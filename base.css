@@ -400,3 +400,26 @@ h2 { font-size: 1.6rem; margin: 8px 0 6px; color: var(--accent); }
 .tm-done-miss { border-color: var(--accent2); }
 .hud-battle { margin-top: 6px; }
 .hud-right { display: flex; flex-direction: column; align-items: flex-end; }
+
+/* ---------- 자금 · 상점 ---------- */
+.hud-money { font-size: 0.78rem; color: var(--accent); margin-top: 4px; }
+.bar-fill.stat.over { background: linear-gradient(90deg, #ffe29a, #ffb84d); }
+.shop-money { font-family: "Jua", sans-serif; color: var(--accent); font-size: 1.05rem; margin: 6px 0 12px; }
+.shop-item {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--bg2); border: 2px solid var(--line);
+  border-radius: 14px; padding: 12px 14px; margin-bottom: 10px;
+}
+.shop-item .si-emoji { font-size: 1.5rem; }
+.shop-item .si-info { flex: 1; font-size: 0.8rem; color: var(--dim); line-height: 1.5; }
+.shop-item .si-name { font-family: "Jua", sans-serif; color: var(--cream); font-size: 0.95rem; }
+.shop-item.owned { opacity: 0.55; }
+
+/* ---------- 스탯 뽑기 (캐릭터 생성) ---------- */
+.roll-box {
+  background: var(--bg2); border: 2px solid var(--line);
+  border-radius: 16px; padding: 14px 10px 6px; margin-top: 14px; text-align: center;
+}
+.roll-box canvas { max-width: 100%; }
+.roll-stars { font-size: 0.72rem; color: var(--dim); line-height: 1.8; margin: 4px 0 6px; }
+.roll-box .btn-ghost { margin-top: 4px; }

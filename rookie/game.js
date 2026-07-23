@@ -76,19 +76,43 @@ const rand = (a, b) => a + Math.random() * (b - a);
 const randInt = (a, b) => Math.floor(rand(a, b + 1));
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+const STAT_CAP = 130; // 100 이후는 '한계 돌파' 구간 (성장 효율 절반)
+const fmtMoney = (v) => (v >= 10000 ? `${(v / 10000).toFixed(1)}억` : `${Math.round(v)}만`);
 
-function newState(region, pos, name) {
+// 시작 능력치 뽑기 — 이름 화면에서 미리 보고 다시 뽑을 수 있어요
+function rollStats(pos) {
   const stats = {};
   const talents = {};
   for (const d of STAT_DEFS[pos]) {
-    stats[d.key] = randInt(28, 44);
+    stats[d.key] = randInt(24, 38);
     talents[d.key] = rand(0.8, 1.45);
   }
+  return { stats, talents };
+}
+
+let pendingRoll = null;
+function renderRoll() {
+  if (!pendingRoll) return;
+  const defs = STAT_DEFS[chosenPos];
+  window.Radar.draw($("roll-radar"), defs, pendingRoll.stats);
+  $("roll-stars").innerHTML = defs
+    .map((d) => `${d.emoji} ${d.name} ${"⭐".repeat(clamp(Math.round((pendingRoll.talents[d.key] - 0.6) * 4), 1, 5))}`)
+    .join(" · ") + `<br/>⭐ = 잠재력 — 별이 많은 능력치일수록 훈련 효율이 높아요`;
+}
+$("btn-reroll")?.addEventListener("click", () => {
+  pendingRoll = rollStats(chosenPos);
+  renderRoll();
+});
+
+function newState(region, pos, name, roll) {
+  const { stats, talents } = roll || rollStats(pos);
   return {
     region: region.id, pos, name,
     year: 1, month: 3,
     stats, talents,
     avatar: (window.Avatar && window.Avatar.get()) || null,
+    money: 0,
+    gear: {},
     condition: 80,
     scout: 0,
     buff: false, // 다음 훈련 효율 상승
@@ -139,6 +163,83 @@ const goHome = () => { if (S) save(); location.reload(); };
 $("btn-home-main")?.addEventListener("click", goHome);
 $("btn-home-pro")?.addEventListener("click", goHome);
 
+// ---------- 장비 상점 ----------
+const GEAR_TIERS = [
+  { n: "I", bonus: 3, price: 300 },
+  { n: "II", bonus: 5, price: 800 },
+  { n: "III", bonus: 8, price: 2000 },
+];
+let shopReturn = "screen-main";
+function openShop(returnTo) {
+  shopReturn = returnTo || "screen-main";
+  renderShop();
+  show("screen-shop");
+}
+function statDefs() { return Array.isArray(STAT_DEFS) ? STAT_DEFS : STAT_DEFS[S.pos]; }
+function renderShop() {
+  $("shop-money").textContent = `💰 보유 자금 ${fmtMoney(S.money || 0)}`;
+  const box = $("shop-list");
+  box.innerHTML = "";
+  for (const d of statDefs()) {
+    const ownedCnt = GEAR_TIERS.filter((t) => S.gear[`${d.key}-${t.n}`]).length;
+    const tier = GEAR_TIERS[ownedCnt];
+    const div = document.createElement("div");
+    div.className = "shop-item" + (tier ? "" : " owned");
+    if (tier) {
+      div.innerHTML = `
+        <span class="si-emoji">${d.emoji}</span>
+        <div class="si-info"><div class="si-name">${d.name} 장비 ${tier.n}</div>${d.name} +${tier.bonus} · ${fmtMoney(tier.price)}</div>
+        <button class="mini-btn">구매</button>`;
+      div.querySelector(".mini-btn").onclick = () => {
+        if ((S.money || 0) < tier.price) {
+          alert("자금이 부족해요! 수당이나 광고 보상으로 모아봐요 💰");
+          return;
+        }
+        S.money -= tier.price;
+        S.gear[`${d.key}-${tier.n}`] = true;
+        S.stats[d.key] = clamp(S.stats[d.key] + tier.bonus, 0, STAT_CAP);
+        save();
+        renderShop();
+      };
+    } else {
+      div.innerHTML = `<span class="si-emoji">${d.emoji}</span><div class="si-info"><div class="si-name">${d.name} 장비 완비!</div>모든 티어 보유 중 ✨</div>`;
+    }
+    box.appendChild(div);
+  }
+  // 📺 광고 보상 (3분 쿨다운)
+  const AD_CD_KEY = "grow-ad-cd";
+  const left = Math.max(0, 180000 - (Date.now() - (+localStorage.getItem(AD_CD_KEY) || 0)));
+  const adRow = $("ad-row");
+  if (left > 0) {
+    adRow.innerHTML = `<p class="av-note">📺 다음 광고 보상까지 약 ${Math.ceil(left / 60000)}분 남았어요</p>`;
+  } else {
+    adRow.innerHTML = `
+      <button class="btn btn-primary" id="btn-ad">📺 광고 보고 +200만 받기</button>
+      ${window.Ads && window.Ads.enabled() ? "" : `<p class="av-note">아직 광고가 연결 전이라 지금은 그냥 드려요 🎁</p>`}`;
+    $("btn-ad").onclick = () => {
+      $("btn-ad").disabled = true;
+      window.Ads.rewarded((ok) => {
+        if (ok) {
+          S.money = (S.money || 0) + 200;
+          localStorage.setItem(AD_CD_KEY, Date.now());
+          save();
+        }
+        renderShop();
+      });
+    };
+  }
+}
+$("btn-shop-main")?.addEventListener("click", () => openShop("screen-main"));
+$("btn-shop-pro")?.addEventListener("click", () => openShop("screen-pro"));
+$("btn-shop-back")?.addEventListener("click", () => {
+  show(shopReturn);
+  if (shopReturn === "screen-main") renderMain();
+  else {
+    const c = window.Career || window.IdolCareer;
+    if (c && c.refreshPro) c.refreshPro();
+  }
+});
+
 // ---------- 시작 흐름 ----------
 let chosenRegion = null;
 let chosenPos = null;
@@ -149,6 +250,8 @@ function initTitle() {
     $("btn-continue").classList.remove("hidden");
     $("btn-continue").onclick = () => {
       S = JSON.parse(saved);
+      S.money = S.money || 0;
+      S.gear = S.gear || {};
       if (S.phase === "pro" && window.Career) {
         window.Career.showPro();
       } else {
@@ -192,7 +295,9 @@ document.querySelectorAll("#position-list .card").forEach((btn) => {
     chosenPos = btn.dataset.pos;
     $("name-hint").textContent = `${chosenRegion.school} ${chosenPos === "batter" ? "타자" : "투수"} 유망주의 이름은?`;
     $("input-name").value = pick(SURNAMES) + pick(GIVEN);
+    pendingRoll = rollStats(chosenPos);
     show("screen-name");
+    renderRoll();
   });
 });
 
@@ -202,7 +307,7 @@ $("btn-random-name").addEventListener("click", () => {
 
 $("btn-start").addEventListener("click", () => {
   const name = $("input-name").value.trim() || pick(SURNAMES) + pick(GIVEN);
-  S = newState(chosenRegion, chosenPos, name);
+  S = newState(chosenRegion, chosenPos, name, pendingRoll);
   addLog(`⚾ ${chosenRegion.school} 입학! ${name}의 야구 인생이 시작됐어요.`);
   save();
   renderMain();
@@ -220,6 +325,7 @@ function renderMain() {
   if (S.avatar) { av.src = S.avatar; av.classList.remove("hidden"); }
   else av.classList.add("hidden");
 
+  $("hud-money").textContent = `💰 ${fmtMoney(S.money || 0)}`;
   $("cond-num").textContent = Math.round(S.condition);
   const condBar = $("cond-bar");
   condBar.style.width = `${S.condition}%`;
@@ -239,9 +345,9 @@ function renderMain() {
     row.className = "stat-row";
     row.innerHTML = `
       <span class="stat-name">${d.emoji} ${d.name}</span>
-      <div class="bar"><div class="bar-fill stat" style="width:${v}%"></div></div>
+      <div class="bar"><div class="bar-fill stat${v > 100 ? " over" : ""}" style="width:${Math.min(v, 100)}%"></div></div>
       <span class="stat-val">${v}</span>
-      <span class="stat-pot" title="잠재력">${stars}</span>`;
+      <span class="stat-pot" title="잠재력 — 별이 많을수록 훈련 효율이 높아요">${stars}</span>`;
     statsBox.appendChild(row);
   }
 
@@ -288,12 +394,25 @@ function doTraining(def) {
     return;
   }
 
+  // 훈련 실패 — 컨디션이 낮을수록 위험해요
+  const failP = S.condition < 40 ? 0.15 : 0.07;
+  if (Math.random() < failP) {
+    const loss = Math.round(rand(0.5, 1.5) * 10) / 10;
+    S.stats[def.key] = clamp(S.stats[def.key] - loss, 0, STAT_CAP);
+    S.condition = clamp(S.condition - randInt(6, 10), 0, 100);
+    addLog(`😵 ${def.name} 훈련이 완전히 꼬였어요… -${loss.toFixed(1)} (${Math.round(S.stats[def.key])})`);
+    maybeEvent();
+    endMonth();
+    return;
+  }
+
   const condMod = S.condition >= 70 ? 1.15 : S.condition >= 40 ? 1.0 : 0.6;
   const buffMod = S.buff ? 1.5 : 1.0;
   S.buff = false;
   let gain = rand(2.2, 4.2) * S.talents[def.key] * r.growth * condMod * buffMod;
+  if (S.stats[def.key] >= 100) gain *= 0.5; // 💥 한계 돌파 구간
   gain = Math.round(gain * 10) / 10;
-  S.stats[def.key] = clamp(S.stats[def.key] + gain, 0, 100);
+  S.stats[def.key] = clamp(S.stats[def.key] + gain, 0, STAT_CAP);
   S.condition = clamp(S.condition - randInt(12, 18), 0, 100);
   addLog(`${def.emoji} ${def.name} 훈련 완료! +${gain.toFixed(1)} (${Math.round(S.stats[def.key])})`);
 
@@ -303,7 +422,7 @@ function doTraining(def) {
 
 function doRest() {
   S.condition = clamp(S.condition + randInt(30, 42), 0, 100);
-  S.stats.stamina = clamp(S.stats.stamina + 0.5, 0, 100);
+  S.stats.stamina = clamp(S.stats.stamina + 0.5, 0, STAT_CAP);
   addLog(`🛌 푹 쉬었어요. 컨디션 회복! (${Math.round(S.condition)})`);
   maybeEvent();
   endMonth();
@@ -315,7 +434,7 @@ function maybeEvent() {
   const events = [
     () => {
       const d = pick(STAT_DEFS[S.pos]);
-      S.stats[d.key] = clamp(S.stats[d.key] + 3, 0, 100);
+      S.stats[d.key] = clamp(S.stats[d.key] + 3, 0, STAT_CAP);
       addLog(`🧢 감독님의 특별 지도! ${d.name} +3`);
     },
     () => {
@@ -336,7 +455,7 @@ function maybeEvent() {
       addLog(`🔥 라이벌의 도발에 불이 붙었어요! 다음 훈련 효율 1.5배`);
     },
     () => {
-      S.stats.stamina = clamp(S.stats.stamina + 2, 0, 100);
+      S.stats.stamina = clamp(S.stats.stamina + 2, 0, STAT_CAP);
       addLog(`🏃 아침 러닝 습관이 몸에 붙었어요. 체력 +2`);
     },
     () => {
@@ -683,6 +802,8 @@ function renderGameSim(roundName, opp, perf, story, interactive, preWin) {
     let pts = perf.pts + (win ? 4 : 1) + tour.round * 3 + (bonus || 0);
     pts = Math.round(pts * r.spot);
     S.scout = Math.max(0, S.scout + pts); // 못한 경기는 주목도가 깎여요
+    const pay = win ? 60 + tour.round * 25 : 25;
+    S.money = (S.money || 0) + pay;
     tour.totalPts += pts;
     S.condition = clamp(S.condition - 6, 0, 100);
     save();
@@ -692,7 +813,7 @@ function renderGameSim(roundName, opp, perf, story, interactive, preWin) {
       <div class="tour-vs">${r.school} <span class="${win ? "win" : "lose"}">${win ? "승리! 🎉" : "패배… 😢"}</span></div>
       <div class="tour-line">${perf.line}</div>
       ${perf.highlight ? `<div class="tour-line tour-highlight">${perf.highlight}</div>` : ""}
-      <div class="tour-pts">${pts >= 0 ? `🔭 스카우트 주목도 +${pts}` : `📉 스카우트 주목도 ${pts}`}</div>`;
+      <div class="tour-pts">${pts >= 0 ? `🔭 스카우트 주목도 +${pts}` : `📉 스카우트 주목도 ${pts}`} · 💰 수당 +${pay}만</div>`;
     if (win && tour.round < ROUNDS.length - 1) {
       tour.round += 1;
       btn.textContent = `${ROUNDS[tour.round]} 진출!`;
@@ -703,6 +824,7 @@ function renderGameSim(roundName, opp, perf, story, interactive, preWin) {
       if (champion) {
         S.trophies.push(`${S.year}학년 ${tour.name} 우승`);
         S.scout += 30;
+        S.money = (S.money || 0) + 300; // 🏆 우승 상금
         tour.totalPts += 30;
       }
       btn.textContent = champion ? "🏆 우승 세리머니!" : "대회 마치기";

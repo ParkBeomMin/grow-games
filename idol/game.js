@@ -67,21 +67,47 @@ const rand = (a, b) => a + Math.random() * (b - a);
 const randInt = (a, b) => Math.floor(rand(a, b + 1));
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+const STAT_CAP = 130; // 100 이후는 '한계 돌파' 구간 (성장 효율 절반)
+const fmtMoney = (v) => (v >= 10000 ? `${(v / 10000).toFixed(1)}억` : `${Math.round(v)}만`);
 
-function newState(agency, pos, name) {
+// 시작 능력치 뽑기 — 이름 화면에서 미리 보고 다시 뽑을 수 있어요
+function rollStats(pos) {
   const stats = {};
   const talents = {};
   for (const d of STAT_DEFS) {
-    stats[d.key] = randInt(28, 44);
+    stats[d.key] = randInt(24, 38);
     talents[d.key] = rand(0.8, 1.45);
   }
-  stats[POS_INFO[pos].stat] = clamp(stats[POS_INFO[pos].stat] + 8, 0, 100);
+  stats[POS_INFO[pos].stat] = clamp(stats[POS_INFO[pos].stat] + 8, 0, STAT_CAP);
   talents[POS_INFO[pos].stat] = Math.max(talents[POS_INFO[pos].stat], 1.05);
+  return { stats, talents };
+}
+
+let pendingRoll = null;
+function renderRoll() {
+  if (!pendingRoll) return;
+  window.Radar.draw($("roll-radar"), STAT_DEFS, pendingRoll.stats, {
+    stroke: "#ff8fc8",
+    fill: "rgba(255, 143, 200, 0.3)",
+  });
+  $("roll-stars").innerHTML = STAT_DEFS
+    .map((d) => `${d.emoji} ${d.name} ${"⭐".repeat(clamp(Math.round((pendingRoll.talents[d.key] - 0.6) * 4), 1, 5))}`)
+    .join(" · ") + `<br/>⭐ = 잠재력 — 별이 많은 능력치일수록 연습 효율이 높아요`;
+}
+$("btn-reroll")?.addEventListener("click", () => {
+  pendingRoll = rollStats(chosenPos);
+  renderRoll();
+});
+
+function newState(agency, pos, name, roll) {
+  const { stats, talents } = roll || rollStats(pos);
   return {
     agency: agency.id, pos, name,
     year: 1, month: 1,
     stats, talents,
     avatar: (window.Avatar && window.Avatar.get()) || null,
+    money: 0,
+    gear: {},
     condition: 80,
     fandom: 0,
     buff: false,
@@ -132,6 +158,83 @@ const goHome = () => { if (S) save(); location.reload(); };
 $("btn-home-main")?.addEventListener("click", goHome);
 $("btn-home-pro")?.addEventListener("click", goHome);
 
+// ---------- 장비 상점 ----------
+const GEAR_TIERS = [
+  { n: "I", bonus: 3, price: 300 },
+  { n: "II", bonus: 5, price: 800 },
+  { n: "III", bonus: 8, price: 2000 },
+];
+let shopReturn = "screen-main";
+function openShop(returnTo) {
+  shopReturn = returnTo || "screen-main";
+  renderShop();
+  show("screen-shop");
+}
+function statDefs() { return Array.isArray(STAT_DEFS) ? STAT_DEFS : STAT_DEFS[S.pos]; }
+function renderShop() {
+  $("shop-money").textContent = `💰 보유 자금 ${fmtMoney(S.money || 0)}`;
+  const box = $("shop-list");
+  box.innerHTML = "";
+  for (const d of statDefs()) {
+    const ownedCnt = GEAR_TIERS.filter((t) => S.gear[`${d.key}-${t.n}`]).length;
+    const tier = GEAR_TIERS[ownedCnt];
+    const div = document.createElement("div");
+    div.className = "shop-item" + (tier ? "" : " owned");
+    if (tier) {
+      div.innerHTML = `
+        <span class="si-emoji">${d.emoji}</span>
+        <div class="si-info"><div class="si-name">${d.name} 장비 ${tier.n}</div>${d.name} +${tier.bonus} · ${fmtMoney(tier.price)}</div>
+        <button class="mini-btn">구매</button>`;
+      div.querySelector(".mini-btn").onclick = () => {
+        if ((S.money || 0) < tier.price) {
+          alert("자금이 부족해요! 수당이나 광고 보상으로 모아봐요 💰");
+          return;
+        }
+        S.money -= tier.price;
+        S.gear[`${d.key}-${tier.n}`] = true;
+        S.stats[d.key] = clamp(S.stats[d.key] + tier.bonus, 0, STAT_CAP);
+        save();
+        renderShop();
+      };
+    } else {
+      div.innerHTML = `<span class="si-emoji">${d.emoji}</span><div class="si-info"><div class="si-name">${d.name} 장비 완비!</div>모든 티어 보유 중 ✨</div>`;
+    }
+    box.appendChild(div);
+  }
+  // 📺 광고 보상 (3분 쿨다운)
+  const AD_CD_KEY = "grow-ad-cd";
+  const left = Math.max(0, 180000 - (Date.now() - (+localStorage.getItem(AD_CD_KEY) || 0)));
+  const adRow = $("ad-row");
+  if (left > 0) {
+    adRow.innerHTML = `<p class="av-note">📺 다음 광고 보상까지 약 ${Math.ceil(left / 60000)}분 남았어요</p>`;
+  } else {
+    adRow.innerHTML = `
+      <button class="btn btn-primary" id="btn-ad">📺 광고 보고 +200만 받기</button>
+      ${window.Ads && window.Ads.enabled() ? "" : `<p class="av-note">아직 광고가 연결 전이라 지금은 그냥 드려요 🎁</p>`}`;
+    $("btn-ad").onclick = () => {
+      $("btn-ad").disabled = true;
+      window.Ads.rewarded((ok) => {
+        if (ok) {
+          S.money = (S.money || 0) + 200;
+          localStorage.setItem(AD_CD_KEY, Date.now());
+          save();
+        }
+        renderShop();
+      });
+    };
+  }
+}
+$("btn-shop-main")?.addEventListener("click", () => openShop("screen-main"));
+$("btn-shop-pro")?.addEventListener("click", () => openShop("screen-pro"));
+$("btn-shop-back")?.addEventListener("click", () => {
+  show(shopReturn);
+  if (shopReturn === "screen-main") renderMain();
+  else {
+    const c = window.Career || window.IdolCareer;
+    if (c && c.refreshPro) c.refreshPro();
+  }
+});
+
 // ---------- 시작 흐름 ----------
 let chosenAgency = null;
 let chosenPos = null;
@@ -142,6 +245,8 @@ function initTitle() {
     $("btn-continue").classList.remove("hidden");
     $("btn-continue").onclick = () => {
       S = JSON.parse(saved);
+      S.money = S.money || 0;
+      S.gear = S.gear || {};
       if (S.phase === "idol-pro" && window.IdolCareer) {
         window.IdolCareer.showActivity();
       } else {
@@ -185,7 +290,9 @@ document.querySelectorAll("#position-list .card").forEach((btn) => {
     chosenPos = btn.dataset.pos;
     $("name-hint").textContent = `${chosenAgency.name} ${POS_INFO[chosenPos].name} 연습생의 활동명은?`;
     $("input-name").value = pick(STAGE_NAMES);
+    pendingRoll = rollStats(chosenPos);
     show("screen-name");
+    renderRoll();
   });
 });
 
@@ -195,7 +302,7 @@ $("btn-random-name").addEventListener("click", () => {
 
 $("btn-start").addEventListener("click", () => {
   const name = $("input-name").value.trim() || pick(STAGE_NAMES);
-  S = newState(chosenAgency, chosenPos, name);
+  S = newState(chosenAgency, chosenPos, name, pendingRoll);
   addLog(`🎤 ${chosenAgency.name} 연습생 계약! ${name}의 연습실 생활이 시작됐어요.`);
   save();
   renderMain();
@@ -213,6 +320,7 @@ function renderMain() {
   if (S.avatar) { av.src = S.avatar; av.classList.remove("hidden"); }
   else av.classList.add("hidden");
 
+  $("hud-money").textContent = `💰 ${fmtMoney(S.money || 0)}`;
   $("cond-num").textContent = Math.round(S.condition);
   const condBar = $("cond-bar");
   condBar.style.width = `${S.condition}%`;
@@ -231,9 +339,9 @@ function renderMain() {
     row.className = "stat-row";
     row.innerHTML = `
       <span class="stat-name">${d.emoji} ${d.name}</span>
-      <div class="bar"><div class="bar-fill stat" style="width:${v}%"></div></div>
+      <div class="bar"><div class="bar-fill stat${v > 100 ? " over" : ""}" style="width:${Math.min(v, 100)}%"></div></div>
       <span class="stat-val">${v}</span>
-      <span class="stat-pot" title="잠재력">${stars}</span>`;
+      <span class="stat-pot" title="잠재력 — 별이 많을수록 훈련 효율이 높아요">${stars}</span>`;
     statsBox.appendChild(row);
   }
 
@@ -277,12 +385,25 @@ function doTraining(def) {
     return;
   }
 
+  // 훈련 실패 — 컨디션이 낮을수록 위험해요
+  const failP = S.condition < 40 ? 0.15 : 0.07;
+  if (Math.random() < failP) {
+    const loss = Math.round(rand(0.5, 1.5) * 10) / 10;
+    S.stats[def.key] = clamp(S.stats[def.key] - loss, 0, STAT_CAP);
+    S.condition = clamp(S.condition - randInt(6, 10), 0, 100);
+    addLog(`😵 ${def.name} 훈련이 완전히 꼬였어요… -${loss.toFixed(1)} (${Math.round(S.stats[def.key])})`);
+    maybeEvent();
+    endMonth();
+    return;
+  }
+
   const condMod = S.condition >= 70 ? 1.15 : S.condition >= 40 ? 1.0 : 0.6;
   const buffMod = S.buff ? 1.5 : 1.0;
   S.buff = false;
   let gain = rand(2.2, 4.2) * S.talents[def.key] * a.growth * condMod * buffMod;
+  if (S.stats[def.key] >= 100) gain *= 0.5; // 💥 한계 돌파 구간
   gain = Math.round(gain * 10) / 10;
-  S.stats[def.key] = clamp(S.stats[def.key] + gain, 0, 100);
+  S.stats[def.key] = clamp(S.stats[def.key] + gain, 0, STAT_CAP);
   S.condition = clamp(S.condition - randInt(12, 18), 0, 100);
   addLog(`${def.emoji} ${def.name} 연습 완료! +${gain.toFixed(1)} (${Math.round(S.stats[def.key])})`);
 
@@ -292,7 +413,7 @@ function doTraining(def) {
 
 function doRest() {
   S.condition = clamp(S.condition + randInt(30, 42), 0, 100);
-  S.stats.stamina = clamp(S.stats.stamina + 0.5, 0, 100);
+  S.stats.stamina = clamp(S.stats.stamina + 0.5, 0, STAT_CAP);
   addLog(`🛌 푹 쉬었어요. 컨디션 회복! (${Math.round(S.condition)})`);
   maybeEvent();
   endMonth();
@@ -304,7 +425,7 @@ function maybeEvent() {
   const events = [
     () => {
       const d = pick(STAT_DEFS);
-      S.stats[d.key] = clamp(S.stats[d.key] + 3, 0, 100);
+      S.stats[d.key] = clamp(S.stats[d.key] + 3, 0, STAT_CAP);
       addLog(`🧑‍🏫 트레이너 선생님의 특별 레슨! ${d.name} +3`);
     },
     () => {
@@ -325,7 +446,7 @@ function maybeEvent() {
       addLog(`🔥 월말평가 1위 라이벌의 무대에 자극받았어요! 다음 연습 효율 1.5배`);
     },
     () => {
-      S.stats.stamina = clamp(S.stats.stamina + 2, 0, 100);
+      S.stats.stamina = clamp(S.stats.stamina + 2, 0, STAT_CAP);
       addLog(`🏃 새벽 러닝 루틴이 몸에 붙었어요. 체력 +2`);
     },
     () => {
@@ -520,6 +641,8 @@ function playEvalStage() {
   $("stage-round").textContent = `${ev.idx}번째 무대 · ${type.name}`;
   renderStageSim(type, grade, (fg) => {
     const pts = Math.round(fg.pts * a.spot);
+    const pay = { S: 60, A: 40, B: 25, C: 10, D: 0 }[fg.g] || 0;
+    S.money = (S.money || 0) + pay;
     S.fandom = Math.max(0, S.fandom + pts);
     S.stages += 1;
     ev.totalPts += pts;
@@ -528,7 +651,7 @@ function playEvalStage() {
     const resultHTML = `
       <div class="tour-vs">무대 등급 <span class="${fg.g === "S" || fg.g === "A" ? "win" : fg.g === "D" ? "lose" : ""}">${fg.g}</span></div>
       <div class="tour-line">${fg.txt}</div>
-      <div class="tour-pts">${pts >= 0 ? `💖 팬덤 +${pts}` : `📉 팬덤 ${pts}`}</div>`;
+      <div class="tour-pts">${pts >= 0 ? `💖 팬덤 +${pts}` : `📉 팬덤 ${pts}`}${pay ? ` · 💰 수당 +${pay}만` : ""}</div>`;
     return ev.idx < 3
       ? { resultHTML, nextLabel: "다음 무대", nextFn: playEvalStage }
       : { resultHTML, nextLabel: "종합 순위 발표", nextFn: finishEval };
@@ -589,6 +712,7 @@ function playSurvivalRound() {
   $("stage-round").textContent = `${roundName} · ${type.name}`;
   renderStageSim(type, grade, (fg) => {
     const pts = Math.round(fg.pts * a.spot) + ev.round * 4;
+    S.money = (S.money || 0) + 30 + ev.round * 20;
     S.fandom = Math.max(0, S.fandom + pts);
     S.stages += 1;
     // 하이라이트 성공/실패가 생존 확률에도 영향

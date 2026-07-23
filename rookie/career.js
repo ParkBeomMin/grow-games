@@ -82,7 +82,8 @@ window.Career = (() => {
     const av = $("pro-avatar");
     if (S.avatar) { av.src = S.avatar; av.classList.remove("hidden"); }
     else av.classList.add("hidden");
-    $("pro-cond-num").textContent = Math.round(S.condition);
+    $("pro-money").textContent = `💰 ${fmtMoney(S.money || 0)}`;
+  $("pro-cond-num").textContent = Math.round(S.condition);
     $("pro-cond-bar").style.width = `${S.condition}%`;
 
     const stats = $("pro-stats");
@@ -93,7 +94,7 @@ window.Career = (() => {
       row.className = "stat-row";
       row.innerHTML = `
         <span class="stat-name">${d.emoji} ${d.name}</span>
-        <div class="bar"><div class="bar-fill stat" style="width:${v}%"></div></div>
+        <div class="bar"><div class="bar-fill stat${v > 100 ? " over" : ""}" style="width:${Math.min(v, 100)}%"></div></div>
         <span class="stat-val">${v}</span>`;
       stats.appendChild(row);
     }
@@ -122,9 +123,23 @@ window.Career = (() => {
   function campAction(def) {
     if (def) {
       const ageMod = S.age <= 23 ? 1.1 : S.age <= 27 ? 1.0 : S.age <= 30 ? 0.75 : 0.45;
+      const failP = S.condition < 40 ? 0.15 : 0.07;
+      if (Math.random() < failP) {
+        const loss = Math.round(rand(0.5, 1.5) * 10) / 10;
+        S.stats[def.key] = clamp(S.stats[def.key] - loss, 0, STAT_CAP);
+        S.condition = clamp(S.condition - randInt(6, 10), 0, 100);
+        proLog(`😵 ${def.name} 훈련이 꼬였어요… -${loss.toFixed(1)}`);
+        S.camp -= 1;
+        save();
+        if (S.camp <= 0) runSeason();
+        else renderPro();
+        return;
+      }
       const condMod = S.condition >= 70 ? 1.1 : S.condition >= 40 ? 1.0 : 0.6;
-      const gain = Math.round(rand(1.8, 3.6) * S.talents[def.key] * ageMod * condMod * 10) / 10;
-      S.stats[def.key] = clamp(S.stats[def.key] + gain, 0, 100);
+      let gain = rand(1.8, 3.6) * S.talents[def.key] * ageMod * condMod;
+      if (S.stats[def.key] >= 100) gain *= 0.5;
+      gain = Math.round(gain * 10) / 10;
+      S.stats[def.key] = clamp(S.stats[def.key] + gain, 0, STAT_CAP);
       S.condition = clamp(S.condition - randInt(10, 16), 0, 100);
       proLog(`${def.emoji} ${def.name} 훈련 +${gain.toFixed(1)} (${Math.round(S.stats[def.key])})`);
     } else {
@@ -186,9 +201,11 @@ window.Career = (() => {
 
     // 시즌을 치르며 성장(젊을 때)·노쇠화(31세 이후)
     for (const d of STAT_DEFS[S.pos]) {
-      if (S.age <= 25) S.stats[d.key] = clamp(S.stats[d.key] + rand(0, 1.2) * S.talents[d.key], 0, 100);
-      else if (S.age >= 31) S.stats[d.key] = clamp(S.stats[d.key] - rand(0.8, 2.2) - (S.age - 31) * 0.35, 0, 100);
+      if (S.age <= 25) S.stats[d.key] = clamp(S.stats[d.key] + rand(0, 1.2) * S.talents[d.key], 0, STAT_CAP);
+      else if (S.age >= 31) S.stats[d.key] = clamp(S.stats[d.key] - rand(0.8, 2.2) - (S.age - 31) * 0.35, 0, STAT_CAP);
     }
+    const salary = 3000 + Math.round(Math.max(war, 0) * 1500);
+    S.money = (S.money || 0) + salary;
     S.age += 1;
     save();
 
@@ -200,6 +217,7 @@ window.Career = (() => {
       { text: `정규시즌 최종 ${rank}위로 마감`, cls: rank <= 3 ? "good" : rank >= 8 ? "bad" : "" },
     ];
     if (champ) feeds.push({ text: "🏆 한국시리즈 우승!! 헹가래의 주인공이 됐어요", cls: "good" });
+    feeds.push({ text: `💰 시즌 연봉 정산 +${fmtMoney(salary)}`, cls: "good" });
     for (const a of awards) feeds.push({ text: `🎖️ ${a} 수상!`, cls: "good" });
     playFeeds(`📺 ${S.proYear}년차 시즌`, feeds, seasonReport);
   }
@@ -515,6 +533,7 @@ window.Career = (() => {
 
   return {
     onDraft,
+    refreshPro: renderPro,
     enterPro,
     showHof,
     showBattle,

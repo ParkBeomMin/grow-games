@@ -68,6 +68,11 @@
         <input id="input-name" type="text" maxlength="8" placeholder="이름 입력" />
         <button class="btn btn-ghost" id="btn-random-name">🎲 랜덤</button>
       </div>
+      <div class="roll-box">
+        <canvas id="roll-radar" width="280" height="230"></canvas>
+        <div class="roll-stars" id="roll-stars"></div>
+        <button class="btn btn-ghost" id="btn-reroll">🎲 능력치 다시 뽑기</button>
+      </div>
       <div class="avatar-slot" id="avatar-slot"></div>
       <button class="btn btn-primary" id="btn-start">입학하기</button>
       <button class="btn btn-ghost" id="btn-back-name">← 뒤로</button>
@@ -85,7 +90,9 @@
         </div>
         <div class="hud-right">
           <div class="hud-turn" id="hud-turn"></div>
+          <div class="hud-money" id="hud-money"></div>
           <button class="mini-btn hud-battle" id="btn-battle-main">⚔️ 배틀</button>
+          <button class="mini-btn hud-battle" id="btn-shop-main">🛍️ 상점</button>
           <button class="mini-btn hud-battle" id="btn-home-main">🏠 홈</button>
         </div>
       </header>
@@ -142,7 +149,9 @@
         </div>
         <div class="hud-right">
           <div class="hud-turn" id="pro-turn"></div>
+          <div class="hud-money" id="pro-money"></div>
           <button class="mini-btn hud-battle" id="btn-battle-pro">⚔️ 배틀</button>
+          <button class="mini-btn hud-battle" id="btn-shop-pro">🛍️ 상점</button>
           <button class="mini-btn hud-battle" id="btn-home-pro">🏠 홈</button>
         </div>
       </header>
@@ -185,10 +194,23 @@
       <button class="btn btn-ghost" id="btn-battle-back">← 돌아가기</button>
     </section>
 
+
+    <!-- 장비 상점 -->
+    <section class="screen" id="screen-shop">
+      <h2>🛍️ 장비 상점</h2>
+      <p class="hint">수당으로 장비를 마련해 능력치를 올려요. 효과는 즉시 적용!</p>
+      <p class="shop-money" id="shop-money"></p>
+      <div id="shop-list"></div>
+      <div class="battle-row" id="ad-row"></div>
+      <button class="btn btn-ghost" id="btn-shop-back">← 돌아가기</button>
+    </section>
+
   </main>
   <script src="../avatar.js"></script>
+  <script src="../radar.js"></script>
   <script src="../timing.js"></script>
   <script src="../match.js"></script>
+  <script src="../ads.js"></script>
   <script src="game.js"></script>
   <script src="career.js"></script>
 <script>if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");</script>

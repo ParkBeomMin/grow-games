@@ -81,7 +81,8 @@ window.IdolCareer = (() => {
     const av = $("pro-avatar");
     if (S.avatar) { av.src = S.avatar; av.classList.remove("hidden"); }
     else av.classList.add("hidden");
-    $("pro-cond-num").textContent = Math.round(S.condition);
+    $("pro-money").textContent = `💰 ${fmtMoney(S.money || 0)}`;
+  $("pro-cond-num").textContent = Math.round(S.condition);
     $("pro-cond-bar").style.width = `${S.condition}%`;
 
     const stats = $("pro-stats");
@@ -92,7 +93,7 @@ window.IdolCareer = (() => {
       row.className = "stat-row";
       row.innerHTML = `
         <span class="stat-name">${d.emoji} ${d.name}</span>
-        <div class="bar"><div class="bar-fill stat" style="width:${v}%"></div></div>
+        <div class="bar"><div class="bar-fill stat${v > 100 ? " over" : ""}" style="width:${Math.min(v, 100)}%"></div></div>
         <span class="stat-val">${v}</span>`;
       stats.appendChild(row);
     }
@@ -121,9 +122,23 @@ window.IdolCareer = (() => {
   function prepAction(def) {
     if (def) {
       const yearMod = S.proYear <= 3 ? 1.1 : S.proYear <= 6 ? 1.0 : S.proYear <= 8 ? 0.7 : 0.45;
+      const failP = S.condition < 40 ? 0.15 : 0.07;
+      if (Math.random() < failP) {
+        const loss = Math.round(rand(0.5, 1.5) * 10) / 10;
+        S.stats[def.key] = clamp(S.stats[def.key] - loss, 0, STAT_CAP);
+        S.condition = clamp(S.condition - randInt(6, 10), 0, 100);
+        proLog(`😵 ${def.name} 훈련이 꼬였어요… -${loss.toFixed(1)}`);
+        S.camp -= 1;
+        save();
+        if (S.camp <= 0) runComeback();
+        else renderPrep();
+        return;
+      }
       const condMod = S.condition >= 70 ? 1.1 : S.condition >= 40 ? 1.0 : 0.6;
-      const gain = Math.round(rand(1.8, 3.6) * S.talents[def.key] * yearMod * condMod * 10) / 10;
-      S.stats[def.key] = clamp(S.stats[def.key] + gain, 0, 100);
+      let gain = rand(1.8, 3.6) * S.talents[def.key] * yearMod * condMod;
+      if (S.stats[def.key] >= 100) gain *= 0.5;
+      gain = Math.round(gain * 10) / 10;
+      S.stats[def.key] = clamp(S.stats[def.key] + gain, 0, STAT_CAP);
       S.condition = clamp(S.condition - randInt(10, 16), 0, 100);
       proLog(`${def.emoji} ${def.name} 연습 +${gain.toFixed(1)} (${Math.round(S.stats[def.key])})`);
     } else {
@@ -209,11 +224,14 @@ window.IdolCareer = (() => {
       S.career.years.push({ y: S.proYear, hype: Math.round(hype * 10) / 10, wins, sales, dFan, awards });
       // 초반엔 성장, 8년차부터는 서서히 하락
       for (const d of STAT_DEFS) {
-        if (S.proYear <= 3) S.stats[d.key] = clamp(S.stats[d.key] + rand(0, 1) * S.talents[d.key], 0, 100);
-        else if (S.proYear >= 8) S.stats[d.key] = clamp(S.stats[d.key] - rand(0.6, 1.8), 0, 100);
+        if (S.proYear <= 3) S.stats[d.key] = clamp(S.stats[d.key] + rand(0, 1) * S.talents[d.key], 0, STAT_CAP);
+        else if (S.proYear >= 8) S.stats[d.key] = clamp(S.stats[d.key] - rand(0.6, 1.8), 0, STAT_CAP);
       }
+      const income = sales * 3 + wins * 80;
+      S.money = (S.money || 0) + income;
       save();
       feed({ text: `📊 음악방송 1위 ${wins}회 · 초동 ${sales}만 장`, cls: wins > 0 ? "good" : "" });
+      feed({ text: `💰 활동 정산 +${fmtMoney(income)}`, cls: "good" });
       if (awards.length) feed({ text: `🏆 연말 시상식 ${awards.join(", ")} 수상!`, cls: "good" });
       feed({ text: dFan >= 0 ? `💖 팬덤 +${dFan}` : `📉 팬덤 ${dFan}`, cls: dFan >= 0 ? "good" : "bad" });
       btn.disabled = false;
@@ -506,6 +524,7 @@ window.IdolCareer = (() => {
 
   return {
     onEnding,
+    refreshPro: renderPrep,
     showHof,
     showBattle,
     showActivity: () => {
