@@ -375,3 +375,28 @@ h2 { font-size: 1.6rem; margin: 8px 0 6px; color: var(--accent); }
 .season-table { width: 100%; border-collapse: collapse; font-size: 0.74rem; margin: 10px 0; }
 .season-table th, .season-table td { border-bottom: 1px solid var(--line); padding: 5px 4px; text-align: center; color: var(--dim); }
 .season-table th { color: var(--cream); font-weight: 400; }
+
+/* ---------- 타이밍 미니게임 ---------- */
+.tm-box {
+  background: var(--bg2); border: 2px solid var(--accent);
+  border-radius: 14px; padding: 14px; margin: 10px 0; text-align: center;
+  animation: fadein .25s ease;
+}
+.tm-label { font-family: "Jua", sans-serif; color: var(--cream); margin-bottom: 10px; font-size: 0.95rem; }
+.tm-bar {
+  position: relative; height: 26px; border-radius: 99px;
+  background: #0a0f0c; border: 1px solid var(--line); overflow: hidden;
+}
+.tm-zone { position: absolute; top: 0; bottom: 0; background: rgba(110, 231, 160, 0.35); }
+.tm-zone-perfect { position: absolute; top: 0; bottom: 0; background: var(--accent); opacity: 0.55; }
+.tm-marker {
+  position: absolute; top: -2px; bottom: -2px; width: 4px; margin-left: -2px;
+  background: #fff; border-radius: 2px; box-shadow: 0 0 6px rgba(255,255,255,.8);
+}
+.tm-marker.tm-perfect { background: var(--accent); box-shadow: 0 0 10px var(--accent); }
+.tm-marker.tm-miss { background: var(--accent2); }
+.tm-btn { margin-top: 12px; padding: 12px; font-size: 1.05rem; }
+.tm-done-perfect { border-color: #6ee7a0; }
+.tm-done-miss { border-color: var(--accent2); }
+.hud-battle { margin-top: 6px; }
+.hud-right { display: flex; flex-direction: column; align-items: flex-end; }

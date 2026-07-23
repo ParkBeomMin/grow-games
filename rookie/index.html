@@ -9,6 +9,9 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Jua&family=Gowun+Dodum&display=swap" rel="stylesheet" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <meta name="theme-color" content="#0e1b12" />
+  <link rel="apple-touch-icon" href="icon-192.png" />
   <link rel="stylesheet" href="../base.css" />
   <link rel="stylesheet" href="style.css" />
 </head>
@@ -79,6 +82,7 @@
         </div>
         <div class="hud-right">
           <div class="hud-turn" id="hud-turn"></div>
+          <button class="mini-btn hud-battle" id="btn-battle-main">⚔️ 배틀</button>
         </div>
       </header>
 
@@ -134,6 +138,7 @@
         </div>
         <div class="hud-right">
           <div class="hud-turn" id="pro-turn"></div>
+          <button class="mini-btn hud-battle" id="btn-battle-pro">⚔️ 배틀</button>
         </div>
       </header>
       <div class="gauges">
@@ -177,7 +182,9 @@
 
   </main>
   <script src="../avatar.js"></script>
+  <script src="../timing.js"></script>
   <script src="game.js"></script>
   <script src="career.js"></script>
+<script>if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");</script>
 </body>
 </html>

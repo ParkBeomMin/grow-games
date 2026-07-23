@@ -299,6 +299,10 @@ function maybeEvent() {
       S.stats.stamina = clamp(S.stats.stamina + 2, 0, 100);
       addLog(`🏃 새벽 러닝 루틴이 몸에 붙었어요. 체력 +2`);
     },
+    () => {
+      S.fandom = Math.max(0, S.fandom - 10);
+      addLog(`📉 무대 실수 클립이 돌고 있어요… 팬덤 -10`);
+    },
   ];
   pick(events)();
 }
@@ -343,12 +347,22 @@ function stageScore(type) {
   return { mainKey, score };
 }
 
+const GRADE_ORDER = ["D", "C", "B", "A", "S"];
+const GRADE_INFO = {
+  S: { pts: 30, txt: "🌟 완벽한 무대! 심사위원 전원이 기립했어요." },
+  A: { pts: 22, txt: "🔥 시선을 사로잡는 무대! 카메라가 계속 따라와요." },
+  B: { pts: 15, txt: "🙂 안정적인 무대. 나쁘지 않았어요." },
+  C: { pts: 9, txt: "😬 아쉬운 실수가 있었어요. 다음에 만회해요." },
+  D: { pts: -5, txt: "😢 무대 위에서 머리가 하얘졌어요… 팬들이 실망했어요." },
+};
+const makeGrade = (g) => ({ g, ...GRADE_INFO[g] });
+
 function gradeOf(score) {
-  if (score >= 76) return { g: "S", pts: 30, txt: "🌟 완벽한 무대! 심사위원 전원이 기립했어요." };
-  if (score >= 64) return { g: "A", pts: 22, txt: "🔥 시선을 사로잡는 무대! 카메라가 계속 따라와요." };
-  if (score >= 52) return { g: "B", pts: 15, txt: "🙂 안정적인 무대. 나쁘지 않았어요." };
-  if (score >= 40) return { g: "C", pts: 9, txt: "😬 아쉬운 실수가 있었어요. 다음에 만회해요." };
-  return { g: "D", pts: 5, txt: "😢 무대 위에서 머리가 하얘졌어요…" };
+  if (score >= 76) return makeGrade("S");
+  if (score >= 64) return makeGrade("A");
+  if (score >= 52) return makeGrade("B");
+  if (score >= 40) return makeGrade("C");
+  return makeGrade("D");
 }
 
 // ---------- 무대 연출 ----------
@@ -376,8 +390,8 @@ const MOMENTS = {
 };
 
 let stageTimer = null;
-// 무대를 문자중계처럼 연출한 뒤 결과를 보여줌
-function renderStageSim(type, grade, resultHTML, nextLabel, nextFn) {
+// 무대를 문자중계처럼 연출 + 하이라이트 타이밍 미니게임 → 결과는 onFinal(최종등급)로
+function renderStageSim(type, grade, onFinal) {
   const key = type.main || POS_INFO[S.pos].stat;
   const pool = MOMENTS[key] || MOMENTS.vocal;
   const goodN = grade.g === "S" ? 3 : grade.g === "A" ? 2 : grade.g === "B" ? 1 : 0;
@@ -390,11 +404,10 @@ function renderStageSim(type, grade, resultHTML, nextLabel, nextFn) {
     { text: `🎤 ${S.name}, ${type.name}에 오릅니다.` },
     { text: "조명이 켜지고, 음악이 시작돼요 🎶" },
     ...moments,
-    { text: "심사위원들이 점수를 적습니다… ✍️" },
   ];
 
-  $("stage-card").innerHTML = `<div class="pbp" id="pbp"></div><div id="stage-result"></div>`;
-  let idx = 0;
+  $("stage-card").innerHTML = `<div class="pbp" id="pbp"></div><div id="stage-moment"></div><div id="stage-result"></div>`;
+  let idx = 0, momentOn = false, finished = false;
   function applyFeed(f) {
     const div = document.createElement("div");
     if (f.cls) div.className = f.cls;
@@ -402,20 +415,55 @@ function renderStageSim(type, grade, resultHTML, nextLabel, nextFn) {
     $("pbp").appendChild(div);
     $("pbp").scrollTop = $("pbp").scrollHeight;
   }
-  function showResult() {
+  function startMoment() {
+    if (momentOn) return;
+    momentOn = true;
     clearInterval(stageTimer);
-    $("stage-result").innerHTML = resultHTML;
-    $("btn-stage-next").textContent = nextLabel;
-    $("btn-stage-next").onclick = nextFn;
+    applyFeed({ text: "✨ 하이라이트 파트가 다가와요…!", cls: "good" });
+    const btn = $("btn-stage-next");
+    btn.disabled = true;
+    btn.textContent = "✨ 하이라이트!";
+    const stat = S.stats[key];
+    window.Timing.play($("stage-moment"), {
+      label: "✨ 킬링파트! 초록 존에서 포인트를 찍어요!",
+      button: "지금! 🎤",
+      zonePct: clamp(13 + stat * 0.24, 13, 38),
+    }, (res) => {
+      let gi = GRADE_ORDER.indexOf(grade.g);
+      if (res === "perfect") gi = Math.min(4, gi + 1);
+      else if (res === "miss") gi = Math.max(0, gi - 1);
+      const finalGrade = makeGrade(GRADE_ORDER[gi]);
+      applyFeed(res === "perfect"
+        ? { text: "💫 킬링파트를 완벽하게! 객석이 터져나가요!", cls: "good" }
+        : res === "good"
+          ? { text: "✨ 하이라이트를 무난히 소화했어요" }
+          : { text: "😱 하이라이트에서 삐끗… 등급이 흔들려요", cls: "bad" });
+      applyFeed({ text: "심사위원들이 점수를 적습니다… ✍️" });
+      showResult(finalGrade);
+    });
+  }
+  function showResult(finalGrade) {
+    if (finished) return;
+    finished = true;
+    clearInterval(stageTimer);
+    const r = onFinal(finalGrade);
+    $("stage-result").innerHTML = r.resultHTML;
+    const btn = $("btn-stage-next");
+    btn.disabled = false;
+    btn.textContent = r.nextLabel;
+    btn.onclick = r.nextFn;
   }
   stageTimer = setInterval(() => {
-    if (idx >= feeds.length) { showResult(); return; }
+    if (idx >= feeds.length) { startMoment(); return; }
     applyFeed(feeds[idx++]);
   }, 650);
-  $("btn-stage-next").textContent = "⏩ 빨리 감기";
-  $("btn-stage-next").onclick = () => {
+  const btn = $("btn-stage-next");
+  btn.textContent = "⏩ 빨리 감기";
+  btn.disabled = false;
+  btn.onclick = () => {
+    if (momentOn || finished) return;
     while (idx < feeds.length) applyFeed(feeds[idx++]);
-    showResult();
+    startMoment();
   };
 }
 
@@ -438,21 +486,24 @@ function playEvalStage() {
   const type = ev.idx === 2 ? STAGE_TYPES[3] : STAGE_TYPES[pick([0, 1, 2])];
   const { score } = stageScore(type);
   const grade = gradeOf(score);
-  const pts = Math.round(grade.pts * a.spot);
-  S.fandom += pts;
-  S.stages += 1;
-  ev.totalPts += pts;
-  ev.scores.push(score);
   S.condition = clamp(S.condition - 5, 0, 100);
   ev.idx += 1;
-
   $("stage-round").textContent = `${ev.idx}번째 무대 · ${type.name}`;
-  const resultHTML = `
-    <div class="tour-vs">무대 등급 <span class="${grade.g === "S" || grade.g === "A" ? "win" : grade.g === "D" ? "lose" : ""}">${grade.g}</span></div>
-    <div class="tour-line">${grade.txt}</div>
-    <div class="tour-pts">💖 팬덤 +${pts}</div>`;
-  if (ev.idx < 3) renderStageSim(type, grade, resultHTML, "다음 무대", playEvalStage);
-  else renderStageSim(type, grade, resultHTML, "종합 순위 발표", finishEval);
+  renderStageSim(type, grade, (fg) => {
+    const pts = Math.round(fg.pts * a.spot);
+    S.fandom = Math.max(0, S.fandom + pts);
+    S.stages += 1;
+    ev.totalPts += pts;
+    ev.scores.push(score + (fg.pts - grade.pts) * 0.6);
+    save();
+    const resultHTML = `
+      <div class="tour-vs">무대 등급 <span class="${fg.g === "S" || fg.g === "A" ? "win" : fg.g === "D" ? "lose" : ""}">${fg.g}</span></div>
+      <div class="tour-line">${fg.txt}</div>
+      <div class="tour-pts">${pts >= 0 ? `💖 팬덤 +${pts}` : `📉 팬덤 ${pts}`}</div>`;
+    return ev.idx < 3
+      ? { resultHTML, nextLabel: "다음 무대", nextFn: playEvalStage }
+      : { resultHTML, nextLabel: "종합 순위 발표", nextFn: finishEval };
+  });
 }
 
 function finishEval() {
@@ -505,31 +556,37 @@ function playSurvivalRound() {
   const type = pick(STAGE_TYPES);
   const { score } = stageScore(type);
   const grade = gradeOf(score);
-  const pts = Math.round(grade.pts * a.spot) + ev.round * 4;
-  S.fandom += pts;
-  S.stages += 1;
   S.condition = clamp(S.condition - 5, 0, 100);
-
-  const p = clamp(
-    0.40 + a.debut * 0.35 + (overall() - 50) / 90 + S.fandom / 1500 +
-    (S.condition - 50) / 900 - ev.round * 0.05,
-    0.12, 0.93
-  );
-  const pass = Math.random() < p;
-
   $("stage-round").textContent = `${roundName} · ${type.name}`;
-  const resultHTML = `
-    <div class="tour-vs">무대 등급 ${grade.g} — <span class="${pass ? "win" : "lose"}">${pass ? "생존! 🎉" : "탈락… 💧"}</span></div>
-    <div class="tour-line">${grade.txt}</div>
-    <div class="tour-pts">💖 팬덤 +${pts}</div>`;
-  if (pass && ev.round < SURVIVAL_ROUNDS.length - 1) {
-    ev.round += 1;
-    renderStageSim(type, grade, resultHTML, `${SURVIVAL_ROUNDS[ev.round]} 진출!`, playSurvivalRound);
-  } else {
+  renderStageSim(type, grade, (fg) => {
+    const pts = Math.round(fg.pts * a.spot) + ev.round * 4;
+    S.fandom = Math.max(0, S.fandom + pts);
+    S.stages += 1;
+    // 하이라이트 성공/실패가 생존 확률에도 영향
+    const momentBonus = fg.pts > grade.pts ? 0.06 : fg.pts < grade.pts ? -0.06 : 0;
+    const p = clamp(
+      0.40 + a.debut * 0.35 + (overall() - 50) / 90 + S.fandom / 1500 +
+      (S.condition - 50) / 900 - ev.round * 0.05 + momentBonus,
+      0.12, 0.93
+    );
+    const pass = Math.random() < p;
+    save();
+    const resultHTML = `
+      <div class="tour-vs">무대 등급 ${fg.g} — <span class="${pass ? "win" : "lose"}">${pass ? "생존! 🎉" : "탈락… 💧"}</span></div>
+      <div class="tour-line">${fg.txt}</div>
+      <div class="tour-pts">${pts >= 0 ? `💖 팬덤 +${pts}` : `📉 팬덤 ${pts}`}</div>`;
+    if (pass && ev.round < SURVIVAL_ROUNDS.length - 1) {
+      ev.round += 1;
+      return { resultHTML, nextLabel: `${SURVIVAL_ROUNDS[ev.round]} 진출!`, nextFn: playSurvivalRound };
+    }
     ev.eliminated = !pass;
     const capturedRound = ev.round;
-    renderStageSim(type, grade, resultHTML, pass ? "🌟 최종 발표 보러 가기" : "결과 받아들이기", () => showEnding(pass, capturedRound));
-  }
+    return {
+      resultHTML,
+      nextLabel: pass ? "🌟 최종 발표 보러 가기" : "결과 받아들이기",
+      nextFn: () => showEnding(pass, capturedRound),
+    };
+  });
 }
 
 // ---------- 엔딩 ----------

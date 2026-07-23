@@ -314,6 +314,10 @@ function maybeEvent() {
       S.stats.stamina = clamp(S.stats.stamina + 2, 0, 100);
       addLog(`🏃 아침 러닝 습관이 몸에 붙었어요. 체력 +2`);
     },
+    () => {
+      S.scout = Math.max(0, S.scout - 10);
+      addLog(`📉 슬럼프라는 소문이 돌아요… 스카우트 주목도 -10`);
+    },
   ];
   pick(events)();
 }
@@ -369,20 +373,14 @@ function playTourGame() {
     r.win + (overall() - 50) / 130 + (S.condition - 50) / 700 - tour.round * 0.06,
     0.15, 0.92
   );
-  const win = Math.random() < p;
-  S.games += 1;
-
-  // 개인 성적
   const perf = S.pos === "batter" ? batterLine() : pitcherLine();
-  let pts = perf.pts + (win ? 4 : 1) + tour.round * 3;
-  pts = Math.round(pts * r.spot);
-  S.scout += pts;
-  tour.totalPts += pts;
-  S.condition = clamp(S.condition - 6, 0, 100);
-
-  // 결과에 맞는 경기 흐름(라인스코어 + 중계 이벤트) 생성 후 연출
-  const story = S.pos === "batter" ? batterStory(win, perf) : pitcherStory(win, perf);
-  renderGameSim(roundName, opp, win, perf, pts, story);
+  // 절반 이상은 '운명의 9회' 접전 — 타이밍 미니게임이 승부를 결정해요
+  const interactive = Math.random() < 0.55;
+  const preWin = interactive ? null : Math.random() < p;
+  const story = S.pos === "batter"
+    ? batterStory(preWin, perf, interactive)
+    : pitcherStory(preWin, perf, interactive);
+  renderGameSim(roundName, opp, perf, story, interactive, preWin);
 }
 
 // ---------- 경기 시뮬레이션 연출 ----------
@@ -393,7 +391,9 @@ function shuffle(a) {
   }
   return a;
 }
-function addRuns(inn, n) { for (let i = 0; i < n; i++) inn[randInt(0, 8)]++; }
+function addRuns(inn, n, lo = 0, hi = 8) {
+  for (let i = 0; i < n; i++) inn[randInt(lo, hi)]++;
+}
 
 const HR_TXT = [
   "담장을 훌쩍 넘기는 큼지막한 홈런! 💥",
@@ -413,17 +413,18 @@ const OUT_TXT = [
   "파울 접전 끝에 범타 처리",
 ];
 
-// 타자: 개인 성적(안타/홈런)을 이닝에 배치하고 팀 득점을 승패에 맞게 채움
-function batterStory(win, perf) {
+// 타자: 개인 성적을 이닝에 배치. interactive면 마지막 타석은 미니게임 몫으로 남겨둠
+function batterStory(win, perf, interactive) {
   const ourInn = Array(9).fill(0), oppInn = Array(9).fill(0), contrib = Array(9).fill(0);
   const events = [];
-  const abInnsAll = [[3], [2, 5], [1, 4, 7], [1, 3, 6, 8], [1, 3, 5, 7, 8]];
-  const abInns = abInnsAll[perf.ab - 1] || [1, 3, 6, 8];
   const outcomes = shuffle([
     ...Array(perf.hr).fill("hr"),
     ...Array(perf.hits - perf.hr).fill("hit"),
     ...Array(perf.ab - perf.hits).fill("out"),
   ]);
+  if (interactive) outcomes.pop(); // 마지막 타석은 유저가 직접
+  const abInnsAll = [[], [3], [2, 5], [1, 4, 7], [1, 3, 6, 8], [1, 3, 5, 7, 8]];
+  const abInns = abInnsAll[outcomes.length] || [1, 3, 6, 8];
   let sbLeft = perf.sb;
   outcomes.forEach((o, i) => {
     const inn = abInns[i];
@@ -442,7 +443,25 @@ function batterStory(win, perf) {
       events.push({ inn, half: "말", text: `${S.name}, ${pick(OUT_TXT)}`, cls: "" });
     }
   });
+  perf.baseHits = outcomes.filter((o) => o !== "out").length;
+  perf.baseHr = outcomes.filter((o) => o === "hr").length;
   const hrTotal = ourInn.reduce((a, b) => a + b, 0);
+
+  if (interactive) {
+    // 9회말 시작 시점에 정확히 1점 뒤진 접전으로 구성
+    const ourTotal8 = Math.max(hrTotal, randInt(1, 4));
+    addRuns(ourInn, ourTotal8 - hrTotal, 0, 7);
+    addRuns(oppInn, ourTotal8 + 1, 0, 8);
+    for (let i = 0; i < 9; i++) {
+      if (oppInn[i] > 0) events.push({ inn: i + 1, half: "초", text: `상대가 ${oppInn[i]}점을 냈어요 😬`, cls: "bad" });
+      if (i < 8) {
+        const extra = ourInn[i] - contrib[i];
+        if (extra > 0) events.push({ inn: i + 1, half: "말", text: `우리 타선이 ${extra}점을 뽑아냅니다! 🔥`, cls: "good" });
+      }
+    }
+    return { ourInn, oppInn, events, moment: { half: "말" } };
+  }
+
   const targetOur = win
     ? randInt(Math.max(3, hrTotal + 1), Math.max(6, hrTotal + 3))
     : hrTotal + randInt(0, 2);
@@ -457,19 +476,32 @@ function batterStory(win, perf) {
   return { ourInn, oppInn, events };
 }
 
-// 투수: 내가 던진 이닝에 탈삼진/실점을 배치, 나머지는 불펜과 타선이 채움
-function pitcherStory(win, perf) {
+// 투수: 내가 던진 이닝에 탈삼진/실점 배치. interactive면 9회초 위기를 유저가 막음
+function pitcherStory(win, perf, interactive) {
   const ourInn = Array(9).fill(0), oppInn = Array(9).fill(0);
   const events = [];
-  const myRuns = Array(perf.ip).fill(0), myKs = Array(perf.ip).fill(0);
-  for (let i = 0; i < perf.runs; i++) myRuns[randInt(0, perf.ip - 1)]++;
-  for (let i = 0; i < perf.k; i++) myKs[randInt(0, perf.ip - 1)]++;
-  for (let i = 0; i < perf.ip; i++) {
+  const ip = interactive ? Math.min(perf.ip, 8) : perf.ip;
+  const myRuns = Array(ip).fill(0), myKs = Array(ip).fill(0);
+  for (let i = 0; i < perf.runs; i++) myRuns[randInt(0, ip - 1)]++;
+  for (let i = 0; i < perf.k; i++) myKs[randInt(0, ip - 1)]++;
+  for (let i = 0; i < ip; i++) {
     oppInn[i] += myRuns[i];
     if (myRuns[i] > 0) events.push({ inn: i + 1, half: "초", text: `${S.name}, ${myRuns[i]}실점… 흔들립니다 😬`, cls: "bad" });
     else if (myKs[i] >= 2) events.push({ inn: i + 1, half: "초", text: `${S.name}, 탈삼진 ${myKs[i]}개 포함 무실점! 🔥`, cls: "good" });
     else if (Math.random() < 0.35) events.push({ inn: i + 1, half: "초", text: `${S.name}, 삼자범퇴 처리 🧊`, cls: "good" });
   }
+
+  if (interactive) {
+    // 9회초 시작 시점에 1점 앞선 리드, 마지막 위기를 유저가 직접 막음
+    const oppTotal8 = oppInn.slice(0, 8).reduce((a, b) => a + b, 0);
+    addRuns(ourInn, oppTotal8 + 1, 0, 7);
+    for (let i = 0; i < 8; i++) {
+      if (ourInn[i] > 0) events.push({ inn: i + 1, half: "말", text: `우리 타선이 ${ourInn[i]}점 지원! 🔥`, cls: "good" });
+    }
+    if (ip < 8) events.push({ inn: 8, half: "초", text: `불펜이 버텨준 사이, 9회를 앞두고 ${S.name}이(가) 다시 공을 쥡니다 🔥`, cls: "" });
+    return { ourInn, oppInn, events, moment: { half: "초" } };
+  }
+
   if (perf.ip < 9) {
     events.push({ inn: perf.ip, half: "초", text: `${perf.ip}이닝을 끝으로 마운드를 내려옵니다 👏`, cls: "" });
     const bullpen = win ? randInt(0, 1) : randInt(1, 2);
@@ -493,7 +525,7 @@ function pitcherStory(win, perf) {
 }
 
 let simTimer = null;
-function renderGameSim(roundName, opp, win, perf, pts, story) {
+function renderGameSim(roundName, opp, perf, story, interactive, preWin) {
   const r = regionOf();
   $("tour-round").textContent = `${roundName} vs ${opp}`;
   const heads = Array.from({ length: 9 }, (_, i) => `<th>${i + 1}</th>`).join("");
@@ -507,25 +539,36 @@ function renderGameSim(roundName, opp, win, perf, pts, story) {
       </tbody>
     </table>
     <div class="pbp" id="pbp"></div>
+    <div id="game-moment"></div>
     <div id="game-result"></div>`;
 
   const evFor = (inn, half) => story.events.filter((e) => e.inn === inn && e.half === half);
   const steps = [{ feeds: [{ text: `⚾ ${roundName} vs ${opp} — 플레이볼!` }] }];
   for (let i = 0; i < 9; i++) {
+    if (interactive && story.moment.half === "초" && i === 8) { steps.push({ moment: true }); break; }
     steps.push({ cell: ["opp", i, story.oppInn[i]], feeds: evFor(i + 1, "초").map((e) => ({ text: `${i + 1}회초 · ${e.text}`, cls: e.cls })) });
+    if (interactive && story.moment.half === "말" && i === 8) { steps.push({ moment: true }); break; }
     steps.push({ cell: ["our", i, story.ourInn[i]], feeds: evFor(i + 1, "말").map((e) => ({ text: `${i + 1}회말 · ${e.text}`, cls: e.cls })) });
   }
-  const ourTotal = story.ourInn.reduce((a, b) => a + b, 0);
-  const oppTotal = story.oppInn.reduce((a, b) => a + b, 0);
-  steps.push({ feeds: [{ text: `📢 경기 종료 — ${ourTotal}:${oppTotal}`, cls: win ? "good" : "bad" }] });
+  if (!interactive) {
+    const ourTotal = story.ourInn.reduce((a, b) => a + b, 0);
+    const oppTotal = story.oppInn.reduce((a, b) => a + b, 0);
+    steps.push({ feeds: [{ text: `📢 경기 종료 — ${ourTotal}:${oppTotal}`, cls: preWin ? "good" : "bad" }] });
+  }
 
   const totals = { opp: 0, our: 0 };
-  let idx = 0;
+  let idx = 0, finished = false, momentOn = false;
+
   function applyStep(s) {
     if (s.cell) {
       const [side, i, v] = s.cell;
       $(`sb-${side}-${i}`).textContent = v;
       totals[side] += v;
+      $(`sb-r-${side}`).textContent = totals[side];
+    }
+    if (s.addR) {
+      const [side, n] = s.addR;
+      totals[side] += n;
       $(`sb-r-${side}`).textContent = totals[side];
     }
     for (const f of s.feeds || []) {
@@ -537,17 +580,98 @@ function renderGameSim(roundName, opp, win, perf, pts, story) {
     const pbp = $("pbp");
     pbp.scrollTop = pbp.scrollHeight;
   }
-  function showResult() {
+
+  function beginMoment() {
+    momentOn = true;
     clearInterval(simTimer);
+    const isBat = S.pos === "batter";
+    applyStep({ feeds: [{ text: isBat
+      ? `⚡ 9회말 2아웃, 1점 차 역전 찬스! ${S.name}의 타석!`
+      : `⚡ 9회초 1점 차 리드, 2아웃 만루 위기! ${S.name}의 결정구!`, cls: "good" }] });
+    const btn = $("btn-tour-next");
+    btn.disabled = true;
+    btn.textContent = "⚡ 운명의 순간!";
+    const stat = isBat ? S.stats.contact : S.stats.control;
+    window.Timing.play($("game-moment"), {
+      label: isBat ? "⚾ 공이 온다! 초록 존에서 스윙!" : "🎯 결정구! 초록 존에서 릴리스!",
+      button: isBat ? "스윙! 🏏" : "던진다! 🔥",
+      zonePct: clamp(13 + stat * 0.24, 13, 38),
+    }, resolveMoment);
+  }
+
+  function resolveMoment(res) {
+    const isBat = S.pos === "batter";
+    const flipWin = () => Math.random() < clamp(0.5 + (overall() - 50) / 250, 0.3, 0.7);
+    let win;
+    if (isBat) {
+      if (res === "perfect") {
+        win = true;
+        applyStep({ cell: ["our", 8, 2], feeds: [{ text: `9회말 · ${S.name}, 끝내기 투런 홈런!!! 💥🎉`, cls: "good" }] });
+        perf.baseHits += 1; perf.baseHr += 1;
+        perf.highlight = "💥 운명의 타석에서 터진 끝내기 홈런! 전국구 스타 탄생!";
+      } else if (res === "good") {
+        win = flipWin();
+        applyStep({ cell: ["our", 8, 1], feeds: [{ text: `9회말 · ${S.name}, 극적인 동점 적시타! ⚡`, cls: "good" }] });
+        applyStep({ addR: [win ? "our" : "opp", 1], feeds: [{ text: win ? "🔥 연장 10회, 끝내기 승리!" : "💧 연장 접전 끝에 아쉬운 역전패…", cls: win ? "good" : "bad" }] });
+        perf.baseHits += 1;
+        perf.highlight = win ? "⚡ 동점 적시타로 경기를 살려냈어요!" : "⚡ 동점 적시타에도 아쉬운 연장 패배…";
+      } else {
+        win = false;
+        applyStep({ cell: ["our", 8, 0], feeds: [{ text: `9회말 · ${S.name}, 헛스윙 삼진… 경기 종료 💧`, cls: "bad" }] });
+        perf.highlight = "😢 운명의 타석에서 방망이가 헛돌았어요…";
+      }
+      perf.hits = perf.baseHits;
+      perf.hr = perf.baseHr;
+      perf.pts = perf.hits * 7 + perf.hr * 16 + perf.sb * 4 + Math.round(S.stats.defense / 25) + (perf.hits === 0 ? -9 : 0);
+      perf.line = `${S.name}: ${perf.ab}타수 ${perf.hits}안타${perf.hr ? ` ${perf.hr}홈런` : ""}${perf.sb ? ` ${perf.sb}도루` : ""}`;
+    } else {
+      if (res === "perfect") {
+        win = true;
+        applyStep({ cell: ["opp", 8, 0], feeds: [{ text: `9회초 · ${S.name}, 마지막 타자를 삼진으로!! 경기 끝! 🧊🎉`, cls: "good" }] });
+        perf.highlight = "🧊 만루 위기에서 삼진 마무리! 강심장 에이스!";
+      } else if (res === "good") {
+        win = flipWin();
+        applyStep({ cell: ["opp", 8, 1], feeds: [{ text: "9회초 · 1실점으로 동점을 허용했지만 추가 실점은 막았어요", cls: "" }] });
+        applyStep({ addR: [win ? "our" : "opp", 1], feeds: [{ text: win ? "🔥 연장 10회말, 우리 타선의 끝내기!" : "💧 연장 접전 끝에 아쉬운 패배…", cls: win ? "good" : "bad" }] });
+        perf.runs += 1;
+      } else {
+        win = false;
+        applyStep({ cell: ["opp", 8, 2], feeds: [{ text: "9회초 · 통한의 역전 2타점 안타를 맞았어요… 💧", cls: "bad" }] });
+        perf.highlight = "😵 마지막 순간 결정구가 가운데로 몰렸어요…";
+        perf.runs += 2;
+      }
+      if (!perf.highlight || res === "good") {
+        perf.highlight = win ? "🔥 위기를 버텨 승리를 지켜냈어요!" : perf.highlight;
+      }
+      perf.pts = Math.max(perf.ip * 2 + perf.k * 2.5 - perf.runs * 2.5, -12);
+      perf.line = `${S.name}: ${perf.ip}이닝 ${perf.k}탈삼진 ${perf.runs}실점`;
+    }
+    applyStep({ feeds: [{ text: `📢 경기 종료 — ${totals.our}:${totals.opp}`, cls: win ? "good" : "bad" }] });
+    showResult(win, res === "perfect" ? 6 : 0);
+  }
+
+  function showResult(win, bonus) {
+    if (finished) return;
+    finished = true;
+    clearInterval(simTimer);
+    S.games += 1;
+    let pts = perf.pts + (win ? 4 : 1) + tour.round * 3 + (bonus || 0);
+    pts = Math.round(pts * r.spot);
+    S.scout = Math.max(0, S.scout + pts); // 못한 경기는 주목도가 깎여요
+    tour.totalPts += pts;
+    S.condition = clamp(S.condition - 6, 0, 100);
+    save();
+    const btn = $("btn-tour-next");
+    btn.disabled = false;
     $("game-result").innerHTML = `
       <div class="tour-vs">${r.school} <span class="${win ? "win" : "lose"}">${win ? "승리! 🎉" : "패배… 😢"}</span></div>
       <div class="tour-line">${perf.line}</div>
       ${perf.highlight ? `<div class="tour-line tour-highlight">${perf.highlight}</div>` : ""}
-      <div class="tour-pts">🔭 스카우트 주목도 +${pts}</div>`;
+      <div class="tour-pts">${pts >= 0 ? `🔭 스카우트 주목도 +${pts}` : `📉 스카우트 주목도 ${pts}`}</div>`;
     if (win && tour.round < ROUNDS.length - 1) {
       tour.round += 1;
-      $("btn-tour-next").textContent = `${ROUNDS[tour.round]} 진출!`;
-      $("btn-tour-next").onclick = playTourGame;
+      btn.textContent = `${ROUNDS[tour.round]} 진출!`;
+      btn.onclick = playTourGame;
     } else {
       tour.alive = false;
       const champion = win && tour.round === ROUNDS.length - 1;
@@ -556,18 +680,28 @@ function renderGameSim(roundName, opp, win, perf, pts, story) {
         S.scout += 30;
         tour.totalPts += 30;
       }
-      $("btn-tour-next").textContent = champion ? "🏆 우승 세리머니!" : "대회 마치기";
-      $("btn-tour-next").onclick = () => finishTournament(champion, roundName);
+      btn.textContent = champion ? "🏆 우승 세리머니!" : "대회 마치기";
+      btn.onclick = () => finishTournament(champion, roundName);
     }
   }
+
   simTimer = setInterval(() => {
-    if (idx >= steps.length) { showResult(); return; }
-    applyStep(steps[idx++]);
+    if (idx >= steps.length) { if (!interactive) showResult(preWin, 0); return; }
+    const st = steps[idx++];
+    if (st.moment) { beginMoment(); return; }
+    applyStep(st);
   }, 550);
   $("btn-tour-next").textContent = "⏩ 빨리 감기";
+  $("btn-tour-next").disabled = false;
   $("btn-tour-next").onclick = () => {
-    while (idx < steps.length) applyStep(steps[idx++]);
-    showResult();
+    if (momentOn || finished) return;
+    clearInterval(simTimer);
+    while (idx < steps.length) {
+      const st = steps[idx++];
+      if (st.moment) { beginMoment(); return; }
+      applyStep(st);
+    }
+    if (!interactive) showResult(preWin, 0);
   };
 }
 
@@ -592,7 +726,7 @@ function batterLine() {
     }
   }
   if (hits > 0 && Math.random() < S.stats.run / 250) sb++;
-  const pts = hits * 7 + hr * 16 + sb * 4 + Math.round(S.stats.defense / 25);
+  const pts = hits * 7 + hr * 16 + sb * 4 + Math.round(S.stats.defense / 25) + (hits === 0 ? -9 : 0);
   const line = `${S.name}: ${ab}타수 ${hits}안타${hr ? ` ${hr}홈런` : ""}${sb ? ` ${sb}도루` : ""}`;
   let highlight = "";
   if (hr) highlight = "💥 담장을 넘기는 큼지막한 홈런! 관중석이 술렁여요.";
@@ -606,13 +740,13 @@ function pitcherLine() {
   const kRate = (S.stats.velocity + S.stats.breaking) / 2;
   const k = clamp(Math.round(ip * (0.4 + kRate / 90) + randInt(-1, 1)), 0, ip * 3);
   const runs = clamp(Math.round(ip * (0.9 - S.stats.control / 130) + randInt(-1, 1)), 0, 9);
-  const pts = ip * 2 + k * 2.5 - runs * 2;
+  const pts = Math.max(ip * 2 + k * 2.5 - runs * 2.5, -12);
   const line = `${S.name}: ${ip}이닝 ${k}탈삼진 ${runs}실점`;
   let highlight = "";
   if (runs === 0 && ip >= 5) highlight = "🧊 압도적인 무실점 호투! 스카우트들이 수첩을 꺼내요.";
   else if (k >= ip * 1.5) highlight = "🔥 탈삼진 쇼! 상대 타자들이 방망이를 헛돌려요.";
   else if (runs >= 5) highlight = "😵 난타당한 하루… 다음을 기약해요.";
-  return { pts: Math.max(pts, 2), line, highlight, ip, k, runs };
+  return { pts, line, highlight, ip, k, runs };
 }
 
 // ---------- 드래프트 ----------

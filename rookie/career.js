@@ -410,7 +410,9 @@ window.Career = (() => {
     return list;
   }
 
-  function showBattle() {
+  let battleReturn = "screen-title";
+  function showBattle(returnTo) {
+    if (returnTo) battleReturn = returnTo;
     if (!S) {
       const sv = localStorage.getItem(SAVE_KEY);
       if (sv) S = JSON.parse(sv);
@@ -533,9 +535,11 @@ window.Career = (() => {
 
   // ---------- 초기화 ----------
   $("btn-hof")?.addEventListener("click", showHof);
-  $("btn-battle")?.addEventListener("click", showBattle);
+  $("btn-battle")?.addEventListener("click", () => showBattle("screen-title"));
+  $("btn-battle-main")?.addEventListener("click", () => showBattle("screen-main"));
+  $("btn-battle-pro")?.addEventListener("click", () => showBattle("screen-pro"));
   $("btn-hof-back")?.addEventListener("click", () => show("screen-title"));
-  $("btn-battle-back")?.addEventListener("click", () => show("screen-title"));
+  $("btn-battle-back")?.addEventListener("click", () => show(battleReturn));
 
   return {
     onDraft,
