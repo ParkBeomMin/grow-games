@@ -1,32 +1,54 @@
 /* 광고 모듈 — Google H5 Games Ads (Ad Placement API)
- * ADSENSE_CLIENT에 애드센스 게시자 ID(ca-pub-…)를 넣으면 활성화돼요.
- * 보상형 광고는 애드센스 계정에서 H5 Games Ads 프로그램 사용 설정이 필요해요.
- * 비어 있거나 광고 로드 실패 시엔 보상을 그냥 지급하는 폴백 모드로 동작해요. */
+ * 스크립트는 유저가 보상형 광고 버튼을 눌렀을 때만 지연 로드해요.
+ * (페이지 로드 시 로드하면 애드센스 '자동 광고'가 상단 배너를 끼워넣어 게임을 방해)
+ * 광고 미로드/미충전 시엔 보상을 그냥 지급하는 폴백으로 동작해요. */
 "use strict";
 
 window.Ads = (() => {
   const ADSENSE_CLIENT = "ca-pub-7426857657290789";
 
-  let ready = false;
-  if (ADSENSE_CLIENT) {
+  let state = "idle"; // idle | loading | ready | failed
+  const queue = [];
+
+  function loadScript() {
+    state = "loading";
     const s = document.createElement("script");
     s.async = true;
     s.crossOrigin = "anonymous";
     s.dataset.adFrequencyHint = "30s";
     s.src = `https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${ADSENSE_CLIENT}`;
+    s.onload = () => {
+      window.adsbygoogle = window.adsbygoogle || [];
+      window.adBreak = window.adConfig = function (o) { window.adsbygoogle.push(o); };
+      window.adConfig({ preloadAdBreaks: "on", sound: "off" });
+      state = "ready";
+      flush();
+    };
+    s.onerror = () => {
+      state = "failed";
+      flush();
+    };
     document.head.appendChild(s);
-    window.adsbygoogle = window.adsbygoogle || [];
-    window.adBreak = window.adConfig = function (o) { window.adsbygoogle.push(o); };
-    window.adConfig({ preloadAdBreaks: "on", sound: "off" });
-    ready = true;
   }
 
-  // 보상형 광고 — cb(보상지급여부, 실제광고여부)
-  function rewarded(cb) {
-    if (!ready || typeof window.adBreak !== "function") {
-      cb(true, false); // 폴백: 광고 없이 지급
+  function flush() {
+    while (queue.length) runRewarded(queue.shift());
+  }
+
+  function runRewarded(cb) {
+    if (state !== "ready" || typeof window.adBreak !== "function") {
+      cb(true, false); // 광고 불가 → 그냥 지급
       return;
     }
+    let finished = false;
+    const finish = (reward, real) => {
+      if (finished) return;
+      finished = true;
+      clearTimeout(timer);
+      cb(reward, real);
+    };
+    // 광고 응답이 아예 없을 때를 대비한 안전장치
+    const timer = setTimeout(() => finish(true, false), 10000);
     let viewed = false;
     window.adBreak({
       type: "reward",
@@ -34,9 +56,22 @@ window.Ads = (() => {
       beforeReward(showAdFn) { showAdFn(); },
       adViewed() { viewed = true; },
       adDismissed() { viewed = false; },
-      adBreakDone() { cb(viewed, true); },
+      adBreakDone(info) {
+        const st = info && info.breakStatus;
+        if (st === "viewed") finish(true, true);        // 끝까지 시청 → 보상
+        else if (st === "dismissed") finish(false, true); // 중간에 닫음 → 보상 없음
+        else finish(true, false);                        // 광고 미충전 등 → 그냥 지급
+      },
     });
   }
 
-  return { rewarded, enabled: () => ready };
+  // cb(보상지급여부, 실제광고여부)
+  function rewarded(cb) {
+    if (!ADSENSE_CLIENT) { cb(true, false); return; }
+    if (state === "ready" || state === "failed") { runRewarded(cb); return; }
+    queue.push(cb);
+    if (state === "idle") loadScript();
+  }
+
+  return { rewarded, enabled: () => !!ADSENSE_CLIENT };
 })();
