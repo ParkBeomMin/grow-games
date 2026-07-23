@@ -318,6 +318,7 @@ window.Career = (() => {
     hofBtn.textContent = "🏛️ 명예의 전당 보기";
     hofBtn.onclick = showHof;
     act.appendChild(hofBtn);
+    S = null; // 은퇴 완료 — 더 이상 '현역'으로 배틀 목록에 남지 않게
     const again = document.createElement("button");
     again.className = "btn btn-ghost";
     again.textContent = "🔁 새 선수 키우기";

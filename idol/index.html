@@ -27,6 +27,8 @@
         <p class="desc">오디션에 합격한 평범한 연습생에서 데뷔조까지.<br/>연습실 3년, 당신의 무대가 시작됩니다.</p>
         <button class="btn btn-primary" id="btn-new">새 게임 시작</button>
         <button class="btn btn-ghost hidden" id="btn-continue">이어하기</button>
+        <button class="btn btn-ghost" id="btn-hof">🏛️ 명예의 전당</button>
+        <button class="btn btn-ghost" id="btn-battle">⚔️ 배틀 아레나</button>
         <a class="series-link" href="../">🎮 키우기 시리즈 더 보기</a>
       </div>
     </section>
@@ -85,6 +87,7 @@
         </div>
         <div class="hud-right">
           <div class="hud-turn" id="hud-turn"></div>
+          <button class="mini-btn hud-battle" id="btn-battle-main">⚔️ 배틀</button>
         </div>
       </header>
 
@@ -127,10 +130,66 @@
       </div>
     </section>
 
+
+    <!-- 데뷔 후 활동 (컴백 준비) -->
+    <section class="screen" id="screen-pro">
+      <header class="hud">
+        <div class="hud-id">
+          <img id="pro-avatar" class="hud-avatar hidden" alt="" />
+          <div class="hud-left">
+            <div class="hud-name" id="pro-name"></div>
+            <div class="hud-school" id="pro-team"></div>
+          </div>
+        </div>
+        <div class="hud-right">
+          <div class="hud-turn" id="pro-turn"></div>
+          <button class="mini-btn hud-battle" id="btn-battle-pro">⚔️ 배틀</button>
+        </div>
+      </header>
+      <div class="gauges">
+        <div class="gauge">
+          <div class="gauge-label"><span>🩹 컨디션</span><span id="pro-cond-num"></span></div>
+          <div class="bar"><div class="bar-fill cond" id="pro-cond-bar"></div></div>
+        </div>
+      </div>
+      <div class="stats" id="pro-stats"></div>
+      <div class="actions">
+        <p class="actions-title" id="pro-camp-title"></p>
+        <div class="action-grid" id="pro-actions"></div>
+      </div>
+      <div class="log" id="pro-log"></div>
+    </section>
+
+    <!-- 활동 결산 / 은퇴식 -->
+    <section class="screen" id="screen-career">
+      <h2 id="career-title"></h2>
+      <div class="draft-card" id="career-card"></div>
+      <div class="draft-actions" id="career-actions"></div>
+    </section>
+
+    <!-- 명예의 전당 -->
+    <section class="screen" id="screen-hof">
+      <h2>🏛️ 명예의 전당</h2>
+      <p class="hint">무대를 빛낸 아이돌들의 커리어가 여기 잠들어 있어요.</p>
+      <div id="hof-list"></div>
+      <button class="btn btn-ghost" id="btn-hof-back">← 돌아가기</button>
+    </section>
+
+    <!-- 배틀 아레나 -->
+    <section class="screen" id="screen-battle">
+      <h2>⚔️ 배틀 아레나</h2>
+      <p class="hint">컴백 대결! 현역이든 은퇴했든 언제든 참전할 수 있어요.</p>
+      <div id="battle-setup"></div>
+      <div id="battle-view"></div>
+      <div id="battle-rank"></div>
+      <button class="btn btn-ghost" id="btn-battle-back">← 돌아가기</button>
+    </section>
+
   </main>
   <script src="../avatar.js"></script>
   <script src="../timing.js"></script>
   <script src="game.js"></script>
+  <script src="career.js"></script>
 <script>if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");</script>
 </body>
 </html>

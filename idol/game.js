@@ -117,8 +117,12 @@ function initTitle() {
     $("btn-continue").classList.remove("hidden");
     $("btn-continue").onclick = () => {
       S = JSON.parse(saved);
-      renderMain();
-      show("screen-main");
+      if (S.phase === "idol-pro" && window.IdolCareer) {
+        window.IdolCareer.showActivity();
+      } else {
+        renderMain();
+        show("screen-main");
+      }
     };
   }
   $("btn-new").onclick = () => {
@@ -657,7 +661,9 @@ function showEnding(survivedFinal, lastRound) {
     location.reload();
   };
 
-  clearSave();
+  // 데뷔조 합류·차기 데뷔조면 데뷔 활동으로 이어갈 수 있어요
+  if (window.IdolCareer) window.IdolCareer.onEnding(survivedFinal || lastRound === 3, survivedFinal && score >= 520);
+  else clearSave();
   show("screen-ending");
 }
 
