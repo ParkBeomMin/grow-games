@@ -351,6 +351,74 @@ function gradeOf(score) {
   return { g: "D", pts: 5, txt: "😢 무대 위에서 머리가 하얘졌어요…" };
 }
 
+// ---------- 무대 연출 ----------
+function shuffle(a) {
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+const MOMENTS = {
+  vocal: {
+    good: ["고음이 시원하게 뻗어요! 🎶", "애드리브에 심사위원이 고개를 끄덕여요 ✨", "떨림 없는 클라이맥스, 소름이 돋아요 🥹"],
+    bad: ["고음에서 살짝 흔들렸어요 😬", "가사를 순간 놓칠 뻔했어요 💦"],
+  },
+  dance: {
+    good: ["칼군무 포인트를 완벽하게 소화! 🕺", "턴 동작이 물 흐르듯 이어져요 ✨", "엔딩 포즈까지 한 치의 오차도 없어요 🔥"],
+    bad: ["박자를 반 박자 놓쳤어요 😬", "동선이 살짝 꼬였어요 💦"],
+  },
+  rap: {
+    good: ["속사포 파트를 씹지 않고 완주! 🎙️", "자작 가사에 연습실이 술렁여요 ✨", "비트 위에서 완전히 자유로워요 🔥"],
+    bad: ["플로우가 잠깐 어긋났어요 😬", "발음이 뭉개진 구간이 있었어요 💦"],
+  },
+};
+
+let stageTimer = null;
+// 무대를 문자중계처럼 연출한 뒤 결과를 보여줌
+function renderStageSim(type, grade, resultHTML, nextLabel, nextFn) {
+  const key = type.main || POS_INFO[S.pos].stat;
+  const pool = MOMENTS[key] || MOMENTS.vocal;
+  const goodN = grade.g === "S" ? 3 : grade.g === "A" ? 2 : grade.g === "B" ? 1 : 0;
+  const badN = grade.g === "D" ? 2 : grade.g === "C" ? 1 : grade.g === "B" ? 1 : 0;
+  const moments = shuffle([
+    ...shuffle([...pool.good]).slice(0, goodN).map((t) => ({ text: t, cls: "good" })),
+    ...shuffle([...pool.bad]).slice(0, badN).map((t) => ({ text: t, cls: "bad" })),
+  ]);
+  const feeds = [
+    { text: `🎤 ${S.name}, ${type.name}에 오릅니다.` },
+    { text: "조명이 켜지고, 음악이 시작돼요 🎶" },
+    ...moments,
+    { text: "심사위원들이 점수를 적습니다… ✍️" },
+  ];
+
+  $("stage-card").innerHTML = `<div class="pbp" id="pbp"></div><div id="stage-result"></div>`;
+  let idx = 0;
+  function applyFeed(f) {
+    const div = document.createElement("div");
+    if (f.cls) div.className = f.cls;
+    div.textContent = f.text;
+    $("pbp").appendChild(div);
+    $("pbp").scrollTop = $("pbp").scrollHeight;
+  }
+  function showResult() {
+    clearInterval(stageTimer);
+    $("stage-result").innerHTML = resultHTML;
+    $("btn-stage-next").textContent = nextLabel;
+    $("btn-stage-next").onclick = nextFn;
+  }
+  stageTimer = setInterval(() => {
+    if (idx >= feeds.length) { showResult(); return; }
+    applyFeed(feeds[idx++]);
+  }, 650);
+  $("btn-stage-next").textContent = "⏩ 빨리 감기";
+  $("btn-stage-next").onclick = () => {
+    while (idx < feeds.length) applyFeed(feeds[idx++]);
+    showResult();
+  };
+}
+
 // ---------- 정기 평가 (쇼케이스) ----------
 function startEval(name) {
   ev = { kind: "eval", name, idx: 0, totalPts: 0, scores: [] };
@@ -379,18 +447,12 @@ function playEvalStage() {
   ev.idx += 1;
 
   $("stage-round").textContent = `${ev.idx}번째 무대 · ${type.name}`;
-  $("stage-card").innerHTML = `
+  const resultHTML = `
     <div class="tour-vs">무대 등급 <span class="${grade.g === "S" || grade.g === "A" ? "win" : grade.g === "D" ? "lose" : ""}">${grade.g}</span></div>
     <div class="tour-line">${grade.txt}</div>
     <div class="tour-pts">💖 팬덤 +${pts}</div>`;
-
-  if (ev.idx < 3) {
-    $("btn-stage-next").textContent = "다음 무대";
-    $("btn-stage-next").onclick = playEvalStage;
-  } else {
-    $("btn-stage-next").textContent = "종합 순위 발표";
-    $("btn-stage-next").onclick = finishEval;
-  }
+  if (ev.idx < 3) renderStageSim(type, grade, resultHTML, "다음 무대", playEvalStage);
+  else renderStageSim(type, grade, resultHTML, "종합 순위 발표", finishEval);
 }
 
 function finishEval() {
@@ -456,19 +518,17 @@ function playSurvivalRound() {
   const pass = Math.random() < p;
 
   $("stage-round").textContent = `${roundName} · ${type.name}`;
-  $("stage-card").innerHTML = `
+  const resultHTML = `
     <div class="tour-vs">무대 등급 ${grade.g} — <span class="${pass ? "win" : "lose"}">${pass ? "생존! 🎉" : "탈락… 💧"}</span></div>
     <div class="tour-line">${grade.txt}</div>
     <div class="tour-pts">💖 팬덤 +${pts}</div>`;
-
   if (pass && ev.round < SURVIVAL_ROUNDS.length - 1) {
     ev.round += 1;
-    $("btn-stage-next").textContent = `${SURVIVAL_ROUNDS[ev.round]} 진출!`;
-    $("btn-stage-next").onclick = playSurvivalRound;
+    renderStageSim(type, grade, resultHTML, `${SURVIVAL_ROUNDS[ev.round]} 진출!`, playSurvivalRound);
   } else {
     ev.eliminated = !pass;
-    $("btn-stage-next").textContent = pass ? "🌟 최종 발표 보러 가기" : "결과 받아들이기";
-    $("btn-stage-next").onclick = () => showEnding(pass, ev.round);
+    const capturedRound = ev.round;
+    renderStageSim(type, grade, resultHTML, pass ? "🌟 최종 발표 보러 가기" : "결과 받아들이기", () => showEnding(pass, capturedRound));
   }
 }
 
