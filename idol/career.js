@@ -337,39 +337,14 @@ window.IdolCareer = (() => {
     show("screen-hof");
   }
 
-  // ---------- 랜덤 매칭 서버 (rookie와 동일 구조, 버킷 키만 넣으면 글로벌 매칭) ----------
-  const MATCH_BUCKET = "";
-  const MATCH_URL = "https://kvdb.io";
-
-  function playerId() {
-    let id = localStorage.getItem("grow-player-id");
-    if (!id) {
-      id = "u" + Math.random().toString(36).slice(2, 10);
-      localStorage.setItem("grow-player-id", id);
-    }
-    return id;
+  // ---------- 랜덤 매칭 (공용 ../match.js — Supabase 연동) ----------
+  const GAME_ID = "idol";
+  const matchEnabled = () => !!(window.Match && window.Match.enabled());
+  function submitProfile(f, rating, w, l) {
+    if (window.Match) window.Match.submit(GAME_ID, { name: f.name, bp: f.bp, rating, w, l });
   }
-
-  async function submitProfile(f, rating, w, l) {
-    if (!MATCH_BUCKET) return;
-    try {
-      await fetch(`${MATCH_URL}/${MATCH_BUCKET}/idol-${playerId()}`, {
-        method: "PUT",
-        body: JSON.stringify({ id: playerId(), n: f.name, bp: f.bp, r: rating, w, l, g: "idol" }),
-      });
-    } catch { /* 오프라인이면 조용히 넘어감 */ }
-  }
-
   async function fetchRoster() {
-    if (!MATCH_BUCKET) return null;
-    try {
-      const res = await fetch(`${MATCH_URL}/${MATCH_BUCKET}/?values=true&format=json&limit=200`);
-      if (!res.ok) return null;
-      const arr = await res.json();
-      return arr
-        .map(([, v]) => { try { return JSON.parse(v); } catch { return null; } })
-        .filter((x) => x && x.n && typeof x.bp === "number" && x.g === "idol");
-    } catch { return null; }
+    return window.Match ? window.Match.roster(GAME_ID) : null;
   }
 
   // ---------- 배틀 아레나 (컴백 대결) ----------
@@ -414,18 +389,18 @@ window.IdolCareer = (() => {
           <label>내 아이돌</label>
           <select id="battle-me">${list.map((f, i) => `<option value="${i}">${f.name} · 무대 파워 ${f.bp}</option>`).join("")}</select>
           <button class="btn btn-primary" id="btn-fight">🎲 랜덤 매칭 시작</button>
-          <p class="av-note">${MATCH_BUCKET ? "🌍 전 세계 플레이어 풀에서 상대를 찾아요" : "🤖 오프라인 모드 — 매칭 서버 연결 전까진 봇과 매칭돼요"}</p>
+          <p class="av-note">${matchEnabled() ? "🌍 전 세계 플레이어 풀에서 전투력이 비슷한 상대를 찾아요" : "🤖 오프라인 모드 — 매칭 서버 연결 전까진 봇과 매칭돼요"}</p>
         </div>`;
       $("btn-fight").onclick = async () => {
         const me = list[+$("battle-me").value];
         $("btn-fight").textContent = "🔍 상대 찾는 중…";
         const roster = await fetchRoster();
         let opp;
-        const pool = (roster || []).filter((r) => r.id !== playerId());
+        const pool = (roster || []).filter((r) => !r.mine);
         if (pool.length) {
           pool.sort((a, b) => Math.abs(a.bp - me.bp) - Math.abs(b.bp - me.bp));
           const o = pick(pool.slice(0, 6));
-          opp = { id: "r-" + o.id, name: o.n, bp: o.bp, remote: true };
+          opp = { id: "r-" + o.id, name: o.name, bp: o.bp, remote: true };
         } else {
           const g = pick(GHOSTS);
           opp = { ...g, name: `${g.name} (봇)` };
@@ -496,8 +471,12 @@ window.IdolCareer = (() => {
     if (roster && roster.length) {
       global = true;
       rows = roster.map((p) => ({
-        id: p.id, name: p.n, rating: p.r || 1000, w: p.w || 0, l: p.l || 0,
-        ghost: p.id !== playerId(),
+        id: p.id,
+        name: p.name,
+        rating: p.rating || 1000,
+        w: p.w || 0,
+        l: p.l || 0,
+        ghost: !p.mine,
       }));
     } else {
       const data = loadBattle();
