@@ -96,6 +96,13 @@ window.Career = (() => {
         <span class="stat-name">${d.emoji} ${d.name}</span>
         <div class="bar"><div class="bar-fill stat${v > 100 ? " over" : ""}" style="width:${Math.min(v, 100)}%"></div></div>
         <span class="stat-val">${v}</span>`;
+      if (v >= 100) {
+        const aw = document.createElement("button");
+        aw.className = "mini-btn awaken-btn";
+        aw.textContent = "🔮 각성";
+        aw.onclick = () => { if (awakenTalent(d.key, proLog)) renderPro(); };
+        row.appendChild(aw);
+      }
       stats.appendChild(row);
     }
 

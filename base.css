@@ -423,3 +423,6 @@ h2 { font-size: 1.6rem; margin: 8px 0 6px; color: var(--accent); }
 .roll-box canvas { max-width: 100%; }
 .roll-stars { font-size: 0.72rem; color: var(--dim); line-height: 1.8; margin: 4px 0 6px; }
 .roll-box .btn-ghost { margin-top: 4px; }
+
+/* ---------- 재능 각성 ---------- */
+.awaken-btn { color: var(--accent); border-color: var(--accent); flex-shrink: 0; padding: 4px 8px; }

@@ -163,6 +163,40 @@ const goHome = () => { if (S) save(); location.reload(); };
 $("btn-home-main")?.addEventListener("click", goHome);
 $("btn-home-pro")?.addEventListener("click", goHome);
 
+
+// ---------- 재능 각성 ----------
+// 스탯 100 이상(한계 돌파)부터 도전 가능. 깊이 돌파할수록 성공 확률 상승.
+// 성공: 재능(⭐) 상승 / 실패: 낮은 확률로 재능 하락 — 어느 쪽이든 스탯은 크게 낮아져 다시 키워야 해요.
+function awakenTalent(key, logFn) {
+  const defs = Array.isArray(STAT_DEFS) ? STAT_DEFS : STAT_DEFS[S.pos];
+  const d = defs.find((x) => x.key === key);
+  const v = S.stats[key];
+  if (!d || v < 100) return false;
+  const p = Math.min(0.25 + (v - 100) * 0.015, 0.75);
+  const ok = confirm(
+    `🔮 ${d.name} 재능 각성 시도!\n\n` +
+    `성공 확률 ${Math.round(p * 100)}% (돌파가 깊을수록 올라가요)\n` +
+    `· 성공: 재능(⭐)이 영구히 상승\n` +
+    `· 실패: 낮은 확률로 재능이 살짝 하락\n` +
+    `· 성공하든 실패하든 ${d.name} 수치는 크게 낮아져서 다시 키워야 해요\n\n진행할까요?`
+  );
+  if (!ok) return false;
+  if (Math.random() < p) {
+    S.talents[key] = Math.min(S.talents[key] + rand(0.15, 0.3), 1.8);
+    S.stats[key] = randInt(45, 60);
+    logFn(`🔮✨ ${d.name} 재능 각성 성공!! 잠재력이 한 단계 피어났어요 (수치 ${Math.round(S.stats[key])}부터 재도전)`);
+  } else if (Math.random() < 0.1) {
+    S.talents[key] = Math.max(S.talents[key] - 0.1, 0.8);
+    S.stats[key] = randInt(30, 50);
+    logFn(`🔮💧 각성 실패… 무리한 시도에 재능까지 살짝 잃었어요 (${Math.round(S.stats[key])})`);
+  } else {
+    S.stats[key] = randInt(30, 50);
+    logFn(`🔮💦 각성 실패… ${d.name} ${Math.round(S.stats[key])}부터 다시 담금질!`);
+  }
+  save();
+  return true;
+}
+
 // ---------- 장비 상점 ----------
 const GEAR_TIERS = [
   { n: "I", bonus: 3, price: 300 },
@@ -348,6 +382,13 @@ function renderMain() {
       <div class="bar"><div class="bar-fill stat${v > 100 ? " over" : ""}" style="width:${Math.min(v, 100)}%"></div></div>
       <span class="stat-val">${v}</span>
       <span class="stat-pot" title="잠재력 — 별이 많을수록 훈련 효율이 높아요">${stars}</span>`;
+    if (v >= 100) {
+      const aw = document.createElement("button");
+      aw.className = "mini-btn awaken-btn";
+      aw.textContent = "🔮 각성";
+      aw.onclick = () => { if (awakenTalent(d.key, addLog)) renderMain(); };
+      row.appendChild(aw);
+    }
     statsBox.appendChild(row);
   }
 

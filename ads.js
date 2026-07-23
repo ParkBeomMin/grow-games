@@ -5,7 +5,7 @@
 "use strict";
 
 window.Ads = (() => {
-  const ADSENSE_CLIENT = ""; // 예: "ca-pub-1234567890123456"
+  const ADSENSE_CLIENT = "ca-pub-7426857657290789";
 
   let ready = false;
   if (ADSENSE_CLIENT) {
