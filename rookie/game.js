@@ -247,11 +247,61 @@ function makeAdSlotButton(rerender) {
   return btn;
 }
 
+// ---------- 선수 기록 ----------
+let recordReturn = "screen-main";
+function openRecord(returnTo) {
+  recordReturn = returnTo || "screen-main";
+  renderRecord();
+  show("screen-record");
+}
+function renderRecord() {
+  const r = regionOf();
+  const isBat = S.pos === "batter";
+  let hs = "고교 대회 출전 기록이 아직 없어요";
+  if (S.hsTotals) {
+    hs = isBat
+      ? `${S.games}경기 · ${S.hsTotals.ab}타수 ${S.hsTotals.hits}안타 (타율 ${(S.hsTotals.hits / Math.max(S.hsTotals.ab, 1)).toFixed(3)}) · ${S.hsTotals.hr}홈런 · ${S.hsTotals.sb}도루`
+      : `${S.games}경기 · ${S.hsTotals.ip}이닝 · ${S.hsTotals.k}탈삼진 · 평균자책 ${((S.hsTotals.runs * 9) / Math.max(S.hsTotals.ip, 1)).toFixed(2)}`;
+  }
+  const trophyLine = S.trophies && S.trophies.length ? `🏆 ${S.trophies.join(", ")}` : "🏆 우승 경력 없음";
+  let proHtml = "";
+  if (S.career && S.career.seasons.length) {
+    const rows = S.career.seasons.map((x) =>
+      `<tr><td>${x.y}년차</td><td>${x.role ? x.role.replace(" 투수", "").replace(" 타자", "") : "-"}</td><td style="text-align:left">${x.line}${x.champ ? " 🏆" : ""}${x.awards && x.awards.length ? " 🎖️" : ""}</td><td>${x.war.toFixed(1)}</td></tr>`
+    ).join("");
+    proHtml = `
+      <table class="season-table"><thead><tr><th>시즌</th><th>보직</th><th>성적</th><th>WAR</th></tr></thead><tbody>${rows}</tbody></table>
+      <div>통산 ${S.career.seasons.length}시즌 · WAR ${S.career.warSum.toFixed(1)} · 🏆 ${S.career.rings} · MVP ${S.career.mvp} · GG ${S.career.gg}${S.career.roy ? " · 신인왕" : ""}</div>`;
+  }
+  const defs = STAT_DEFS[S.pos];
+  const gearList = defs
+    .map((d) => {
+      const owned = GEAR_TIERS.filter((t) => S.gear && S.gear[`${d.key}-${t.n}`]).length;
+      return owned ? `${d.emoji}${"★".repeat(owned)}` : null;
+    })
+    .filter(Boolean)
+    .join(" ");
+  $("record-card").innerHTML = `
+    ${S.avatar ? `<img class="draft-avatar" src="${S.avatar}" alt="" />` : `<div class="draft-emoji">⚾</div>`}
+    <div class="draft-title">${S.name}</div>
+    <div class="draft-team">${S.phase === "pro" ? `${S.team} · ${S.role || ""}` : `${r.school} · ${isBat ? "타자" : "투수"}`} · ${S.phase === "pro" ? `${S.age}세` : `${S.year}학년`}</div>
+    <div class="draft-summary">
+      <b>🏫 고교 기록</b><br/>${hs}<br/>🔭 주목도 ${Math.round(S.scout)} · ${trophyLine}<br/>
+      ${proHtml ? `<br/><b>⚾ 프로 기록</b>${proHtml}<br/>` : ""}
+      ${gearList ? `<br/><b>🛍️ 보유 장비</b> ${gearList}` : ""}
+    </div>`;
+}
+$("btn-record-main")?.addEventListener("click", () => openRecord("screen-main"));
+$("btn-record-pro")?.addEventListener("click", () => openRecord("screen-pro"));
+$("btn-record-back")?.addEventListener("click", () => show(recordReturn));
+
 // ---------- 장비 상점 ----------
 const GEAR_TIERS = [
-  { n: "I", bonus: 3, price: 300 },
-  { n: "II", bonus: 5, price: 800 },
-  { n: "III", bonus: 8, price: 2000 },
+  { n: "I", bonus: 3, price: 500 },
+  { n: "II", bonus: 5, price: 1500 },
+  { n: "III", bonus: 8, price: 4000 },
+  { n: "IV", bonus: 12, price: 10000 },
+  { n: "V", bonus: 16, price: 25000 },
 ];
 let shopReturn = "screen-main";
 function openShop(returnTo) {
@@ -747,6 +797,19 @@ function pitcherStory(win, perf, interactive) {
   return { ourInn, oppInn, events };
 }
 
+// 미니게임 종류 — 랜덤으로 등장하고, 성공 존은 관련 스탯+컨디션에 비례
+const MINI_BAT = [
+  { label: "⚾ 공이 온다! 초록 존에서 스윙!", button: "스윙! 🏏", stat: "contact", ok: "통렬한 적시타! 🏏", great: "담장 직격 2타점! 💥", bad: "헛스윙… 기회를 놓쳤어요" },
+  { label: "👟 도루 찬스! 스타트 타이밍!", button: "달려! 👟", stat: "run", ok: "도루 성공, 득점으로 연결! 👟", great: "과감한 홈스틸!! ⚡", bad: "견제사… 아까운 주자" },
+  { label: "🧤 큰 타구! 다이빙 캐치 타이밍!", button: "점프! 🧤", stat: "defense", ok: "슈퍼캐치로 실점 저지! 🧤", great: "호수비에 이은 더블플레이! 🌟", bad: "글러브를 스치고 빠졌어요…" },
+];
+const MINI_PIT = [
+  { label: "🎯 결정구! 초록 존에서 릴리스!", button: "던진다! 🔥", stat: "control", ok: "루킹 삼진! 위기 탈출 🎯", great: "3구 삼진으로 이닝 종료!! 🧊", bad: "볼넷… 주자가 쌓여요" },
+  { label: "🔥 전력투구! 릴리스 포인트!", button: "던진다! ⚡", stat: "velocity", ok: "최고 구속으로 윽박질렀어요! 🔥", great: "라이징 패스트볼에 헛스윙 삼진! ⚡", bad: "공이 몰렸다… 안타 허용" },
+  { label: "🧤 강습 타구! 반사신경 타이밍!", button: "캐치! 🧤", stat: "defense", ok: "번개 같은 수비! 🧤", great: "1-2-3 더블플레이 완성! 🌟", bad: "다리 사이로 빠졌어요…" },
+];
+const miniZone = (stat) => clamp(13 + stat * 0.22 + (S.condition - 50) * 0.08, 10, 40);
+
 let simTimer = null;
 function renderGameSim(roundName, opp, perf, story, interactive, preWin) {
   const r = regionOf();
@@ -766,12 +829,18 @@ function renderGameSim(roundName, opp, perf, story, interactive, preWin) {
     <div id="game-result"></div>`;
 
   const evFor = (inn, half) => story.events.filter((e) => e.inn === inn && e.half === half);
+  // 경기 중 랜덤 미니게임 — 35% 확률로 2~7회 중 한 이닝에 등장
+  const isBat = S.pos === "batter";
+  const midInn = Math.random() < 0.35 ? randInt(2, 7) : -1;
+  const midHalf = isBat ? "말" : "초";
   const steps = [{ feeds: [{ text: `⚾ ${roundName} vs ${opp} — 플레이볼!` }] }];
   for (let i = 0; i < 9; i++) {
     if (interactive && story.moment.half === "초" && i === 8) { steps.push({ moment: true }); break; }
-    steps.push({ cell: ["opp", i, story.oppInn[i]], feeds: evFor(i + 1, "초").map((e) => ({ text: `${i + 1}회초 · ${e.text}`, cls: e.cls })) });
+    if (midInn === i + 1 && midHalf === "초") steps.push({ midMoment: true, inn: i });
+    else steps.push({ cell: ["opp", i, story.oppInn[i]], feeds: evFor(i + 1, "초").map((e) => ({ text: `${i + 1}회초 · ${e.text}`, cls: e.cls })) });
     if (interactive && story.moment.half === "말" && i === 8) { steps.push({ moment: true }); break; }
-    steps.push({ cell: ["our", i, story.ourInn[i]], feeds: evFor(i + 1, "말").map((e) => ({ text: `${i + 1}회말 · ${e.text}`, cls: e.cls })) });
+    if (midInn === i + 1 && midHalf === "말") steps.push({ midMoment: true, inn: i });
+    else steps.push({ cell: ["our", i, story.ourInn[i]], feeds: evFor(i + 1, "말").map((e) => ({ text: `${i + 1}회말 · ${e.text}`, cls: e.cls })) });
   }
   if (!interactive) {
     const ourTotal = story.ourInn.reduce((a, b) => a + b, 0);
@@ -804,10 +873,47 @@ function renderGameSim(roundName, opp, perf, story, interactive, preWin) {
     pbp.scrollTop = pbp.scrollHeight;
   }
 
+  function beginMidMoment(step) {
+    momentOn = true;
+    clearInterval(simTimer);
+    const type = pick(isBat ? MINI_BAT : MINI_PIT);
+    const i = step.inn;
+    applyStep({ feeds: [{ text: `⚡ ${i + 1}회 승부처! ${type.label.split("!")[0]}!`, cls: "good" }] });
+    const btn = $("btn-tour-next");
+    btn.disabled = true;
+    btn.textContent = "⚡ 승부처!";
+    window.Timing.play($("game-moment"), {
+      label: type.label,
+      button: type.button,
+      zonePct: miniZone(S.stats[type.stat]),
+    }, (res) => {
+      const half = isBat ? "말" : "초";
+      let delta;
+      if (res === "perfect") {
+        delta = isBat ? 2 : 0;
+        story.ourInn[i] += isBat ? 2 : 0;
+        if (!isBat) story.oppInn[i] = 0;
+        applyStep({ cell: [isBat ? "our" : "opp", i, isBat ? story.ourInn[i] : 0], feeds: [{ text: `${i + 1}회${half} · ${type.great}`, cls: "good" }] });
+        perf.pts += 8;
+      } else if (res === "good") {
+        if (isBat) story.ourInn[i] += 1;
+        applyStep({ cell: [isBat ? "our" : "opp", i, isBat ? story.ourInn[i] : story.oppInn[i]], feeds: [{ text: `${i + 1}회${half} · ${type.ok}`, cls: "good" }] });
+        perf.pts += 4;
+      } else {
+        if (!isBat) story.oppInn[i] += 1;
+        applyStep({ cell: [isBat ? "our" : "opp", i, isBat ? story.ourInn[i] : story.oppInn[i]], feeds: [{ text: `${i + 1}회${half} · ${type.bad}`, cls: "bad" }] });
+      }
+      // 미드 미니게임이 스코어를 바꿨으니 비접전 경기의 승패도 최종 스코어로 재판정
+      momentOn = false;
+      btn.disabled = false;
+      btn.textContent = "⏩ 빨리 감기";
+      simTimer = setInterval(tick, 550);
+    });
+  }
+
   function beginMoment() {
     momentOn = true;
     clearInterval(simTimer);
-    const isBat = S.pos === "batter";
     applyStep({ feeds: [{ text: isBat
       ? `⚡ 9회말 2아웃, 1점 차 역전 찬스! ${S.name}의 타석!`
       : `⚡ 9회초 1점 차 리드, 2아웃 만루 위기! ${S.name}의 결정구!`, cls: "good" }] });
@@ -818,12 +924,11 @@ function renderGameSim(roundName, opp, perf, story, interactive, preWin) {
     window.Timing.play($("game-moment"), {
       label: isBat ? "⚾ 공이 온다! 초록 존에서 스윙!" : "🎯 결정구! 초록 존에서 릴리스!",
       button: isBat ? "스윙! 🏏" : "던진다! 🔥",
-      zonePct: clamp(13 + stat * 0.24, 13, 38),
+      zonePct: miniZone(stat),
     }, resolveMoment);
   }
 
   function resolveMoment(res) {
-    const isBat = S.pos === "batter";
     const flipWin = () => Math.random() < clamp(0.5 + (overall() - 50) / 250, 0.3, 0.7);
     let win;
     if (isBat) {
@@ -881,6 +986,12 @@ function renderGameSim(roundName, opp, perf, story, interactive, preWin) {
     let pts = perf.pts + (win ? 4 : 1) + tour.round * 3 + (bonus || 0);
     pts = Math.round(pts * r.spot);
     S.scout = Math.max(0, S.scout + pts); // 못한 경기는 주목도가 깎여요
+    if (!S.hsTotals) S.hsTotals = S.pos === "batter" ? { ab: 0, hits: 0, hr: 0, sb: 0 } : { ip: 0, k: 0, runs: 0 };
+    if (S.pos === "batter") {
+      S.hsTotals.ab += perf.ab; S.hsTotals.hits += perf.hits; S.hsTotals.hr += perf.hr; S.hsTotals.sb += perf.sb;
+    } else {
+      S.hsTotals.ip += perf.ip; S.hsTotals.k += perf.k; S.hsTotals.runs += perf.runs;
+    }
     const pay = win ? 60 + tour.round * 25 : 25;
     S.money = (S.money || 0) + pay;
     tour.totalPts += pts;
@@ -911,12 +1022,23 @@ function renderGameSim(roundName, opp, perf, story, interactive, preWin) {
     }
   }
 
-  simTimer = setInterval(() => {
-    if (idx >= steps.length) { if (!interactive) showResult(preWin, 0); return; }
+  function endOfSteps() {
+    if (interactive) return;
+    // 미드 미니게임이 점수를 바꿨을 수 있으니 최종 스코어 기준으로 승패 판정
+    const win = totals.our > totals.opp ? true : totals.our < totals.opp ? false : preWin;
+    if (totals.our === totals.opp) {
+      applyStep({ addR: [win ? "our" : "opp", 1], feeds: [{ text: win ? "🔥 연장 끝에 승리!" : "💧 연장 끝에 석패…", cls: win ? "good" : "bad" }] });
+    }
+    showResult(win, 0);
+  }
+  function tick() {
+    if (idx >= steps.length) { endOfSteps(); return; }
     const st = steps[idx++];
     if (st.moment) { beginMoment(); return; }
+    if (st.midMoment) { beginMidMoment(st); return; }
     applyStep(st);
-  }, 550);
+  }
+  simTimer = setInterval(tick, 550);
   $("btn-tour-next").textContent = "⏩ 빨리 감기";
   $("btn-tour-next").disabled = false;
   $("btn-tour-next").onclick = () => {
@@ -925,9 +1047,10 @@ function renderGameSim(roundName, opp, perf, story, interactive, preWin) {
     while (idx < steps.length) {
       const st = steps[idx++];
       if (st.moment) { beginMoment(); return; }
+      if (st.midMoment) { beginMidMoment(st); return; }
       applyStep(st);
     }
-    if (!interactive) showResult(preWin, 0);
+    endOfSteps();
   };
 }
 
@@ -982,23 +1105,23 @@ function showDraft() {
   const team = pick(r.teams);
 
   let emoji, title, teamLine, msg;
-  if (score >= 660) {
+  if (score >= 620) {
     emoji = "👑"; title = "1라운드 전체 상위 지명!";
     teamLine = `${team} 1라운드 지명`;
     msg = "전국이 주목한 최대어! 계약금이 역대급이라는 소문이 돌아요.";
-  } else if (score >= 560) {
+  } else if (score >= 520) {
     emoji = "🌟"; title = "1라운드 지명!";
     teamLine = `${team} 1라운드 지명`;
     msg = "연고 구단이 1라운드에서 호명! 홈 팬들의 환호가 쏟아져요.";
-  } else if (score >= 450) {
+  } else if (score >= 410) {
     emoji = "🎉"; title = "상위 라운드 지명!";
     teamLine = `${team} 2~4라운드 지명`;
     msg = "당당히 프로 유니폼을 입어요. 1군 데뷔가 머지않았어요.";
-  } else if (score >= 360) {
+  } else if (score >= 330) {
     emoji = "🧢"; title = "중·하위 라운드 지명";
     teamLine = `${team} 5~10라운드 지명`;
     msg = "프로의 문을 통과! 여기서부터가 진짜 시작이에요.";
-  } else if (score >= 300) {
+  } else if (score >= 270) {
     emoji = "🌱"; title = "육성선수 계약";
     teamLine = `${team} 육성선수 입단`;
     msg = "정식 지명은 아니지만 기회는 있어요. 흙 속의 진주가 되어봐요.";

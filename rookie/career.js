@@ -30,7 +30,7 @@ window.Career = (() => {
     const actions = document.querySelector("#screen-draft .draft-actions");
     document.getElementById("btn-go-pro")?.remove();
     document.getElementById("btn-retire-now")?.remove();
-    const drafted = score >= 300; // 육성선수 이상
+    const drafted = score >= 270; // 육성선수 이상
     const btn = document.createElement("button");
     if (drafted) {
       S.team = team;
@@ -57,7 +57,22 @@ window.Career = (() => {
     S.proYear = 0;
     S.career = { seasons: [], mvp: 0, gg: 0, roy: 0, rings: 0, warSum: 0 };
     S.proLog = [];
+    S.role = assignRole();
     startCamp();
+  }
+
+  // 능력치에 따라 타순/투수 보직 배정 (매 시즌 재평가)
+  function assignRole() {
+    if (S.pos === "batter") {
+      const { contact, power, run } = S.stats;
+      if (Math.max(contact, power, run) < 55) return "6번 타자";
+      if (power >= contact && power >= run) return "4번 타자";
+      if (run > contact) return "1번 타자";
+      return "3번 타자";
+    }
+    if (S.stats.stamina >= 55) return "선발 투수";
+    if (S.stats.velocity >= S.stats.control) return "마무리 투수";
+    return "불펜 투수";
   }
 
   function proLog(msg) {
@@ -69,7 +84,13 @@ window.Career = (() => {
     S.proYear += 1;
     S.camp = 3;
     S.condition = 80;
-    proLog(`⛺ ${S.proYear}년차 스프링캠프 시작! (${S.age}세)`);
+    S.season = null;
+    const newRole = assignRole();
+    if (newRole !== S.role) {
+      proLog(`📋 코칭스태프 결정: 올 시즌 보직은 ${newRole}! (지난 시즌 ${S.role || "신인"})`);
+      S.role = newRole;
+    }
+    proLog(`⛺ ${S.proYear}년차 스프링캠프 시작! (${S.age}세 · ${S.role})`);
     save();
     renderPro();
     show("screen-pro");
@@ -77,8 +98,8 @@ window.Career = (() => {
 
   function renderPro() {
     $("pro-name").textContent = `${S.name} (${S.pos === "batter" ? "타자" : "투수"})`;
-    $("pro-team").textContent = `⚾ ${S.team} · ${S.age}세 · ${S.proYear}년차 · 종합 ${Math.round(overall())}`;
-    $("pro-turn").textContent = `캠프 훈련 ${3 - S.camp}/3`;
+    $("pro-team").textContent = `⚾ ${S.team} · ${S.role || ""} · ${S.age}세 · ${S.proYear}년차 · 종합 ${Math.round(overall())}`;
+    $("pro-turn").textContent = S.season ? `시리즈 ${S.season.idx}/10` : `캠프 훈련 ${3 - S.camp}/3`;
     const av = $("pro-avatar");
     if (S.avatar) { av.src = S.avatar; av.classList.remove("hidden"); }
     else av.classList.add("hidden");
@@ -106,7 +127,9 @@ window.Career = (() => {
       stats.appendChild(row);
     }
 
-    $("pro-camp-title").textContent = `스프링캠프 — 남은 훈련 ${S.camp}회, 끝나면 시즌 개막!`;
+    $("pro-camp-title").textContent = S.season
+      ? `⚔️ 시즌 중 — ${S.season.idx}차 시리즈 종료. 다음 시리즈 전 훈련 ${S.camp}회!`
+      : `스프링캠프 — 남은 훈련 ${S.camp}회, 끝나면 시즌 개막!`;
     const box = $("pro-actions");
     box.innerHTML = "";
     for (const d of STAT_DEFS[S.pos]) {
@@ -175,59 +198,185 @@ window.Career = (() => {
     "포스트시즌이 걸린 경기에서 역투! 🎯",
   ];
 
+  // ---------- 시즌 (10개 시리즈로 진행) ----------
+  const KBO_TEAMS = REGIONS.flatMap((r) => r.teams);
+  const SERIES_COUNT = 10;
+  const SERIES_GAMES = 14;
+
   function runSeason() {
-    // 포지션 핵심 능력치 가중 (집중 육성한 선수가 제 성적을 내도록)
+    if (!S.season) initSeason();
+    playSeries();
+  }
+
+  function initSeason() {
+    S.season = {
+      idx: 0,
+      teamW: 0,
+      teamL: 0,
+      others: KBO_TEAMS.filter((t) => t !== S.team).map((name) => ({ name, w: 0, l: 0, str: rand(0.36, 0.62) })),
+      stats: S.pos === "batter" ? { ab: 0, hits: 0, hr: 0, sb: 0 } : { ip: 0, k: 0, er: 0, wins: 0, saves: 0 },
+      warAcc: 0,
+    };
+    save();
+  }
+
+  function standingsHTML() {
+    const rows = [
+      { name: S.team, w: S.season.teamW, l: S.season.teamL, me: true },
+      ...S.season.others,
+    ].sort((a, b) => b.w - a.w);
+    return `<table class="rank-table season-standings"><thead><tr><th>#</th><th>팀</th><th>승-패</th></tr></thead>
+      <tbody>${rows.map((t, i) => `<tr class="${t.me ? "me" : ""}"><td>${i + 1}</td><td>${t.name}</td><td>${t.w}-${t.l}</td></tr>`).join("")}</tbody></table>`;
+  }
+
+  function myRank() {
+    const better = S.season.others.filter((o) => o.w > S.season.teamW).length;
+    return better + 1;
+  }
+
+  function playSeries() {
+    S.season.idx += 1;
+    const sn = S.season;
     const core = S.pos === "batter"
       ? S.stats.contact * 0.45 + S.stats.power * 0.35 + S.stats.run * 0.1 + S.stats.defense * 0.1
       : S.stats.velocity * 0.35 + S.stats.control * 0.35 + S.stats.breaking * 0.2 + S.stats.stamina * 0.1;
     const agePen = S.age >= 31 ? (S.age - 30) * 0.55 : 0;
-    const condBonus = (S.condition - 50) / 60;
-    const war = Math.round(clamp((core - 48) / 6 + rand(-1, 2) + condBonus - agePen, -1.5, 12) * 10) / 10;
+    // 컨디션이 시리즈 성적에 직접 영향
+    const form = clamp((core - 48) / 6 + rand(-1, 1.5) + (S.condition - 50) / 55 - agePen, -1.5, 12);
+    let w = clamp(Math.round(SERIES_GAMES * clamp(0.40 + form / 30, 0.2, 0.75) + rand(-1.5, 1.5)), 2, 12);
 
-    let line;
+    // 시리즈 개인 성적
+    let sLine, bonusApplied = { hits: 0, hr: 0, k: 0 };
+    const condMod = 1 + (S.condition - 50) / 250;
+    let sStat;
     if (S.pos === "batter") {
-      const avg = clamp(0.215 + S.stats.contact * 0.0013 + rand(-0.015, 0.015), 0.18, 0.39);
-      const hr = Math.max(0, Math.round(S.stats.power * 0.36 + rand(-5, 5)));
-      const sb = Math.max(0, Math.round(S.stats.run * 0.3 + rand(-4, 4)));
-      line = `타율 ${avg.toFixed(3)} · ${hr}홈런 · ${sb}도루`;
+      const ab = randInt(50, 58);
+      const hits = Math.max(0, Math.round(ab * (0.16 + S.stats.contact * 0.0014) * condMod + rand(-2, 2)));
+      const hr = Math.max(0, Math.round(S.stats.power * 0.045 * condMod + rand(-1.5, 1.5)));
+      const sb = Math.max(0, Math.round(S.stats.run * 0.04 + rand(-1, 1)));
+      sStat = { ab, hits, hr, sb };
     } else {
-      const era = clamp(5.6 - S.stats.control * 0.033 - S.stats.velocity * 0.012 + rand(-0.4, 0.4), 1.4, 7.5);
-      const wins = Math.max(0, Math.round(war * 1.5 + 4 + rand(-2, 2)));
-      const k = Math.max(20, Math.round((S.stats.velocity + S.stats.breaking) * 1.1 + rand(-15, 15)));
-      line = `평균자책 ${era.toFixed(2)} · ${wins}승 · ${k}탈삼진`;
+      const kRate = (S.stats.velocity + S.stats.breaking) / 2;
+      if (S.role === "선발 투수") {
+        const ip = randInt(16, 21);
+        sStat = { ip, k: Math.max(0, Math.round(ip * (0.5 + kRate / 95) * condMod)), er: Math.max(0, Math.round(ip * (0.72 - S.stats.control * 0.0045) + rand(-1, 1))), wins: clamp(Math.round(w * 0.2 + rand(-0.5, 1)), 0, 4), saves: 0 };
+      } else if (S.role === "마무리 투수") {
+        const ip = randInt(5, 8);
+        sStat = { ip, k: Math.max(0, Math.round(ip * (0.8 + kRate / 90) * condMod)), er: Math.max(0, Math.round(ip * (0.5 - S.stats.control * 0.003) + rand(0, 1))), wins: 0, saves: clamp(Math.round(w * 0.35 + rand(-1, 1)), 0, 7) };
+      } else {
+        const ip = randInt(8, 12);
+        sStat = { ip, k: Math.max(0, Math.round(ip * (0.6 + kRate / 95) * condMod)), er: Math.max(0, Math.round(ip * (0.6 - S.stats.control * 0.004) + rand(-1, 1))), wins: randInt(0, 1), saves: 0 };
+      }
     }
 
-    const rank = clamp(randInt(2, 10) - Math.round(war / 2.5), 1, 10);
-    const champ = (rank === 1 && Math.random() < 0.5) || (rank === 2 && Math.random() < 0.22);
-    const awards = [];
-    if (S.proYear === 1 && war >= 3.5 && Math.random() < 0.75) { awards.push("신인왕"); S.career.roy += 1; }
-    if (war >= 6.5 && Math.random() < 0.5) { awards.push("MVP"); S.career.mvp += 1; }
-    else if (war >= 4.5 && Math.random() < 0.45) { awards.push("골든글러브"); S.career.gg += 1; }
-    if (champ) S.career.rings += 1;
-    S.career.warSum = Math.round((S.career.warSum + Math.max(war, 0)) * 10) / 10;
-    S.career.seasons.push({ y: S.proYear, age: S.age, war, line, rank, champ, awards });
-
-    // 시즌을 치르며 성장(젊을 때)·노쇠화(31세 이후)
-    for (const d of STAT_DEFS[S.pos]) {
-      if (S.age <= 25) S.stats[d.key] = clamp(S.stats[d.key] + rand(0, 1.2) * S.talents[d.key], 0, STAT_CAP);
-      else if (S.age >= 31) S.stats[d.key] = clamp(S.stats[d.key] - rand(0.8, 2.2) - (S.age - 31) * 0.35, 0, STAT_CAP);
-    }
-    const salary = 3000 + Math.round(Math.max(war, 0) * 1500);
-    S.money = (S.money || 0) + salary;
-    S.age += 1;
-    save();
-
-    const feeds = [
-      { text: `⚾ ${S.proYear}년차 시즌 개막 — ${S.team} ${S.name}` },
-      ...shuffle(S.pos === "batter" ? [...SEASON_MOMENTS_BAT] : [...SEASON_MOMENTS_PIT])
-        .slice(0, 3)
-        .map((t) => ({ text: t, cls: war >= 3 ? "good" : "" })),
-      { text: `정규시즌 최종 ${rank}위로 마감`, cls: rank <= 3 ? "good" : rank >= 8 ? "bad" : "" },
+    // 중계 화면
+    $("tour-title").textContent = `📺 ${S.proYear}년차 시즌 — ${sn.idx}차 시리즈`;
+    $("tour-round").textContent = `${S.team} · ${S.role}`;
+    $("tour-card").innerHTML = `<div class="pbp" id="pbp-pro"></div><div id="series-moment"></div><div id="series-standings"></div>`;
+    show("screen-tournament");
+    const feed = (f) => {
+      const div = document.createElement("div");
+      if (f.cls) div.className = f.cls;
+      div.textContent = f.text;
+      $("pbp-pro").appendChild(div);
+      $("pbp-pro").scrollTop = $("pbp-pro").scrollHeight;
+    };
+    const highlights = shuffle(S.pos === "batter" ? [...SEASON_MOMENTS_BAT] : [...SEASON_MOMENTS_PIT]).slice(0, 2);
+    const pre = [
+      { text: `⚾ ${sn.idx}차 시리즈 (${SERIES_GAMES}경기) 시작!` },
+      ...highlights.map((t) => ({ text: t, cls: form >= 3 ? "good" : "" })),
     ];
-    if (champ) feeds.push({ text: "🏆 한국시리즈 우승!! 헹가래의 주인공이 됐어요", cls: "good" });
-    feeds.push({ text: `💰 시즌 연봉 정산 +${fmtMoney(salary)}`, cls: "good" });
-    for (const a of awards) feeds.push({ text: `🎖️ ${a} 수상!`, cls: "good" });
-    playFeeds(`📺 ${S.proYear}년차 시즌`, feeds, seasonReport);
+    let idx = 0, momentOn = false;
+    const btn = $("btn-tour-next");
+    btn.textContent = "⏩ 빨리 감기";
+    btn.disabled = false;
+    const timer = setInterval(() => {
+      if (idx >= pre.length) { clearInterval(timer); maybeMoment(); return; }
+      feed(pre[idx++]);
+    }, 600);
+    btn.onclick = () => {
+      if (momentOn) return;
+      clearInterval(timer);
+      while (idx < pre.length) feed(pre[idx++]);
+      maybeMoment();
+    };
+
+    function maybeMoment() {
+      if (momentOn) return;
+      momentOn = true;
+      if (Math.random() < 0.45) {
+        const type = pick(S.pos === "batter" ? MINI_BAT : MINI_PIT);
+        feed({ text: "⚡ 시리즈의 승부처가 찾아왔어요!", cls: "good" });
+        btn.disabled = true;
+        btn.textContent = "⚡ 승부처!";
+        window.Timing.play($("series-moment"), {
+          label: type.label,
+          button: type.button,
+          zonePct: miniZone(S.stats[type.stat]),
+        }, (res) => {
+          if (res === "perfect") {
+            w = clamp(w + 1, 2, SERIES_GAMES - 1);
+            if (S.pos === "batter") { sStat.hits += 3; sStat.hr += 1; }
+            else sStat.k += 4;
+            feed({ text: type.great, cls: "good" });
+          } else if (res === "good") {
+            if (S.pos === "batter") sStat.hits += 1;
+            else sStat.k += 2;
+            feed({ text: type.ok, cls: "good" });
+          } else {
+            w = clamp(w - 1, 2, SERIES_GAMES - 1);
+            feed({ text: type.bad, cls: "bad" });
+          }
+          btn.disabled = false;
+          finishSeries();
+        });
+      } else {
+        finishSeries();
+      }
+    }
+
+    function finishSeries() {
+      const l = SERIES_GAMES - w;
+      sn.teamW += w;
+      sn.teamL += l;
+      for (const o of sn.others) {
+        const ow = clamp(Math.round(SERIES_GAMES * o.str + rand(-2.5, 2.5)), 2, 12);
+        o.w += ow;
+        o.l += SERIES_GAMES - ow;
+      }
+      // 개인 성적 누적
+      const t = sn.stats;
+      for (const k2 of Object.keys(sStat)) t[k2] += sStat[k2];
+      sn.warAcc += form;
+      S.condition = clamp(S.condition - randInt(14, 22), 0, 100);
+      const pay = 300 + Math.round(Math.max(form, 0) * 60);
+      S.money = (S.money || 0) + pay;
+      save();
+
+      if (S.pos === "batter") {
+        sLine = `${sStat.ab}타수 ${sStat.hits}안타 ${sStat.hr}홈런 ${sStat.sb}도루`;
+      } else if (S.role === "마무리 투수") {
+        sLine = `${sStat.ip}이닝 ${sStat.saves}세이브 ${sStat.k}K ${sStat.er}자책`;
+      } else {
+        sLine = `${sStat.ip}이닝 ${sStat.wins}승 ${sStat.k}K ${sStat.er}자책`;
+      }
+      feed({ text: `📊 시리즈 결과 ${w}승 ${l}패 · ${S.name}: ${sLine}`, cls: w > l ? "good" : "bad" });
+      feed({ text: `💰 시리즈 수당 +${pay}만 · 현재 ${myRank()}위 (${sn.teamW}승 ${sn.teamL}패)`, cls: "" });
+      $("series-standings").innerHTML = `<h2 class="rank-title">🏟️ 리그 순위</h2>` + standingsHTML();
+
+      if (sn.idx < SERIES_COUNT) {
+        btn.textContent = `🏋️ 훈련하고 ${sn.idx + 1}차 시리즈로`;
+        btn.onclick = () => {
+          S.camp = 1;
+          save();
+          renderPro();
+          show("screen-pro");
+        };
+      } else {
+        btn.textContent = "🏁 시즌 결산";
+        btn.onclick = finishSeason;
+      }
+    }
   }
 
   function playFeeds(title, feeds, onDone) {
@@ -253,6 +402,52 @@ window.Career = (() => {
       while (idx < feeds.length) apply(feeds[idx++]);
       done();
     };
+  }
+
+  function finishSeason() {
+    if (!S.season) return;
+    const sn = S.season;
+    const st = sn.stats;
+    const war = Math.round(clamp(sn.warAcc / SERIES_COUNT, -1.5, 12) * 10) / 10;
+    let line, raw;
+    if (S.pos === "batter") {
+      const avg = st.hits / Math.max(st.ab, 1);
+      line = `타율 ${avg.toFixed(3)} · ${st.hr}홈런 · ${st.sb}도루`;
+      raw = { ...st, avg };
+    } else {
+      const era = (st.er * 9) / Math.max(st.ip, 1);
+      line = S.role === "마무리 투수"
+        ? `평균자책 ${era.toFixed(2)} · ${st.saves}세이브 · ${st.k}탈삼진`
+        : `평균자책 ${era.toFixed(2)} · ${st.wins}승 · ${st.k}탈삼진`;
+      raw = { ...st, era };
+    }
+    const rank = myRank();
+    const champ = (rank === 1 && Math.random() < 0.6) || (rank <= 3 && rank > 1 && Math.random() < 0.22);
+    const awards = [];
+    if (S.proYear === 1 && war >= 3.5 && Math.random() < 0.75) { awards.push("신인왕"); S.career.roy += 1; }
+    if (war >= 6.5 && Math.random() < 0.5) { awards.push("MVP"); S.career.mvp += 1; }
+    else if (war >= 4.5 && Math.random() < 0.45) { awards.push("골든글러브"); S.career.gg += 1; }
+    if (champ) S.career.rings += 1;
+    S.career.warSum = Math.round((S.career.warSum + Math.max(war, 0)) * 10) / 10;
+    S.career.seasons.push({ y: S.proYear, age: S.age, war, line, rank, champ, awards, role: S.role, raw });
+
+    for (const d of STAT_DEFS[S.pos]) {
+      if (S.age <= 25) S.stats[d.key] = clamp(S.stats[d.key] + rand(0, 1.2) * S.talents[d.key], 0, STAT_CAP);
+      else if (S.age >= 31) S.stats[d.key] = clamp(S.stats[d.key] - rand(0.8, 2.2) - (S.age - 31) * 0.35, 0, STAT_CAP);
+    }
+    const salary = 3000 + Math.round(Math.max(war, 0) * 1500);
+    S.money = (S.money || 0) + salary;
+    S.age += 1;
+    S.season = null;
+    save();
+
+    const feeds = [
+      { text: `🏁 정규시즌 종료 — 최종 ${rank}위 (${sn.teamW}승 ${sn.teamL}패)`, cls: rank <= 3 ? "good" : rank >= 8 ? "bad" : "" },
+    ];
+    if (champ) feeds.push({ text: "🏆 한국시리즈 우승!! 헹가래의 주인공이 됐어요", cls: "good" });
+    for (const a of awards) feeds.push({ text: `🎖️ ${a} 수상!`, cls: "good" });
+    feeds.push({ text: `💰 시즌 연봉 정산 +${fmtMoney(salary)}`, cls: "good" });
+    playFeeds(`📺 ${S.proYear}년차 시즌 결산`, feeds, seasonReport);
   }
 
   function seasonReport() {
@@ -547,6 +742,7 @@ window.Career = (() => {
     showBattle,
     showPro: () => {
       if (S.camp > 0) { renderPro(); show("screen-pro"); }
+      else if (S.season) runSeason();
       else seasonReport();
     },
   };

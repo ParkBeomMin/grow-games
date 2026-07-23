@@ -244,9 +244,11 @@ function makeAdSlotButton(rerender) {
 
 // ---------- 장비 상점 ----------
 const GEAR_TIERS = [
-  { n: "I", bonus: 3, price: 300 },
-  { n: "II", bonus: 5, price: 800 },
-  { n: "III", bonus: 8, price: 2000 },
+  { n: "I", bonus: 3, price: 500 },
+  { n: "II", bonus: 5, price: 1500 },
+  { n: "III", bonus: 8, price: 4000 },
+  { n: "IV", bonus: 12, price: 10000 },
+  { n: "V", bonus: 16, price: 25000 },
 ];
 let shopReturn = "screen-main";
 function openShop(returnTo) {
