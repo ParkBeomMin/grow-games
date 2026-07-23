@@ -115,6 +115,7 @@ window.IdolCareer = (() => {
       btn.onclick = () => prepAction(d);
       box.appendChild(btn);
     }
+    box.appendChild(makeAdSlotButton(renderPrep));
     const rest = document.createElement("button");
     rest.className = "action-btn rest";
     rest.innerHTML = `<span class="a-emoji">🛌</span>휴식 <span class="a-sub">컨디션 회복</span>`;

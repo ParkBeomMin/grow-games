@@ -426,3 +426,10 @@ h2 { font-size: 1.6rem; margin: 8px 0 6px; color: var(--accent); }
 
 /* ---------- 재능 각성 ---------- */
 .awaken-btn { color: var(--accent); border-color: var(--accent); flex-shrink: 0; padding: 4px 8px; }
+
+/* ---------- 광고 보상 팝업 · 보너스 슬롯 ---------- */
+.ad-modal { min-width: 260px; }
+.ad-modal-body { padding: 18px 8px; font-size: 1rem; color: var(--cream); line-height: 1.7; }
+.ad-modal-body .ad-emoji { font-size: 2.4rem; margin-bottom: 6px; }
+.action-btn.ad-slot { border-color: var(--accent); }
+.action-btn:disabled { opacity: 0.45; cursor: default; transform: none; }

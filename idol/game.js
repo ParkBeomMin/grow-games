@@ -192,6 +192,56 @@ function awakenTalent(key, logFn) {
   return true;
 }
 
+
+// ---------- 광고 보상 (공용) ----------
+const AD_CD_KEY = "grow-ad-cd";
+const adCooldownLeft = () =>
+  Math.max(0, 180000 - (Date.now() - (+localStorage.getItem(AD_CD_KEY) || 0)));
+
+// 팝업(모달)로 광고 → 보상 연출
+function showAdModal(amount, onDone) {
+  const ov = document.createElement("div");
+  ov.className = "av-overlay";
+  ov.innerHTML = `
+    <div class="av-modal ad-modal">
+      <p class="av-title">📺 광고 보고 보너스 받기</p>
+      <div class="ad-modal-body"><div class="ad-emoji">⏳</div>광고를 불러오는 중…</div>
+      <div class="av-actions"><button class="btn btn-ghost ad-modal-close" disabled>잠시만요…</button></div>
+    </div>`;
+  document.body.appendChild(ov);
+  const body = ov.querySelector(".ad-modal-body");
+  const closeBtn = ov.querySelector(".ad-modal-close");
+  const finish = () => { ov.remove(); if (onDone) onDone(); };
+  window.Ads.rewarded((ok, real) => {
+    if (ok) {
+      S.money = (S.money || 0) + amount;
+      localStorage.setItem(AD_CD_KEY, Date.now());
+      save();
+      body.innerHTML = `<div class="ad-emoji">💰</div><b>+${amount}만</b> 획득!${real ? "" : `<br/><span class="av-note">아직 광고 연결 전이라 그냥 드렸어요 🎁</span>`}`;
+    } else {
+      body.innerHTML = `<div class="ad-emoji">💧</div>광고를 끝까지 봐야 보상을 받을 수 있어요`;
+    }
+    closeBtn.disabled = false;
+    closeBtn.textContent = "확인";
+    closeBtn.onclick = finish;
+  });
+}
+
+// 훈련 그리드 빈 칸용 보너스 버튼 생성
+function makeAdSlotButton(rerender) {
+  const btn = document.createElement("button");
+  btn.className = "action-btn ad-slot";
+  const left = adCooldownLeft();
+  if (left > 0) {
+    btn.disabled = true;
+    btn.innerHTML = `<span class="a-emoji">📺</span>보너스<span class="a-sub">${Math.ceil(left / 60000)}분 후 가능</span>`;
+  } else {
+    btn.innerHTML = `<span class="a-emoji">📺</span>보너스<span class="a-sub">광고 보고 +100만</span>`;
+    btn.onclick = () => showAdModal(100, rerender);
+  }
+  return btn;
+}
+
 // ---------- 장비 상점 ----------
 const GEAR_TIERS = [
   { n: "I", bonus: 3, price: 300 },
@@ -235,27 +285,14 @@ function renderShop() {
     }
     box.appendChild(div);
   }
-  // 📺 광고 보상 (3분 쿨다운)
-  const AD_CD_KEY = "grow-ad-cd";
-  const left = Math.max(0, 180000 - (Date.now() - (+localStorage.getItem(AD_CD_KEY) || 0)));
+  // 📺 광고 보상 (3분 쿨다운) — 팝업으로 진행
+  const left = adCooldownLeft();
   const adRow = $("ad-row");
   if (left > 0) {
     adRow.innerHTML = `<p class="av-note">📺 다음 광고 보상까지 약 ${Math.ceil(left / 60000)}분 남았어요</p>`;
   } else {
-    adRow.innerHTML = `
-      <button class="btn btn-primary" id="btn-ad">📺 광고 보고 +200만 받기</button>
-      ${window.Ads && window.Ads.enabled() ? "" : `<p class="av-note">아직 광고가 연결 전이라 지금은 그냥 드려요 🎁</p>`}`;
-    $("btn-ad").onclick = () => {
-      $("btn-ad").disabled = true;
-      window.Ads.rewarded((ok) => {
-        if (ok) {
-          S.money = (S.money || 0) + 200;
-          localStorage.setItem(AD_CD_KEY, Date.now());
-          save();
-        }
-        renderShop();
-      });
-    };
+    adRow.innerHTML = `<button class="btn btn-primary" id="btn-ad">📺 광고 보고 +200만 받기</button>`;
+    $("btn-ad").onclick = () => showAdModal(200, renderShop);
   }
 }
 $("btn-shop-main")?.addEventListener("click", () => openShop("screen-main"));
@@ -395,6 +432,7 @@ function renderMain() {
     btn.onclick = () => doTraining(d);
     actBox.appendChild(btn);
   }
+  actBox.appendChild(makeAdSlotButton(renderMain));
   const rest = document.createElement("button");
   rest.className = "action-btn rest";
   rest.innerHTML = `<span class="a-emoji">🛌</span>휴식 <span class="a-sub">컨디션 대폭 회복</span>`;
