@@ -38,6 +38,7 @@
       <h2>🗺️ 지역 선택</h2>
       <p class="hint">어느 지역에서 야구를 시작할까요?<br/>지역에 따라 진학할 학교와 연고 구단이 달라져요.</p>
       <div class="card-grid" id="region-list"></div>
+      <button class="btn btn-ghost" id="btn-back-first">← 타이틀로</button>
     </section>
 
     <!-- 포지션 선택 -->
@@ -56,6 +57,7 @@
           <span class="card-desc">구속 · 제구 · 변화구를 갈고닦아<br/>탈삼진 쇼로 마운드를 지배해요</span>
         </button>
       </div>
+      <button class="btn btn-ghost" id="btn-back-position">← 뒤로</button>
     </section>
 
     <!-- 이름 입력 -->
@@ -68,6 +70,7 @@
       </div>
       <div class="avatar-slot" id="avatar-slot"></div>
       <button class="btn btn-primary" id="btn-start">입학하기</button>
+      <button class="btn btn-ghost" id="btn-back-name">← 뒤로</button>
     </section>
 
     <!-- 메인 (육성) -->
@@ -83,6 +86,7 @@
         <div class="hud-right">
           <div class="hud-turn" id="hud-turn"></div>
           <button class="mini-btn hud-battle" id="btn-battle-main">⚔️ 배틀</button>
+          <button class="mini-btn hud-battle" id="btn-home-main">🏠 홈</button>
         </div>
       </header>
 
@@ -139,6 +143,7 @@
         <div class="hud-right">
           <div class="hud-turn" id="pro-turn"></div>
           <button class="mini-btn hud-battle" id="btn-battle-pro">⚔️ 배틀</button>
+          <button class="mini-btn hud-battle" id="btn-home-pro">🏠 홈</button>
         </div>
       </header>
       <div class="gauges">
@@ -173,7 +178,7 @@
     <!-- 배틀 아레나 -->
     <section class="screen" id="screen-battle">
       <h2>⚔️ 배틀 아레나</h2>
-      <p class="hint">은퇴 선수로 맞대결! 친구의 선수 코드를 등록해 싸울 수도 있어요.</p>
+      <p class="hint">🌍 전 세계 플레이어와 랜덤 매칭!<br/>현역이든 은퇴 선수든 언제든 참전할 수 있어요.</p>
       <div id="battle-setup"></div>
       <div id="battle-view"></div>
       <div id="battle-rank"></div>

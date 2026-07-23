@@ -105,7 +105,32 @@ function show(id) {
   document.querySelectorAll(".screen").forEach((el) => el.classList.remove("active"));
   $(id).classList.add("active");
   window.scrollTo(0, 0);
+  if (!show._silent) history.pushState({ s: id }, "");
 }
+
+// ---------- 화면 이동 (뒤로/홈) ----------
+const BACK_SAFE = ["screen-title", "screen-agency", "screen-position", "screen-name", "screen-hof", "screen-battle"];
+window.addEventListener("popstate", (e) => {
+  const target = e.state && e.state.s;
+  const cur = document.querySelector(".screen.active");
+  const curId = cur ? cur.id : "";
+  if (target && BACK_SAFE.includes(target) && BACK_SAFE.includes(curId)) {
+    show._silent = true;
+    show(target);
+    show._silent = false;
+  } else {
+    // 경기/육성 진행 중에는 실수 방지를 위해 뒤로가기를 막아요
+    history.pushState({ s: curId }, "");
+  }
+});
+
+$("btn-back-first")?.addEventListener("click", () => show("screen-title"));
+$("btn-back-position")?.addEventListener("click", () => show("screen-agency"));
+$("btn-back-name")?.addEventListener("click", () => show("screen-position"));
+// 홈 = 타이틀로 (진행 상황은 매 턴 자동 저장돼요)
+const goHome = () => { if (S) save(); location.reload(); };
+$("btn-home-main")?.addEventListener("click", goHome);
+$("btn-home-pro")?.addEventListener("click", goHome);
 
 // ---------- 시작 흐름 ----------
 let chosenAgency = null;
