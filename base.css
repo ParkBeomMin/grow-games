@@ -338,3 +338,40 @@ h2 { font-size: 1.6rem; margin: 8px 0 6px; color: var(--accent); }
 }
 .pbp .good { color: #6ee7a0; }
 .pbp .bad { color: #f59e8b; }
+
+/* ---------- 명예의 전당 · 배틀 ---------- */
+.hof-card {
+  display: flex; gap: 12px; align-items: center;
+  background: var(--bg2); border: 2px solid var(--line);
+  border-radius: 14px; padding: 12px 14px; margin-bottom: 10px;
+}
+.hof-face { width: 52px; height: 52px; border-radius: 50%; object-fit: cover; border: 2px solid var(--accent); }
+.hof-face-emoji {
+  width: 52px; height: 52px; border-radius: 50%; background: var(--field);
+  display: flex; align-items: center; justify-content: center; font-size: 1.6rem; flex-shrink: 0;
+}
+.hof-info { flex: 1; font-size: 0.78rem; color: var(--dim); line-height: 1.5; }
+.hof-info .hof-name { font-family: "Jua", sans-serif; font-size: 1rem; color: var(--cream); }
+.hof-grade { font-size: 0.72rem; color: var(--accent); }
+.mini-btn {
+  background: transparent; border: 1px solid var(--line); color: var(--sky);
+  border-radius: 8px; padding: 6px 10px; font-size: 0.72rem; cursor: pointer; flex-shrink: 0;
+}
+.battle-row {
+  display: flex; flex-direction: column; gap: 8px;
+  background: var(--bg2); border: 2px solid var(--line);
+  border-radius: 14px; padding: 14px; margin-bottom: 12px;
+  font-size: 0.85rem; color: var(--dim);
+}
+.battle-row select, .battle-row textarea {
+  background: var(--bg); color: var(--text); border: 2px solid var(--line);
+  border-radius: 10px; padding: 10px; font-size: 0.9rem; font-family: inherit;
+}
+.rank-title { font-size: 1.1rem; margin-top: 14px; }
+.rank-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; margin-top: 8px; }
+.rank-table th, .rank-table td { border-bottom: 1px solid var(--line); padding: 7px 6px; text-align: left; color: var(--dim); }
+.rank-table th { color: var(--cream); font-family: "Jua", sans-serif; font-weight: 400; }
+.rank-table .me td { color: var(--accent); }
+.season-table { width: 100%; border-collapse: collapse; font-size: 0.74rem; margin: 10px 0; }
+.season-table th, .season-table td { border-bottom: 1px solid var(--line); padding: 5px 4px; text-align: center; color: var(--dim); }
+.season-table th { color: var(--cream); font-weight: 400; }

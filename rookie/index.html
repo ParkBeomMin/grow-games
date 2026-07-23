@@ -24,6 +24,8 @@
         <p class="desc">평범한 중학교 졸업생에서 KBO 1라운더까지.<br/>고교 3년, 당신의 야구 인생이 시작됩니다.</p>
         <button class="btn btn-primary" id="btn-new">새 게임 시작</button>
         <button class="btn btn-ghost hidden" id="btn-continue">이어하기</button>
+        <button class="btn btn-ghost" id="btn-hof">🏛️ 명예의 전당</button>
+        <button class="btn btn-ghost" id="btn-battle">⚔️ 배틀 아레나</button>
         <a class="series-link" href="../">🎮 키우기 시리즈 더 보기</a>
       </div>
     </section>
@@ -119,8 +121,63 @@
       </div>
     </section>
 
+
+    <!-- 프로 커리어 (스프링캠프) -->
+    <section class="screen" id="screen-pro">
+      <header class="hud">
+        <div class="hud-id">
+          <img id="pro-avatar" class="hud-avatar hidden" alt="" />
+          <div class="hud-left">
+            <div class="hud-name" id="pro-name"></div>
+            <div class="hud-school" id="pro-team"></div>
+          </div>
+        </div>
+        <div class="hud-right">
+          <div class="hud-turn" id="pro-turn"></div>
+        </div>
+      </header>
+      <div class="gauges">
+        <div class="gauge">
+          <div class="gauge-label"><span>🩹 컨디션</span><span id="pro-cond-num"></span></div>
+          <div class="bar"><div class="bar-fill cond" id="pro-cond-bar"></div></div>
+        </div>
+      </div>
+      <div class="stats" id="pro-stats"></div>
+      <div class="actions">
+        <p class="actions-title" id="pro-camp-title"></p>
+        <div class="action-grid" id="pro-actions"></div>
+      </div>
+      <div class="log" id="pro-log"></div>
+    </section>
+
+    <!-- 시즌 결산 / 은퇴식 -->
+    <section class="screen" id="screen-career">
+      <h2 id="career-title"></h2>
+      <div class="draft-card" id="career-card"></div>
+      <div class="draft-actions" id="career-actions"></div>
+    </section>
+
+    <!-- 명예의 전당 -->
+    <section class="screen" id="screen-hof">
+      <h2>🏛️ 명예의 전당</h2>
+      <p class="hint">은퇴한 선수들의 커리어가 여기 잠들어 있어요.</p>
+      <div id="hof-list"></div>
+      <button class="btn btn-ghost" id="btn-hof-back">← 돌아가기</button>
+    </section>
+
+    <!-- 배틀 아레나 -->
+    <section class="screen" id="screen-battle">
+      <h2>⚔️ 배틀 아레나</h2>
+      <p class="hint">은퇴 선수로 맞대결! 친구의 선수 코드를 등록해 싸울 수도 있어요.</p>
+      <div id="battle-setup"></div>
+      <div id="battle-view"></div>
+      <div id="battle-rank"></div>
+      <button class="btn btn-ghost" id="btn-battle-back">← 돌아가기</button>
+    </section>
+
   </main>
   <script src="../avatar.js"></script>
   <script src="game.js"></script>
+  <script src="career.js"></script>
 </body>
 </html>

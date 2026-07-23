@@ -124,8 +124,12 @@ function initTitle() {
     $("btn-continue").classList.remove("hidden");
     $("btn-continue").onclick = () => {
       S = JSON.parse(saved);
-      renderMain();
-      show("screen-main");
+      if (S.phase === "pro" && window.Career) {
+        window.Career.showPro();
+      } else {
+        renderMain();
+        show("screen-main");
+      }
     };
   }
   $("btn-new").onclick = () => {
@@ -676,7 +680,8 @@ function showDraft() {
     location.reload();
   };
 
-  clearSave();
+  if (window.Career) window.Career.onDraft(score, team);
+  else clearSave();
   show("screen-draft");
 }
 
