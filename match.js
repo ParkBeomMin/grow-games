@@ -25,8 +25,9 @@
 "use strict";
 
 window.Match = (() => {
-  const SUPABASE_URL = "";      // 예: https://abcd1234.supabase.co
-  const SUPABASE_ANON_KEY = ""; // Settings → API → anon public
+  const SUPABASE_URL = "https://dlbpvzgwwcgphlhymncx.supabase.co";
+  // anon public 키 — 공개용 키라 커밋해도 안전해요 (보안은 RLS가 담당)
+  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRsYnB2emd3d2NncGhsaHltbmN4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ3ODA3MTMsImV4cCI6MjEwMDM1NjcxM30.tyLMO8o_i5OTmKaRudFd5LATDjmjVzL8M2NM_4EoeBc";
 
   const enabled = () => !!(SUPABASE_URL && SUPABASE_ANON_KEY);
   const headers = () => ({
