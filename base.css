@@ -441,3 +441,6 @@ h2 { font-size: 1.6rem; margin: 8px 0 6px; color: var(--accent); }
 .tm-duel { display: flex; gap: 8px; }
 .tm-duel .tm-duel-btn { flex: 1; margin: 0; padding: 12px 4px; font-size: 0.95rem; }
 .ad-box { margin-top: 16px; min-height: 0; }
+
+.auto-toggle { display: block; font-size: 0.8rem; color: var(--dim); margin: -2px 0 10px; cursor: pointer; }
+.auto-toggle input { accent-color: var(--accent); }

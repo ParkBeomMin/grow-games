@@ -232,17 +232,48 @@ function showAdModal(amount, onDone) {
   });
 }
 
-// 훈련 그리드 빈 칸용 보너스 버튼 생성
+// 광고 특훈 — 랜덤 스탯을 훈련하되 턴(월/경기 카운트)을 소모하지 않아요
+function showAdTrainModal(rerender) {
+  const ov = document.createElement("div");
+  ov.className = "av-overlay";
+  ov.innerHTML = `
+    <div class="av-modal ad-modal">
+      <p class="av-title">📺 광고 보고 무료 특훈</p>
+      <div class="ad-modal-body"><div class="ad-emoji">⏳</div>광고를 불러오는 중…</div>
+      <div class="av-actions"><button type="button" class="btn btn-ghost ad-modal-close" disabled>잠시만요…</button></div>
+    </div>`;
+  document.body.appendChild(ov);
+  const body = ov.querySelector(".ad-modal-body");
+  const closeBtn = ov.querySelector(".ad-modal-close");
+  window.Ads.rewarded((ok, real) => {
+    if (ok) {
+      const d = pick(statDefs());
+      let gain = rand(2.2, 4.2) * S.talents[d.key];
+      if (S.stats[d.key] >= 100) gain *= 0.5;
+      gain = Math.round(gain * 10) / 10;
+      S.stats[d.key] = clamp(S.stats[d.key] + gain, 0, STAT_CAP);
+      localStorage.setItem(AD_CD_KEY, Date.now());
+      save();
+      body.innerHTML = `<div class="ad-emoji">${d.emoji}</div><b>${d.name} +${gain.toFixed(1)}</b> 특훈 완료!<br/><span class="av-note">턴을 소모하지 않는 보너스 훈련이에요${real ? "" : " · 광고 연결 전이라 그냥 진행했어요 🎁"}</span>`;
+    } else {
+      body.innerHTML = `<div class="ad-emoji">💧</div>광고를 끝까지 봐야 특훈할 수 있어요`;
+    }
+    closeBtn.disabled = false;
+    closeBtn.textContent = "확인";
+    closeBtn.onclick = () => { ov.remove(); if (rerender) rerender(); };
+  });
+}
+
 function makeAdSlotButton(rerender) {
   const btn = document.createElement("button");
   btn.className = "action-btn ad-slot";
   const left = adCooldownLeft();
   if (left > 0) {
     btn.disabled = true;
-    btn.innerHTML = `<span class="a-emoji">📺</span>보너스<span class="a-sub">${Math.ceil(left / 60000)}분 후 가능</span>`;
+    btn.innerHTML = `<span class="a-emoji">📺</span>특훈<span class="a-sub">${Math.ceil(left / 60000)}분 후 가능</span>`;
   } else {
-    btn.innerHTML = `<span class="a-emoji">📺</span>보너스<span class="a-sub">광고 보고 +100만</span>`;
-    btn.onclick = () => showAdModal(100, rerender);
+    btn.innerHTML = `<span class="a-emoji">📺</span>특훈<span class="a-sub">광고 보고 무료 훈련</span>`;
+    btn.onclick = () => showAdTrainModal(rerender);
   }
   return btn;
 }
@@ -496,6 +527,23 @@ function renderMain() {
   rest.onclick = doRest;
   actBox.appendChild(rest);
 
+  // 대회 기간 — 훈련 잠그고 출전 버튼만 활성화
+  if (S.pendingTour) {
+    actBox.querySelectorAll(".action-btn").forEach((b) => (b.disabled = true));
+    const go = document.createElement("button");
+    go.className = "action-btn rest go-game";
+    go.innerHTML = `<span class="a-emoji">🏆</span>${S.pendingTour} 출전!<span class="a-sub">전국대회가 시작돼요</span>`;
+    go.onclick = () => {
+      const t = S.pendingTour;
+      S.pendingTour = null;
+      save();
+      renderMain(); // 숨겨진 화면에 출전 버튼이 남지 않게 정리
+      startTournament(t);
+    };
+    actBox.appendChild(go);
+    $("hud-turn").textContent = `${S.year}학년 ${S.month}월 · 🏆 대회 기간`;
+  }
+
   renderLog();
 }
 
@@ -600,10 +648,12 @@ function endMonth() {
   save();
   renderMain();
 
-  // 대회 달이면 대회 시작
+  // 대회 달이면 출전 버튼을 띄우고 대기 (자동 시작 X)
   const tname = TOURNAMENTS[S.month];
   if (tname) {
-    startTournament(tname);
+    S.pendingTour = tname;
+    save();
+    renderMain();
     return;
   }
   advanceMonth();
@@ -641,19 +691,54 @@ function playTourGame() {
   const roundName = ROUNDS[tour.round];
   const opp = pick(OPPONENTS);
 
-  // 승률: 학교 전력 + 선수 능력 + 컨디션 - 라운드 페널티
   const p = clamp(
     r.win + (overall() - 50) / 130 + (S.condition - 50) / 700 - tour.round * 0.06,
     0.15, 0.92
   );
   const perf = S.pos === "batter" ? batterLine() : pitcherLine();
-  // 절반 이상은 '운명의 9회' 접전 — 타이밍 미니게임이 승부를 결정해요
   const interactive = Math.random() < 0.55;
   const preWin = interactive ? null : Math.random() < p;
   const story = S.pos === "batter"
     ? batterStory(preWin, perf, interactive)
     : pitcherStory(preWin, perf, interactive);
-  renderGameSim(roundName, opp, perf, story, interactive, preWin);
+
+  renderGameSim({
+    title: `${roundName} vs ${opp}`,
+    oppName: opp,
+    homeName: r.school,
+    perf, story, interactive, preWin,
+    onFinish: (win, bonus) => {
+      S.games += 1;
+      let pts = perf.pts + (win ? 4 : 1) + tour.round * 3 + (bonus || 0);
+      pts = Math.round(pts * r.spot);
+      S.scout = Math.max(0, S.scout + pts);
+      if (!S.hsTotals) S.hsTotals = S.pos === "batter" ? { ab: 0, hits: 0, hr: 0, sb: 0 } : { ip: 0, k: 0, runs: 0 };
+      if (S.pos === "batter") {
+        S.hsTotals.ab += perf.ab; S.hsTotals.hits += perf.hits; S.hsTotals.hr += perf.hr; S.hsTotals.sb += perf.sb;
+      } else {
+        S.hsTotals.ip += perf.ip; S.hsTotals.k += perf.k; S.hsTotals.runs += perf.runs;
+      }
+      const pay = win ? 60 + tour.round * 25 : 25;
+      S.money = (S.money || 0) + pay;
+      tour.totalPts += pts;
+      S.condition = clamp(S.condition - 6, 0, 100);
+      save();
+      const extra = `<div class="tour-pts">${pts >= 0 ? `🔭 스카우트 주목도 +${pts}` : `📉 스카우트 주목도 ${pts}`} · 💰 수당 +${pay}만</div>`;
+      if (win && tour.round < ROUNDS.length - 1) {
+        tour.round += 1;
+        return { extra, nextLabel: `${ROUNDS[tour.round]} 진출!`, nextFn: playTourGame };
+      }
+      tour.alive = false;
+      const champion = win && tour.round === ROUNDS.length - 1;
+      if (champion) {
+        S.trophies.push(`${S.year}학년 ${tour.name} 우승`);
+        S.scout += 30;
+        S.money = (S.money || 0) + 300;
+        tour.totalPts += 30;
+      }
+      return { extra, nextLabel: champion ? "🏆 우승 세리머니!" : "대회 마치기", nextFn: () => finishTournament(champion, roundName) };
+    },
+  });
 }
 
 // ---------- 경기 시뮬레이션 연출 ----------
@@ -810,6 +895,22 @@ const MINI_PIT = [
 ];
 const miniZone = (stat) => clamp(13 + stat * 0.22 + (S.condition - 50) * 0.08, 10, 40);
 
+// 🤖 미니게임 자동 진행 — 스탯 기반 확률로 즉시 판정
+const autoMiniOn = () => localStorage.getItem("grow-auto-mini") === "1";
+function autoRes(stat) {
+  const pPerfect = clamp(0.12 + stat * 0.003 + (S.condition - 50) * 0.001, 0.08, 0.5);
+  const pMiss = clamp(0.4 - stat * 0.002, 0.08, 0.4);
+  const r = Math.random();
+  return r < pPerfect ? "perfect" : r < pPerfect + pMiss ? "miss" : "good";
+}
+{
+  const chk = $("auto-mini");
+  if (chk) {
+    chk.checked = autoMiniOn();
+    chk.onchange = () => localStorage.setItem("grow-auto-mini", chk.checked ? "1" : "0");
+  }
+}
+
 // 연타/수싸움 결과 텍스트
 const MASH_BAT = { ok: "혼신의 스윙이 통했어요! 💪", great: "이 악문 풀스윙, 폭발적인 장타!! 💥", bad: "힘이 빠졌다… 범타" };
 const MASH_PIT = { ok: "몰아붙인 투구로 범타 처리! 🔥", great: "혼신의 전력투구, 3구 삼진!! ⚡", bad: "체력이 방전… 안타 허용" };
@@ -822,6 +923,7 @@ function playRandomMini(container, cb) {
   const mech = pick(["bar", "bar", "mash", "duel"]);
   if (mech === "bar") {
     const type = pick(isBat ? MINI_BAT : MINI_PIT);
+    if (autoMiniOn()) { cb(autoRes(S.stats[type.stat]), type); return; }
     window.Timing.play(container, {
       label: type.label,
       button: type.button,
@@ -829,6 +931,7 @@ function playRandomMini(container, cb) {
     }, (res) => cb(res, type));
   } else if (mech === "mash") {
     const stat = isBat ? S.stats.power : S.stats.stamina;
+    if (autoMiniOn()) { cb(autoRes(stat), isBat ? MASH_BAT : MASH_PIT); return; }
     window.Timing.mash(container, {
       label: isBat ? "💪 풀카운트 힘 대결! 연타로 힘을 모아라!" : "🔥 혼신의 투구! 연타로 어깨를 달궈라!",
       button: "탭! 👊",
@@ -836,6 +939,7 @@ function playRandomMini(container, cb) {
     }, (res) => cb(res, isBat ? MASH_BAT : MASH_PIT));
   } else {
     const stat = isBat ? S.stats.contact : S.stats.control;
+    if (autoMiniOn()) { cb(autoRes(stat), isBat ? DUEL_BAT : DUEL_PIT); return; }
     window.Timing.duel(container, {
       label: isBat ? "🧠 수 싸움! 투수의 결정구 코스를 읽어라" : "🧠 수 싸움! 타자가 노리는 코스를 피해 던져라",
       choices: ["몸쪽", "가운데", "바깥쪽"],
@@ -845,9 +949,11 @@ function playRandomMini(container, cb) {
 }
 
 let simTimer = null;
-function renderGameSim(roundName, opp, perf, story, interactive, preWin) {
-  const r = regionOf();
-  $("tour-round").textContent = `${roundName} vs ${opp}`;
+// 범용 경기 시뮬레이터 — 고교 대회와 프로 리그가 함께 사용
+// cfg: { title, oppName, homeName, perf, story, interactive, preWin, onFinish(win,bonus)→{extra,nextLabel,nextFn} }
+function renderGameSim(cfg) {
+  const { oppName: opp, perf, story, interactive, preWin } = cfg;
+  $("tour-round").textContent = cfg.title;
   const heads = Array.from({ length: 9 }, (_, i) => `<th>${i + 1}</th>`).join("");
   const cells = (side) => Array.from({ length: 9 }, (_, i) => `<td id="sb-${side}-${i}"></td>`).join("");
   $("tour-card").innerHTML = `
@@ -855,7 +961,7 @@ function renderGameSim(roundName, opp, perf, story, interactive, preWin) {
       <thead><tr><th></th>${heads}<th>R</th></tr></thead>
       <tbody>
         <tr><th>${opp.slice(0, 4)}</th>${cells("opp")}<td class="sb-r" id="sb-r-opp">0</td></tr>
-        <tr><th>${r.school.slice(0, 4)}</th>${cells("our")}<td class="sb-r" id="sb-r-our">0</td></tr>
+        <tr><th>${cfg.homeName.slice(0, 4)}</th>${cells("our")}<td class="sb-r" id="sb-r-our">0</td></tr>
       </tbody>
     </table>
     <div class="pbp" id="pbp"></div>
@@ -863,17 +969,21 @@ function renderGameSim(roundName, opp, perf, story, interactive, preWin) {
     <div id="game-result"></div>`;
 
   const evFor = (inn, half) => story.events.filter((e) => e.inn === inn && e.half === half);
-  // 경기 중 랜덤 미니게임 — 35% 확률로 2~7회 중 한 이닝에 등장
+  // 경기 중 랜덤 미니게임 — 35% 확률로 2~7회 중 한 이닝에 등장 (프로 지정 모먼트가 있으면 생략)
   const isBat = S.pos === "batter";
-  const midInn = Math.random() < 0.35 ? randInt(2, 7) : -1;
+  const proAb = story.proAb || null;
+  const proCrisis = story.proCrisis || null;
+  const midInn = (!proAb && !proCrisis && Math.random() < 0.35) ? randInt(2, 7) : -1;
   const midHalf = isBat ? "말" : "초";
-  const steps = [{ feeds: [{ text: `⚾ ${roundName} vs ${opp} — 플레이볼!` }] }];
+  const steps = [{ feeds: [{ text: `⚾ ${cfg.title} — 플레이볼!` }] }];
   for (let i = 0; i < 9; i++) {
     if (interactive && story.moment.half === "초" && i === 8) { steps.push({ moment: true }); break; }
-    if (midInn === i + 1 && midHalf === "초") steps.push({ midMoment: true, inn: i });
+    if (proCrisis && proCrisis.includes(i + 1)) steps.push({ proMoment: "crisis", inn: i });
+    else if (midInn === i + 1 && midHalf === "초") steps.push({ midMoment: true, inn: i });
     else steps.push({ cell: ["opp", i, story.oppInn[i]], feeds: evFor(i + 1, "초").map((e) => ({ text: `${i + 1}회초 · ${e.text}`, cls: e.cls })) });
     if (interactive && story.moment.half === "말" && i === 8) { steps.push({ moment: true }); break; }
-    if (midInn === i + 1 && midHalf === "말") steps.push({ midMoment: true, inn: i });
+    if (proAb && proAb.includes(i + 1)) steps.push({ proMoment: "ab", inn: i });
+    else if (midInn === i + 1 && midHalf === "말") steps.push({ midMoment: true, inn: i });
     else steps.push({ cell: ["our", i, story.ourInn[i]], feeds: evFor(i + 1, "말").map((e) => ({ text: `${i + 1}회말 · ${e.text}`, cls: e.cls })) });
   }
   if (!interactive) {
@@ -905,6 +1015,71 @@ function renderGameSim(roundName, opp, perf, story, interactive, preWin) {
     }
     const pbp = $("pbp");
     pbp.scrollTop = pbp.scrollHeight;
+  }
+
+  // 프로: 내 타석 / 투수 위기 — 매번 미니게임 (자동 모드면 즉시 판정)
+  function beginProMoment(st) {
+    momentOn = true;
+    clearInterval(simTimer);
+    const i = st.inn;
+    const btn = $("btn-tour-next");
+    const resume = () => {
+      momentOn = false;
+      btn.disabled = false;
+      btn.textContent = "⏩ 빨리 감기";
+      simTimer = setInterval(tick, 550);
+    };
+    if (st.proMoment === "ab") {
+      applyStep({ feeds: [{ text: `🧢 ${i + 1}회말, ${S.name}의 타석!`, cls: "good" }] });
+      const doRes = (res) => {
+        let txt, cls = "good", runs = 0;
+        if (res === "perfect") {
+          if (Math.random() < 0.35 + S.stats.power / 400) {
+            perf.hr += 1; perf.hits += 1; runs = randInt(1, 2);
+            txt = `${S.name}, 큼지막한 홈런!! 💥`;
+          } else {
+            perf.hits += 1; runs = 1;
+            txt = `${S.name}, 총알 같은 2루타! ⚡ (1타점)`;
+          }
+        } else if (res === "good") {
+          if (Math.random() < clamp(0.22 + S.stats.contact / 320, 0.22, 0.55)) {
+            perf.hits += 1;
+            runs = Math.random() < 0.4 ? 1 : 0;
+            txt = `${S.name}, 안타! 🏏${runs ? " (1타점)" : ""}`;
+            if (Math.random() < S.stats.run / 400) { perf.sb += 1; txt += " 이어서 도루! 👟"; }
+          } else {
+            cls = "";
+            txt = `${S.name}, 잘 맞았지만 야수 정면… 아쉬운 타구`;
+          }
+        } else {
+          cls = "";
+          txt = `${S.name}, ${pick(OUT_TXT)}`;
+        }
+        story.ourInn[i] += runs;
+        applyStep({ cell: ["our", i, story.ourInn[i]], feeds: [{ text: `${i + 1}회말 · ${txt}`, cls }] });
+        resume();
+      };
+      if (autoMiniOn()) { doRes(autoRes(S.stats.contact)); return; }
+      btn.disabled = true;
+      btn.textContent = "🧢 내 타석!";
+      playRandomMini($("game-moment"), doRes);
+    } else {
+      applyStep({ feeds: [{ text: `🔥 ${i + 1}회초, 주자가 쌓이며 위기!`, cls: "bad" }] });
+      const doRes = (res) => {
+        let runs, txt, cls;
+        if (res === "perfect") { runs = 0; perf.k += 2; txt = "연속 탈삼진으로 위기 탈출!! 🧊"; cls = "good"; }
+        else if (res === "good") { runs = randInt(0, 1); txt = runs ? "1실점으로 최소 실점 방어" : "범타 처리로 무실점! 🧤"; cls = runs ? "" : "good"; }
+        else { runs = 2; txt = "통한의 적시타… 2실점 💧"; cls = "bad"; }
+        story.oppInn[i] += runs;
+        perf.runs = (perf.runs || 0) + runs;
+        applyStep({ cell: ["opp", i, story.oppInn[i]], feeds: [{ text: `${i + 1}회초 · ${txt}`, cls }] });
+        resume();
+      };
+      if (autoMiniOn()) { doRes(autoRes(S.stats.control)); return; }
+      btn.disabled = true;
+      btn.textContent = "🔥 위기!";
+      playRandomMini($("game-moment"), doRes);
+    }
   }
 
   function beginMidMoment(step) {
@@ -950,6 +1125,7 @@ function renderGameSim(roundName, opp, perf, story, interactive, preWin) {
     btn.disabled = true;
     btn.textContent = "⚡ 운명의 순간!";
     const stat = isBat ? S.stats.contact : S.stats.control;
+    if (autoMiniOn()) { resolveMoment(autoRes(stat)); return; }
     window.Timing.play($("game-moment"), {
       label: isBat ? "⚾ 공이 온다! 초록 존에서 스윙!" : "🎯 결정구! 초록 존에서 릴리스!",
       button: isBat ? "스윙! 🏏" : "던진다! 🔥",
@@ -1011,44 +1187,16 @@ function renderGameSim(roundName, opp, perf, story, interactive, preWin) {
     if (finished) return;
     finished = true;
     clearInterval(simTimer);
-    S.games += 1;
-    let pts = perf.pts + (win ? 4 : 1) + tour.round * 3 + (bonus || 0);
-    pts = Math.round(pts * r.spot);
-    S.scout = Math.max(0, S.scout + pts); // 못한 경기는 주목도가 깎여요
-    if (!S.hsTotals) S.hsTotals = S.pos === "batter" ? { ab: 0, hits: 0, hr: 0, sb: 0 } : { ip: 0, k: 0, runs: 0 };
-    if (S.pos === "batter") {
-      S.hsTotals.ab += perf.ab; S.hsTotals.hits += perf.hits; S.hsTotals.hr += perf.hr; S.hsTotals.sb += perf.sb;
-    } else {
-      S.hsTotals.ip += perf.ip; S.hsTotals.k += perf.k; S.hsTotals.runs += perf.runs;
-    }
-    const pay = win ? 60 + tour.round * 25 : 25;
-    S.money = (S.money || 0) + pay;
-    tour.totalPts += pts;
-    S.condition = clamp(S.condition - 6, 0, 100);
-    save();
+    const out = cfg.onFinish(win, bonus) || {};
     const btn = $("btn-tour-next");
     btn.disabled = false;
     $("game-result").innerHTML = `
-      <div class="tour-vs">${r.school} <span class="${win ? "win" : "lose"}">${win ? "승리! 🎉" : "패배… 😢"}</span></div>
+      <div class="tour-vs">${cfg.homeName} <span class="${win ? "win" : "lose"}">${win ? "승리! 🎉" : "패배… 😢"}</span></div>
       <div class="tour-line">${perf.line}</div>
       ${perf.highlight ? `<div class="tour-line tour-highlight">${perf.highlight}</div>` : ""}
-      <div class="tour-pts">${pts >= 0 ? `🔭 스카우트 주목도 +${pts}` : `📉 스카우트 주목도 ${pts}`} · 💰 수당 +${pay}만</div>`;
-    if (win && tour.round < ROUNDS.length - 1) {
-      tour.round += 1;
-      btn.textContent = `${ROUNDS[tour.round]} 진출!`;
-      btn.onclick = playTourGame;
-    } else {
-      tour.alive = false;
-      const champion = win && tour.round === ROUNDS.length - 1;
-      if (champion) {
-        S.trophies.push(`${S.year}학년 ${tour.name} 우승`);
-        S.scout += 30;
-        S.money = (S.money || 0) + 300; // 🏆 우승 상금
-        tour.totalPts += 30;
-      }
-      btn.textContent = champion ? "🏆 우승 세리머니!" : "대회 마치기";
-      btn.onclick = () => finishTournament(champion, roundName);
-    }
+      ${out.extra || ""}`;
+    btn.textContent = out.nextLabel || "계속";
+    btn.onclick = out.nextFn || (() => {});
   }
 
   function endOfSteps() {
@@ -1065,6 +1213,7 @@ function renderGameSim(roundName, opp, perf, story, interactive, preWin) {
     const st = steps[idx++];
     if (st.moment) { beginMoment(); return; }
     if (st.midMoment) { beginMidMoment(st); return; }
+    if (st.proMoment) { beginProMoment(st); return; }
     applyStep(st);
   }
   simTimer = setInterval(tick, 550);
@@ -1077,6 +1226,7 @@ function renderGameSim(roundName, opp, perf, story, interactive, preWin) {
       const st = steps[idx++];
       if (st.moment) { beginMoment(); return; }
       if (st.midMoment) { beginMidMoment(st); return; }
+      if (st.proMoment) { beginProMoment(st); return; }
       applyStep(st);
     }
     endOfSteps();
