@@ -6,6 +6,9 @@
 
 window.Ads = (() => {
   const ADSENSE_CLIENT = "ca-pub-7426857657290789";
+  // 애드센스에서 '디스플레이 광고 단위'를 만들고 슬롯 번호를 넣으면
+  // 결산/엔딩 화면 하단에 배너가 표시돼요. 비워두면 아무것도 안 나와요.
+  const AD_DISPLAY_SLOT = "";
 
   let state = "idle"; // idle | loading | ready | failed
   const queue = [];
@@ -23,6 +26,7 @@ window.Ads = (() => {
       window.adConfig({ preloadAdBreaks: "on", sound: "off" });
       state = "ready";
       flush();
+      flushDisplays();
     };
     s.onerror = () => {
       state = "failed";
@@ -73,5 +77,22 @@ window.Ads = (() => {
     if (state === "idle") loadScript();
   }
 
-  return { rewarded, enabled: () => !!ADSENSE_CLIENT };
+  // 디스플레이 배너 (결산/엔딩 등 콘텐츠 화면 하단 전용)
+  const displayQueue = [];
+  function flushDisplays() {
+    while (displayQueue.length) {
+      const el = displayQueue.shift();
+      el.innerHTML = `<ins class="adsbygoogle" style="display:block" data-ad-client="${ADSENSE_CLIENT}" data-ad-slot="${AD_DISPLAY_SLOT}" data-ad-format="auto" data-full-width-responsive="true"></ins>`;
+      try { (window.adsbygoogle = window.adsbygoogle || []).push({}); } catch { /* noop */ }
+    }
+  }
+  function display(el) {
+    if (!ADSENSE_CLIENT || !AD_DISPLAY_SLOT || !el || el.dataset.adDone) return;
+    el.dataset.adDone = "1";
+    displayQueue.push(el);
+    if (state === "ready") flushDisplays();
+    else if (state === "idle") loadScript();
+  }
+
+  return { rewarded, display, enabled: () => !!ADSENSE_CLIENT };
 })();

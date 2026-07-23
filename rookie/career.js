@@ -305,15 +305,10 @@ window.Career = (() => {
       if (momentOn) return;
       momentOn = true;
       if (Math.random() < 0.45) {
-        const type = pick(S.pos === "batter" ? MINI_BAT : MINI_PIT);
         feed({ text: "⚡ 시리즈의 승부처가 찾아왔어요!", cls: "good" });
         btn.disabled = true;
         btn.textContent = "⚡ 승부처!";
-        window.Timing.play($("series-moment"), {
-          label: type.label,
-          button: type.button,
-          zonePct: miniZone(S.stats[type.stat]),
-        }, (res) => {
+        playRandomMini($("series-moment"), (res, type) => {
           if (res === "perfect") {
             w = clamp(w + 1, 2, SERIES_GAMES - 1);
             if (S.pos === "batter") { sStat.hits += 3; sStat.hr += 1; }
@@ -484,6 +479,7 @@ window.Career = (() => {
     ret.textContent = "🎓 은퇴하기";
     ret.onclick = () => enshrine(S.team);
     act.appendChild(ret);
+    if (window.Ads) window.Ads.display($("ad-career"));
     show("screen-career");
   }
 

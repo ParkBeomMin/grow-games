@@ -810,6 +810,40 @@ const MINI_PIT = [
 ];
 const miniZone = (stat) => clamp(13 + stat * 0.22 + (S.condition - 50) * 0.08, 10, 40);
 
+// 연타/수싸움 결과 텍스트
+const MASH_BAT = { ok: "혼신의 스윙이 통했어요! 💪", great: "이 악문 풀스윙, 폭발적인 장타!! 💥", bad: "힘이 빠졌다… 범타" };
+const MASH_PIT = { ok: "몰아붙인 투구로 범타 처리! 🔥", great: "혼신의 전력투구, 3구 삼진!! ⚡", bad: "체력이 방전… 안타 허용" };
+const DUEL_BAT = { ok: "노림수 적중! 안타! 🧠", great: "완벽한 수읽기, 통타!! 💥", bad: "유인구에 속았다… 삼진" };
+const DUEL_PIT = { ok: "타자의 노림수를 피했어요! 🧠", great: "허를 찌른 결정구, 삼진!! 🎯", bad: "딱 노리던 코스였다… 통타" };
+
+// 승부처 미니게임 — 종류(타이밍/연타/수싸움)와 상황을 랜덤으로
+function playRandomMini(container, cb) {
+  const isBat = S.pos === "batter";
+  const mech = pick(["bar", "bar", "mash", "duel"]);
+  if (mech === "bar") {
+    const type = pick(isBat ? MINI_BAT : MINI_PIT);
+    window.Timing.play(container, {
+      label: type.label,
+      button: type.button,
+      zonePct: miniZone(S.stats[type.stat]),
+    }, (res) => cb(res, type));
+  } else if (mech === "mash") {
+    const stat = isBat ? S.stats.power : S.stats.stamina;
+    window.Timing.mash(container, {
+      label: isBat ? "💪 풀카운트 힘 대결! 연타로 힘을 모아라!" : "🔥 혼신의 투구! 연타로 어깨를 달궈라!",
+      button: "탭! 👊",
+      target: Math.round(clamp(26 - stat * 0.08 - (S.condition - 50) * 0.03, 10, 26)),
+    }, (res) => cb(res, isBat ? MASH_BAT : MASH_PIT));
+  } else {
+    const stat = isBat ? S.stats.contact : S.stats.control;
+    window.Timing.duel(container, {
+      label: isBat ? "🧠 수 싸움! 투수의 결정구 코스를 읽어라" : "🧠 수 싸움! 타자가 노리는 코스를 피해 던져라",
+      choices: ["몸쪽", "가운데", "바깥쪽"],
+      hintChance: clamp((stat - 40) / 80 + (S.condition - 50) / 400, 0, 0.9),
+    }, (res) => cb(res, isBat ? DUEL_BAT : DUEL_PIT));
+  }
+}
+
 let simTimer = null;
 function renderGameSim(roundName, opp, perf, story, interactive, preWin) {
   const r = regionOf();
@@ -876,17 +910,12 @@ function renderGameSim(roundName, opp, perf, story, interactive, preWin) {
   function beginMidMoment(step) {
     momentOn = true;
     clearInterval(simTimer);
-    const type = pick(isBat ? MINI_BAT : MINI_PIT);
     const i = step.inn;
-    applyStep({ feeds: [{ text: `⚡ ${i + 1}회 승부처! ${type.label.split("!")[0]}!`, cls: "good" }] });
+    applyStep({ feeds: [{ text: `⚡ ${i + 1}회, 경기의 승부처가 찾아왔어요!`, cls: "good" }] });
     const btn = $("btn-tour-next");
     btn.disabled = true;
     btn.textContent = "⚡ 승부처!";
-    window.Timing.play($("game-moment"), {
-      label: type.label,
-      button: type.button,
-      zonePct: miniZone(S.stats[type.stat]),
-    }, (res) => {
+    playRandomMini($("game-moment"), (res, type) => {
       const half = isBat ? "말" : "초";
       let delta;
       if (res === "perfect") {

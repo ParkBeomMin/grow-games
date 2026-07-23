@@ -205,15 +205,10 @@ window.IdolCareer = (() => {
       momentOn = true;
       btn.disabled = true;
       btn.textContent = "✨ 킬링파트!";
-      const stat = S.stats[POS_INFO[S.pos].stat];
-      window.Timing.play($("cb-moment"), {
-        label: "✨ 컴백 무대 킬링파트! 초록 존에서!",
-        button: "지금! 🎤",
-        zonePct: clamp(13 + stat * 0.24, 13, 38),
-      }, (res) => {
-        if (res === "perfect") { hype += 1.2; feed({ text: "💫 킬링파트 직캠이 실시간 트렌드 1위!", cls: "good" }); }
-        else if (res === "miss") { hype -= 1.2; feed({ text: "😱 생방송 무대 실수… 클립이 퍼지고 있어요", cls: "bad" }); }
-        else feed({ text: "✨ 안정적인 컴백 무대를 마쳤어요" });
+      playRandomMini($("cb-moment"), (res, type) => {
+        if (res === "perfect") { hype += 1.2; feed({ text: type.great, cls: "good" }); }
+        else if (res === "miss") { hype -= 1.2; feed({ text: type.bad, cls: "bad" }); }
+        else feed({ text: type.ok });
         finish();
       });
     }
@@ -282,6 +277,7 @@ window.IdolCareer = (() => {
     ret.textContent = "🎓 은퇴하기";
     ret.onclick = () => enshrine();
     act.appendChild(ret);
+    if (window.Ads) window.Ads.display($("ad-career"));
     show("screen-career");
   }
 

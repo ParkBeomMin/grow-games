@@ -620,6 +620,36 @@ const MOMENTS = {
   },
 };
 
+// 무대 승부처 미니게임 — 종류 랜덤 (타이밍/연타/수싸움)
+const IDOL_BAR = { ok: "✨ 하이라이트를 무난히 소화했어요", great: "💫 킬링파트를 완벽하게! 객석이 터져나가요!", bad: "😱 하이라이트에서 삐끗… 등급이 흔들려요" };
+const IDOL_MASH = { ok: "🎤 고음을 끝까지 버텨냈어요!", great: "💥 폭발적인 성량으로 무대를 찢었다!!", bad: "😮‍💨 호흡이 달렸다… 아쉬운 마무리" };
+const IDOL_DUEL = { ok: "📷 카메라를 정확히 찾아 미소!", great: "🌟 완벽한 동선, 직캠 각도 최고!!", bad: "🙈 동선이 꼬여 화면 밖으로…" };
+const miniZone = (stat) => clamp(13 + stat * 0.22 + (S.condition - 50) * 0.08, 10, 40);
+
+function playRandomMini(container, cb) {
+  const posStat = POS_INFO[S.pos].stat;
+  const mech = pick(["bar", "bar", "mash", "duel"]);
+  if (mech === "bar") {
+    window.Timing.play(container, {
+      label: "✨ 킬링파트! 초록 존에서 포인트를 찍어요!",
+      button: "지금! 🎤",
+      zonePct: miniZone(S.stats[posStat]),
+    }, (res) => cb(res, IDOL_BAR));
+  } else if (mech === "mash") {
+    window.Timing.mash(container, {
+      label: "🎤 클라이맥스 고음! 연타로 성량을 끌어올려라!",
+      button: "탭! 🎶",
+      target: Math.round(clamp(26 - S.stats.stamina * 0.08 - (S.condition - 50) * 0.03, 10, 26)),
+    }, (res) => cb(res, IDOL_MASH));
+  } else {
+    window.Timing.duel(container, {
+      label: "🧠 엔딩 요정 자리 싸움! 카메라는 어디로?",
+      choices: ["왼쪽", "중앙", "오른쪽"],
+      hintChance: clamp((S.stats.charm - 40) / 80 + (S.condition - 50) / 400, 0, 0.9),
+    }, (res) => cb(res, IDOL_DUEL));
+  }
+}
+
 let stageTimer = null;
 // 무대를 문자중계처럼 연출 + 하이라이트 타이밍 미니게임 → 결과는 onFinal(최종등급)로
 function renderStageSim(type, grade, onFinal) {
@@ -654,21 +684,16 @@ function renderStageSim(type, grade, onFinal) {
     const btn = $("btn-stage-next");
     btn.disabled = true;
     btn.textContent = "✨ 하이라이트!";
-    const stat = S.stats[key];
-    window.Timing.play($("stage-moment"), {
-      label: "✨ 킬링파트! 초록 존에서 포인트를 찍어요!",
-      button: "지금! 🎤",
-      zonePct: clamp(13 + stat * 0.24, 13, 38),
-    }, (res) => {
+    playRandomMini($("stage-moment"), (res, type) => {
       let gi = GRADE_ORDER.indexOf(grade.g);
       if (res === "perfect") gi = Math.min(4, gi + 1);
       else if (res === "miss") gi = Math.max(0, gi - 1);
       const finalGrade = makeGrade(GRADE_ORDER[gi]);
       applyFeed(res === "perfect"
-        ? { text: "💫 킬링파트를 완벽하게! 객석이 터져나가요!", cls: "good" }
+        ? { text: type.great, cls: "good" }
         : res === "good"
-          ? { text: "✨ 하이라이트를 무난히 소화했어요" }
-          : { text: "😱 하이라이트에서 삐끗… 등급이 흔들려요", cls: "bad" });
+          ? { text: type.ok }
+          : { text: type.bad, cls: "bad" });
       applyFeed({ text: "심사위원들이 점수를 적습니다… ✍️" });
       showResult(finalGrade);
     });
