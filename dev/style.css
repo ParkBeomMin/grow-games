@@ -1,0 +1,55 @@
+/* 더 커밋 — 다크 터미널/깃허브 테마 (grow/base.css 위에 덮어씀) */
+:root {
+  --bg: #0d1117;
+  --bg2: #161b26;
+  --field: #1e2636;
+  --line: #30394d;
+  --cream: #eef2fb;
+  --accent: #7c8cff;
+  --accent2: #ef5350;
+  --sky: #58d6c9;
+  --text: #eaeef7;
+  --dim: #97a3bd;
+}
+
+body {
+  background:
+    radial-gradient(ellipse 120% 60% at 50% -10%, #232b45 0%, transparent 60%),
+    var(--bg);
+}
+
+.title-box h1 { color: var(--accent); font-family: "Jua", sans-serif; }
+
+.btn-primary {
+  background: linear-gradient(180deg, #9aa6ff, var(--accent));
+  color: #10143a;
+  box-shadow: 0 4px 0 #4a56c9;
+}
+
+.bar-fill.scout { background: linear-gradient(90deg, #b6c0ff, var(--accent)); }
+.bar-fill.stat { background: linear-gradient(90deg, #8fe8de, var(--sky)); }
+
+.tag { background: rgba(124, 140, 255, 0.14); color: var(--accent); }
+
+.card-grid.three { grid-template-columns: 1fr 1fr 1fr; }
+
+.series-link {
+  display: block;
+  margin-top: 18px;
+  color: var(--dim);
+  font-size: 0.85rem;
+  text-decoration: none;
+}
+.series-link:hover { color: var(--sky); }
+
+.draft-card {
+  background: linear-gradient(180deg, #1e2636, #141a26);
+  border-color: #3a445e;
+}
+.draft-summary { border-color: #3a445e; }
+
+.season-standings .me td { color: var(--accent); font-weight: 700; }
+
+@media (max-width: 380px) {
+  .card-grid.three { grid-template-columns: 1fr; }
+}
