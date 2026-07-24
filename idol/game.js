@@ -389,6 +389,15 @@ function initTitle() {
     renderAgencies();
     show("screen-agency");
   };
+  // 지금까지 등록된 연습생 수
+  if (window.Match && Match.enabled()) {
+    Match.count("idol").then((n) => {
+      if (n) {
+        $("title-count").innerHTML = `🎤 지금까지 <b>${n.toLocaleString()}명</b>의 연습생이 데뷔를 꿈꿨어요!`;
+        $("title-count").classList.remove("hidden");
+      }
+    });
+  }
 }
 
 function resumeSlot(id) {
@@ -502,6 +511,7 @@ $("btn-start").addEventListener("click", () => {
   const name = $("input-name").value.trim() || pick(STAGE_NAMES);
   curSlot = null; // 새 연습생은 새 슬롯에 — 기존 저장은 그대로 남아요
   if (window.Stats) Stats.log("new_player", { pos: chosenPos, agency: chosenAgency.id });
+  if (window.Match) Match.register("idol", name);
   S = newState(chosenAgency, chosenPos, name, pendingRoll);
   addLog(`🎤 ${chosenAgency.name} 연습생 계약! ${name}의 연습실 생활이 시작됐어요.`);
   save();

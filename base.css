@@ -486,3 +486,7 @@ h2 { font-size: 1.6rem; margin: 8px 0 6px; color: var(--accent); }
   background: transparent; color: var(--dim); cursor: pointer; flex-shrink: 0;
 }
 .slot-del:hover { border-color: var(--accent2); color: var(--accent2); }
+
+/* ---------- 타이틀 플레이어 수 ---------- */
+.title-count { font-size: .85rem; color: var(--sky); margin: -18px 0 20px; }
+.title-count b { color: var(--accent); }

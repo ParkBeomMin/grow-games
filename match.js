@@ -70,6 +70,43 @@ window.Match = (() => {
     }
   }
 
+  // 첫 캐릭터 생성 시 풀에 등록만 — 이미 있으면 건드리지 않아요 (전적 보호)
+  async function register(game, name) {
+    if (!enabled()) return;
+    try {
+      await fetch(`${SUPABASE_URL}/rest/v1/players`, {
+        method: "POST",
+        headers: { ...headers(), Prefer: "resolution=ignore-duplicates" },
+        body: JSON.stringify([{
+          id: `${game}-${playerId()}`,
+          game,
+          name: String(name).slice(0, 24),
+          bp: 0,
+          rating: 1000,
+          w: 0,
+          l: 0,
+          updated_at: new Date().toISOString(),
+        }]),
+      });
+    } catch { /* noop */ }
+  }
+
+  // 해당 게임의 전체 플레이어 수 (타이틀 화면 표기용)
+  async function count(game) {
+    if (!enabled()) return null;
+    try {
+      const res = await fetch(
+        `${SUPABASE_URL}/rest/v1/players?game=eq.${game}&select=id&limit=1`,
+        { headers: { ...headers(), Prefer: "count=exact" } }
+      );
+      const cr = res.headers.get("content-range"); // 예: "0-0/42"
+      const n = cr && cr.includes("/") ? parseInt(cr.split("/")[1], 10) : NaN;
+      return Number.isFinite(n) ? n : null;
+    } catch {
+      return null;
+    }
+  }
+
   // 해당 게임의 플레이어 풀 (레이팅 내림차순, 최대 200명)
   async function roster(game) {
     if (!enabled()) return null;
@@ -87,5 +124,5 @@ window.Match = (() => {
     }
   }
 
-  return { enabled, playerId, submit, roster };
+  return { enabled, playerId, submit, roster, register, count };
 })();

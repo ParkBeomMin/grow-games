@@ -41,6 +41,10 @@ window.Stats = (() => {
 
   // 실패해도 게임에 영향 없게 완전 fire-and-forget
   function log(event, data) {
+    // GA4에도 같은 이벤트 전달 (gtag 스니펫이 있는 페이지에서만)
+    try {
+      if (typeof window.gtag === "function") window.gtag("event", event, { game: gameName, ...(data || {}) });
+    } catch { /* noop */ }
     if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return;
     try {
       fetch(`${SUPABASE_URL}/rest/v1/events`, {
