@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="noindex" />
+  <title>📊 키우기 시리즈 · 통계 대시보드</title>
+  <style>
+    :root {
+      --bg: #0e1420; --bg2: #172032; --line: #29354c; --accent: #ffd166;
+      --sky: #7fd1e8; --text: #eef2f8; --dim: #93a3bd; --good: #6ee7a0; --bad: #ef6351;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); padding: 20px 16px 60px; }
+    .wrap { max-width: 760px; margin: 0 auto; }
+    h1 { font-size: 1.5rem; margin-bottom: 4px; }
+    .sub { color: var(--dim); font-size: .85rem; margin-bottom: 20px; }
+    .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-bottom: 24px; }
+    .kpi { background: var(--bg2); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
+    .kpi .n { font-size: 1.7rem; font-weight: 700; color: var(--accent); }
+    .kpi .l { font-size: .78rem; color: var(--dim); margin-top: 2px; }
+    section { background: var(--bg2); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; margin-bottom: 16px; }
+    section h2 { font-size: 1rem; margin-bottom: 14px; display: flex; align-items: center; gap: 6px; }
+    .tabs { display: flex; gap: 6px; margin-bottom: 16px; }
+    .tab { flex: 1; padding: 9px; border: 1px solid var(--line); background: var(--bg2); color: var(--dim); border-radius: 10px; cursor: pointer; font-size: .9rem; }
+    .tab.on { border-color: var(--accent); color: var(--accent); }
+    .bar-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; font-size: .85rem; }
+    .bar-label { width: 96px; flex-shrink: 0; color: var(--dim); text-align: right; }
+    .bar-track { flex: 1; background: #0a0f18; border-radius: 6px; height: 22px; position: relative; overflow: hidden; }
+    .bar-fill { height: 100%; background: linear-gradient(90deg, var(--sky), var(--accent)); border-radius: 6px; min-width: 2px; transition: width .5s ease; }
+    .bar-val { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); font-size: .76rem; color: var(--text); font-weight: 600; }
+    .funnel .bar-fill { background: linear-gradient(90deg, #5b8def, var(--sky)); }
+    .spark { display: flex; align-items: flex-end; gap: 4px; margin-top: 8px; }
+    .spark .col { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 4px; }
+    .spark .col .b { width: 100%; background: linear-gradient(180deg, var(--accent), var(--sky)); border-radius: 3px 3px 0 0; min-height: 2px; }
+    .spark .col .d { font-size: .58rem; color: var(--dim); }
+    .empty { color: var(--dim); font-size: .85rem; padding: 8px 0; }
+    .setup { border-color: var(--accent); }
+    .setup pre { background: #0a0f18; border-radius: 10px; padding: 14px; overflow-x: auto; font-size: .74rem; line-height: 1.6; color: #cfe3ff; margin: 10px 0; white-space: pre; }
+    .setup .copy { background: var(--accent); color: #3a2a00; border: none; border-radius: 8px; padding: 8px 16px; font-weight: 700; cursor: pointer; }
+    .err { color: var(--bad); font-size: .8rem; }
+    .refresh { background: transparent; border: 1px solid var(--line); color: var(--sky); border-radius: 8px; padding: 6px 14px; cursor: pointer; font-size: .82rem; }
+    a.home { color: var(--sky); font-size: .82rem; text-decoration: none; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>📊 통계 대시보드</h1>
+    <p class="sub">키우기 시리즈 · <a class="home" href="../">🎮 게임으로</a> · <button class="refresh" id="refresh">↻ 새로고침</button></p>
+
+    <div id="content"><p class="empty">불러오는 중…</p></div>
+  </div>
+
+  <script>
+    const SUPABASE_URL = "https://dlbpvzgwwcgphlhymncx.supabase.co";
+    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRsYnB2emd3d2NncGhsaHltbmN4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ3ODA3MTMsImV4cCI6MjEwMDM1NjcxM30.tyLMO8o_i5OTmKaRudFd5LATDjmjVzL8M2NM_4EoeBc";
+
+    const H = { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` };
+    const $ = (id) => document.getElementById(id);
+    const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+
+    const GAMES = { rookie: "⚾ 더 루키", idol: "🎤 더 트레이니" };
+    const POS = { batter: "타자", pitcher: "투수", vocal: "보컬", dance: "댄스", rap: "랩" };
+    const EVENT_LABEL = {
+      visit: "방문", new_player: "새 캐릭터", draft: "드래프트", ending: "서바이벌 결과",
+      pro_enter: "프로 입단", debut: "데뷔", season_end: "시즌 결산", year_end: "연말 결산",
+      retire: "은퇴", battle: "배틀", bonus: "보너스",
+    };
+
+    async function getView(name) {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/${name}?select=*`, { headers: H });
+      if (!res.ok) throw new Error(`${name}: HTTP ${res.status}`);
+      return res.json();
+    }
+
+    const bar = (label, val, max, cls = "") =>
+      `<div class="bar-row"><div class="bar-label">${esc(label)}</div>
+        <div class="bar-track"><div class="bar-fill ${cls}" style="width:${max ? Math.max(2, (val / max) * 100) : 2}%"></div>
+        <span class="bar-val">${val.toLocaleString()}</span></div></div>`;
+
+    function choiceSection(rows) {
+      let html = "";
+      for (const game of Object.keys(GAMES)) {
+        const g = rows.filter((r) => r.game === game && r.choice);
+        if (!g.length) continue;
+        const agg = {};
+        for (const r of g) agg[r.choice] = (agg[r.choice] || 0) + r.n;
+        const items = Object.entries(agg).sort((a, b) => b[1] - a[1]);
+        const max = items[0][1];
+        const title = game === "rookie" ? "지역 선택 분포" : "소속사 선택 분포";
+        html += `<section><h2>${GAMES[game]} · ${title}</h2>${items.map(([k, v]) => bar(k, v, max)).join("")}</section>`;
+
+        // 포지션 분포
+        const pos = {};
+        for (const r of g) if (r.pos) pos[r.pos] = (pos[r.pos] || 0) + r.n;
+        const pi = Object.entries(pos).sort((a, b) => b[1] - a[1]);
+        if (pi.length) {
+          const pmax = pi[0][1];
+          html += `<section><h2>${GAMES[game]} · 포지션 분포</h2>${pi.map(([k, v]) => bar(POS[k] || k, v, pmax)).join("")}</section>`;
+        }
+      }
+      return html || `<section><h2>선택 분포</h2><p class="empty">아직 새 캐릭터 데이터가 없어요.</p></section>`;
+    }
+
+    function funnelSection(rows) {
+      let html = "";
+      for (const game of Object.keys(GAMES)) {
+        const g = rows.filter((r) => r.game === game);
+        if (!g.length) continue;
+        const order = ["visit", "new_player", "draft", "debut", "ending", "pro_enter", "season_end", "year_end", "retire", "battle", "bonus"];
+        g.sort((a, b) => order.indexOf(a.event) - order.indexOf(b.event));
+        const max = Math.max(...g.map((r) => r.total));
+        html += `<section class="funnel"><h2>${GAMES[game]} · 이벤트별 발생</h2>${
+          g.map((r) => bar(EVENT_LABEL[r.event] || r.event, r.total, max)).join("")
+        }</section>`;
+      }
+      return html;
+    }
+
+    function dailySection(rows) {
+      const byDay = {};
+      for (const r of rows) {
+        byDay[r.day] = byDay[r.day] || { visits: 0, np: 0 };
+        byDay[r.day].visits += r.visits || 0;
+        byDay[r.day].np += r.new_players || 0;
+      }
+      const days = Object.keys(byDay).sort().slice(-14);
+      if (!days.length) return "";
+      const max = Math.max(...days.map((d) => byDay[d].visits), 1);
+      return `<section><h2>📅 최근 방문 추이 (일별 순 방문 기기)</h2>
+        <div class="spark">${days.map((d) => {
+          const v = byDay[d].visits;
+          const md = d.slice(5);
+          const h = Math.max(3, Math.round((v / max) * 90));
+          return `<div class="col"><div class="b" style="height:${h}px" title="${d}: ${v}"></div><div class="d">${md}</div></div>`;
+        }).join("")}</div></section>`;
+    }
+
+    const SETUP_SQL = `-- Supabase SQL Editor에서 1회 실행 (집계 전용 읽기 뷰)
+create or replace view public.stats_summary as
+  select game, event, count(*)::int total, count(distinct player)::int players
+  from public.events group by game, event;
+
+create or replace view public.stats_choices as
+  select game, coalesce(data->>'region', data->>'agency') choice,
+    data->>'pos' pos, count(*)::int n
+  from public.events where event = 'new_player'
+  group by 1, 2, 3;
+
+create or replace view public.stats_daily as
+  select game, (ts at time zone 'Asia/Seoul')::date day,
+    count(*) filter (where event = 'visit')::int visits,
+    count(*) filter (where event = 'new_player')::int new_players
+  from public.events group by 1, 2;
+
+grant select on public.stats_summary, public.stats_choices, public.stats_daily to anon;`;
+
+    function setupCard(msg) {
+      return `<section class="setup"><h2>⚙️ 통계 뷰 설정이 필요해요</h2>
+        <p class="empty">${msg} 아래 SQL을 Supabase → SQL Editor에서 한 번만 실행하면 여기에 통계가 떠요.</p>
+        <pre id="sql">${esc(SETUP_SQL)}</pre>
+        <button class="copy" id="copysql">📋 SQL 복사</button></section>`;
+    }
+
+    async function load() {
+      $("content").innerHTML = `<p class="empty">불러오는 중…</p>`;
+      let summary, choices, daily, failed = false;
+      try { summary = await getView("stats_summary"); } catch { failed = true; }
+      try { choices = await getView("stats_choices"); } catch { failed = true; }
+      try { daily = await getView("stats_daily"); } catch { failed = true; }
+
+      if (failed || !summary) {
+        $("content").innerHTML = setupCard("아직 집계 뷰가 없거나 접근할 수 없어요.");
+        wireCopy();
+        return;
+      }
+
+      const totalVisits = summary.filter((r) => r.event === "visit").reduce((a, r) => a + r.players, 0);
+      const totalNew = summary.filter((r) => r.event === "new_player").reduce((a, r) => a + r.total, 0);
+      const totalBattle = summary.filter((r) => r.event === "battle").reduce((a, r) => a + r.total, 0);
+      const totalRetire = summary.filter((r) => r.event === "retire").reduce((a, r) => a + r.total, 0);
+
+      let html = `<div class="kpis">
+        <div class="kpi"><div class="n">${totalVisits.toLocaleString()}</div><div class="l">순 방문자</div></div>
+        <div class="kpi"><div class="n">${totalNew.toLocaleString()}</div><div class="l">새 캐릭터</div></div>
+        <div class="kpi"><div class="n">${totalBattle.toLocaleString()}</div><div class="l">배틀 횟수</div></div>
+        <div class="kpi"><div class="n">${totalRetire.toLocaleString()}</div><div class="l">은퇴(완주)</div></div>
+      </div>`;
+
+      html += dailySection(daily || []);
+      html += choiceSection(choices || []);
+      html += funnelSection(summary);
+
+      if (!summary.length) html = setupCard("뷰는 있는데 아직 수집된 데이터가 없어요.") + html;
+      $("content").innerHTML = html;
+      wireCopy();
+    }
+
+    function wireCopy() {
+      const btn = $("copysql");
+      if (btn) btn.onclick = () => {
+        navigator.clipboard?.writeText(SETUP_SQL).then(
+          () => (btn.textContent = "✅ 복사됨!"),
+          () => (btn.textContent = "복사 실패")
+        );
+      };
+    }
+
+    $("refresh").onclick = load;
+    load();
+  </script>
+</body>
+</html>

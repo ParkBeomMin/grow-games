@@ -556,7 +556,7 @@ $("btn-random-name").addEventListener("click", () => {
 $("btn-start").addEventListener("click", () => {
   const name = $("input-name").value.trim() || pick(STAGE_NAMES);
   curSlot = null; // 새 연습생은 새 슬롯에 — 기존 저장은 그대로 남아요
-  if (window.Stats) Stats.log("new_player", { pos: chosenPos, agency: chosenAgency.id });
+  if (window.Stats) Stats.log("new_player", { pos: chosenPos, agency: chosenAgency.name });
   if (window.Match) Match.register("idol", name);
   S = newState(chosenAgency, chosenPos, name, pendingRoll);
   addLog(`🎤 ${chosenAgency.name} 연습생 계약! ${name}의 연습실 생활이 시작됐어요.`);

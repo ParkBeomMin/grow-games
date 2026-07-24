@@ -572,7 +572,7 @@ $("btn-random-name").addEventListener("click", () => {
 $("btn-start").addEventListener("click", () => {
   const name = $("input-name").value.trim() || pick(SURNAMES) + pick(GIVEN);
   curSlot = null; // 새 선수는 새 슬롯에 — 기존 선수 저장은 그대로 남아요
-  if (window.Stats) Stats.log("new_player", { pos: chosenPos, region: chosenRegion.id });
+  if (window.Stats) Stats.log("new_player", { pos: chosenPos, region: chosenRegion.name });
   if (window.Match) Match.register("rookie", name);
   S = newState(chosenRegion, chosenPos, name, pendingRoll);
   addLog(`⚾ ${chosenRegion.school} 입학! ${name}의 야구 인생이 시작됐어요.`);
