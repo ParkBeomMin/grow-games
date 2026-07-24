@@ -346,6 +346,7 @@ h2 { font-size: 1.6rem; margin: 8px 0 6px; color: var(--accent); }
   background: var(--bg2); border: 2px solid var(--line);
   border-radius: 14px; padding: 12px 14px; margin-bottom: 10px;
 }
+.hof-card.me { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
 .hof-face { width: 52px; height: 52px; border-radius: 50%; object-fit: cover; border: 2px solid var(--accent); }
 .hof-face-emoji {
   width: 52px; height: 52px; border-radius: 50%; background: var(--field);

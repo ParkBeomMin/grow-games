@@ -124,5 +124,43 @@ window.Match = (() => {
     }
   }
 
-  return { enabled, playerId, submit, roster, register, count };
+  // ---------- 명예의 전당 (전 세계 공유) ----------
+  // 은퇴 시 커리어 엔트리를 hof 테이블에 등록 (실패해도 로컬 저장은 유지)
+  async function submitHof(game, entry) {
+    if (!enabled()) return false;
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/hof`, {
+        method: "POST",
+        headers: { ...headers(), Prefer: "resolution=merge-duplicates,return=minimal" },
+        body: JSON.stringify([{
+          id: `${game}-${String(entry.id)}`,
+          game,
+          player: String(entry.name || "").slice(0, 24),
+          score: Math.round(entry.score) || 0,
+          data: entry,
+        }]),
+      });
+      return res.ok;
+    } catch {
+      return false;
+    }
+  }
+
+  // 해당 게임의 전 세계 명예의 전당 (점수 내림차순, 최대 100)
+  async function fetchHof(game) {
+    if (!enabled()) return null;
+    try {
+      const res = await fetch(
+        `${SUPABASE_URL}/rest/v1/hof?game=eq.${game}&select=data&order=score.desc&limit=100`,
+        { headers: headers() }
+      );
+      if (!res.ok) return null;
+      const arr = await res.json();
+      return arr.map((r) => r.data).filter(Boolean);
+    } catch {
+      return null;
+    }
+  }
+
+  return { enabled, playerId, submit, roster, register, count, submitHof, fetchHof };
 })();

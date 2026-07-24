@@ -457,6 +457,7 @@ window.StockCareer = (() => {
     const hof = loadHof();
     hof.push(entry);
     saveHof(hof);
+    if (window.Match) window.Match.submitHof("stock", entry);
     if (window.Stats) Stats.log("retire", { years: entry.seasons, wins: entry.wins, score: entry.score });
     clearSave();
 
@@ -486,13 +487,30 @@ window.StockCareer = (() => {
     show("screen-career");
   }
 
-  function showHof() {
-    const list = loadHof().filter((e) => e.game === "stock").sort((a, b) => b.score - a.score);
+  async function showHof() {
     const box = $("hof-list");
-    box.innerHTML = list.length ? "" : `<p class="hint">아직 아무도 없어요. 첫 전설이 되어보세요!</p>`;
-    list.forEach((e, i) => {
+    box.innerHTML = `<p class="hint">불러오는 중…</p>`;
+    show("screen-hof");
+    const local = loadHof().filter((e) => e.game === "stock");
+    const localIds = new Set(local.map((e) => e.id));
+    let list = local, global = false;
+    const remote = window.Match ? await window.Match.fetchHof("stock") : null;
+    if (remote && remote.length) {
+      global = true;
+      const seen = new Set();
+      list = [];
+      for (const e of [...remote, ...local]) {
+        if (!e || seen.has(e.id)) continue;
+        seen.add(e.id);
+        list.push(e);
+      }
+    }
+    list.sort((a, b) => b.score - a.score);
+    box.innerHTML = `<h2 class="rank-title">🏅 ${global ? "글로벌" : "로컬"} 명예의 전당</h2>`;
+    if (!list.length) { box.innerHTML += `<p class="hint">아직 아무도 없어요. 첫 전설이 되어보세요!</p>`; return; }
+    list.slice(0, 100).forEach((e, i) => {
       const div = document.createElement("div");
-      div.className = "hof-card";
+      div.className = "hof-card" + (localIds.has(e.id) ? " me" : "");
       div.innerHTML = `
         <div class="hof-face-emoji">📈</div>
         <div class="hof-info">
@@ -501,7 +519,6 @@ window.StockCareer = (() => {
         </div>`;
       box.appendChild(div);
     });
-    show("screen-hof");
   }
 
   // ---------- 랜덤 매칭 (공용 ../match.js — Supabase 연동) ----------
