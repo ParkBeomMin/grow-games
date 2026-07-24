@@ -465,8 +465,8 @@ h2 { font-size: 1.6rem; margin: 8px 0 6px; color: var(--accent); }
   border-top: 1px solid var(--line);
   padding: 2px 0 calc(2px + env(safe-area-inset-bottom, 0px));
   /* display:none이면 애드센스가 크기를 못 재서 광고를 안 채워요 —
-     화면 밖으로 밀어뒀다가 채워지면 올라오게 처리 */
-  transform: translateY(120%);
+     화면 밖으로 밀어뒀다가 채워지면 올라오게 처리 (닫기 버튼 높이까지 포함) */
+  transform: translateY(calc(100% + 34px));
   transition: transform .3s ease;
 }
 .ad-anchor.on { transform: none; }

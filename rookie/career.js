@@ -111,12 +111,14 @@ window.Career = (() => {
     stats.innerHTML = "";
     for (const d of STAT_DEFS[S.pos]) {
       const v = Math.round(S.stats[d.key]);
+      const stars = "⭐".repeat(clamp(Math.round((S.talents[d.key] - 0.6) * 4), 1, 5));
       const row = document.createElement("div");
       row.className = "stat-row";
       row.innerHTML = `
         <span class="stat-name">${d.emoji} ${d.name}</span>
         <div class="bar"><div class="bar-fill stat${v > 100 ? " over" : ""}" style="width:${Math.min(v, 100)}%"></div></div>
-        <span class="stat-val">${v}</span>`;
+        <span class="stat-val">${v}</span>
+        <span class="stat-pot" title="잠재력 — 별이 많을수록 훈련 효율이 높아요">${stars}</span>`;
       if (v >= 100) {
         const aw = document.createElement("button");
         aw.className = "mini-btn awaken-btn";
