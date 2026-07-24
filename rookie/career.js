@@ -619,6 +619,7 @@ window.Career = (() => {
     const box = $("hof-list");
     box.innerHTML = `<p class="hint">불러오는 중…</p>`;
     show("screen-hof");
+    if (window.Match) await window.Match.backfillHof();
     const local = loadHof().filter((e) => e.game === "rookie");
     const localIds = new Set(local.map((e) => e.id));
     let list = local, global = false;
@@ -634,8 +635,7 @@ window.Career = (() => {
       }
     }
     list.sort((a, b) => b.score - a.score);
-    box.innerHTML = `<h2 class="rank-title">🏅 ${global ? "글로벌" : "로컬"} 명예의 전당</h2>`;
-    if (!list.length) { box.innerHTML += `<p class="hint">아직 아무도 없어요. 첫 전설이 되어보세요!</p>`; return; }
+    box.innerHTML = list.length ? "" : `<p class="hint">아직 아무도 없어요. 첫 전설이 되어보세요!</p>`;
     list.slice(0, 100).forEach((e, i) => {
       const div = document.createElement("div");
       div.className = "hof-card" + (localIds.has(e.id) ? " me" : "");

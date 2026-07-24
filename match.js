@@ -146,6 +146,22 @@ window.Match = (() => {
     }
   }
 
+  // 테이블 생성 전에 은퇴한 로컬 기록을 DB로 1회 올려요 (중복은 upsert로 무시)
+  async function backfillHof() {
+    if (!enabled()) return;
+    if (localStorage.getItem("grow-hof-synced") === "1") return;
+    let list = [];
+    try { list = JSON.parse(localStorage.getItem("grow-hof-v1")) || []; } catch { list = []; }
+    if (!list.length) { localStorage.setItem("grow-hof-synced", "1"); return; }
+    let allOk = true;
+    for (const e of list) {
+      if (!e || !e.game || e.id == null) continue;
+      const ok = await submitHof(e.game, e);
+      if (!ok) allOk = false;
+    }
+    if (allOk) localStorage.setItem("grow-hof-synced", "1"); // 전부 성공했을 때만 완료 처리
+  }
+
   // 해당 게임의 전 세계 명예의 전당 (점수 내림차순, 최대 100)
   async function fetchHof(game) {
     if (!enabled()) return null;
@@ -162,5 +178,5 @@ window.Match = (() => {
     }
   }
 
-  return { enabled, playerId, submit, roster, register, count, submitHof, fetchHof };
+  return { enabled, playerId, submit, roster, register, count, submitHof, fetchHof, backfillHof };
 })();
