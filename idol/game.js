@@ -364,6 +364,53 @@ function renderShop() {
     $("btn-ad").onclick = () => showAdModal(200, renderShop);
   }
 }
+// ---------- 활동 기록 ----------
+let recordReturn = "screen-main";
+function openRecord(returnTo) {
+  recordReturn = returnTo || "screen-main";
+  renderRecord();
+  show("screen-record");
+}
+function renderRecord() {
+  const a = agencyOf();
+  const trophyLine = S.trophies && S.trophies.length ? `🏆 ${S.trophies.join(", ")}` : "🏆 평가 1위 경력 없음";
+  // 진행 중인 활동 (데뷔 후)
+  let curHtml = "";
+  if (S.activity) {
+    const act = S.activity;
+    curHtml = `<br/><b>🔥 진행 중인 활동</b><br/>${act.cb}차 컴백 · ${act.week}/${act.weekTotal}주차 소화<br/>올해 음방 1위 ${act.wins}회 · 컴백 화력 ${act.hypeSum >= 0 ? "+" : ""}${Math.round(act.hypeSum * 10) / 10}<br/>`;
+  }
+  let proHtml = "";
+  if (S.career && S.career.years && S.career.years.length) {
+    const rows = S.career.years.map((x) =>
+      `<tr><td>${x.y}년차</td><td>1위 ${x.wins}회</td><td>초동 ${x.sales}만</td><td>${x.awards && x.awards.length ? "🏆" + x.awards.join(",") : "-"}</td></tr>`
+    ).join("");
+    proHtml = `
+      <table class="season-table"><thead><tr><th>연차</th><th>음방</th><th>판매량</th><th>수상</th></tr></thead><tbody>${rows}</tbody></table>
+      <div>통산 ${S.career.years.length}년 · 1위 ${S.career.wins}회 · 🏆 대상 ${S.career.daesang} · 본상 ${S.career.bonsang}${S.career.rookie ? " · 신인상" : ""}</div>`;
+  }
+  const gearList = STAT_DEFS
+    .map((d) => {
+      const owned = GEAR_TIERS.filter((t) => S.gear && S.gear[`${d.key}-${t.n}`]).length;
+      return owned ? `${d.emoji}${"★".repeat(owned)}` : null;
+    })
+    .filter(Boolean)
+    .join(" ");
+  $("record-card").innerHTML = `
+    <div class="draft-emoji">🎤</div>
+    <div class="draft-title">${S.name}</div>
+    <div class="draft-team">${S.phase === "idol-pro" ? `${S.group}${S.center ? " · 센터" : ""} · ${S.proYear}년차` : `${a.emoji} ${a.name} 연습생 ${S.year}년차`} · ${POS_INFO[S.pos].name}</div>
+    <div class="draft-summary">
+      <b>🏫 연습생 기록</b><br/>무대 ${S.stages || 0}회 · 💖 팬덤 ${Math.round(S.fandom)}<br/>${trophyLine}<br/>
+      ${curHtml}
+      ${proHtml ? `<br/><b>🎤 지난 활동 기록</b>${proHtml}<br/>` : ""}
+      ${gearList ? `<br/><b>🛍️ 보유 아이템</b> ${gearList}` : ""}
+    </div>`;
+}
+$("btn-record-main")?.addEventListener("click", () => openRecord("screen-main"));
+$("btn-record-pro")?.addEventListener("click", () => openRecord("screen-pro"));
+$("btn-record-back")?.addEventListener("click", () => show(recordReturn));
+
 $("btn-shop-main")?.addEventListener("click", () => openShop("screen-main"));
 $("btn-shop-pro")?.addEventListener("click", () => openShop("screen-pro"));
 $("btn-shop-back")?.addEventListener("click", () => {
@@ -573,6 +620,28 @@ function renderMain() {
   rest.onclick = doRest;
   actBox.appendChild(rest);
 
+  // 무대 날 — 연습 잠그고 무대 시작 버튼만 (🎁 특훈은 턴 미소모라 허용)
+  if (S.pendingStage) {
+    actBox.querySelectorAll(".action-btn").forEach((b) => {
+      if (!b.classList.contains("ad-slot")) b.disabled = true;
+    });
+    const ps = S.pendingStage;
+    const go = document.createElement("button");
+    go.className = "action-btn rest go-game";
+    go.innerHTML = ps.kind === "survival"
+      ? `<span class="a-emoji">🔥</span>데뷔 서바이벌 출전!<span class="a-sub">3년의 연습이 여기서 판가름나요</span>`
+      : `<span class="a-emoji">🎤</span>${ps.name} 무대 오르기!<span class="a-sub">평가 무대 준비 완료</span>`;
+    go.onclick = () => {
+      const kind = ps.kind, name = ps.name;
+      S.pendingStage = null;
+      save();
+      renderMain();
+      if (kind === "survival") startSurvival();
+      else startEval(name);
+    };
+    actBox.appendChild(go);
+  }
+
   renderLog();
 }
 
@@ -672,19 +741,15 @@ function maybeEvent() {
 
 // ---------- 월 진행 ----------
 function endMonth() {
+  // 평가/서바이벌 달이면 연습 버튼을 잠그고 '무대 오르기' 버튼으로 시작해요
+  if (S.year === 3 && S.month === 12) {
+    S.pendingStage = { kind: "survival" };
+  } else if (EVALS[S.month]) {
+    S.pendingStage = { kind: "eval", name: EVALS[S.month] };
+  }
   save();
   renderMain();
-
-  // 3년차 12월 = 데뷔 서바이벌
-  if (S.year === 3 && S.month === 12) {
-    startSurvival();
-    return;
-  }
-  const evalName = EVALS[S.month];
-  if (evalName) {
-    startEval(evalName);
-    return;
-  }
+  if (S.pendingStage) return;
   advanceMonth();
 }
 

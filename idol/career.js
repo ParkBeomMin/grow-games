@@ -69,7 +69,45 @@ window.IdolCareer = (() => {
     S.proYear += 1;
     S.camp = 3;
     S.condition = 80;
-    proLog(`💿 ${S.proYear}년차 컴백 준비 시작!`);
+    S.activity = null;
+    S.pendingShow = false;
+    proLog(`💿 ${S.proYear}년차 활동 시작! 첫 컴백을 준비해요.`);
+    save();
+    renderPrep();
+    show("screen-pro");
+  }
+
+  // ---------- 연간 활동 (컴백 2회 × 음방 6주) ----------
+  const CB_PER_YEAR = 2;
+  const WEEKS_PER_CB = 6;
+  const RIVAL_GROUPS = ["네온시티", "스텔라즈", "허니문", "그라비티", "민트초코", "새벽달", "아이리스", "폭스클럽"];
+
+  function rollRivals() {
+    return RIVAL_GROUPS.map((name) => ({ name, pop: rand(52, 88) }));
+  }
+
+  function initActivity() {
+    S.activity = {
+      cb: 1, cbTotal: CB_PER_YEAR,
+      week: 0, weekTotal: WEEKS_PER_CB,
+      wins: 0, sales: 0, hypeSum: 0, cbHype: 0, cbWins: 0,
+      rivals: rollRivals(),
+    };
+  }
+
+  // 연습 턴 소진 후 흐름 제어 — 무대 날엔 pendingShow로 잠가요
+  function afterPrep() {
+    if (S.camp > 0) { renderPrep(); return; }
+    if (!S.activity) initActivity();
+    else if (S.activity.week >= S.activity.weekTotal) {
+      // 다음 컴백 시작
+      S.activity.cb += 1;
+      S.activity.week = 0;
+      S.activity.cbHype = 0;
+      S.activity.cbWins = 0;
+      S.activity.rivals = rollRivals();
+    }
+    S.pendingShow = true;
     save();
     renderPrep();
     show("screen-pro");
@@ -78,7 +116,9 @@ window.IdolCareer = (() => {
   function renderPrep() {
     $("pro-name").textContent = `${S.name} (${POS_INFO[S.pos].name})`;
     $("pro-team").textContent = `🎤 ${S.group}${S.center ? " · 센터" : ""} · ${S.proYear}년차 · 종합 ${Math.round(overall())}`;
-    $("pro-turn").textContent = `컴백 준비 ${3 - S.camp}/3`;
+    $("pro-turn").textContent = S.activity
+      ? `${S.activity.cb}차 컴백 · W${S.activity.week}/${S.activity.weekTotal} · 1위 ${S.activity.wins}회`
+      : `컴백 준비 ${3 - S.camp}/3`;
     $("pro-money").textContent = `💰 ${fmtMoney(S.money || 0)}`;
   $("pro-cond-num").textContent = Math.round(S.condition);
     $("pro-cond-bar").style.width = `${S.condition}%`;
@@ -105,7 +145,13 @@ window.IdolCareer = (() => {
       stats.appendChild(row);
     }
 
-    $("pro-camp-title").textContent = `컴백 준비 — 남은 연습 ${S.camp}회, 끝나면 컴백 무대!`;
+    $("pro-camp-title").textContent = S.pendingShow
+      ? (S.activity.week === 0
+        ? `💿 ${S.activity.cb}차 컴백 준비 완료 — 컴백을 시작하세요!`
+        : `🎤 음방 D-day! W${S.activity.week + 1} 무대를 시작하세요`)
+      : (S.activity
+        ? `활동 중 — 다음 무대 전 연습 ${S.camp}회 남음`
+        : `컴백 준비 — 남은 연습 ${S.camp}회, 끝나면 활동 시작!`);
     const box = $("pro-actions");
     box.innerHTML = "";
     for (const d of STAT_DEFS) {
@@ -121,6 +167,20 @@ window.IdolCareer = (() => {
     rest.innerHTML = `<span class="a-emoji">🛌</span>휴식 <span class="a-sub">컨디션 회복</span>`;
     rest.onclick = () => prepAction(null);
     box.appendChild(rest);
+
+    // 무대 날 — 연습 잠그고 시작 버튼만 (🎁 특훈은 턴 미소모라 허용)
+    if (S.pendingShow) {
+      box.querySelectorAll(".action-btn").forEach((b) => {
+        if (!b.classList.contains("ad-slot")) b.disabled = true;
+      });
+      const go = document.createElement("button");
+      go.className = "action-btn rest go-game";
+      go.innerHTML = S.activity.week === 0
+        ? `<span class="a-emoji">💿</span>${S.activity.cb}차 컴백 시작<span class="a-sub">티저 · 뮤비 공개 → 첫 무대</span>`
+        : `<span class="a-emoji">🎤</span>음방 무대<span class="a-sub">W${S.activity.week + 1}/${S.activity.weekTotal} 주간 차트 경쟁</span>`;
+      go.onclick = playShow;
+      box.appendChild(go);
+    }
 
     $("pro-log").innerHTML = (S.proLog || [])
       .map((l, i) => `<div class="${i === 0 ? "new" : ""}">${l}</div>`)
@@ -138,8 +198,7 @@ window.IdolCareer = (() => {
         proLog(`😵 ${def.name} 훈련이 꼬였어요… -${loss.toFixed(1)}`);
         S.camp -= 1;
         save();
-        if (S.camp <= 0) runComeback();
-        else renderPrep();
+        afterPrep();
         return;
       }
       const condMod = S.condition >= 70 ? 1.1 : S.condition >= 40 ? 1.0 : 0.6;
@@ -155,22 +214,21 @@ window.IdolCareer = (() => {
     }
     S.camp -= 1;
     save();
-    if (S.camp <= 0) runComeback();
-    else renderPrep();
+    afterPrep();
   }
 
-  // ---------- 컴백 활동 시뮬레이션 ----------
-  function runComeback() {
-    const perf =
-      S.stats[POS_INFO[S.pos].stat] * 0.4 +
-      S.stats.charm * 0.3 +
-      ((S.stats.vocal + S.stats.dance + S.stats.rap) / 3) * 0.3;
-    const agePen = S.proYear >= 8 ? (S.proYear - 7) * 0.5 : 0;
-    let hype = clamp((perf - 48) / 6 + rand(-1, 2) + (S.condition - 50) / 60 - agePen, -1.5, 12);
+  // ---------- 음방 무대 (주 1회, 주간 차트 경쟁) ----------
+  function chartHTML(rows) {
+    return `<table class="rank-table season-standings"><thead><tr><th>#</th><th>그룹</th><th>점수</th></tr></thead>
+      <tbody>${rows.map((r, i) => `<tr class="${r.me ? "me" : ""}"><td>${i + 1}</td><td>${r.name}</td><td>${Math.round(r.score)}</td></tr>`).join("")}</tbody></table>`;
+  }
 
-    $("stage-title").textContent = `💿 ${S.proYear}년차 컴백 — ${S.group}`;
-    $("stage-round").textContent = "";
-    $("stage-card").innerHTML = `<div class="pbp" id="pbp-cb"></div><div id="cb-moment"></div>`;
+  function playShow() {
+    const act = S.activity;
+    const firstWeek = act.week === 0;
+    $("stage-title").textContent = `💿 ${S.proYear}년차 ${act.cb}차 컴백 — ${S.group}`;
+    $("stage-round").textContent = `W${act.week + 1}/${act.weekTotal} 음악방송`;
+    $("stage-card").innerHTML = `<div class="pbp" id="pbp-cb"></div><div id="cb-moment"></div><div id="cb-result"></div>`;
     show("screen-stage");
 
     const feed = (f) => {
@@ -180,11 +238,21 @@ window.IdolCareer = (() => {
       $("pbp-cb").appendChild(div);
       $("pbp-cb").scrollTop = $("pbp-cb").scrollHeight;
     };
-    const pre = [
-      { text: `📸 ${S.group} 컴백 티저 공개! 팬들이 술렁여요` },
-      { text: "🎬 뮤직비디오 공개 — 조회수가 무섭게 올라요" },
-      { text: "🎤 컴백 무대 생방송 시작!" },
-    ];
+    const pre = firstWeek
+      ? [
+          { text: `📸 ${S.group} ${act.cb}차 컴백 티저 공개! 팬들이 술렁여요` },
+          { text: "🎬 뮤직비디오 공개 — 조회수가 무섭게 올라요" },
+          { text: "🎤 컴백 첫 무대 생방송 시작!" },
+        ]
+      : [
+          { text: `📺 ${pick(["엠카운트다운", "뮤직뱅크", "쇼! 음악중심", "인기가요"])} 생방송 — ${S.group} 무대!` },
+          { text: pick([
+            "🎙️ 라이브 밸런스가 좋아요. 현장 반응이 뜨거워요",
+            "📱 무대 직캠이 실시간 트렌드에 올랐어요",
+            "💖 팬덤 응원봉이 객석을 가득 메웠어요",
+            "🩰 대형 스크린에 잡힌 표정 연기가 화제예요",
+          ]) },
+        ];
     let idx = 0, momentOn = false;
     const btn = $("btn-stage-next");
     btn.textContent = "⏩ 빨리 감기";
@@ -192,7 +260,7 @@ window.IdolCareer = (() => {
     const timer = setInterval(() => {
       if (idx >= pre.length) { clearInterval(timer); moment(); return; }
       feed(pre[idx++]);
-    }, 650);
+    }, 600);
     btn.onclick = () => {
       if (momentOn) return;
       clearInterval(timer);
@@ -200,48 +268,125 @@ window.IdolCareer = (() => {
       moment();
     };
 
+    // 매 무대 필수 미니게임 (자동 모드면 즉시 판정)
+    let miniBonus = 0, miniHype = 0;
     function moment() {
       if (momentOn) return;
       momentOn = true;
       btn.disabled = true;
-      btn.textContent = "✨ 킬링파트!";
+      btn.textContent = "✨ 하이라이트!";
       playRandomMini($("cb-moment"), (res, type) => {
-        if (res === "perfect") { hype += 1.2; feed({ text: type.great, cls: "good" }); }
-        else if (res === "miss") { hype -= 1.2; feed({ text: type.bad, cls: "bad" }); }
-        else feed({ text: type.ok });
-        finish();
+        if (res === "perfect") { miniBonus = 10; miniHype = 0.5; feed({ text: type.great, cls: "good" }); }
+        else if (res === "miss") { miniBonus = -8; miniHype = -0.5; feed({ text: type.bad, cls: "bad" }); }
+        else { miniBonus = 3; feed({ text: type.ok }); }
+        weeklyChart();
       });
     }
 
-    function finish() {
-      const wins = Math.max(0, Math.round(hype * 1.3 + rand(-1, 1)));
-      const sales = Math.max(1, Math.round(S.fandom * 0.08 + hype * 6 + rand(-5, 5)));
-      const dFan = Math.round(hype * 12 + wins * 4 - (hype < 0 ? 15 : 0));
-      S.fandom = Math.max(0, S.fandom + dFan);
-      const awards = [];
-      if (S.proYear === 1 && hype >= 3 && Math.random() < 0.8) { awards.push("신인상"); S.career.rookie += 1; }
-      if (hype >= 6.5 && Math.random() < 0.45) { awards.push("대상"); S.career.daesang += 1; }
-      else if (hype >= 4.5 && Math.random() < 0.5) { awards.push("본상"); S.career.bonsang += 1; }
-      S.career.wins += wins;
-      S.career.sales += sales;
-      S.career.years.push({ y: S.proYear, hype: Math.round(hype * 10) / 10, wins, sales, dFan, awards });
-      if (window.Stats) Stats.log("year_end", { y: S.proYear, wins, sales });
-      // 초반엔 성장, 8년차부터는 서서히 하락
-      for (const d of STAT_DEFS) {
-        if (S.proYear <= 3) S.stats[d.key] = clamp(S.stats[d.key] + rand(0, 1) * S.talents[d.key], 0, STAT_CAP);
-        else if (S.proYear >= 8) S.stats[d.key] = clamp(S.stats[d.key] - rand(0.6, 1.8), 0, STAT_CAP);
+    // 주간 차트 발표
+    function weeklyChart() {
+      const myScore =
+        S.stats[POS_INFO[S.pos].stat] * 0.32 +
+        S.stats.charm * 0.22 +
+        ((S.stats.vocal + S.stats.dance + S.stats.rap) / 3) * 0.2 +
+        S.condition / 8 + (S.fandom || 0) / 45 + miniBonus + rand(-5, 5);
+      const rows = [
+        { name: S.group, score: myScore, me: true },
+        ...act.rivals.map((r) => ({ name: r.name, score: r.pop + rand(-8, 8) })),
+      ].sort((a, b) => b.score - a.score);
+      const rank = rows.findIndex((r) => r.me) + 1;
+      const won = rank === 1;
+
+      act.week += 1;
+      act.hypeSum += (5 - rank) * 0.35 + miniHype;
+      act.cbHype += (5 - rank) * 0.35 + miniHype;
+      let pay = 30;
+      let dFan;
+      if (won) {
+        act.wins += 1;
+        act.cbWins += 1;
+        S.career.wins += 1;
+        pay += 100;
+        dFan = randInt(10, 18);
+        feed({ text: `🏆 주간 차트 1위!! 앵콜 무대를 가져갑니다!`, cls: "good" });
+      } else if (rank <= 3) {
+        dFan = randInt(4, 9);
+        feed({ text: `📊 이번 주 차트 ${rank}위 — 1위가 눈앞이에요!`, cls: "good" });
+      } else {
+        dFan = randInt(-3, 3);
+        feed({ text: `📊 이번 주 차트 ${rank}위`, cls: rank >= 6 ? "bad" : "" });
       }
-      const income = sales * 3 + wins * 80;
-      S.money = (S.money || 0) + income;
+      S.fandom = Math.max(0, (S.fandom || 0) + dFan);
+      S.money = (S.money || 0) + pay;
+      S.condition = clamp(S.condition - randInt(3, 6), 0, 100);
+      S.pendingShow = false;
+
+      const cbDone = act.week >= act.weekTotal;
+      let extraLine = "";
+      if (cbDone) {
+        const cbSales = Math.max(1, Math.round(S.fandom * 0.05 + act.cbWins * 6 + act.cbHype * 4 + rand(-4, 4)));
+        act.sales += cbSales;
+        extraLine = `<div class="tour-pts">💿 ${act.cb}차 컴백 종료 — 1위 ${act.cbWins}회 · 초동 ${cbSales}만 장</div>`;
+      }
       save();
-      feed({ text: `📊 음악방송 1위 ${wins}회 · 초동 ${sales}만 장`, cls: wins > 0 ? "good" : "" });
-      feed({ text: `💰 활동 정산 +${fmtMoney(income)}`, cls: "good" });
-      if (awards.length) feed({ text: `🏆 연말 시상식 ${awards.join(", ")} 수상!`, cls: "good" });
-      feed({ text: dFan >= 0 ? `💖 팬덤 +${dFan}` : `📉 팬덤 ${dFan}`, cls: dFan >= 0 ? "good" : "bad" });
+
+      $("cb-result").innerHTML = `
+        <div class="tour-vs">${won ? "🏆 1위!" : `차트 ${rank}위`} <span class="${won ? "win" : ""}">${S.group}</span></div>
+        ${chartHTML(rows.slice(0, 5))}
+        <div class="tour-pts">💰 출연료 +${pay}만 · ${dFan >= 0 ? `💖 팬덤 +${dFan}` : `📉 팬덤 ${dFan}`}</div>
+        ${extraLine}`;
+
       btn.disabled = false;
-      btn.textContent = "활동 결산 보기";
-      btn.onclick = yearReport;
+      if (!cbDone) {
+        btn.textContent = `🏋️ 다음 무대 준비 (W${act.week + 1})`;
+        btn.onclick = () => {
+          S.camp = 2;
+          save();
+          renderPrep();
+          show("screen-pro");
+        };
+      } else if (act.cb < act.cbTotal) {
+        btn.textContent = `💿 ${act.cb + 1}차 컴백 준비하기`;
+        btn.onclick = () => {
+          S.camp = 3;
+          save();
+          renderPrep();
+          show("screen-pro");
+        };
+      } else {
+        btn.textContent = "🏁 연말 결산";
+        btn.onclick = finishYear;
+      }
     }
+  }
+
+  // ---------- 연말 결산 ----------
+  function finishYear() {
+    const act = S.activity;
+    const agePen = S.proYear >= 8 ? (S.proYear - 7) * 0.8 : 0;
+    const hype = clamp(act.hypeSum / 2.2 - agePen, -1.5, 12);
+    const wins = act.wins;
+    const sales = act.sales;
+    const dFan = Math.round(hype * 10 + wins * 3 - (hype < 0 ? 15 : 0));
+    S.fandom = Math.max(0, S.fandom + dFan);
+    const awards = [];
+    if (S.proYear === 1 && hype >= 3 && Math.random() < 0.8) { awards.push("신인상"); S.career.rookie += 1; }
+    if (hype >= 6.5 && Math.random() < 0.45) { awards.push("대상"); S.career.daesang += 1; }
+    else if (hype >= 4.5 && Math.random() < 0.5) { awards.push("본상"); S.career.bonsang += 1; }
+    S.career.sales += sales;
+    S.career.years.push({ y: S.proYear, hype: Math.round(hype * 10) / 10, wins, sales, dFan, awards });
+    if (window.Stats) Stats.log("year_end", { y: S.proYear, wins, sales });
+    // 초반엔 성장, 8년차부터는 서서히 하락
+    for (const d of STAT_DEFS) {
+      if (S.proYear <= 3) S.stats[d.key] = clamp(S.stats[d.key] + rand(0, 1) * S.talents[d.key], 0, STAT_CAP);
+      else if (S.proYear >= 8) S.stats[d.key] = clamp(S.stats[d.key] - rand(0.6, 1.8), 0, STAT_CAP);
+    }
+    const income = sales * 3 + wins * 40;
+    S.money = (S.money || 0) + income;
+    S.activity = null;
+    S.pendingShow = false;
+    save();
+    yearReport();
   }
 
   function yearReport() {
@@ -534,8 +679,9 @@ window.IdolCareer = (() => {
     showHof,
     showBattle,
     showActivity: () => {
-      if (S.camp > 0) { renderPrep(); show("screen-pro"); }
-      else yearReport();
+      if (S.camp > 0 || S.activity || S.pendingShow) { renderPrep(); show("screen-pro"); }
+      else if (S.career && S.career.years.length) yearReport();
+      else { renderPrep(); show("screen-pro"); }
     },
   };
 })();
