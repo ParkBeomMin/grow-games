@@ -148,9 +148,10 @@ create or replace view public.stats_choices as
   group by 1, 2, 3;
 
 create or replace view public.stats_daily as
-  select game, (ts at time zone 'Asia/Seoul')::date day,
-    count(*) filter (where event = 'visit')::int visits,
-    count(*) filter (where event = 'new_player')::int new_players
+  select game,
+    (ts at time zone 'Asia/Seoul')::date as "day",
+    count(*) filter (where event = 'visit') as visits,
+    count(*) filter (where event = 'new_player') as new_players
   from public.events group by 1, 2;
 
 grant select on public.stats_summary, public.stats_choices, public.stats_daily to anon;`;
