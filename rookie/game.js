@@ -110,7 +110,6 @@ function newState(region, pos, name, roll) {
     region: region.id, pos, name,
     year: 1, month: 3,
     stats, talents,
-    avatar: (window.Avatar && window.Avatar.get()) || null,
     money: 0,
     gear: {},
     condition: 80,
@@ -359,7 +358,7 @@ function renderRecord() {
     .filter(Boolean)
     .join(" ");
   $("record-card").innerHTML = `
-    ${S.avatar ? `<img class="draft-avatar" src="${S.avatar}" alt="" />` : `<div class="draft-emoji">⚾</div>`}
+    <div class="draft-emoji">⚾</div>
     <div class="draft-title">${S.name}</div>
     <div class="draft-team">${S.phase === "pro" ? `${S.team} · ${S.role || ""}` : `${r.school} · ${isBat ? "타자" : "투수"}`} · ${S.phase === "pro" ? `${S.age}세` : `${S.year}학년`}</div>
     <div class="draft-summary">
@@ -500,7 +499,7 @@ function showSlotPicker() {
         return `
           <div class="slot-row">
             <button type="button" class="slot-go" data-id="${id}">
-              ${st.avatar ? `<img class="slot-avatar" src="${st.avatar}" alt="" />` : `<span class="slot-avatar slot-emoji">⚾</span>`}
+              <span class="slot-avatar slot-emoji">⚾</span>
               <span class="slot-info">
                 <b>${st.name}</b>
                 <span>${slotDesc(st)}</span>
@@ -588,10 +587,6 @@ function renderMain() {
   $("hud-name").textContent = `${S.name} (${S.pos === "batter" ? "타자" : "투수"})`;
   $("hud-school").textContent = `${r.emoji} ${r.school} · 종합 ${Math.round(overall())}`;
   $("hud-turn").textContent = `${S.year}학년 ${S.month}월`;
-
-  const av = $("hud-avatar");
-  if (S.avatar) { av.src = S.avatar; av.classList.remove("hidden"); }
-  else av.classList.add("hidden");
 
   $("hud-money").textContent = `💰 ${fmtMoney(S.money || 0)}`;
   $("cond-num").textContent = Math.round(S.condition);
@@ -1455,7 +1450,6 @@ function showDraft() {
     : "🏆 우승 경력 없음";
 
   $("draft-card").innerHTML = `
-    ${S.avatar ? `<img class="draft-avatar" src="${S.avatar}" alt="" />` : ""}
     <div class="draft-emoji">${emoji}</div>
     <div class="draft-title">${title}</div>
     <div class="draft-team">${teamLine}</div>
@@ -1486,5 +1480,4 @@ function showDraft() {
 
 // ---------- 시작 ----------
 initTitle();
-if (window.Avatar) window.Avatar.mount("avatar-slot");
 if (window.Stats) Stats.init("rookie");

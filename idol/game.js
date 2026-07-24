@@ -105,7 +105,6 @@ function newState(agency, pos, name, roll) {
     agency: agency.id, pos, name,
     year: 1, month: 1,
     stats, talents,
-    avatar: (window.Avatar && window.Avatar.get()) || null,
     money: 0,
     gear: {},
     condition: 80,
@@ -437,7 +436,7 @@ function showSlotPicker() {
         return `
           <div class="slot-row">
             <button type="button" class="slot-go" data-id="${id}">
-              ${st.avatar ? `<img class="slot-avatar" src="${st.avatar}" alt="" />` : `<span class="slot-avatar slot-emoji">🎤</span>`}
+              <span class="slot-avatar slot-emoji">🎤</span>
               <span class="slot-info">
                 <b>${st.name}</b>
                 <span>${slotDesc(st)}</span>
@@ -525,10 +524,6 @@ function renderMain() {
   $("hud-name").textContent = `${S.name} (${POS_INFO[S.pos].name})`;
   $("hud-school").textContent = `${a.emoji} ${a.name} · 종합 ${Math.round(overall())}`;
   $("hud-turn").textContent = `${S.year}년차 ${S.month}월`;
-
-  const av = $("hud-avatar");
-  if (S.avatar) { av.src = S.avatar; av.classList.remove("hidden"); }
-  else av.classList.add("hidden");
 
   $("hud-money").textContent = `💰 ${fmtMoney(S.money || 0)}`;
   $("cond-num").textContent = Math.round(S.condition);
@@ -1064,7 +1059,6 @@ function showEnding(survivedFinal, lastRound) {
     : "🏆 평가 1위 경력 없음";
 
   $("ending-card").innerHTML = `
-    ${S.avatar ? `<img class="draft-avatar" src="${S.avatar}" alt="" />` : ""}
     <div class="draft-emoji">${emoji}</div>
     <div class="draft-title">${title}</div>
     <div class="draft-team">${teamLine}</div>
@@ -1098,5 +1092,4 @@ function showEnding(survivedFinal, lastRound) {
 
 // ---------- 시작 ----------
 initTitle();
-if (window.Avatar) window.Avatar.mount("avatar-slot");
 if (window.Stats) Stats.init("idol");

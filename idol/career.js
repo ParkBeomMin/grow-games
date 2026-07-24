@@ -79,9 +79,6 @@ window.IdolCareer = (() => {
     $("pro-name").textContent = `${S.name} (${POS_INFO[S.pos].name})`;
     $("pro-team").textContent = `🎤 ${S.group}${S.center ? " · 센터" : ""} · ${S.proYear}년차 · 종합 ${Math.round(overall())}`;
     $("pro-turn").textContent = `컴백 준비 ${3 - S.camp}/3`;
-    const av = $("pro-avatar");
-    if (S.avatar) { av.src = S.avatar; av.classList.remove("hidden"); }
-    else av.classList.add("hidden");
     $("pro-money").textContent = `💰 ${fmtMoney(S.money || 0)}`;
   $("pro-cond-num").textContent = Math.round(S.condition);
     $("pro-cond-bar").style.width = `${S.condition}%`;
@@ -255,7 +252,7 @@ window.IdolCareer = (() => {
     const forcedRetire = S.proYear >= 10;
     $("career-title").textContent = `📊 ${y.y}년차 활동 결산`;
     $("career-card").innerHTML = `
-      ${S.avatar ? `<img class="draft-avatar" src="${S.avatar}" alt="" />` : `<div class="draft-emoji">🎤</div>`}
+      <div class="draft-emoji">🎤</div>
       <div class="draft-title">${
         y.hype >= 6 ? "차트를 지배한 해!" :
         y.hype >= 3.5 ? "탄탄한 활동을 이어간 해" :
@@ -307,7 +304,6 @@ window.IdolCareer = (() => {
       name: S.name,
       pos: S.pos,
       team: S.group || agencyOf().name,
-      avatar: S.avatar || null,
       seasons: c.years ? c.years.length : 0,
       wins: c.wins, daesang: c.daesang, bonsang: c.bonsang, rookie: c.rookie,
       finalOvr: Math.round(overall()),
@@ -322,7 +318,7 @@ window.IdolCareer = (() => {
 
     $("career-title").textContent = "🏛️ 은퇴식";
     $("career-card").innerHTML = `
-      ${entry.avatar ? `<img class="draft-avatar" src="${entry.avatar}" alt="" />` : `<div class="draft-emoji">🎤</div>`}
+      <div class="draft-emoji">🎤</div>
       <div class="draft-title">${entry.name}, 무대와 작별</div>
       <div class="draft-team">${entry.grade}</div>
       <div>${entry.seasons ? `${entry.team}(으)로 ${entry.seasons}년을 활동했어요.` : "데뷔 무대 대신 다른 길을 택했어요."}</div>
@@ -354,7 +350,7 @@ window.IdolCareer = (() => {
       const div = document.createElement("div");
       div.className = "hof-card";
       div.innerHTML = `
-        ${e.avatar ? `<img class="hof-face" src="${e.avatar}" alt="" />` : `<div class="hof-face-emoji">🎤</div>`}
+        <div class="hof-face-emoji">🎤</div>
         <div class="hof-info">
           <div class="hof-name">${i + 1}. ${e.name} <span class="hof-grade">${e.grade}</span></div>
           ${e.team} · ${e.seasons}년 활동 · 1위 ${e.wins}회 · 🏆${e.daesang + e.bonsang} · 점수 ${e.score}

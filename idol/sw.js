@@ -1,6 +1,6 @@
 /* idol 서비스워커 — 네트워크 우선, 실패 시 캐시 (오프라인 플레이) */
 const CACHE = "idol-v3";
-const ASSETS = ["./", "./index.html", "./style.css", "./game.js", "./career.js", "./manifest.webmanifest", "../base.css", "../avatar.js", "../timing.js", "../match.js"];
+const ASSETS = ["./", "./index.html", "./style.css", "./game.js", "./career.js", "./manifest.webmanifest", "../base.css", "../timing.js", "../match.js"];
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));
 });

@@ -101,9 +101,6 @@ window.Career = (() => {
     $("pro-name").textContent = `${S.name} (${S.pos === "batter" ? "타자" : "투수"})`;
     $("pro-team").textContent = `⚾ ${S.team} · ${S.role || ""} · ${S.age}세 · ${S.proYear}년차 · 종합 ${Math.round(overall())}`;
     $("pro-turn").textContent = S.season ? `G ${S.season.game}/${S.season.total} · ${myRank()}위` : `캠프 훈련 ${3 - S.camp}/3`;
-    const av = $("pro-avatar");
-    if (S.avatar) { av.src = S.avatar; av.classList.remove("hidden"); }
-    else av.classList.add("hidden");
     $("pro-money").textContent = `💰 ${fmtMoney(S.money || 0)}`;
   $("pro-cond-num").textContent = Math.round(S.condition);
     $("pro-cond-bar").style.width = `${S.condition}%`;
@@ -526,7 +523,7 @@ window.Career = (() => {
     const forcedRetire = S.age > 40 || overall() < 30;
     $("career-title").textContent = `📊 ${s.y}년차 시즌 결산`;
     $("career-card").innerHTML = `
-      ${S.avatar ? `<img class="draft-avatar" src="${S.avatar}" alt="" />` : `<div class="draft-emoji">⚾</div>`}
+      <div class="draft-emoji">⚾</div>
       <div class="draft-title">${
         s.war >= 5 ? "리그를 지배한 시즌!" :
         s.war >= 2.5 ? "제 몫을 해낸 시즌" :
@@ -578,7 +575,6 @@ window.Career = (() => {
       name: S.name,
       pos: S.pos,
       team: team || "고교 무대",
-      avatar: S.avatar || null,
       seasons: c.seasons.length,
       warSum: c.warSum,
       rings: c.rings, mvp: c.mvp, gg: c.gg, roy: c.roy,
@@ -594,7 +590,7 @@ window.Career = (() => {
 
     $("career-title").textContent = "🏛️ 은퇴식";
     $("career-card").innerHTML = `
-      ${entry.avatar ? `<img class="draft-avatar" src="${entry.avatar}" alt="" />` : `<div class="draft-emoji">⚾</div>`}
+      <div class="draft-emoji">⚾</div>
       <div class="draft-title">${entry.name}, 그라운드와 작별</div>
       <div class="draft-team">${entry.grade}</div>
       <div>${entry.seasons ? `${entry.team}에서 ${entry.seasons}시즌을 뛰었어요.` : "프로 무대 대신 다른 길을 택했어요."}</div>
@@ -626,7 +622,7 @@ window.Career = (() => {
       const div = document.createElement("div");
       div.className = "hof-card";
       div.innerHTML = `
-        ${e.avatar ? `<img class="hof-face" src="${e.avatar}" alt="" />` : `<div class="hof-face-emoji">⚾</div>`}
+        <div class="hof-face-emoji">⚾</div>
         <div class="hof-info">
           <div class="hof-name">${i + 1}. ${e.name} <span class="hof-grade">${e.grade}</span></div>
           ${e.team} · ${e.seasons}시즌 · WAR ${(+e.warSum).toFixed(1)} · 🏆${e.rings} · 점수 ${e.score}
