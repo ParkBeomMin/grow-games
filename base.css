@@ -435,12 +435,22 @@ h2 { font-size: 1.6rem; margin: 8px 0 6px; color: var(--accent); }
 .action-btn.ad-slot { border-color: var(--accent); }
 .action-btn:disabled { opacity: 0.45; cursor: default; transform: none; }
 
-/* ---------- 미니게임: 연타 · 수싸움 ---------- */
-.tm-mash-fill { height: 100%; width: 0; background: linear-gradient(90deg, #ffe29a, var(--accent)); border-radius: 99px; transition: width 0.1s; }
-.tm-mash-btn { user-select: none; -webkit-user-select: none; touch-action: manipulation; }
+/* ---------- 미니게임: 홀드 · 순서 기억 · 반응 속도 · 수싸움 ---------- */
+.tm-fill { position: absolute; left: 0; top: 0; height: 100%; width: 0; background: linear-gradient(90deg, rgba(255, 226, 154, .45), rgba(255, 209, 102, .7)); border-radius: 99px; }
+.tm-hold-btn { user-select: none; -webkit-user-select: none; touch-action: manipulation; }
 .tm-hint { font-size: 0.8rem; color: var(--sky); margin-bottom: 10px; }
 .tm-duel { display: flex; gap: 8px; }
-.tm-duel .tm-duel-btn { flex: 1; margin: 0; padding: 12px 4px; font-size: 0.95rem; }
+.tm-duel .tm-duel-btn, .tm-duel .tm-seq-btn { flex: 1; margin: 0; padding: 12px 4px; font-size: 0.95rem; }
+.tm-seq-show { font-size: 1.6rem; letter-spacing: 6px; text-align: center; margin: 8px 0 12px; min-height: 2.2rem; }
+.tm-seq-btn { font-size: 1.2rem; }
+.tm-seq-wrong { border-color: var(--accent2) !important; color: var(--accent2) !important; }
+.tm-react-btn { transition: none; }
+.tm-react-wait { filter: grayscale(0.8) brightness(0.7); }
+.tm-react-go { animation: reactpulse 0.5s ease infinite; }
+@keyframes reactpulse {
+  0%, 100% { box-shadow: 0 4px 0 #b98e2f, 0 0 0 0 rgba(255, 209, 102, .7); }
+  50% { box-shadow: 0 4px 0 #b98e2f, 0 0 0 10px rgba(255, 209, 102, 0); }
+}
 .ad-box { margin-top: 16px; min-height: 0; }
 
 .auto-toggle { display: block; font-size: 0.8rem; color: var(--dim); margin: -2px 0 10px; cursor: pointer; }
@@ -454,9 +464,12 @@ h2 { font-size: 1.6rem; margin: 8px 0 6px; color: var(--accent); }
   background: var(--bg2);
   border-top: 1px solid var(--line);
   padding: 2px 0 calc(2px + env(safe-area-inset-bottom, 0px));
-  display: none;
+  /* display:none이면 애드센스가 크기를 못 재서 광고를 안 채워요 —
+     화면 밖으로 밀어뒀다가 채워지면 올라오게 처리 */
+  transform: translateY(120%);
+  transition: transform .3s ease;
 }
-.ad-anchor.on { display: block; }
+.ad-anchor.on { transform: none; }
 .ad-anchor-close {
   position: absolute;
   top: -26px; right: 8px;
@@ -470,3 +483,26 @@ h2 { font-size: 1.6rem; margin: 8px 0 6px; color: var(--accent); }
   cursor: pointer;
 }
 body.has-ad-anchor #app { padding-bottom: 108px; }
+
+/* ---------- 이어하기 선수 선택 ---------- */
+.slot-modal { width: min(360px, 92vw); }
+.slot-list { display: flex; flex-direction: column; gap: 8px; max-height: 55vh; overflow-y: auto; margin: 4px 0 6px; }
+.slot-row { display: flex; gap: 6px; align-items: stretch; }
+.slot-go {
+  flex: 1; display: flex; align-items: center; gap: 10px; text-align: left;
+  background: linear-gradient(180deg, var(--bg2), var(--field));
+  border: 2px solid var(--line); border-radius: 12px; padding: 10px 12px;
+  color: var(--text); cursor: pointer; min-width: 0;
+}
+.slot-go:hover { border-color: var(--accent); }
+.slot-avatar { width: 42px; height: 42px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
+.slot-emoji { display: flex; align-items: center; justify-content: center; font-size: 1.5rem; background: rgba(0, 0, 0, .25); }
+.slot-info { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.slot-info b { font-size: 1rem; color: var(--accent); }
+.slot-info span { font-size: .74rem; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.slot-info .slot-date { font-size: .66rem; }
+.slot-del {
+  width: 42px; border: 2px solid var(--line); border-radius: 12px;
+  background: transparent; color: var(--dim); cursor: pointer; flex-shrink: 0;
+}
+.slot-del:hover { border-color: var(--accent2); color: var(--accent2); }

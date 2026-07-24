@@ -123,8 +123,40 @@ const overall = () => {
   return vals.reduce((a, b) => a + b, 0) / vals.length;
 };
 
-function save() { localStorage.setItem(SAVE_KEY, JSON.stringify(S)); }
-function clearSave() { localStorage.removeItem(SAVE_KEY); }
+// ---------- 저장 — 연습생 여러 명(슬롯) 지원 ----------
+const SLOTS_KEY = SAVE_KEY + "-slots";
+let curSlot = null;
+function loadSlots() {
+  try { return JSON.parse(localStorage.getItem(SLOTS_KEY)) || {}; } catch { return {}; }
+}
+function saveSlots(sl) { localStorage.setItem(SLOTS_KEY, JSON.stringify(sl)); }
+// 예전 단일 저장 → 슬롯으로 이사
+{
+  const old = localStorage.getItem(SAVE_KEY);
+  if (old) {
+    try {
+      const sl = loadSlots();
+      sl["s" + Date.now()] = JSON.parse(old);
+      saveSlots(sl);
+    } catch { /* 손상된 저장은 버려요 */ }
+    localStorage.removeItem(SAVE_KEY);
+  }
+}
+function save() {
+  if (!S) return;
+  if (!curSlot) curSlot = "s" + Date.now() + Math.floor(Math.random() * 1e4);
+  S.savedAt = Date.now();
+  const sl = loadSlots();
+  sl[curSlot] = S;
+  saveSlots(sl);
+}
+function clearSave() {
+  if (!curSlot) return;
+  const sl = loadSlots();
+  delete sl[curSlot];
+  saveSlots(sl);
+  curSlot = null;
+}
 
 // ---------- 화면 전환 ----------
 function show(id) {
@@ -165,7 +197,8 @@ $("btn-home-pro")?.addEventListener("click", goHome);
 function awakenTalent(key, logFn) {
   const defs = Array.isArray(STAT_DEFS) ? STAT_DEFS : STAT_DEFS[S.pos];
   const d = defs.find((x) => x.key === key);
-  const v = S.stats[key];
+  // 화면 표시(반올림)와 동일한 기준 — 99.6도 '100'으로 보이면 각성 가능해야 해요
+  const v = Math.round(S.stats[key]);
   if (!d || v < 100) return false;
   const p = Math.min(0.25 + (v - 100) * 0.015, 0.75);
   const ok = confirm(
@@ -346,25 +379,82 @@ let chosenAgency = null;
 let chosenPos = null;
 
 function initTitle() {
-  const saved = localStorage.getItem(SAVE_KEY);
-  if (saved) {
+  if (Object.keys(loadSlots()).length) {
     $("btn-continue").classList.remove("hidden");
-    $("btn-continue").onclick = () => {
-      S = JSON.parse(saved);
-      S.money = S.money || 0;
-      S.gear = S.gear || {};
-      if (S.phase === "idol-pro" && window.IdolCareer) {
-        window.IdolCareer.showActivity();
-      } else {
-        renderMain();
-        show("screen-main");
-      }
-    };
+    $("btn-continue").onclick = showSlotPicker;
   }
   $("btn-new").onclick = () => {
     renderAgencies();
     show("screen-agency");
   };
+}
+
+function resumeSlot(id) {
+  const sl = loadSlots();
+  if (!sl[id]) return;
+  curSlot = id;
+  S = sl[id];
+  S.money = S.money || 0;
+  S.gear = S.gear || {};
+  if (S.phase === "idol-pro" && window.IdolCareer) {
+    window.IdolCareer.showActivity();
+  } else {
+    renderMain();
+    show("screen-main");
+  }
+}
+
+function slotDesc(st) {
+  const posName = POS_INFO[st.pos] ? POS_INFO[st.pos].name : "";
+  if (st.phase === "idol-pro") return `🎤 ${st.group || "데뷔 그룹"} · ${st.proYear || 1}년차${st.center ? " · 센터" : ""}`;
+  const a = AGENCIES.find((x) => x.id === st.agency);
+  return `🏢 ${a ? a.name : ""} 연습생 ${st.year}년차 · ${posName}`;
+}
+
+// 이어하기 — 어떤 연습생으로 계속할지 선택
+function showSlotPicker() {
+  const sl = loadSlots();
+  const ids = Object.keys(sl).sort((a, b) => (sl[b].savedAt || 0) - (sl[a].savedAt || 0));
+  const ov = document.createElement("div");
+  ov.className = "av-overlay";
+  ov.innerHTML = `
+    <div class="av-modal slot-modal">
+      <p class="av-title">👥 어떤 연습생으로 이어할까요?</p>
+      <div class="slot-list">${ids.map((id) => {
+        const st = sl[id];
+        const d = st.savedAt ? new Date(st.savedAt) : null;
+        return `
+          <div class="slot-row">
+            <button type="button" class="slot-go" data-id="${id}">
+              ${st.avatar ? `<img class="slot-avatar" src="${st.avatar}" alt="" />` : `<span class="slot-avatar slot-emoji">🎤</span>`}
+              <span class="slot-info">
+                <b>${st.name}</b>
+                <span>${slotDesc(st)}</span>
+                ${d ? `<span class="slot-date">${d.getMonth() + 1}/${d.getDate()} 저장</span>` : ""}
+              </span>
+            </button>
+            <button type="button" class="slot-del" data-id="${id}" aria-label="삭제">🗑️</button>
+          </div>`;
+      }).join("")}</div>
+      <div class="av-actions"><button type="button" class="btn btn-ghost slot-close">닫기</button></div>
+    </div>`;
+  document.body.appendChild(ov);
+  ov.querySelector(".slot-close").onclick = () => ov.remove();
+  ov.querySelectorAll(".slot-go").forEach((b) => {
+    b.onclick = () => { ov.remove(); resumeSlot(b.dataset.id); };
+  });
+  ov.querySelectorAll(".slot-del").forEach((b) => {
+    b.onclick = () => {
+      const st = sl[b.dataset.id];
+      if (!confirm(`${st ? st.name : "이 연습생"}의 저장을 삭제할까요? 되돌릴 수 없어요!`)) return;
+      const cur = loadSlots();
+      delete cur[b.dataset.id];
+      saveSlots(cur);
+      ov.remove();
+      if (Object.keys(cur).length) showSlotPicker();
+      else $("btn-continue").classList.add("hidden");
+    };
+  });
 }
 
 function renderAgencies() {
@@ -408,6 +498,7 @@ $("btn-random-name").addEventListener("click", () => {
 
 $("btn-start").addEventListener("click", () => {
   const name = $("input-name").value.trim() || pick(STAGE_NAMES);
+  curSlot = null; // 새 연습생은 새 슬롯에 — 기존 저장은 그대로 남아요
   S = newState(chosenAgency, chosenPos, name, pendingRoll);
   addLog(`🎤 ${chosenAgency.name} 연습생 계약! ${name}의 연습실 생활이 시작됐어요.`);
   save();
@@ -653,9 +744,11 @@ const MOMENTS = {
   },
 };
 
-// 무대 승부처 미니게임 — 종류 랜덤 (타이밍/연타/수싸움)
+// 무대 승부처 미니게임 — 타이밍/홀드/안무 암기/반응/수싸움 5종 랜덤
 const IDOL_BAR = { ok: "✨ 하이라이트를 무난히 소화했어요", great: "💫 킬링파트를 완벽하게! 객석이 터져나가요!", bad: "😱 하이라이트에서 삐끗… 등급이 흔들려요" };
-const IDOL_MASH = { ok: "🎤 고음을 끝까지 버텨냈어요!", great: "💥 폭발적인 성량으로 무대를 찢었다!!", bad: "😮‍💨 호흡이 달렸다… 아쉬운 마무리" };
+const IDOL_HOLD = { ok: "🎤 고음을 안정적으로 끌어올렸어요!", great: "💥 완벽한 호흡에서 터진 초고음!! 무대를 찢었다!", bad: "😮‍💨 호흡 조절 실패… 음이 흔들렸어요" };
+const IDOL_SEQ = { ok: "🕺 안무 순서를 정확히 소화했어요!", great: "🌟 칼군무 완벽 수행!! 직캠 화력 폭발!", bad: "🙈 안무 순서가 꼬였다… 동선 충돌" };
+const IDOL_REACT = { ok: "📷 카메라 신호에 바로 반응했어요!", great: "⚡ 0.1초 만에 찾은 렌즈, 표정까지 완벽!!", bad: "😵 카메라가 지나갔는데 놓쳤어요…" };
 const IDOL_DUEL = { ok: "📷 카메라를 정확히 찾아 미소!", great: "🌟 완벽한 동선, 직캠 각도 최고!!", bad: "🙈 동선이 꼬여 화면 밖으로…" };
 const miniZone = (stat) => clamp(13 + stat * 0.22 + (S.condition - 50) * 0.08, 10, 40);
 
@@ -676,7 +769,7 @@ function autoRes(stat) {
 
 function playRandomMini(container, cb) {
   const posStat = POS_INFO[S.pos].stat;
-  const mech = pick(["bar", "bar", "mash", "duel"]);
+  const mech = pick(["bar", "hold", "seq", "react", "duel"]);
   if (mech === "bar") {
     if (autoMiniOn()) { cb(autoRes(S.stats[posStat]), IDOL_BAR); return; }
     window.Timing.play(container, {
@@ -684,13 +777,28 @@ function playRandomMini(container, cb) {
       button: "지금! 🎤",
       zonePct: miniZone(S.stats[posStat]),
     }, (res) => cb(res, IDOL_BAR));
-  } else if (mech === "mash") {
-    if (autoMiniOn()) { cb(autoRes(S.stats.stamina), IDOL_MASH); return; }
-    window.Timing.mash(container, {
-      label: "🎤 클라이맥스 고음! 연타로 성량을 끌어올려라!",
-      button: "탭! 🎶",
-      target: Math.round(clamp(26 - S.stats.stamina * 0.08 - (S.condition - 50) * 0.03, 10, 26)),
-    }, (res) => cb(res, IDOL_MASH));
+  } else if (mech === "hold") {
+    if (autoMiniOn()) { cb(autoRes(S.stats.stamina), IDOL_HOLD); return; }
+    window.Timing.hold(container, {
+      label: "🎤 클라이맥스 고음! 꾹 눌러 호흡을 모으고, 초록 존에서 터뜨려요!",
+      button: "꾹 누르기 🎶",
+      zonePct: miniZone(S.stats.stamina),
+    }, (res) => cb(res, IDOL_HOLD));
+  } else if (mech === "seq") {
+    if (autoMiniOn()) { cb(autoRes(S.stats.dance), IDOL_SEQ); return; }
+    window.Timing.sequence(container, {
+      label: "🕺 포인트 안무! 순서를 기억했다가 그대로!",
+      icons: ["🎤", "🕺", "🎙️", "✨"],
+      showMs: 900 + S.stats.dance * 6 + (S.condition - 50) * 3,
+    }, (res) => cb(res, IDOL_SEQ));
+  } else if (mech === "react") {
+    if (autoMiniOn()) { cb(autoRes(S.stats.charm), IDOL_REACT); return; }
+    window.Timing.reaction(container, {
+      label: "📷 개인 직캠 타임! 신호가 켜지면 바로 렌즈를 봐요!",
+      button: "여기!! 📷",
+      perfectMs: 300 + S.stats.charm * 1.5,
+      goodMs: 700 + S.stats.charm * 2.5,
+    }, (res) => cb(res, IDOL_REACT));
   } else {
     if (autoMiniOn()) { cb(autoRes(S.stats.charm), IDOL_DUEL); return; }
     window.Timing.duel(container, {

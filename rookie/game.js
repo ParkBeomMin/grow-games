@@ -128,8 +128,40 @@ const overall = () => {
   return vals.reduce((a, b) => a + b, 0) / vals.length;
 };
 
-function save() { localStorage.setItem(SAVE_KEY, JSON.stringify(S)); }
-function clearSave() { localStorage.removeItem(SAVE_KEY); }
+// ---------- 저장 — 선수 여러 명(슬롯) 지원 ----------
+const SLOTS_KEY = SAVE_KEY + "-slots";
+let curSlot = null;
+function loadSlots() {
+  try { return JSON.parse(localStorage.getItem(SLOTS_KEY)) || {}; } catch { return {}; }
+}
+function saveSlots(sl) { localStorage.setItem(SLOTS_KEY, JSON.stringify(sl)); }
+// 예전 단일 저장 → 슬롯으로 이사
+{
+  const old = localStorage.getItem(SAVE_KEY);
+  if (old) {
+    try {
+      const sl = loadSlots();
+      sl["s" + Date.now()] = JSON.parse(old);
+      saveSlots(sl);
+    } catch { /* 손상된 저장은 버려요 */ }
+    localStorage.removeItem(SAVE_KEY);
+  }
+}
+function save() {
+  if (!S) return;
+  if (!curSlot) curSlot = "s" + Date.now() + Math.floor(Math.random() * 1e4);
+  S.savedAt = Date.now();
+  const sl = loadSlots();
+  sl[curSlot] = S;
+  saveSlots(sl);
+}
+function clearSave() {
+  if (!curSlot) return;
+  const sl = loadSlots();
+  delete sl[curSlot];
+  saveSlots(sl);
+  curSlot = null;
+}
 
 // ---------- 화면 전환 ----------
 function show(id) {
@@ -170,7 +202,8 @@ $("btn-home-pro")?.addEventListener("click", goHome);
 function awakenTalent(key, logFn) {
   const defs = Array.isArray(STAT_DEFS) ? STAT_DEFS : STAT_DEFS[S.pos];
   const d = defs.find((x) => x.key === key);
-  const v = S.stats[key];
+  // 화면 표시(반올림)와 동일한 기준 — 99.6도 '100'으로 보이면 각성 가능해야 해요
+  const v = Math.round(S.stats[key]);
   if (!d || v < 100) return false;
   const p = Math.min(0.25 + (v - 100) * 0.015, 0.75);
   const ok = confirm(
@@ -398,25 +431,82 @@ let chosenRegion = null;
 let chosenPos = null;
 
 function initTitle() {
-  const saved = localStorage.getItem(SAVE_KEY);
-  if (saved) {
+  if (Object.keys(loadSlots()).length) {
     $("btn-continue").classList.remove("hidden");
-    $("btn-continue").onclick = () => {
-      S = JSON.parse(saved);
-      S.money = S.money || 0;
-      S.gear = S.gear || {};
-      if (S.phase === "pro" && window.Career) {
-        window.Career.showPro();
-      } else {
-        renderMain();
-        show("screen-main");
-      }
-    };
+    $("btn-continue").onclick = showSlotPicker;
   }
   $("btn-new").onclick = () => {
     renderRegions();
     show("screen-region");
   };
+}
+
+function resumeSlot(id) {
+  const sl = loadSlots();
+  if (!sl[id]) return;
+  curSlot = id;
+  S = sl[id];
+  S.money = S.money || 0;
+  S.gear = S.gear || {};
+  if (S.phase === "pro" && window.Career) {
+    window.Career.showPro();
+  } else {
+    renderMain();
+    show("screen-main");
+  }
+}
+
+function slotDesc(st) {
+  const posName = st.pos === "batter" ? "타자" : "투수";
+  if (st.phase === "pro") return `⚾ ${st.team} · ${st.role || posName} · ${st.proYear || 1}년차`;
+  const r = REGIONS.find((x) => x.id === st.region);
+  return `🏫 ${r ? r.school : ""} ${st.year}학년 · ${posName}`;
+}
+
+// 이어하기 — 어떤 선수로 계속할지 선택
+function showSlotPicker() {
+  const sl = loadSlots();
+  const ids = Object.keys(sl).sort((a, b) => (sl[b].savedAt || 0) - (sl[a].savedAt || 0));
+  const ov = document.createElement("div");
+  ov.className = "av-overlay";
+  ov.innerHTML = `
+    <div class="av-modal slot-modal">
+      <p class="av-title">👥 어떤 선수로 이어할까요?</p>
+      <div class="slot-list">${ids.map((id) => {
+        const st = sl[id];
+        const d = st.savedAt ? new Date(st.savedAt) : null;
+        return `
+          <div class="slot-row">
+            <button type="button" class="slot-go" data-id="${id}">
+              ${st.avatar ? `<img class="slot-avatar" src="${st.avatar}" alt="" />` : `<span class="slot-avatar slot-emoji">⚾</span>`}
+              <span class="slot-info">
+                <b>${st.name}</b>
+                <span>${slotDesc(st)}</span>
+                ${d ? `<span class="slot-date">${d.getMonth() + 1}/${d.getDate()} 저장</span>` : ""}
+              </span>
+            </button>
+            <button type="button" class="slot-del" data-id="${id}" aria-label="삭제">🗑️</button>
+          </div>`;
+      }).join("")}</div>
+      <div class="av-actions"><button type="button" class="btn btn-ghost slot-close">닫기</button></div>
+    </div>`;
+  document.body.appendChild(ov);
+  ov.querySelector(".slot-close").onclick = () => ov.remove();
+  ov.querySelectorAll(".slot-go").forEach((b) => {
+    b.onclick = () => { ov.remove(); resumeSlot(b.dataset.id); };
+  });
+  ov.querySelectorAll(".slot-del").forEach((b) => {
+    b.onclick = () => {
+      const st = sl[b.dataset.id];
+      if (!confirm(`${st ? st.name : "이 선수"}의 저장을 삭제할까요? 되돌릴 수 없어요!`)) return;
+      const cur = loadSlots();
+      delete cur[b.dataset.id];
+      saveSlots(cur);
+      ov.remove();
+      if (Object.keys(cur).length) showSlotPicker();
+      else $("btn-continue").classList.add("hidden");
+    };
+  });
 }
 
 function renderRegions() {
@@ -460,6 +550,7 @@ $("btn-random-name").addEventListener("click", () => {
 
 $("btn-start").addEventListener("click", () => {
   const name = $("input-name").value.trim() || pick(SURNAMES) + pick(GIVEN);
+  curSlot = null; // 새 선수는 새 슬롯에 — 기존 선수 저장은 그대로 남아요
   S = newState(chosenRegion, chosenPos, name, pendingRoll);
   addLog(`⚾ ${chosenRegion.school} 입학! ${name}의 야구 인생이 시작됐어요.`);
   save();
@@ -912,16 +1003,20 @@ function autoRes(stat) {
   }
 }
 
-// 연타/수싸움 결과 텍스트
-const MASH_BAT = { ok: "혼신의 스윙이 통했어요! 💪", great: "이 악문 풀스윙, 폭발적인 장타!! 💥", bad: "힘이 빠졌다… 범타" };
-const MASH_PIT = { ok: "몰아붙인 투구로 범타 처리! 🔥", great: "혼신의 전력투구, 3구 삼진!! ⚡", bad: "체력이 방전… 안타 허용" };
+// 홀드/사인/반응/수싸움 결과 텍스트
+const HOLD_BAT = { ok: "힘을 모은 풀스윙이 통했어요! 💪", great: "완벽하게 응축된 힘, 폭발적인 장타!! 💥", bad: "힘 조절 실패… 범타" };
+const HOLD_PIT = { ok: "힘을 실은 강속구로 범타 처리! 🔥", great: "완벽한 밸런스에서 나온 광속구, 삼진!! ⚡", bad: "힘이 과했다… 제구가 날렸어요" };
+const SEQ_BAT = { ok: "사인대로 노려친 안타! 📋", great: "벤치의 작전을 완벽 수행, 통타!! 💥", bad: "사인을 놓쳤다… 어이없는 헛스윙" };
+const SEQ_PIT = { ok: "포수 리드대로 범타 유도! 📋", great: "볼배합 완벽 수행, 삼진!! 🧊", bad: "사인 미스… 한가운데 실투" };
+const REACT_BAT = { ok: "빠른 스타트로 세이프! ⚡", great: "번개 같은 반응, 한 베이스 더!! 👟", bad: "반응이 늦었다… 아웃" };
+const REACT_PIT = { ok: "강습 타구를 낚아챘어요! ⚡", great: "총알 타구를 다이빙 캐치!! 🧤", bad: "손을 스치고 빠졌다… 내야안타" };
 const DUEL_BAT = { ok: "노림수 적중! 안타! 🧠", great: "완벽한 수읽기, 통타!! 💥", bad: "유인구에 속았다… 삼진" };
 const DUEL_PIT = { ok: "타자의 노림수를 피했어요! 🧠", great: "허를 찌른 결정구, 삼진!! 🎯", bad: "딱 노리던 코스였다… 통타" };
 
-// 승부처 미니게임 — 종류(타이밍/연타/수싸움)와 상황을 랜덤으로
+// 승부처 미니게임 — 타이밍/홀드/사인 암기/반응 속도/수싸움 5종 랜덤
 function playRandomMini(container, cb) {
   const isBat = S.pos === "batter";
-  const mech = pick(["bar", "bar", "mash", "duel"]);
+  const mech = pick(["bar", "hold", "seq", "react", "duel"]);
   if (mech === "bar") {
     const type = pick(isBat ? MINI_BAT : MINI_PIT);
     if (autoMiniOn()) { cb(autoRes(S.stats[type.stat]), type); return; }
@@ -930,14 +1025,31 @@ function playRandomMini(container, cb) {
       button: type.button,
       zonePct: miniZone(S.stats[type.stat]),
     }, (res) => cb(res, type));
-  } else if (mech === "mash") {
-    const stat = isBat ? S.stats.power : S.stats.stamina;
-    if (autoMiniOn()) { cb(autoRes(stat), isBat ? MASH_BAT : MASH_PIT); return; }
-    window.Timing.mash(container, {
-      label: isBat ? "💪 풀카운트 힘 대결! 연타로 힘을 모아라!" : "🔥 혼신의 투구! 연타로 어깨를 달궈라!",
-      button: "탭! 👊",
-      target: Math.round(clamp(26 - stat * 0.08 - (S.condition - 50) * 0.03, 10, 26)),
-    }, (res) => cb(res, isBat ? MASH_BAT : MASH_PIT));
+  } else if (mech === "hold") {
+    const stat = isBat ? S.stats.power : S.stats.velocity;
+    if (autoMiniOn()) { cb(autoRes(stat), isBat ? HOLD_BAT : HOLD_PIT); return; }
+    window.Timing.hold(container, {
+      label: isBat ? "💪 꾹 눌러 힘을 모으고, 초록 존에서 풀스윙!" : "🔥 꾹 눌러 어깨를 달구고, 초록 존에서 릴리스!",
+      button: isBat ? "꾹 누르기 🏏" : "꾹 누르기 ⚾",
+      zonePct: miniZone(stat),
+    }, (res) => cb(res, isBat ? HOLD_BAT : HOLD_PIT));
+  } else if (mech === "seq") {
+    const stat = isBat ? S.stats.contact : S.stats.control;
+    if (autoMiniOn()) { cb(autoRes(stat), isBat ? SEQ_BAT : SEQ_PIT); return; }
+    window.Timing.sequence(container, {
+      label: isBat ? "📋 벤치 사인! 순서를 기억했다가 그대로!" : "📋 포수 사인! 볼배합을 기억했다가 그대로!",
+      icons: ["⚾", "🧢", "🧤", "🏏"],
+      showMs: 900 + stat * 6 + (S.condition - 50) * 3,
+    }, (res) => cb(res, isBat ? SEQ_BAT : SEQ_PIT));
+  } else if (mech === "react") {
+    const stat = isBat ? S.stats.run : S.stats.defense;
+    if (autoMiniOn()) { cb(autoRes(stat), isBat ? REACT_BAT : REACT_PIT); return; }
+    window.Timing.reaction(container, {
+      label: isBat ? "👟 견제가 온다! 신호가 켜지면 곧바로 귀루!" : "🧤 강습 타구! 신호가 켜지면 곧바로 캐치!",
+      button: isBat ? "귀루!! ⚡" : "캐치!! 🧤",
+      perfectMs: 300 + stat * 1.5,
+      goodMs: 700 + stat * 2.5,
+    }, (res) => cb(res, isBat ? REACT_BAT : REACT_PIT));
   } else {
     const stat = isBat ? S.stats.contact : S.stats.control;
     if (autoMiniOn()) { cb(autoRes(stat), isBat ? DUEL_BAT : DUEL_PIT); return; }
