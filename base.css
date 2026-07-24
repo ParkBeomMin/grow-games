@@ -456,33 +456,13 @@ h2 { font-size: 1.6rem; margin: 8px 0 6px; color: var(--accent); }
 .auto-toggle { display: block; font-size: 0.8rem; color: var(--dim); margin: -2px 0 10px; cursor: pointer; }
 .auto-toggle input { accent-color: var(--accent); }
 
-/* ---------- 하단 띠 배너 ---------- */
+/* ---------- 하단 띠 배너 (콘텐츠 맨 아래 일반 배치) ---------- */
 .ad-anchor {
-  position: fixed;
-  left: 0; right: 0; bottom: 0;
-  z-index: 60;
-  background: var(--bg2);
+  margin-top: 20px;
   border-top: 1px solid var(--line);
-  padding: 2px 0 calc(2px + env(safe-area-inset-bottom, 0px));
-  /* display:none이면 애드센스가 크기를 못 재서 광고를 안 채워요 —
-     화면 밖으로 밀어뒀다가 채워지면 올라오게 처리 (닫기 버튼 높이까지 포함) */
-  transform: translateY(calc(100% + 34px));
-  transition: transform .3s ease;
+  padding-top: 8px;
+  min-height: 60px;
 }
-.ad-anchor.on { transform: none; }
-.ad-anchor-close {
-  position: absolute;
-  top: -26px; right: 8px;
-  width: 26px; height: 24px;
-  border: 1px solid var(--line);
-  border-bottom: none;
-  border-radius: 8px 8px 0 0;
-  background: var(--bg2);
-  color: var(--dim);
-  font-size: 0.7rem;
-  cursor: pointer;
-}
-body.has-ad-anchor #app { padding-bottom: 108px; }
 
 /* ---------- 이어하기 선수 선택 ---------- */
 .slot-modal { width: min(360px, 92vw); }

@@ -96,27 +96,24 @@ window.Ads = (() => {
     else if (state === "idle") loadScript();
   }
 
-  // 하단 띠 배너 — 고정 높이(60px)로 요청, 채워질 때만 표시
+  // 하단 띠 배너 — 콘텐츠 맨 아래 일반 배치
+  // (position:fixed로 화면에 고정하면 애드센스 정책 단속 스크립트가
+  //  스크롤 시 광고를 접어버려요. 화면 고정형은 자동 광고의 '앵커'만 공식 지원)
   function anchor() {
     if (!ADSENSE_CLIENT || !AD_ANCHOR_SLOT || document.getElementById("ad-anchor")) return;
+    const app = document.getElementById("app");
+    if (!app) return;
     const bar = document.createElement("div");
     bar.id = "ad-anchor";
     bar.className = "ad-anchor";
     bar.innerHTML = `
-      <button type="button" class="ad-anchor-close" aria-label="광고 닫기">✕</button>
       <ins class="adsbygoogle" style="display:block;width:100%;height:60px"
         data-ad-client="${ADSENSE_CLIENT}" data-ad-slot="${AD_ANCHOR_SLOT}"></ins>`;
-    document.body.appendChild(bar);
-    bar.querySelector(".ad-anchor-close").onclick = () => {
-      bar.remove();
-      document.body.classList.remove("has-ad-anchor");
-    };
+    app.appendChild(bar);
     const ins = bar.querySelector("ins");
-    // 광고가 실제로 채워졌을 때만 바(와 본문 여백)를 보여줘요
+    // 미충전이면 빈 칸이 남지 않게 치워요
     new MutationObserver(() => {
-      const filled = ins.dataset.adStatus === "filled";
-      bar.classList.toggle("on", filled);
-      document.body.classList.toggle("has-ad-anchor", filled);
+      if (ins.dataset.adStatus === "unfilled") bar.remove();
     }).observe(ins, { attributes: true, attributeFilter: ["data-ad-status"] });
     const push = () => { try { (window.adsbygoogle = window.adsbygoogle || []).push({}); } catch { /* noop */ } };
     if (state === "ready") push();
@@ -124,7 +121,7 @@ window.Ads = (() => {
       if (state === "idle") loadScript();
       const wait = setInterval(() => {
         if (state === "ready") { clearInterval(wait); push(); }
-        else if (state === "failed") clearInterval(wait);
+        else if (state === "failed") { clearInterval(wait); bar.remove(); }
       }, 300);
     }
   }
