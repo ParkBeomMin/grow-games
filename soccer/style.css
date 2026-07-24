@@ -1,0 +1,56 @@
+/* 더 윙어 — 그라운드 그린 테마 (grow/base.css 위에 덮어씀) */
+:root {
+  --bg: #0b1e14;
+  --bg2: #102a1d;
+  --field: #16402c;
+  --line: #235c3e;
+  --cream: #eafaf0;
+  --accent: #59c98a;
+  --accent2: #ef5350;
+  --sky: #5fa8ff;
+  --text: #eaf6ef;
+  --dim: #93b6a2;
+}
+
+body {
+  background:
+    radial-gradient(ellipse 120% 60% at 50% -10%, #16402c00 0%, transparent 60%),
+    repeating-linear-gradient(90deg, #0d2317 0px, #0d2317 40px, #0b1e14 40px, #0b1e14 80px),
+    var(--bg);
+}
+
+.title-box h1 { color: var(--accent); }
+
+.btn-primary {
+  background: linear-gradient(180deg, #85e3ac, var(--accent));
+  color: #06331d;
+  box-shadow: 0 4px 0 #2f8f5c;
+}
+
+.bar-fill.scout { background: linear-gradient(90deg, #b6ecca, var(--accent)); }
+.bar-fill.stat { background: linear-gradient(90deg, #9fd0ff, var(--sky)); }
+
+.tag { background: rgba(89, 201, 138, 0.12); color: var(--accent); }
+
+.card-grid.three { grid-template-columns: 1fr 1fr 1fr; }
+
+.series-link {
+  display: block;
+  margin-top: 18px;
+  color: var(--dim);
+  font-size: 0.85rem;
+  text-decoration: none;
+}
+.series-link:hover { color: var(--sky); }
+
+.draft-card {
+  background: linear-gradient(180deg, #16402c, #0e2619);
+  border-color: #2b6b47;
+}
+.draft-summary { border-color: #2b6b47; }
+
+.season-standings .me td { color: var(--accent); font-weight: 700; }
+
+@media (max-width: 380px) {
+  .card-grid.three { grid-template-columns: 1fr; }
+}
