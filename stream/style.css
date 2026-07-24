@@ -1,0 +1,56 @@
+/* 더 스트리머 — 네온 퍼플 방송 테마 (grow/base.css 위에 덮어씀) */
+:root {
+  --bg: #140a26;
+  --bg2: #1d1136;
+  --field: #291845;
+  --line: #4a2c78;
+  --cream: #f3ecff;
+  --accent: #c07bff;
+  --accent2: #ff5c8a;
+  --sky: #7bb8ff;
+  --text: #f0eaff;
+  --dim: #a99bc7;
+}
+
+body {
+  background:
+    radial-gradient(ellipse 120% 60% at 50% -10%, #3a1f66 0%, transparent 60%),
+    radial-gradient(ellipse 80% 50% at 80% 110%, #2a1147 0%, transparent 55%),
+    var(--bg);
+}
+
+.title-box h1 { color: var(--accent); }
+
+.btn-primary {
+  background: linear-gradient(180deg, #d9a8ff, var(--accent));
+  color: #2a0d4d;
+  box-shadow: 0 4px 0 #7d3fc0;
+}
+
+.bar-fill.scout { background: linear-gradient(90deg, #e6c8ff, var(--accent)); }
+.bar-fill.stat { background: linear-gradient(90deg, #a8ccff, var(--sky)); }
+
+.tag { background: rgba(192, 123, 255, 0.14); color: var(--accent); }
+
+.card-grid.three { grid-template-columns: 1fr 1fr 1fr; }
+
+.series-link {
+  display: block;
+  margin-top: 18px;
+  color: var(--dim);
+  font-size: 0.85rem;
+  text-decoration: none;
+}
+.series-link:hover { color: var(--sky); }
+
+.draft-card {
+  background: linear-gradient(180deg, #291845, #180d2e);
+  border-color: #5a3894;
+}
+.draft-summary { border-color: #5a3894; }
+
+.season-standings .me td { color: var(--accent); font-weight: 700; }
+
+@media (max-width: 380px) {
+  .card-grid.three { grid-template-columns: 1fr; }
+}
