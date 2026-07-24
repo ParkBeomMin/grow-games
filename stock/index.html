@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <!-- Google tag (gtag.js) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-7PR9LC4KKV"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-7PR9LC4KKV');
+  </script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>더 인베스터 📈 주린이 키우기</title>
+  <meta name="description" content="시장을 고르고 3년간 공부해 전업투자자에 도전하는 주식 투자 육성 게임 (가상 종목·투자 조언 아님)" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📈</text></svg>" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Jua&family=Gowun+Dodum&display=swap" rel="stylesheet" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <meta name="theme-color" content="#0c1a14" />
+  <link rel="apple-touch-icon" href="icon-192.png" />
+  <link rel="stylesheet" href="../base.css" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main id="app">
+
+    <!-- 타이틀 -->
+    <section class="screen active" id="screen-title">
+      <div class="title-box">
+        <div class="title-ball">📈</div>
+        <h1>더 인베스터</h1>
+        <p class="subtitle">주린이 키우기</p>
+        <p class="desc">월급쟁이 주린이에서 전업투자자까지.<br/>3년의 공부, 당신의 주식 인생이 시작됩니다.</p>
+        <p class="title-count hidden" id="title-count"></p>
+        <button class="btn btn-primary" id="btn-new">새 게임 시작</button>
+        <button class="btn btn-ghost hidden" id="btn-continue">이어하기</button>
+        <button class="btn btn-ghost" id="btn-hof">🏛️ 명예의 전당</button>
+        <button class="btn btn-ghost" id="btn-battle">⚔️ 배틀 아레나</button>
+        <a class="series-link" href="../">🎮 키우기 시리즈 더 보기</a>
+        <p class="disclaimer">⚠️ 가상의 종목으로 즐기는 게임이에요. 실제 투자 조언이 아니에요.</p>
+      </div>
+    </section>
+
+    <!-- 시장 선택 -->
+    <section class="screen" id="screen-agency">
+      <h2>📊 시장 선택</h2>
+      <p class="hint">어느 시장에서 투자를 시작할까요?<br/>시장에 따라 변동성과 성장 환경이 달라져요.</p>
+      <div class="card-grid" id="agency-list"></div>
+      <button class="btn btn-ghost" id="btn-back-first">← 타이틀로</button>
+    </section>
+
+    <!-- 투자 스타일 선택 -->
+    <section class="screen" id="screen-position">
+      <h2>🎯 투자 스타일</h2>
+      <p class="hint" id="position-hint"></p>
+      <div class="card-grid three" id="position-list">
+        <button class="card" data-pos="value">
+          <span class="card-emoji">💎</span>
+          <span class="card-title">가치투자</span>
+          <span class="card-desc">저평가 우량주를<br/>발굴해 존버하는 스타일</span>
+        </button>
+        <button class="card" data-pos="scalp">
+          <span class="card-emoji">🔥</span>
+          <span class="card-title">단타</span>
+          <span class="card-desc">순간 타이밍으로<br/>짧게 치고 빠지는 스타일</span>
+        </button>
+        <button class="card" data-pos="news">
+          <span class="card-emoji">🎯</span>
+          <span class="card-title">정보매매</span>
+          <span class="card-desc">뉴스·재료를 먼저 읽고<br/>테마를 선점하는 스타일</span>
+        </button>
+      </div>
+      <button class="btn btn-ghost" id="btn-back-position">← 뒤로</button>
+    </section>
+
+    <!-- 닉네임 입력 -->
+    <section class="screen" id="screen-name">
+      <h2>✏️ 계좌 개설</h2>
+      <p class="hint" id="name-hint"></p>
+      <div class="name-box">
+        <input id="input-name" type="text" maxlength="8" placeholder="닉네임 입력" />
+        <button class="btn btn-ghost" id="btn-random-name">🎲 랜덤</button>
+      </div>
+      <div class="roll-box">
+        <canvas id="roll-radar" width="280" height="230"></canvas>
+        <div class="roll-stars" id="roll-stars"></div>
+        <button class="btn btn-ghost" id="btn-reroll">🎲 능력치 다시 뽑기</button>
+      </div>
+      <button class="btn btn-primary" id="btn-start">계좌 개설하기</button>
+      <button class="btn btn-ghost" id="btn-back-name">← 뒤로</button>
+    </section>
+
+    <!-- 메인 (육성) -->
+    <section class="screen" id="screen-main">
+      <header class="hud">
+        <div class="hud-id">
+          <div class="hud-left">
+            <div class="hud-name" id="hud-name"></div>
+            <div class="hud-school" id="hud-school"></div>
+          </div>
+        </div>
+        <div class="hud-right">
+          <div class="hud-turn" id="hud-turn"></div>
+          <div class="hud-money" id="hud-money"></div>
+          <button class="mini-btn hud-battle" id="btn-battle-main">⚔️ 배틀</button>
+          <button class="mini-btn hud-battle" id="btn-record-main">📊 기록</button>
+          <button class="mini-btn hud-battle" id="btn-shop-main">🛍️ 상점</button>
+          <button class="mini-btn hud-battle" id="btn-home-main">🏠 홈</button>
+        </div>
+      </header>
+
+      <div class="gauges">
+        <div class="gauge">
+          <div class="gauge-label"><span>🩹 컨디션</span><span id="cond-num"></span></div>
+          <div class="bar"><div class="bar-fill cond" id="cond-bar"></div></div>
+        </div>
+        <div class="gauge">
+          <div class="gauge-label"><span>📈 투자 내공</span><span id="scout-num"></span></div>
+          <div class="bar"><div class="bar-fill scout" id="scout-bar"></div></div>
+        </div>
+      </div>
+
+      <div class="stats" id="stats-box"></div>
+
+      <div class="actions">
+        <p class="actions-title">이번 달 뭘 공부할까요?</p>
+        <div class="action-grid" id="action-list"></div>
+      </div>
+
+      <div class="log" id="log-box"></div>
+    </section>
+
+    <!-- 모의투자 대회 / 전업 도전 -->
+    <section class="screen" id="screen-stage">
+      <h2 id="stage-title"></h2>
+      <div class="tour-round" id="stage-round"></div>
+      <label class="auto-toggle"><input type="checkbox" id="auto-mini" /> 🤖 매매 자동 진행</label>
+      <div class="tour-card" id="stage-card"></div>
+      <button class="btn btn-primary" id="btn-stage-next">다음</button>
+    </section>
+
+    <!-- 엔딩 -->
+    <section class="screen" id="screen-ending">
+      <h2>📈 전업 도전 최종 결과</h2>
+      <div class="draft-card" id="ending-card"></div>
+      <div class="draft-actions">
+        <button class="btn btn-ghost" id="btn-share">📋 결과 복사</button>
+        <button class="btn btn-primary" id="btn-restart">처음부터 다시</button>
+      </div>
+    </section>
+
+
+    <!-- 전업 후 활동 (실전 준비) -->
+    <section class="screen" id="screen-pro">
+      <header class="hud">
+        <div class="hud-id">
+          <div class="hud-left">
+            <div class="hud-name" id="pro-name"></div>
+            <div class="hud-school" id="pro-team"></div>
+          </div>
+        </div>
+        <div class="hud-right">
+          <div class="hud-turn" id="pro-turn"></div>
+          <div class="hud-money" id="pro-money"></div>
+          <button class="mini-btn hud-battle" id="btn-battle-pro">⚔️ 배틀</button>
+          <button class="mini-btn hud-battle" id="btn-record-pro">📊 기록</button>
+          <button class="mini-btn hud-battle" id="btn-shop-pro">🛍️ 상점</button>
+          <button class="mini-btn hud-battle" id="btn-home-pro">🏠 홈</button>
+        </div>
+      </header>
+      <div class="gauges">
+        <div class="gauge">
+          <div class="gauge-label"><span>🩹 컨디션</span><span id="pro-cond-num"></span></div>
+          <div class="bar"><div class="bar-fill cond" id="pro-cond-bar"></div></div>
+        </div>
+      </div>
+      <div class="stats" id="pro-stats"></div>
+      <div class="actions">
+        <p class="actions-title" id="pro-camp-title"></p>
+        <div class="action-grid" id="pro-actions"></div>
+      </div>
+      <div class="log" id="pro-log"></div>
+    </section>
+
+    <!-- 연말 결산 / 은퇴식 -->
+    <section class="screen" id="screen-career">
+      <h2 id="career-title"></h2>
+      <div class="draft-card" id="career-card"></div>
+      <div class="draft-actions" id="career-actions"></div>
+      <div class="ad-box" id="ad-career"></div>
+    </section>
+
+    <!-- 명예의 전당 -->
+    <section class="screen" id="screen-hof">
+      <h2>🏛️ 명예의 전당</h2>
+      <p class="hint">시장을 주름잡은 투자자들의 커리어가 여기 잠들어 있어요.</p>
+      <div id="hof-list"></div>
+      <button class="btn btn-ghost" id="btn-hof-back">← 돌아가기</button>
+    </section>
+
+    <!-- 배틀 아레나 -->
+    <section class="screen" id="screen-battle">
+      <h2>⚔️ 배틀 아레나</h2>
+      <p class="hint">수익률 대결! 현역이든 은퇴했든 언제든 참전할 수 있어요.</p>
+      <div id="battle-setup"></div>
+      <div id="battle-view"></div>
+      <div id="battle-rank"></div>
+      <button class="btn btn-ghost" id="btn-battle-back">← 돌아가기</button>
+    </section>
+
+
+    <!-- 기록 -->
+    <section class="screen" id="screen-record">
+      <h2>📊 투자 기록</h2>
+      <div class="draft-card" id="record-card"></div>
+      <button class="btn btn-ghost" id="btn-record-back">← 돌아가기</button>
+    </section>
+
+    <!-- 장비 상점 -->
+    <section class="screen" id="screen-shop">
+      <h2>🛍️ 장비 상점</h2>
+      <p class="hint">시드로 장비를 마련해 능력치를 올려요. 효과는 즉시 적용!</p>
+      <p class="shop-money" id="shop-money"></p>
+      <div id="shop-list"></div>
+      <div class="battle-row" id="ad-row"></div>
+      <button class="btn btn-ghost" id="btn-shop-back">← 돌아가기</button>
+    </section>
+
+  </main>
+  <script src="../radar.js"></script>
+  <script src="../timing.js"></script>
+  <script src="../match.js"></script>
+  <script src="../stats.js"></script>
+  <script src="../ads.js"></script>
+  <script src="game.js"></script>
+  <script src="career.js"></script>
+<script>if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");</script>
+</body>
+</html>

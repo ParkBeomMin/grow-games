@@ -1,0 +1,59 @@
+/* 더 인베스터 — 다크 그린/차트 테마 (grow/base.css 위에 덮어씀) */
+:root {
+  --bg: #0c1a14;
+  --bg2: #122720;
+  --field: #163a2c;
+  --line: #245741;
+  --cream: #eafaf1;
+  --accent: #4fd88a;
+  --accent2: #ef5350;
+  --sky: #6fd0c0;
+  --text: #eaf5ef;
+  --dim: #92b0a2;
+}
+
+body {
+  background:
+    radial-gradient(ellipse 120% 60% at 50% -10%, #14342410 0%, transparent 60%),
+    linear-gradient(180deg, #123023 0%, transparent 50%),
+    var(--bg);
+}
+
+.title-box h1 { color: var(--accent); }
+
+.btn-primary {
+  background: linear-gradient(180deg, #7ce8ad, var(--accent));
+  color: #06341f;
+  box-shadow: 0 4px 0 #2f9c63;
+}
+
+.bar-fill.scout { background: linear-gradient(90deg, #a7f0cb, var(--accent)); }
+.bar-fill.stat { background: linear-gradient(90deg, #a0e6da, var(--sky)); }
+
+.tag { background: rgba(79, 216, 138, 0.12); color: var(--accent); }
+
+.card-grid.three { grid-template-columns: 1fr 1fr 1fr; }
+
+.series-link {
+  display: block;
+  margin-top: 18px;
+  color: var(--dim);
+  font-size: 0.85rem;
+  text-decoration: none;
+}
+.series-link:hover { color: var(--sky); }
+
+.disclaimer { margin-top: 12px; color: var(--dim); font-size: 0.72rem; opacity: 0.8; }
+
+.draft-card {
+  background: linear-gradient(180deg, #163a2c, #0f261c);
+  border-color: #2f6b4f;
+}
+.draft-summary { border-color: #2f6b4f; }
+
+/* 수익률 랭킹에서 내 계좌 강조 */
+.season-standings .me td { color: var(--accent); font-weight: 700; }
+
+@media (max-width: 380px) {
+  .card-grid.three { grid-template-columns: 1fr; }
+}
