@@ -251,6 +251,7 @@ function showAdModal(amount, onDone) {
       S.money = (S.money || 0) + amount;
       localStorage.setItem(AD_CD_KEY, Date.now());
       save();
+      if (window.Stats) Stats.log("bonus", { type: "money" });
       body.innerHTML = `<div class="ad-emoji">💰</div><b>+${amount}만</b> 획득!<br/><span class="av-note">다음 보너스는 30분 후에 열려요</span>`;
     } else {
       body.innerHTML = `<div class="ad-emoji">💧</div>보상을 받지 못했어요`;
@@ -283,6 +284,7 @@ function showAdTrainModal(rerender) {
       S.stats[d.key] = clamp(S.stats[d.key] + gain, 0, STAT_CAP);
       localStorage.setItem(AD_CD_KEY, Date.now());
       save();
+      if (window.Stats) Stats.log("bonus", { type: "train" });
       body.innerHTML = `<div class="ad-emoji">${d.emoji}</div><b>${d.name} +${gain.toFixed(1)}</b> 특훈 완료!<br/><span class="av-note">턴을 소모하지 않는 보너스 연습 · 다음은 30분 후</span>`;
     } else {
       body.innerHTML = `<div class="ad-emoji">💧</div>특훈에 실패했어요`;
@@ -499,6 +501,7 @@ $("btn-random-name").addEventListener("click", () => {
 $("btn-start").addEventListener("click", () => {
   const name = $("input-name").value.trim() || pick(STAGE_NAMES);
   curSlot = null; // 새 연습생은 새 슬롯에 — 기존 저장은 그대로 남아요
+  if (window.Stats) Stats.log("new_player", { pos: chosenPos, agency: chosenAgency.id });
   S = newState(chosenAgency, chosenPos, name, pendingRoll);
   addLog(`🎤 ${chosenAgency.name} 연습생 계약! ${name}의 연습실 생활이 시작됐어요.`);
   save();
@@ -1075,6 +1078,8 @@ function showEnding(survivedFinal, lastRound) {
     location.reload();
   };
 
+  if (window.Stats) Stats.log("ending", { title, score: Math.round(score) });
+
   // 데뷔조 합류·차기 데뷔조면 데뷔 활동으로 이어갈 수 있어요
   if (window.IdolCareer) window.IdolCareer.onEnding(survivedFinal || lastRound === 3, survivedFinal && score >= 520);
   else clearSave();
@@ -1084,3 +1089,4 @@ function showEnding(survivedFinal, lastRound) {
 // ---------- 시작 ----------
 initTitle();
 if (window.Avatar) window.Avatar.mount("avatar-slot");
+if (window.Stats) Stats.init("idol");

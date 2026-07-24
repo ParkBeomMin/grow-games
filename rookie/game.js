@@ -256,6 +256,7 @@ function showAdModal(amount, onDone) {
       S.money = (S.money || 0) + amount;
       localStorage.setItem(AD_CD_KEY, Date.now());
       save();
+      if (window.Stats) Stats.log("bonus", { type: "money" });
       body.innerHTML = `<div class="ad-emoji">💰</div><b>+${amount}만</b> 획득!<br/><span class="av-note">다음 보너스는 30분 후에 열려요</span>`;
     } else {
       body.innerHTML = `<div class="ad-emoji">💧</div>보상을 받지 못했어요`;
@@ -288,6 +289,7 @@ function showAdTrainModal(rerender) {
       S.stats[d.key] = clamp(S.stats[d.key] + gain, 0, STAT_CAP);
       localStorage.setItem(AD_CD_KEY, Date.now());
       save();
+      if (window.Stats) Stats.log("bonus", { type: "train" });
       body.innerHTML = `<div class="ad-emoji">${d.emoji}</div><b>${d.name} +${gain.toFixed(1)}</b> 특훈 완료!<br/><span class="av-note">턴을 소모하지 않는 보너스 훈련 · 다음은 30분 후</span>`;
     } else {
       body.innerHTML = `<div class="ad-emoji">💧</div>특훈에 실패했어요`;
@@ -562,6 +564,7 @@ $("btn-random-name").addEventListener("click", () => {
 $("btn-start").addEventListener("click", () => {
   const name = $("input-name").value.trim() || pick(SURNAMES) + pick(GIVEN);
   curSlot = null; // 새 선수는 새 슬롯에 — 기존 선수 저장은 그대로 남아요
+  if (window.Stats) Stats.log("new_player", { pos: chosenPos, region: chosenRegion.id });
   S = newState(chosenRegion, chosenPos, name, pendingRoll);
   addLog(`⚾ ${chosenRegion.school} 입학! ${name}의 야구 인생이 시작됐어요.`);
   save();
@@ -1432,6 +1435,8 @@ function showDraft() {
     msg = "아쉽지만 야구 인생은 길어요. 4년 뒤 대졸 드래프트를 노려봐요!";
   }
 
+  if (window.Stats) Stats.log("draft", { title, score: Math.round(score) });
+
   const statLines = STAT_DEFS[S.pos]
     .map((d) => `${d.emoji} ${d.name} ${Math.round(S.stats[d.key])}`)
     .join(" · ");
@@ -1472,3 +1477,4 @@ function showDraft() {
 // ---------- 시작 ----------
 initTitle();
 if (window.Avatar) window.Avatar.mount("avatar-slot");
+if (window.Stats) Stats.init("rookie");

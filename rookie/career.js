@@ -58,6 +58,7 @@ window.Career = (() => {
     S.career = { seasons: [], mvp: 0, gg: 0, roy: 0, rings: 0, warSum: 0 };
     S.proLog = [];
     S.role = assignRole();
+    if (window.Stats) Stats.log("pro_enter", { team, role: S.role });
     startCamp();
   }
 
@@ -494,6 +495,7 @@ window.Career = (() => {
     if (champ) S.career.rings += 1;
     S.career.warSum = Math.round((S.career.warSum + Math.max(war, 0)) * 10) / 10;
     S.career.seasons.push({ y: S.proYear, age: S.age, war, line, rank, champ, awards, role: S.role, raw });
+    if (window.Stats) Stats.log("season_end", { y: S.proYear, war, rank, champ });
 
     for (const d of STAT_DEFS[S.pos]) {
       if (S.age <= 25) S.stats[d.key] = clamp(S.stats[d.key] + rand(0, 1.2) * S.talents[d.key], 0, STAT_CAP);
@@ -587,6 +589,7 @@ window.Career = (() => {
     const hof = loadHof();
     hof.push(entry);
     saveHof(hof);
+    if (window.Stats) Stats.log("retire", { seasons: entry.seasons, war: entry.warSum, score: entry.score });
     clearSave();
 
     $("career-title").textContent = "🏛️ 은퇴식";
@@ -716,6 +719,7 @@ window.Career = (() => {
   function fight(me, opp) {
     const p = clamp(0.5 + (me.bp - opp.bp) / 700, 0.08, 0.92);
     const win = Math.random() < p;
+    if (window.Stats) Stats.log("battle", { win, remote: !!opp.remote });
     const myRuns = win ? randInt(3, 8) : randInt(0, 3);
     const oppRuns = win ? randInt(0, Math.max(0, myRuns - 1)) : myRuns + randInt(1, 3);
 

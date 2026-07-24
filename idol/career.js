@@ -56,6 +56,7 @@ window.IdolCareer = (() => {
     S.proYear = 0;
     S.career = { years: [], wins: 0, daesang: 0, bonsang: 0, rookie: 0, sales: 0 };
     S.proLog = [];
+    if (window.Stats) Stats.log("debut", { group: S.group, center: !!center });
     startPrep();
   }
 
@@ -227,6 +228,7 @@ window.IdolCareer = (() => {
       S.career.wins += wins;
       S.career.sales += sales;
       S.career.years.push({ y: S.proYear, hype: Math.round(hype * 10) / 10, wins, sales, dFan, awards });
+      if (window.Stats) Stats.log("year_end", { y: S.proYear, wins, sales });
       // 초반엔 성장, 8년차부터는 서서히 하락
       for (const d of STAT_DEFS) {
         if (S.proYear <= 3) S.stats[d.key] = clamp(S.stats[d.key] + rand(0, 1) * S.talents[d.key], 0, STAT_CAP);
@@ -315,6 +317,7 @@ window.IdolCareer = (() => {
     const hof = loadHof();
     hof.push(entry);
     saveHof(hof);
+    if (window.Stats) Stats.log("retire", { years: entry.seasons, wins: entry.wins, score: entry.score });
     clearSave();
 
     $("career-title").textContent = "🏛️ 은퇴식";
@@ -442,6 +445,7 @@ window.IdolCareer = (() => {
   function fight(me, opp) {
     const p = clamp(0.5 + (me.bp - opp.bp) / 700, 0.08, 0.92);
     const win = Math.random() < p;
+    if (window.Stats) Stats.log("battle", { win, remote: !!opp.remote });
     let a, b;
     if (win) { a = randInt(86, 97); b = a - randInt(2, 8); }
     else { b = randInt(86, 97); a = b - randInt(2, 8); }
