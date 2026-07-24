@@ -59,12 +59,13 @@
     const $ = (id) => document.getElementById(id);
     const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
 
-    const GAMES = { rookie: "⚾ 더 루키", idol: "🎤 더 트레이니", stock: "📈 더 인베스터", soccer: "⚽ 더 윙어", dev: "💻 더 커밋" };
+    const GAMES = { rookie: "⚾ 더 루키", idol: "🎤 더 트레이니", stock: "📈 더 인베스터", soccer: "⚽ 더 윙어", dev: "💻 더 커밋", chef: "🍜 더 셰프" };
     const POS = {
       batter: "타자", pitcher: "투수", vocal: "보컬", dance: "댄스", rap: "랩",
       value: "가치투자", scalp: "단타", news: "정보매매",
       fw: "공격수", mf: "미드필더", df: "수비수",
       front: "프론트엔드", back: "백엔드", ai: "AI·데이터",
+      korean: "한식", western: "양식", dessert: "디저트",
     };
     // 예전 id로 저장된 선택값을 읽기 좋은 이름으로 합쳐요 (id↔이름 혼재 방지)
     const CHOICE_ALIAS = {

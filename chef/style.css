@@ -1,0 +1,55 @@
+/* 더 셰프 — 따뜻한 주방 오렌지 테마 (grow/base.css 위에 덮어씀) */
+:root {
+  --bg: #2a1410;
+  --bg2: #371c15;
+  --field: #48261b;
+  --line: #6b3a28;
+  --cream: #fbeee6;
+  --accent: #ff9d5c;
+  --accent2: #ef5350;
+  --sky: #ffcf8f;
+  --text: #f6eae1;
+  --dim: #c2a394;
+}
+
+body {
+  background:
+    radial-gradient(ellipse 120% 60% at 50% -10%, #5a2f1e 0%, transparent 60%),
+    var(--bg);
+}
+
+.title-box h1 { color: var(--accent); }
+
+.btn-primary {
+  background: linear-gradient(180deg, #ffbd85, var(--accent));
+  color: #4a2205;
+  box-shadow: 0 4px 0 #c76a30;
+}
+
+.bar-fill.scout { background: linear-gradient(90deg, #ffd9b0, var(--accent)); }
+.bar-fill.stat { background: linear-gradient(90deg, #ffe0b8, var(--sky)); }
+
+.tag { background: rgba(255, 157, 92, 0.14); color: var(--accent); }
+
+.card-grid.three { grid-template-columns: 1fr 1fr 1fr; }
+
+.series-link {
+  display: block;
+  margin-top: 18px;
+  color: var(--dim);
+  font-size: 0.85rem;
+  text-decoration: none;
+}
+.series-link:hover { color: var(--sky); }
+
+.draft-card {
+  background: linear-gradient(180deg, #48261b, #331910);
+  border-color: #7a4530;
+}
+.draft-summary { border-color: #7a4530; }
+
+.season-standings .me td { color: var(--accent); font-weight: 700; }
+
+@media (max-width: 380px) {
+  .card-grid.three { grid-template-columns: 1fr; }
+}
