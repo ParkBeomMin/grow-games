@@ -113,7 +113,7 @@
       return html || `<section><h2>선택 분포</h2><p class="empty">아직 새 캐릭터 데이터가 없어요.</p></section>`;
     }
 
-    function funnelSection(rows) {
+    function funnelSection(rows, hofByGame) {
       let html = "";
       for (const game of Object.keys(GAMES)) {
         const g = rows.filter((r) => r.game === game);
@@ -121,7 +121,8 @@
         const order = ["visit", "new_player", "draft", "debut", "ending", "pro_enter", "season_end", "year_end", "retire", "battle", "bonus"];
         g.sort((a, b) => order.indexOf(a.event) - order.indexOf(b.event));
         const max = Math.max(...g.map((r) => r.total));
-        html += `<section class="funnel"><h2>${GAMES[game]} · 이벤트별 발생</h2>${
+        const hofN = hofByGame ? (hofByGame[game] || 0) : null;
+        html += `<section class="funnel"><h2>${GAMES[game]} · 이벤트별 발생${hofN != null ? ` · 🏛️명전 ${hofN}명` : ""}</h2>${
           g.map((r) => bar(EVENT_LABEL[r.event] || r.event, r.total, max)).join("")
         }</section>`;
       }
@@ -174,12 +175,28 @@ grant select on public.stats_summary, public.stats_choices, public.stats_daily t
         <button class="copy" id="copysql">📋 SQL 복사</button></section>`;
     }
 
+    // 명예의 전당 실제 등록 인원 (hof 테이블 직접 조회 — 읽기 정책 open)
+    async function getHof() {
+      try {
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/hof?select=game&limit=5000`, { headers: H });
+        if (!res.ok) return null;
+        return res.json();
+      } catch { return null; }
+    }
+
     async function load() {
       $("content").innerHTML = `<p class="empty">불러오는 중…</p>`;
       let summary, choices, daily, failed = false;
       try { summary = await getView("stats_summary"); } catch { failed = true; }
       try { choices = await getView("stats_choices"); } catch { failed = true; }
       try { daily = await getView("stats_daily"); } catch { failed = true; }
+      const hofRows = await getHof();
+      let hofTotal = null, hofByGame = null;
+      if (hofRows) {
+        hofByGame = {};
+        for (const r of hofRows) hofByGame[r.game] = (hofByGame[r.game] || 0) + 1;
+        hofTotal = hofRows.length;
+      }
 
       if (failed || !summary) {
         $("content").innerHTML = setupCard("아직 집계 뷰가 없거나 접근할 수 없어요.");
@@ -196,12 +213,16 @@ grant select on public.stats_summary, public.stats_choices, public.stats_daily t
         <div class="kpi"><div class="n">${totalVisits.toLocaleString()}</div><div class="l">순 방문자</div></div>
         <div class="kpi"><div class="n">${totalNew.toLocaleString()}</div><div class="l">새 캐릭터</div></div>
         <div class="kpi"><div class="n">${totalBattle.toLocaleString()}</div><div class="l">배틀 횟수</div></div>
-        <div class="kpi"><div class="n">${totalRetire.toLocaleString()}</div><div class="l">은퇴(완주)</div></div>
-      </div>`;
+        <div class="kpi"><div class="n">${totalRetire.toLocaleString()}</div><div class="l">은퇴 이벤트</div></div>
+        ${hofTotal != null ? `<div class="kpi"><div class="n">${hofTotal.toLocaleString()}</div><div class="l">🏛️ 명예의 전당</div></div>` : ""}
+      </div>
+      ${hofTotal != null && hofTotal !== totalRetire
+        ? `<p class="empty" style="margin:-12px 0 20px">ℹ️ 은퇴 이벤트(${totalRetire})는 통계 도입 이후 집계, 명예의 전당(${hofTotal})은 전체 은퇴자 명단이라 숫자가 달라요.</p>`
+        : ""}`;
 
       html += dailySection(daily || []);
       html += choiceSection(choices || []);
-      html += funnelSection(summary);
+      html += funnelSection(summary, hofByGame);
 
       if (!summary.length) html = setupCard("뷰는 있는데 아직 수집된 데이터가 없어요.") + html;
       $("content").innerHTML = html;
