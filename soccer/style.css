@@ -51,6 +51,47 @@ body {
 
 .season-standings .me td { color: var(--accent); font-weight: 700; }
 
+/* FM식 경기 스코어보드 */
+.matchscore {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin: 6px 0 4px;
+  padding: 12px 10px;
+  background: linear-gradient(180deg, #16402c, #0e2619);
+  border: 1px solid #2b6b47;
+  border-radius: 14px;
+}
+.matchscore .ms-team {
+  flex: 1;
+  text-align: center;
+  font-family: "Jua", sans-serif;
+  font-size: 0.95rem;
+  color: var(--text);
+  line-height: 1.2;
+}
+.matchscore .ms-team.home { color: var(--accent); }
+.matchscore .ms-num {
+  font-family: "Jua", sans-serif;
+  font-size: 1.7rem;
+  min-width: 84px;
+  text-align: center;
+  color: var(--text);
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 10px;
+  padding: 2px 8px;
+}
+.matchscore .ms-num.win { color: #85e3ac; }
+.matchscore .ms-num.lose { color: #ff8a80; }
+.ms-line {
+  text-align: center;
+  color: var(--dim);
+  font-size: 0.9rem;
+  margin-bottom: 8px;
+}
+.ms-line b { color: var(--accent); }
+
 @media (max-width: 380px) {
   .card-grid.three { grid-template-columns: 1fr; }
 }

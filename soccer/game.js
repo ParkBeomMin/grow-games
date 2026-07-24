@@ -103,6 +103,7 @@ function newState(market, pos, name, roll) {
     buff: false,
     trophies: [],
     stages: 0, // 출전 경기 수
+    youth: { g: 0, a: 0, def: 0 }, // 유스 통산 골·도움·수비
     log: [],
   };
 }
@@ -356,19 +357,22 @@ function openRecord(returnTo) {
 function renderRecord() {
   const m = marketOf();
   const trophyLine = S.trophies && S.trophies.length ? `🏆 ${S.trophies.join(", ")}` : "🏆 대회 1위 경력 없음";
+  const y = S.youth || { g: 0, a: 0, def: 0 };
   let curHtml = "";
   if (S.activity) {
     const act = S.activity;
-    curHtml = `<br/><b>🔥 진행 중인 시즌</b><br/>${["전반기", "후반기"][act.cb - 1] || act.cb + "차"} · ${act.week}/${act.weekTotal}R 소화<br/>이 주의 선수 ${act.wins}회 · 활약 지수 ${act.hypeSum >= 0 ? "+" : ""}${Math.round(act.hypeSum * 10) / 10}<br/>`;
+    const rec = act.teamW != null ? ` · ${act.teamW}승 ${act.teamD}무 ${act.teamL}패` : "";
+    curHtml = `<br/><b>🔥 진행 중인 시즌</b><br/>${["전반기", "후반기"][act.cb - 1] || act.cb + "차"} · ${act.week}/${act.weekTotal}R 소화${rec}<br/>⚽ 골 ${act.goals || 0} · 🅰️ 도움 ${act.assists || 0} · 🛡️ 수비 ${act.defense || 0} · 🏅 MOM ${act.wins}회<br/>`;
   }
   let proHtml = "";
   if (S.career && S.career.years && S.career.years.length) {
     const rows = S.career.years.map((x) =>
-      `<tr><td>${x.y}시즌</td><td>MOM ${x.wins}회</td><td>${x.sales}P</td><td>${x.awards && x.awards.length ? "🏆" + x.awards.join(",") : "-"}</td></tr>`
+      `<tr><td>${x.y}시즌</td><td>${x.apps != null ? x.apps : "-"}</td><td>${x.goals != null ? x.goals : "-"}</td><td>${x.assists != null ? x.assists : "-"}</td><td>${x.defense != null ? x.defense : "-"}</td><td>${x.awards && x.awards.length ? "🏆" + x.awards.join(",") : "-"}</td></tr>`
     ).join("");
+    const cr = S.career;
     proHtml = `
-      <table class="season-table"><thead><tr><th>시즌</th><th>MOM</th><th>공격P</th><th>수상</th></tr></thead><tbody>${rows}</tbody></table>
-      <div>통산 ${S.career.years.length}시즌 · MOM ${S.career.wins}회 · 🏆 MVP ${S.career.daesang} · 베스트11 ${S.career.bonsang}${S.career.rookie ? " · 신인왕" : ""}</div>`;
+      <table class="season-table"><thead><tr><th>시즌</th><th>출전</th><th>⚽골</th><th>🅰️도움</th><th>🛡️수비</th><th>수상</th></tr></thead><tbody>${rows}</tbody></table>
+      <div>통산 ${cr.years.length}시즌 · 출전 ${cr.apps || 0}경기 · ⚽ ${cr.goals || 0}골 · 🅰️ ${cr.assists || 0}도움 · 🛡️ 수비 ${cr.defense || 0} · 🏅 MOM ${cr.wins}회<br/>🏆 MVP ${cr.daesang} · 베스트11 ${cr.bonsang}${cr.rookie ? " · 신인왕" : ""}</div>`;
   }
   const gearList = STAT_DEFS
     .map((d) => {
@@ -382,7 +386,7 @@ function renderRecord() {
     <div class="draft-title">${S.name}</div>
     <div class="draft-team">${S.phase === "soccer-pro" ? `${S.group}${S.center ? " · 주장" : ""} · ${S.proYear}시즌` : `${m.emoji} ${m.name} 유망주 ${S.year}년차`} · ${POS_INFO[S.pos].name}</div>
     <div class="draft-summary">
-      <b>🌱 유스 기록</b><br/>출전 ${S.stages || 0}경기 · ⭐ 명성 ${Math.round(S.fandom)}<br/>${trophyLine}<br/>
+      <b>🌱 유스 기록</b><br/>출전 ${S.stages || 0}경기 · ⚽ ${y.g}골 · 🅰️ ${y.a}도움 · 🛡️ 수비 ${y.def}<br/>⭐ 명성 ${Math.round(S.fandom)}<br/>${trophyLine}<br/>
       ${curHtml}
       ${proHtml ? `<br/><b>⚽ 프로 기록</b>${proHtml}<br/>` : ""}
       ${gearList ? `<br/><b>🛍️ 보유 장비</b> ${gearList}` : ""}
@@ -770,6 +774,51 @@ function gradeOf(score) {
   return makeGrade("D");
 }
 
+// ---------- 경기 스탯(골·도움·수비) & 스코어 산출 ----------
+const OPP_CLUBS = ["FC 노바", "레인저스", "선더볼트", "블랙이글스", "시티즌", "레알 몬테", "아틀레티코 델", "포레스트 FC"];
+// 간이 포아송 샘플러 — 골/도움 수 같은 이산 이벤트에 자연스러운 분포를 줘요
+function poissonish(lam) {
+  let n = 0, L = Math.exp(-Math.max(0, lam)), p = 1;
+  do { p *= Math.random(); n++; } while (p > L && n < 12);
+  return n - 1;
+}
+// rating(평점 0~10대) → 이번 경기 골·도움·수비 (포지션별 가중)
+function matchContribution(rating) {
+  const perf = clamp((rating - 5) / 4 + 0.6, 0.15, 1.6);
+  const shootF = (S.stats.shoot || 40) / 100;
+  const passF = (S.stats.pass || 40) / 100;
+  const defF = (S.stats.defense || 40) / 100;
+  const gLam = (S.pos === "fw" ? 1.05 : S.pos === "mf" ? 0.5 : 0.14) * perf * (0.55 + shootF);
+  const aLam = (S.pos === "mf" ? 0.95 : S.pos === "fw" ? 0.55 : 0.28) * perf * (0.55 + passF);
+  const dLam = (S.pos === "df" ? 2.3 : S.pos === "mf" ? 1.2 : 0.45) * perf * (0.55 + defF);
+  return { g: poissonish(gLam), a: poissonish(aLam), def: poissonish(dLam) };
+}
+// 내 골 수 & 평점에 어울리는 팀 스코어(우리:상대)와 승부 결과
+function matchScoreline(myGoals, rating) {
+  let tf = myGoals + randInt(0, 2);
+  const strength = clamp((rating - 5) / 5 + ((S.stats.defense || 40) - 50) / 120, -0.6, 0.9);
+  const winP = clamp(0.45 + strength * 0.4, 0.15, 0.82);
+  const roll = Math.random();
+  let ta, res;
+  if (roll < winP) { ta = randInt(0, Math.max(0, tf - 1)); res = "W"; }
+  else if (roll < winP + 0.22) { ta = tf; res = "D"; }
+  else { ta = tf + randInt(1, 2); res = "L"; }
+  return { tf, ta, res };
+}
+const RES_LABEL = { W: "승리 🎉", D: "무승부 🤝", L: "패배 💧" };
+// 골/도움/수비 이벤트를 분(') 마커와 함께 FM식 피드 라인으로
+function matchEventFeeds(c, oppName, tf, ta) {
+  const mins = [];
+  for (let i = 0; i < c.g; i++) mins.push({ min: randInt(3, 90), text: `⚽ 골!! ${S.name} 득점`, cls: "good" });
+  for (let i = 0; i < c.a; i++) mins.push({ min: randInt(3, 90), text: `🅰️ 도움! ${S.name}의 결정적 패스`, cls: "good" });
+  if (S.pos === "df" && c.def >= 3 && ta === 0) mins.push({ min: randInt(60, 90), text: `🛡️ 완벽한 클린시트! 뒷문을 걸어 잠갔어요`, cls: "good" });
+  else if (c.def >= 2) mins.push({ min: randInt(20, 85), text: `🛡️ 결정적 태클·차단 ${c.def}회로 위기를 막아요`, cls: "" });
+  const oppGoals = Math.max(0, ta);
+  for (let i = 0; i < Math.min(oppGoals, 2); i++) mins.push({ min: randInt(3, 90), text: `😣 ${oppName} 실점…`, cls: "bad" });
+  mins.sort((x, y) => x.min - y.min);
+  return mins.map((e) => ({ text: `${e.min}' ${e.text}`, cls: e.cls }));
+}
+
 // ---------- 경기 연출 ----------
 function shuffle(a) {
   for (let i = a.length - 1; i > 0; i--) {
@@ -958,12 +1007,17 @@ function playEvalStage() {
     S.money = (S.money || 0) + pay;
     S.fandom = Math.max(0, S.fandom + pts);
     S.stages += 1;
+    const rating = clamp(score / 10 + (fg.pts - grade.pts) * 0.06, 1, 12);
+    const c = matchContribution(rating);
+    S.youth = S.youth || { g: 0, a: 0, def: 0 };
+    S.youth.g += c.g; S.youth.a += c.a; S.youth.def += c.def;
     ev.totalPts += pts;
     ev.scores.push(score + (fg.pts - grade.pts) * 0.6);
     save();
     const resultHTML = `
-      <div class="tour-vs">경기 평점 <span class="${fg.g === "S" || fg.g === "A" ? "win" : fg.g === "D" ? "lose" : ""}">${fg.g}</span></div>
+      <div class="tour-vs">경기 평점 <span class="${fg.g === "S" || fg.g === "A" ? "win" : fg.g === "D" ? "lose" : ""}">${fg.g}</span> <span class="score-final">${(rating).toFixed(1)}점</span></div>
       <div class="tour-line">${fg.txt}</div>
+      <div class="tour-pts">⚽ 골 ${c.g} · 🅰️ 도움 ${c.a} · 🛡️ 수비 ${c.def}</div>
       <div class="tour-pts">${pts >= 0 ? `⭐ 명성 +${pts}` : `📉 명성 ${pts}`}${pay ? ` · 💰 수당 +${pay}만` : ""}</div>`;
     return ev.idx < 3
       ? { resultHTML, nextLabel: "다음 경기", nextFn: playEvalStage }
@@ -1035,10 +1089,15 @@ function playSurvivalRound() {
       0.12, 0.93
     );
     const pass = Math.random() < p;
+    const rating = clamp(score / 10 + (fg.pts - grade.pts) * 0.06, 1, 12);
+    const c = matchContribution(rating);
+    S.youth = S.youth || { g: 0, a: 0, def: 0 };
+    S.youth.g += c.g; S.youth.a += c.a; S.youth.def += c.def;
     save();
     const resultHTML = `
-      <div class="tour-vs">경기 평점 ${fg.g} — <span class="${pass ? "win" : "lose"}">${pass ? "통과! 🎉" : "탈락… 💧"}</span></div>
+      <div class="tour-vs">경기 평점 ${fg.g} <span class="score-final">${rating.toFixed(1)}점</span> — <span class="${pass ? "win" : "lose"}">${pass ? "통과! 🎉" : "탈락… 💧"}</span></div>
       <div class="tour-line">${fg.txt}</div>
+      <div class="tour-pts">⚽ 골 ${c.g} · 🅰️ 도움 ${c.a} · 🛡️ 수비 ${c.def}</div>
       <div class="tour-pts">${pts >= 0 ? `⭐ 명성 +${pts}` : `📉 명성 ${pts}`}</div>`;
     if (pass && ev.round < SURVIVAL_ROUNDS.length - 1) {
       ev.round += 1;
@@ -1106,6 +1165,7 @@ function showEnding(survivedFinal, lastRound) {
       ${m.emoji} ${m.name} · ${POS_INFO[S.pos].name} ${S.name}<br/>
       ${statLines}<br/>
       ⭐ 최종 명성 ${Math.round(S.fandom)} · 출전 ${S.stages}경기<br/>
+      ⚽ ${(S.youth || {}).g || 0}골 · 🅰️ ${(S.youth || {}).a || 0}도움 · 🛡️ 수비 ${(S.youth || {}).def || 0}<br/>
       ${trophyLine}
     </div>`;
 

@@ -54,7 +54,7 @@ window.WingerCareer = (() => {
     S.group = pick(CLUB_NAMES);
     S.center = !!captain;
     S.proYear = 0;
-    S.career = { years: [], wins: 0, daesang: 0, bonsang: 0, rookie: 0, sales: 0 };
+    S.career = { years: [], wins: 0, daesang: 0, bonsang: 0, rookie: 0, sales: 0, goals: 0, assists: 0, defense: 0, apps: 0, teamW: 0, teamD: 0, teamL: 0 };
     S.proLog = [];
     if (window.Stats) Stats.log("debut", { group: S.group, center: !!captain });
     startPrep();
@@ -93,6 +93,8 @@ window.WingerCareer = (() => {
       cb: 1, cbTotal: CB_PER_YEAR,
       week: 0, weekTotal: WEEKS_PER_CB,
       wins: 0, sales: 0, hypeSum: 0, cbHype: 0, cbWins: 0,
+      goals: 0, assists: 0, defense: 0, apps: 0, teamW: 0, teamD: 0, teamL: 0,
+      opp: pick(OPP_CLUBS),
       rivals: rollRivals(),
     };
   }
@@ -225,8 +227,9 @@ window.WingerCareer = (() => {
   function playShow() {
     const act = S.activity;
     const firstWeek = act.week === 0;
+    act.opp = pick(OPP_CLUBS.filter((n) => n !== S.group)); // 이번 상대
     $("stage-title").textContent = `⚽ ${S.proYear}시즌 ${cbLabel(act.cb)} — ${S.group}`;
-    $("stage-round").textContent = `R${act.week + 1}/${act.weekTotal} 리그 경기`;
+    $("stage-round").textContent = `R${act.week + 1}/${act.weekTotal} 리그 · vs ${act.opp}`;
     $("stage-card").innerHTML = `<div class="pbp" id="pbp-cb"></div><div id="cb-moment"></div><div id="cb-result"></div>`;
     show("screen-stage");
 
@@ -239,12 +242,12 @@ window.WingerCareer = (() => {
     };
     const pre = firstWeek
       ? [
-          { text: `📋 ${S.group}, ${cbLabel(act.cb)} 개막을 앞두고 전술 미팅` },
+          { text: `📋 ${S.group}, ${cbLabel(act.cb)} 개막전 상대는 ${act.opp}` },
           { text: "🏟️ 홈 팬들이 경기장을 가득 메웠어요" },
-          { text: "🔔 킥오프! 개막전 시작!" },
+          { text: `🔔 킥오프! ${S.group} vs ${act.opp} 개막전 시작!` },
         ]
       : [
-          { text: `🔔 R${act.week + 1} 킥오프 — ${S.group} vs ${pick(act.rivals).name}의 팀` },
+          { text: `🔔 R${act.week + 1} 킥오프 — ${S.group} vs ${act.opp}` },
           { text: pick([
             "🏃 초반부터 강하게 몰아붙여요",
             "📣 원정 응원단의 함성이 뜨거워요",
@@ -294,6 +297,23 @@ window.WingerCareer = (() => {
       ].sort((a, b) => b.score - a.score);
       const rank = rows.findIndex((r) => r.me) + 1;
       const won = rank === 1;
+      const rating = clamp(myScore / 10, 1, 10);
+
+      // 이번 경기 개인 기록(골·도움·수비) + 팀 스코어 산출 (FM식)
+      const oppName = act.opp || "상대팀";
+      const c = matchContribution(rating);
+      const sl = matchScoreline(c.g, rating);
+      const evFeeds = matchEventFeeds(c, oppName, sl.tf, sl.ta);
+      evFeeds.forEach((f) => feed(f));
+      feed({ text: `🔚 경기 종료 — ${S.group} ${sl.tf} : ${sl.ta} ${oppName}`, cls: sl.res === "W" ? "good" : sl.res === "L" ? "bad" : "" });
+
+      act.apps = (act.apps || 0) + 1;
+      act.goals = (act.goals || 0) + c.g;
+      act.assists = (act.assists || 0) + c.a;
+      act.defense = (act.defense || 0) + c.def;
+      if (sl.res === "W") act.teamW = (act.teamW || 0) + 1;
+      else if (sl.res === "D") act.teamD = (act.teamD || 0) + 1;
+      else act.teamL = (act.teamL || 0) + 1;
 
       act.week += 1;
       act.hypeSum += (5 - rank) * 0.35 + miniHype;
@@ -306,7 +326,7 @@ window.WingerCareer = (() => {
         S.career.wins += 1;
         pay += 100;
         dFan = randInt(10, 18);
-        feed({ text: `🏆 이 주의 선수(MOM)!! 최고 평점을 받았어요!`, cls: "good" });
+        feed({ text: `🏅 이 주의 선수(MOM)!! 최고 평점을 받았어요!`, cls: "good" });
       } else if (rank <= 3) {
         dFan = randInt(4, 9);
         feed({ text: `📊 이번 R 평점 ${rank}위 — MOM이 눈앞이에요!`, cls: "good" });
@@ -328,7 +348,14 @@ window.WingerCareer = (() => {
       }
       save();
 
+      const scoreClass = sl.res === "W" ? "win" : sl.res === "L" ? "lose" : "";
       $("cb-result").innerHTML = `
+        <div class="matchscore">
+          <span class="ms-team home">⚽ ${S.group}</span>
+          <span class="ms-num ${scoreClass}">${sl.tf} : ${sl.ta}</span>
+          <span class="ms-team">${oppName}</span>
+        </div>
+        <div class="ms-line">${RES_LABEL[sl.res]} · 평점 <b>${rating.toFixed(1)}</b> · ⚽${c.g} 🅰️${c.a} 🛡️${c.def}${won ? " · 🏅 MOM" : ""}</div>
         <div class="tour-vs">${won ? "🏆 MOM!" : `평점 ${rank}위`} <span class="${won ? "win" : ""}">${S.name}</span></div>
         ${chartHTML(rows.slice(0, 5))}
         <div class="tour-pts">💰 경기 수당 +${pay}만 · ${dFan >= 0 ? `⭐ 명성 +${dFan}` : `📉 명성 ${dFan}`}</div>
@@ -372,8 +399,16 @@ window.WingerCareer = (() => {
     if (hype >= 6.5 && Math.random() < 0.45) { awards.push("리그MVP"); S.career.daesang += 1; }
     else if (hype >= 4.5 && Math.random() < 0.5) { awards.push("베스트11"); S.career.bonsang += 1; }
     S.career.sales += sales;
-    S.career.years.push({ y: S.proYear, hype: Math.round(hype * 10) / 10, wins, sales, dFan, awards });
-    if (window.Stats) Stats.log("year_end", { y: S.proYear, wins, sales });
+    const gg = act.goals || 0, ga = act.assists || 0, gd = act.defense || 0, apps = act.apps || 0;
+    S.career.goals = (S.career.goals || 0) + gg;
+    S.career.assists = (S.career.assists || 0) + ga;
+    S.career.defense = (S.career.defense || 0) + gd;
+    S.career.apps = (S.career.apps || 0) + apps;
+    S.career.teamW = (S.career.teamW || 0) + (act.teamW || 0);
+    S.career.teamD = (S.career.teamD || 0) + (act.teamD || 0);
+    S.career.teamL = (S.career.teamL || 0) + (act.teamL || 0);
+    S.career.years.push({ y: S.proYear, hype: Math.round(hype * 10) / 10, wins, sales, dFan, awards, goals: gg, assists: ga, defense: gd, apps });
+    if (window.Stats) Stats.log("year_end", { y: S.proYear, wins, sales, goals: gg, assists: ga });
     for (const d of STAT_DEFS) {
       if (S.proYear <= 3) S.stats[d.key] = clamp(S.stats[d.key] + rand(0, 1) * S.talents[d.key], 0, STAT_CAP);
       else if (S.proYear >= 8) S.stats[d.key] = clamp(S.stats[d.key] - rand(0.6, 1.8), 0, STAT_CAP);
@@ -389,9 +424,10 @@ window.WingerCareer = (() => {
   function yearReport() {
     const y = S.career.years[S.career.years.length - 1];
     const rows = S.career.years.slice(-8).map((x) =>
-      `<tr><td>${x.y}시즌</td><td>MOM ${x.wins}회</td><td>${x.sales}P</td><td>${x.awards.length ? "🏆" + x.awards.join(",") : "-"}</td></tr>`
+      `<tr><td>${x.y}시즌</td><td>${x.apps != null ? x.apps : "-"}</td><td>${x.goals != null ? x.goals : "-"}</td><td>${x.assists != null ? x.assists : "-"}</td><td>${x.defense != null ? x.defense : "-"}</td><td>${x.awards.length ? "🏆" + x.awards.join(",") : "-"}</td></tr>`
     ).join("");
     const forcedRetire = S.proYear >= 10;
+    const cr = S.career;
     $("career-title").textContent = `📊 ${y.y}시즌 결산`;
     $("career-card").innerHTML = `
       <div class="draft-emoji">⚽</div>
@@ -400,11 +436,12 @@ window.WingerCareer = (() => {
         y.hype >= 3.5 ? "제 몫을 해낸 시즌" :
         y.hype >= 1 ? "아쉬움이 남는 시즌" : "혹독한 시즌…"
       }</div>
-      <div class="draft-team">${S.group} · MOM ${y.wins}회 · 공격포인트 ${y.sales}P</div>
-      <table class="season-table"><thead><tr><th>시즌</th><th>MOM</th><th>공격P</th><th>수상</th></tr></thead><tbody>${rows}</tbody></table>
+      <div class="draft-team">${S.group} · ${y.apps || 0}경기 ⚽${y.goals || 0}골 🅰️${y.assists || 0}도움 🛡️${y.defense || 0} · MOM ${y.wins}회</div>
+      <table class="season-table"><thead><tr><th>시즌</th><th>출전</th><th>⚽골</th><th>🅰️도움</th><th>🛡️수비</th><th>수상</th></tr></thead><tbody>${rows}</tbody></table>
       <div class="draft-summary">
-        통산 ${S.career.years.length}시즌 · MOM ${S.career.wins}회 · 🏆 MVP ${S.career.daesang} · 베스트11 ${S.career.bonsang}${S.career.rookie ? " · 신인왕" : ""}<br/>
-        ⭐ 명성 ${Math.round(S.fandom)} · ${forcedRetire ? "슬슬 은퇴를 고민할 나이가 됐어요. 아름다운 마무리를…" : "다음 시즌도 계속 뛸 수 있어요!"}
+        통산 ${cr.years.length}시즌 · 출전 ${cr.apps || 0} · ⚽ ${cr.goals || 0}골 · 🅰️ ${cr.assists || 0}도움 · 🛡️ ${cr.defense || 0} · 🏅 MOM ${cr.wins}회<br/>
+        🏆 MVP ${cr.daesang} · 베스트11 ${cr.bonsang}${cr.rookie ? " · 신인왕" : ""} · ⭐ 명성 ${Math.round(S.fandom)}<br/>
+        ${forcedRetire ? "슬슬 은퇴를 고민할 나이가 됐어요. 아름다운 마무리를…" : "다음 시즌도 계속 뛸 수 있어요!"}
       </div>`;
     const act = $("career-actions");
     act.innerHTML = "";
@@ -448,6 +485,9 @@ window.WingerCareer = (() => {
       team: S.group || marketOf().name,
       seasons: c.years ? c.years.length : 0,
       wins: c.wins, daesang: c.daesang, bonsang: c.bonsang, rookie: c.rookie,
+      goals: (c.goals || 0) + ((S.youth && S.youth.g) || 0),
+      assists: (c.assists || 0) + ((S.youth && S.youth.a) || 0),
+      apps: (c.apps || 0) + (S.stages || 0),
       finalOvr: Math.round(overall()),
       score,
       grade: gradeOfScore(score),
@@ -466,7 +506,8 @@ window.WingerCareer = (() => {
       <div class="draft-team">${entry.grade}</div>
       <div>${entry.seasons ? `${entry.team}에서 ${entry.seasons}시즌을 뛰었어요.` : "프로 무대 대신 다른 길을 택했어요."}</div>
       <div class="draft-summary">
-        MOM ${entry.wins}회 · 🏆 MVP ${entry.daesang} · 베스트11 ${entry.bonsang}${entry.rookie ? " · 신인왕" : ""}<br/>
+        통산 ${entry.apps}경기 ⚽ ${entry.goals}골 · 🅰️ ${entry.assists}도움<br/>
+        🏅 MOM ${entry.wins}회 · 🏆 MVP ${entry.daesang} · 베스트11 ${entry.bonsang}${entry.rookie ? " · 신인왕" : ""}<br/>
         커리어 점수 <b>${entry.score}</b> — 명예의 전당에 영구 기록됐어요
       </div>`;
     const act = $("career-actions");
@@ -513,7 +554,7 @@ window.WingerCareer = (() => {
         <div class="hof-face-emoji">⚽</div>
         <div class="hof-info">
           <div class="hof-name">${i + 1}. ${e.name} <span class="hof-grade">${e.grade}</span></div>
-          ${e.team} · ${e.seasons}시즌 · MOM ${e.wins}회 · 🏆${e.daesang + e.bonsang} · 점수 ${e.score}
+          ${e.team} · ${e.seasons}시즌${e.goals != null ? ` · ⚽${e.goals} 🅰️${e.assists || 0}` : ""} · 🏅MOM ${e.wins} · 🏆${e.daesang + e.bonsang} · 점수 ${e.score}
         </div>`;
       box.appendChild(div);
     });
