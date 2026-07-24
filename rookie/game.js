@@ -198,33 +198,34 @@ function awakenTalent(key, logFn) {
 }
 
 
-// ---------- 광고 보상 (공용) ----------
+// ---------- 보너스 보상 (공용) — 30분에 1번 ----------
 const AD_CD_KEY = "grow-ad-cd";
+const AD_CD_MS = 1800000; // 30분
 const adCooldownLeft = () =>
-  Math.max(0, 180000 - (Date.now() - (+localStorage.getItem(AD_CD_KEY) || 0)));
+  Math.max(0, AD_CD_MS - (Date.now() - (+localStorage.getItem(AD_CD_KEY) || 0)));
 
-// 팝업(모달)로 광고 → 보상 연출
+// 팝업(모달)로 보너스 지급 연출
 function showAdModal(amount, onDone) {
   const ov = document.createElement("div");
   ov.className = "av-overlay";
   ov.innerHTML = `
     <div class="av-modal ad-modal">
-      <p class="av-title">📺 광고 보고 보너스 받기</p>
-      <div class="ad-modal-body"><div class="ad-emoji">⏳</div>광고를 불러오는 중…</div>
+      <p class="av-title">🎁 보너스 타임!</p>
+      <div class="ad-modal-body"><div class="ad-emoji">⏳</div>준비 중…</div>
       <div class="av-actions"><button class="btn btn-ghost ad-modal-close" disabled>잠시만요…</button></div>
     </div>`;
   document.body.appendChild(ov);
   const body = ov.querySelector(".ad-modal-body");
   const closeBtn = ov.querySelector(".ad-modal-close");
   const finish = () => { ov.remove(); if (onDone) onDone(); };
-  window.Ads.rewarded((ok, real) => {
+  window.Ads.rewarded((ok) => {
     if (ok) {
       S.money = (S.money || 0) + amount;
       localStorage.setItem(AD_CD_KEY, Date.now());
       save();
-      body.innerHTML = `<div class="ad-emoji">💰</div><b>+${amount}만</b> 획득!${real ? "" : `<br/><span class="av-note">아직 광고 연결 전이라 그냥 드렸어요 🎁</span>`}`;
+      body.innerHTML = `<div class="ad-emoji">💰</div><b>+${amount}만</b> 획득!<br/><span class="av-note">다음 보너스는 30분 후에 열려요</span>`;
     } else {
-      body.innerHTML = `<div class="ad-emoji">💧</div>광고를 끝까지 봐야 보상을 받을 수 있어요`;
+      body.innerHTML = `<div class="ad-emoji">💧</div>보상을 받지 못했어요`;
     }
     closeBtn.disabled = false;
     closeBtn.textContent = "확인";
@@ -232,20 +233,20 @@ function showAdModal(amount, onDone) {
   });
 }
 
-// 광고 특훈 — 랜덤 스탯을 훈련하되 턴(월/경기 카운트)을 소모하지 않아요
+// 무료 특훈 — 랜덤 스탯을 훈련하되 턴(월/경기 카운트)을 소모하지 않아요
 function showAdTrainModal(rerender) {
   const ov = document.createElement("div");
   ov.className = "av-overlay";
   ov.innerHTML = `
     <div class="av-modal ad-modal">
-      <p class="av-title">📺 광고 보고 무료 특훈</p>
-      <div class="ad-modal-body"><div class="ad-emoji">⏳</div>광고를 불러오는 중…</div>
+      <p class="av-title">🎁 무료 특훈!</p>
+      <div class="ad-modal-body"><div class="ad-emoji">⏳</div>준비 중…</div>
       <div class="av-actions"><button type="button" class="btn btn-ghost ad-modal-close" disabled>잠시만요…</button></div>
     </div>`;
   document.body.appendChild(ov);
   const body = ov.querySelector(".ad-modal-body");
   const closeBtn = ov.querySelector(".ad-modal-close");
-  window.Ads.rewarded((ok, real) => {
+  window.Ads.rewarded((ok) => {
     if (ok) {
       const d = pick(statDefs());
       let gain = rand(2.2, 4.2) * S.talents[d.key];
@@ -254,9 +255,9 @@ function showAdTrainModal(rerender) {
       S.stats[d.key] = clamp(S.stats[d.key] + gain, 0, STAT_CAP);
       localStorage.setItem(AD_CD_KEY, Date.now());
       save();
-      body.innerHTML = `<div class="ad-emoji">${d.emoji}</div><b>${d.name} +${gain.toFixed(1)}</b> 특훈 완료!<br/><span class="av-note">턴을 소모하지 않는 보너스 훈련이에요${real ? "" : " · 광고 연결 전이라 그냥 진행했어요 🎁"}</span>`;
+      body.innerHTML = `<div class="ad-emoji">${d.emoji}</div><b>${d.name} +${gain.toFixed(1)}</b> 특훈 완료!<br/><span class="av-note">턴을 소모하지 않는 보너스 훈련 · 다음은 30분 후</span>`;
     } else {
-      body.innerHTML = `<div class="ad-emoji">💧</div>광고를 끝까지 봐야 특훈할 수 있어요`;
+      body.innerHTML = `<div class="ad-emoji">💧</div>특훈에 실패했어요`;
     }
     closeBtn.disabled = false;
     closeBtn.textContent = "확인";
@@ -270,9 +271,9 @@ function makeAdSlotButton(rerender) {
   const left = adCooldownLeft();
   if (left > 0) {
     btn.disabled = true;
-    btn.innerHTML = `<span class="a-emoji">📺</span>특훈<span class="a-sub">${Math.ceil(left / 60000)}분 후 가능</span>`;
+    btn.innerHTML = `<span class="a-emoji">🎁</span>특훈<span class="a-sub">${Math.ceil(left / 60000)}분 후 가능</span>`;
   } else {
-    btn.innerHTML = `<span class="a-emoji">📺</span>특훈<span class="a-sub">광고 보고 무료 훈련</span>`;
+    btn.innerHTML = `<span class="a-emoji">🎁</span>특훈<span class="a-sub">30분마다 무료 훈련</span>`;
     btn.onclick = () => showAdTrainModal(rerender);
   }
   return btn;
@@ -371,13 +372,13 @@ function renderShop() {
     }
     box.appendChild(div);
   }
-  // 📺 광고 보상 (3분 쿨다운) — 팝업으로 진행
+  // 🎁 보너스 보상 (30분 쿨다운) — 팝업으로 진행
   const left = adCooldownLeft();
   const adRow = $("ad-row");
   if (left > 0) {
-    adRow.innerHTML = `<p class="av-note">📺 다음 광고 보상까지 약 ${Math.ceil(left / 60000)}분 남았어요</p>`;
+    adRow.innerHTML = `<p class="av-note">🎁 다음 보너스까지 약 ${Math.ceil(left / 60000)}분 남았어요</p>`;
   } else {
-    adRow.innerHTML = `<button class="btn btn-primary" id="btn-ad">📺 광고 보고 +200만 받기</button>`;
+    adRow.innerHTML = `<button class="btn btn-primary" id="btn-ad">🎁 30분 보너스 +200만 받기</button>`;
     $("btn-ad").onclick = () => showAdModal(200, renderShop);
   }
 }
@@ -986,11 +987,8 @@ function renderGameSim(cfg) {
     else if (midInn === i + 1 && midHalf === "말") steps.push({ midMoment: true, inn: i });
     else steps.push({ cell: ["our", i, story.ourInn[i]], feeds: evFor(i + 1, "말").map((e) => ({ text: `${i + 1}회말 · ${e.text}`, cls: e.cls })) });
   }
-  if (!interactive) {
-    const ourTotal = story.ourInn.reduce((a, b) => a + b, 0);
-    const oppTotal = story.oppInn.reduce((a, b) => a + b, 0);
-    steps.push({ feeds: [{ text: `📢 경기 종료 — ${ourTotal}:${oppTotal}`, cls: preWin ? "good" : "bad" }] });
-  }
+  // (비인터랙티브 경기의 '경기 종료' 문구는 미니게임 결과가 반영된
+  //  실제 최종 스코어로 endOfSteps에서 출력해요)
 
   const totals = { opp: 0, our: 0 };
   let idx = 0, finished = false, momentOn = false;
@@ -1201,11 +1199,12 @@ function renderGameSim(cfg) {
 
   function endOfSteps() {
     if (interactive) return;
-    // 미드 미니게임이 점수를 바꿨을 수 있으니 최종 스코어 기준으로 승패 판정
+    // 미니게임이 점수를 바꿨을 수 있으니 최종 스코어 기준으로 승패 판정
     const win = totals.our > totals.opp ? true : totals.our < totals.opp ? false : preWin;
     if (totals.our === totals.opp) {
       applyStep({ addR: [win ? "our" : "opp", 1], feeds: [{ text: win ? "🔥 연장 끝에 승리!" : "💧 연장 끝에 석패…", cls: win ? "good" : "bad" }] });
     }
+    applyStep({ feeds: [{ text: `📢 경기 종료 — ${totals.our}:${totals.opp}`, cls: win ? "good" : "bad" }] });
     showResult(win, 0);
   }
   function tick() {

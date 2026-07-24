@@ -128,7 +128,7 @@ window.Career = (() => {
     }
 
     $("pro-camp-title").textContent = S.season
-      ? (S.pendingGame ? `⚾ 경기일! G${S.season.game + 1} 준비 완료 — 경기를 시작하세요` : `시즌 중 — 다음 경기 전 훈련 1회`)
+      ? (S.pendingGame ? `⚾ 경기일! G${S.season.game + 1} 준비 완료 — 경기를 시작하세요` : `시즌 중 — 다음 경기 전 훈련 ${S.camp}회 남음`)
       : `스프링캠프 — 남은 훈련 ${S.camp}회, 끝나면 시즌 개막!`;
     const box = $("pro-actions");
     box.innerHTML = "";
@@ -427,7 +427,8 @@ window.Career = (() => {
       extra,
       nextLabel: `🏋️ 다음 경기 준비 (G${sn.game + 1})`,
       nextFn: () => {
-        S.camp = 1;
+        // 3연전 단위로 시리즈가 끝나면 이동일이 껴서 훈련 기회가 더 많아요
+        S.camp = sn.game % 3 === 0 ? 3 : 2;
         save();
         renderPro();
         show("screen-pro");

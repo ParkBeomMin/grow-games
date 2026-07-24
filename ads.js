@@ -1,14 +1,15 @@
-/* 광고 모듈 — Google H5 Games Ads (Ad Placement API)
- * 스크립트는 유저가 보상형 광고 버튼을 눌렀을 때만 지연 로드해요.
- * (페이지 로드 시 로드하면 애드센스 '자동 광고'가 상단 배너를 끼워넣어 게임을 방해)
- * 광고 미로드/미충전 시엔 보상을 그냥 지급하는 폴백으로 동작해요. */
+/* 광고 모듈 — Google AdSense
+ * - 보상형(H5 Games Ads)은 트래픽이 늘 때까지 비활성화 (H5_ADS = false)
+ *   → 보상 버튼은 광고 없이 그냥 지급되고, 호출부의 쿨다운(30분)으로 제한돼요.
+ * - 디스플레이 배너: 결산 화면(display) + 하단 띠 배너(anchor)
+ * - 배너가 채워지지 않으면(미충전/차단) 자리 차지 없이 자동으로 숨겨져요. */
 "use strict";
 
 window.Ads = (() => {
   const ADSENSE_CLIENT = "ca-pub-7426857657290789";
-  // 애드센스에서 '디스플레이 광고 단위'를 만들고 슬롯 번호를 넣으면
-  // 결산/엔딩 화면 하단에 배너가 표시돼요. 비워두면 아무것도 안 나와요.
-  const AD_DISPLAY_SLOT = "8106727861";
+  const AD_DISPLAY_SLOT = "8106727861"; // 결산 화면 사각형
+  const AD_ANCHOR_SLOT = "5820310026"; // 하단 띠 배너
+  const H5_ADS = false; // 보상형 광고 — 트래픽 늘면 true로
 
   let state = "idle"; // idle | loading | ready | failed
   const queue = [];
@@ -18,12 +19,14 @@ window.Ads = (() => {
     const s = document.createElement("script");
     s.async = true;
     s.crossOrigin = "anonymous";
-    s.dataset.adFrequencyHint = "30s";
+    if (H5_ADS) s.dataset.adFrequencyHint = "30s";
     s.src = `https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${ADSENSE_CLIENT}`;
     s.onload = () => {
       window.adsbygoogle = window.adsbygoogle || [];
-      window.adBreak = window.adConfig = function (o) { window.adsbygoogle.push(o); };
-      window.adConfig({ preloadAdBreaks: "on", sound: "off" });
+      if (H5_ADS) {
+        window.adBreak = window.adConfig = function (o) { window.adsbygoogle.push(o); };
+        window.adConfig({ preloadAdBreaks: "on", sound: "off" });
+      }
       state = "ready";
       flush();
       flushDisplays();
@@ -53,13 +56,12 @@ window.Ads = (() => {
     };
     // 광고 응답이 아예 없을 때를 대비한 안전장치
     const timer = setTimeout(() => finish(true, false), 10000);
-    let viewed = false;
     window.adBreak({
       type: "reward",
       name: "gear_reward",
       beforeReward(showAdFn) { showAdFn(); },
-      adViewed() { viewed = true; },
-      adDismissed() { viewed = false; },
+      adViewed() {},
+      adDismissed() {},
       adBreakDone(info) {
         const st = info && info.breakStatus;
         if (st === "viewed") finish(true, true);        // 끝까지 시청 → 보상
@@ -69,9 +71,9 @@ window.Ads = (() => {
     });
   }
 
-  // cb(보상지급여부, 실제광고여부)
+  // cb(보상지급여부, 실제광고여부) — H5 비활성 시 즉시 지급
   function rewarded(cb) {
-    if (!ADSENSE_CLIENT) { cb(true, false); return; }
+    if (!H5_ADS || !ADSENSE_CLIENT) { cb(true, false); return; }
     if (state === "ready" || state === "failed") { runRewarded(cb); return; }
     queue.push(cb);
     if (state === "idle") loadScript();
@@ -94,5 +96,45 @@ window.Ads = (() => {
     else if (state === "idle") loadScript();
   }
 
-  return { rewarded, display, enabled: () => !!ADSENSE_CLIENT };
+  // 하단 띠 배너 — 고정 높이(60px)로 요청, 채워질 때만 표시
+  function anchor() {
+    if (!ADSENSE_CLIENT || !AD_ANCHOR_SLOT || document.getElementById("ad-anchor")) return;
+    const bar = document.createElement("div");
+    bar.id = "ad-anchor";
+    bar.className = "ad-anchor";
+    bar.innerHTML = `
+      <button type="button" class="ad-anchor-close" aria-label="광고 닫기">✕</button>
+      <ins class="adsbygoogle" style="display:block;width:100%;height:60px"
+        data-ad-client="${ADSENSE_CLIENT}" data-ad-slot="${AD_ANCHOR_SLOT}"></ins>`;
+    document.body.appendChild(bar);
+    bar.querySelector(".ad-anchor-close").onclick = () => {
+      bar.remove();
+      document.body.classList.remove("has-ad-anchor");
+    };
+    const ins = bar.querySelector("ins");
+    // 광고가 실제로 채워졌을 때만 바(와 본문 여백)를 보여줘요
+    new MutationObserver(() => {
+      const filled = ins.dataset.adStatus === "filled";
+      bar.classList.toggle("on", filled);
+      document.body.classList.toggle("has-ad-anchor", filled);
+    }).observe(ins, { attributes: true, attributeFilter: ["data-ad-status"] });
+    const push = () => { try { (window.adsbygoogle = window.adsbygoogle || []).push({}); } catch { /* noop */ } };
+    if (state === "ready") push();
+    else {
+      if (state === "idle") loadScript();
+      const wait = setInterval(() => {
+        if (state === "ready") { clearInterval(wait); push(); }
+        else if (state === "failed") clearInterval(wait);
+      }, 300);
+    }
+  }
+
+  // 게임 로드를 방해하지 않게 잠깐 뒤에 하단 배너 준비
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", () => setTimeout(anchor, 1200));
+  } else {
+    setTimeout(anchor, 1200);
+  }
+
+  return { rewarded, display, anchor, enabled: () => !!ADSENSE_CLIENT };
 })();
