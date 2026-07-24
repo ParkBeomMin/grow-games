@@ -8,7 +8,7 @@ window.Ads = (() => {
   const ADSENSE_CLIENT = "ca-pub-7426857657290789";
   // 애드센스에서 '디스플레이 광고 단위'를 만들고 슬롯 번호를 넣으면
   // 결산/엔딩 화면 하단에 배너가 표시돼요. 비워두면 아무것도 안 나와요.
-  const AD_DISPLAY_SLOT = "";
+  const AD_DISPLAY_SLOT = "8106727861";
 
   let state = "idle"; // idle | loading | ready | failed
   const queue = [];
