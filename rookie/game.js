@@ -329,6 +329,16 @@ function renderRecord() {
       : `${S.games}경기 · ${S.hsTotals.ip}이닝 · ${S.hsTotals.k}탈삼진 · 평균자책 ${((S.hsTotals.runs * 9) / Math.max(S.hsTotals.ip, 1)).toFixed(2)}`;
   }
   const trophyLine = S.trophies && S.trophies.length ? `🏆 ${S.trophies.join(", ")}` : "🏆 우승 경력 없음";
+  // 진행 중인 프로 시즌 기록
+  let curHtml = "";
+  if (S.season) {
+    const t = S.season.stats;
+    const rank = S.season.others.filter((o) => o.w > S.season.teamW).length + 1;
+    const line = isBat
+      ? `${t.ab}타수 ${t.hits}안타 (타율 ${(t.hits / Math.max(t.ab, 1)).toFixed(3)}) · ${t.hr}홈런 · ${t.sb}도루`
+      : `${t.g}등판 ${t.ip}이닝 · ${t.k}탈삼진 · 평균자책 ${((t.er * 9) / Math.max(t.ip, 1)).toFixed(2)}${t.wins ? ` · ${t.wins}승` : ""}${t.saves ? ` · ${t.saves}세이브` : ""}`;
+    curHtml = `<br/><b>🔥 진행 중인 시즌</b><br/>G ${S.season.game}/${S.season.total} · ${S.team} ${S.season.teamW}승 ${S.season.teamL}패 (${rank}위)<br/>${line}<br/>`;
+  }
   let proHtml = "";
   if (S.career && S.career.seasons.length) {
     const rows = S.career.seasons.map((x) =>
@@ -352,7 +362,8 @@ function renderRecord() {
     <div class="draft-team">${S.phase === "pro" ? `${S.team} · ${S.role || ""}` : `${r.school} · ${isBat ? "타자" : "투수"}`} · ${S.phase === "pro" ? `${S.age}세` : `${S.year}학년`}</div>
     <div class="draft-summary">
       <b>🏫 고교 기록</b><br/>${hs}<br/>🔭 주목도 ${Math.round(S.scout)} · ${trophyLine}<br/>
-      ${proHtml ? `<br/><b>⚾ 프로 기록</b>${proHtml}<br/>` : ""}
+      ${curHtml}
+      ${proHtml ? `<br/><b>⚾ 지난 시즌 기록</b>${proHtml}<br/>` : ""}
       ${gearList ? `<br/><b>🛍️ 보유 장비</b> ${gearList}` : ""}
     </div>`;
 }
