@@ -18,6 +18,16 @@ const MARKETS = [
     debut: 0.58, growth: 1.15, spot: 1.05,
     desc: "손맛으로 배우는 야생 주방. 실전 감각이 쑥쑥 자라요",
   },
+  {
+    id: "france", name: "프랑스 요리 유학", emoji: "🇫🇷", tier: "정통 유럽",
+    debut: 0.6, growth: 1.13, spot: 1.12,
+    desc: "본토에서 배우는 클래식. 기본기와 창의력이 함께 자라요",
+  },
+  {
+    id: "truck", name: "푸드트럭 창업", emoji: "🚚", tier: "창업 코스",
+    debut: 0.56, growth: 1.16, spot: 1.06,
+    desc: "맨몸으로 부딪히는 길거리 장사. 스피드와 생존력이 폭발 성장해요",
+  },
 ];
 
 const STAT_DEFS = [
@@ -33,6 +43,7 @@ const POS_INFO = {
   korean: { name: "한식", stat: "taste" },
   western: { name: "양식", stat: "knife" },
   dessert: { name: "디저트", stat: "creativity" },
+  chinese: { name: "중식", stat: "speed" },
 };
 
 const CHEF_NAMES = ["도마", "칼든손", "맛의달인", "불꽃요리", "간잘맞춤", "플레이팅", "미쉐린", "막내셰프", "수셰프", "오너셰프", "손맛", "황금레시피"];
@@ -788,6 +799,10 @@ const MOMENTS = {
   creativity: {
     good: ["플레이팅이 한 폭의 그림 같아요! 🎨", "예상 밖의 조합이 통했어요 ✨", "메뉴에 스토리가 담겼어요 🔥"],
     bad: ["콘셉트가 살짝 과했어요 😬", "접시가 조금 허전했어요 💦"],
+  },
+  speed: {
+    good: ["불맛 가득 웍질이 예술이에요! ⚡", "폭발적인 화력으로 순식간에 완성! 🔥", "쏟아지는 주문을 완벽하게 쳐냈어요 ✨"],
+    bad: ["웍 온도가 살짝 식었어요 😬", "타이밍이 반 박자 늦었어요 💦"],
   },
 };
 

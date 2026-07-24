@@ -19,6 +19,16 @@ const MARKETS = [
     debut: 0.62, growth: 1.08, spot: 1.05,
     desc: "길거리 축구로 다져진 개인기. 화려하게 성장해요",
   },
+  {
+    id: "jp", name: "일본 J리그 유스", emoji: "🇯🇵", tier: "정교한 시스템",
+    debut: 0.65, growth: 1.04, spot: 1.03,
+    desc: "정교한 패스 축구를 가르쳐요. 전술 이해와 기본기가 빠르게 자라요",
+  },
+  {
+    id: "af", name: "아프리카 유망주", emoji: "🌍", tier: "피지컬 몬스터",
+    debut: 0.57, growth: 1.18, spot: 1.08,
+    desc: "타고난 신체 능력으로 폭발 성장. 대신 기복이 크고 경쟁이 치열해요",
+  },
 ];
 
 const STAT_DEFS = [
@@ -34,6 +44,7 @@ const POS_INFO = {
   fw: { name: "공격수", stat: "shoot" },
   mf: { name: "미드필더", stat: "pass" },
   df: { name: "수비수", stat: "defense" },
+  wg: { name: "윙어", stat: "dribble" },
 };
 
 const PLAYER_NAMES = ["도현", "시우", "주원", "하준", "은우", "서준", "이안", "리오", "카이", "마테오", "루카", "지안"];
@@ -788,9 +799,12 @@ function matchContribution(rating) {
   const shootF = (S.stats.shoot || 40) / 100;
   const passF = (S.stats.pass || 40) / 100;
   const defF = (S.stats.defense || 40) / 100;
-  const gLam = (S.pos === "fw" ? 1.05 : S.pos === "mf" ? 0.5 : 0.14) * perf * (0.55 + shootF);
-  const aLam = (S.pos === "mf" ? 0.95 : S.pos === "fw" ? 0.55 : 0.28) * perf * (0.55 + passF);
-  const dLam = (S.pos === "df" ? 2.3 : S.pos === "mf" ? 1.2 : 0.45) * perf * (0.55 + defF);
+  const G = { fw: 1.05, wg: 0.75, mf: 0.5, df: 0.14 };
+  const A = { mf: 0.95, wg: 0.85, fw: 0.55, df: 0.28 };
+  const D = { df: 2.3, mf: 1.2, wg: 0.5, fw: 0.45 };
+  const gLam = (G[S.pos] ?? 0.4) * perf * (0.55 + shootF);
+  const aLam = (A[S.pos] ?? 0.4) * perf * (0.55 + passF);
+  const dLam = (D[S.pos] ?? 0.6) * perf * (0.55 + defF);
   return { g: poissonish(gLam), a: poissonish(aLam), def: poissonish(dLam) };
 }
 // 내 골 수 & 평점에 어울리는 팀 스코어(우리:상대)와 승부 결과
@@ -840,6 +854,10 @@ const MOMENTS = {
   defense: {
     good: ["완벽한 태클로 위기를 끊어요! 🛡️", "상대 에이스를 완전히 지웠어요 ✨", "몸을 던진 블로킹! 🔥"],
     bad: ["뒷공간을 살짝 내줬어요 😬", "커버 타이밍이 늦었어요 💦"],
+  },
+  dribble: {
+    good: ["현란한 개인기로 수비를 벗겨내요! 🏃", "폭발적인 스피드로 측면을 돌파! ⚡", "환상적인 드리블에 관중이 열광해요 🔥"],
+    bad: ["무리한 드리블이 끊겼어요 😬", "볼 컨트롤이 살짝 흔들렸어요 💦"],
   },
 };
 

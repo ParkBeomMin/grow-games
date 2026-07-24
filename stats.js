@@ -70,6 +70,26 @@ window.Stats = (() => {
       localStorage.setItem(key, today);
       log("visit");
     }
+    trackPwa(name, today);
+  }
+
+  // PWA 설치/실행 추적
+  //  - pwa_install: 사용자가 실제로 '홈 화면에 추가'로 설치한 순간 (설치 수)
+  //  - pwa_launch : 설치된 앱(standalone)으로 실행한 경우, 하루 1회 (설치 후 사용 수)
+  function trackPwa(name, today) {
+    try {
+      window.addEventListener("appinstalled", () => log("pwa_install"));
+      const standalone =
+        (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) ||
+        window.navigator.standalone === true;
+      if (standalone) {
+        const skey = "grow-pwa-launch-" + name;
+        if (localStorage.getItem(skey) !== today) {
+          localStorage.setItem(skey, today);
+          log("pwa_launch");
+        }
+      }
+    } catch { /* noop */ }
   }
 
   return { init, log };
