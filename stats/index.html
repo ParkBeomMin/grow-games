@@ -41,8 +41,12 @@
     .funnel .bar-fill { background: linear-gradient(90deg, #5b8def, var(--sky)); }
     .spark { display: flex; align-items: flex-end; gap: 4px; margin-top: 8px; }
     .spark .col { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 4px; }
-    .spark .col .b { width: 100%; background: linear-gradient(180deg, var(--accent), var(--sky)); border-radius: 3px 3px 0 0; min-height: 2px; }
+    .spark .col { cursor: pointer; outline: none; }
+    .spark .col .b { width: 100%; background: linear-gradient(180deg, var(--accent), var(--sky)); border-radius: 3px 3px 0 0; min-height: 2px; transition: filter .12s; }
+    .spark .col .v { font-size: .58rem; font-weight: 700; color: var(--text); }
     .spark .col .d { font-size: .58rem; color: var(--dim); }
+    .spark .col:hover .b, .spark .col:focus .b, .spark .col.active .b { filter: brightness(1.25); box-shadow: 0 0 0 2px var(--accent); }
+    .sparktip { position: fixed; z-index: 40; background: var(--bg2); border: 1px solid var(--accent); border-radius: 8px; padding: 6px 10px; font-size: .76rem; color: var(--text); white-space: nowrap; box-shadow: 0 6px 18px rgba(0,0,0,.45); transform: translate(-50%, calc(-100% - 8px)); pointer-events: none; display: none; }
     .empty { color: var(--dim); font-size: .85rem; padding: 8px 0; }
     .setup { border-color: var(--accent); }
     .setup pre { background: #0a0f18; border-radius: 10px; padding: 14px; overflow-x: auto; font-size: .74rem; line-height: 1.6; color: #cfe3ff; margin: 10px 0; white-space: pre; }
@@ -167,11 +171,15 @@
       if (!days.length) return "";
       const max = Math.max(...days.map((d) => byDay[d].visits), 1);
       return `<section><h2>📅 최근 방문 추이 (일별 순 방문 기기)</h2>
+        <p class="empty" style="margin:-6px 0 10px">막대를 누르거나 마우스를 올리면 상세 숫자를 볼 수 있어요</p>
         <div class="spark">${days.map((d) => {
           const v = byDay[d].visits;
+          const np = byDay[d].np;
           const md = d.slice(5);
+          const [, mo, da] = d.split("-");
           const h = Math.max(3, Math.round((v / max) * 90));
-          return `<div class="col"><div class="b" style="height:${h}px" title="${d}: ${v}"></div><div class="d">${md}</div></div>`;
+          const info = `${+mo}월 ${+da}일 · 방문 ${v}명 · 새 캐릭터 ${np}명`;
+          return `<div class="col" tabindex="0" data-info="${info}"><div class="v">${v}</div><div class="b" style="height:${h}px"></div><div class="d">${md}</div></div>`;
         }).join("")}</div></section>`;
     }
 
@@ -271,6 +279,56 @@ grant select on public.stats_summary, public.stats_choices, public.stats_daily t
     }
 
     $("refresh").onclick = load;
+
+    // ---------- 방문 추이 막대 툴팁 (마우스오버 / 클릭·탭) ----------
+    // load()가 내용을 다시 그려도 유지되도록 document에 위임해요.
+    (function sparkTooltip() {
+      const tip = document.createElement("div");
+      tip.className = "sparktip";
+      document.body.appendChild(tip);
+      let activeCol = null;   // 현재 툴팁이 떠 있는 칼럼
+      let pinned = null;      // 클릭/탭으로 고정된 칼럼 (모바일 탭 유지용)
+      const inCol = (el) => (el && el.closest ? el.closest(".spark .col") : null);
+      function showFor(col) {
+        if (!col || !col.dataset.info) return;
+        if (activeCol && activeCol !== col) activeCol.classList.remove("active");
+        activeCol = col;
+        col.classList.add("active");
+        tip.textContent = col.dataset.info;
+        const r = col.getBoundingClientRect();
+        tip.style.left = r.left + r.width / 2 + "px";
+        tip.style.top = r.top + "px";
+        tip.style.display = "block";
+      }
+      function hide() {
+        tip.style.display = "none";
+        if (activeCol) { activeCol.classList.remove("active"); activeCol = null; }
+      }
+      // 마우스 오버: 고정된 게 없을 때만 미리보기로 표시
+      document.addEventListener("mouseover", (e) => {
+        if (pinned) return;
+        const c = inCol(e.target);
+        if (c) showFor(c);
+      });
+      document.addEventListener("mouseout", (e) => {
+        if (pinned) return;
+        const c = inCol(e.target);
+        if (!c) return;
+        // 같은 칼럼 안(자식 요소)으로 이동한 거면 닫지 않아요
+        if (inCol(e.relatedTarget) !== c) hide();
+      });
+      // 클릭/탭: 고정 토글 (모바일은 hover가 없어 이걸로 표시)
+      document.addEventListener("click", (e) => {
+        const c = inCol(e.target);
+        if (c) { if (pinned === c) { pinned = null; hide(); } else { pinned = c; showFor(c); } }
+        else { pinned = null; hide(); }
+      });
+      document.addEventListener("focusin", (e) => {
+        const c = inCol(e.target);
+        if (c) showFor(c);
+      });
+      window.addEventListener("scroll", () => { pinned = null; hide(); }, { passive: true });
+    })();
 
     // ---------- 비밀번호 게이트 ----------
     // 소스에는 비번 평문이 아니라 SHA-256 해시만 담겨요.
