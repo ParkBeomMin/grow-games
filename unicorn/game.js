@@ -130,7 +130,11 @@ function load() {
   } catch { /* noop */ }
   return false;
 }
+// 초기화 중에는 저장을 완전히 막아요.
+// (지우고 reload하면 beforeunload의 save()가 방금 지운 데이터를 되살려버려요)
+let wiping = false;
 function save() {
+  if (wiping) return;
   const now = Date.now();
   // 플레이 타임 누적 (sessionStart는 init에서 잡아요)
   if (S.sessionStart) { S.playMs = (S.playMs || 0) + (now - S.sessionStart); S.sessionStart = now; }
@@ -571,7 +575,9 @@ function init() {
   document.querySelectorAll(".tab").forEach((b) => b.addEventListener("click", () => setTab(b.dataset.tab)));
   $("btn-reset").addEventListener("click", () => {
     if (confirm("정말 처음부터 다시 시작할까요? 모든 진행(스톡옵션 포함)이 사라져요!")) {
-      localStorage.removeItem(SAVE_KEY); location.reload();
+      wiping = true;                      // 이후 저장 차단 (reload 중 되살아나지 않게)
+      try { localStorage.removeItem(SAVE_KEY); } catch {}
+      location.reload();
     }
   });
   lastTick = Date.now();
