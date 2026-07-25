@@ -164,6 +164,29 @@ body {
 }
 .end-card .btn-retire { margin: 0 0 10px; }
 
+/* 사명 짓기 */
+.company { cursor: pointer; }
+.company:hover { text-decoration: underline dotted; }
+.name-row { display: flex; gap: 8px; margin-bottom: 10px; }
+.name-row input {
+  flex: 1; min-width: 0; padding: 12px 13px; border-radius: 12px;
+  border: 1px solid var(--line); background: var(--bg); color: var(--text);
+  font-family: "Jua", sans-serif; font-size: 1.02rem; text-align: center;
+}
+.name-row input:focus { outline: 0; border-color: var(--accent); }
+.name-dice {
+  flex: none; width: 48px; border: 1px solid var(--line); border-radius: 12px;
+  background: var(--field); color: var(--text); font-size: 1.2rem; cursor: pointer;
+}
+.name-dice:hover { border-color: var(--accent); }
+.name-dice:active { transform: scale(.94); }
+.name-picks { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin-bottom: 14px; }
+.name-pick {
+  padding: 6px 11px; border-radius: 99px; cursor: pointer;
+  border: 1px dashed var(--line); background: transparent; color: var(--dim); font-size: 0.78rem;
+}
+.name-pick:hover { border-color: var(--accent); color: var(--accent); border-style: solid; }
+
 /* 명예의 전당 */
 .hof-card-wrap { max-width: 400px; }
 .hof-list { text-align: left; max-height: 55vh; overflow-y: auto; margin-bottom: 12px; }

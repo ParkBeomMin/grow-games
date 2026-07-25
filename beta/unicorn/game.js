@@ -61,7 +61,22 @@ const FINAL_STAGE = 1e13;     // 데카콘 = 엔딩 트리거
 const BOOST_DUR = 60000;   // 부스터 지속 60초
 const BOOST_CD = 300000;   // 쿨다운 5분
 
+// 사명 추천 — 통짜 이름 + (앞말 × 뒷말) 조합으로 매번 다르게 뽑아요
 const COMPANY_NAMES = ["토스트", "당근파이", "쿠키페이", "배달의민속", "네이비어", "카카옹", "라인프렌드", "우아한형아들", "비바리버블릭", "센드버그"];
+const NAME_HEAD = [
+  "토스", "당근", "쿠키", "배달", "네이비", "카카", "라인", "우아", "비바", "센드",
+  "크래프트", "하이퍼", "넥스트", "딥", "퀀텀", "노바", "제로", "코드", "픽셀", "버그",
+  "무한", "새벽", "라면", "심야", "월세", "치킨", "라떼", "떡상", "존버", "폭풍",
+];
+const NAME_TAIL = [
+  "랩스", "소프트", "테크", "웍스", "페이", "클라우드", "스튜디오", "컴퍼니", "시스템즈", "다이나믹스",
+  "코퍼레이션", "홀딩스", "네트웍스", "AI", "로보틱스", "인터랙티브", "솔루션", "플랫폼", "커넥트", "스페이스",
+];
+function randomCompany() {
+  // 1/4 확률로 통짜 이름, 나머지는 조합형
+  if (Math.random() < 0.25) return pick(COMPANY_NAMES);
+  return pick(NAME_HEAD) + pick(NAME_TAIL);
+}
 const MEMES = [
   "🚀 금요일 오후 배포 강행 — 그런데 대박이 났어요!",
   "🍜 '일단 머지'가 통했어요!",
@@ -104,7 +119,7 @@ const TERM_MAX = 9; // 터미널에 남겨둘 줄 수
 let S = null;
 function fresh() {
   return {
-    company: pick(COMPANY_NAMES),
+    company: randomCompany(),
     code: 0,             // 보유 코드(줄)
     gens: {}, equip: {}, // 자동화 보유수 / 장비 보유수
     so: 0, exits: 0,
@@ -316,6 +331,43 @@ function showEnding() {
 }
 function closeEnding() { $("ending").classList.add("hidden"); }
 
+// ---------- 사명 짓기 ----------
+// 새 게임을 시작할 때(그리고 상단 회사명을 눌렀을 때) 이름을 직접 정할 수 있어요.
+let namingDone = null; // 확인 시 실행할 콜백
+function renderNamePicks() {
+  const box = $("name-picks");
+  const picks = [];
+  while (picks.length < 4) { const n = randomCompany(); if (!picks.includes(n)) picks.push(n); }
+  box.innerHTML = picks.map((n) => `<button class="name-pick" type="button">${n}</button>`).join("");
+  box.querySelectorAll(".name-pick").forEach((b) => {
+    b.onclick = () => { $("name-input").value = b.textContent; $("name-input").focus(); };
+  });
+}
+const NAMING_TEXT = {
+  new:    { emoji: "🦄", title: "창업하기",   desc: "회사 이름을 정해주세요. 명예의 전당에 이 이름으로 남아요.", ok: "🚀 창업 시작" },
+  rename: { emoji: "✏️", title: "사명 변경",  desc: "회사 이름을 바꿔요. 진행 상황은 그대로예요.",              ok: "✅ 확인" },
+  retire: { emoji: "🏛️", title: "은퇴 등록",  desc: "명예의 전당에 남길 회사 이름이에요.",                      ok: "🏛️ 이 이름으로 등록" },
+};
+function openNaming(mode, onDone) {
+  const t = NAMING_TEXT[mode] || NAMING_TEXT.rename;
+  namingDone = onDone || null;
+  $("name-emoji").textContent = t.emoji;
+  $("name-title").textContent = t.title;
+  $("name-desc").textContent = t.desc;
+  $("btn-name-ok").textContent = t.ok;
+  $("name-input").value = S.company;
+  renderNamePicks();
+  $("naming").classList.remove("hidden");
+  setTimeout(() => { const el = $("name-input"); el.focus(); el.select(); }, 60);
+}
+function confirmName() {
+  const v = String($("name-input").value || "").trim().slice(0, 24);
+  S.company = v || randomCompany();   // 비워두면 추천 이름으로
+  $("naming").classList.add("hidden");
+  save(); renderAll();
+  if (namingDone) { const cb = namingDone; namingDone = null; cb(); }
+}
+
 // ---------- 명예의 전당 / 은퇴 ----------
 // Exit = 회사 하나를 팔고 '다시 창업'(프레스티지)  ·  은퇴 = 창업 인생 자체를 마무리
 const HOF_KEY = "grow-hof-v1"; // 시리즈 공용 (entry.game으로 구분)
@@ -342,11 +394,13 @@ function gradeOf(bestRun) {
 // 은퇴 가능 조건 — 한 번이라도 시리즈 A를 찍었거나 Exit 경험이 있으면
 const canRetire = () => S.bestRun >= EXIT_UNLOCK || S.exits > 0;
 
+// 은퇴 — 사명 모달로 이름을 확정한 뒤 진행해요
 function doRetire() {
   if (!canRetire()) return;
-  const name = prompt("명예의 전당에 남길 회사 이름을 정해주세요", S.company);
-  if (name === null) return;
-  const company = String(name).trim().slice(0, 24) || S.company;
+  openNaming("retire", finishRetire);
+}
+function finishRetire() {
+  const company = S.company;
   if (!confirm(
     `🏛️ 창업 인생을 마치고 은퇴할까요?\n\n` +
     `· ${company} 의 기록이 명예의 전당에 영구 등록돼요\n` +
@@ -556,7 +610,8 @@ function offlineReward() {
 
 // ---------- 초기화 ----------
 function init() {
-  if (!load()) { S = fresh(); save(); }
+  const isNew = !load();
+  if (isNew) { S = fresh(); save(); }
   S.sessionStart = Date.now();
   offlineReward();
   termBoot();
@@ -572,6 +627,11 @@ function init() {
   $("btn-retire").addEventListener("click", doRetire);
   $("btn-hof").addEventListener("click", showHof);
   $("btn-hof-close").addEventListener("click", closeHof);
+  // 사명 짓기 — 상단 회사명을 누르면 언제든 바꿀 수 있어요
+  $("btn-name-dice").addEventListener("click", () => { $("name-input").value = randomCompany(); renderNamePicks(); });
+  $("btn-name-ok").addEventListener("click", confirmName);
+  $("name-input").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); confirmName(); } });
+  $("company-name").addEventListener("click", () => openNaming("rename"));
   document.querySelectorAll(".tab").forEach((b) => b.addEventListener("click", () => setTab(b.dataset.tab)));
   $("btn-reset").addEventListener("click", () => {
     if (confirm("정말 처음부터 다시 시작할까요? 모든 진행(스톡옵션 포함)이 사라져요!")) {
@@ -586,5 +646,7 @@ function init() {
   window.addEventListener("beforeunload", save);
   // 방문·PWA 집계 + 이후 이벤트의 게임명 지정 (없으면 game이 "unknown"으로 기록돼요)
   if (window.Stats) Stats.init("unicorn");
+  // 새로 시작하는 판이면 사명부터 정하고 들어가요
+  if (isNew) openNaming("new");
 }
 init();

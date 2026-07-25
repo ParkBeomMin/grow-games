@@ -23,7 +23,7 @@
   <link rel="stylesheet" href="../base.css" />
   <!-- ?v= 는 캐시 무효화용. game.js/style.css 고칠 때마다 같이 올려주세요
        (GitHub Pages가 정적 파일에 max-age=600을 붙여서, 안 올리면 최대 10분간 옛 파일이 떠요) -->
-  <link rel="stylesheet" href="style.css?v=9" />
+  <link rel="stylesheet" href="style.css?v=11" />
 </head>
 <body>
   <main id="app">
@@ -82,6 +82,20 @@
     </div>
   </main>
 
+  <div class="end-wrap hidden" id="naming">
+    <div class="end-card">
+      <div class="end-crown" id="name-emoji">🦄</div>
+      <h2 class="end-title" id="name-title">창업하기</h2>
+      <p class="end-desc" id="name-desc">회사 이름을 정해주세요. 명예의 전당에 이 이름으로 남아요.</p>
+      <div class="name-row">
+        <input id="name-input" type="text" maxlength="24" placeholder="회사 이름" autocomplete="off" />
+        <button class="name-dice" id="btn-name-dice" title="다시 추천">🎲</button>
+      </div>
+      <div class="name-picks" id="name-picks"></div>
+      <button class="btn btn-exit" id="btn-name-ok">🚀 창업 시작</button>
+    </div>
+  </div>
+
   <div class="end-wrap hidden" id="hof">
     <div class="end-card hof-card-wrap">
       <h2 class="end-title">🏛️ 명예의 전당</h2>
@@ -109,6 +123,6 @@
   <script src="../match.js"></script>
   <script src="../stats.js"></script>
   <script src="../ads.js"></script>
-  <script src="game.js?v=10"></script>
+  <script src="game.js?v=11"></script>
 </body>
 </html>
