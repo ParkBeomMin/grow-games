@@ -7,14 +7,14 @@ const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 
 // ---------- 데이터 ----------
 const GENERATORS = [
-  { id: "caffeine", emoji: "☕", name: "카페인 풀가동",       base: 0.1,   cost: 15,     desc: "밤샘 코딩 모드" },
-  { id: "junior",   emoji: "👨‍💻", name: "주니어 개발자",     base: 1,     cost: 100,    desc: "열정은 가득" },
-  { id: "senior",   emoji: "🧑‍💻", name: "시니어 개발자",     base: 8,     cost: 1100,   desc: "버그를 예방해요" },
-  { id: "bot",      emoji: "🤖", name: "자동 커밋봇",         base: 47,    cost: 12000,  desc: "24시간 커밋" },
-  { id: "ci",       emoji: "🔁", name: "CI/CD 파이프라인",    base: 260,   cost: 130000, desc: "자동 빌드·배포" },
-  { id: "server",   emoji: "☁️", name: "서버 오토스케일",     base: 1400,  cost: 1.4e6,  desc: "무한 확장" },
-  { id: "offshore", emoji: "🌏", name: "글로벌 오프쇼어 팀",  base: 7800,  cost: 2e7,    desc: "24시간 릴레이 개발" },
-  { id: "ai",       emoji: "🧠", name: "AI 에이전트 군단",    base: 44000, cost: 3.3e8,  desc: "자율 개발·자율 배포" },
+  { id: "caffeine", emoji: "☕", name: "카페인 풀가동",       base: 1,      cost: 10,     desc: "밤샘 코딩 모드" },
+  { id: "junior",   emoji: "👨‍💻", name: "주니어 개발자",     base: 8,      cost: 120,    desc: "열정은 가득" },
+  { id: "senior",   emoji: "🧑‍💻", name: "시니어 개발자",     base: 47,     cost: 1400,   desc: "버그를 예방해요" },
+  { id: "bot",      emoji: "🤖", name: "자동 커밋봇",         base: 260,    cost: 20000,  desc: "24시간 커밋" },
+  { id: "ci",       emoji: "🔁", name: "CI/CD 파이프라인",    base: 1400,   cost: 250000, desc: "자동 빌드·배포" },
+  { id: "server",   emoji: "☁️", name: "서버 오토스케일",     base: 7800,   cost: 3e6,    desc: "무한 확장" },
+  { id: "offshore", emoji: "🌏", name: "글로벌 오프쇼어 팀",  base: 44000,  cost: 4e7,    desc: "24시간 릴레이 개발" },
+  { id: "ai",       emoji: "🧠", name: "AI 에이전트 군단",    base: 260000, cost: 5e8,    desc: "자율 개발·자율 배포" },
 ];
 
 const UPGRADES = [
@@ -104,6 +104,13 @@ function fmt(n) {
   return s + UNITS[t];
 }
 const lines = (n) => fmt(n) + "줄";
+// 생산 속도용 — 100 미만 소수도 '0.1줄'처럼 보이게 (내림 때문에 0으로 보이지 않게)
+function rate(n) {
+  if (n <= 0) return "0";
+  if (n < 100) { const r = Math.round(n * 10) / 10; return Number.isInteger(r) ? String(r) : r.toFixed(1); }
+  return fmt(n);
+}
+const linesRate = (n) => rate(n) + "줄";
 const mmss = (ms) => { const t = Math.ceil(ms / 1000); return Math.floor(t / 60) + ":" + String(t % 60).padStart(2, "0"); };
 
 // ---------- 로그 ----------
@@ -184,7 +191,7 @@ function renderHud() {
   const now = Date.now();
   const v = valuation(), st = stageOf(v), ns = nextStage(v);
   $("hud-code").textContent = "💾 " + lines(S.code);
-  $("hud-sec").textContent = lines(perSec()) + "/초";
+  $("hud-sec").textContent = linesRate(perSec()) + "/초";
   $("hud-so").textContent = "🧾 스톡옵션 " + S.so + " (×" + prestigeMult().toFixed(2) + ")";
   $("stage-name").textContent = `${st.emoji} ${st.name}`;
   $("stage-val").textContent = "누적 " + lines(v);
@@ -223,7 +230,7 @@ function renderGens() {
         <span class="gen-emoji">${g.emoji}</span>
         <span class="gen-info">
           <b>${g.name} ${cnt ? `<i>×${cnt}</i>` : ""}</b>
-          <span class="gen-desc">${cnt ? `${lines(out)}/초` : g.desc}</span>
+          <span class="gen-desc">${cnt ? `${linesRate(out)}/초` : g.desc}</span>
         </span>
         <span class="gen-cost">${lines(cost)}</span>
       </button>`;
