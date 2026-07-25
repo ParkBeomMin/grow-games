@@ -83,6 +83,10 @@ body {
   background: linear-gradient(180deg, #ffe08a, #ffb300); color: #3a2600; box-shadow: 0 4px 0 #b37c00;
 }
 .btn-boost:disabled { background: var(--field); color: var(--dim); box-shadow: 0 4px 0 #0a1024; cursor: not-allowed; }
+/* 스프린트 아래 인라인 배너 — 맨 아래용 구분선/여백은 걷어내요 */
+#ad-anchor-slot:empty { display: none; }
+#ad-anchor-slot .ad-anchor { margin: 12px 0 0; padding-top: 0; border-top: 0; }
+
 .btn-exit {
   width: 100%; margin: 10px 0 6px;
   background: linear-gradient(180deg, #ff87b0, var(--accent2)); color: #2a0d1d; box-shadow: 0 4px 0 #b23a63;

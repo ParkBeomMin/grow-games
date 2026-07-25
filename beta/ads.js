@@ -96,9 +96,10 @@ window.Ads = (() => {
     else if (state === "idle") loadScript();
   }
 
-  // 하단 띠 배너 — 콘텐츠 맨 아래 일반 배치
+  // 하단 띠 배너 — 기본은 콘텐츠 맨 아래 배치
   // (position:fixed로 화면에 고정하면 애드센스 정책 단속 스크립트가
   //  스크롤 시 광고를 접어버려요. 화면 고정형은 자동 광고의 '앵커'만 공식 지원)
+  // 페이지에 #ad-anchor-slot 요소를 두면 그 자리에 대신 붙어요.
   function anchor() {
     if (!ADSENSE_CLIENT || !AD_ANCHOR_SLOT || document.getElementById("ad-anchor")) return;
     const app = document.getElementById("app");
@@ -109,7 +110,7 @@ window.Ads = (() => {
     bar.innerHTML = `
       <ins class="adsbygoogle" style="display:block;width:100%;height:60px"
         data-ad-client="${ADSENSE_CLIENT}" data-ad-slot="${AD_ANCHOR_SLOT}"></ins>`;
-    app.appendChild(bar);
+    (document.getElementById("ad-anchor-slot") || app).appendChild(bar);
     const ins = bar.querySelector("ins");
     // 미충전이면 빈 칸이 남지 않게 치워요
     new MutationObserver(() => {

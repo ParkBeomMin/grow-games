@@ -23,7 +23,7 @@
   <link rel="stylesheet" href="../base.css" />
   <!-- ?v= 는 캐시 무효화용. game.js/style.css 고칠 때마다 같이 올려주세요
        (GitHub Pages가 정적 파일에 max-age=600을 붙여서, 안 올리면 최대 10분간 옛 파일이 떠요) -->
-  <link rel="stylesheet" href="style.css?v=8" />
+  <link rel="stylesheet" href="style.css?v=9" />
 </head>
 <body>
   <main id="app">
@@ -57,6 +57,8 @@
     </button>
 
     <button class="btn btn-boost" id="btn-boost">🚀 스프린트 (×2) — 60초간 생산 2배</button>
+    <!-- 하단 띠 배너가 여기에 붙어요 (ads.js가 #ad-anchor-slot을 찾아 배치) -->
+    <div id="ad-anchor-slot"></div>
     <button class="btn btn-exit" id="btn-exit" disabled>🔒 Exit</button>
 
     <div class="tabs">
@@ -107,6 +109,6 @@
   <script src="../match.js"></script>
   <script src="../stats.js"></script>
   <script src="../ads.js"></script>
-  <script src="game.js?v=8"></script>
+  <script src="game.js?v=9"></script>
 </body>
 </html>
