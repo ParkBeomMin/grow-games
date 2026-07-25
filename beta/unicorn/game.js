@@ -9,32 +9,32 @@ const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 // ---------- 데이터 ----------
 // 조직 — 반복 채용/구축, 개당 '초당 +per줄' 패시브. 비용은 1.15^보유수로 상승.
 const GENERATORS = [
-  { id: "americano", emoji: "👨‍💻", name: "열정 인턴",          per: 1,    cost: 20 },
-  { id: "energy",    emoji: "🧑‍💻", name: "주니어 개발자",      per: 2,    cost: 60 },
-  { id: "book",      emoji: "👩‍💻", name: "시니어 개발자",      per: 3,    cost: 150 },
-  { id: "stack",     emoji: "🧠",  name: "테크리드",           per: 6,    cost: 400 },
-  { id: "ai",        emoji: "🤖",  name: "자동 커밋봇",         per: 10,   cost: 1000 },
-  { id: "youtube",   emoji: "🔁",  name: "CI/CD 파이프라인",    per: 20,   cost: 2200 },
-  { id: "copilot",   emoji: "☁️",  name: "오토스케일 서버",     per: 30,   cost: 3500 },
-  { id: "conf",      emoji: "🌏",  name: "오프쇼어 팀",         per: 60,   cost: 8000 },
-  { id: "remote",    emoji: "🏢",  name: "판교 사옥",           per: 100,  cost: 15000 },
-  { id: "offshore",  emoji: "🦾",  name: "AI 코딩 에이전트",    per: 320,  cost: 5e4 },
-  { id: "agent",     emoji: "🛰️", name: "자율 개발 군단",      per: 1200, cost: 3e5 },
+  { id: "americano", emoji: "👨‍💻", name: "열정 인턴",          per: 1,    cost: 25 },
+  { id: "energy",    emoji: "🧑‍💻", name: "주니어 개발자",      per: 4,    cost: 120 },
+  { id: "book",      emoji: "👩‍💻", name: "시니어 개발자",      per: 9,    cost: 350 },
+  { id: "stack",     emoji: "🧠",  name: "테크리드",           per: 18,   cost: 900 },
+  { id: "ai",        emoji: "🤖",  name: "자동 커밋봇",         per: 40,   cost: 2600 },
+  { id: "youtube",   emoji: "🔁",  name: "CI/CD 파이프라인",    per: 90,   cost: 7500 },
+  { id: "copilot",   emoji: "☁️",  name: "오토스케일 서버",     per: 200,  cost: 22000 },
+  { id: "conf",      emoji: "🌏",  name: "오프쇼어 팀",         per: 450,  cost: 75000 },
+  { id: "remote",    emoji: "🏢",  name: "판교 사옥",           per: 1000, cost: 2.6e5 },
+  { id: "offshore",  emoji: "🦾",  name: "AI 코딩 에이전트",    per: 2400, cost: 1.5e6 },
+  { id: "agent",     emoji: "🛰️", name: "자율 개발 군단",      per: 6000, cost: 1e7 },
 ];
 
 // 개발력 — 반복 투자, 개당 '클릭당 +per줄' (내 코딩 셋업·스킬). 비용은 1.15^보유수로 상승.
 const EQUIP = [
-  { id: "kb",       emoji: "⌨️",  name: "텐키리스 키보드",       per: 1,    cost: 10 },
-  { id: "chair",    emoji: "🪑",  name: "인체공학 의자",         per: 2,    cost: 100 },
-  { id: "glass",    emoji: "🎧",  name: "집중용 헤드셋",         per: 3,    cost: 250 },
-  { id: "mouse",    emoji: "🖱️", name: "게이밍 마우스",         per: 5,    cost: 500 },
-  { id: "wrist",    emoji: "💪",  name: "손목 보호대",           per: 8,    cost: 900 },
-  { id: "lube",     emoji: "⌨️",  name: "무접점 커스텀 키보드",  per: 12,   cost: 1500 },
-  { id: "dual",     emoji: "🖥️", name: "울트라와이드 모니터",   per: 35,   cost: 5000 },
-  { id: "rgb",      emoji: "🌙",  name: "새벽 감성 코딩",        per: 80,   cost: 12000 },
-  { id: "keycap",   emoji: "🧘",  name: "몰입 모드(Flow)",       per: 150,  cost: 25000 },
-  { id: "sitstand", emoji: "⚡",  name: "단축키 장인",           per: 400,  cost: 8e4 },
-  { id: "vim",      emoji: "🪄",  name: "정규식 흑마법",         per: 1000, cost: 5e5 },
+  { id: "kb",       emoji: "⌨️",  name: "텐키리스 키보드",       per: 1,    cost: 15 },
+  { id: "chair",    emoji: "🪑",  name: "인체공학 의자",         per: 3,    cost: 120 },
+  { id: "glass",    emoji: "🎧",  name: "집중용 헤드셋",         per: 7,    cost: 400 },
+  { id: "mouse",    emoji: "🖱️", name: "게이밍 마우스",         per: 15,   cost: 1200 },
+  { id: "wrist",    emoji: "💪",  name: "손목 보호대",           per: 30,   cost: 3200 },
+  { id: "lube",     emoji: "⌨️",  name: "무접점 커스텀 키보드",  per: 60,   cost: 9000 },
+  { id: "dual",     emoji: "🖥️", name: "울트라와이드 모니터",   per: 140,  cost: 32000 },
+  { id: "rgb",      emoji: "🌙",  name: "새벽 감성 코딩",        per: 300,  cost: 1.2e5 },
+  { id: "keycap",   emoji: "🧘",  name: "몰입 모드(Flow)",       per: 700,  cost: 6e5 },
+  { id: "sitstand", emoji: "⚡",  name: "단축키 장인",           per: 1800, cost: 3.2e6 },
+  { id: "vim",      emoji: "🪄",  name: "정규식 흑마법",         per: 5000, cost: 2e7 },
 ];
 
 const STAGES = [
