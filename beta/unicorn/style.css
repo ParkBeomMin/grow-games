@@ -119,4 +119,39 @@ body {
 .gen-cost, .up-cost { font-family: "Jua", sans-serif; color: var(--accent); font-size: 0.95rem; white-space: nowrap; }
 .gen.no .gen-cost, .up.no .up-cost { color: var(--accent2); }
 
+/* 잠긴 항목 — Exit을 할 이유를 보여주는 티저 */
+.gen.lock { opacity: .55; cursor: default; border-style: dashed; }
+.gen.lock:hover { border-color: var(--line); }
+.gen.lock b { color: var(--dim); letter-spacing: 2px; }
+.gen.lock .gen-desc { color: var(--accent2); }
+.gen.lock .gen-lv { color: var(--dim); }
+
+/* 엔딩 */
+.end-wrap {
+  position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center;
+  padding: 20px; background: rgba(5,8,18,.86); backdrop-filter: blur(4px); overflow-y: auto;
+  animation: endIn .3s ease-out;
+}
+@keyframes endIn { from { opacity: 0; } to { opacity: 1; } }
+.end-card {
+  width: 100%; max-width: 380px; text-align: center; padding: 26px 20px 20px;
+  background: linear-gradient(180deg, #1b2547, #101733);
+  border: 1px solid var(--accent); border-radius: 20px;
+  box-shadow: 0 0 50px rgba(100,255,218,.18);
+}
+.end-crown { font-size: 3.4rem; animation: crownPop .5s ease-out; }
+@keyframes crownPop { from { transform: scale(.4) rotate(-15deg); opacity: 0; } to { transform: none; opacity: 1; } }
+.end-title { font-family: "Jua", sans-serif; font-size: 1.7rem; color: var(--accent); margin: 4px 0 2px; }
+.end-company { font-family: "Jua", sans-serif; color: var(--text); font-size: 1.05rem; }
+.end-desc { color: var(--dim); font-size: 0.82rem; margin: 8px 0 14px; }
+.end-stats { text-align: left; margin-bottom: 14px; }
+.end-row {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 10px;
+  padding: 9px 2px; border-bottom: 1px solid var(--line); font-size: 0.86rem; color: var(--dim);
+}
+.end-row:last-child { border-bottom: 0; }
+.end-row b { font-family: "Jua", sans-serif; color: var(--accent); font-size: 0.95rem; }
+#end-ad { margin: 4px 0 10px; }
+.end-card .btn-exit { margin: 6px 0 10px; }
+
 .uni-foot { text-align: center; padding: 18px 0 40px; }

@@ -20,6 +20,10 @@ const GENERATORS = [
   { id: "remote",    emoji: "🏢",  name: "판교 사옥",           per: 1000, cost: 2.6e5 },
   { id: "offshore",  emoji: "🦾",  name: "AI 코딩 에이전트",    per: 2400, cost: 1.5e6 },
   { id: "agent",     emoji: "🛰️", name: "자율 개발 군단",      per: 6000, cost: 1e7 },
+  // req = 해금에 필요한 Exit 횟수 (회차를 거듭할수록 새 조직이 열려요)
+  { id: "angel",     emoji: "😇",  name: "엔젤 투자자",         per: 15000,  cost: 6e7, req: 1 },
+  { id: "ipo",       emoji: "🔔",  name: "IPO 준비팀",          per: 40000,  cost: 4e8, req: 2 },
+  { id: "quantum",   emoji: "🌌",  name: "양자컴 클러스터",     per: 100000, cost: 3e9, req: 3 },
 ];
 
 // 개발력 — 반복 투자, 개당 '클릭당 +per줄' (내 코딩 셋업·스킬). 비용은 1.15^보유수로 상승.
@@ -35,19 +39,24 @@ const EQUIP = [
   { id: "keycap",   emoji: "🧘",  name: "몰입 모드(Flow)",       per: 700,  cost: 6e5 },
   { id: "sitstand", emoji: "⚡",  name: "단축키 장인",           per: 1800, cost: 3.2e6 },
   { id: "vim",      emoji: "🪄",  name: "정규식 흑마법",         per: 5000, cost: 2e7 },
+  // req = 해금에 필요한 Exit 횟수
+  { id: "pair",     emoji: "👥",  name: "AI 페어 프로그래머",    per: 12000, cost: 1.2e8, req: 1 },
+  { id: "neural",   emoji: "🧬",  name: "뇌-키보드 인터페이스",  per: 30000, cost: 8e8,   req: 2 },
+  { id: "timestop", emoji: "⏳",  name: "시간 정지 디버깅",      per: 80000, cost: 6e9,   req: 3 },
 ];
 
 const STAGES = [
   { v: 0,    emoji: "🌱", name: "부트스트랩" },
-  { v: 1e4,  emoji: "🌿", name: "프리시드" },
-  { v: 1e6,  emoji: "🌾", name: "시드 투자" },
-  { v: 1e8,  emoji: "📈", name: "시리즈 A" },
-  { v: 1e10, emoji: "🚀", name: "시리즈 B" },
-  { v: 1e12, emoji: "💫", name: "시리즈 C" },
-  { v: 1e13, emoji: "🦄", name: "유니콘" },
-  { v: 1e15, emoji: "👑", name: "데카콘" },
+  { v: 5e3,  emoji: "🌿", name: "프리시드" },
+  { v: 3e5,  emoji: "🌾", name: "시드 투자" },
+  { v: 1e7,  emoji: "📈", name: "시리즈 A" },
+  { v: 3e8,  emoji: "🚀", name: "시리즈 B" },
+  { v: 1e10, emoji: "💫", name: "시리즈 C" },
+  { v: 1e11, emoji: "🦄", name: "유니콘" },
+  { v: 1e13, emoji: "👑", name: "데카콘" },
 ];
-const EXIT_UNLOCK = 1e8; // 시리즈 A부터 Exit 가능
+const EXIT_UNLOCK = 1e7;      // 시리즈 A부터 Exit 가능
+const FINAL_STAGE = 1e13;     // 데카콘 = 엔딩 트리거
 
 const BOOST_DUR = 60000;   // 부스터 지속 60초
 const BOOST_CD = 300000;   // 쿨다운 5분
@@ -101,6 +110,7 @@ function fresh() {
     so: 0, exits: 0,
     earnedRun: 0, earnedAll: 0,
     buffUntil: 0, boostCdUntil: 0,
+    startedAt: Date.now(), endedAt: 0, playMs: 0,
     savedAt: Date.now(),
     log: [],
   };
@@ -111,15 +121,24 @@ function load() {
     if (s && typeof s.code === "number") {
       S = s; S.gens = S.gens || {}; S.equip = S.equip || {}; S.log = S.log || [];
       S.boostCdUntil = S.boostCdUntil || 0;
+      S.startedAt = S.startedAt || Date.now();
+      S.endedAt = S.endedAt || 0;
+      S.playMs = S.playMs || 0;
       return true;
     }
   } catch { /* noop */ }
   return false;
 }
-function save() { S.savedAt = Date.now(); try { localStorage.setItem(SAVE_KEY, JSON.stringify(S)); } catch {} }
+function save() {
+  const now = Date.now();
+  // 플레이 타임 누적 (sessionStart는 init에서 잡아요)
+  if (S.sessionStart) { S.playMs = (S.playMs || 0) + (now - S.sessionStart); S.sessionStart = now; }
+  S.savedAt = now;
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify(S)); } catch {}
+}
 
 // ---------- 계산 ----------
-const prestigeMult = () => 1 + S.so * 0.04;
+const prestigeMult = () => 1 + S.so * 0.10;
 const buffMult = () => (Date.now() < S.buffUntil ? 2 : 1);
 const baseSec = () => GENERATORS.reduce((s, g) => s + (S.gens[g.id] || 0) * g.per, 0);
 const perSec = () => baseSec() * prestigeMult() * buffMult();
@@ -131,7 +150,10 @@ const equipCost = (e) => Math.ceil(e.cost * Math.pow(1.15, S.equip[e.id] || 0));
 const valuation = () => S.earnedRun;
 const stageOf = (v) => { let st = STAGES[0]; for (const s of STAGES) if (v >= s.v) st = s; return st; };
 const nextStage = (v) => STAGES.find((s) => s.v > v) || null;
-const exitSO = () => Math.floor(Math.sqrt(S.earnedRun / 1e6));
+// 첫 Exit(시리즈 A)에서 SO 10 = 생산 ×2.0 — 리셋이 확실히 이득이 되게
+const exitSO = () => Math.floor(10 * Math.sqrt(S.earnedRun / EXIT_UNLOCK));
+// 해금 여부 — req가 없으면 처음부터, 있으면 Exit 횟수 충족 시
+const unlocked = (it) => !it.req || S.exits >= it.req;
 
 // ---------- 숫자 포맷 (한글 단위) ----------
 const UNITS = ["", "만", "억", "조", "경", "해", "자", "양", "구", "간"];
@@ -200,14 +222,14 @@ function floatText(e, txt) {
 // ---------- 구매 ----------
 function buyGen(g) {
   const cost = genCost(g);
-  if (S.code < cost) return;
+  if (!unlocked(g) || S.code < cost) return;
   S.code -= cost;
   S.gens[g.id] = (S.gens[g.id] || 0) + 1;
   save(); renderAll();
 }
 function buyEquip(e) {
   const cost = equipCost(e);
-  if (S.code < cost) return;
+  if (!unlocked(e) || S.code < cost) return;
   S.code -= cost;
   S.equip[e.id] = (S.equip[e.id] || 0) + 1;
   save(); renderAll();
@@ -234,9 +256,15 @@ function doExit() {
   const gain = exitSO();
   if (gain < 1) return;
   const label = stageOf(valuation()).name;
+  const nextExits = S.exits + 1;
+  const opening = [...GENERATORS, ...EQUIP].filter((it) => it.req === nextExits);
+  const unlockMsg = opening.length
+    ? `· 🔓 새로 열려요: ${opening.map((o) => o.name).join(", ")}\n`
+    : "";
   if (!confirm(
     `🚀 Exit — ${label} 단계에서 회사를 매각/상장할까요?\n\n` +
-    `· 스톡옵션 +${gain} 획득 (영구 생산 배수 +${gain * 4}%p)\n` +
+    `· 스톡옵션 +${gain} 획득 (영구 생산 배수 ×${(1 + (S.so + gain) * 0.1).toFixed(2)})\n` +
+    unlockMsg +
     `· 코드·조직·개발력은 초기화되고, 더 빠르게 다시 시작해요\n\n진행할까요?`
   )) return;
   S.so += gain;
@@ -244,9 +272,41 @@ function doExit() {
   S.code = 0; S.gens = {}; S.equip = {}; S.earnedRun = 0;
   S.buffUntil = 0;
   addLog(`🚀 Exit 성공! 스톡옵션 +${gain} (통산 ${S.exits}회, 누적 SO ${S.so})`);
+  if (opening.length) addLog(`🔓 ${opening.map((o) => o.name).join(", ")} 해금!`);
   save(); renderAll();
-  alert(`🎉 Exit 완료!\n\n스톡옵션 ${gain}개를 챙기고 새 창업을 시작합니다.\n이제 생산 배수 ×${prestigeMult().toFixed(2)}!`);
+  alert(
+    `🎉 Exit 완료!\n\n스톡옵션 ${gain}개를 챙기고 새 창업을 시작합니다.\n이제 생산 배수 ×${prestigeMult().toFixed(2)}!` +
+    (opening.length ? `\n\n🔓 해금: ${opening.map((o) => o.name).join(", ")}` : "")
+  );
 }
+
+// ---------- 엔딩 (데카콘 도달) ----------
+function playTime() { return S.playMs + (Date.now() - (S.sessionStart || Date.now())); }
+function hhmm(ms) {
+  const t = Math.floor(ms / 1000);
+  const d = Math.floor(t / 86400), h = Math.floor((t % 86400) / 3600), m = Math.floor((t % 3600) / 60);
+  return (d ? `${d}일 ` : "") + (d || h ? `${h}시간 ` : "") + `${m}분`;
+}
+function checkEnding() {
+  if (S.endedAt || valuation() < FINAL_STAGE) return;
+  S.endedAt = Date.now();
+  addLog("👑 데카콘 등극! 시장을 지배하는 회사가 되었어요.");
+  save();
+  showEnding();
+}
+function showEnding() {
+  $("end-company").textContent = "🦄 " + S.company;
+  $("end-stats").innerHTML = [
+    ["🏢 최종 기업가치", lines(valuation())],
+    ["💾 통산 생산 코드", lines(S.earnedAll)],
+    ["🚀 Exit 횟수", S.exits + "회"],
+    ["🧾 누적 스톡옵션", S.so + " (×" + prestigeMult().toFixed(2) + ")"],
+    ["⏱️ 플레이 타임", hhmm(playTime())],
+  ].map(([k, v]) => `<div class="end-row"><span>${k}</span><b>${v}</b></div>`).join("");
+  $("ending").classList.remove("hidden");
+  if (window.Ads && window.Ads.display) window.Ads.display($("end-ad"));
+}
+function closeEnding() { $("ending").classList.add("hidden"); }
 
 // ---------- 렌더 ----------
 function renderHud() {
@@ -282,7 +342,19 @@ function renderHud() {
 }
 
 // 개발력·조직 공통 아이템 렌더 (subtitle 단위만 다름)
+// 아직 안 열린 항목은 잠금 상태로 보여줘요 — Exit을 할 이유가 되게
 function itemHTML(item, cnt, cost, can, unit) {
+  if (!unlocked(item)) {
+    return `
+      <button class="gen lock" data-id="${item.id}" disabled>
+        <span class="gen-emoji">🔒</span>
+        <span class="gen-info">
+          <b>???</b>
+          <span class="gen-desc">Exit ${item.req}회 달성 시 해금</span>
+        </span>
+        <span class="gen-right"><span class="gen-lv">${unit} +${fmt(item.per)}줄</span></span>
+      </button>`;
+  }
   return `
     <button class="gen ${can ? "" : "no"}" data-id="${item.id}">
       <span class="gen-emoji">${item.emoji}</span>
@@ -296,21 +368,27 @@ function itemHTML(item, cnt, cost, can, unit) {
       </span>
     </button>`;
 }
+// 잠긴 항목은 '바로 다음 하나'만 보여줘서 목록이 길어지지 않게
+function visible(list) {
+  const open = list.filter(unlocked);
+  const next = list.find((it) => !unlocked(it));
+  return next ? open.concat([next]) : open;
+}
 function renderGens() {
   const box = $("gen-list");
-  box.innerHTML = GENERATORS.map((g) => {
+  box.innerHTML = visible(GENERATORS).map((g) => {
     const cnt = S.gens[g.id] || 0, cost = genCost(g);
     return itemHTML(g, cnt, cost, S.code >= cost, "초당");
   }).join("");
-  box.querySelectorAll(".gen").forEach((b) => { b.onclick = () => buyGen(GENERATORS.find((g) => g.id === b.dataset.id)); });
+  box.querySelectorAll(".gen:not(.lock)").forEach((b) => { b.onclick = () => buyGen(GENERATORS.find((g) => g.id === b.dataset.id)); });
 }
 function renderEquip() {
   const box = $("equip-list");
-  box.innerHTML = EQUIP.map((e) => {
+  box.innerHTML = visible(EQUIP).map((e) => {
     const cnt = S.equip[e.id] || 0, cost = equipCost(e);
     return itemHTML(e, cnt, cost, S.code >= cost, "클릭당");
   }).join("");
-  box.querySelectorAll(".gen").forEach((b) => { b.onclick = () => buyEquip(EQUIP.find((e) => e.id === b.dataset.id)); });
+  box.querySelectorAll(".gen:not(.lock)").forEach((b) => { b.onclick = () => buyEquip(EQUIP.find((e) => e.id === b.dataset.id)); });
 }
 
 function renderAll() {
@@ -336,6 +414,7 @@ function tick() {
   lastTick = now;
   const gain = perSec() * dt;
   if (gain > 0) { S.code += gain; S.earnedRun += gain; S.earnedAll += gain; }
+  checkEnding();
   renderHud();
   if (now - lastListRender > 500) { renderEquip(); renderGens(); renderLog(); lastListRender = now; }
 }
@@ -355,6 +434,7 @@ function offlineReward() {
 // ---------- 초기화 ----------
 function init() {
   if (!load()) { S = fresh(); save(); }
+  S.sessionStart = Date.now();
   offlineReward();
   termBoot();
   renderAll();
@@ -363,6 +443,8 @@ function init() {
   $("clicker").addEventListener("pointerdown", (e) => { e.preventDefault(); onClick(e); });
   $("btn-boost").addEventListener("click", useBoost);
   $("btn-exit").addEventListener("click", doExit);
+  $("btn-end-close").addEventListener("click", closeEnding);
+  $("btn-end-exit").addEventListener("click", () => { closeEnding(); doExit(); });
   document.querySelectorAll(".tab").forEach((b) => b.addEventListener("click", () => setTab(b.dataset.tab)));
   $("btn-reset").addEventListener("click", () => {
     if (confirm("정말 처음부터 다시 시작할까요? 모든 진행(스톡옵션 포함)이 사라져요!")) {
