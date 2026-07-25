@@ -108,7 +108,7 @@ function fresh() {
     code: 0,             // 보유 코드(줄)
     gens: {}, equip: {}, // 자동화 보유수 / 장비 보유수
     so: 0, exits: 0,
-    earnedRun: 0, earnedAll: 0,
+    earnedRun: 0, earnedAll: 0, bestRun: 0,
     buffUntil: 0, boostCdUntil: 0,
     startedAt: Date.now(), endedAt: 0, playMs: 0,
     savedAt: Date.now(),
@@ -124,6 +124,7 @@ function load() {
       S.startedAt = S.startedAt || Date.now();
       S.endedAt = S.endedAt || 0;
       S.playMs = S.playMs || 0;
+      S.bestRun = S.bestRun || S.earnedRun || 0;
       return true;
     }
   } catch { /* noop */ }
@@ -308,6 +309,115 @@ function showEnding() {
 }
 function closeEnding() { $("ending").classList.add("hidden"); }
 
+// ---------- 명예의 전당 / 창업 정리(은퇴) ----------
+const HOF_KEY = "grow-hof-v1"; // 시리즈 공용 (entry.game으로 구분)
+const loadHof = () => { try { return JSON.parse(localStorage.getItem(HOF_KEY)) || []; } catch { return []; } };
+const saveHof = (l) => { try { localStorage.setItem(HOF_KEY, JSON.stringify(l.slice(-200))); } catch {} };
+
+// 누적 코드가 주력(로그 스케일) + Exit 횟수 + 최고 단계
+function hofScore() {
+  return Math.round(
+    Math.log10(S.earnedAll + 10) * 1000 +
+    S.exits * 300 +
+    STAGES.indexOf(stageOf(S.bestRun)) * 200
+  );
+}
+function gradeOf(bestRun) {
+  const st = stageOf(bestRun).name;
+  if (bestRun >= FINAL_STAGE) return "👑 시장을 지배한 창업가";
+  if (st === "유니콘") return "🦄 유니콘을 세운 사람";
+  if (st === "시리즈 C") return "💫 대형 스타트업 대표";
+  if (st === "시리즈 B") return "🚀 성장 궤도에 오른 대표";
+  if (st === "시리즈 A") return "📈 투자 유치에 성공한 대표";
+  return "🌱 작지만 단단했던 시작";
+}
+// 정리 가능 조건 — 한 번이라도 시리즈 A를 찍었거나 Exit 경험이 있으면
+const canRetire = () => S.bestRun >= EXIT_UNLOCK || S.exits > 0;
+
+function doRetire() {
+  if (!canRetire()) return;
+  const name = prompt("명예의 전당에 남길 회사 이름을 정해주세요", S.company);
+  if (name === null) return;
+  const company = String(name).trim().slice(0, 24) || S.company;
+  if (!confirm(
+    `🏁 여기서 창업 인생을 정리할까요?\n\n` +
+    `· ${company} 의 기록이 명예의 전당에 영구 등록돼요\n` +
+    `· 스톡옵션을 포함한 모든 진행이 초기화되고 처음부터 시작해요\n\n진행할까요?`
+  )) return;
+
+  const entry = {
+    id: "u" + Date.now(),
+    game: "unicorn",
+    name: company,
+    earnedAll: Math.round(S.earnedAll),
+    bestRun: Math.round(S.bestRun),
+    stage: stageOf(S.bestRun).name,
+    exits: S.exits,
+    so: S.so,
+    playMs: playTime(),
+    score: hofScore(),
+    grade: gradeOf(S.bestRun),
+  };
+  const hof = loadHof();
+  hof.push(entry);
+  saveHof(hof);
+  if (window.Match) window.Match.submitHof("unicorn", entry);
+  if (window.Stats) Stats.log("retire", { exits: entry.exits, so: entry.so, score: entry.score });
+
+  // 완전히 새 인생으로 — 자동 저장이 옛 상태를 되살리지 않게 S 자체를 교체
+  try { localStorage.removeItem(SAVE_KEY); } catch {}
+  S = fresh();
+  S.sessionStart = Date.now();
+  save();
+  $("ending").classList.add("hidden");
+  renderAll();
+  alert(
+    `🏛️ ${entry.name} 의 기록이 명예의 전당에 등록됐어요!\n\n` +
+    `${entry.grade}\n최고 단계 ${entry.stage} · Exit ${entry.exits}회 · 점수 ${entry.score}`
+  );
+  showHof();
+}
+
+async function showHof() {
+  const box = $("hof-list"), scope = $("hof-scope");
+  box.innerHTML = `<p class="hint">불러오는 중…</p>`;
+  scope.textContent = "기록을 불러오는 중…";
+  $("hof").classList.remove("hidden");
+
+  if (window.Match) await window.Match.backfillHof();
+  const local = loadHof().filter((e) => e.game === "unicorn");
+  const localIds = new Set(local.map((e) => e.id));
+  let list = local, global = false;
+  const remote = window.Match ? await window.Match.fetchHof("unicorn") : null;
+  if (remote && remote.length) {
+    global = true;
+    const seen = new Set();
+    list = [];
+    for (const e of [...remote, ...local]) {
+      if (!e || seen.has(e.id)) continue;
+      seen.add(e.id);
+      list.push(e);
+    }
+  }
+  list.sort((a, b) => b.score - a.score);
+  scope.textContent = global ? "🌏 전 세계 창업가 순위" : "📱 내 기기에 남은 기록";
+  if (!list.length) { box.innerHTML = `<p class="hint">아직 아무도 없어요. 첫 전설이 되어보세요!</p>`; return; }
+  box.innerHTML = "";
+  list.slice(0, 100).forEach((e, i) => {
+    const div = document.createElement("div");
+    div.className = "hof-row" + (localIds.has(e.id) ? " me" : "");
+    div.innerHTML = `
+      <span class="hof-rank">${i + 1}</span>
+      <span class="hof-body">
+        <b>${e.name} <span class="hof-grade">${e.grade || ""}</span></b>
+        <span>${e.stage || "-"} · 누적 ${lines(e.earnedAll || 0)} · Exit ${e.exits || 0}회 · ${hhmm(e.playMs || 0)}</span>
+      </span>
+      <span class="hof-score">${(e.score || 0).toLocaleString()}</span>`;
+    box.appendChild(div);
+  });
+}
+function closeHof() { $("hof").classList.add("hidden"); }
+
 // ---------- 렌더 ----------
 function renderHud() {
   const now = Date.now();
@@ -339,6 +449,9 @@ function renderHud() {
   const exitBtn = $("btn-exit");
   if (v >= EXIT_UNLOCK) { exitBtn.disabled = false; exitBtn.innerHTML = `🚀 Exit (매각/IPO) — 스톡옵션 +${exitSO()}`; }
   else { exitBtn.disabled = true; exitBtn.innerHTML = `🔒 Exit — 시리즈 A(${lines(EXIT_UNLOCK)})부터`; }
+
+  // 창업 정리 — 조건 충족 시에만 노출 (아무 때나 끝낼 수 있게)
+  $("btn-retire").classList.toggle("hidden", !canRetire());
 }
 
 // 개발력·조직 공통 아이템 렌더 (subtitle 단위만 다름)
@@ -414,6 +527,7 @@ function tick() {
   lastTick = now;
   const gain = perSec() * dt;
   if (gain > 0) { S.code += gain; S.earnedRun += gain; S.earnedAll += gain; }
+  if (S.earnedRun > S.bestRun) S.bestRun = S.earnedRun;
   checkEnding();
   renderHud();
   if (now - lastListRender > 500) { renderEquip(); renderGens(); renderLog(); lastListRender = now; }
@@ -445,6 +559,10 @@ function init() {
   $("btn-exit").addEventListener("click", doExit);
   $("btn-end-close").addEventListener("click", closeEnding);
   $("btn-end-exit").addEventListener("click", () => { closeEnding(); doExit(); });
+  $("btn-end-retire").addEventListener("click", doRetire);
+  $("btn-retire").addEventListener("click", doRetire);
+  $("btn-hof").addEventListener("click", showHof);
+  $("btn-hof-close").addEventListener("click", closeHof);
   document.querySelectorAll(".tab").forEach((b) => b.addEventListener("click", () => setTab(b.dataset.tab)));
   $("btn-reset").addEventListener("click", () => {
     if (confirm("정말 처음부터 다시 시작할까요? 모든 진행(스톡옵션 포함)이 사라져요!")) {

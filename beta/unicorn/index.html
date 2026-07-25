@@ -23,7 +23,7 @@
   <link rel="stylesheet" href="../base.css" />
   <!-- ?v= 는 캐시 무효화용. game.js/style.css 고칠 때마다 같이 올려주세요
        (GitHub Pages가 정적 파일에 max-age=600을 붙여서, 안 올리면 최대 10분간 옛 파일이 떠요) -->
-  <link rel="stylesheet" href="style.css?v=6" />
+  <link rel="stylesheet" href="style.css?v=7" />
 </head>
 <body>
   <main id="app">
@@ -72,10 +72,22 @@
 
     <div class="log" id="ev-log"></div>
 
+    <button class="btn btn-retire hidden" id="btn-retire">🏁 창업 정리하고 명예의 전당 등록</button>
+
     <div class="uni-foot">
+      <button class="mini-btn" id="btn-hof">🏛️ 명예의 전당</button>
       <button class="mini-btn" id="btn-reset">🗑️ 처음부터</button>
     </div>
   </main>
+
+  <div class="end-wrap hidden" id="hof">
+    <div class="end-card hof-card-wrap">
+      <h2 class="end-title">🏛️ 명예의 전당</h2>
+      <p class="end-desc" id="hof-scope">기록을 불러오는 중…</p>
+      <div class="hof-list" id="hof-list"></div>
+      <button class="mini-btn" id="btn-hof-close">닫기</button>
+    </div>
+  </div>
 
   <div class="end-wrap hidden" id="ending">
     <div class="end-card">
@@ -86,12 +98,15 @@
       <div class="end-stats" id="end-stats"></div>
       <div id="end-ad"></div>
       <button class="btn btn-exit" id="btn-end-exit">🚀 Exit하고 새 창업</button>
+      <button class="btn btn-retire" id="btn-end-retire">🏁 여기서 마무리하고 등록</button>
       <button class="mini-btn" id="btn-end-close">계속 플레이하기</button>
     </div>
   </div>
 
   <script src="../env.js"></script>
+  <script src="../match.js"></script>
+  <script src="../stats.js"></script>
   <script src="../ads.js"></script>
-  <script src="game.js?v=6"></script>
+  <script src="game.js?v=7"></script>
 </body>
 </html>
