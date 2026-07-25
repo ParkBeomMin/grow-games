@@ -450,10 +450,12 @@ async function showHof() {
   if (window.Match) await window.Match.backfillHof();
   const local = loadHof().filter((e) => e.game === "unicorn");
   const localIds = new Set(local.map((e) => e.id));
-  let list = local, global = false;
   const remote = window.Match ? await window.Match.fetchHof("unicorn") : null;
-  if (remote && remote.length) {
-    global = true;
+  // fetchHof는 실패하면 null, 성공했는데 기록이 없으면 [] 를 줘요.
+  // 배열이기만 하면 '연결은 됐다'는 뜻 — 기록 0개를 오프라인으로 오해하면 안 돼요.
+  const online = Array.isArray(remote);
+  let list = local;
+  if (online) {
     const seen = new Set();
     list = [];
     for (const e of [...remote, ...local]) {
@@ -463,8 +465,15 @@ async function showHof() {
     }
   }
   list.sort((a, b) => b.score - a.score);
-  scope.textContent = global ? "🌏 전 세계 창업가 순위" : "📱 내 기기에 남은 기록";
-  if (!list.length) { box.innerHTML = `<p class="hint">아직 아무도 없어요. 첫 전설이 되어보세요!</p>`; return; }
+  scope.textContent = online
+    ? (list.length ? "🌏 전 세계 창업가 순위" : "🌏 전 세계 순위")
+    : "📡 서버에 연결하지 못했어요 — 내 기기 기록만 표시";
+  if (!list.length) {
+    box.innerHTML = online
+      ? `<p class="hint">아직 은퇴한 창업가가 없어요. 첫 전설이 되어보세요! 🦄</p>`
+      : `<p class="hint">이 기기에 남은 기록이 없어요.</p>`;
+    return;
+  }
   box.innerHTML = "";
   list.slice(0, 100).forEach((e, i) => {
     const div = document.createElement("div");
