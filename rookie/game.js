@@ -1137,9 +1137,10 @@ function renderGameSim(cfg) {
     else if (midInn === i + 1 && midHalf === "초") steps.push({ midMoment: true, inn: i });
     else steps.push({ cell: ["opp", i, story.oppInn[i]], feeds: evFor(i + 1, "초").map((e) => ({ text: `${i + 1}회초 · ${e.text}`, cls: e.cls })) });
     if (interactive && story.moment.half === "말" && i === 8) { steps.push({ moment: true }); break; }
-    if (proAb && proAb.includes(i + 1)) steps.push({ proMoment: "ab", inn: i });
-    else if (midInn === i + 1 && midHalf === "말") steps.push({ midMoment: true, inn: i });
-    else steps.push({ cell: ["our", i, story.ourInn[i]], feeds: evFor(i + 1, "말").map((e) => ({ text: `${i + 1}회말 · ${e.text}`, cls: e.cls })) });
+    const bottom9 = i === 8; // 9회말 — 홈팀(우리)이 앞서 있으면 진행하지 않아요
+    if (proAb && proAb.includes(i + 1)) steps.push({ proMoment: "ab", inn: i, bottom9 });
+    else if (midInn === i + 1 && midHalf === "말") steps.push({ midMoment: true, inn: i, bottom9 });
+    else steps.push({ cell: ["our", i, story.ourInn[i]], feeds: evFor(i + 1, "말").map((e) => ({ text: `${i + 1}회말 · ${e.text}`, cls: e.cls })), bottom9 });
   }
   // (비인터랙티브 경기의 '경기 종료' 문구는 미니게임 결과가 반영된
   //  실제 최종 스코어로 endOfSteps에서 출력해요)
@@ -1361,9 +1362,18 @@ function renderGameSim(cfg) {
     applyStep({ feeds: [{ text: `📢 경기 종료 — ${totals.our}:${totals.opp}`, cls: win ? "good" : "bad" }] });
     showResult(win, 0);
   }
+  // 9회초까지 홈팀(우리)이 앞서 있으면 9회말은 진행하지 않아요 (실제 야구 규칙)
+  function skipBottom9IfLeading(st) {
+    if (!st.bottom9 || interactive || totals.our <= totals.opp) return false;
+    if (st.proMoment === "ab" && perf.ab) perf.ab -= 1; // 하지 않은 타석은 기록에서 제외
+    applyStep({ feeds: [{ text: "🏁 9회초까지 앞서고 있어 9회말은 진행하지 않습니다! (홈팀 리드)", cls: "good" }] });
+    endOfSteps();
+    return true;
+  }
   function tick() {
     if (idx >= steps.length) { endOfSteps(); return; }
     const st = steps[idx++];
+    if (skipBottom9IfLeading(st)) return;
     if (st.moment) { beginMoment(); return; }
     if (st.midMoment) { beginMidMoment(st); return; }
     if (st.proMoment) { beginProMoment(st); return; }
@@ -1377,6 +1387,7 @@ function renderGameSim(cfg) {
     clearInterval(simTimer);
     while (idx < steps.length) {
       const st = steps[idx++];
+      if (skipBottom9IfLeading(st)) return;
       if (st.moment) { beginMoment(); return; }
       if (st.midMoment) { beginMidMoment(st); return; }
       if (st.proMoment) { beginProMoment(st); return; }
