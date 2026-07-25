@@ -1,0 +1,75 @@
+/* 더 유니콘 — 스타트업 네온 테마 (base.css 위에 덮어씀) */
+:root {
+  --bg: #0a0f1e; --bg2: #121a30; --field: #1a2440; --line: #2b3860;
+  --accent: #64ffda; --accent2: #ff5c8a; --sky: #7bb8ff; --text: #eaf1ff; --dim: #92a2c9;
+}
+body {
+  background:
+    radial-gradient(ellipse 100% 55% at 20% -10%, #1b2a5a 0%, transparent 55%),
+    radial-gradient(ellipse 90% 50% at 90% 5%, #143a4a 0%, transparent 50%),
+    var(--bg);
+}
+#app { max-width: 460px; }
+
+.uni-head { padding-top: 14px; }
+.uni-top { display: flex; align-items: center; justify-content: space-between; }
+.company { font-family: "Jua", sans-serif; font-size: 1.5rem; color: var(--accent); }
+.series-link { color: var(--dim); font-size: 0.8rem; text-decoration: none; }
+.series-link:hover { color: var(--sky); }
+.stage-row { display: flex; align-items: baseline; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+.stage-name { font-family: "Jua", sans-serif; font-size: 1.05rem; color: var(--text); }
+.stage-val { color: var(--dim); font-size: 0.8rem; }
+.buff-tag { margin-left: auto; font-size: 0.72rem; font-weight: 700; color: #10131f; background: var(--accent); border-radius: 99px; padding: 2px 8px; animation: buffpulse 0.8s ease infinite; }
+@keyframes buffpulse { 0%,100%{ transform: scale(1); } 50%{ transform: scale(1.12); } }
+.stage-track { height: 8px; background: rgba(255,255,255,.06); border-radius: 99px; overflow: hidden; margin: 8px 0 4px; }
+.stage-bar { height: 100%; width: 0; background: linear-gradient(90deg, var(--sky), var(--accent)); transition: width .3s; }
+.stage-next { font-size: 0.72rem; color: var(--dim); }
+
+.hud2 { text-align: center; margin: 16px 0 12px; }
+.hud2-money { font-family: "Jua", sans-serif; font-size: 2.2rem; color: var(--accent); text-shadow: 0 0 18px rgba(100,255,218,.3); }
+.hud2-sub { color: var(--dim); font-size: 0.82rem; margin-top: 2px; }
+
+.clicker {
+  position: relative; width: 100%; border: 0; cursor: pointer;
+  background: radial-gradient(circle at 50% 35%, #1c2748, #0e1428);
+  border: 2px solid var(--line); border-radius: 20px; padding: 26px 0 22px;
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  box-shadow: 0 8px 0 #0a1024, inset 0 0 40px rgba(100,255,218,.05);
+  transition: transform .05s, box-shadow .05s; user-select: none; overflow: hidden;
+}
+.clicker:active { transform: translateY(5px); box-shadow: 0 3px 0 #0a1024, inset 0 0 40px rgba(100,255,218,.08); }
+.clicker-emoji { font-size: 3.6rem; filter: drop-shadow(0 4px 8px rgba(0,0,0,.5)); pointer-events: none; }
+.clicker-label { color: var(--dim); font-size: 0.9rem; pointer-events: none; }
+.float-num {
+  position: absolute; transform: translate(-50%, -50%); pointer-events: none;
+  color: var(--accent); font-family: "Jua", sans-serif; font-size: 1.1rem; font-weight: 700;
+  text-shadow: 0 2px 4px rgba(0,0,0,.6); animation: floatUp .9s ease-out forwards;
+}
+@keyframes floatUp { 0%{ opacity: 1; } 100%{ opacity: 0; transform: translate(-50%, -180%); } }
+
+.btn-exit {
+  width: 100%; margin: 14px 0 6px;
+  background: linear-gradient(180deg, #ff87b0, var(--accent2)); color: #2a0d1d; box-shadow: 0 4px 0 #b23a63;
+}
+.btn-exit:disabled { background: var(--field); color: var(--dim); box-shadow: 0 4px 0 #0a1024; cursor: not-allowed; }
+
+.panel { background: var(--bg2); border: 1px solid var(--line); border-radius: 16px; padding: 14px; margin-top: 14px; }
+.panel h2 { font-size: 0.95rem; margin-bottom: 10px; color: var(--text); }
+
+.gen, .up {
+  width: 100%; display: flex; align-items: center; gap: 11px; text-align: left;
+  background: var(--field); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin-bottom: 8px; cursor: pointer;
+  color: var(--text); transition: transform .08s, border-color .12s;
+}
+.gen:active, .up:active { transform: scale(.98); }
+.gen:hover, .up:hover { border-color: var(--accent); }
+.gen.no, .up.no { opacity: .5; cursor: not-allowed; }
+.gen-emoji, .up-emoji { font-size: 1.7rem; width: 34px; text-align: center; }
+.gen-info, .up-info { flex: 1; min-width: 0; }
+.gen-info b, .up-info b { display: block; font-size: 0.92rem; }
+.gen-info b i { color: var(--accent); font-style: normal; font-size: 0.82rem; }
+.gen-desc, .up-info span { color: var(--dim); font-size: 0.74rem; }
+.gen-cost, .up-cost { font-family: "Jua", sans-serif; color: var(--accent); font-size: 0.9rem; white-space: nowrap; }
+.gen.no .gen-cost, .up.no .up-cost { color: var(--accent2); }
+
+.uni-foot { text-align: center; padding: 18px 0 40px; }

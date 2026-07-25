@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <!-- Google tag (gtag.js) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-7PR9LC4KKV"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-7PR9LC4KKV');
+  </script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>더 유니콘 🦄 창업 방치</title>
+  <meta name="description" content="클릭으로 코딩하고 자동화로 회사를 키워 Exit(매각·상장)에 도전하는 창업 방치형 게임" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦄</text></svg>" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Jua&family=Gowun+Dodum&display=swap" rel="stylesheet" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <meta name="theme-color" content="#0a0f1e" />
+  <link rel="apple-touch-icon" href="icon-192.png" />
+  <link rel="stylesheet" href="../base.css" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main id="app">
+    <header class="uni-head">
+      <div class="uni-top">
+        <div class="company" id="company-name">🦄 스타트업</div>
+        <a class="series-link" href="../">🎮 시리즈</a>
+      </div>
+      <div class="stage-row">
+        <span class="stage-name" id="stage-name"></span>
+        <span class="stage-val" id="stage-val"></span>
+        <span class="buff-tag hidden" id="buff-tag">🔥 2배!</span>
+      </div>
+      <div class="stage-track"><div class="stage-bar" id="stage-bar"></div></div>
+      <div class="stage-next" id="stage-next"></div>
+    </header>
+
+    <div class="hud2">
+      <div class="hud2-money" id="hud-money">₩ 0</div>
+      <div class="hud2-sub"><span id="hud-sec">0 /초</span> · <span id="hud-so">🧾 스톡옵션 0</span></div>
+    </div>
+
+    <button class="clicker" id="clicker">
+      <span class="clicker-emoji">💻</span>
+      <span class="clicker-label">눌러서 코딩! 💾</span>
+    </button>
+
+    <button class="btn btn-exit" id="btn-exit" disabled>🔒 Exit</button>
+
+    <section class="panel">
+      <h2>🤖 자동화 고용</h2>
+      <div id="gen-list"></div>
+    </section>
+
+    <section class="panel">
+      <h2>🧩 업그레이드</h2>
+      <div id="up-list"></div>
+    </section>
+
+    <div class="log" id="ev-log"></div>
+
+    <div class="uni-foot">
+      <button class="mini-btn" id="btn-reset">🗑️ 처음부터</button>
+    </div>
+  </main>
+
+  <script src="../env.js"></script>
+  <script src="game.js"></script>
+</body>
+</html>
