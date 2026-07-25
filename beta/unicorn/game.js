@@ -63,6 +63,34 @@ const MEMES = [
   "🧠 AI가 스스로 리팩터링을 끝냈어요!",
 ];
 
+// 클릭할 때 터미널에 찍히는 코드 라인들 (우리 개그 라인)
+const CODE_LINES = [
+  "git commit -m '일단 커밋'",
+  "npm run build",
+  "const idea = new Startup();",
+  "deploy --prod --yolo",
+  "fix: 새벽 3시의 그 버그",
+  "console.log('여기까진 됨');",
+  "useEffect(() => grow(), []);",
+  "SELECT * FROM users;",
+  "docker compose up -d",
+  "refactor: 함수 이름 또 바꿈",
+  "test: 통과했다 치자",
+  "merge main ← feature/유니콘",
+  "try { ship(); } catch (e) {}",
+  "chore: 의존성 42개 업데이트",
+  "perf: 렌더링 3배 빨라짐",
+  "feat: 결제 붙임",
+  "hotfix: 결제 다시 붙임",
+  "TODO: 나중에 고치자",
+  "rm -rf node_modules && npm i",
+  "if (버그) { 버그 = false; }",
+  "// 이 코드는 건드리지 마세요",
+  "git push --force (미안)",
+];
+const BOOT_LINES = ["시스템 초기화 완료.", "코딩 시작 준비 끝."];
+const TERM_MAX = 9; // 터미널에 남겨둘 줄 수
+
 // ---------- 상태 ----------
 let S = null;
 function fresh() {
@@ -129,10 +157,32 @@ const mmss = (ms) => { const t = Math.ceil(ms / 1000); return Math.floor(t / 60)
 function addLog(msg) { S.log.unshift(msg); S.log = S.log.slice(0, 20); }
 function renderLog() { $("ev-log").innerHTML = S.log.map((l, i) => `<div class="${i === 0 ? "new" : ""}">${l}</div>`).join(""); }
 
+// ---------- 터미널 출력 ----------
+let lastLineIdx = -1;
+function termPush(text, boot) {
+  const body = $("term-body");
+  if (!body) return;
+  const el = document.createElement("span");
+  el.className = "term-line" + (boot ? " boot" : "");
+  const p = document.createElement("span");
+  p.className = "p"; p.textContent = ">";
+  el.append(p, " " + text);
+  body.appendChild(el);
+  while (body.childElementCount > TERM_MAX) body.removeChild(body.firstElementChild);
+}
+function termBoot() { BOOT_LINES.forEach((l) => termPush(l, true)); }
+function termCode() {
+  let i = Math.floor(Math.random() * CODE_LINES.length);
+  if (i === lastLineIdx) i = (i + 1) % CODE_LINES.length; // 같은 줄 연속 방지
+  lastLineIdx = i;
+  termPush(CODE_LINES[i], false);
+}
+
 // ---------- 클릭 ----------
 function onClick(e) {
   const v = clickValue();
   S.code += v; S.earnedRun += v; S.earnedAll += v;
+  termCode();
   floatText(e, "+" + fmt(v));
 }
 function floatText(e, txt) {
@@ -306,6 +356,7 @@ function offlineReward() {
 function init() {
   if (!load()) { S = fresh(); save(); }
   offlineReward();
+  termBoot();
   renderAll();
   setTab("equip");
   // click 대신 pointerdown — 빠른 연타에서 누락 없이 즉시 반응 (마우스·터치 모두 커버)
