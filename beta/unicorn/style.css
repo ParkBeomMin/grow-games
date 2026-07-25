@@ -49,14 +49,8 @@ body {
 }
 @keyframes floatUp { 0%{ opacity: 1; } 100%{ opacity: 0; transform: translate(-50%, -180%); } }
 
-.btn-clickup {
-  width: 100%; margin: 12px 0 0;
-  background: linear-gradient(180deg, #9fd6ff, var(--sky)); color: #08203a; box-shadow: 0 4px 0 #3a6ea5;
-}
-.btn-clickup:disabled { background: var(--field); color: var(--dim); box-shadow: 0 4px 0 #0a1024; cursor: not-allowed; }
-.btn-clickup b { font-family: "Jua", sans-serif; }
 .btn-boost {
-  width: 100%; margin: 10px 0 0;
+  width: 100%; margin: 12px 0 0;
   background: linear-gradient(180deg, #ffe08a, #ffb300); color: #3a2600; box-shadow: 0 4px 0 #b37c00;
 }
 .btn-boost:disabled { background: var(--field); color: var(--dim); box-shadow: 0 4px 0 #0a1024; cursor: not-allowed; }
@@ -91,7 +85,9 @@ body {
 .gen-info b, .up-info b { display: block; font-size: 0.92rem; }
 .gen-info b i { color: var(--accent); font-style: normal; font-size: 0.82rem; }
 .gen-desc, .up-info span { color: var(--dim); font-size: 0.74rem; }
-.gen-cost, .up-cost { font-family: "Jua", sans-serif; color: var(--accent); font-size: 0.9rem; white-space: nowrap; }
+.gen-right { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; white-space: nowrap; }
+.gen-lv { color: var(--dim); font-size: 0.72rem; }
+.gen-cost, .up-cost { font-family: "Jua", sans-serif; color: var(--accent); font-size: 0.95rem; white-space: nowrap; }
 .gen.no .gen-cost, .up.no .up-cost { color: var(--accent2); }
 
 .uni-foot { text-align: center; padding: 18px 0 40px; }

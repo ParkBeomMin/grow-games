@@ -1,4 +1,5 @@
-/* 더 유니콘 🦄 창업 방치 — 클릭으로 코딩 → 자동화 → 성장 → Exit 프레스티지 */
+/* 더 유니콘 🦄 창업 방치 — 클릭으로 코딩 → 장비·자동화로 성장 → Exit 프레스티지
+ * 장비(반복): 클릭당 코드 +N   /   자동화(반복): 초당 코드 +N   — 둘 다 가산식, 배수 아님 */
 "use strict";
 
 const SAVE_KEY = "unicorn-save-v1";
@@ -6,26 +7,34 @@ const $ = (id) => document.getElementById(id);
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 
 // ---------- 데이터 ----------
+// 자동화 — 반복 구매, 개당 '초당 +per줄' 패시브. 비용은 1.15^보유수로 상승.
 const GENERATORS = [
-  { id: "caffeine", emoji: "☕", name: "카페인 풀가동",       base: 1,      cost: 10,     desc: "밤샘 코딩 모드" },
-  { id: "junior",   emoji: "👨‍💻", name: "주니어 개발자",     base: 8,      cost: 120,    desc: "열정은 가득" },
-  { id: "senior",   emoji: "🧑‍💻", name: "시니어 개발자",     base: 47,     cost: 1400,   desc: "버그를 예방해요" },
-  { id: "bot",      emoji: "🤖", name: "자동 커밋봇",         base: 260,    cost: 20000,  desc: "24시간 커밋" },
-  { id: "ci",       emoji: "🔁", name: "CI/CD 파이프라인",    base: 1400,   cost: 250000, desc: "자동 빌드·배포" },
-  { id: "server",   emoji: "☁️", name: "서버 오토스케일",     base: 7800,   cost: 3e6,    desc: "무한 확장" },
-  { id: "offshore", emoji: "🌏", name: "글로벌 오프쇼어 팀",  base: 44000,  cost: 4e7,    desc: "24시간 릴레이 개발" },
-  { id: "ai",       emoji: "🧠", name: "AI 에이전트 군단",    base: 260000, cost: 5e8,    desc: "자율 개발·자율 배포" },
+  { id: "americano", emoji: "☕",  name: "아메리카노",         per: 1,    cost: 20 },
+  { id: "energy",    emoji: "⚡",  name: "에너지 드링크",      per: 2,    cost: 60 },
+  { id: "book",      emoji: "📖",  name: "개발서적 정독",      per: 3,    cost: 150 },
+  { id: "stack",     emoji: "🧱",  name: "스택오버플로우",     per: 6,    cost: 400 },
+  { id: "ai",        emoji: "🧠",  name: "AI 활용능력 향상",   per: 10,   cost: 1000 },
+  { id: "youtube",   emoji: "📺",  name: "유튜브 코딩 채널",   per: 20,   cost: 2200 },
+  { id: "copilot",   emoji: "🤖",  name: "깃허브 코파일럿",    per: 30,   cost: 3500 },
+  { id: "conf",      emoji: "🎫",  name: "테크 컨퍼런스",      per: 60,   cost: 8000 },
+  { id: "remote",    emoji: "🏠",  name: "재택근무",           per: 100,  cost: 15000 },
+  { id: "offshore",  emoji: "🌏",  name: "글로벌 오프쇼어 팀", per: 320,  cost: 5e4 },
+  { id: "agent",     emoji: "🛰️", name: "AI 에이전트 군단",   per: 1200, cost: 3e5 },
 ];
 
-// 업그레이드 — 1회성 강력 배수. 프리미엄(비싸게) 포지션. 비용 오름차순.
-// 클릭당 코드는 별도의 '클릭 강화'(반복 구매)로 키워요 → clickUpCost / buyClickUp
-const UPGRADES = [
-  { id: "kb1",        emoji: "⌨️", name: "기계식 키보드",        cost: 800,    type: "click",  mult: 2, desc: "클릭 파워 ×2" },
-  { id: "coffee",     emoji: "☕", name: "에스프레소 머신",      cost: 9000,   type: "global", mult: 2, desc: "전체 생산 ×2" },
-  { id: "kb2",        emoji: "⌨️", name: "적축 커스텀 키보드",   cost: 90000,  type: "click",  mult: 3, desc: "클릭 파워 ×3" },
-  { id: "framework",  emoji: "🧩", name: "최신 프레임워크 도입", cost: 8e5,    type: "global", mult: 2, desc: "전체 생산 ×2" },
-  { id: "cloud",      emoji: "💳", name: "클라우드 크레딧 대량", cost: 1.2e7,  type: "global", mult: 2, desc: "전체 생산 ×2" },
-  { id: "opensource", emoji: "⭐", name: "오픈소스 스타 떡상",   cost: 3e8,    type: "global", mult: 3, desc: "전체 생산 ×3" },
+// 장비 — 반복 구매, 개당 '클릭당 +per줄'. 비용은 1.15^보유수로 상승.
+const EQUIP = [
+  { id: "kb",     emoji: "⌨️",  name: "기계식 키보드",         per: 1,   cost: 10 },
+  { id: "chair",  emoji: "🪑",  name: "허먼밀러 체어",         per: 2,   cost: 100 },
+  { id: "glass",  emoji: "👓",  name: "블루라이트 차단 안경",  per: 3,   cost: 250 },
+  { id: "mouse",  emoji: "🖱️", name: "로지텍 마우스",         per: 5,   cost: 500 },
+  { id: "wrist",  emoji: "💺",  name: "손목 받침대",           per: 8,   cost: 900 },
+  { id: "lube",   emoji: "💧",  name: "기계식 스위치 윤활",    per: 12,  cost: 1500 },
+  { id: "dual",   emoji: "🖥️", name: "듀얼 모니터",           per: 35,  cost: 5000 },
+  { id: "rgb",    emoji: "🌈",  name: "RGB 게이밍 감성",       per: 80,  cost: 12000 },
+  { id: "keycap", emoji: "🔲",  name: "무각 키캡",             per: 150, cost: 25000 },
+  { id: "sitstand", emoji: "🧍", name: "스탠딩 데스크",        per: 400, cost: 8e4 },
+  { id: "vim",    emoji: "🧙",  name: "Vim 마스터",            per: 1000, cost: 5e5 },
 ];
 
 const STAGES = [
@@ -60,8 +69,7 @@ function fresh() {
   return {
     company: pick(COMPANY_NAMES),
     code: 0,             // 보유 코드(줄)
-    clickLv: 0,          // 클릭 강화 레벨 (반복 구매)
-    gens: {}, ups: {},
+    gens: {}, equip: {}, // 자동화 보유수 / 장비 보유수
     so: 0, exits: 0,
     earnedRun: 0, earnedAll: 0,
     buffUntil: 0, boostCdUntil: 0,
@@ -73,8 +81,8 @@ function load() {
   try {
     const s = JSON.parse(localStorage.getItem(SAVE_KEY));
     if (s && typeof s.code === "number") {
-      S = s; S.gens = S.gens || {}; S.ups = S.ups || {}; S.log = S.log || [];
-      S.boostCdUntil = S.boostCdUntil || 0; S.clickLv = S.clickLv || 0;
+      S = s; S.gens = S.gens || {}; S.equip = S.equip || {}; S.log = S.log || [];
+      S.boostCdUntil = S.boostCdUntil || 0;
       return true;
     }
   } catch { /* noop */ }
@@ -83,17 +91,15 @@ function load() {
 function save() { S.savedAt = Date.now(); try { localStorage.setItem(SAVE_KEY, JSON.stringify(S)); } catch {} }
 
 // ---------- 계산 ----------
-const clickMult = () => UPGRADES.filter((u) => u.type === "click" && S.ups[u.id]).reduce((m, u) => m * u.mult, 1);
-const globalMult = () => UPGRADES.filter((u) => u.type === "global" && S.ups[u.id]).reduce((m, u) => m * u.mult, 1);
 const prestigeMult = () => 1 + S.so * 0.04;
 const buffMult = () => (Date.now() < S.buffUntil ? 2 : 1);
-const baseSec = () => GENERATORS.reduce((s, g) => s + (S.gens[g.id] || 0) * g.base, 0);
-const perSec = () => baseSec() * globalMult() * prestigeMult() * buffMult();
-// 클릭당 코드 = (기본 1 + 강화 레벨) × 키보드 배수 × 전체·프레스티지·부스터 배수
-const clickBase = () => 1 + (S.clickLv || 0);
-const clickValue = () => clickBase() * clickMult() * globalMult() * prestigeMult() * buffMult();
-const clickUpCost = () => Math.ceil(20 * Math.pow(1.15, S.clickLv || 0));
+const baseSec = () => GENERATORS.reduce((s, g) => s + (S.gens[g.id] || 0) * g.per, 0);
+const perSec = () => baseSec() * prestigeMult() * buffMult();
+// 클릭당 코드 = (기본 1 + 장비 보너스 합) × 프레스티지·부스터 배수
+const clickBase = () => 1 + EQUIP.reduce((s, e) => s + (S.equip[e.id] || 0) * e.per, 0);
+const clickValue = () => clickBase() * prestigeMult() * buffMult();
 const genCost = (g) => Math.ceil(g.cost * Math.pow(1.15, S.gens[g.id] || 0));
+const equipCost = (e) => Math.ceil(e.cost * Math.pow(1.15, S.equip[e.id] || 0));
 const valuation = () => S.earnedRun;
 const stageOf = (v) => { let st = STAGES[0]; for (const s of STAGES) if (v >= s.v) st = s; return st; };
 const nextStage = (v) => STAGES.find((s) => s.v > v) || null;
@@ -149,22 +155,15 @@ function buyGen(g) {
   S.gens[g.id] = (S.gens[g.id] || 0) + 1;
   save(); renderAll();
 }
-function buyUp(u) {
-  if (S.ups[u.id] || S.code < u.cost) return;
-  S.code -= u.cost;
-  S.ups[u.id] = 1;
-  addLog(`${u.emoji} ${u.name} 도입! (${u.desc})`);
-  save(); renderAll();
-}
-function buyClickUp() {
-  const cost = clickUpCost();
+function buyEquip(e) {
+  const cost = equipCost(e);
   if (S.code < cost) return;
   S.code -= cost;
-  S.clickLv = (S.clickLv || 0) + 1;
+  S.equip[e.id] = (S.equip[e.id] || 0) + 1;
   save(); renderAll();
 }
 
-// ---------- 집중 부스터 (2배 · 5분 쿨다운 · 추후 보상형 광고) ----------
+// ---------- AI 리팩토링 부스터 (2배 · 5분 쿨다운 · 추후 보상형 광고) ----------
 function useBoost() {
   const now = Date.now();
   if (now < S.buffUntil || now < S.boostCdUntil) return;
@@ -188,11 +187,11 @@ function doExit() {
   if (!confirm(
     `🚀 Exit — ${label} 단계에서 회사를 매각/상장할까요?\n\n` +
     `· 스톡옵션 +${gain} 획득 (영구 생산 배수 +${gain * 4}%p)\n` +
-    `· 코드·직원·업그레이드는 초기화되고, 더 빠르게 다시 시작해요\n\n진행할까요?`
+    `· 코드·장비·자동화는 초기화되고, 더 빠르게 다시 시작해요\n\n진행할까요?`
   )) return;
   S.so += gain;
   S.exits += 1;
-  S.code = 0; S.gens = {}; S.ups = {}; S.clickLv = 0; S.earnedRun = 0;
+  S.code = 0; S.gens = {}; S.equip = {}; S.earnedRun = 0;
   S.buffUntil = 0;
   addLog(`🚀 Exit 성공! 스톡옵션 +${gain} (통산 ${S.exits}회, 누적 SO ${S.so})`);
   save(); renderAll();
@@ -205,13 +204,8 @@ function renderHud() {
   const v = valuation(), st = stageOf(v), ns = nextStage(v);
   $("hud-code").textContent = "💾 " + lines(S.code);
   $("hud-sec").textContent = linesRate(perSec()) + "/초";
-  $("clicker-label").textContent = `눌러서 코딩! 💾 +${fmt(clickValue())}줄`;
-
-  // 클릭 강화 버튼 (반복 구매)
-  const cu = $("btn-clickup"), cuCost = clickUpCost();
-  cu.disabled = S.code < cuCost;
-  cu.innerHTML = `⌨️ 클릭 강화 <b>Lv.${S.clickLv || 0}</b> — 클릭당 💾${fmt(clickValue())}줄 · ${lines(cuCost)}`;
   $("hud-so").textContent = "🧾 스톡옵션 " + S.so + " (×" + prestigeMult().toFixed(2) + ")";
+  $("clicker-label").textContent = `눌러서 코딩! 💾 +${fmt(clickValue())}줄`;
   $("stage-name").textContent = `${st.emoji} ${st.name}`;
   $("stage-val").textContent = "누적 " + lines(v);
   const bar = $("stage-bar");
@@ -225,11 +219,11 @@ function renderHud() {
   }
   $("buff-tag").classList.toggle("hidden", now >= S.buffUntil);
 
-  // 부스터 버튼
+  // AI 리팩토링(부스터) 버튼
   const bb = $("btn-boost");
-  if (now < S.buffUntil) { bb.disabled = true; bb.textContent = `🔥 부스터 발동 중! (${Math.ceil((S.buffUntil - now) / 1000)}초)`; }
-  else if (now < S.boostCdUntil) { bb.disabled = true; bb.textContent = `🔥 부스터 (${mmss(S.boostCdUntil - now)} 후)`; }
-  else { bb.disabled = false; bb.textContent = "🔥 집중 부스터 — 60초간 2배"; }
+  if (now < S.buffUntil) { bb.disabled = true; bb.textContent = `🔥 리팩토링 발동 중! (${Math.ceil((S.buffUntil - now) / 1000)}초)`; }
+  else if (now < S.boostCdUntil) { bb.disabled = true; bb.textContent = `🔥 AI 리팩토링 (${mmss(S.boostCdUntil - now)} 후)`; }
+  else { bb.disabled = false; bb.textContent = "🔥 AI 리팩토링 (×2) — 60초간 생산 2배"; }
 
   // Exit 버튼
   const exitBtn = $("btn-exit");
@@ -237,55 +231,51 @@ function renderHud() {
   else { exitBtn.disabled = true; exitBtn.innerHTML = `🔒 Exit — 시리즈 A(${lines(EXIT_UNLOCK)})부터`; }
 }
 
+// 장비·자동화 공통 아이템 렌더 (subtitle 단위만 다름)
+function itemHTML(item, cnt, cost, can, unit) {
+  return `
+    <button class="gen ${can ? "" : "no"}" data-id="${item.id}">
+      <span class="gen-emoji">${item.emoji}</span>
+      <span class="gen-info">
+        <b>${item.name}</b>
+        <span class="gen-desc">${unit} +${fmt(item.per)}줄</span>
+      </span>
+      <span class="gen-right">
+        <span class="gen-lv">Lv.${cnt}</span>
+        <span class="gen-cost">${lines(cost)}</span>
+      </span>
+    </button>`;
+}
 function renderGens() {
   const box = $("gen-list");
   box.innerHTML = GENERATORS.map((g) => {
-    const cnt = S.gens[g.id] || 0;
-    const cost = genCost(g);
-    const can = S.code >= cost;
-    const out = cnt * g.base * globalMult() * prestigeMult();
-    return `
-      <button class="gen ${can ? "" : "no"}" data-gen="${g.id}">
-        <span class="gen-emoji">${g.emoji}</span>
-        <span class="gen-info">
-          <b>${g.name} ${cnt ? `<i>×${cnt}</i>` : ""}</b>
-          <span class="gen-desc">${cnt ? `${linesRate(out)}/초` : g.desc}</span>
-        </span>
-        <span class="gen-cost">${lines(cost)}</span>
-      </button>`;
+    const cnt = S.gens[g.id] || 0, cost = genCost(g);
+    return itemHTML(g, cnt, cost, S.code >= cost, "초당");
   }).join("");
-  box.querySelectorAll(".gen").forEach((b) => { b.onclick = () => buyGen(GENERATORS.find((g) => g.id === b.dataset.gen)); });
+  box.querySelectorAll(".gen").forEach((b) => { b.onclick = () => buyGen(GENERATORS.find((g) => g.id === b.dataset.id)); });
 }
-
-function renderUps() {
-  const box = $("up-list");
-  const avail = UPGRADES.filter((u) => !S.ups[u.id]);
-  if (!avail.length) { box.innerHTML = `<p class="hint">모든 업그레이드를 도입했어요 ✨</p>`; return; }
-  box.innerHTML = avail.map((u) => {
-    const can = S.code >= u.cost;
-    return `
-      <button class="up ${can ? "" : "no"}" data-up="${u.id}">
-        <span class="up-emoji">${u.emoji}</span>
-        <span class="up-info"><b>${u.name}</b><span>${u.desc}</span></span>
-        <span class="up-cost">${lines(u.cost)}</span>
-      </button>`;
+function renderEquip() {
+  const box = $("equip-list");
+  box.innerHTML = EQUIP.map((e) => {
+    const cnt = S.equip[e.id] || 0, cost = equipCost(e);
+    return itemHTML(e, cnt, cost, S.code >= cost, "클릭당");
   }).join("");
-  box.querySelectorAll(".up").forEach((b) => { b.onclick = () => buyUp(UPGRADES.find((u) => u.id === b.dataset.up)); });
+  box.querySelectorAll(".gen").forEach((b) => { b.onclick = () => buyEquip(EQUIP.find((e) => e.id === b.dataset.id)); });
 }
 
 function renderAll() {
   $("company-name").textContent = "🦄 " + S.company;
   renderHud();
+  renderEquip();
   renderGens();
-  renderUps();
   renderLog();
 }
 
 // ---------- 탭 ----------
 function setTab(tab) {
   document.querySelectorAll(".tab").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
+  $("panel-equip").classList.toggle("hidden", tab !== "equip");
   $("panel-gen").classList.toggle("hidden", tab !== "gen");
-  $("panel-up").classList.toggle("hidden", tab !== "up");
 }
 
 // ---------- 루프 ----------
@@ -297,7 +287,7 @@ function tick() {
   const gain = perSec() * dt;
   if (gain > 0) { S.code += gain; S.earnedRun += gain; S.earnedAll += gain; }
   renderHud();
-  if (now - lastListRender > 500) { renderGens(); renderUps(); renderLog(); lastListRender = now; }
+  if (now - lastListRender > 500) { renderEquip(); renderGens(); renderLog(); lastListRender = now; }
 }
 
 // ---------- 오프라인 보상 ----------
@@ -317,10 +307,9 @@ function init() {
   if (!load()) { S = fresh(); save(); }
   offlineReward();
   renderAll();
-  setTab("gen");
+  setTab("equip");
   // click 대신 pointerdown — 빠른 연타에서 누락 없이 즉시 반응 (마우스·터치 모두 커버)
   $("clicker").addEventListener("pointerdown", (e) => { e.preventDefault(); onClick(e); });
-  $("btn-clickup").addEventListener("click", buyClickUp);
   $("btn-boost").addEventListener("click", useBoost);
   $("btn-exit").addEventListener("click", doExit);
   document.querySelectorAll(".tab").forEach((b) => b.addEventListener("click", () => setTab(b.dataset.tab)));
