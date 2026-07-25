@@ -350,17 +350,40 @@ window.Career = (() => {
     $("tour-round").textContent = S.role;
     $("tour-card").innerHTML = `<div class="pbp" id="pbp-pro"></div><div id="game-result"></div><div id="game-moment"></div>`;
     show("screen-tournament");
-    const win = Math.random() < teamWinP();
     let perf = null;
+    let win;
     const feeds = [];
     if (mode === "relief") {
-      const ip = S.role === "마무리 투수" ? 1 : randInt(1, 2);
+      const isCloser = S.role === "마무리 투수";
+      const ip = isCloser ? 1 : randInt(1, 2);
       const k = randInt(0, 2);
-      const er = Math.random() < 0.18 ? 1 : 0;
+      // 등판당 실점 (마무리가 조금 더 안정적) — 0실점이 대부분, 가끔 1~2실점
+      const er = Math.random() < (isCloser ? 0.16 : 0.22) ? (Math.random() < 0.28 ? 2 : 1) : 0;
       perf = { ip, k, runs: er };
-      feeds.push({ text: S.role === "마무리 투수" ? "🔔 9회, 세이브 상황에 마무리 등판!" : "🔔 승부처에 중간계투로 등판!" });
-      feeds.push({ text: `${S.name}: ${ip}이닝 ${k}K ${er}실점`, cls: er ? "bad" : "good" });
+      if (isCloser) {
+        // 세이브 상황 = 우리 팀이 앞선 채 9회 등판. 무실점이면 리드를 지켜 승리+세이브,
+        // 실점하면 블론세이브 위험이 커져요.
+        feeds.push({ text: "🔔 9회, 팀이 앞선 세이브 상황에 마무리 등판!" });
+        feeds.push({ text: `${S.name}: ${ip}이닝 ${k}K ${er}실점`, cls: er ? "bad" : "good" });
+        if (er === 0) {
+          win = true;
+          feeds.push({ text: "🧊 리드를 완벽히 지켜냈어요! 세이브 성공!", cls: "good" });
+        } else {
+          win = Math.random() < (er === 1 ? 0.42 : 0.18);
+          feeds.push({
+            text: win ? "😮‍💨 실점했지만 아슬아슬하게 리드를 지켰어요" : "💥 블론세이브… 리드를 지키지 못했어요",
+            cls: win ? "" : "bad",
+          });
+        }
+      } else {
+        // 중간계투 — 세이브 상황은 아니지만 무실점 호투는 승리에 힘을 보태요
+        win = Math.random() < clamp(teamWinP() + (er === 0 ? 0.1 : -0.12 * er), 0.2, 0.85);
+        feeds.push({ text: "🔔 승부처에 중간계투로 등판!" });
+        feeds.push({ text: `${S.name}: ${ip}이닝 ${k}K ${er}실점`, cls: er ? "bad" : "good" });
+      }
     } else {
+      // 등판 없는 날 — 순수 팀 전력 승부
+      win = Math.random() < teamWinP();
       feeds.push({ text: "🪑 오늘은 등판 없이 더그아웃에서 응원!" });
     }
     feeds.push({ text: `📢 경기 종료 — ${win ? "승리! 🎉" : "패배 😢"}`, cls: win ? "good" : "bad" });
@@ -485,10 +508,20 @@ window.Career = (() => {
     war = Math.round(war * 10) / 10;
     const rank = myRank();
     const champ = (rank === 1 && Math.random() < 0.6) || (rank > 1 && rank <= 3 && Math.random() < 0.22);
+    // 수상은 '리그 내 상대 비교' — 가상 경쟁자들의 WAR와 겨뤄 최고면 수상해요.
+    // (압도적인 시즌은 랜덤에 밀려 MVP를 놓치지 않아요)
     const awards = [];
-    if (S.proYear === 1 && war >= 3.5 && Math.random() < 0.75) { awards.push("신인왕"); S.career.roy += 1; }
-    if (war >= 6.5 && Math.random() < 0.5) { awards.push("MVP"); S.career.mvp += 1; }
-    else if (war >= 4.5 && Math.random() < 0.45) { awards.push("골든글러브"); S.career.gg += 1; }
+    if (S.proYear === 1 && war >= 3.5) {
+      const bestRookie = Math.max(...Array.from({ length: 4 }, () => rand(1.5, 4.2)));
+      if (war >= bestRookie) { awards.push("신인왕"); S.career.roy += 1; }
+    }
+    const leagueBest = Math.max(...Array.from({ length: 6 }, () => rand(3.5, 7.8)));
+    if (war >= 5.5 && war >= leagueBest) {
+      awards.push("MVP"); S.career.mvp += 1;
+    } else if (war >= 4.5) {
+      const posBar = rand(4.2, 6.2); // 포지션 상위권 컷
+      if (war >= posBar) { awards.push("골든글러브"); S.career.gg += 1; }
+    }
     if (champ) S.career.rings += 1;
     S.career.warSum = Math.round((S.career.warSum + Math.max(war, 0)) * 10) / 10;
     S.career.seasons.push({ y: S.proYear, age: S.age, war, line, rank, champ, awards, role: S.role, raw });

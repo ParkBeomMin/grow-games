@@ -369,10 +369,19 @@ window.StockCareer = (() => {
     const sales = act.sales;
     const dFan = Math.round(hype * 10 + wins * 3 - (hype < 0 ? 15 : 0));
     S.fandom = Math.max(0, S.fandom + dFan);
+    // 수상은 '업계 내 상대 비교' — 가상 경쟁자들과 겨뤄 최고면 수상해요.
     const awards = [];
-    if (S.proYear === 1 && hype >= 3 && Math.random() < 0.8) { awards.push("신인투자자상"); S.career.rookie += 1; }
-    if (hype >= 6.5 && Math.random() < 0.45) { awards.push("올해의투자자"); S.career.daesang += 1; }
-    else if (hype >= 4.5 && Math.random() < 0.5) { awards.push("베스트개미"); S.career.bonsang += 1; }
+    if (S.proYear === 1 && hype >= 3) {
+      const bestRookie = Math.max(...Array.from({ length: 4 }, () => rand(1.5, 4.2)));
+      if (hype >= bestRookie) { awards.push("신인투자자상"); S.career.rookie += 1; }
+    }
+    const leagueBest = Math.max(...Array.from({ length: 6 }, () => rand(3.5, 7.8)));
+    if (hype >= 5.5 && hype >= leagueBest) {
+      awards.push("올해의투자자"); S.career.daesang += 1;
+    } else if (hype >= 4.5) {
+      const posBar = rand(4.2, 6.2);
+      if (hype >= posBar) { awards.push("베스트개미"); S.career.bonsang += 1; }
+    }
     S.career.sales += sales;
     S.career.years.push({ y: S.proYear, hype: Math.round(hype * 10) / 10, wins, sales, dFan, awards });
     if (window.Stats) Stats.log("year_end", { y: S.proYear, wins, sales });

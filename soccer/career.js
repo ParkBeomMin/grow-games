@@ -323,10 +323,20 @@ window.WingerCareer = (() => {
     const sales = act.sales;
     const dFan = Math.round(hype * 10 + wins * 3 - (hype < 0 ? 15 : 0));
     S.fandom = Math.max(0, S.fandom + dFan);
+    // 수상은 '리그 내 상대 비교' — 가상 경쟁자들의 활약과 겨뤄 최고면 수상해요.
+    // (압도적인 시즌은 랜덤에 밀려 상을 놓치지 않아요)
     const awards = [];
-    if (S.proYear === 1 && hype >= 3 && Math.random() < 0.8) { awards.push("신인왕"); S.career.rookie += 1; }
-    if (hype >= 6.5 && Math.random() < 0.45) { awards.push("리그MVP"); S.career.daesang += 1; }
-    else if (hype >= 4.5 && Math.random() < 0.5) { awards.push("베스트11"); S.career.bonsang += 1; }
+    if (S.proYear === 1 && hype >= 3) {
+      const bestRookie = Math.max(...Array.from({ length: 4 }, () => rand(1.5, 4.2)));
+      if (hype >= bestRookie) { awards.push("신인왕"); S.career.rookie += 1; }
+    }
+    const leagueBest = Math.max(...Array.from({ length: 6 }, () => rand(3.5, 7.8)));
+    if (hype >= 5.5 && hype >= leagueBest) {
+      awards.push("리그MVP"); S.career.daesang += 1;
+    } else if (hype >= 4.5) {
+      const posBar = rand(4.2, 6.2);
+      if (hype >= posBar) { awards.push("베스트11"); S.career.bonsang += 1; }
+    }
     S.career.sales += sales;
     const gg = act.goals || 0, ga = act.assists || 0, gd = act.defense || 0, apps = act.apps || 0;
     S.career.goals = (S.career.goals || 0) + gg;
