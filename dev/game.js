@@ -836,7 +836,7 @@ function autoRes(stat) {
 
 function playRandomMini(container, cb) {
   const posStat = POS_INFO[S.pos].stat;
-  const mech = pick(["bar", "hold", "seq", "react", "duel"]);
+  const mech = pick(["bar", "hold", "seq", "react", "duel", "target", "drop", "odd"]);
   if (mech === "bar") {
     if (autoMiniOn()) { cb(autoRes(S.stats[posStat]), DEV_BAR); return; }
     window.Timing.play(container, {
@@ -866,6 +866,24 @@ function playRandomMini(container, cb) {
       perfectMs: 300 + S.stats.cs * 1.5,
       goodMs: 700 + S.stats.cs * 2.5,
     }, (res) => cb(res, DEV_REACT));
+  } else if (mech === "target") {
+    if (autoMiniOn()) { cb(autoRes(S.stats[posStat]), DEV_REACT); return; }
+    window.Timing.target(container, {
+      label: "🐛 버그 잡기! 튀어나오는 버그를 빠르게 탭!",
+      icon: "🐛", count: 3, lifeMs: 800 + Math.min(S.stats[posStat], 130) * 3,
+    }, (res) => cb(res, DEV_REACT));
+  } else if (mech === "drop") {
+    if (autoMiniOn()) { cb(autoRes(S.stats[posStat]), DEV_BAR); return; }
+    window.Timing.drop(container, {
+      label: "📦 배포 캐치! 떨어지는 커밋을 초록 존에서 딱 머지!",
+      icon: "📦", zonePct: miniZone(S.stats[posStat]),
+    }, (res) => cb(res, DEV_BAR));
+  } else if (mech === "odd") {
+    if (autoMiniOn()) { cb(autoRes(S.stats.collab), DEV_DUEL); return; }
+    window.Timing.odd(container, {
+      label: "🔍 코드 리뷰! 다른 문자 하나를 빠르게 찾아 탭!",
+      rounds: 2, sets: [["O", "0"], ["l", "1"], ["·", "•"]],
+    }, (res) => cb(res, DEV_DUEL));
   } else {
     if (autoMiniOn()) { cb(autoRes(S.stats.collab), DEV_DUEL); return; }
     window.Timing.duel(container, {

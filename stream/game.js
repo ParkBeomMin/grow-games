@@ -829,7 +829,7 @@ function autoRes(stat) {
 
 function playRandomMini(container, cb) {
   const posStat = POS_INFO[S.pos].stat;
-  const mech = pick(["bar", "hold", "seq", "react", "duel"]);
+  const mech = pick(["bar", "hold", "seq", "react", "duel", "target", "drop", "odd"]);
   if (mech === "bar") {
     if (autoMiniOn()) { cb(autoRes(S.stats[posStat]), STREAM_BAR); return; }
     window.Timing.play(container, {
@@ -859,6 +859,24 @@ function playRandomMini(container, cb) {
       perfectMs: 300 + S.stats.reaction * 1.5,
       goodMs: 700 + S.stats.reaction * 2.5,
     }, (res) => cb(res, STREAM_REACT));
+  } else if (mech === "target") {
+    if (autoMiniOn()) { cb(autoRes(S.stats[posStat]), STREAM_REACT); return; }
+    window.Timing.target(container, {
+      label: "💥 도네 알림 폭주! 튀어나오는 후원을 빠르게 탭!",
+      icon: "💸", count: 3, lifeMs: 800 + Math.min(S.stats[posStat], 130) * 3,
+    }, (res) => cb(res, STREAM_REACT));
+  } else if (mech === "drop") {
+    if (autoMiniOn()) { cb(autoRes(S.stats[posStat]), STREAM_BAR); return; }
+    window.Timing.drop(container, {
+      label: "🎬 클립 캐치! 떨어지는 하이라이트를 초록 존에서 딱!",
+      icon: "✂️", zonePct: miniZone(S.stats[posStat]),
+    }, (res) => cb(res, STREAM_BAR));
+  } else if (mech === "odd") {
+    if (autoMiniOn()) { cb(autoRes(S.stats.chat), STREAM_DUEL); return; }
+    window.Timing.odd(container, {
+      label: "👀 채팅 관찰! 다른 이모지 하나를 빠르게 찾아 탭!",
+      rounds: 2, sets: [["😂", "🤣"], ["👍", "👎"], ["❤️", "🧡"]],
+    }, (res) => cb(res, STREAM_DUEL));
   } else {
     if (autoMiniOn()) { cb(autoRes(S.stats.chat), STREAM_DUEL); return; }
     window.Timing.duel(container, {

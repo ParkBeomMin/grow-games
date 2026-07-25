@@ -888,7 +888,7 @@ function autoRes(stat) {
 
 function playRandomMini(container, cb) {
   const posStat = POS_INFO[S.pos].stat;
-  const mech = pick(["bar", "hold", "seq", "react", "duel"]);
+  const mech = pick(["bar", "hold", "seq", "react", "duel", "target", "drop", "odd"]);
   if (mech === "bar") {
     if (autoMiniOn()) { cb(autoRes(S.stats[posStat]), SOCCER_BAR); return; }
     window.Timing.play(container, {
@@ -918,6 +918,24 @@ function playRandomMini(container, cb) {
       perfectMs: 300 + S.stats.defense * 1.5,
       goodMs: 700 + S.stats.defense * 2.5,
     }, (res) => cb(res, SOCCER_REACT));
+  } else if (mech === "target") {
+    if (autoMiniOn()) { cb(autoRes(S.stats[posStat]), SOCCER_REACT); return; }
+    window.Timing.target(container, {
+      label: "🎯 슛 찬스 러시! 튀어나오는 기회를 놓치지 말고 탭!",
+      icon: "⚽", count: 3, lifeMs: 800 + Math.min(S.stats[posStat], 130) * 3,
+    }, (res) => cb(res, SOCCER_REACT));
+  } else if (mech === "drop") {
+    if (autoMiniOn()) { cb(autoRes(S.stats[posStat]), SOCCER_BAR); return; }
+    window.Timing.drop(container, {
+      label: "⚽ 트래핑! 떨어지는 공을 초록 존에서 딱 잡아 슛!",
+      icon: "⚽", zonePct: miniZone(S.stats[posStat]),
+    }, (res) => cb(res, SOCCER_BAR));
+  } else if (mech === "odd") {
+    if (autoMiniOn()) { cb(autoRes(S.stats.dribble), SOCCER_DUEL); return; }
+    window.Timing.odd(container, {
+      label: "👀 수비 빈틈 포착! 다른 하나를 빠르게 찾아 탭!",
+      rounds: 2, sets: [["🧍", "🏃"], ["🥅", "⚽"], ["🟩", "🟢"]],
+    }, (res) => cb(res, SOCCER_DUEL));
   } else {
     if (autoMiniOn()) { cb(autoRes(S.stats.dribble), SOCCER_DUEL); return; }
     window.Timing.duel(container, {

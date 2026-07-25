@@ -833,7 +833,7 @@ function autoRes(stat) {
 
 function playRandomMini(container, cb) {
   const posStat = POS_INFO[S.pos].stat;
-  const mech = pick(["bar", "hold", "seq", "react", "duel"]);
+  const mech = pick(["bar", "hold", "seq", "react", "duel", "target", "drop", "odd"]);
   if (mech === "bar") {
     if (autoMiniOn()) { cb(autoRes(S.stats[posStat]), CHEF_BAR); return; }
     window.Timing.play(container, {
@@ -863,6 +863,24 @@ function playRandomMini(container, cb) {
       perfectMs: 300 + S.stats.speed * 1.5,
       goodMs: 700 + S.stats.speed * 2.5,
     }, (res) => cb(res, CHEF_REACT));
+  } else if (mech === "target") {
+    if (autoMiniOn()) { cb(autoRes(S.stats[posStat]), CHEF_REACT); return; }
+    window.Timing.target(container, {
+      label: "🔥 주문 폭주! 튀어나오는 주문표를 빠르게 탭!",
+      icon: "🧾", count: 3, lifeMs: 800 + Math.min(S.stats[posStat], 130) * 3,
+    }, (res) => cb(res, CHEF_REACT));
+  } else if (mech === "drop") {
+    if (autoMiniOn()) { cb(autoRes(S.stats[posStat]), CHEF_BAR); return; }
+    window.Timing.drop(container, {
+      label: "🍳 캐치! 떨어지는 재료를 팬 존에서 딱 받아내요!",
+      icon: "🍅", zonePct: miniZone(S.stats[posStat]),
+    }, (res) => cb(res, CHEF_BAR));
+  } else if (mech === "odd") {
+    if (autoMiniOn()) { cb(autoRes(S.stats.creativity), CHEF_DUEL); return; }
+    window.Timing.odd(container, {
+      label: "👀 재료 검수! 다른 재료 하나를 빠르게 찾아 탭!",
+      rounds: 2, sets: [["🍅", "🍎"], ["🥚", "🧅"], ["🥬", "🥦"]],
+    }, (res) => cb(res, CHEF_DUEL));
   } else {
     if (autoMiniOn()) { cb(autoRes(S.stats.creativity), CHEF_DUEL); return; }
     window.Timing.duel(container, {

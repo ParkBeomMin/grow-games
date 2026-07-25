@@ -232,5 +232,163 @@ window.Timing = (() => {
     });
   }
 
-  return { play, hold, sequence, reaction, duel };
+  // 조준 탭 — 튀어나오는 타겟을 순서대로 빠르게 탭 (반응·순발력)
+  function target(container, opts, cb) {
+    const total = clampV(opts.count || 3, 2, 6);
+    const life = clampV(opts.lifeMs || 850, 450, 1600);
+    const icon = opts.icon || "🎯";
+    const wrap = document.createElement("div");
+    wrap.className = "tm-box";
+    wrap.innerHTML = `
+      <p class="tm-label">${opts.label || "튀어나오는 타겟을 빠르게 탭!"}</p>
+      <div class="tm-field"></div>`;
+    container.appendChild(wrap);
+    const field = wrap.querySelector(".tm-field");
+    let idx = 0, hits = 0, fast = 0, done = false, curTimer = null, shownAt = 0;
+    const need = Math.ceil(total * 0.6);
+    function finish() {
+      if (done) return;
+      done = true;
+      clearTimeout(curTimer);
+      const res = (hits >= total && fast >= need) ? "perfect" : (hits >= need) ? "good" : "miss";
+      wrap.classList.add(`tm-done-${res}`);
+      setTimeout(() => { wrap.remove(); cb(res); }, 450);
+    }
+    function spawn() {
+      if (done) return;
+      if (idx >= total) { finish(); return; }
+      idx++;
+      const t = document.createElement("button");
+      t.type = "button";
+      t.className = "tm-target";
+      t.textContent = icon;
+      t.style.left = `${8 + Math.random() * 74}%`;
+      t.style.top = `${12 + Math.random() * 62}%`;
+      field.appendChild(t);
+      shownAt = performance.now();
+      t.onclick = () => {
+        if (done || t.disabled) return;
+        t.disabled = true;
+        hits += 1;
+        if (performance.now() - shownAt <= life * 0.55) fast += 1;
+        t.classList.add("tm-target-hit");
+        clearTimeout(curTimer);
+        setTimeout(() => t.remove(), 120);
+        spawn();
+      };
+      curTimer = setTimeout(() => {
+        t.classList.add("tm-target-miss");
+        setTimeout(() => t.remove(), 160);
+        spawn();
+      }, life);
+    }
+    spawn();
+  }
+
+  // 낙하 캐치 — 떨어지는 물체가 초록 존에 왔을 때 딱 잡으세요 (타이밍)
+  function drop(container, opts, cb) {
+    const zone = clampV(opts.zonePct || 22, 10, 40);
+    const center = 66;
+    const icon = opts.icon || "⚽";
+    const wrap = document.createElement("div");
+    wrap.className = "tm-box";
+    wrap.innerHTML = `
+      <p class="tm-label">${opts.label || "떨어지는 순간, 초록 존에서 딱 잡으세요!"}</p>
+      <div class="tm-drop">
+        <div class="tm-drop-band"></div>
+        <div class="tm-drop-perfect"></div>
+        <div class="tm-drop-icon">${icon}</div>
+      </div>
+      <button type="button" class="btn btn-primary tm-btn">${opts.button || "잡기! ✋"}</button>`;
+    container.appendChild(wrap);
+    const band = wrap.querySelector(".tm-drop-band");
+    const perf = wrap.querySelector(".tm-drop-perfect");
+    const ic = wrap.querySelector(".tm-drop-icon");
+    const btn = wrap.querySelector(".tm-btn");
+    const perfW = zone * 0.4;
+    band.style.top = `${center - zone / 2}%`;
+    band.style.height = `${zone}%`;
+    perf.style.top = `${center - perfW / 2}%`;
+    perf.style.height = `${perfW}%`;
+    let pos = 0, raf = 0, done = false, last = performance.now();
+    function tick(now) {
+      const dt = Math.min((now - last) / 1000, 0.05);
+      last = now;
+      pos += dt * 52; // 약 1.9초에 바닥
+      ic.style.top = `${Math.min(pos, 100)}%`;
+      if (pos >= 100) { finish(); return; }
+      raf = requestAnimationFrame(tick);
+    }
+    function finish() {
+      if (done) return;
+      done = true;
+      cancelAnimationFrame(raf);
+      btn.disabled = true;
+      let res = "miss";
+      if (Math.abs(pos - center) <= perfW / 2) res = "perfect";
+      else if (Math.abs(pos - center) <= zone / 2) res = "good";
+      wrap.classList.add(`tm-done-${res}`);
+      setTimeout(() => { wrap.remove(); cb(res); }, 450);
+    }
+    btn.onclick = finish;
+    raf = requestAnimationFrame(tick);
+  }
+
+  // 다른 그림 찾기 — 여러 개 중 다른 하나를 빠르게 찾아 탭 (집중·판단)
+  function odd(container, opts, cb) {
+    const rounds = clampV(opts.rounds || 2, 1, 4);
+    const sets = opts.sets || [["🟢", "🟩"], ["🔵", "🟦"], ["🟡", "🟨"]];
+    const grid = clampV(opts.grid || 9, 4, 12);
+    const wrap = document.createElement("div");
+    wrap.className = "tm-box";
+    wrap.innerHTML = `
+      <p class="tm-label">${opts.label || "다른 하나를 빠르게 찾아 탭!"}</p>
+      <div class="tm-odd"></div>`;
+    container.appendChild(wrap);
+    const box = wrap.querySelector(".tm-odd");
+    let round = 0, correct = 0, fast = 0, done = false, timer = null, shownAt = 0;
+    const need = Math.ceil(rounds * 0.6);
+    function finish() {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      const res = (correct >= rounds && fast >= need) ? "perfect" : (correct >= need) ? "good" : "miss";
+      wrap.classList.add(`tm-done-${res}`);
+      setTimeout(() => { wrap.remove(); cb(res); }, 450);
+    }
+    function nextRound() {
+      if (done) return;
+      if (round >= rounds) { finish(); return; }
+      round += 1;
+      box.innerHTML = "";
+      const pair = sets[Math.floor(Math.random() * sets.length)];
+      const base = pair[0], oddIcon = pair[1];
+      const oddCell = Math.floor(Math.random() * grid);
+      shownAt = performance.now();
+      for (let i = 0; i < grid; i++) {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "tm-odd-cell";
+        b.textContent = i === oddCell ? oddIcon : base;
+        b.onclick = () => {
+          if (done) return;
+          if (i === oddCell) {
+            correct += 1;
+            if (performance.now() - shownAt <= 1500) fast += 1;
+            b.classList.add("tm-odd-hit");
+            nextRound();
+          } else {
+            b.classList.add("tm-seq-wrong");
+            finish();
+          }
+        };
+        box.appendChild(b);
+      }
+      clearTimeout(timer);
+      timer = setTimeout(() => finish(), 4000);
+    }
+    nextRound();
+  }
+
+  return { play, hold, sequence, reaction, duel, target, drop, odd };
 })();

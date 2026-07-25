@@ -1037,7 +1037,7 @@ const DUEL_PIT = { ok: "타자의 노림수를 피했어요! 🧠", great: "허�
 // 승부처 미니게임 — 타이밍/홀드/사인 암기/반응 속도/수싸움 5종 랜덤
 function playRandomMini(container, cb) {
   const isBat = S.pos === "batter";
-  const mech = pick(["bar", "hold", "seq", "react", "duel"]);
+  const mech = pick(["bar", "hold", "seq", "react", "duel", "target", "drop", "odd"]);
   if (mech === "bar") {
     const type = pick(isBat ? MINI_BAT : MINI_PIT);
     if (autoMiniOn()) { cb(autoRes(S.stats[type.stat]), type); return; }
@@ -1071,6 +1071,27 @@ function playRandomMini(container, cb) {
       perfectMs: 300 + stat * 1.5,
       goodMs: 700 + stat * 2.5,
     }, (res) => cb(res, isBat ? REACT_BAT : REACT_PIT));
+  } else if (mech === "target") {
+    const stat = isBat ? S.stats.run : S.stats.defense;
+    if (autoMiniOn()) { cb(autoRes(stat), isBat ? REACT_BAT : REACT_PIT); return; }
+    window.Timing.target(container, {
+      label: isBat ? "⚡ 빠른 배팅! 튀어나오는 공을 놓치지 말고 탭!" : "🧤 타구 처리! 튀어나오는 타구를 빠르게 잡아 탭!",
+      icon: isBat ? "⚾" : "🧤", count: 3, lifeMs: 800 + Math.min(stat, 130) * 3,
+    }, (res) => cb(res, isBat ? REACT_BAT : REACT_PIT));
+  } else if (mech === "drop") {
+    const type = pick(isBat ? MINI_BAT : MINI_PIT);
+    if (autoMiniOn()) { cb(autoRes(S.stats[type.stat]), type); return; }
+    window.Timing.drop(container, {
+      label: isBat ? "⚾ 낙구 배팅! 떨어지는 공을 초록 존에서 딱 받아쳐!" : "🧤 포구! 떨어지는 공을 글러브 존에서 딱 잡아!",
+      icon: "⚾", zonePct: miniZone(S.stats[type.stat]),
+    }, (res) => cb(res, type));
+  } else if (mech === "odd") {
+    const stat = isBat ? S.stats.contact : S.stats.control;
+    if (autoMiniOn()) { cb(autoRes(stat), isBat ? DUEL_BAT : DUEL_PIT); return; }
+    window.Timing.odd(container, {
+      label: "👀 빠른 눈! 다른 하나를 순식간에 찾아 탭!",
+      rounds: 2, sets: [["⚾", "🥎"], ["🧢", "⛑️"], ["🧤", "🥊"]],
+    }, (res) => cb(res, isBat ? DUEL_BAT : DUEL_PIT));
   } else {
     const stat = isBat ? S.stats.contact : S.stats.control;
     if (autoMiniOn()) { cb(autoRes(stat), isBat ? DUEL_BAT : DUEL_PIT); return; }
