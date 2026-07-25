@@ -17,14 +17,15 @@ const GENERATORS = [
   { id: "ai",       emoji: "🧠", name: "AI 에이전트 군단",    base: 260000, cost: 5e8,    desc: "자율 개발·자율 배포" },
 ];
 
-// 업그레이드 — 1회성 강력 부스트라 접근성 좋게(싸고 이르게). 비용 오름차순.
+// 업그레이드 — 1회성 강력 배수. 프리미엄(비싸게) 포지션. 비용 오름차순.
+// 클릭당 코드는 별도의 '클릭 강화'(반복 구매)로 키워요 → clickUpCost / buyClickUp
 const UPGRADES = [
-  { id: "kb1",        emoji: "⌨️", name: "기계식 키보드",        cost: 150,    type: "click",  mult: 2, desc: "클릭 파워 ×2" },
-  { id: "coffee",     emoji: "☕", name: "에스프레소 머신",      cost: 1200,   type: "global", mult: 2, desc: "전체 생산 ×2" },
-  { id: "kb2",        emoji: "⌨️", name: "적축 커스텀 키보드",   cost: 9000,   type: "click",  mult: 3, desc: "클릭 파워 ×3" },
-  { id: "framework",  emoji: "🧩", name: "최신 프레임워크 도입", cost: 45000,  type: "global", mult: 2, desc: "전체 생산 ×2" },
-  { id: "cloud",      emoji: "💳", name: "클라우드 크레딧 대량", cost: 9e5,    type: "global", mult: 2, desc: "전체 생산 ×2" },
-  { id: "opensource", emoji: "⭐", name: "오픈소스 스타 떡상",   cost: 2.5e7,  type: "global", mult: 3, desc: "전체 생산 ×3" },
+  { id: "kb1",        emoji: "⌨️", name: "기계식 키보드",        cost: 800,    type: "click",  mult: 2, desc: "클릭 파워 ×2" },
+  { id: "coffee",     emoji: "☕", name: "에스프레소 머신",      cost: 9000,   type: "global", mult: 2, desc: "전체 생산 ×2" },
+  { id: "kb2",        emoji: "⌨️", name: "적축 커스텀 키보드",   cost: 90000,  type: "click",  mult: 3, desc: "클릭 파워 ×3" },
+  { id: "framework",  emoji: "🧩", name: "최신 프레임워크 도입", cost: 8e5,    type: "global", mult: 2, desc: "전체 생산 ×2" },
+  { id: "cloud",      emoji: "💳", name: "클라우드 크레딧 대량", cost: 1.2e7,  type: "global", mult: 2, desc: "전체 생산 ×2" },
+  { id: "opensource", emoji: "⭐", name: "오픈소스 스타 떡상",   cost: 3e8,    type: "global", mult: 3, desc: "전체 생산 ×3" },
 ];
 
 const STAGES = [
@@ -59,6 +60,7 @@ function fresh() {
   return {
     company: pick(COMPANY_NAMES),
     code: 0,             // 보유 코드(줄)
+    clickLv: 0,          // 클릭 강화 레벨 (반복 구매)
     gens: {}, ups: {},
     so: 0, exits: 0,
     earnedRun: 0, earnedAll: 0,
@@ -72,7 +74,7 @@ function load() {
     const s = JSON.parse(localStorage.getItem(SAVE_KEY));
     if (s && typeof s.code === "number") {
       S = s; S.gens = S.gens || {}; S.ups = S.ups || {}; S.log = S.log || [];
-      S.boostCdUntil = S.boostCdUntil || 0;
+      S.boostCdUntil = S.boostCdUntil || 0; S.clickLv = S.clickLv || 0;
       return true;
     }
   } catch { /* noop */ }
@@ -87,7 +89,10 @@ const prestigeMult = () => 1 + S.so * 0.04;
 const buffMult = () => (Date.now() < S.buffUntil ? 2 : 1);
 const baseSec = () => GENERATORS.reduce((s, g) => s + (S.gens[g.id] || 0) * g.base, 0);
 const perSec = () => baseSec() * globalMult() * prestigeMult() * buffMult();
-const clickValue = () => Math.max(1, 1 * clickMult()) * globalMult() * prestigeMult() * buffMult();
+// 클릭당 코드 = (기본 1 + 강화 레벨) × 키보드 배수 × 전체·프레스티지·부스터 배수
+const clickBase = () => 1 + (S.clickLv || 0);
+const clickValue = () => clickBase() * clickMult() * globalMult() * prestigeMult() * buffMult();
+const clickUpCost = () => Math.ceil(20 * Math.pow(1.15, S.clickLv || 0));
 const genCost = (g) => Math.ceil(g.cost * Math.pow(1.15, S.gens[g.id] || 0));
 const valuation = () => S.earnedRun;
 const stageOf = (v) => { let st = STAGES[0]; for (const s of STAGES) if (v >= s.v) st = s; return st; };
@@ -151,6 +156,13 @@ function buyUp(u) {
   addLog(`${u.emoji} ${u.name} 도입! (${u.desc})`);
   save(); renderAll();
 }
+function buyClickUp() {
+  const cost = clickUpCost();
+  if (S.code < cost) return;
+  S.code -= cost;
+  S.clickLv = (S.clickLv || 0) + 1;
+  save(); renderAll();
+}
 
 // ---------- 집중 부스터 (2배 · 5분 쿨다운 · 추후 보상형 광고) ----------
 function useBoost() {
@@ -180,7 +192,7 @@ function doExit() {
   )) return;
   S.so += gain;
   S.exits += 1;
-  S.code = 0; S.gens = {}; S.ups = {}; S.earnedRun = 0;
+  S.code = 0; S.gens = {}; S.ups = {}; S.clickLv = 0; S.earnedRun = 0;
   S.buffUntil = 0;
   addLog(`🚀 Exit 성공! 스톡옵션 +${gain} (통산 ${S.exits}회, 누적 SO ${S.so})`);
   save(); renderAll();
@@ -193,6 +205,12 @@ function renderHud() {
   const v = valuation(), st = stageOf(v), ns = nextStage(v);
   $("hud-code").textContent = "💾 " + lines(S.code);
   $("hud-sec").textContent = linesRate(perSec()) + "/초";
+  $("clicker-label").textContent = `눌러서 코딩! 💾 +${fmt(clickValue())}줄`;
+
+  // 클릭 강화 버튼 (반복 구매)
+  const cu = $("btn-clickup"), cuCost = clickUpCost();
+  cu.disabled = S.code < cuCost;
+  cu.innerHTML = `⌨️ 클릭 강화 <b>Lv.${S.clickLv || 0}</b> — 클릭당 💾${fmt(clickValue())}줄 · ${lines(cuCost)}`;
   $("hud-so").textContent = "🧾 스톡옵션 " + S.so + " (×" + prestigeMult().toFixed(2) + ")";
   $("stage-name").textContent = `${st.emoji} ${st.name}`;
   $("stage-val").textContent = "누적 " + lines(v);
@@ -302,6 +320,7 @@ function init() {
   setTab("gen");
   // click 대신 pointerdown — 빠른 연타에서 누락 없이 즉시 반응 (마우스·터치 모두 커버)
   $("clicker").addEventListener("pointerdown", (e) => { e.preventDefault(); onClick(e); });
+  $("btn-clickup").addEventListener("click", buyClickUp);
   $("btn-boost").addEventListener("click", useBoost);
   $("btn-exit").addEventListener("click", doExit);
   document.querySelectorAll(".tab").forEach((b) => b.addEventListener("click", () => setTab(b.dataset.tab)));

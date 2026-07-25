@@ -49,8 +49,14 @@ body {
 }
 @keyframes floatUp { 0%{ opacity: 1; } 100%{ opacity: 0; transform: translate(-50%, -180%); } }
 
-.btn-boost {
+.btn-clickup {
   width: 100%; margin: 12px 0 0;
+  background: linear-gradient(180deg, #9fd6ff, var(--sky)); color: #08203a; box-shadow: 0 4px 0 #3a6ea5;
+}
+.btn-clickup:disabled { background: var(--field); color: var(--dim); box-shadow: 0 4px 0 #0a1024; cursor: not-allowed; }
+.btn-clickup b { font-family: "Jua", sans-serif; }
+.btn-boost {
+  width: 100%; margin: 10px 0 0;
   background: linear-gradient(180deg, #ffe08a, #ffb300); color: #3a2600; box-shadow: 0 4px 0 #b37c00;
 }
 .btn-boost:disabled { background: var(--field); color: var(--dim); box-shadow: 0 4px 0 #0a1024; cursor: not-allowed; }
