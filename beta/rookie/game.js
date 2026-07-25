@@ -342,11 +342,21 @@ function renderRecord() {
   }
   let proHtml = "";
   if (S.career && S.career.seasons.length) {
-    const rows = S.career.seasons.map((x) =>
-      `<tr><td>${x.y}년차</td><td>${x.role ? x.role.replace(" 투수", "").replace(" 타자", "") : "-"}</td><td style="text-align:left">${x.line}${x.champ ? " 🏆" : ""}${x.awards && x.awards.length ? " 🎖️" : ""}</td><td>${x.war.toFixed(1)}</td></tr>`
-    ).join("");
+    // 수상은 이름까지 — "몇 년차에 뭘 탔는지"가 연도별 기록의 핵심이라 🎖️만으론 부족해요
+    const AWARD_TAG = { MVP: "MVP", 골든글러브: "GG", 신인왕: "신인왕" };
+    const rows = S.career.seasons.map((x) => {
+      const badges =
+        (x.champ ? `<span class="sn-tag champ">🏆우승</span>` : "") +
+        (x.awards || []).map((a) => `<span class="sn-tag award">🎖️${AWARD_TAG[a] || a}</span>`).join("");
+      return `<tr>
+        <td class="sn-y">${x.y}년차${x.age ? `<span class="sn-age">${x.age}세</span>` : ""}</td>
+        <td class="sn-role">${x.role ? x.role.replace(" 투수", "").replace(" 타자", "") : "-"}</td>
+        <td class="sn-line">${x.line}${badges ? `<span class="sn-tags">${badges}</span>` : ""}</td>
+        <td class="sn-war">${x.war.toFixed(1)}</td>
+      </tr>`;
+    }).join("");
     proHtml = `
-      <table class="season-table"><thead><tr><th>시즌</th><th>보직</th><th>성적</th><th>WAR</th></tr></thead><tbody>${rows}</tbody></table>
+      <table class="season-table season-career"><thead><tr><th>시즌</th><th>보직</th><th>성적</th><th>WAR</th></tr></thead><tbody>${rows}</tbody></table>
       <div>통산 ${S.career.seasons.length}시즌 · WAR ${S.career.warSum.toFixed(1)} · 🏆 ${S.career.rings} · MVP ${S.career.mvp} · GG ${S.career.gg}${S.career.roy ? " · 신인왕" : ""}</div>`;
   }
   const defs = STAT_DEFS[S.pos];
@@ -364,7 +374,7 @@ function renderRecord() {
     <div class="draft-summary">
       <b>🏫 고교 기록</b><br/>${hs}<br/>🔭 주목도 ${Math.round(S.scout)} · ${trophyLine}<br/>
       ${curHtml}
-      ${proHtml ? `<br/><b>⚾ 지난 시즌 기록</b>${proHtml}<br/>` : ""}
+      ${proHtml ? `<br/><b>⚾ 연도별 통산 기록</b>${proHtml}<br/>` : ""}
       ${gearList ? `<br/><b>🛍️ 보유 장비</b> ${gearList}` : ""}
     </div>`;
 }
