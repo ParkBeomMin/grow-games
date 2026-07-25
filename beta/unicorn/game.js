@@ -1,5 +1,5 @@
-/* 더 유니콘 🦄 창업 방치 — 클릭으로 코딩 → 장비·자동화로 성장 → Exit 프레스티지
- * 장비(반복): 클릭당 코드 +N   /   자동화(반복): 초당 코드 +N   — 둘 다 가산식, 배수 아님 */
+/* 더 유니콘 🦄 창업 방치 — 클릭으로 코딩 → 개발력·조직으로 성장 → Exit 프레스티지
+ * 개발력(반복): 클릭당 코드 +N   /   조직(반복): 초당 코드 +N   — 둘 다 가산식, 배수 아님 */
 "use strict";
 
 const SAVE_KEY = "unicorn-save-v1";
@@ -7,34 +7,34 @@ const $ = (id) => document.getElementById(id);
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 
 // ---------- 데이터 ----------
-// 자동화 — 반복 구매, 개당 '초당 +per줄' 패시브. 비용은 1.15^보유수로 상승.
+// 조직 — 반복 채용/구축, 개당 '초당 +per줄' 패시브. 비용은 1.15^보유수로 상승.
 const GENERATORS = [
-  { id: "americano", emoji: "☕",  name: "아메리카노",         per: 1,    cost: 20 },
-  { id: "energy",    emoji: "⚡",  name: "에너지 드링크",      per: 2,    cost: 60 },
-  { id: "book",      emoji: "📖",  name: "개발서적 정독",      per: 3,    cost: 150 },
-  { id: "stack",     emoji: "🧱",  name: "스택오버플로우",     per: 6,    cost: 400 },
-  { id: "ai",        emoji: "🧠",  name: "AI 활용능력 향상",   per: 10,   cost: 1000 },
-  { id: "youtube",   emoji: "📺",  name: "유튜브 코딩 채널",   per: 20,   cost: 2200 },
-  { id: "copilot",   emoji: "🤖",  name: "깃허브 코파일럿",    per: 30,   cost: 3500 },
-  { id: "conf",      emoji: "🎫",  name: "테크 컨퍼런스",      per: 60,   cost: 8000 },
-  { id: "remote",    emoji: "🏠",  name: "재택근무",           per: 100,  cost: 15000 },
-  { id: "offshore",  emoji: "🌏",  name: "글로벌 오프쇼어 팀", per: 320,  cost: 5e4 },
-  { id: "agent",     emoji: "🛰️", name: "AI 에이전트 군단",   per: 1200, cost: 3e5 },
+  { id: "americano", emoji: "👨‍💻", name: "열정 인턴",          per: 1,    cost: 20 },
+  { id: "energy",    emoji: "🧑‍💻", name: "주니어 개발자",      per: 2,    cost: 60 },
+  { id: "book",      emoji: "👩‍💻", name: "시니어 개발자",      per: 3,    cost: 150 },
+  { id: "stack",     emoji: "🧠",  name: "테크리드",           per: 6,    cost: 400 },
+  { id: "ai",        emoji: "🤖",  name: "자동 커밋봇",         per: 10,   cost: 1000 },
+  { id: "youtube",   emoji: "🔁",  name: "CI/CD 파이프라인",    per: 20,   cost: 2200 },
+  { id: "copilot",   emoji: "☁️",  name: "오토스케일 서버",     per: 30,   cost: 3500 },
+  { id: "conf",      emoji: "🌏",  name: "오프쇼어 팀",         per: 60,   cost: 8000 },
+  { id: "remote",    emoji: "🏢",  name: "판교 사옥",           per: 100,  cost: 15000 },
+  { id: "offshore",  emoji: "🦾",  name: "AI 코딩 에이전트",    per: 320,  cost: 5e4 },
+  { id: "agent",     emoji: "🛰️", name: "자율 개발 군단",      per: 1200, cost: 3e5 },
 ];
 
-// 장비 — 반복 구매, 개당 '클릭당 +per줄'. 비용은 1.15^보유수로 상승.
+// 개발력 — 반복 투자, 개당 '클릭당 +per줄' (내 코딩 셋업·스킬). 비용은 1.15^보유수로 상승.
 const EQUIP = [
-  { id: "kb",     emoji: "⌨️",  name: "기계식 키보드",         per: 1,   cost: 10 },
-  { id: "chair",  emoji: "🪑",  name: "허먼밀러 체어",         per: 2,   cost: 100 },
-  { id: "glass",  emoji: "👓",  name: "블루라이트 차단 안경",  per: 3,   cost: 250 },
-  { id: "mouse",  emoji: "🖱️", name: "로지텍 마우스",         per: 5,   cost: 500 },
-  { id: "wrist",  emoji: "💺",  name: "손목 받침대",           per: 8,   cost: 900 },
-  { id: "lube",   emoji: "💧",  name: "기계식 스위치 윤활",    per: 12,  cost: 1500 },
-  { id: "dual",   emoji: "🖥️", name: "듀얼 모니터",           per: 35,  cost: 5000 },
-  { id: "rgb",    emoji: "🌈",  name: "RGB 게이밍 감성",       per: 80,  cost: 12000 },
-  { id: "keycap", emoji: "🔲",  name: "무각 키캡",             per: 150, cost: 25000 },
-  { id: "sitstand", emoji: "🧍", name: "스탠딩 데스크",        per: 400, cost: 8e4 },
-  { id: "vim",    emoji: "🧙",  name: "Vim 마스터",            per: 1000, cost: 5e5 },
+  { id: "kb",       emoji: "⌨️",  name: "텐키리스 키보드",       per: 1,    cost: 10 },
+  { id: "chair",    emoji: "🪑",  name: "인체공학 의자",         per: 2,    cost: 100 },
+  { id: "glass",    emoji: "🎧",  name: "집중용 헤드셋",         per: 3,    cost: 250 },
+  { id: "mouse",    emoji: "🖱️", name: "게이밍 마우스",         per: 5,    cost: 500 },
+  { id: "wrist",    emoji: "💪",  name: "손목 보호대",           per: 8,    cost: 900 },
+  { id: "lube",     emoji: "⌨️",  name: "무접점 커스텀 키보드",  per: 12,   cost: 1500 },
+  { id: "dual",     emoji: "🖥️", name: "울트라와이드 모니터",   per: 35,   cost: 5000 },
+  { id: "rgb",      emoji: "🌙",  name: "새벽 감성 코딩",        per: 80,   cost: 12000 },
+  { id: "keycap",   emoji: "🧘",  name: "몰입 모드(Flow)",       per: 150,  cost: 25000 },
+  { id: "sitstand", emoji: "⚡",  name: "단축키 장인",           per: 400,  cost: 8e4 },
+  { id: "vim",      emoji: "🪄",  name: "정규식 흑마법",         per: 1000, cost: 5e5 },
 ];
 
 const STAGES = [
@@ -187,7 +187,7 @@ function doExit() {
   if (!confirm(
     `🚀 Exit — ${label} 단계에서 회사를 매각/상장할까요?\n\n` +
     `· 스톡옵션 +${gain} 획득 (영구 생산 배수 +${gain * 4}%p)\n` +
-    `· 코드·장비·자동화는 초기화되고, 더 빠르게 다시 시작해요\n\n진행할까요?`
+    `· 코드·조직·개발력은 초기화되고, 더 빠르게 다시 시작해요\n\n진행할까요?`
   )) return;
   S.so += gain;
   S.exits += 1;
@@ -219,11 +219,11 @@ function renderHud() {
   }
   $("buff-tag").classList.toggle("hidden", now >= S.buffUntil);
 
-  // AI 리팩토링(부스터) 버튼
+  // 스프린트(부스터) 버튼
   const bb = $("btn-boost");
-  if (now < S.buffUntil) { bb.disabled = true; bb.textContent = `🔥 리팩토링 발동 중! (${Math.ceil((S.buffUntil - now) / 1000)}초)`; }
-  else if (now < S.boostCdUntil) { bb.disabled = true; bb.textContent = `🔥 AI 리팩토링 (${mmss(S.boostCdUntil - now)} 후)`; }
-  else { bb.disabled = false; bb.textContent = "🔥 AI 리팩토링 (×2) — 60초간 생산 2배"; }
+  if (now < S.buffUntil) { bb.disabled = true; bb.textContent = `🔥 스프린트 중! (${Math.ceil((S.buffUntil - now) / 1000)}초)`; }
+  else if (now < S.boostCdUntil) { bb.disabled = true; bb.textContent = `🚀 스프린트 (${mmss(S.boostCdUntil - now)} 후)`; }
+  else { bb.disabled = false; bb.textContent = "🚀 스프린트 (×2) — 60초간 생산 2배"; }
 
   // Exit 버튼
   const exitBtn = $("btn-exit");
@@ -231,7 +231,7 @@ function renderHud() {
   else { exitBtn.disabled = true; exitBtn.innerHTML = `🔒 Exit — 시리즈 A(${lines(EXIT_UNLOCK)})부터`; }
 }
 
-// 장비·자동화 공통 아이템 렌더 (subtitle 단위만 다름)
+// 개발력·조직 공통 아이템 렌더 (subtitle 단위만 다름)
 function itemHTML(item, cnt, cost, can, unit) {
   return `
     <button class="gen ${can ? "" : "no"}" data-id="${item.id}">
