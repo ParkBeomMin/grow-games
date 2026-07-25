@@ -55,6 +55,26 @@
 - ⭐ **배경 별점** — 성장/안정성이 다 비슷하게(★★★) 보이던 문제를 상대 비교 5칸 별점으로 개선
 - 🩹 각종 UI/밸런스 보정 — 타율 과다, 각성 버튼 무반응(100 표시), 하단 배너, 미니게임 연타 제거 등
 
+## 🧪 베타 / 배포 (스테이징)
+
+운영 중인 서비스라 새 기능은 **베타에서 검증 후 상용에 반영**해요.
+
+- **상용**: `parkbeommin.github.io/grow-games/` (루트)
+- **베타**: `parkbeommin.github.io/grow-games/beta/` (같은 main의 `beta/` 폴더 — 링크를 안 걸어 일반 유저는 오지 않아요, 좌하단 🧪 BETA 배지 표시)
+- **완전 격리**: 베타는 `env.js`가 `/beta/` 경로를 감지해 localStorage를 `beta::` 네임스페이스로 분리하고, `match.js`·`stats.js`가 원격(Supabase·GA) 기록을 꺼요 → **상용 저장/명예의 전당/통계를 오염시키지 않아요.**
+
+**작업 흐름**
+```bash
+# 1) (필요 시) 베타를 최신 상용 기준으로 맞추기
+bash scripts/sync-beta.sh          # 루트 → beta/
+
+# 2) beta/ 안에서 새 기능 수정 → /beta/ 에서 확인
+
+# 3) OK 되면 상용에 반영
+bash scripts/promote.sh            # beta/ → 루트
+git add -A && git commit -m "release: promote beta → prod" && git push origin main
+```
+
 ## 🚀 실행 방법
 
 정적 사이트라 아무 웹서버로나 열면 돼요.
