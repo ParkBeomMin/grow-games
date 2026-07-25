@@ -514,6 +514,8 @@ function showSlotPicker() {
 function renderMarkets() {
   const box = $("agency-list");
   box.innerHTML = "";
+  const starBar = (v, vals) => { const lo = Math.min(...vals), hi = Math.max(...vals); const n = hi === lo ? 3 : Math.min(5, Math.max(1, 1 + Math.round(((v - lo) / (hi - lo)) * 4))); return "★".repeat(n) + "☆".repeat(5 - n); };
+  const GVALS = MARKETS.map((x) => x.growth), DVALS = MARKETS.map((x) => x.debut);
   for (const m of MARKETS) {
     const btn = document.createElement("button");
     btn.className = "card";
@@ -523,8 +525,8 @@ function renderMarkets() {
       <span class="card-sub">${m.tier}</span>
       <span class="card-desc">${m.desc}</span>
       <span class="card-tags">
-        <span class="tag">우상향 ${"★".repeat(Math.round(m.growth * 3))}</span>
-        <span class="tag">안정성 ${"★".repeat(Math.round(m.debut * 5))}</span>
+        <span class="tag">우상향 ${starBar(m.growth, GVALS)}</span>
+        <span class="tag">안정성 ${starBar(m.debut, DVALS)}</span>
       </span>`;
     btn.onclick = () => {
       chosenMarket = m;

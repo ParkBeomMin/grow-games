@@ -517,6 +517,8 @@ function showSlotPicker() {
 function renderAgencies() {
   const box = $("agency-list");
   box.innerHTML = "";
+  const starBar = (v, vals) => { const lo = Math.min(...vals), hi = Math.max(...vals); const n = hi === lo ? 3 : Math.min(5, Math.max(1, 1 + Math.round(((v - lo) / (hi - lo)) * 4))); return "★".repeat(n) + "☆".repeat(5 - n); };
+  const GVALS = AGENCIES.map((x) => x.growth), DVALS = AGENCIES.map((x) => x.debut);
   for (const a of AGENCIES) {
     const btn = document.createElement("button");
     btn.className = "card";
@@ -526,8 +528,8 @@ function renderAgencies() {
       <span class="card-sub">${a.tier} 기획사</span>
       <span class="card-desc">${a.desc}</span>
       <span class="card-tags">
-        <span class="tag">데뷔 파워 ${"★".repeat(Math.round(a.debut * 5))}</span>
-        <span class="tag">성장 ${"★".repeat(Math.round(a.growth * 3))}</span>
+        <span class="tag">데뷔 파워 ${starBar(a.debut, DVALS)}</span>
+        <span class="tag">성장 ${starBar(a.growth, GVALS)}</span>
       </span>`;
     btn.onclick = () => {
       chosenAgency = a;

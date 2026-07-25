@@ -533,6 +533,8 @@ function showSlotPicker() {
 function renderRegions() {
   const box = $("region-list");
   box.innerHTML = "";
+  const starBar = (v, vals) => { const lo = Math.min(...vals), hi = Math.max(...vals); const n = hi === lo ? 3 : Math.min(5, Math.max(1, 1 + Math.round(((v - lo) / (hi - lo)) * 4))); return "★".repeat(n) + "☆".repeat(5 - n); };
+  const WVALS = REGIONS.map((x) => x.win), GVALS = REGIONS.map((x) => x.growth);
   for (const r of REGIONS) {
     const btn = document.createElement("button");
     btn.className = "card";
@@ -542,8 +544,8 @@ function renderRegions() {
       <span class="card-sub">${r.school} · ${r.teams.join(" / ")}</span>
       <span class="card-desc">${r.desc}</span>
       <span class="card-tags">
-        <span class="tag">팀 전력 ${"★".repeat(Math.round(r.win * 5))}</span>
-        <span class="tag">성장 ${"★".repeat(Math.round(r.growth * 3))}</span>
+        <span class="tag">팀 전력 ${starBar(r.win, WVALS)}</span>
+        <span class="tag">성장 ${starBar(r.growth, GVALS)}</span>
       </span>`;
     btn.onclick = () => {
       chosenRegion = r;
