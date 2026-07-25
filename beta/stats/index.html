@@ -86,7 +86,7 @@
     const $ = (id) => document.getElementById(id);
     const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
 
-    const GAMES = { rookie: "⚾ 더 루키", idol: "🎤 더 트레이니", stock: "📈 더 인베스터", soccer: "⚽ 더 윙어", dev: "💻 더 커밋", chef: "🍜 더 셰프", stream: "📺 더 스트리머" };
+    const GAMES = { rookie: "⚾ 더 루키", idol: "🎤 더 트레이니", stock: "📈 더 인베스터", soccer: "⚽ 더 윙어", dev: "💻 더 커밋", chef: "🍜 더 셰프", stream: "📺 더 스트리머", unicorn: "🦄 더 유니콘" };
     const POS = {
       batter: "타자", pitcher: "투수", vocal: "보컬", dance: "댄스", rap: "랩",
       value: "가치투자", scalp: "단타", news: "정보매매", port: "분산투자",
@@ -108,6 +108,7 @@
       pro_enter: "프로 입단", debut: "데뷔", season_end: "시즌 결산", year_end: "연말 결산",
       retire: "은퇴", battle: "배틀", bonus: "보너스",
       pwa_install: "📲 앱 설치", pwa_launch: "📲 앱 실행",
+      exit: "🚀 Exit(재창업)", decacorn: "👑 데카콘 달성",
     };
 
     async function getView(name) {
@@ -150,7 +151,7 @@
       for (const game of Object.keys(GAMES)) {
         const g = rows.filter((r) => r.game === game);
         if (!g.length) continue;
-        const order = ["visit", "pwa_install", "pwa_launch", "new_player", "draft", "debut", "ending", "pro_enter", "season_end", "year_end", "retire", "battle", "bonus"];
+        const order = ["visit", "pwa_install", "pwa_launch", "new_player", "draft", "debut", "ending", "pro_enter", "season_end", "year_end", "exit", "decacorn", "retire", "battle", "bonus"];
         g.sort((a, b) => order.indexOf(a.event) - order.indexOf(b.event));
         const max = Math.max(...g.map((r) => r.total));
         const hofN = hofByGame ? (hofByGame[game] || 0) : null;
@@ -158,6 +159,55 @@
           g.map((r) => bar(EVENT_LABEL[r.event] || r.event, r.total, max)).join("")
         }</section>`;
       }
+      return html;
+    }
+
+    // 🦄 더 유니콘 — 방치형이라 지표가 달라요 (포지션 대신 Exit·스톡옵션·최고 단계)
+    const UNI_STAGES = ["부트스트랩", "프리시드", "시드 투자", "시리즈 A", "시리즈 B", "시리즈 C", "유니콘", "데카콘"];
+    function unicornSection(hofRows) {
+      if (!hofRows) return "";
+      const es = hofRows.filter((r) => r.game === "unicorn" && r.data).map((r) => r.data);
+      if (!es.length) return `<section><h2>🦄 더 유니콘 · 창업가 기록</h2><p class="empty">아직 은퇴한 창업가가 없어요.</p></section>`;
+
+      const num = (v) => (typeof v === "number" && isFinite(v) ? v : 0);
+      const deca = es.filter((e) => e.stage === "데카콘").length;
+      const best = es.reduce((a, b) => (num(b.score) > num(a.score) ? b : a));
+      const avgExit = es.reduce((s, e) => s + num(e.exits), 0) / es.length;
+      const maxSo = Math.max(...es.map((e) => num(e.so)));
+
+      let html = `<section><h2>🦄 더 유니콘 · 창업가 기록</h2>
+        <div class="kpis">
+          <div class="kpi"><div class="n">${es.length.toLocaleString()}</div><div class="l">🏛️ 은퇴 창업가</div></div>
+          <div class="kpi"><div class="n">${deca.toLocaleString()}</div><div class="l">👑 데카콘 달성</div></div>
+          <div class="kpi"><div class="n">${avgExit.toFixed(1)}</div><div class="l">🚀 평균 Exit</div></div>
+          <div class="kpi"><div class="n">${maxSo.toLocaleString()}</div><div class="l">🧾 최고 스톡옵션</div></div>
+        </div></section>`;
+
+      // 최고 단계 분포
+      const byStage = {};
+      for (const e of es) byStage[e.stage || "-"] = (byStage[e.stage || "-"] || 0) + 1;
+      const si = UNI_STAGES.filter((s) => byStage[s]).map((s) => [s, byStage[s]]);
+      if (si.length) {
+        const smax = Math.max(...si.map((x) => x[1]));
+        html += `<section><h2>🦄 더 유니콘 · 최고 단계 분포</h2>${si.map(([k, v]) => bar(k, v, smax)).join("")}</section>`;
+      }
+
+      // Exit 횟수 분포
+      const byExit = {};
+      for (const e of es) { const k = num(e.exits) >= 4 ? "4회 이상" : `${num(e.exits)}회`; byExit[k] = (byExit[k] || 0) + 1; }
+      const order = ["0회", "1회", "2회", "3회", "4회 이상"];
+      const ei = order.filter((k) => byExit[k]).map((k) => [k, byExit[k]]);
+      if (ei.length) {
+        const emax = Math.max(...ei.map((x) => x[1]));
+        html += `<section><h2>🦄 더 유니콘 · Exit 횟수 분포</h2>${ei.map(([k, v]) => bar(k, v, emax)).join("")}</section>`;
+      }
+
+      // 상위 기록
+      const top = [...es].sort((a, b) => num(b.score) - num(a.score)).slice(0, 5);
+      const tmax = num(top[0].score);
+      html += `<section><h2>🦄 더 유니콘 · 최고 기록 TOP ${top.length}</h2>${
+        top.map((e, i) => bar(`${i + 1}. ${e.name || "-"} (${e.stage || "-"} · Exit ${num(e.exits)}회)`, num(e.score), tmax)).join("")
+      }<p class="empty" style="margin-top:8px">최고 기록: ${esc(best.name || "-")} · ${esc(best.grade || "-")}</p></section>`;
       return html;
     }
 
@@ -214,7 +264,7 @@ grant select on public.stats_summary, public.stats_choices, public.stats_daily t
     // 명예의 전당 실제 등록 인원 (hof 테이블 직접 조회 — 읽기 정책 open)
     async function getHof() {
       try {
-        const res = await fetch(`${SUPABASE_URL}/rest/v1/hof?select=game&limit=5000`, { headers: H });
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/hof?select=game,data&limit=5000`, { headers: H });
         if (!res.ok) return null;
         return res.json();
       } catch { return null; }
@@ -262,6 +312,7 @@ grant select on public.stats_summary, public.stats_choices, public.stats_daily t
 
       html += dailySection(daily || []);
       html += choiceSection(choices || []);
+      html += unicornSection(hofRows);
       html += funnelSection(summary, hofByGame);
 
       if (!summary.length) html = setupCard("뷰는 있는데 아직 수집된 데이터가 없어요.") + html;

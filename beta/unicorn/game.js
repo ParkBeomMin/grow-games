@@ -275,6 +275,7 @@ function doExit() {
   S.buffUntil = 0;
   addLog(`🚀 Exit 성공! 스톡옵션 +${gain} (통산 ${S.exits}회, 누적 SO ${S.so})`);
   if (opening.length) addLog(`🔓 ${opening.map((o) => o.name).join(", ")} 해금!`);
+  if (window.Stats) Stats.log("exit", { exits: S.exits, so: S.so, stage: label });
   save(); renderAll();
   alert(
     `🎉 Exit 완료!\n\n스톡옵션 ${gain}개를 챙기고 새 창업을 시작합니다.\n이제 생산 배수 ×${prestigeMult().toFixed(2)}!` +
@@ -293,6 +294,7 @@ function checkEnding() {
   if (S.endedAt || valuation() < FINAL_STAGE) return;
   S.endedAt = Date.now();
   addLog("👑 데카콘 등극! 시장을 지배하는 회사가 되었어요.");
+  if (window.Stats) Stats.log("decacorn", { exits: S.exits, so: S.so, playMin: Math.round(playTime() / 60000) });
   save();
   showEnding();
 }
@@ -576,5 +578,7 @@ function init() {
   setInterval(tick, 100);
   setInterval(save, 5000);
   window.addEventListener("beforeunload", save);
+  // 방문·PWA 집계 + 이후 이벤트의 게임명 지정 (없으면 game이 "unknown"으로 기록돼요)
+  if (window.Stats) Stats.init("unicorn");
 }
 init();
