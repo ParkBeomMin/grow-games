@@ -84,31 +84,33 @@ git add -A && git commit -m "release: promote beta → prod"
 bash scripts/release.sh 1.2.0 "내용 요약"
 ```
 
-> 상용 버전은 루트의 **`VERSION`** 파일이 기준이에요. 태그는 환경에 따라
-> 푸시가 막힐 수 있지만(GitHub 프록시 정책), VERSION은 일반 파일이라 항상 올라가요.
-
 ### 버전 · 롤백
 
-릴리스마다 `vX.Y.Z` 태그를 남겨요. 문제가 생기면 **태그 하나로 상용을 되돌릴 수 있어요.**
+버전의 기준은 **두 가지**예요. 둘 다 일반 파일이라 어떤 환경에서든 확실히 남아요.
+
+| 기준 | 역할 |
+|---|---|
+| `VERSION` | 지금 상용에 올라간 버전 (`cat VERSION`) |
+| `CHANGELOG.md` | 버전별 **커밋 해시**와 변경 내용 — 롤백 대상 목록 |
+
+> ⚠️ **태그는 보조 수단이에요.** 자동화 환경(Claude Code 등)의 git 프록시는
+> 브랜치 ref만 허용하고 **태그 push를 403으로 거부**해요. 개인 PC에서는 정상이라,
+> 태그가 필요하면 CHANGELOG의 해시로 나중에 한 번에 만들면 됩니다.
 
 ```bash
-git tag -l -n1                     # 릴리스 목록 보기
-bash scripts/rollback.sh v1.0.0    # 상용(루트)을 그 시점으로 복원
-git status --short                 # 확인 후
-git add -A && git commit -m "revert: 상용을 v1.0.0 으로 롤백" && git push origin main
+bash scripts/rollback.sh                     # 릴리스 목록 보기
+bash scripts/rollback.sh 1e960bd --dry-run   # 뭐가 바뀔지 미리보기 (파일 안 건드림)
+bash scripts/rollback.sh 1e960bd             # 실제 복원
+git status --short                           # 확인 후
+git add -A && git commit -m "revert: 상용 롤백" && git push origin main
 ```
 
-- `rollback.sh`는 **루트(상용)만** 되돌려요 — `beta/`와 `scripts/`는 그대로라 작업 중인 베타가 날아가지 않아요.
-- 태그 이후 추가된 파일(새로 나간 게임 폴더 등)은 상용에서 제거돼요.
+- 태그·브랜치·**커밋 해시** 아무거나 받아요 — 태그가 없어도 롤백돼요.
+- **루트(상용)만** 되돌려요 — `beta/`와 `scripts/`는 그대로라 작업 중인 베타가 안 날아가요.
+- 그 시점 이후 추가된 파일(새로 나간 게임 폴더 등)은 상용에서 제거돼요.
 - 작업 트리만 바꾸므로, 확인 후 직접 커밋/푸시해야 실제로 반영돼요.
 
-| 태그 | 내용 |
-|---|---|
-| `v1.0.0` | 배포 체계 도입 전 기준점 — 육성 게임 7종 |
-| `v1.1.0` | 방치형 신작 **더 유니콘** · 아케이드 허브 · 더 루키 연도별 기록 개선 |
-| `v1.1.1` | 유니콘 통계 대시보드 지원 · `Stats.init` 누락 수정 |
-| `v1.1.2` | 유니콘 '처음부터' 초기화 안 되던 문제 수정 |
-| `v1.2.0` | 유니콘 **사명 직접 입력**(랜덤 추천·사명 변경) · `VERSION`/릴리스 스크립트 도입 |
+버전별 상세 이력은 [`CHANGELOG.md`](./CHANGELOG.md)에 있어요.
 
 ## 🚀 실행 방법
 
