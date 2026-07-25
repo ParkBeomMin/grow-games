@@ -292,7 +292,8 @@ function init() {
   offlineReward();
   renderAll();
   setTab("gen");
-  $("clicker").addEventListener("click", onClick);
+  // click 대신 pointerdown — 빠른 연타에서 누락 없이 즉시 반응 (마우스·터치 모두 커버)
+  $("clicker").addEventListener("pointerdown", (e) => { e.preventDefault(); onClick(e); });
   $("btn-boost").addEventListener("click", useBoost);
   $("btn-exit").addEventListener("click", doExit);
   document.querySelectorAll(".tab").forEach((b) => b.addEventListener("click", () => setTab(b.dataset.tab)));
