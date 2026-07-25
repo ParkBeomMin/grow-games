@@ -40,24 +40,26 @@
     </header>
 
     <div class="hud2">
-      <div class="hud2-money" id="hud-money">₩ 0</div>
-      <div class="hud2-sub"><span id="hud-sec">0 /초</span> · <span id="hud-so">🧾 스톡옵션 0</span></div>
+      <div class="hud2-money" id="hud-code">💾 0줄</div>
+      <div class="hud2-sub"><span id="hud-sec">0줄/초</span> · <span id="hud-so">🧾 스톡옵션 0</span></div>
     </div>
 
     <button class="clicker" id="clicker">
       <span class="clicker-emoji">💻</span>
-      <span class="clicker-label">눌러서 코딩! 💾</span>
+      <span class="clicker-label">눌러서 코딩! 💾 코드 +1</span>
     </button>
 
+    <button class="btn btn-boost" id="btn-boost">🔥 집중 부스터 — 60초간 2배</button>
     <button class="btn btn-exit" id="btn-exit" disabled>🔒 Exit</button>
 
-    <section class="panel">
-      <h2>🤖 자동화 고용</h2>
+    <div class="tabs">
+      <button class="tab active" data-tab="gen">🤖 자동화</button>
+      <button class="tab" data-tab="up">🧩 업그레이드</button>
+    </div>
+    <section class="panel" id="panel-gen">
       <div id="gen-list"></div>
     </section>
-
-    <section class="panel">
-      <h2>🧩 업그레이드</h2>
+    <section class="panel hidden" id="panel-up">
       <div id="up-list"></div>
     </section>
 
@@ -69,6 +71,7 @@
   </main>
 
   <script src="../env.js"></script>
+  <script src="../ads.js"></script>
   <script src="game.js"></script>
 </body>
 </html>
