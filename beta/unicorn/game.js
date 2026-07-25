@@ -266,7 +266,8 @@ function doExit() {
     `🚀 Exit — ${label} 단계에서 회사를 매각/상장할까요?\n\n` +
     `· 스톡옵션 +${gain} 획득 (영구 생산 배수 ×${(1 + (S.so + gain) * 0.1).toFixed(2)})\n` +
     unlockMsg +
-    `· 코드·조직·개발력은 초기화되고, 더 빠르게 다시 시작해요\n\n진행할까요?`
+    `· 코드·조직·개발력은 초기화되고, 더 빠르게 다시 시작해요\n` +
+    `· 회사만 파는 거예요 — 창업 인생은 계속됩니다\n\n진행할까요?`
   )) return;
   S.so += gain;
   S.exits += 1;
@@ -309,7 +310,8 @@ function showEnding() {
 }
 function closeEnding() { $("ending").classList.add("hidden"); }
 
-// ---------- 명예의 전당 / 창업 정리(은퇴) ----------
+// ---------- 명예의 전당 / 은퇴 ----------
+// Exit = 회사 하나를 팔고 '다시 창업'(프레스티지)  ·  은퇴 = 창업 인생 자체를 마무리
 const HOF_KEY = "grow-hof-v1"; // 시리즈 공용 (entry.game으로 구분)
 const loadHof = () => { try { return JSON.parse(localStorage.getItem(HOF_KEY)) || []; } catch { return []; } };
 const saveHof = (l) => { try { localStorage.setItem(HOF_KEY, JSON.stringify(l.slice(-200))); } catch {} };
@@ -331,7 +333,7 @@ function gradeOf(bestRun) {
   if (st === "시리즈 A") return "📈 투자 유치에 성공한 대표";
   return "🌱 작지만 단단했던 시작";
 }
-// 정리 가능 조건 — 한 번이라도 시리즈 A를 찍었거나 Exit 경험이 있으면
+// 은퇴 가능 조건 — 한 번이라도 시리즈 A를 찍었거나 Exit 경험이 있으면
 const canRetire = () => S.bestRun >= EXIT_UNLOCK || S.exits > 0;
 
 function doRetire() {
@@ -340,9 +342,10 @@ function doRetire() {
   if (name === null) return;
   const company = String(name).trim().slice(0, 24) || S.company;
   if (!confirm(
-    `🏁 여기서 창업 인생을 정리할까요?\n\n` +
+    `🏛️ 창업 인생을 마치고 은퇴할까요?\n\n` +
     `· ${company} 의 기록이 명예의 전당에 영구 등록돼요\n` +
-    `· 스톡옵션을 포함한 모든 진행이 초기화되고 처음부터 시작해요\n\n진행할까요?`
+    `· 회사만 파는 Exit과 달리, 은퇴는 커리어 전체를 마무리해요\n` +
+    `· 스톡옵션을 포함한 모든 진행이 사라지고 완전히 새로 시작해요\n\n진행할까요?`
   )) return;
 
   const entry = {
@@ -372,7 +375,7 @@ function doRetire() {
   $("ending").classList.add("hidden");
   renderAll();
   alert(
-    `🏛️ ${entry.name} 의 기록이 명예의 전당에 등록됐어요!\n\n` +
+    `🏛️ ${entry.name}, 은퇴!\n\n명예의 전당에 이름을 남겼어요.\n\n` +
     `${entry.grade}\n최고 단계 ${entry.stage} · Exit ${entry.exits}회 · 점수 ${entry.score}`
   );
   showHof();
@@ -447,10 +450,10 @@ function renderHud() {
 
   // Exit 버튼
   const exitBtn = $("btn-exit");
-  if (v >= EXIT_UNLOCK) { exitBtn.disabled = false; exitBtn.innerHTML = `🚀 Exit (매각/IPO) — 스톡옵션 +${exitSO()}`; }
+  if (v >= EXIT_UNLOCK) { exitBtn.disabled = false; exitBtn.innerHTML = `🚀 Exit — 매각하고 재창업 (스톡옵션 +${exitSO()})`; }
   else { exitBtn.disabled = true; exitBtn.innerHTML = `🔒 Exit — 시리즈 A(${lines(EXIT_UNLOCK)})부터`; }
 
-  // 창업 정리 — 조건 충족 시에만 노출 (아무 때나 끝낼 수 있게)
+  // 은퇴 — 조건 충족 시에만 노출 (아무 때나 끝낼 수 있게)
   $("btn-retire").classList.toggle("hidden", !canRetire());
 }
 
