@@ -226,163 +226,92 @@ window.WingerCareer = (() => {
 
   function playShow() {
     const act = S.activity;
-    const firstWeek = act.week === 0;
     act.opp = pick(OPP_CLUBS.filter((n) => n !== S.group)); // 이번 상대
     $("stage-title").textContent = `⚽ ${S.proYear}시즌 ${cbLabel(act.cb)} — ${S.group}`;
     $("stage-round").textContent = `R${act.week + 1}/${act.weekTotal} 리그 · vs ${act.opp}`;
-    $("stage-card").innerHTML = `<div class="pbp" id="pbp-cb"></div><div id="cb-moment"></div><div id="cb-result"></div>`;
     show("screen-stage");
 
-    const feed = (f) => {
-      const div = document.createElement("div");
-      if (f.cls) div.className = f.cls;
-      div.textContent = f.text;
-      $("pbp-cb").appendChild(div);
-      $("pbp-cb").scrollTop = $("pbp-cb").scrollHeight;
-    };
-    const pre = firstWeek
-      ? [
-          { text: `📋 ${S.group}, ${cbLabel(act.cb)} 개막전 상대는 ${act.opp}` },
-          { text: "🏟️ 홈 팬들이 경기장을 가득 메웠어요" },
-          { text: `🔔 킥오프! ${S.group} vs ${act.opp} 개막전 시작!` },
-        ]
-      : [
-          { text: `🔔 R${act.week + 1} 킥오프 — ${S.group} vs ${act.opp}` },
-          { text: pick([
-            "🏃 초반부터 강하게 몰아붙여요",
-            "📣 원정 응원단의 함성이 뜨거워요",
-            "🎯 전방 압박이 매섭게 걸립니다",
-            "🛡️ 팽팽한 중원 싸움이 이어져요",
-          ]) },
-        ];
-    let idx = 0, momentOn = false;
-    const btn = $("btn-stage-next");
-    btn.textContent = "⏩ 빨리 감기";
-    btn.disabled = false;
-    const timer = setInterval(() => {
-      if (idx >= pre.length) { clearInterval(timer); moment(); return; }
-      feed(pre[idx++]);
-    }, 600);
-    btn.onclick = () => {
-      if (momentOn) return;
-      clearInterval(timer);
-      while (idx < pre.length) feed(pre[idx++]);
-      moment();
-    };
+    const myScore =
+      S.stats[POS_INFO[S.pos].stat] * 0.32 +
+      S.stats.stamina * 0.22 +
+      ((S.stats.shoot + S.stats.pass + S.stats.dribble) / 3) * 0.2 +
+      S.condition / 8 + (S.fandom || 0) / 45 + rand(-5, 5) + 20;
+    const rating = clamp(myScore / 10, 1, 10);
+    const c = matchContribution(rating);
+    const oppGoals = deriveOppGoals(rating, S.stats.defense);
+    MatchSim.run({
+      home: S.group, away: act.opp, myName: S.name,
+      goals: c.g, assists: c.a, defense: c.def, oppGoals,
+      finalize: (info) => proMatchFinalize(act, info, rating),
+    });
+  }
 
-    let miniBonus = 0, miniHype = 0;
-    function moment() {
-      if (momentOn) return;
-      momentOn = true;
-      btn.disabled = true;
-      btn.textContent = "🔥 승부처!";
-      playRandomMini($("cb-moment"), (res, type) => {
-        if (res === "perfect") { miniBonus = 10; miniHype = 0.5; feed({ text: type.great, cls: "good" }); }
-        else if (res === "miss") { miniBonus = -8; miniHype = -0.5; feed({ text: type.bad, cls: "bad" }); }
-        else { miniBonus = 3; feed({ text: type.ok }); }
-        weeklyChart();
-      });
+  // 프로 경기 결과 반영 (MOM 평점 순위 + 보상 + 다음 진행)
+  function proMatchFinalize(act, info, rating) {
+    const momAdj = info.momentRes === "perfect" ? 8 : info.momentRes === "miss" ? -8 : 0;
+    const myRankScore = rating * 10 + momAdj + rand(-4, 4);
+    const rows = [
+      { name: S.name, score: myRankScore, me: true },
+      ...act.rivals.map((r) => ({ name: r.name, score: r.pop + rand(-8, 8) })),
+    ].sort((a, b) => b.score - a.score);
+    const rank = rows.findIndex((r) => r.me) + 1;
+    const won = rank === 1;
+    const hypeDelta = (5 - rank) * 0.35 + (info.momentRes === "perfect" ? 0.5 : info.momentRes === "miss" ? -0.5 : 0);
+
+    act.apps = (act.apps || 0) + 1;
+    act.goals = (act.goals || 0) + info.myGoals;
+    act.assists = (act.assists || 0) + info.assists;
+    act.defense = (act.defense || 0) + info.defense;
+    if (info.res === "W") act.teamW = (act.teamW || 0) + 1;
+    else if (info.res === "D") act.teamD = (act.teamD || 0) + 1;
+    else act.teamL = (act.teamL || 0) + 1;
+
+    act.week += 1;
+    act.hypeSum += hypeDelta;
+    act.cbHype += hypeDelta;
+    let pay = 30, dFan;
+    if (won) {
+      act.wins += 1; act.cbWins += 1; S.career.wins += 1;
+      pay += 100; dFan = randInt(10, 18);
+    } else if (rank <= 3) {
+      dFan = randInt(4, 9);
+    } else {
+      dFan = randInt(-3, 3);
     }
+    S.fandom = Math.max(0, (S.fandom || 0) + dFan);
+    S.money = (S.money || 0) + pay;
+    S.condition = clamp(S.condition - randInt(3, 6), 0, 100);
+    S.pendingShow = false;
 
-    // 주간 활약(평점) 랭킹 발표
-    function weeklyChart() {
-      const myScore =
-        S.stats[POS_INFO[S.pos].stat] * 0.32 +
-        S.stats.stamina * 0.22 +
-        ((S.stats.shoot + S.stats.pass + S.stats.dribble) / 3) * 0.2 +
-        S.condition / 8 + (S.fandom || 0) / 45 + miniBonus + rand(-5, 5) + 20;
-      const rows = [
-        { name: S.name, score: myScore, me: true },
-        ...act.rivals.map((r) => ({ name: r.name, score: r.pop + rand(-8, 8) })),
-      ].sort((a, b) => b.score - a.score);
-      const rank = rows.findIndex((r) => r.me) + 1;
-      const won = rank === 1;
-      const rating = clamp(myScore / 10, 1, 10);
-
-      // 이번 경기 개인 기록(골·도움·수비) + 팀 스코어 산출 (FM식)
-      const oppName = act.opp || "상대팀";
-      const c = matchContribution(rating);
-      const sl = matchScoreline(c.g, rating);
-      const evFeeds = matchEventFeeds(c, oppName, sl.tf, sl.ta);
-      evFeeds.forEach((f) => feed(f));
-      feed({ text: `🔚 경기 종료 — ${S.group} ${sl.tf} : ${sl.ta} ${oppName}`, cls: sl.res === "W" ? "good" : sl.res === "L" ? "bad" : "" });
-
-      act.apps = (act.apps || 0) + 1;
-      act.goals = (act.goals || 0) + c.g;
-      act.assists = (act.assists || 0) + c.a;
-      act.defense = (act.defense || 0) + c.def;
-      if (sl.res === "W") act.teamW = (act.teamW || 0) + 1;
-      else if (sl.res === "D") act.teamD = (act.teamD || 0) + 1;
-      else act.teamL = (act.teamL || 0) + 1;
-
-      act.week += 1;
-      act.hypeSum += (5 - rank) * 0.35 + miniHype;
-      act.cbHype += (5 - rank) * 0.35 + miniHype;
-      let pay = 30;
-      let dFan;
-      if (won) {
-        act.wins += 1;
-        act.cbWins += 1;
-        S.career.wins += 1;
-        pay += 100;
-        dFan = randInt(10, 18);
-        feed({ text: `🏅 이 주의 선수(MOM)!! 최고 평점을 받았어요!`, cls: "good" });
-      } else if (rank <= 3) {
-        dFan = randInt(4, 9);
-        feed({ text: `📊 이번 R 평점 ${rank}위 — MOM이 눈앞이에요!`, cls: "good" });
-      } else {
-        dFan = randInt(-3, 3);
-        feed({ text: `📊 이번 R 평점 ${rank}위`, cls: rank >= 6 ? "bad" : "" });
-      }
-      S.fandom = Math.max(0, (S.fandom || 0) + dFan);
-      S.money = (S.money || 0) + pay;
-      S.condition = clamp(S.condition - randInt(3, 6), 0, 100);
-      S.pendingShow = false;
-
-      const cbDone = act.week >= act.weekTotal;
-      let extraLine = "";
-      if (cbDone) {
-        const cbSales = Math.max(1, Math.round(S.fandom * 0.05 + act.cbWins * 6 + act.cbHype * 4 + rand(-4, 4)));
-        act.sales += cbSales;
-        extraLine = `<div class="tour-pts">⚽ ${cbLabel(act.cb)} 종료 — MOM ${act.cbWins}회 · 공격포인트 ${cbSales}P</div>`;
-      }
-      save();
-
-      const scoreClass = sl.res === "W" ? "win" : sl.res === "L" ? "lose" : "";
-      $("cb-result").innerHTML = `
-        <div class="matchscore">
-          <span class="ms-team home">⚽ ${S.group}</span>
-          <span class="ms-num ${scoreClass}">${sl.tf} : ${sl.ta}</span>
-          <span class="ms-team">${oppName}</span>
-        </div>
-        <div class="ms-line">${RES_LABEL[sl.res]} · 평점 <b>${rating.toFixed(1)}</b> · ⚽${c.g} 🅰️${c.a} 🛡️${c.def}${won ? " · 🏅 MOM" : ""}</div>
-        <div class="tour-vs">${won ? "🏆 MOM!" : `평점 ${rank}위`} <span class="${won ? "win" : ""}">${S.name}</span></div>
-        ${chartHTML(rows.slice(0, 5))}
-        <div class="tour-pts">💰 경기 수당 +${pay}만 · ${dFan >= 0 ? `⭐ 명성 +${dFan}` : `📉 명성 ${dFan}`}</div>
-        ${extraLine}`;
-
-      btn.disabled = false;
-      if (!cbDone) {
-        btn.textContent = `🏋️ 다음 경기 준비 (R${act.week + 1})`;
-        btn.onclick = () => {
-          S.camp = 2;
-          save();
-          renderPrep();
-          show("screen-pro");
-        };
-      } else if (act.cb < act.cbTotal) {
-        btn.textContent = `⚽ ${cbLabel(act.cb + 1)} 준비하기`;
-        btn.onclick = () => {
-          S.camp = 3;
-          save();
-          renderPrep();
-          show("screen-pro");
-        };
-      } else {
-        btn.textContent = "🏁 시즌 결산";
-        btn.onclick = finishYear;
-      }
+    const cbDone = act.week >= act.weekTotal;
+    let extraLine = "";
+    if (cbDone) {
+      const cbSales = Math.max(1, Math.round(S.fandom * 0.05 + act.cbWins * 6 + act.cbHype * 4 + rand(-4, 4)));
+      act.sales += cbSales;
+      extraLine = `<div class="tour-pts">⚽ ${cbLabel(act.cb)} 종료 — MOM ${act.cbWins}회 · 공격포인트 ${cbSales}P</div>`;
     }
+    save();
+
+    const scoreClass = info.res === "W" ? "win" : info.res === "L" ? "lose" : "";
+    const resultHTML = `
+      <div class="ms-final ${scoreClass}">${info.home} ${info.teamGoals} : ${info.oppGoals} ${info.away} · ${RES_LABEL[info.res]}</div>
+      <div class="tour-vs">${won ? "🏅 MOM!" : `평점 ${rank}위`} <span class="${won ? "win" : ""}">${S.name}</span> · ⚽${info.myGoals} 🅰️${info.assists} 🛡️${info.defense}</div>
+      ${chartHTML(rows.slice(0, 5))}
+      <div class="tour-pts">💰 경기 수당 +${pay}만 · ${dFan >= 0 ? `⭐ 명성 +${dFan}` : `📉 명성 ${dFan}`}</div>
+      ${extraLine}`;
+
+    let nextLabel, nextFn;
+    if (!cbDone) {
+      nextLabel = `🏋️ 다음 경기 준비 (R${act.week + 1})`;
+      nextFn = () => { S.camp = 2; save(); renderPrep(); show("screen-pro"); };
+    } else if (act.cb < act.cbTotal) {
+      nextLabel = `⚽ ${cbLabel(act.cb + 1)} 준비하기`;
+      nextFn = () => { S.camp = 3; save(); renderPrep(); show("screen-pro"); };
+    } else {
+      nextLabel = "🏁 시즌 결산";
+      nextFn = finishYear;
+    }
+    return { resultHTML, nextLabel, nextFn };
   }
 
   // ---------- 시즌 결산 ----------

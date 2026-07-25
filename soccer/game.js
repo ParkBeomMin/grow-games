@@ -928,76 +928,159 @@ function playRandomMini(container, cb) {
   }
 }
 
-let stageTimer = null;
-function renderStageSim(type, grade, onFinal) {
-  const key = type.main || POS_INFO[S.pos].stat;
-  const pool = MOMENTS[key] || MOMENTS.shoot;
-  const goodN = grade.g === "S" ? 3 : grade.g === "A" ? 2 : grade.g === "B" ? 1 : 0;
-  const badN = grade.g === "D" ? 2 : grade.g === "C" ? 1 : grade.g === "B" ? 1 : 0;
-  const moments = shuffle([
-    ...shuffle([...pool.good]).slice(0, goodN).map((t) => ({ text: t, cls: "good" })),
-    ...shuffle([...pool.bad]).slice(0, badN).map((t) => ({ text: t, cls: "bad" })),
-  ]);
-  const feeds = [
-    { text: `⚽ ${S.name}, ${type.name} 상황에 나섭니다.` },
-    { text: "휘슬이 울리고, 경기가 시작돼요 🏟️" },
-    ...moments,
-  ];
+// 평점·수비력으로 상대 실점 수를 산출
+function deriveOppGoals(rating, defStat) {
+  const base = 2.4 - (rating - 5) * 0.28 - (defStat / 100) * 1.4 + rand(-0.3, 0.9);
+  return Math.max(0, Math.min(4, Math.round(base)));
+}
 
-  $("stage-card").innerHTML = `<div class="pbp" id="pbp"></div><div id="stage-moment"></div><div id="stage-result"></div>`;
-  let idx = 0, momentOn = false, finished = false;
-  function applyFeed(f) {
-    const div = document.createElement("div");
-    if (f.cls) div.className = f.cls;
-    div.textContent = f.text;
-    $("pbp").appendChild(div);
-    $("pbp").scrollTop = $("pbp").scrollHeight;
-  }
-  function startMoment() {
-    if (momentOn) return;
-    momentOn = true;
-    clearInterval(stageTimer);
-    applyFeed({ text: "🔥 결정적인 순간이 찾아와요…!", cls: "good" });
+// ---------- 경기 시뮬레이션 뷰 (스코어보드 + 미니 필드 + 중계) ----------
+// 유스/프로 경기 공통. #stage-card 안에 렌더하고 #btn-stage-next를 재사용해요.
+const MatchSim = (() => {
+  let timer = null;
+  function run(cfg) {
+    const { home, away, myName, goals, assists, defense, oppGoals } = cfg;
+    clearInterval(timer);
+    $("stage-card").innerHTML = `
+      <div class="msim">
+        <div class="scoreboard">
+          <span class="sb-team home">${home}</span>
+          <span class="sb-score"><b id="sb-h">0</b><i>:</i><b id="sb-a">0</b></span>
+          <span class="sb-team away">${away}</span>
+        </div>
+        <div class="sb-clock">⏱ <span id="sb-min">0</span>'</div>
+        <div class="pitch">
+          <span class="pitch-mid"></span>
+          <span class="net left">🥅</span><span class="net right">🥅</span>
+          <span class="ball" id="ball">⚽</span>
+        </div>
+        <div class="pbp" id="pbp"></div>
+        <div id="stage-moment"></div>
+        <div id="stage-result"></div>
+      </div>`;
+    let h = 0, a = 0;
+    const setScore = () => { $("sb-h").textContent = h; $("sb-a").textContent = a; };
+    const setMin = (m) => { const el = $("sb-min"); if (el) el.textContent = m; };
+    const moveBall = (side) => {
+      const b = $("ball"); if (!b) return;
+      b.style.left = (side === "atk" ? 82 : side === "def" ? 18 : 50) + "%";
+      b.style.top = (26 + Math.random() * 46) + "%";
+    };
+    const flash = (side) => {
+      const p = document.querySelector(".msim .pitch"); if (!p) return;
+      p.classList.remove("goal-h", "goal-a"); void p.offsetWidth;
+      p.classList.add(side === "atk" ? "goal-h" : "goal-a");
+    };
+    const feed = (text, cls) => {
+      const d = document.createElement("div");
+      if (cls) d.className = cls;
+      d.textContent = text;
+      $("pbp").appendChild(d);
+      $("pbp").scrollTop = $("pbp").scrollHeight;
+    };
+
+    // 골·실점·기타 이벤트를 분(') 순으로 배치
+    const evs = [];
+    const rmin = () => randInt(6, 82);
+    for (let i = 0; i < goals; i++) evs.push({ min: rmin(), side: "atk", h: 1, cls: "good", text: `⚽ 골!! ${myName} 득점!` });
+    for (let i = 0; i < assists; i++) evs.push({ min: rmin(), side: "atk", h: 1, cls: "good", text: `🅰️ ${myName}의 도움! 팀 추가골` });
+    for (let i = 0; i < oppGoals; i++) evs.push({ min: rmin(), side: "def", a: 1, cls: "bad", text: `😣 ${away}에 실점…` });
+    if (defense >= 2) evs.push({ min: rmin(), side: "def", text: `🛡️ ${myName}, 결정적 태클로 위기를 끊어요!` });
+    evs.push({ min: rmin(), side: "mid", text: pick(["중원 싸움이 뜨거워요", "빠른 템포로 오가는 공방", "관중석이 들썩입니다", "양 팀 압박이 매섭습니다"]) });
+    evs.sort((x, y) => x.min - y.min);
+    const momentMin = Math.min(88, Math.max(78, (evs.length ? evs[evs.length - 1].min : 60) + 4));
+
+    let i = 0, momentDone = false, finished = false;
     const btn = $("btn-stage-next");
-    btn.disabled = true;
-    btn.textContent = "🔥 승부처!";
-    playRandomMini($("stage-moment"), (res, type) => {
-      let gi = GRADE_ORDER.indexOf(grade.g);
-      if (res === "perfect") gi = Math.min(4, gi + 1);
-      else if (res === "miss") gi = Math.max(0, gi - 1);
-      const finalGrade = makeGrade(GRADE_ORDER[gi]);
-      applyFeed(res === "perfect"
-        ? { text: type.great, cls: "good" }
-        : res === "good"
-          ? { text: type.ok }
-          : { text: type.bad, cls: "bad" });
-      applyFeed({ text: "경기 종료 휘슬! 평점을 매깁니다… 📝" });
-      showResult(finalGrade);
-    });
-  }
-  function showResult(finalGrade) {
-    if (finished) return;
-    finished = true;
-    clearInterval(stageTimer);
-    const r = onFinal(finalGrade);
-    $("stage-result").innerHTML = r.resultHTML;
-    const btn = $("btn-stage-next");
+
+    const applyEvent = (e) => {
+      setMin(e.min); moveBall(e.side);
+      if (e.h) { h += 1; setScore(); flash("atk"); }
+      if (e.a) { a += 1; setScore(); flash("def"); }
+      feed(e.text, e.cls);
+    };
+    const step = () => {
+      if (i >= evs.length) { clearInterval(timer); moment(); return; }
+      applyEvent(evs[i++]);
+    };
+
+    function moment() {
+      if (momentDone) return;
+      momentDone = true;
+      clearInterval(timer);
+      setMin(momentMin); moveBall("atk");
+      feed("🔥 결정적인 순간이 찾아와요…!", "good");
+      btn.disabled = true;
+      btn.textContent = "🔥 승부처!";
+      playRandomMini($("stage-moment"), (res, mtype) => {
+        if (res === "perfect") {
+          h += 1; setScore(); flash("atk");
+          feed(mtype.great, "good");
+          feed(`🌟 극장골!! ${myName}, 결정적인 한 방을 꽂아요!`, "good");
+        } else if (res === "miss") {
+          a += 1; setScore(); flash("def");
+          feed(mtype.bad, "bad");
+          feed(`😱 치명적인 실수… ${away}에 한 점을 내줍니다`, "bad");
+        } else {
+          feed(mtype.ok);
+        }
+        setMin(90);
+        feed("삐— 경기 종료 휘슬! 🔔");
+        finish(res);
+      });
+    }
+
+    function finish(momentRes) {
+      if (finished) return;
+      finished = true;
+      clearInterval(timer);
+      const res = h > a ? "W" : h < a ? "L" : "D";
+      const info = {
+        home, away,
+        myGoals: goals + (momentRes === "perfect" ? 1 : 0),
+        assists, defense,
+        teamGoals: h, oppGoals: a, res, momentRes,
+      };
+      const out = cfg.finalize(info);
+      $("stage-result").innerHTML = out.resultHTML;
+      btn.disabled = false;
+      btn.textContent = out.nextLabel;
+      btn.onclick = out.nextFn;
+    }
+
+    setScore(); setMin(0); moveBall("mid");
+    feed(`🏟️ ${home} vs ${away} — 킥오프!`);
+    btn.textContent = "⏩ 빨리감기";
     btn.disabled = false;
-    btn.textContent = r.nextLabel;
-    btn.onclick = r.nextFn;
+    btn.onclick = () => {
+      if (momentDone || finished) return;
+      clearInterval(timer);
+      while (i < evs.length) applyEvent(evs[i++]);
+      moment();
+    };
+    timer = setInterval(step, 780);
   }
-  stageTimer = setInterval(() => {
-    if (idx >= feeds.length) { startMoment(); return; }
-    applyFeed(feeds[idx++]);
-  }, 650);
-  const btn = $("btn-stage-next");
-  btn.textContent = "⏩ 빨리 감기";
-  btn.disabled = false;
-  btn.onclick = () => {
-    if (momentOn || finished) return;
-    while (idx < feeds.length) applyFeed(feeds[idx++]);
-    startMoment();
-  };
+  return { run };
+})();
+
+// 유스 경기(평가전/트라이아웃) — MatchSim로 시뮬레이션
+function renderStageSim(type, grade, onFinal) {
+  const gradeRating = { S: 8.4, A: 7.2, B: 6.1, C: 4.9, D: 3.7 }[grade.g] || 6;
+  const rating = clamp(gradeRating + rand(-0.5, 0.5), 1, 10);
+  const c = matchContribution(rating);
+  const oppGoals = deriveOppGoals(rating, S.stats.defense);
+  MatchSim.run({
+    home: "우리 유스",
+    away: pick(OPP_CLUBS),
+    myName: S.name,
+    goals: c.g, assists: c.a, defense: c.def, oppGoals,
+    finalize: (info) => {
+      let gi = GRADE_ORDER.indexOf(grade.g);
+      if (info.momentRes === "perfect") gi = Math.min(4, gi + 1);
+      else if (info.momentRes === "miss") gi = Math.max(0, gi - 1);
+      return onFinal(makeGrade(GRADE_ORDER[gi]), info);
+    },
+  });
 }
 
 // ---------- 유스 대회 ----------
@@ -1021,23 +1104,22 @@ function playEvalStage() {
   S.condition = clamp(S.condition - 5, 0, 100);
   ev.idx += 1;
   $("stage-round").textContent = `${ev.idx}번째 경기 · ${type.name}`;
-  renderStageSim(type, grade, (fg) => {
+  renderStageSim(type, grade, (fg, info) => {
     const pts = Math.round(fg.pts * m.spot);
     const pay = { S: 60, A: 40, B: 25, C: 10, D: 0 }[fg.g] || 0;
     S.money = (S.money || 0) + pay;
     S.fandom = Math.max(0, S.fandom + pts);
     S.stages += 1;
-    const rating = clamp(score / 10 + (fg.pts - grade.pts) * 0.06, 1, 12);
-    const c = matchContribution(rating);
     S.youth = S.youth || { g: 0, a: 0, def: 0 };
-    S.youth.g += c.g; S.youth.a += c.a; S.youth.def += c.def;
+    S.youth.g += info.myGoals; S.youth.a += info.assists; S.youth.def += info.defense;
     ev.totalPts += pts;
     ev.scores.push(score + (fg.pts - grade.pts) * 0.6);
     save();
+    const scoreClass = info.res === "W" ? "win" : info.res === "L" ? "lose" : "";
     const resultHTML = `
-      <div class="tour-vs">경기 평점 <span class="${fg.g === "S" || fg.g === "A" ? "win" : fg.g === "D" ? "lose" : ""}">${fg.g}</span> <span class="score-final">${(rating).toFixed(1)}점</span></div>
+      <div class="ms-final ${scoreClass}">${info.home} ${info.teamGoals} : ${info.oppGoals} ${info.away} · ${RES_LABEL[info.res]}</div>
+      <div class="tour-vs">경기 평점 <span class="${fg.g === "S" || fg.g === "A" ? "win" : fg.g === "D" ? "lose" : ""}">${fg.g}</span> · ⚽${info.myGoals} 🅰️${info.assists} 🛡️${info.defense}</div>
       <div class="tour-line">${fg.txt}</div>
-      <div class="tour-pts">⚽ 골 ${c.g} · 🅰️ 도움 ${c.a} · 🛡️ 수비 ${c.def}</div>
       <div class="tour-pts">${pts >= 0 ? `⭐ 명성 +${pts}` : `📉 명성 ${pts}`}${pay ? ` · 💰 수당 +${pay}만` : ""}</div>`;
     return ev.idx < 3
       ? { resultHTML, nextLabel: "다음 경기", nextFn: playEvalStage }
@@ -1097,7 +1179,7 @@ function playSurvivalRound() {
   const grade = gradeOf(score);
   S.condition = clamp(S.condition - 5, 0, 100);
   $("stage-round").textContent = `${roundName} · ${type.name}`;
-  renderStageSim(type, grade, (fg) => {
+  renderStageSim(type, grade, (fg, info) => {
     const pts = Math.round(fg.pts * m.spot) + ev.round * 4;
     S.money = (S.money || 0) + 30 + ev.round * 20;
     S.fandom = Math.max(0, S.fandom + pts);
@@ -1109,15 +1191,14 @@ function playSurvivalRound() {
       0.12, 0.93
     );
     const pass = Math.random() < p;
-    const rating = clamp(score / 10 + (fg.pts - grade.pts) * 0.06, 1, 12);
-    const c = matchContribution(rating);
     S.youth = S.youth || { g: 0, a: 0, def: 0 };
-    S.youth.g += c.g; S.youth.a += c.a; S.youth.def += c.def;
+    S.youth.g += info.myGoals; S.youth.a += info.assists; S.youth.def += info.defense;
     save();
+    const scoreClass = info.res === "W" ? "win" : info.res === "L" ? "lose" : "";
     const resultHTML = `
-      <div class="tour-vs">경기 평점 ${fg.g} <span class="score-final">${rating.toFixed(1)}점</span> — <span class="${pass ? "win" : "lose"}">${pass ? "통과! 🎉" : "탈락… 💧"}</span></div>
+      <div class="ms-final ${scoreClass}">${info.home} ${info.teamGoals} : ${info.oppGoals} ${info.away} · ${RES_LABEL[info.res]}</div>
+      <div class="tour-vs">경기 평점 ${fg.g} · ⚽${info.myGoals} 🅰️${info.assists} 🛡️${info.defense} — <span class="${pass ? "win" : "lose"}">${pass ? "통과! 🎉" : "탈락… 💧"}</span></div>
       <div class="tour-line">${fg.txt}</div>
-      <div class="tour-pts">⚽ 골 ${c.g} · 🅰️ 도움 ${c.a} · 🛡️ 수비 ${c.def}</div>
       <div class="tour-pts">${pts >= 0 ? `⭐ 명성 +${pts}` : `📉 명성 ${pts}`}</div>`;
     if (pass && ev.round < SURVIVAL_ROUNDS.length - 1) {
       ev.round += 1;
