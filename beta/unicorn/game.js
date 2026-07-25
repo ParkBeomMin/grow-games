@@ -17,13 +17,14 @@ const GENERATORS = [
   { id: "ai",       emoji: "🧠", name: "AI 에이전트 군단",    base: 260000, cost: 5e8,    desc: "자율 개발·자율 배포" },
 ];
 
+// 업그레이드 — 1회성 강력 부스트라 접근성 좋게(싸고 이르게). 비용 오름차순.
 const UPGRADES = [
-  { id: "kb1",        emoji: "⌨️", name: "기계식 키보드",        cost: 500,   type: "click",  mult: 2, desc: "클릭 파워 ×2" },
-  { id: "coffee",     emoji: "☕", name: "에스프레소 머신",      cost: 5000,  type: "global", mult: 2, desc: "전체 생산 ×2" },
-  { id: "framework",  emoji: "🧩", name: "최신 프레임워크 도입", cost: 6e4,   type: "global", mult: 2, desc: "전체 생산 ×2" },
-  { id: "kb2",        emoji: "⌨️", name: "적축 커스텀 키보드",   cost: 3e5,   type: "click",  mult: 3, desc: "클릭 파워 ×3" },
-  { id: "cloud",      emoji: "💳", name: "클라우드 크레딧 대량", cost: 3e6,   type: "global", mult: 2, desc: "전체 생산 ×2" },
-  { id: "opensource", emoji: "⭐", name: "오픈소스 스타 떡상",   cost: 4e7,   type: "global", mult: 3, desc: "전체 생산 ×3" },
+  { id: "kb1",        emoji: "⌨️", name: "기계식 키보드",        cost: 150,    type: "click",  mult: 2, desc: "클릭 파워 ×2" },
+  { id: "coffee",     emoji: "☕", name: "에스프레소 머신",      cost: 1200,   type: "global", mult: 2, desc: "전체 생산 ×2" },
+  { id: "kb2",        emoji: "⌨️", name: "적축 커스텀 키보드",   cost: 9000,   type: "click",  mult: 3, desc: "클릭 파워 ×3" },
+  { id: "framework",  emoji: "🧩", name: "최신 프레임워크 도입", cost: 45000,  type: "global", mult: 2, desc: "전체 생산 ×2" },
+  { id: "cloud",      emoji: "💳", name: "클라우드 크레딧 대량", cost: 9e5,    type: "global", mult: 2, desc: "전체 생산 ×2" },
+  { id: "opensource", emoji: "⭐", name: "오픈소스 스타 떡상",   cost: 2.5e7,  type: "global", mult: 3, desc: "전체 생산 ×3" },
 ];
 
 const STAGES = [
