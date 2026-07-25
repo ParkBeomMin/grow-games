@@ -12,7 +12,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>키우기 시리즈 🎮</title>
-  <meta name="description" content="한 판에 5분, 브라우저에서 즐기는 인생 육성 게임 시리즈" />
+  <meta name="description" content="브라우저에서 바로 즐기는 인생 육성 · 방치 게임 시리즈" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎮</text></svg>" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -23,32 +23,58 @@
   <link rel="stylesheet" href="base.css" />
   <style>
     :root {
-      --bg: #101321;
-      --bg2: #181c30;
-      --field: #202541;
-      --line: #363e6b;
-      --accent: #ffd166;
-      --sky: #8fb8ff;
-      --text: #eef0fa;
-      --dim: #9aa3c7;
+      --bg: #0d1020; --bg2: #161a2e; --field: #202541; --line: #363e6b;
+      --accent: #ffd166; --sky: #8fb8ff; --text: #eef0fa; --dim: #9aa3c7;
     }
     body {
       background:
-        radial-gradient(ellipse 120% 60% at 50% -10%, #232a4d 0%, transparent 60%),
+        radial-gradient(ellipse 100% 55% at 15% -10%, #2a2560 0%, transparent 55%),
+        radial-gradient(ellipse 90% 50% at 90% 0%, #123a55 0%, transparent 50%),
         var(--bg);
+      min-height: 100vh;
     }
-    .hub-head { text-align: center; padding: 7vh 0 26px; }
-    .hub-head .title-ball { font-size: 3.2rem; }
-    .hub-head h1 { font-size: 2.6rem; color: var(--accent); text-shadow: 0 4px 0 rgba(0,0,0,.35); }
-    .hub-head p { color: var(--dim); margin-top: 8px; line-height: 1.6; }
-    a.card { text-decoration: none; }
-    .card.soon { opacity: .45; cursor: default; }
-    .card.soon:hover { transform: none; border-color: var(--line); }
-    .badge {
-      font-size: .68rem; border-radius: 99px; padding: 2px 10px;
-      background: rgba(110, 231, 160, .15); color: #6ee7a0;
+    .hub-head { text-align: center; padding: 6vh 0 18px; }
+    .hub-head .title-ball { font-size: 3rem; animation: bob 3s ease-in-out infinite; }
+    @keyframes bob { 0%,100%{ transform: translateY(0); } 50%{ transform: translateY(-7px); } }
+    .hub-head h1 { font-size: 2.5rem; color: var(--accent); text-shadow: 0 4px 0 rgba(0,0,0,.35); }
+    .hub-head p.tag { color: var(--dim); margin-top: 8px; line-height: 1.6; }
+    .hub-stats {
+      display: inline-flex; margin-top: 16px; flex-wrap: wrap; justify-content: center;
+      background: rgba(255,255,255,.04); border: 1px solid var(--line); border-radius: 14px; overflow: hidden;
     }
-    .card.soon .badge { background: rgba(255,255,255,.08); color: var(--dim); }
+    .hub-stats .s { padding: 9px 16px; text-align: center; border-right: 1px solid var(--line); }
+    .hub-stats .s:last-child { border-right: 0; }
+    .hub-stats .s b { display: block; font-family: "Jua", sans-serif; font-size: 1.25rem; color: var(--accent); }
+    .hub-stats .s span { font-size: .7rem; color: var(--dim); }
+
+    .hub-section-title { max-width: 720px; margin: 26px auto 10px; padding: 0 4px; font-family: "Jua", sans-serif; color: var(--text); font-size: 1.05rem; display: flex; align-items: center; gap: 7px; }
+    /* 이어하기 */
+    #continue-wrap { max-width: 720px; margin: 0 auto; }
+    .continue-row { display: flex; gap: 10px; overflow-x: auto; padding: 4px 4px 10px; scrollbar-width: thin; }
+    .continue-card {
+      flex: 0 0 auto; min-width: 150px; text-decoration: none; display: flex; align-items: center; gap: 10px;
+      background: linear-gradient(180deg, var(--bg2), #12162a); border: 1px solid var(--line); border-radius: 14px; padding: 11px 13px;
+      transition: transform .12s, border-color .12s;
+    }
+    .continue-card:hover { transform: translateY(-2px); border-color: var(--accent); }
+    .continue-card .ce { font-size: 1.7rem; }
+    .continue-card .ci b { display: block; color: var(--text); font-size: .95rem; }
+    .continue-card .ci span { color: var(--dim); font-size: .74rem; }
+
+    /* 게임 카드 */
+    a.card { text-decoration: none; position: relative; }
+    .card .chip {
+      position: absolute; top: 10px; right: 10px; font-size: .62rem; font-weight: 700;
+      padding: 3px 8px; border-radius: 99px; background: rgba(143,184,255,.16); color: var(--sky); letter-spacing: .3px;
+    }
+    .card .playing {
+      position: absolute; top: 10px; left: 10px; font-size: .6rem; font-weight: 700;
+      padding: 3px 8px; border-radius: 99px; background: rgba(110,231,160,.16); color: #6ee7a0;
+    }
+    .badge { font-size: .68rem; border-radius: 99px; padding: 2px 10px; background: rgba(110,231,160,.15); color: #6ee7a0; }
+    .hub-foot { text-align: center; padding: 26px 0 40px; }
+    .hub-foot a { color: var(--dim); font-size: .82rem; text-decoration: none; margin: 0 8px; }
+    .hub-foot a:hover { color: var(--sky); }
   </style>
 </head>
 <body>
@@ -56,62 +82,88 @@
     <header class="hub-head">
       <div class="title-ball">🎮</div>
       <h1>키우기 시리즈</h1>
-      <p>한 판에 5분, 인생 육성 시뮬레이션.<br/>당신의 루키를 정상까지 키워보세요.</p>
+      <p class="tag">브라우저에서 바로 즐기는<br/>인생 육성 · 방치 게임 시리즈 🎮</p>
+      <div class="hub-stats" id="hub-stats">
+        <div class="s"><b>7</b><span>게임</span></div>
+        <div class="s"><b id="stat-playing">0</b><span>진행 중</span></div>
+        <div class="s"><b id="stat-hof">0</b><span>명예의 전당</span></div>
+      </div>
     </header>
 
-    <div class="card-grid">
-      <a class="card" href="rookie/">
-        <span class="card-emoji">⚾</span>
-        <span class="card-title">더 루키</span>
-        <span class="card-sub">야구선수 키우기</span>
-        <span class="card-desc">지역 명문고 입학부터<br/>KBO 드래프트 지명까지</span>
-        <span class="card-tags"><span class="badge">플레이 가능</span></span>
-      </a>
-      <a class="card" href="soccer/">
-        <span class="card-emoji">⚽</span>
-        <span class="card-title">더 윙어</span>
-        <span class="card-sub">축구선수 키우기</span>
-        <span class="card-desc">유스팀 유망주에서<br/>프로 계약·빅클럽 입단까지</span>
-        <span class="card-tags"><span class="badge">플레이 가능</span></span>
-      </a>
-      <a class="card" href="idol/">
-        <span class="card-emoji">🎤</span>
-        <span class="card-title">더 트레이니</span>
-        <span class="card-sub">아이돌 연습생 키우기</span>
-        <span class="card-desc">소속사 연습실 3년,<br/>데뷔 서바이벌 생존까지</span>
-        <span class="card-tags"><span class="badge">플레이 가능</span></span>
-      </a>
-      <a class="card" href="stock/">
-        <span class="card-emoji">📈</span>
-        <span class="card-title">더 인베스터</span>
-        <span class="card-sub">주린이 키우기</span>
-        <span class="card-desc">월급쟁이 주린이에서<br/>전업투자자 전향까지</span>
-        <span class="card-tags"><span class="badge">플레이 가능</span></span>
-      </a>
-      <a class="card" href="dev/">
-        <span class="card-emoji">💻</span>
-        <span class="card-title">더 커밋</span>
-        <span class="card-sub">개발자 키우기</span>
-        <span class="card-desc">코딩 왕초보에서<br/>개발자 취업까지</span>
-        <span class="card-tags"><span class="badge">플레이 가능</span></span>
-      </a>
-      <a class="card" href="chef/">
-        <span class="card-emoji">🍜</span>
-        <span class="card-title">더 셰프</span>
-        <span class="card-sub">요리사 키우기</span>
-        <span class="card-desc">주방 막내에서<br/>미쉐린 스타 셰프까지</span>
-        <span class="card-tags"><span class="badge">플레이 가능</span></span>
-      </a>
-      <a class="card" href="stream/">
-        <span class="card-emoji">📺</span>
-        <span class="card-title">더 스트리머</span>
-        <span class="card-sub">스트리머 키우기</span>
-        <span class="card-desc">시청자 0명 방송에서<br/>전업 스트리머까지</span>
-        <span class="card-tags"><span class="badge">플레이 가능</span></span>
-      </a>
+    <!-- 이어하기 (진행 중 캐릭터가 있으면 노출) -->
+    <div id="continue-wrap" hidden>
+      <div class="hub-section-title">▶️ 이어하기</div>
+      <div class="continue-row" id="continue-row"></div>
     </div>
+
+    <div class="hub-section-title">🕹️ 게임 고르기</div>
+    <div class="card-grid" id="game-grid"></div>
+
   </main>
-<script src="env.js"></script>
-<script>if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");</script>
+
+  <script src="env.js"></script>
+  <script>
+    // 게임 메타데이터 (허브 전용)
+    const GAMES = [
+      { slug: "rookie", emoji: "⚾", title: "더 루키",     sub: "야구선수 키우기",     genre: "스포츠", save: "rookie-save-v1" },
+      { slug: "soccer", emoji: "⚽", title: "더 윙어",     sub: "축구선수 키우기",     genre: "스포츠", save: "winger-save-v1" },
+      { slug: "idol",   emoji: "🎤", title: "더 트레이니", sub: "아이돌 연습생 키우기", genre: "연예",  save: "trainee-save-v1" },
+      { slug: "stock",  emoji: "📈", title: "더 인베스터", sub: "주린이 키우기",       genre: "금융",  save: "investor-save-v1" },
+      { slug: "dev",    emoji: "💻", title: "더 커밋",     sub: "개발자 키우기",       genre: "IT",    save: "devgrow-save-v1" },
+      { slug: "chef",   emoji: "🍜", title: "더 셰프",     sub: "요리사 키우기",       genre: "요리",  save: "chef-save-v1" },
+      { slug: "stream", emoji: "📺", title: "더 스트리머", sub: "스트리머 키우기",     genre: "방송",  save: "streamer-save-v1" },
+      { slug: "unicorn", emoji: "🦄", title: "더 유니콘",   sub: "창업 방치 (NEW)",     genre: "방치",  save: "unicorn-save-v1" },
+    ];
+
+    const readSlots = (save) => {
+      try { return JSON.parse(localStorage.getItem(save + "-slots")) || {}; } catch { return {}; }
+    };
+    const progressLabel = (st) => {
+      const pro = st.phase && /pro|debut/.test(String(st.phase));
+      if (pro) return `프로 ${st.proYear || 1}년차`;
+      return `${st.year || 1}년차`;
+    };
+
+    // 진행 중 캐릭터 모으기 (게임 넘나들며)
+    const chars = [];
+    for (const g of GAMES) {
+      const slots = readSlots(g.save);
+      for (const id of Object.keys(slots)) {
+        const st = slots[id];
+        if (st && st.name) chars.push({ g, st, savedAt: st.savedAt || 0 });
+      }
+    }
+    chars.sort((a, b) => b.savedAt - a.savedAt);
+
+    // 이어하기 렌더
+    if (chars.length) {
+      document.getElementById("continue-wrap").hidden = false;
+      document.getElementById("continue-row").innerHTML = chars.slice(0, 12).map((c) => `
+        <a class="continue-card" href="${c.g.slug}/">
+          <span class="ce">${c.g.emoji}</span>
+          <span class="ci"><b>${c.st.name}</b><span>${c.g.title} · ${progressLabel(c.st)}</span></span>
+        </a>`).join("");
+    }
+
+    // 게임 카드 렌더 (+ 진행 중 배지)
+    const playingSet = new Set(chars.map((c) => c.g.slug));
+    document.getElementById("game-grid").innerHTML = GAMES.map((g) => `
+      <a class="card" href="${g.slug}/">
+        ${playingSet.has(g.slug) ? `<span class="playing">▶ 진행 중</span>` : ""}
+        <span class="chip">${g.genre}</span>
+        <span class="card-emoji">${g.emoji}</span>
+        <span class="card-title">${g.title}</span>
+        <span class="card-sub">${g.sub}</span>
+        <span class="card-tags"><span class="badge">플레이 가능</span></span>
+      </a>`).join("");
+
+    // 로컬 통계
+    document.getElementById("stat-playing").textContent = chars.length;
+    try {
+      const hof = JSON.parse(localStorage.getItem("grow-hof-v1")) || [];
+      document.getElementById("stat-hof").textContent = hof.length;
+    } catch { /* noop */ }
+  </script>
+  <script>if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");</script>
 </body>
 </html>

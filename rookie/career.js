@@ -550,9 +550,17 @@ window.Career = (() => {
 
   function seasonReport() {
     const s = S.career.seasons[S.career.seasons.length - 1];
-    const rows = S.career.seasons.slice(-8).map((x) =>
-      `<tr><td>${x.y}년차</td><td>${x.age}세</td><td style="text-align:left">${x.line}${x.champ ? " 🏆" : ""}${x.awards.length ? " 🎖️" : ""}</td><td>${x.war.toFixed(1)}</td></tr>`
-    ).join("");
+    const AWARD_TAG = { MVP: "MVP", 골든글러브: "GG", 신인왕: "신인왕" };
+    const rows = S.career.seasons.slice(-8).map((x) => {
+      const badges =
+        (x.champ ? `<span class="sn-tag champ">🏆우승</span>` : "") +
+        (x.awards || []).map((a) => `<span class="sn-tag award">🎖️${AWARD_TAG[a] || a}</span>`).join("");
+      return `<tr><td>${x.y}년차</td><td>${x.age}세</td><td class="sn-line">${x.line}${badges ? `<span class="sn-tags">${badges}</span>` : ""}</td><td class="sn-war">${x.war.toFixed(1)}</td></tr>`;
+    }).join("");
+    // 8시즌을 넘기면 표가 잘리니 전체를 어디서 보는지 알려줘요
+    const moreHint = S.career.seasons.length > 8
+      ? `<div class="hint">최근 8시즌만 표시돼요 — 전체는 상단 <b>📊 기록</b>에서 볼 수 있어요</div>`
+      : "";
     const forcedRetire = S.age > 40 || overall() < 30;
     $("career-title").textContent = `📊 ${s.y}년차 시즌 결산`;
     $("career-card").innerHTML = `
@@ -563,7 +571,8 @@ window.Career = (() => {
         s.war >= 0.5 ? "아쉬움이 남는 시즌" : "혹독한 시즌…"
       }</div>
       <div class="draft-team">${S.team} · ${s.line} · WAR ${s.war.toFixed(1)}</div>
-      <table class="season-table"><thead><tr><th>시즌</th><th>나이</th><th>성적</th><th>WAR</th></tr></thead><tbody>${rows}</tbody></table>
+      <table class="season-table season-career"><thead><tr><th>시즌</th><th>나이</th><th>성적</th><th>WAR</th></tr></thead><tbody>${rows}</tbody></table>
+      ${moreHint}
       <div class="draft-summary">
         통산 ${S.career.seasons.length}시즌 · WAR ${S.career.warSum.toFixed(1)} · 🏆 우승 ${S.career.rings}회 · MVP ${S.career.mvp} · GG ${S.career.gg}${S.career.roy ? " · 신인왕" : ""}<br/>
         ${forcedRetire ? "구단에서 은퇴식을 준비하고 있어요…" : overall() < 42 ? "⚠️ 기량 하락이 눈에 띄어요. 은퇴를 고민할 때일지도." : "다음 시즌도 달릴 수 있어요!"}

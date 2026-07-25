@@ -378,6 +378,25 @@ h2 { font-size: 1.6rem; margin: 8px 0 6px; color: var(--accent); }
 .season-table th, .season-table td { border-bottom: 1px solid var(--line); padding: 5px 4px; text-align: center; color: var(--dim); }
 .season-table th { color: var(--cream); font-weight: 400; }
 
+/* 연도별 통산 기록표 — 좁은 칸이 세로로 쪼개지지 않게 폭을 고정해요 */
+.season-career { table-layout: fixed; }
+.season-career th:nth-child(1), .season-career td:nth-child(1) { width: 60px; }
+.season-career th:nth-child(2), .season-career td:nth-child(2) { width: 46px; }
+.season-career th:nth-child(4), .season-career td:nth-child(4) { width: 38px; }
+.season-career td { vertical-align: top; word-break: keep-all; }
+.season-career .sn-y, .season-career .sn-role { white-space: nowrap; }
+.season-career .sn-y { color: var(--cream); }
+.season-career .sn-age { display: block; font-size: 0.64rem; opacity: .65; }
+.season-career .sn-line { text-align: left; }
+.season-career .sn-war { color: var(--cream); }
+.sn-tags { display: block; margin-top: 2px; }
+.sn-tag {
+  display: inline-block; margin: 1px 3px 0 0; padding: 1px 5px;
+  border-radius: 99px; font-size: 0.62rem; white-space: nowrap;
+}
+.sn-tag.champ { background: rgba(255,196,0,.16); color: #ffd45e; }
+.sn-tag.award { background: rgba(120,200,255,.14); color: #8fd0ff; }
+
 /* ---------- 타이밍 미니게임 ---------- */
 .tm-box {
   background: var(--bg2); border: 2px solid var(--accent);

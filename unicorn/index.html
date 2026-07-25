@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <!-- Google tag (gtag.js) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-7PR9LC4KKV"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-7PR9LC4KKV');
+  </script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>더 유니콘 🦄 창업 방치</title>
+  <meta name="description" content="클릭으로 코딩하고 자동화로 회사를 키워 Exit(매각·상장)에 도전하는 창업 방치형 게임" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦄</text></svg>" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Jua&family=Gowun+Dodum&display=swap" rel="stylesheet" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <meta name="theme-color" content="#0a0f1e" />
+  <link rel="apple-touch-icon" href="icon-192.png" />
+  <link rel="stylesheet" href="../base.css" />
+  <!-- ?v= 는 캐시 무효화용. game.js/style.css 고칠 때마다 같이 올려주세요
+       (GitHub Pages가 정적 파일에 max-age=600을 붙여서, 안 올리면 최대 10분간 옛 파일이 떠요) -->
+  <link rel="stylesheet" href="style.css?v=9" />
+</head>
+<body>
+  <main id="app">
+    <header class="uni-head">
+      <div class="uni-top">
+        <div class="company" id="company-name">🦄 스타트업</div>
+        <a class="series-link" href="../">🎮 시리즈</a>
+      </div>
+      <div class="stage-row">
+        <span class="stage-name" id="stage-name"></span>
+        <span class="stage-val" id="stage-val"></span>
+        <span class="buff-tag hidden" id="buff-tag">🔥 2배!</span>
+      </div>
+      <div class="stage-track"><div class="stage-bar" id="stage-bar"></div></div>
+      <div class="stage-next" id="stage-next"></div>
+    </header>
+
+    <div class="hud2">
+      <div class="hud2-money" id="hud-code">💾 0줄</div>
+      <div class="hud2-sub"><span id="hud-sec">0줄/초</span> · <span id="hud-so">🧾 스톡옵션 0</span></div>
+    </div>
+
+    <button class="clicker" id="clicker">
+      <span class="term-bar">
+        <span class="term-dot r"></span><span class="term-dot y"></span><span class="term-dot g"></span>
+        <span class="term-title">~/유니콘 — main</span>
+      </span>
+      <span class="term-body" id="term-body"></span>
+      <span class="term-caret">▌</span>
+      <span class="clicker-label" id="clicker-label">눌러서 코딩! 💾 +1줄</span>
+    </button>
+
+    <button class="btn btn-boost" id="btn-boost">🚀 스프린트 (×2) — 60초간 생산 2배</button>
+    <!-- 하단 띠 배너가 여기에 붙어요 (ads.js가 #ad-anchor-slot을 찾아 배치) -->
+    <div id="ad-anchor-slot"></div>
+    <button class="btn btn-exit" id="btn-exit" disabled>🔒 Exit</button>
+
+    <div class="tabs">
+      <button class="tab active" data-tab="equip">⌨️ 개발력</button>
+      <button class="tab" data-tab="gen">🏢 조직</button>
+    </div>
+    <section class="panel" id="panel-equip">
+      <div id="equip-list"></div>
+    </section>
+    <section class="panel hidden" id="panel-gen">
+      <div id="gen-list"></div>
+    </section>
+
+    <div class="log" id="ev-log"></div>
+
+    <button class="btn btn-retire hidden" id="btn-retire">🏛️ 은퇴 — 명예의 전당에 기록 남기기</button>
+
+    <div class="uni-foot">
+      <button class="mini-btn" id="btn-hof">🏛️ 명예의 전당</button>
+      <button class="mini-btn" id="btn-reset">🗑️ 처음부터</button>
+    </div>
+  </main>
+
+  <div class="end-wrap hidden" id="hof">
+    <div class="end-card hof-card-wrap">
+      <h2 class="end-title">🏛️ 명예의 전당</h2>
+      <p class="end-desc" id="hof-scope">기록을 불러오는 중…</p>
+      <div class="hof-list" id="hof-list"></div>
+      <button class="mini-btn" id="btn-hof-close">닫기</button>
+    </div>
+  </div>
+
+  <div class="end-wrap hidden" id="ending">
+    <div class="end-card">
+      <div class="end-crown">👑</div>
+      <h2 class="end-title">데카콘 등극!</h2>
+      <div class="end-company" id="end-company">🦄 스타트업</div>
+      <p class="end-desc">누적 코드 10조 줄 돌파. 당신의 회사가 시장을 지배합니다.</p>
+      <div class="end-stats" id="end-stats"></div>
+      <div id="end-ad"></div>
+      <button class="btn btn-exit" id="btn-end-exit">🚀 Exit하고 새 창업</button>
+      <button class="btn btn-retire" id="btn-end-retire">🏛️ 은퇴하고 기록 남기기</button>
+      <button class="mini-btn" id="btn-end-close">계속 플레이하기</button>
+    </div>
+  </div>
+
+  <script src="../env.js"></script>
+  <script src="../match.js"></script>
+  <script src="../stats.js"></script>
+  <script src="../ads.js"></script>
+  <script src="game.js?v=9"></script>
+</body>
+</html>
