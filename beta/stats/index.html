@@ -225,9 +225,11 @@
       return html;
     }
 
-    function dailySection(rows) {
+    // game이 null이면 전 게임 합산(#overview), 게임 키면 그 게임만(#panel)이에요.
+    function dailySection(rows, game) {
+      const src = game ? rows.filter((r) => r.game === game) : rows;
       const byDay = {};
-      for (const r of rows) {
+      for (const r of src) {
         byDay[r.day] = byDay[r.day] || { visits: 0, np: 0 };
         byDay[r.day].visits += r.visits || 0;
         byDay[r.day].np += r.new_players || 0;
@@ -235,7 +237,10 @@
       const days = Object.keys(byDay).sort().slice(-14);
       if (!days.length) return "";
       const max = Math.max(...days.map((d) => byDay[d].visits), 1);
-      return `<section><h2>📅 최근 방문 추이 (일별 순 방문 기기)</h2>
+      const title = game
+        ? "📅 방문 추이 (일별 순 방문 기기)"
+        : "📅 최근 방문 추이 (전 게임 합산 · 일별 순 방문 기기)";
+      return `<section><h2>${title}</h2>
         <p class="empty" style="margin:-6px 0 10px">막대를 누르거나 마우스를 올리면 상세 숫자를 볼 수 있어요</p>
         <div class="spark">${days.map((d) => {
           const v = byDay[d].visits;
@@ -332,7 +337,9 @@ grant select on public.stats_summary, public.stats_choices, public.stats_daily t
     function renderPanel() {
       if (!STATE) { $("panel").innerHTML = ""; return; }
       const game = activeGame;
-      const parts = [];   // Task 3~6에서 섹션이 하나씩 채워져요
+      const parts = [
+        dailySection(STATE.daily, game),
+      ];
       $("panel").innerHTML = parts.join("").trim() || emptyCard(game);
     }
 
