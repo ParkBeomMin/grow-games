@@ -116,12 +116,12 @@ window.Career = (() => {
       row.innerHTML = `
         <span class="stat-name">${d.emoji} ${d.name}</span>
         <div class="bar"><div class="bar-fill stat${v > 100 ? " over" : ""}" style="width:${Math.min(v, 100)}%"></div></div>
-        <span class="stat-val">${v}</span>
+        <span class="stat-val${v >= statCap(d.key) ? " max" : ""}" title="상한 ${statCap(d.key)}">${v}</span>
         <span class="stat-pot" title="잠재력 — 별이 많을수록 훈련 효율이 높아요">${stars}</span>`;
       if (v >= 100) {
         const aw = document.createElement("button");
-        aw.className = "mini-btn awaken-btn";
-        aw.textContent = "🔮 각성";
+        aw.className = "mini-btn awaken-btn" + (v >= statCap(d.key) ? " ready" : "");
+        aw.textContent = isTalentMax(tv) ? "🌠 초월" : "🔮 각성";
         aw.onclick = () => { if (awakenTalent(d.key, proLog)) renderPro(); };
         row.appendChild(aw);
       }
@@ -135,9 +135,18 @@ window.Career = (() => {
     box.innerHTML = "";
     for (const d of STAT_DEFS[S.pos]) {
       const btn = document.createElement("button");
-      btn.className = "action-btn";
-      btn.innerHTML = `<span class="a-emoji">${d.emoji}</span>${d.name} 훈련<span class="a-sub">${d.sub}</span>`;
-      btn.onclick = () => campAction(d);
+      // 상한에 닿으면 훈련해도 오르지 않아요 — 각성/초월로 바꿔줍니다
+      if (atCap(d.key)) {
+        const tmax = isTalentMax(S.talents[d.key]);
+        const pct = Math.round((tmax ? transP(transLv(d.key)) : awakenP(Math.round(S.stats[d.key]))) * 100);
+        btn.className = "action-btn awaken-act";
+        btn.innerHTML = `<span class="a-emoji">${tmax ? "🌠" : "🔮"}</span>${d.name} ${tmax ? "초월 각성" : "재능 각성"}<span class="a-sub">상한 ${statCap(d.key)} 도달 · 성공률 ${pct}%</span>`;
+        btn.onclick = () => { if (awakenTalent(d.key, proLog)) renderPro(); };
+      } else {
+        btn.className = "action-btn";
+        btn.innerHTML = `<span class="a-emoji">${d.emoji}</span>${d.name} 훈련<span class="a-sub">${d.sub}</span>`;
+        btn.onclick = () => campAction(d);
+      }
       box.appendChild(btn);
     }
     box.appendChild(makeAdSlotButton(renderPro));
@@ -165,6 +174,8 @@ window.Career = (() => {
   }
 
   function campAction(def) {
+    // 상한에 닿았으면 훈련은 턴만 소모돼요 — 각성으로 돌려줍니다
+    if (def && atCap(def.key)) { if (awakenTalent(def.key, proLog)) renderPro(); return; }
     if (def) {
       const ageMod = S.age <= 23 ? 1.1 : S.age <= 27 ? 1.0 : S.age <= 30 ? 0.75 : 0.45;
       const failP = S.condition < 40 ? 0.15 : 0.07;
