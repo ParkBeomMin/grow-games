@@ -82,6 +82,9 @@ window.Career = (() => {
   }
 
   function startCamp() {
+    // 가을야구 화면이 순위표를 펼쳐놨어요. 새 시즌은 접힌 채로 시작해요.
+    const sb = $("pro-standings");
+    if (sb) sb.open = false;
     S.proYear += 1;
     S.camp = 3;
     S.condition = 80;
@@ -103,7 +106,7 @@ window.Career = (() => {
     $("pro-turn").textContent = S.season ? `G ${S.season.game}/${S.season.total} · ${myRank()}위` : `캠프 훈련 ${3 - S.camp}/3`;
     $("pro-money").textContent = `💰 ${fmtMoney(S.money || 0)}`;
     renderStandings();
-  $("pro-cond-num").textContent = Math.round(S.condition);
+    $("pro-cond-num").textContent = Math.round(S.condition);
     $("pro-cond-bar").style.width = `${S.condition}%`;
 
     const stats = $("pro-stats");
@@ -546,7 +549,7 @@ window.Career = (() => {
     const label = Postseason.LABEL[s.round];
     return {
       extra,
-      nextLabel: won ? "🍂 다음 라운드로" : "🏁 시즌 결산",
+      nextLabel: won ? (s.round === "ks" ? "🏆 시즌 결산" : "🍂 다음 라운드로") : "🏁 시즌 결산",
       nextFn: () => advancePostseason([
         { text: won ? `🎉 ${label} 승리! (${myW}-${opW})` : `😢 ${label} 탈락… (${myW}-${opW})`, cls: won ? "good" : "bad" },
       ]),
@@ -668,7 +671,10 @@ window.Career = (() => {
     const P = S.post;
     const feeds = seed ? seed.slice() : [];
 
+    // 정상이면 최대 4바퀴예요 (와카·준PO·PO·KS). 저장이 깨져도 탭이 멎지 않게 막아둬요.
+    let guard = 0;
     for (;;) {
+      if (guard++ > 8) break;
       P.series = Postseason.feedWinner(P.series);
       const idx = P.series.findIndex((s) => !s.done && s.b != null);
       if (idx < 0) break;                        // 남은 시리즈 없음 = 가을야구 종료
@@ -782,7 +788,12 @@ window.Career = (() => {
       { text: `🏁 정규시즌 종료 — 최종 ${rank}위 (${finalW}승 ${finalL}패)`, cls: rank <= 3 ? "good" : rank >= 8 ? "bad" : "" },
     ];
     if (postLine) feeds.push({ text: postLine });
-    if (champ) feeds.push({ text: `🏆 한국시리즈 우승 — 통산 ${S.career.rings}번째 반지예요`, cls: "good" });
+    if (champ) feeds.push({
+      text: S.career.rings === 1
+        ? "🏆 한국시리즈 우승 — 첫 반지예요!"
+        : `🏆 한국시리즈 우승 — 통산 ${S.career.rings}번째 반지예요`,
+      cls: "good",
+    });
     if (champ && window.Fx) Fx.celebrate("champion", "🏆 우승!");
     for (const a of awards) feeds.push({ text: `🎖️ ${a} 수상!`, cls: "good" });
     if (awards.length && window.Fx) Fx.celebrate("award", `🎖️ ${awards.join(" · ")}!`);
@@ -1198,7 +1209,9 @@ window.Career = (() => {
 
   return {
     onDraft,
-    refreshPro: renderPro,
+    // 🛍️ 상점에서 돌아올 때 가을야구 중이면 포스트시즌 화면으로 돌아가야 해요.
+    // renderPro로 고정돼 있으면 경기 시작 버튼이 사라지고 훈련 버튼이 살아나요.
+    refreshPro: () => (inPost() ? renderPost() : renderPro()),
     enterPro,
     showHof,
     showBattle,
@@ -1206,6 +1219,11 @@ window.Career = (() => {
       // 가을야구 도중에 나갔다 와도 그 자리에서 이어져요
       if (inPost()) { renderPost(); show("screen-pro"); }
       else if ((S.season && S.pendingGame) || S.camp > 0) { renderPro(); show("screen-pro"); }
+      // 정규시즌 144경기를 다 치른 뒤라면 결산으로 이어져야 해요. 여기서 runSeason으로
+      // 떨어지면 145번째 경기가 생기고, 방금 딴 우승이 새 대진에 덮여 사라져요.
+      else if (S.season && S.season.game >= S.season.total) {
+        if (S.post) advancePostseason(); else finishSeason();
+      }
       else if (S.season) runSeason();
       else seasonReport();
     },
