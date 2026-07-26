@@ -6,6 +6,14 @@
 window.Timing = (() => {
   const clampV = (v, a, b) => Math.min(b, Math.max(a, v));
 
+  /* 존이 2단(초록=성공, 안쪽 노랑=퍼펙트)이라 헷갈린다는 문의가 많아 범례를 붙인다 */
+  const LEGEND = `
+      <p class="tm-legend">
+        <span class="tm-lg tm-lg-perfect"></span>퍼펙트
+        <span class="tm-lg tm-lg-good"></span>성공
+      </p>
+      <p class="tm-legend-tip">노란 칸에 맞출수록 좋아요</p>`;
+
   function play(container, opts, cb) {
     const zone = clampV(opts.zonePct || 25, 8, 45);
     const wrap = document.createElement("div");
@@ -16,7 +24,7 @@ window.Timing = (() => {
         <div class="tm-zone"></div>
         <div class="tm-zone-perfect"></div>
         <div class="tm-marker"></div>
-      </div>
+      </div>${LEGEND}
       <button type="button" class="btn btn-primary tm-btn">${opts.button || "지금!"}</button>`;
     container.appendChild(wrap);
 
@@ -72,7 +80,7 @@ window.Timing = (() => {
         <div class="tm-zone"></div>
         <div class="tm-zone-perfect"></div>
         <div class="tm-fill"></div>
-      </div>
+      </div>${LEGEND}
       <button type="button" class="btn btn-primary tm-btn tm-hold-btn">${opts.button || "꾹 누르기 💪"}</button>`;
     container.appendChild(wrap);
     const zoneEl = wrap.querySelector(".tm-zone");
@@ -298,7 +306,7 @@ window.Timing = (() => {
         <div class="tm-drop-band"></div>
         <div class="tm-drop-perfect"></div>
         <div class="tm-drop-icon">${icon}</div>
-      </div>
+      </div>${LEGEND}
       <button type="button" class="btn btn-primary tm-btn">${opts.button || "잡기! ✋"}</button>`;
     container.appendChild(wrap);
     const band = wrap.querySelector(".tm-drop-band");

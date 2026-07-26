@@ -415,6 +415,16 @@ h2 { font-size: 1.6rem; margin: 8px 0 6px; color: var(--accent); }
 }
 .tm-zone { position: absolute; top: 0; bottom: 0; background: rgba(110, 231, 160, 0.35); }
 .tm-zone-perfect { position: absolute; top: 0; bottom: 0; background: var(--accent); opacity: 0.55; }
+/* 존 색 범례 — 초록 안의 노랑이 오류로 보인다는 문의가 있어 추가 */
+.tm-legend {
+  display: flex; align-items: center; justify-content: center; gap: 5px;
+  margin: 6px 0 0; font-size: 0.72rem; color: var(--dim);
+}
+.tm-legend .tm-lg { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+.tm-legend .tm-lg-good { margin-left: 8px; }
+.tm-lg-perfect { background: var(--accent); opacity: 0.75; }
+.tm-lg-good { background: rgba(110, 231, 160, 0.55); }
+.tm-legend-tip { margin: 2px 0 0; font-size: 0.7rem; color: var(--dim); opacity: 0.85; text-align: center; }
 .tm-marker {
   position: absolute; top: -2px; bottom: -2px; width: 4px; margin-left: -2px;
   background: #fff; border-radius: 2px; box-shadow: 0 0 6px rgba(255,255,255,.8);
