@@ -421,48 +421,18 @@ window.Career = (() => {
     });
   }
 
-  // 등판 없는 날 / 구원 등판 — 짧은 카드
+  // 등판 없는 날 — 짧은 카드 (구원 등판은 playRelief에서 직접 다뤄요)
   function quickGame(mode, opp) {
+    if (mode === "relief") { playRelief(opp); return; }
     $("tour-title").textContent = `📺 ${gameLabel()} — ${S.team} vs ${opp}`;
     $("tour-round").textContent = S.role;
     $("tour-card").innerHTML = `<div class="pbp" id="pbp-pro"></div><div id="game-result"></div><div id="game-moment"></div>`;
     show("screen-tournament");
-    let perf = null;
-    let win;
+    const perf = null;
     const feeds = [];
-    if (mode === "relief") {
-      const isCloser = S.role === "마무리 투수";
-      const ip = isCloser ? 1 : randInt(1, 2);
-      const k = randInt(0, 2);
-      // 등판당 실점 (마무리가 조금 더 안정적) — 0실점이 대부분, 가끔 1~2실점
-      const er = Math.random() < (isCloser ? 0.16 : 0.22) ? (Math.random() < 0.28 ? 2 : 1) : 0;
-      perf = { ip, k, runs: er };
-      if (isCloser) {
-        // 세이브 상황 = 우리 팀이 앞선 채 9회 등판. 무실점이면 리드를 지켜 승리+세이브,
-        // 실점하면 블론세이브 위험이 커져요.
-        feeds.push({ text: "🔔 9회, 팀이 앞선 세이브 상황에 마무리 등판!" });
-        feeds.push({ text: `${S.name}: ${ip}이닝 ${k}K ${er}실점`, cls: er ? "bad" : "good" });
-        if (er === 0) {
-          win = true;
-          feeds.push({ text: "🧊 리드를 완벽히 지켜냈어요! 세이브 성공!", cls: "good" });
-        } else {
-          win = Math.random() < (er === 1 ? 0.42 : 0.18);
-          feeds.push({
-            text: win ? "😮‍💨 실점했지만 아슬아슬하게 리드를 지켰어요" : "💥 블론세이브… 리드를 지키지 못했어요",
-            cls: win ? "" : "bad",
-          });
-        }
-      } else {
-        // 중간계투 — 세이브 상황은 아니지만 무실점 호투는 승리에 힘을 보태요
-        win = Math.random() < clamp(gameWinP() + (er === 0 ? 0.1 : -0.12 * er), 0.2, 0.85);
-        feeds.push({ text: "🔔 승부처에 중간계투로 등판!" });
-        feeds.push({ text: `${S.name}: ${ip}이닝 ${k}K ${er}실점`, cls: er ? "bad" : "good" });
-      }
-    } else {
-      // 등판 없는 날 — 순수 팀 전력 승부
-      win = Math.random() < gameWinP();
-      feeds.push({ text: "🪑 오늘은 등판 없이 더그아웃에서 응원!" });
-    }
+    // 등판 없는 날 — 순수 팀 전력 승부
+    const win = Math.random() < gameWinP();
+    feeds.push({ text: "🪑 오늘은 등판 없이 더그아웃에서 응원!" });
     feeds.push({ text: `📢 경기 종료 — ${win ? "승리! 🎉" : "패배 😢"}`, cls: win ? "good" : "bad" });
     const box = $("pbp-pro");
     let idx = 0;
@@ -496,6 +466,106 @@ window.Career = (() => {
     };
   }
 
+  /* 🔔 구원 등판 — 예전에는 결과 두 줄만 흘러가고 끝이라 투수가 심심했어요.
+   * 이제 등판 상황(점수·이닝)을 보여주고, 위기 미니게임으로 실점을 직접 정한 뒤,
+   * 바뀐 점수를 그대로 따라가게 했어요. 선발의 스코어보드만큼 크지는 않지만
+   * 1~2이닝짜리 등판에는 9이닝 표가 과해서 점수판만 간단히 씁니다. */
+  function playRelief(opp) {
+    const isCloser = S.role === "마무리 투수";
+    const perf = { ip: isCloser ? 1 : randInt(1, 2), k: 0, runs: 0 };
+    const inn = isCloser ? 9 : randInt(6, 8);
+    // 등판 시점 점수 — 마무리는 1~3점 앞선 세이브 상황, 중간계투는 접전에 투입돼요
+    const their0 = isCloser ? randInt(0, 4) : randInt(1, 5);
+    const our0 = isCloser ? their0 + randInt(1, 3) : their0 + randInt(-1, 1);
+
+    $("tour-title").textContent = `📺 ${gameLabel()} — ${S.team} vs ${opp}`;
+    $("tour-round").textContent = S.role;
+    $("tour-card").innerHTML = `
+      <div class="relief-score" id="relief-score"></div>
+      <div class="pbp" id="pbp-pro"></div>
+      <div id="game-moment"></div>
+      <div id="game-result"></div>`;
+    show("screen-tournament");
+
+    const box = $("pbp-pro");
+    const btn = $("btn-tour-next");
+    const setScore = (our, their) => {
+      $("relief-score").innerHTML =
+        `<span class="rs-name">${S.team.slice(0, 5)}</span>` +
+        `<span class="rs-num${our > their ? " rs-lead" : ""}">${our}</span>` +
+        `<span class="rs-sep">:</span>` +
+        `<span class="rs-num${their > our ? " rs-lead" : ""}">${their}</span>` +
+        `<span class="rs-name">${opp.slice(0, 5)}</span>`;
+    };
+    const feed = (text, cls) => {
+      const d = document.createElement("div");
+      if (cls) d.className = cls;
+      d.textContent = text;
+      box.appendChild(d);
+      box.scrollTop = box.scrollHeight;
+    };
+
+    setScore(our0, their0);
+    const gap = our0 - their0;
+    feed(isCloser
+      ? `🔔 ${inn}회초, ${gap}점 앞선 세이브 상황에 마무리 등판!`
+      : `🔔 ${inn}회초, ${gap === 0 ? "동점" : gap > 0 ? "살얼음 리드" : "추격 중인"} 승부처에 중간계투 등판!`);
+    feed("🔥 주자가 쌓이며 위기! 여기서 막아야 해요.", "bad");
+
+    btn.disabled = true;
+    btn.textContent = "🔥 위기!";
+
+    const resolve = (res) => {
+      /* 실점 폭은 개편 전 구원 등판(평균 0.28실점)에서 너무 벌어지지 않게 잡았어요.
+       * 미니게임으로 실력이 반영되는 만큼 평균은 조금 올라가요. */
+      let runs, txt, cls;
+      if (res === "perfect") { runs = 0; perf.k += 2; txt = "연속 탈삼진으로 위기 탈출!! 🧊"; cls = "good"; }
+      else if (res === "good") { runs = Math.random() < 0.3 ? 1 : 0; perf.k += 1; txt = runs ? "1실점으로 최소 실점 방어" : "범타 처리로 무실점! 🧤"; cls = runs ? "" : "good"; }
+      else { runs = randInt(1, 2); txt = `통한의 적시타… ${runs}실점 💧`; cls = "bad"; }
+      perf.runs = runs;
+
+      let our = our0, their = their0 + runs;
+      setScore(our, their);
+      feed(`${inn}회초 · ${txt}`, cls);
+      feed(`${S.name}: ${perf.ip}이닝 ${perf.k}K ${perf.runs}실점`, perf.runs ? "bad" : "good");
+
+      if (isCloser) {
+        // 리드를 날렸으면 연장 끝에 팀이 이겨도 세이브는 안 붙어요 (finishProGame에서 확인)
+        perf.blown = their >= our;
+        if (perf.blown) feed("💥 블론세이브… 리드를 지키지 못했어요", "bad");
+        else feed("🧊 리드를 지켜냈어요! 세이브 성공!", "good");
+      } else {
+        // 내가 내려간 뒤 남은 이닝은 팀에 맡겨요
+        const addOur = randInt(0, 3), addThem = randInt(0, 2);
+        if (addOur || addThem) feed(`⚾ 남은 이닝, 양 팀이 ${addOur}점과 ${addThem}점을 주고받았어요`);
+        our += addOur; their += addThem;
+        setScore(our, their);
+      }
+
+      let win;
+      if (our > their) win = true;
+      else if (our < their) win = false;
+      else {
+        win = Math.random() < gameWinP();
+        if (win) our += 1; else their += 1;
+        feed(win ? "🔥 연장 끝에 승리!" : "💧 연장 끝에 석패…", win ? "good" : "bad");
+        setScore(our, their);
+      }
+      feed(`📢 경기 종료 — ${S.team} ${our} : ${their} ${opp}`, win ? "good" : "bad");
+
+      const out = finishProGame(win, perf) || {};
+      $("game-result").innerHTML = `
+        <div class="tour-vs">${S.team} <span class="${win ? "win" : "lose"}">${win ? "승리! 🎉" : "패배… 😢"}</span></div>
+        <div class="tour-line">${S.name}: ${perf.ip}이닝 ${perf.k}탈삼진 ${perf.runs}실점</div>
+        ${out.extra || ""}`;
+      btn.disabled = false;
+      btn.textContent = out.nextLabel || "계속";
+      btn.onclick = out.nextFn || (() => {});
+    };
+
+    playRandomMini($("game-moment"), resolve);
+  }
+
   // 경기 종료 후 공통 처리 — 팀/리그/개인 기록 갱신
   function finishProGame(win, perf) {
     if (inPost()) return finishPostGame(win, perf);
@@ -512,7 +582,7 @@ window.Career = (() => {
       } else {
         t.ip += perf.ip; t.k += perf.k; t.er += perf.runs || 0; t.g += 1;
         if (S.role === "선발 투수" && win && perf.ip >= 5) t.wins += 1;
-        if (S.role === "마무리 투수" && win) t.saves += 1;
+        if (S.role === "마무리 투수" && win && !perf.blown) t.saves += 1;
       }
     }
     const pay = win ? 40 : 20;
@@ -554,7 +624,7 @@ window.Career = (() => {
       } else {
         t.ip += perf.ip; t.k += perf.k; t.er += perf.runs || 0; t.g += 1;
         if (S.role === "선발 투수" && win && perf.ip >= 5) t.wins += 1;
-        if (S.role === "마무리 투수" && win) t.saves += 1;
+        if (S.role === "마무리 투수" && win && !perf.blown) t.saves += 1;
       }
     }
     const pay = win ? 80 : 40;              // 가을야구 수당은 정규시즌의 두 배예요
