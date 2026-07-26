@@ -477,13 +477,17 @@ function explainAsset() {
   );
 }
 
-// ---------- 창업 중인 회사 수 ----------
-// register는 id가 같으면 무시돼요(resolution=ignore-duplicates). 여러 번 불러도
-// 이 기기의 회사는 한 번만 집계되고 전적도 덮이지 않아요.
+// ---------- 지금까지 창업한 회사 수 ----------
+// 동시 접속자가 아니라 '등록된 회사 수(누적)'예요. register는 id가 같으면
+// 무시돼요(resolution=ignore-duplicates). 여러 번 불러도 이 기기의 회사는
+// 한 번만 집계되고 전적도 덮이지 않아요.
 function registerCompany() {
   if (window.Match && window.Match.enabled()) window.Match.register("unicorn", S.company);
 }
 const COUNT_POLL_MS = 60000;
+// 등록이 v2.1.0부터 시작돼서 초기엔 수가 아주 적어요.
+// 한 자릿수일 땐 오히려 '아무도 안 한다'로 읽혀서 그냥 숨깁니다.
+const COUNT_MIN = 5;
 let lastCountAt = 0;
 function refreshCount(force) {
   if (!window.Match || !window.Match.enabled()) return;
@@ -491,9 +495,9 @@ function refreshCount(force) {
   if (!force && now - lastCountAt < COUNT_POLL_MS) return;
   lastCountAt = now;
   window.Match.count("unicorn").then((n) => {
-    if (!n) return;                   // 집계 전이거나 실패 — 빈 줄을 남기지 않아요
+    if (!n || n < COUNT_MIN) return;   // 집계 전·실패·너무 적을 땐 줄을 안 만들어요
     const el = $("uni-count");
-    el.innerHTML = `🌏 지금 <b>${n.toLocaleString()}개</b>의 회사가 창업 중이에요`;
+    el.innerHTML = `🌏 지금까지 <b>${n.toLocaleString()}개</b>의 회사가 창업했어요`;
     el.classList.remove("hidden");
   });
 }
