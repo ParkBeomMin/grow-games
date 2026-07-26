@@ -889,17 +889,7 @@ window.Career = (() => {
     const ret = document.createElement("button");
     ret.className = "btn btn-ghost";
     ret.textContent = "🎓 은퇴하기";
-    ret.onclick = () => {
-      if (!confirm(
-        `🎓 여기서 커리어를 마칠까요?\n\n` +
-        `· 명예의 전당에 기록이 남아요\n` + retireSummary() +
-        `· 등급: ${gradeOfScore(careerScore())}\n\n` +
-        `⚠️ 되돌릴 수 없어요.` +
-        (rebirthReady() ? ` 유산을 남기려면 '환생'을 선택하세요.` : ``) +
-        `\n\n진행할까요?`
-      )) return;
-      enshrine(S.team);
-    };
+    ret.onclick = () => enshrine(S.team);
     act.appendChild(ret);
     const reb = document.createElement("button");
     reb.className = "btn btn-ghost";
@@ -1218,20 +1208,6 @@ window.Career = (() => {
       `이제 ${nextGen + 1}세가 더 높은 재능으로 출발해요!`
     );
     location.reload();
-  }
-
-  /* 🎓 은퇴 확인창에 넣을 요약. 되돌릴 수 없는 선택이라 뭐가 남는지 보여줘요. */
-  function retireSummary() {
-    const c = S.career || {};
-    const awards = [
-      (c.rings || 0) ? `🏆우승 ${c.rings}` : "",
-      (c.mvp || 0) ? `🎖️MVP ${c.mvp}` : "",
-      (c.gg || 0) ? `🧤GG ${c.gg}` : "",
-      (c.roy || 0) ? "🌟신인왕" : "",
-    ].filter(Boolean).join(" · ");
-    const seasons = (c.seasons || []).length;
-    return `    ${S.name} · ${seasons}시즌 · WAR ${(c.warSum || 0).toFixed(1)}\n`
-      + (awards ? `    ${awards}\n` : "    수상 기록 없음\n");
   }
 
   function enshrine(team) {
