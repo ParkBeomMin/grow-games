@@ -702,6 +702,19 @@ window.Career = (() => {
     if (feeds.length) playFeeds("🍂 가을야구", feeds, finishSeason); else finishSeason();
   }
 
+  /* 포스트시즌 성적 한 줄. 정규시즌 기록과 합치지 않아요. */
+  function postStatLine() {
+    const P = S.post;
+    if (!P || !P.stats) return "";
+    const t = P.stats;
+    if (S.pos === "batter") {
+      if (!t.ab) return "";
+      return `🍂 가을야구 ${t.ab}타수 ${t.hits}안타${t.hr ? ` ${t.hr}홈런` : ""} (타율 ${(t.hits / t.ab).toFixed(3).slice(1)})`;
+    }
+    if (!t.g) return "";
+    return `🍂 가을야구 ${t.g}경기 ${t.ip}이닝 ${t.k}탈삼진 ${t.er}자책`;
+  }
+
   function finishSeason() {
     if (!S.season) return;
     const sn = S.season;
@@ -725,7 +738,8 @@ window.Career = (() => {
     }
     war = Math.round(war * 10) / 10;
     const rank = myRank();
-    const champ = (rank === 1 && Math.random() < 0.6) || (rank > 1 && rank <= 3 && Math.random() < 0.22);
+    // 한국시리즈를 실제로 이겼을 때만 우승이에요 (예전엔 순위로 주사위를 굴렸어요)
+    const champ = !!(S.post && S.post.wonKS);
     // 수상은 '리그 내 상대 비교' — 가상 경쟁자들의 WAR와 겨뤄 최고면 수상해요.
     // (압도적인 시즌은 랜덤에 밀려 MVP를 놓치지 않아요)
     const awards = [];
@@ -757,11 +771,14 @@ window.Career = (() => {
     S.lastStandings = standingsHTML();
     S.season = null;
     S.pendingGame = false;
+    const postLine = postStatLine();     // S.post를 지우기 전에 문구를 만들어요
+    S.post = null;
     save();
 
     const feeds = [
       { text: `🏁 정규시즌 종료 — 최종 ${rank}위 (${finalW}승 ${finalL}패)`, cls: rank <= 3 ? "good" : rank >= 8 ? "bad" : "" },
     ];
+    if (postLine) feeds.push({ text: postLine });
     if (champ) feeds.push({ text: "🏆 한국시리즈 우승!! 헹가래의 주인공이 됐어요", cls: "good" });
     if (champ && window.Fx) Fx.celebrate("champion", "🏆 우승!");
     for (const a of awards) feeds.push({ text: `🎖️ ${a} 수상!`, cls: "good" });
@@ -1183,7 +1200,9 @@ window.Career = (() => {
     showHof,
     showBattle,
     showPro: () => {
-      if ((S.season && S.pendingGame) || S.camp > 0) { renderPro(); show("screen-pro"); }
+      // 가을야구 도중에 나갔다 와도 그 자리에서 이어져요
+      if (inPost()) { renderPost(); show("screen-pro"); }
+      else if ((S.season && S.pendingGame) || S.camp > 0) { renderPro(); show("screen-pro"); }
       else if (S.season) runSeason();
       else seasonReport();
     },
