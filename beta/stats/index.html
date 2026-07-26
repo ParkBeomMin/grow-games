@@ -331,9 +331,9 @@ grant select on public.stats_summary, public.stats_choices, public.stats_daily t
       // 해시로 오른쪽 끝 탭에 바로 들어오면 칩이 스크롤 밖에 있어요.
       const on = $("tabs").querySelector(".tab.on");
       if (on) {
-        // 브라우저 기본 스크롤 API는 문서까지 세로로 밀어 KPI를 지나쳐요. 탭 바 안에서 가로 위치만 맞춰요.
-        const bar = $("tabs");
-        bar.scrollLeft = on.offsetLeft - (bar.clientWidth - on.offsetWidth) / 2;
+        // scrollIntoView는 문서까지 세로로 밀어 KPI를 지나쳐요. 탭 바 안에서 가로 위치만 맞춰요.
+        const tabsBar = $("tabs");
+        tabsBar.scrollLeft = on.offsetLeft - (tabsBar.clientWidth - on.offsetWidth) / 2;
       }
     }
 
@@ -369,7 +369,13 @@ grant select on public.stats_summary, public.stats_choices, public.stats_daily t
       }
 
       if (failed || !summary) {
-        // 집계 뷰가 없으면 탭이 의미 없어요 — 안내 카드만 남겨요. (STATE는 위에서 이미 비웠어요)
+        // 집계 뷰가 없으면 탭이 의미 없어요 — 안내 카드만 남겨요.
+        // ↻를 연타하면 load()가 겹쳐 도는데, 늦게 끝난 실패가 먼저 성공한 실행의 STATE와
+        // 펼쳐진 탭을 만날 수 있어요. 그래서 여기서 한 번 더 비워요.
+        // STATE를 남겨두면 이후 hashchange가 낡은 데이터를 패널에 다시 그려요.
+        STATE = null;
+        renderTabs();
+        renderPanel();
         $("overview").innerHTML = setupCard("아직 집계 뷰가 없거나 접근할 수 없어요.");
         wireCopy();
         return;
