@@ -90,6 +90,12 @@ window.Career = (() => {
     S.proYear += 1;
     S.camp = 3;
     S.condition = 80;
+    driftTeamStr();
+    if (S.tradeSour) {                 // 트레이드로 잡음이 있었던 해
+      S.condition = 60;
+      S.tradeSour = false;
+      proLog(`😐 트레이드 잡음의 여파로 캠프 분위기가 어색해요 (컨디션 ${S.condition})`);
+    }
     S.season = null;
     const newRole = assignRole();
     if (newRole !== S.role) {
@@ -261,7 +267,8 @@ window.Career = (() => {
       total: SEASON_TOTAL,
       teamW: 0,
       teamL: 0,
-      others: KBO_TEAMS.filter((t) => t !== S.team).map((name) => ({ name, w: 0, l: 0, str: rand(0.36, 0.62) })),
+      // 팀 전력은 저장본에 남아요 — 이적할 때 '어느 팀인지'가 의미를 가지려면 필요해요
+      others: KBO_TEAMS.filter((t) => t !== S.team).map((name) => ({ name, w: 0, l: 0, str: teamStrOf(name) })),
       stats: S.pos === "batter" ? { ab: 0, hits: 0, hr: 0, sb: 0 } : { ip: 0, k: 0, er: 0, wins: 0, saves: 0, g: 0 },
     };
     save();
@@ -307,7 +314,10 @@ window.Career = (() => {
       ? S.stats.contact * 0.45 + S.stats.power * 0.35 + S.stats.run * 0.1 + S.stats.defense * 0.1
       : S.stats.velocity * 0.35 + S.stats.control * 0.35 + S.stats.breaking * 0.2 + S.stats.stamina * 0.1;
     const agePen = S.age >= 31 ? (S.age - 30) * 0.02 : 0;
-    return clamp(0.42 + (core * clutchAvg() - 50) / 160 + (S.condition - 50) / 600 - agePen, 0.25, 0.72);
+    // 소속팀 전력도 조금 섞어요. 안 그러면 강팀으로 이적해도 성적이 똑같아서
+    // 이적에 '우승 도전' 같은 이유가 생기지 않아요. (내 기량이 여전히 주력)
+    const teamBonus = (teamStrOf(S.team) - 0.49) * 0.45;
+    return clamp(0.42 + (core * clutchAvg() - 50) / 160 + (S.condition - 50) / 600 - agePen + teamBonus, 0.25, 0.72);
   }
 
   /* 경기 승률 — 정규시즌은 teamWinP 그대로예요.
@@ -843,7 +853,8 @@ window.Career = (() => {
         s.war >= 2.5 ? "제 몫을 해낸 시즌" :
         s.war >= 0.5 ? "아쉬움이 남는 시즌" : "혹독한 시즌…"
       }</div>
-      <div class="draft-team">${S.team} · ${s.line} · WAR ${s.war.toFixed(1)}</div>
+      <div class="draft-team">${S.team} <span class="team-str">${strLabel(teamStrOf(S.team))}</span> · ${s.line} · WAR ${s.war.toFixed(1)}</div>
+      ${(S.moves || []).length ? `<div class="hint">🔁 이적 이력 — ${S.moves.map((m) => `${m.y}년차 ${m.from}→${m.to}`).join(" · ")}</div>` : ""}
       ${S.lastStandings ? `<div class="hint">📊 최종 순위</div>${S.lastStandings}` : ""}
       <table class="season-table season-career"><thead><tr><th>시즌</th><th>나이</th><th>성적</th><th>WAR</th></tr></thead><tbody>${rows}</tbody></table>
       ${moreHint}
@@ -859,6 +870,21 @@ window.Career = (() => {
       next.textContent = `⛺ ${S.proYear + 1}년차 캠프 시작`;
       next.onclick = startCamp;
       act.appendChild(next);
+    }
+    // 오프시즌 이적 — 자격이 될 때만 보여줘요
+    if (!forcedRetire && faReady()) {
+      const fa = document.createElement("button");
+      fa.className = "btn btn-ghost";
+      fa.textContent = `💼 FA 선언 (${S.proYear}년차 자격)`;
+      fa.onclick = showFa;
+      act.appendChild(fa);
+    }
+    if (!forcedRetire && tradeReady()) {
+      const tr = document.createElement("button");
+      tr.className = "btn btn-ghost";
+      tr.textContent = "🔁 트레이드 요청";
+      tr.onclick = startTrade;
+      act.appendChild(tr);
     }
     const ret = document.createElement("button");
     ret.className = "btn btn-ghost";
@@ -879,6 +905,244 @@ window.Career = (() => {
     }
     if (window.Ads) window.Ads.display($("ad-career"));
     show("screen-career");
+  }
+
+  /* ---------- 이적 (FA 계약 · 트레이드 요청) ----------
+   * 오프시즌(시즌 결산 화면)에서 팀을 옮길 수 있어요.
+   *  · FA    — 자격 연차를 채우면 여러 구단의 제안 중에서 고르는 방식
+   *  · 트레이드 — 내가 먼저 요청하고 구단 프런트와 협상해서 승낙을 받아내는 방식
+   * 팀을 옮기는 게 의미가 있으려면 '어느 팀인지'가 성적에 영향을 줘야 해서,
+   * 팀마다 전력(teamStr)을 두고 승률에 반영해요. */
+  const FA_YEAR = 8;         // FA 자격 연차
+  const TRADE_MIN_YEAR = 2;  // 트레이드 요청 가능 연차
+  const TRADE_ROUNDS = 3;    // 협상 라운드 수
+
+  // 팀 전력 — 한 번 정해두고 시즌마다 조금씩 흔들려요. 저장본에도 남아서
+  // '작년에 강했던 팀'이 올해도 대체로 강해요.
+  function teamStrOf(name) {
+    if (!S.teamStr) S.teamStr = {};
+    if (typeof S.teamStr[name] !== "number") S.teamStr[name] = Math.round(rand(0.38, 0.60) * 1000) / 1000;
+    return S.teamStr[name];
+  }
+  function driftTeamStr() {
+    for (const t of KBO_TEAMS) {
+      S.teamStr[t] = Math.round(clamp(teamStrOf(t) + rand(-0.03, 0.03), 0.36, 0.63) * 1000) / 1000;
+    }
+  }
+  const strLabel = (v) =>
+    v >= 0.56 ? "🏆 우승 후보" : v >= 0.50 ? "📈 상위권" : v >= 0.44 ? "😐 중위권" : "🌱 리빌딩";
+
+  /* 시장 가치 0~100 — 최근 3시즌 WAR가 주력이고 현재 기량이 보조예요.
+   * 이 값이 FA 제안 규모와 트레이드 난이도를 함께 좌우해요. */
+  function marketValue() {
+    const last3 = (S.career.seasons || []).slice(-3);
+    const avgWar = last3.length ? last3.reduce((a, x) => a + Math.max(x.war, 0), 0) / last3.length : 0;
+    return Math.round(clamp(avgWar * 11 + overall() * 0.35, 0, 100));
+  }
+
+  const moveTitle = (t) => { $("move-title").textContent = t; };
+  const moveCard = (html) => { $("move-card").innerHTML = html; };
+  function moveActions(list) {
+    const box = $("move-actions");
+    box.innerHTML = "";
+    for (const it of list) {
+      const b = document.createElement("button");
+      b.className = "btn " + (it.ghost ? "btn-ghost" : "btn-primary");
+      b.innerHTML = it.label;
+      b.onclick = it.onClick;
+      if (it.disabled) b.disabled = true;
+      box.appendChild(b);
+    }
+  }
+
+  // 팀을 실제로 옮겨요. 이적 이력은 결산·명예의 전당에서 쓰여요.
+  function moveTo(team, type, bonus) {
+    const from = S.team;
+    S.team = team;
+    S.money = (S.money || 0) + (bonus || 0);
+    S.moves = S.moves || [];
+    S.moves.push({ y: S.proYear, age: S.age, from, to: team, type });
+    proLog(`${type === "fa" ? "💼" : "🔁"} ${from} → ${team} 이적! (${type === "fa" ? "FA 계약" : "트레이드"})`);
+    if (window.Stats) Stats.log("transfer", { type, from, to: team, y: S.proYear });
+    save();
+  }
+
+  // ---------- FA ----------
+  const faReady = () => S.proYear >= FA_YEAR && S.faYear !== S.proYear;
+
+  /* 제안 목록. 강팀일수록 지갑을 덜 여니까 '돈이냐 우승이냐'가 갈려요. */
+  function faOffers() {
+    const mv = marketValue();
+    const n = mv >= 60 ? 4 : mv >= 40 ? 3 : mv >= 22 ? 2 : 1;
+    const others = shuffle(KBO_TEAMS.filter((t) => t !== S.team)).slice(0, n);
+    const offers = others.map((name) => {
+      const str = teamStrOf(name);
+      // 전력 계수를 크게 잡아야 '돈이냐 우승이냐'가 또렷해져요. 흔들림은 작게.
+      const raw = (6000 + mv * 1100) * rand(0.93, 1.08) * (1.3 - (str - 0.44) * 2.8);
+      return { name, str, money: Math.max(2000, Math.round(raw / 500) * 500) };
+    });
+    // 원소속팀은 언제나 붙잡아요 (조금 더 얹어서)
+    const myStr = teamStrOf(S.team);
+    offers.push({
+      name: S.team, str: myStr, stay: true,
+      money: Math.max(2000, Math.round((6000 + mv * 1150) * 1.1 / 500) * 500),
+    });
+    return offers;
+  }
+
+  function showFa() {
+    const mv = marketValue();
+    const offers = faOffers();
+    moveTitle("💼 FA 자격 취득");
+    moveCard(`
+      <div class="draft-emoji">💼</div>
+      <div class="draft-title">${S.proYear}년차 — 자유계약선수</div>
+      <div class="draft-team">시장 가치 ${mv} / 100 · 제안 ${offers.length}건</div>
+      <div class="hint">계약금이 큰 팀일수록 전력이 아쉬운 경우가 많아요. 우승을 노릴지, 목돈을 챙길지 골라주세요.</div>
+      <div class="offer-list">${offers.map((o, i) => `
+        <button class="offer" data-i="${i}">
+          <span class="offer-team">${o.name}${o.stay ? ' <span class="offer-stay">잔류</span>' : ""}</span>
+          <span class="offer-str">${strLabel(o.str)}</span>
+          <span class="offer-money">💰 ${fmtMoney(o.money)}</span>
+        </button>`).join("")}</div>`);
+    $("move-card").querySelectorAll(".offer").forEach((b) => {
+      b.onclick = () => {
+        const o = offers[+b.dataset.i];
+        if (!confirm(`${o.name} 와(과) 계약할까요?\n\n· 계약금 ${fmtMoney(o.money)}\n· 팀 전력 ${strLabel(o.str)}`)) return;
+        S.faYear = S.proYear;
+        if (o.stay) {
+          S.money = (S.money || 0) + o.money;
+          proLog(`💼 FA 잔류! ${S.team}와 재계약 (계약금 ${fmtMoney(o.money)})`);
+          if (window.Stats) Stats.log("transfer", { type: "fa_stay", to: S.team, y: S.proYear });
+          save();
+        } else {
+          moveTo(o.name, "fa", o.money);
+        }
+        if (window.Fx) Fx.celebrate("award", `💼 ${o.name} 계약!`);
+        seasonReport();
+      };
+    });
+    moveActions([{ label: "← 결산으로 돌아가기", ghost: true, onClick: seasonReport }]);
+    show("screen-move");
+  }
+
+  // ---------- 트레이드 요청 ----------
+  const tradeReady = () => S.proYear >= TRADE_MIN_YEAR && S.tradeYear !== S.proYear;
+
+  /* 협상 카드. front = 구단 프런트의 태도, fans = 팬 여론.
+   * 어느 쪽도 공짜가 없어서 매 라운드 저울질을 하게 돼요. */
+  const TRADE_CARDS = [
+    { id: "talk",  label: "🤝 단장과 진솔한 면담", desc: "무난하지만 확실해요", front: [10, 18], fans: [0, 0] },
+    { id: "press", label: "📰 언론에 흘리기",      desc: "구단은 싫어하고 팬은 주목해요", front: [-14, -6], fans: [12, 22] },
+    { id: "pay",   label: "💰 연봉 삭감 감수",     desc: "지갑을 열어 길을 트는 방법", front: [16, 26], fans: [-12, -4], cost: true },
+    { id: "ring",  label: "🏆 우승 도전 명분",     desc: "우리 팀이 강하면 역효과예요", front: [12, 20], fans: [8, 16], contender: true },
+    { id: "fan",   label: "🙇 팬들께 직접 호소",   desc: "여론은 얻지만 프런트는 불편해요", front: [-8, -2], fans: [16, 26] },
+    { id: "quiet", label: "🧊 조용히 기다리기",     desc: "잡음은 없지만 관심도 식어요", front: [6, 12], fans: [-14, -6] },
+  ];
+
+  function startTrade() {
+    const mv = marketValue();
+    const last = S.career.seasons[S.career.seasons.length - 1];
+    const rank = last ? last.rank : 5;
+    // 잘하는 선수일수록 안 놔주고, 팀이 하위권이면(리빌딩) 쉽게 놔줘요
+    const front = clamp(48 - (mv - 40) * 0.42 + (rank - 5) * 3.4, 8, 76);
+    S.trade = { round: 1, front: Math.round(front), fans: 50, log: [], paid: 0 };
+    renderTrade();
+    show("screen-move");
+  }
+
+  const gaugeHTML = (label, v, good) => `
+    <div class="neg-gauge">
+      <div class="neg-label"><span>${label}</span><span>${Math.round(v)}</span></div>
+      <div class="bar"><div class="bar-fill ${good}" style="width:${clamp(v, 0, 100)}%"></div></div>
+    </div>`;
+
+  function renderTrade() {
+    const T = S.trade;
+    const cards = shuffle(TRADE_CARDS.filter((c) => !(c.id === "pay" && (S.money || 0) < 3000))).slice(0, 3);
+    moveTitle("🔁 트레이드 요청");
+    moveCard(`
+      <div class="draft-emoji">🔁</div>
+      <div class="draft-title">협상 ${T.round} / ${TRADE_ROUNDS} 라운드</div>
+      <div class="draft-team">${S.team} 프런트와 이야기 중이에요</div>
+      ${gaugeHTML("🏢 구단 태도", T.front, "scout")}
+      ${gaugeHTML("📣 팬 여론", T.fans, "cond")}
+      <div class="hint">구단 태도가 60을 넘겨야 보내줘요. 팬 여론이 35 밑이면 성사돼도 뒷맛이 씁니다.</div>
+      ${T.log.length ? `<div class="neg-log">${T.log.map((l) => `<div>${l}</div>`).join("")}</div>` : ""}`);
+    moveActions(cards.map((c) => ({
+      label: `${c.label}<span class="a-sub">${c.desc}</span>`,
+      onClick: () => playTradeCard(c),
+    })).concat([{ label: "← 요청 취소", ghost: true, onClick: () => { S.trade = null; seasonReport(); } }]));
+  }
+
+  function playTradeCard(c) {
+    const T = S.trade;
+    let df = randInt(c.front[0], c.front[1]);
+    let dn = randInt(c.fans[0], c.fans[1]);
+    // 우승 도전 명분은 우리 팀이 이미 강하면 먹히지 않아요
+    if (c.contender && teamStrOf(S.team) >= 0.53) { df = -randInt(6, 12); dn = -randInt(2, 8); }
+    if (c.cost) { const pay = Math.min(S.money || 0, 3000); S.money -= pay; T.paid += pay; }
+    T.front = clamp(T.front + df, 0, 100);
+    T.fans = clamp(T.fans + dn, 0, 100);
+    const sign = (v) => (v >= 0 ? `+${v}` : `${v}`);
+    T.log.unshift(`${c.label} → 구단 ${sign(df)} · 여론 ${sign(dn)}${c.cost ? " · 💰 3000만 지출" : ""}`);
+    T.round += 1;
+    save();
+    if (T.round > TRADE_ROUNDS) finishTrade();
+    else renderTrade();
+  }
+
+  function finishTrade() {
+    const T = S.trade;
+    const p = clamp((T.front - 40) / 50, 0.05, 0.95);
+    const ok = Math.random() < p;
+    S.tradeYear = S.proYear;
+    if (!ok) {
+      S.trade = null;
+      S.tradeSour = true;              // 다음 캠프에서 컨디션이 깎여요
+      proLog(`🔁 트레이드 요청이 거절됐어요… 구단과의 사이가 서먹해졌어요`);
+      save();
+      moveTitle("🔁 트레이드 무산");
+      moveCard(`
+        <div class="draft-emoji">🙅</div>
+        <div class="draft-title">구단이 요청을 거절했어요</div>
+        <div class="draft-team">승낙 확률 ${Math.round(p * 100)}% — 이번엔 닿지 않았어요</div>
+        <div class="hint">올 오프시즌엔 다시 요청할 수 없어요. 다음 시즌 시작 컨디션이 조금 떨어져요.</div>`);
+      moveActions([{ label: "← 결산으로", ghost: true, onClick: seasonReport }]);
+      return;
+    }
+    // 승낙 — 나를 원하는 구단을 추려요 (전력이 셀수록 여론이 좋아야 붙어요)
+    const mv = marketValue();
+    const pool = shuffle(KBO_TEAMS.filter((t) => t !== S.team))
+      .filter((t) => teamStrOf(t) < 0.52 || T.fans >= 45 || mv >= 55)
+      .slice(0, Math.max(2, Math.min(3, 1 + Math.floor(mv / 30))));
+    const suitors = (pool.length ? pool : shuffle(KBO_TEAMS.filter((t) => t !== S.team)).slice(0, 2))
+      .map((name) => ({ name, str: teamStrOf(name) }));
+    const sour = T.fans < 35;
+    moveTitle("🔁 트레이드 승낙!");
+    moveCard(`
+      <div class="draft-emoji">🤝</div>
+      <div class="draft-title">구단이 길을 열어줬어요</div>
+      <div class="draft-team">승낙 확률 ${Math.round(p * 100)}% · 팬 여론 ${Math.round(T.fans)}</div>
+      ${sour ? `<div class="hint">⚠️ 여론이 차가워요. 새 팀에서도 시선이 곱지 않아 적응이 힘들 거예요.</div>` : ""}
+      <div class="hint">어느 팀으로 갈지 골라주세요.</div>
+      <div class="offer-list">${suitors.map((o, i) => `
+        <button class="offer" data-i="${i}">
+          <span class="offer-team">${o.name}</span>
+          <span class="offer-str">${strLabel(o.str)}</span>
+        </button>`).join("")}</div>`);
+    $("move-card").querySelectorAll(".offer").forEach((b) => {
+      b.onclick = () => {
+        const o = suitors[+b.dataset.i];
+        if (!confirm(`${o.name} 로 이적할까요?\n\n· 팀 전력 ${strLabel(o.str)}`)) return;
+        if (sour) S.tradeSour = true;
+        S.trade = null;
+        moveTo(o.name, "trade", 0);
+        if (window.Fx) Fx.celebrate("award", `🔁 ${o.name} 이적!`);
+        seasonReport();
+      };
+    });
+    moveActions([]);
   }
 
   // ---------- 명예의 전당 ----------
@@ -1259,6 +1523,9 @@ window.Career = (() => {
     // 🛍️ 상점에서 돌아올 때 가을야구 중이면 포스트시즌 화면으로 돌아가야 해요.
     // renderPro로 고정돼 있으면 경기 시작 버튼이 사라지고 훈련 버튼이 살아나요.
     refreshPro: () => (inPost() ? renderPost() : renderPro()),
+    showSeasonReport: seasonReport,
+    // 테스트에서 내부 계산을 들여다보기 위한 창구예요 (게임 로직은 이걸 쓰지 않아요)
+    _internals: { marketValue, teamWinP, teamStrOf, faOffers },
     enterPro,
     showHof,
     showBattle,

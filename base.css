@@ -472,6 +472,33 @@ h2 { font-size: 1.6rem; margin: 8px 0 6px; color: var(--accent); }
   .awaken-btn.ready, .action-btn.awaken-act { animation: none; }
 }
 
+/* ---------- 이적 (FA 제안 · 트레이드 협상) ---------- */
+.team-str { font-size: .8rem; color: var(--sky); }
+.offer-list { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+.offer {
+  width: 100%; display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; align-items: center;
+  background: var(--field); border: 2px solid var(--line); border-radius: 12px;
+  padding: 12px 14px; color: var(--text); text-align: left; cursor: pointer;
+  font-family: inherit; transition: border-color .12s ease, transform .12s ease;
+}
+.offer:hover { border-color: var(--accent); transform: translateY(-1px); }
+.offer:active { transform: scale(.99); }
+.offer-team { font-family: "Jua", sans-serif; font-size: 1.05rem; color: var(--cream); }
+.offer-stay { font-size: .68rem; color: var(--accent); background: rgba(255,209,102,.14); border-radius: 99px; padding: 1px 7px; }
+.offer-str { grid-column: 1; font-size: .78rem; color: var(--dim); }
+.offer-money { grid-column: 2; grid-row: 1 / span 2; font-family: "Jua", sans-serif; color: var(--accent); white-space: nowrap; }
+/* 협상 게이지 */
+.neg-gauge { margin-top: 10px; }
+.neg-label { display: flex; justify-content: space-between; font-size: .8rem; color: var(--dim); margin-bottom: 4px; }
+.neg-log {
+  margin-top: 12px; background: rgba(0,0,0,.25); border-radius: 10px;
+  padding: 8px 12px; font-size: .78rem; line-height: 1.7; color: var(--dim); text-align: left;
+}
+.neg-log div:first-child { color: var(--cream); }
+/* 협상 카드는 설명이 붙어서 세로로 쌓아요 */
+#move-actions .btn { display: flex; flex-direction: column; gap: 2px; align-items: center; }
+#move-actions .btn .a-sub { font-size: .7rem; opacity: .75; }
+
 /* ---------- 행동 피드백 (Fx.tap) ---------- */
 /* 누르면 화면이 다시 그려져서 :active가 남지 않아요. 결과를 따로 알려줍니다. */
 .fx-tap { animation: fxTap .6s ease-out; border-color: var(--accent) !important; }
