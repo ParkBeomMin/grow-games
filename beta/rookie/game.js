@@ -126,7 +126,8 @@ function newState(region, pos, name, roll) {
     region: region.id, pos, name,
     year: 1, month: 3,
     stats, talents,
-    money: 0,
+    // 🧬 환생 유산으로 받은 시작 자금이에요. 유산이 없으면 0이에요.
+    money: legacyMoneyBonus(loadLegacy().pts),
     gear: {},
     condition: 80,
     scout: 0,

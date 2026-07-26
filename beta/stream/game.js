@@ -121,7 +121,8 @@ function newState(market, pos, name, roll) {
     market: market.id, pos, name,
     year: 1, month: 1,
     stats, talents,
-    money: 0,
+    // 🧬 환생 유산으로 받은 시작 자금이에요. 유산이 없으면 0이에요.
+    money: legacyMoneyBonus(loadLegacy().pts),
     gear: {},
     condition: 80,
     fandom: 0, // 구독자·화제성

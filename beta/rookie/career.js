@@ -868,8 +868,15 @@ window.Career = (() => {
     const reb = document.createElement("button");
     reb.className = "btn btn-ghost";
     reb.textContent = "🧬 환생하기";
+    reb.disabled = !rebirthReady();
     reb.onclick = () => rebirth(S.team);
     act.appendChild(reb);
+    if (!rebirthReady()) {
+      const rh = document.createElement("div");
+      rh.className = "hint";
+      rh.textContent = rebirthHint();
+      act.appendChild(rh);
+    }
     if (window.Ads) window.Ads.display($("ad-career"));
     show("screen-career");
   }
@@ -895,7 +902,26 @@ window.Career = (() => {
 
   // ---------- 🧬 환생 ----------
   // 은퇴(명예의 전당 등록)와 달리, 기록은 남기지 않고 유산만 다음 세대에 넘겨요.
+  /* 🧬 환생 자격 — 아래 중 하나라도 이루면 열려요.
+   * 은퇴는 언제나 가능하니 못 채워도 커리어가 막히지는 않아요.
+   * 초월은 시간이 아니라 투자를 요구해서(스탯 상한 + 판정 통과) 1단계로 둬요. */
+  const REBIRTH_NEED = { win: 3, top: 3, trans: 1 };
+  function rebirthReady() {
+    const c = S.career || {};
+    return (c.rings || 0) >= REBIRTH_NEED.win
+      || (c.mvp || 0) >= REBIRTH_NEED.top
+      || transTotal() >= REBIRTH_NEED.trans;
+  }
+  function rebirthHint() {
+    const c = S.career || {};
+    return `🏆 우승 ${c.rings || 0}/${REBIRTH_NEED.win} · 🎖️ MVP ${c.mvp || 0}/${REBIRTH_NEED.top} · 🌠 초월 ${transTotal()}/${REBIRTH_NEED.trans} — 하나만 채우면 열려요`;
+  }
+
   function rebirth(team) {
+    if (!rebirthReady()) {
+      alert(`🧬 아직 환생할 수 없어요.\n\n${rebirthHint()}\n\n기록을 남기고 끝내려면 '은퇴'를 선택하세요.`);
+      return;
+    }
     const sc = careerScore();
     const gain = legacyGain(sc);
     const L = loadLegacy();
