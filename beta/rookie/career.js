@@ -301,6 +301,17 @@ window.Career = (() => {
     return clamp(0.42 + (core * clutchAvg() - 50) / 160 + (S.condition - 50) / 600 - agePen, 0.25, 0.72);
   }
 
+  /* 경기 승률 — 정규시즌은 teamWinP 그대로예요.
+   * 가을야구는 상대가 정해져 있으니 상대 전력을 반영해요. 안 그러면 한국시리즈에서
+   * 1위 팀을 만나는 것과 5월에 꼴찌를 만나는 게 똑같아져요. */
+  function gameWinP() {
+    const base = teamWinP();
+    if (!inPost()) return base;
+    const raw = S.post.str ? S.post.str[postOpp()] : null;
+    const opp = typeof raw === "number" ? raw : 0.49;   // 0.49는 팀 전력의 한가운데예요
+    return clamp(base - (opp - 0.49) * 1.8, 0.2, 0.85);
+  }
+
   // 경기 화면 제목 — 포스트시즌엔 정규시즌 경기 번호 대신 라운드·차수를 써요.
   const gameLabel = () => (inPost()
     ? `${Postseason.LABEL[S.post.myRound]} ${S.post.gameNo}차전`
@@ -351,7 +362,7 @@ window.Career = (() => {
       homeName: S.team,
       perf, story,
       interactive: false,
-      preWin: Math.random() < teamWinP(),
+      preWin: Math.random() < gameWinP(),
       onFinish: (win) => {
         perf.line = `${S.name}: ${perf.ab}타수 ${perf.hits}안타${perf.hr ? ` ${perf.hr}홈런` : ""}${perf.sb ? ` ${perf.sb}도루` : ""}`;
         return finishProGame(win, perf);
@@ -383,7 +394,7 @@ window.Career = (() => {
       homeName: S.team,
       perf, story,
       interactive: false,
-      preWin: Math.random() < teamWinP(),
+      preWin: Math.random() < gameWinP(),
       onFinish: (win) => {
         perf.line = `${S.name}: ${perf.ip}이닝 ${perf.k}탈삼진 ${perf.runs}실점`;
         return finishProGame(win, perf);
@@ -424,13 +435,13 @@ window.Career = (() => {
         }
       } else {
         // 중간계투 — 세이브 상황은 아니지만 무실점 호투는 승리에 힘을 보태요
-        win = Math.random() < clamp(teamWinP() + (er === 0 ? 0.1 : -0.12 * er), 0.2, 0.85);
+        win = Math.random() < clamp(gameWinP() + (er === 0 ? 0.1 : -0.12 * er), 0.2, 0.85);
         feeds.push({ text: "🔔 승부처에 중간계투로 등판!" });
         feeds.push({ text: `${S.name}: ${ip}이닝 ${k}K ${er}실점`, cls: er ? "bad" : "good" });
       }
     } else {
       // 등판 없는 날 — 순수 팀 전력 승부
-      win = Math.random() < teamWinP();
+      win = Math.random() < gameWinP();
       feeds.push({ text: "🪑 오늘은 등판 없이 더그아웃에서 응원!" });
     }
     feeds.push({ text: `📢 경기 종료 — ${win ? "승리! 🎉" : "패배 😢"}`, cls: win ? "good" : "bad" });
