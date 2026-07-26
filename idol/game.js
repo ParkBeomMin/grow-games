@@ -709,10 +709,12 @@ function renderMain() {
     if (atCap(d.key)) {
       const tmax = isTalentMax(S.talents[d.key]);
       const pct = Math.round((tmax ? transP(transLv(d.key)) : awakenP(Math.round(S.stats[d.key]))) * 100);
+      btn.dataset.key = d.key;
       btn.className = "action-btn awaken-act";
       btn.innerHTML = `<span class="a-emoji">${tmax ? "🌠" : "🔮"}</span>${d.name} ${tmax ? "초월 각성" : "재능 각성"}<span class="a-sub">상한 ${statCap(d.key)} 도달 · 성공률 ${pct}%</span>`;
       btn.onclick = () => { if (awakenTalent(d.key, addLog)) renderMain(); };
     } else {
+      btn.dataset.key = d.key;
       btn.className = "action-btn";
       btn.innerHTML = `<span class="a-emoji">${d.emoji}</span>${d.name} 연습<span class="a-sub">${d.sub}</span>`;
       btn.onclick = () => doTraining(d);
@@ -722,6 +724,7 @@ function renderMain() {
   actBox.appendChild(makeAdSlotButton(renderMain));
   const rest = document.createElement("button");
   rest.className = "action-btn rest";
+  rest.dataset.key = "__rest";
   rest.innerHTML = `<span class="a-emoji">🛌</span>휴식 <span class="a-sub">컨디션 대폭 회복</span>`;
   rest.onclick = doRest;
   actBox.appendChild(rest);
@@ -763,6 +766,23 @@ function renderLog() {
 }
 
 // ---------- 행동 ----------
+// 버튼을 누르면 화면이 통째로 다시 그려져서 눌린 흔적이 남지 않아요.
+// 그래서 결과(증감치)를 버튼 위에 띄워 눌린 걸 분명히 보여줍니다.
+// 화면이 바뀌었으면(대회·시즌 등) Fx.tap이 알아서 넘어가요.
+// 한 번의 행동에 화면이 여러 번 다시 그려져요
+// (endMonth → renderMain → advanceMonth → renderMain). 바로 붙이면 다음 렌더가
+// 지워버리니, 이번 턴 렌더가 전부 끝난 뒤(다음 태스크)에 붙입니다.
+// 그 사이 다른 화면으로 넘어갔으면 버튼이 없어서 Fx.tap이 조용히 넘어가요.
+function actFx(key, text, bad) {
+  setTimeout(() => {
+    if (!window.Fx) return;
+    // 같은 key의 버튼이 육성 화면과 프로 화면 양쪽에 있어요.
+    // 지금 보이는 화면에서 먼저 찾아야 숨은 버튼에 붙지 않아요.
+    const sel = `.action-btn[data-key="${key}"]`;
+    const el = document.querySelector(`.screen.active ${sel}`) || document.querySelector(sel);
+    Fx.tap(el, text, bad ? "bad" : "good");
+  }, 0);
+}
 function doTraining(def) {
   // 상한에 닿았으면 연습은 턴만 소모돼요 — 각성으로 돌려줍니다
   if (atCap(def.key)) { if (awakenTalent(def.key, addLog)) renderMain(); return; }
@@ -771,6 +791,7 @@ function doTraining(def) {
   if (S.condition < 25 && Math.random() < 0.4) {
     S.condition = clamp(S.condition + 20, 0, 100);
     addLog(`🤕 지친 몸으로 무리하다 ${def.name} 연습 중 몸이 상했어요. 한 달을 회복으로 날렸어요.`);
+    actFx(def.key, "🤕 부상", true);
     endMonth();
     return;
   }
@@ -782,6 +803,7 @@ function doTraining(def) {
     S.stats[def.key] = clamp(S.stats[def.key] - loss, 0, statCap(def.key));
     S.condition = clamp(S.condition - randInt(6, 10), 0, 100);
     addLog(`😵 ${def.name} 훈련이 완전히 꼬였어요… -${loss.toFixed(1)} (${Math.round(S.stats[def.key])})`);
+    actFx(def.key, "-" + loss.toFixed(1), true);
     maybeEvent();
     endMonth();
     return;
@@ -796,15 +818,18 @@ function doTraining(def) {
   S.stats[def.key] = clamp(S.stats[def.key] + gain, 0, statCap(def.key));
   S.condition = clamp(S.condition - randInt(12, 18), 0, 100);
   addLog(`${def.emoji} ${def.name} 연습 완료! +${gain.toFixed(1)} (${Math.round(S.stats[def.key])})`);
+  actFx(def.key, "+" + gain.toFixed(1));
 
   maybeEvent();
   endMonth();
 }
 
 function doRest() {
+  const condBefore = S.condition;
   S.condition = clamp(S.condition + randInt(30, 42), 0, 100);
   S.stats.stamina = clamp(S.stats.stamina + 0.5, 0, statCap("stamina"));
   addLog(`🛌 푹 쉬었어요. 컨디션 회복! (${Math.round(S.condition)})`);
+  actFx("__rest", "컨디션 +" + Math.round(S.condition - condBefore));
   maybeEvent();
   endMonth();
 }

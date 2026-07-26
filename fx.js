@@ -151,5 +151,29 @@ window.Fx = (() => {
     if (text) flash(text);
   }
 
-  return { confetti, burst, flash, celebrate };
+  // ---------- 행동 피드백 ----------
+  // 훈련·구매처럼 누른 직후 화면이 통째로 다시 그려지는 버튼용.
+  // :active 상태가 남지 않으니, 다시 그려진 버튼을 찾아 결과를 알려줘요.
+  //   Fx.tap(".action-btn[data-key=power]", "+3.2", "good")
+  //   kind: "good"(기본) | "bad"
+  function tap(target, text, kind) {
+    const el = typeof target === "string" ? document.querySelector(target) : target;
+    if (!el) return;                       // 화면이 바뀌었으면 조용히 넘어가요
+    const bad = kind === "bad";
+    const cls = bad ? "fx-tap-bad" : "fx-tap";
+    el.classList.remove("fx-tap", "fx-tap-bad");
+    void el.offsetWidth;                   // 연타해도 애니메이션이 다시 시작되게
+    el.classList.add(cls);
+    setTimeout(() => el.classList.remove(cls), 620);
+    if (!text) return;
+    const p = document.createElement("span");
+    p.className = "fx-pop" + (bad ? " bad" : "");
+    p.textContent = text;
+    // 버튼이 position:static이면 뱃지가 엉뚱한 곳에 붙어요
+    if (getComputedStyle(el).position === "static") el.style.position = "relative";
+    el.appendChild(p);
+    setTimeout(() => p.remove(), 800);
+  }
+
+  return { confetti, burst, flash, celebrate, tap };
 })();

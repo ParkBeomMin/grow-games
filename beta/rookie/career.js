@@ -139,10 +139,12 @@ window.Career = (() => {
       if (atCap(d.key)) {
         const tmax = isTalentMax(S.talents[d.key]);
         const pct = Math.round((tmax ? transP(transLv(d.key)) : awakenP(Math.round(S.stats[d.key]))) * 100);
+        btn.dataset.key = d.key;
         btn.className = "action-btn awaken-act";
         btn.innerHTML = `<span class="a-emoji">${tmax ? "🌠" : "🔮"}</span>${d.name} ${tmax ? "초월 각성" : "재능 각성"}<span class="a-sub">상한 ${statCap(d.key)} 도달 · 성공률 ${pct}%</span>`;
         btn.onclick = () => { if (awakenTalent(d.key, proLog)) renderPro(); };
       } else {
+        btn.dataset.key = d.key;
         btn.className = "action-btn";
         btn.innerHTML = `<span class="a-emoji">${d.emoji}</span>${d.name} 훈련<span class="a-sub">${d.sub}</span>`;
         btn.onclick = () => campAction(d);
@@ -152,6 +154,7 @@ window.Career = (() => {
     box.appendChild(makeAdSlotButton(renderPro));
     const rest = document.createElement("button");
     rest.className = "action-btn rest";
+    rest.dataset.key = "__rest";
     rest.innerHTML = `<span class="a-emoji">🛌</span>휴식 <span class="a-sub">컨디션 회복</span>`;
     rest.onclick = () => campAction(null);
     box.appendChild(rest);
@@ -184,6 +187,7 @@ window.Career = (() => {
         S.stats[def.key] = clamp(S.stats[def.key] - loss, 0, statCap(def.key));
         S.condition = clamp(S.condition - randInt(6, 10), 0, 100);
         proLog(`😵 ${def.name} 훈련이 꼬였어요… -${loss.toFixed(1)}`);
+      actFx(def.key, "-" + loss.toFixed(1), true);
         S.camp -= 1;
         save();
         afterCamp();
@@ -196,6 +200,7 @@ window.Career = (() => {
       S.stats[def.key] = clamp(S.stats[def.key] + gain, 0, statCap(def.key));
       S.condition = clamp(S.condition - randInt(10, 16), 0, 100);
       proLog(`${def.emoji} ${def.name} 훈련 +${gain.toFixed(1)} (${Math.round(S.stats[def.key])})`);
+      actFx(def.key, "+" + gain.toFixed(1));
     } else {
       S.condition = clamp(S.condition + randInt(25, 40), 0, 100);
       proLog(`🛌 컨디션 회복 (${Math.round(S.condition)})`);
