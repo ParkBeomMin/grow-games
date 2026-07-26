@@ -82,6 +82,9 @@ window.Career = (() => {
   }
 
   function startCamp() {
+    // 가을야구 화면이 순위표를 펼쳐놨어요. 새 시즌은 접힌 채로 시작해요.
+    const sb = $("pro-standings");
+    if (sb) sb.open = false;
     S.proYear += 1;
     S.camp = 3;
     S.condition = 80;
@@ -102,7 +105,8 @@ window.Career = (() => {
     $("pro-team").textContent = `⚾ ${S.team} · ${S.role || ""} · ${S.age}세 · ${S.proYear}년차 · 종합 ${Math.round(overall())}`;
     $("pro-turn").textContent = S.season ? `G ${S.season.game}/${S.season.total} · ${myRank()}위` : `캠프 훈련 ${3 - S.camp}/3`;
     $("pro-money").textContent = `💰 ${fmtMoney(S.money || 0)}`;
-  $("pro-cond-num").textContent = Math.round(S.condition);
+    renderStandings();
+    $("pro-cond-num").textContent = Math.round(S.condition);
     $("pro-cond-bar").style.width = `${S.condition}%`;
 
     const stats = $("pro-stats");
@@ -274,6 +278,17 @@ window.Career = (() => {
     return S.season.others.filter((o) => o.w > S.season.teamW).length + 1;
   }
 
+  // 📊 프로 화면의 접이식 순위표. 시즌 중이 아니면 숨겨요.
+  function renderStandings() {
+    const box = $("pro-standings");
+    if (!box) return;
+    if (!S.season) { box.hidden = true; return; }
+    box.hidden = false;
+    $("pro-standings-sum").textContent =
+      `📊 ${myRank()}위 · ${S.season.teamW}승 ${S.season.teamL}패`;
+    $("pro-standings-body").innerHTML = standingsHTML();
+  }
+
   function nextOpp() {
     return S.season.others[Math.floor(S.season.game / 3) % S.season.others.length].name;
   }
@@ -286,14 +301,40 @@ window.Career = (() => {
     return clamp(0.42 + (core * clutchAvg() - 50) / 160 + (S.condition - 50) / 600 - agePen, 0.25, 0.72);
   }
 
+  /* 경기 승률 — 정규시즌은 teamWinP 그대로예요.
+   * 가을야구는 상대가 정해져 있으니 상대 전력을 반영해요. 안 그러면 한국시리즈에서
+   * 1위 팀을 만나는 것과 5월에 꼴찌를 만나는 게 똑같아져요. */
+  function gameWinP() {
+    const base = teamWinP();
+    if (!inPost()) return base;
+    const raw = S.post.str ? S.post.str[postOpp()] : null;
+    const opp = typeof raw === "number" ? raw : 0.49;   // 0.49는 팀 전력의 한가운데예요
+    return clamp(base - (opp - 0.49) * 1.8, 0.2, 0.85);
+  }
+
+  // 경기 화면 제목 — 포스트시즌엔 정규시즌 경기 번호 대신 라운드·차수를 써요.
+  const gameLabel = () => (inPost()
+    ? `${Postseason.LABEL[S.post.myRound]} ${S.post.gameNo}차전`
+    : `G${S.season.game + 1}`);
+  const seasonLabel = () => (inPost()
+    ? `🍂 ${S.age}살 가을야구 — ${S.team}`
+    : `⚾ ${S.age}살 시즌 — ${S.team}`);
+
   function playProGame() {
     const sn = S.season;
-    const opp = nextOpp();
+    const post = inPost();
+    const opp = post ? postOpp() : nextOpp();
     const isBat = S.pos === "batter";
     let mode = "full";
     if (!isBat) {
-      if (S.role === "선발 투수") mode = sn.game % 5 === 0 ? "full" : "bench";
-      else mode = Math.random() < (S.role === "마무리 투수" ? 0.55 : 0.45) ? "relief" : "bench";
+      // 가을야구는 단축 로테이션이에요 — 선발은 4경기마다, 불펜은 등판 확률이 올라가요
+      if (S.role === "선발 투수") {
+        const n = post ? S.post.gameNo - 1 : sn.game;
+        mode = n % (post ? 4 : 5) === 0 ? "full" : "bench";
+      } else {
+        const p = S.role === "마무리 투수" ? (post ? 0.70 : 0.55) : (post ? 0.60 : 0.45);
+        mode = Math.random() < p ? "relief" : "bench";
+      }
     }
     if (mode === "full") {
       if (isBat) proBatterGame(opp);
@@ -313,15 +354,15 @@ window.Career = (() => {
     const ourBg = randInt(0, 3);
     for (let i = 0; i < oppRuns; i++) story.oppInn[randInt(0, 8)]++;
     for (let i = 0; i < ourBg; i++) story.ourInn[randInt(0, 8)]++;
-    $("tour-title").textContent = `⚾ ${S.age}살 시즌 — ${S.team}`;
+    $("tour-title").textContent = seasonLabel();
     show("screen-tournament");
     renderGameSim({
-      title: `G${S.season.game + 1} vs ${opp}`,
+      title: `${gameLabel()} vs ${opp}`,
       oppName: opp,
       homeName: S.team,
       perf, story,
       interactive: false,
-      preWin: Math.random() < teamWinP(),
+      preWin: Math.random() < gameWinP(),
       onFinish: (win) => {
         perf.line = `${S.name}: ${perf.ab}타수 ${perf.hits}안타${perf.hr ? ` ${perf.hr}홈런` : ""}${perf.sb ? ` ${perf.sb}도루` : ""}`;
         return finishProGame(win, perf);
@@ -345,15 +386,15 @@ window.Career = (() => {
     for (let i = 0; i < ourBg; i++) story.ourInn[randInt(0, 7)]++;
     const bullpen = randInt(0, 2);
     for (let i = 0; i < bullpen; i++) story.oppInn[randInt(Math.min(ip, 8), 8)]++;
-    $("tour-title").textContent = `⚾ ${S.age}살 시즌 — ${S.team}`;
+    $("tour-title").textContent = seasonLabel();
     show("screen-tournament");
     renderGameSim({
-      title: `G${S.season.game + 1} vs ${opp} (선발 등판)`,
+      title: `${gameLabel()} vs ${opp} (선발 등판)`,
       oppName: opp,
       homeName: S.team,
       perf, story,
       interactive: false,
-      preWin: Math.random() < teamWinP(),
+      preWin: Math.random() < gameWinP(),
       onFinish: (win) => {
         perf.line = `${S.name}: ${perf.ip}이닝 ${perf.k}탈삼진 ${perf.runs}실점`;
         return finishProGame(win, perf);
@@ -363,7 +404,7 @@ window.Career = (() => {
 
   // 등판 없는 날 / 구원 등판 — 짧은 카드
   function quickGame(mode, opp) {
-    $("tour-title").textContent = `📺 G${S.season.game + 1} — ${S.team} vs ${opp}`;
+    $("tour-title").textContent = `📺 ${gameLabel()} — ${S.team} vs ${opp}`;
     $("tour-round").textContent = S.role;
     $("tour-card").innerHTML = `<div class="pbp" id="pbp-pro"></div><div id="game-result"></div><div id="game-moment"></div>`;
     show("screen-tournament");
@@ -394,13 +435,13 @@ window.Career = (() => {
         }
       } else {
         // 중간계투 — 세이브 상황은 아니지만 무실점 호투는 승리에 힘을 보태요
-        win = Math.random() < clamp(teamWinP() + (er === 0 ? 0.1 : -0.12 * er), 0.2, 0.85);
+        win = Math.random() < clamp(gameWinP() + (er === 0 ? 0.1 : -0.12 * er), 0.2, 0.85);
         feeds.push({ text: "🔔 승부처에 중간계투로 등판!" });
         feeds.push({ text: `${S.name}: ${ip}이닝 ${k}K ${er}실점`, cls: er ? "bad" : "good" });
       }
     } else {
       // 등판 없는 날 — 순수 팀 전력 승부
-      win = Math.random() < teamWinP();
+      win = Math.random() < gameWinP();
       feeds.push({ text: "🪑 오늘은 등판 없이 더그아웃에서 응원!" });
     }
     feeds.push({ text: `📢 경기 종료 — ${win ? "승리! 🎉" : "패배 😢"}`, cls: win ? "good" : "bad" });
@@ -438,6 +479,7 @@ window.Career = (() => {
 
   // 경기 종료 후 공통 처리 — 팀/리그/개인 기록 갱신
   function finishProGame(win, perf) {
+    if (inPost()) return finishPostGame(win, perf);
     const sn = S.season;
     sn.game += 1;
     if (win) sn.teamW += 1; else sn.teamL += 1;
@@ -461,7 +503,7 @@ window.Career = (() => {
     save();
     const extra = `<div class="tour-pts">💰 수당 +${pay}만 · ${S.team} ${sn.teamW}승 ${sn.teamL}패 · 현재 ${myRank()}위</div>`;
     if (sn.game >= sn.total) {
-      return { extra, nextLabel: "🏁 시즌 결산", nextFn: finishSeason };
+      return { extra, nextLabel: "🍂 정규시즌 종료", nextFn: enterPostseason };
     }
     return {
       extra,
@@ -473,6 +515,55 @@ window.Career = (() => {
         renderPro();
         show("screen-pro");
       },
+    };
+  }
+
+  /* 포스트시즌 경기 결과 — 시리즈를 굴리고, 기록은 정규시즌과 분리해 쌓아요.
+   * 실제 야구도 포스트시즌 타율을 정규시즌에 합치지 않아요. */
+  function finishPostGame(win, perf) {
+    const P = S.post;
+    const idx = P.series.findIndex((s) => s.round === P.myRound);
+    const before = P.series[idx];
+    const iAmA = before.a === P.myTeam;
+    P.series[idx] = Postseason.advanceSeries(before, iAmA ? win : !win);
+    const s = P.series[idx];
+
+    const t = P.stats;
+    if (perf) {
+      if (S.pos === "batter") {
+        t.ab += perf.ab; t.hits += perf.hits; t.hr += perf.hr; t.sb += perf.sb;
+      } else {
+        t.ip += perf.ip; t.k += perf.k; t.er += perf.runs || 0; t.g += 1;
+        if (S.role === "선발 투수" && win && perf.ip >= 5) t.wins += 1;
+        if (S.role === "마무리 투수" && win) t.saves += 1;
+      }
+    }
+    const pay = win ? 80 : 40;              // 가을야구 수당은 정규시즌의 두 배예요
+    S.money = (S.money || 0) + pay;
+    S.condition = clamp(S.condition - randInt(3, 6), 0, 100);
+
+    const myW = iAmA ? s.aw : s.bw, opW = iAmA ? s.bw : s.aw;
+    const extra = `<div class="tour-pts">💰 수당 +${pay}만 · 시리즈 ${myW}-${opW}</div>`;
+
+    if (!s.done) {
+      P.gameNo += 1;
+      save();
+      return { extra, nextLabel: `🍂 ${P.gameNo}차전으로`, nextFn: () => { renderPost(); show("screen-pro"); } };
+    }
+
+    // 시리즈 종료 — 라운드 사이엔 이동일·휴식일이 있어 컨디션이 회복돼요
+    S.condition = clamp(S.condition + 15, 0, 100);
+    if (s.winner !== P.myTeam) P.eliminated = true;
+    P.gameNo = 1;
+    save();
+    const won = s.winner === P.myTeam;
+    const label = Postseason.LABEL[s.round];
+    return {
+      extra,
+      nextLabel: won ? (s.round === "ks" ? "🏆 시즌 결산" : "🍂 다음 라운드로") : "🏁 시즌 결산",
+      nextFn: () => advancePostseason([
+        { text: won ? `🎉 ${label} 승리! (${myW}-${opW})` : `😢 ${label} 탈락… (${myW}-${opW})`, cls: won ? "good" : "bad" },
+      ]),
     };
   }
 
@@ -501,6 +592,149 @@ window.Career = (() => {
     };
   }
 
+  const inPost = () => !!(S.post && S.post.myRound && !S.post.eliminated);
+
+  /* 정규시즌이 끝나면 최종 순위로 가을야구 진출을 가려요. 6위 이하면 바로 결산이에요. */
+  function enterPostseason() {
+    const sn = S.season;
+    const standings = [
+      { name: S.team, w: sn.teamW, l: sn.teamL, str: 0.5 },
+      ...sn.others.map((o) => ({ name: o.name, w: o.w, l: o.l, str: o.str })),
+    ].sort((a, b) => b.w - a.w);
+
+    const bracket = Postseason.buildBracket(standings, S.team);
+    if (!bracket) {                       // 6위 이하 — 가을야구 없음
+      S.post = null;
+      save();
+      playFeeds("🍂 가을야구", [
+        { text: `정규시즌 ${myRank()}위 — 가을야구 진출에 실패했어요`, cls: "bad" },
+        { text: "5위 안에 들어야 가을야구에 나갈 수 있어요" },
+      ], finishSeason);
+      return;
+    }
+
+    S.post = {
+      series: bracket.series,
+      myTeam: S.team,
+      myRank: bracket.myRank,
+      myRound: bracket.myRound,
+      gameNo: 1,
+      eliminated: false,
+      wonKS: false,
+      // 자동 시뮬에 쓸 팀 강도 (내 팀 것은 안 써요 — 내 경기는 직접 치르니까요)
+      str: standings.reduce((m, t) => ((m[t.name] = t.str), m), {}),
+      stats: S.pos === "batter"
+        ? { ab: 0, hits: 0, hr: 0, sb: 0 }
+        : { ip: 0, k: 0, er: 0, wins: 0, saves: 0, g: 0 },
+    };
+    save();
+    advancePostseason([{ text: `🍂 ${bracket.myRank}위로 가을야구에 진출했어요!`, cls: "good" }]);
+  }
+
+  const mySeries = () => (S.post ? S.post.series.find((s) => s.round === S.post.myRound) : null);
+  const postOpp = () => { const s = mySeries(); return s ? (s.a === S.post.myTeam ? s.b : s.a) : ""; };
+
+  /* 포스트시즌 중의 프로 화면. 시리즈 중엔 훈련이 없어요(실제로도 경기만 있어요).
+   * 능력치·컨디션 표시는 renderPro와 같은 요소를 그대로 써요. */
+  function renderPost() {
+    const P = S.post, s = mySeries();
+    const myW = s.a === P.myTeam ? s.aw : s.bw;
+    const opW = s.a === P.myTeam ? s.bw : s.aw;
+    const label = Postseason.LABEL[s.round];
+
+    $("pro-name").textContent = `${S.name} (${S.pos === "batter" ? "타자" : "투수"})`;
+    $("pro-team").textContent = `⚾ ${S.team} · ${S.role || ""} · ${S.age}세 · ${S.proYear}년차 · 종합 ${Math.round(overall())}`;
+    $("pro-turn").textContent = `🍂 ${label} ${P.gameNo}차전`;
+    $("pro-money").textContent = `💰 ${fmtMoney(S.money || 0)}`;
+    $("pro-cond-num").textContent = Math.round(S.condition);
+    $("pro-cond-bar").style.width = `${S.condition}%`;
+
+    // 순위표 자리에 시리즈 현황을 보여줘요
+    const box = $("pro-standings");
+    box.hidden = false;
+    box.open = true;
+    $("pro-standings-sum").textContent = `🍂 ${label} · 시리즈 ${myW}-${opW}`;
+    $("pro-standings-body").innerHTML = `<table class="rank-table"><tbody>${
+      S.post.series.map((x) => {
+        const line = x.done
+          ? `${x.a} ${x.aw}-${x.bw} ${x.b} → ${x.winner}`
+          : x.b == null ? `${x.a} vs (미정)` : `${x.a} ${x.aw}-${x.bw} ${x.b}`;
+        return `<tr class="${x.round === P.myRound ? "me" : ""}"><td>${Postseason.LABEL[x.round]}</td><td>${line}</td></tr>`;
+      }).join("")
+    }</tbody></table>`;
+
+    $("pro-stats").innerHTML = "";
+    $("pro-camp-title").textContent = `${label} ${P.gameNo}차전 — ${S.team} vs ${postOpp()}`;
+    const acts = $("pro-actions");
+    acts.innerHTML = "";
+    const go = document.createElement("button");
+    go.className = "action-btn rest go-game";
+    go.innerHTML = `<span class="a-emoji">⚾</span>경기 시작<span class="a-sub">시리즈 ${myW}-${opW} · ${s.need}선승제</span>`;
+    go.onclick = playProGame;
+    acts.appendChild(go);
+
+    $("pro-log").innerHTML = (S.proLog || []).map((l, i) => `<div class="${i === 0 ? "new" : ""}">${l}</div>`).join("");
+  }
+
+  /* 대진을 앞으로 굴려요. 내가 나설 시리즈를 만나면 멈추고 화면을 그려요.
+   * 내가 안 낀 라운드는 팀 강도로 자동 판정해서 연출로 흘려보내요. */
+  function advancePostseason(seed) {
+    const P = S.post;
+    const feeds = seed ? seed.slice() : [];
+
+    // 정상이면 최대 4바퀴예요 (와카·준PO·PO·KS). 저장이 깨져도 탭이 멎지 않게 막아둬요.
+    let guard = 0;
+    for (;;) {
+      if (guard++ > 8) break;
+      P.series = Postseason.feedWinner(P.series);
+      const idx = P.series.findIndex((s) => !s.done && s.b != null);
+      if (idx < 0) break;                        // 남은 시리즈 없음 = 가을야구 종료
+
+      const s = P.series[idx];
+      const mine = !P.eliminated && (s.a === P.myTeam || s.b === P.myTeam);
+      if (mine) {
+        P.myRound = s.round;
+        // 와일드카드는 4위가 1승을 안고 시작하니 그만큼 빼야 차수가 맞아요
+        P.gameNo = s.aw + s.bw + 1 - (s.round === "wc" ? 1 : 0);
+        save();
+        const go = () => { renderPost(); show("screen-pro"); };
+        if (feeds.length) playFeeds("🍂 가을야구", feeds, go); else go();
+        return;
+      }
+
+      P.series[idx] = Postseason.simSeries(
+        s.round, s.a, s.b, P.str[s.a], P.str[s.b], s.round === "wc" ? 1 : 0
+      );
+      const r = P.series[idx];
+      feeds.push({ text: `${Postseason.LABEL[r.round]}  ${r.a} ${r.aw}-${r.bw} ${r.b} → ${r.winner} 진출` });
+    }
+
+    // 가을야구 종료 — 우승 여부를 확정하고 결산으로
+    const ks = P.series[3];
+    P.wonKS = !!(ks.done && ks.winner === P.myTeam);
+    P.myRound = null;
+    save();
+    if (P.wonKS) feeds.push({ text: "🏆 한국시리즈 우승!! 헹가래의 주인공이 됐어요", cls: "good" });
+    else if (ks.done) feeds.push({ text: `🏆 ${ks.winner}이(가) 한국시리즈 우승을 차지했어요` });
+    if (feeds.length) playFeeds("🍂 가을야구", feeds, finishSeason); else finishSeason();
+  }
+
+  /* 포스트시즌 성적 한 줄. 정규시즌 기록과 합치지 않아요. */
+  function postStatLine() {
+    const P = S.post;
+    if (!P || !P.stats) return "";
+    const t = P.stats;
+    if (S.pos === "batter") {
+      if (!t.ab) return "";
+      // 타율은 야구 관례대로 앞의 0을 떼요. 다만 1.000은 떼면 .000이 돼서 그대로 둬요.
+      const avg = t.hits / t.ab;
+      const avgTxt = avg >= 1 ? avg.toFixed(3) : avg.toFixed(3).slice(1);
+      return `🍂 가을야구 ${t.ab}타수 ${t.hits}안타${t.hr ? ` ${t.hr}홈런` : ""} (타율 ${avgTxt})`;
+    }
+    if (!t.g) return "";
+    return `🍂 가을야구 ${t.g}경기 ${t.ip}이닝 ${t.k}탈삼진 ${t.er}자책`;
+  }
+
   function finishSeason() {
     if (!S.season) return;
     const sn = S.season;
@@ -524,7 +758,8 @@ window.Career = (() => {
     }
     war = Math.round(war * 10) / 10;
     const rank = myRank();
-    const champ = (rank === 1 && Math.random() < 0.6) || (rank > 1 && rank <= 3 && Math.random() < 0.22);
+    // 한국시리즈를 실제로 이겼을 때만 우승이에요 (예전엔 순위로 주사위를 굴렸어요)
+    const champ = !!(S.post && S.post.wonKS);
     // 수상은 '리그 내 상대 비교' — 가상 경쟁자들의 WAR와 겨뤄 최고면 수상해요.
     // (압도적인 시즌은 랜덤에 밀려 MVP를 놓치지 않아요)
     const awards = [];
@@ -552,14 +787,24 @@ window.Career = (() => {
     S.money = (S.money || 0) + salary;
     S.age += 1;
     const finalW = sn.teamW, finalL = sn.teamL;
+    // 결산 화면에서 보여줄 최종 순위표를 남겨둬요 (S.season을 곧 지우니까요)
+    S.lastStandings = standingsHTML();
     S.season = null;
     S.pendingGame = false;
+    const postLine = postStatLine();     // S.post를 지우기 전에 문구를 만들어요
+    S.post = null;
     save();
 
     const feeds = [
       { text: `🏁 정규시즌 종료 — 최종 ${rank}위 (${finalW}승 ${finalL}패)`, cls: rank <= 3 ? "good" : rank >= 8 ? "bad" : "" },
     ];
-    if (champ) feeds.push({ text: "🏆 한국시리즈 우승!! 헹가래의 주인공이 됐어요", cls: "good" });
+    if (postLine) feeds.push({ text: postLine });
+    if (champ) feeds.push({
+      text: S.career.rings === 1
+        ? "🏆 한국시리즈 우승 — 첫 반지예요!"
+        : `🏆 한국시리즈 우승 — 통산 ${S.career.rings}번째 반지예요`,
+      cls: "good",
+    });
     if (champ && window.Fx) Fx.celebrate("champion", "🏆 우승!");
     for (const a of awards) feeds.push({ text: `🎖️ ${a} 수상!`, cls: "good" });
     if (awards.length && window.Fx) Fx.celebrate("award", `🎖️ ${awards.join(" · ")}!`);
@@ -590,6 +835,7 @@ window.Career = (() => {
         s.war >= 0.5 ? "아쉬움이 남는 시즌" : "혹독한 시즌…"
       }</div>
       <div class="draft-team">${S.team} · ${s.line} · WAR ${s.war.toFixed(1)}</div>
+      ${S.lastStandings ? `<div class="hint">📊 최종 순위</div>${S.lastStandings}` : ""}
       <table class="season-table season-career"><thead><tr><th>시즌</th><th>나이</th><th>성적</th><th>WAR</th></tr></thead><tbody>${rows}</tbody></table>
       ${moreHint}
       <div class="draft-summary">
@@ -974,12 +1220,21 @@ window.Career = (() => {
 
   return {
     onDraft,
-    refreshPro: renderPro,
+    // 🛍️ 상점에서 돌아올 때 가을야구 중이면 포스트시즌 화면으로 돌아가야 해요.
+    // renderPro로 고정돼 있으면 경기 시작 버튼이 사라지고 훈련 버튼이 살아나요.
+    refreshPro: () => (inPost() ? renderPost() : renderPro()),
     enterPro,
     showHof,
     showBattle,
     showPro: () => {
-      if ((S.season && S.pendingGame) || S.camp > 0) { renderPro(); show("screen-pro"); }
+      // 가을야구 도중에 나갔다 와도 그 자리에서 이어져요
+      if (inPost()) { renderPost(); show("screen-pro"); }
+      else if ((S.season && S.pendingGame) || S.camp > 0) { renderPro(); show("screen-pro"); }
+      // 정규시즌 144경기를 다 치른 뒤라면 결산으로 이어져야 해요. 여기서 runSeason으로
+      // 떨어지면 145번째 경기가 생기고, 방금 딴 우승이 새 대진에 덮여 사라져요.
+      else if (S.season && S.season.game >= S.season.total) {
+        if (S.post) advancePostseason(); else finishSeason();
+      }
       else if (S.season) runSeason();
       else seasonReport();
     },
