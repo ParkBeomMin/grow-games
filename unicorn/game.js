@@ -456,7 +456,6 @@ function confirmName() {
   S.company = v || randomCompany();   // 비워두면 추천 이름으로
   $("naming").classList.add("hidden");
   save(); renderAll();
-  registerCompany();                  // 창업·개명 시 풀에 등록 (중복은 무시돼요)
   if (namingDone) { const cb = namingDone; namingDone = null; cb(); }
 }
 
@@ -477,15 +476,12 @@ function explainAsset() {
   );
 }
 
-// ---------- 더 유니콘 플레이어 수 ----------
-// register는 id가 같으면 무시돼요(resolution=ignore-duplicates). 여러 번 불러도
-// 이 기기는 한 번만 집계되고 전적도 덮이지 않아요.
-// 등록은 v2.1.0부터 시작돼서, 그 전부터 하던 사람은 한 번 접속해야 잡혀요.
-function registerCompany() {
-  if (window.Match && window.Match.enabled()) window.Match.register("unicorn", S.company);
-}
-// 더 유니콘에 등록된 기기 수(누적)예요. 동시 접속자가 아니라 '지금까지 플레이한 사람'.
-const COUNT_POLL_MS = 60000;
+// ---------- 더 유니콘 창업 수 ----------
+// 통계 뷰(stats_summary)의 순 방문 기기 수를 써요.
+// players 테이블 등록은 v2.1.0부터라 그 전 플레이어가 통째로 빠졌는데,
+// 방문 이벤트는 훨씬 전부터 쌓여 있어서 실제 수에 가까워요.
+// 뷰 전체를 집계하는 조회라 주기를 길게 잡았습니다.
+const COUNT_POLL_MS = 300000;
 const COUNT_CACHE = "unicorn-player-count";
 let lastCountAt = 0;
 function paintCount(n) {
@@ -495,13 +491,13 @@ function paintCount(n) {
   el.classList.remove("hidden");
 }
 function refreshCount(force) {
-  if (!window.Match || !window.Match.enabled()) return;
+  if (!window.Stats || !window.Stats.players) return;
   // 조회가 끝나기 전 빈 자리를 두지 않게, 직전 값을 먼저 그려요
   if (force) { const c = +localStorage.getItem(COUNT_CACHE) || 0; if (c) paintCount(c); }
   const now = Date.now();
   if (!force && now - lastCountAt < COUNT_POLL_MS) return;
   lastCountAt = now;
-  window.Match.count("unicorn").then((n) => {
+  window.Stats.players("unicorn").then((n) => {
     if (!n) return;                    // 집계 전이거나 실패 — 직전 값을 그대로 둬요
     try { localStorage.setItem(COUNT_CACHE, String(n)); } catch {}
     paintCount(n);
@@ -830,8 +826,6 @@ function init() {
     if (!bugEl) scheduleBug();
     refreshCount();   // 돌아왔을 때 한 번 (COUNT_POLL_MS 안이면 건너뛰어요)
   });
-  // 창업 중인 회사 수 — 기존 플레이어도 집계되게 이미 판이 있으면 바로 등록해요
-  if (!isNew) registerCompany();
   refreshCount(true);
   // 백그라운드에서는 굳이 두드리지 않아요
   setInterval(() => { if (!document.hidden) refreshCount(); }, COUNT_POLL_MS);
