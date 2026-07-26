@@ -262,7 +262,8 @@ const atCap = (key) => Math.round(S.stats[key]) >= statCap(key);
 const awakenP = (v) => Math.min(0.25 + (v - 100) * 0.015, 0.75);
 // 재능은 훈련 속도뿐 아니라 '큰 순간'에도 작용해요 (클러치 보정).
 // 스탯에 이미 반영된 걸 또 곱하는 이중 이득이 되지 않게 폭을 좁혔어요:
-// 평균 재능(1.3) 기준 ±6%, 초월 단계로 최대 +6%p 추가 → 총 0.90 ~ 1.16배.
+// 평균 재능(1.3) 기준 ±6%, 초월 단계로 최대 +6%p 추가.
+// 재능 상한이 1.8이라 실제로 닿는 범위는 0.94 ~ 1.12배예요 (clamp 바깥쪽은 여유분).
 const CLUTCH_SCALE = 0.12;
 function clutch(key) {
   const t = (S && S.talents && S.talents[key]) || 1.3;
@@ -509,10 +510,10 @@ $("btn-record-back")?.addEventListener("click", () => show(recordReturn));
 
 // ---------- 장비 상점 ----------
 const GEAR_TIERS = [
-  { n: "I", bonus: 3, price: 500 },
-  { n: "II", bonus: 5, price: 1500 },
-  { n: "III", bonus: 8, price: 4000 },
-  { n: "IV", bonus: 12, price: 10000 },
+  { n: "I", bonus: 3, price: 300 },
+  { n: "II", bonus: 5, price: 900 },
+  { n: "III", bonus: 8, price: 2500 },
+  { n: "IV", bonus: 12, price: 9000 },
   { n: "V", bonus: 16, price: 25000 },
 ];
 let shopReturn = "screen-main";
@@ -1004,7 +1005,8 @@ function playTourGame() {
       } else {
         S.hsTotals.ip += perf.ip; S.hsTotals.k += perf.k; S.hsTotals.runs += perf.runs;
       }
-      const pay = win ? 60 + tour.round * 25 : 25;
+      // 고교 3년 총수입이 장비 최하 등급에도 못 미치던 걸 올렸어요 (플레이어 피드백)
+      const pay = win ? 120 + tour.round * 50 : 50;
       S.money = (S.money || 0) + pay;
       tour.totalPts += pts;
       S.condition = clamp(S.condition - 6, 0, 100);
@@ -1019,7 +1021,7 @@ function playTourGame() {
       if (champion) {
         S.trophies.push(`${S.year}학년 ${tour.name} 우승`);
         S.scout += 30;
-        S.money = (S.money || 0) + 300;
+        S.money = (S.money || 0) + 600;
         tour.totalPts += 30;
       }
       return { extra, nextLabel: champion ? "🏆 우승 세리머니!" : "대회 마치기", nextFn: () => finishTournament(champion, roundName) };
@@ -1695,6 +1697,42 @@ function showDraft() {
   else clearSave();
   show("screen-draft");
 }
+
+// ---------- ❓ 도움말 ----------
+const HELP_SECTIONS = [
+  { emoji: "🏋️", title: "훈련과 컨디션", body:
+    "매달 훈련이나 휴식을 골라요. 훈련은 능력치를 올리고 컨디션을 깎아요.\n" +
+    "컨디션이 낮은 채로 계속 훈련하면 부상 위험이 커져요. 무리하지 말고 쉬어 가세요." },
+  { emoji: "⭐", title: "재능과 각성", body:
+    "능력치 옆의 별은 두 가지에 영향을 줘요.\n" +
+    "① 훈련 효율 — 별이 많을수록 같은 훈련으로 더 많이 올라요.\n" +
+    "② 승부처 보정 — 능력치가 같아도 별이 높으면 결정적인 순간에 조금 더 잘해요\n" +
+    "   (최저 ×0.94 ~ 최고 ×1.12). 능력치에 이미 반영된 걸 또 곱하지 않게 폭을 좁게 뒀어요.\n" +
+    "능력치 100을 넘으면 '한계 돌파' 구간이라 훈련 효율이 절반이 되고, 그때부터 🔮각성으로\n" +
+    "재능을 올릴 수 있어요. 상한(130)까지 채우면 훈련 대신 각성만 남아요.\n" +
+    "재능이 최대가 되면 🌠초월로 상한 자체를 6씩 올려요 — 성공할수록 어려워지지만\n" +
+    "명예의 전당 점수가 크게 붙어요." },
+  { emoji: "🏆", title: "대회와 드래프트", body:
+    "고교 3년 동안 대회가 6번 열려요(6월 황금사자기 · 8월 청룡기).\n" +
+    "성적이 스카우트 주목도를 올려요. 3학년이 끝나면 주목도와 종합 능력치를 함께 봐서\n" +
+    "드래프트 지명이 갈려요 — 대회 성적만큼 평소 훈련도 중요해요.\n" +
+    "지명되면 프로 무대로, 아니면 고교에서 커리어가 끝나요." },
+  { emoji: "🎓", title: "은퇴와 환생", body:
+    "둘 다 커리어를 마치지만 남기는 게 달라요.\n" +
+    "🎓은퇴는 🏛️명예의 전당에 기록을 남겨요. 전 세계 플레이어와 순위를 겨뤄요.\n" +
+    "🧬환생은 기록 대신 유산을 남겨, 다음 캐릭터가 더 높은 재능과 시작 자금으로 출발해요.\n" +
+    "환생은 🏆우승 3회 · 🎖️MVP 3회 · 🌠초월 1단계 중 하나를 이뤄야 열려요." },
+  { emoji: "💰", title: "돈 벌기와 쓰기", body:
+    "고교 때는 대회 수당이, 프로에서는 경기 수당과 시즌 연봉이 들어와요.\n" +
+    "🛍️상점에서 장비를 사면 능력치가 바로 올라요. 등급은 순서대로만 살 수 있어요.\n" +
+    "30분마다 🎁특훈으로 무료 훈련을 한 번 받을 수 있어요." },
+];
+
+function openHelp() {
+  if (window.Help) window.Help.open("⚾ 더 루키 도움말", HELP_SECTIONS);
+}
+$("btn-help-main")?.addEventListener("click", openHelp);
+$("btn-help-pro")?.addEventListener("click", openHelp);
 
 // ---------- 시작 ----------
 initTitle();
