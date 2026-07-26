@@ -525,3 +525,10 @@ h2 { font-size: 1.6rem; margin: 8px 0 6px; color: var(--accent); }
 /* ---------- 타이틀 플레이어 수 ---------- */
 .title-count { font-size: .85rem; color: var(--sky); margin: -18px 0 20px; }
 .title-count b { color: var(--accent); }
+
+/* 🧬 명예의 전당 세대 표기 (환생으로 이어받은 세대) */
+.hof-gen {
+  display: inline-block; padding: 1px 6px; border-radius: 99px;
+  background: rgba(160,120,255,.18); color: #c9aaff;
+  font-size: 0.68rem; vertical-align: middle;
+}

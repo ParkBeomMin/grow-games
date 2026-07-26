@@ -592,6 +592,11 @@ window.Career = (() => {
     ret.textContent = "🎓 은퇴하기";
     ret.onclick = () => enshrine(S.team);
     act.appendChild(ret);
+    const reb = document.createElement("button");
+    reb.className = "btn btn-ghost";
+    reb.textContent = "🧬 환생하기";
+    reb.onclick = () => rebirth(S.team);
+    act.appendChild(reb);
     if (window.Ads) window.Ads.display($("ad-career"));
     show("screen-career");
   }
@@ -606,13 +611,45 @@ window.Career = (() => {
     return "🌱 짧고 굵은 야구 인생";
   }
 
-  function enshrine(team) {
+  function careerScore() {
     const c = S.career || { seasons: [], mvp: 0, gg: 0, roy: 0, rings: 0, warSum: 0 };
-    const score = Math.round(
+    return Math.round(
       c.warSum * 10 + c.rings * 25 + c.mvp * 40 + c.gg * 15 + c.roy * 20 +
       (S.trophies ? S.trophies.length : 0) * 8 + S.scout * 0.05 +
       transTotal() * 25   // ✨ 초월 단계 보너스
     );
+  }
+
+  // ---------- 🧬 환생 ----------
+  // 은퇴(명예의 전당 등록)와 달리, 기록은 남기지 않고 유산만 다음 세대에 넘겨요.
+  function rebirth(team) {
+    const sc = careerScore();
+    const gain = legacyGain(sc);
+    const L = loadLegacy();
+    const nextPts = L.pts + gain, nextGen = L.gen + 1;
+    const before = legacyTalentBonus(L.pts), after = legacyTalentBonus(nextPts);
+    if (!confirm(
+      `🧬 여기서 커리어를 마치고 다음 세대에 물려줄까요?\n\n` +
+      `· 유산 +${gain} (누적 ${nextPts})\n` +
+      `· 다음 세대 시작 재능 +${before.toFixed(2)} → +${after.toFixed(2)}\n` +
+      `· 시작 자금 ${fmtMoney(legacyMoneyBonus(nextPts))}\n` +
+      `· ${nextGen + 1}세로 새로 시작해요\n\n` +
+      `⚠️ 명예의 전당에는 남지 않아요. 기록을 남기려면 '은퇴'를 선택하세요.\n\n진행할까요?`
+    )) return;
+    saveLegacy({ pts: nextPts, gen: nextGen });
+    if (window.Stats) Stats.log("rebirth", { gen: nextGen, pts: nextPts, score: sc });
+    clearSave();
+    alert(
+      `🧬 ${S.name}의 커리어가 막을 내렸어요.\n\n` +
+      `유산 ${gain}을 남겨 누적 ${nextPts}이 됐습니다.\n` +
+      `이제 ${nextGen + 1}세가 더 높은 재능으로 출발해요!`
+    );
+    location.reload();
+  }
+
+  function enshrine(team) {
+    const c = S.career || { seasons: [], mvp: 0, gg: 0, roy: 0, rings: 0, warSum: 0 };
+    const score = careerScore();
     const entry = {
       id: "p" + Date.now(),
       game: "rookie",
@@ -624,6 +661,7 @@ window.Career = (() => {
       rings: c.rings, mvp: c.mvp, gg: c.gg, roy: c.roy,
       finalOvr: Math.round(overall()),
       trans: transTotal(),
+      gen: loadLegacy().gen + 1,
       score,
       grade: gradeOfScore(score) + (transTotal() ? ` · ${transcendTitle(transTotal())}` : ""),
     };
@@ -687,7 +725,7 @@ window.Career = (() => {
       div.innerHTML = `
         <div class="hof-face-emoji">⚾</div>
         <div class="hof-info">
-          <div class="hof-name">${i + 1}. ${e.name} <span class="hof-grade">${e.grade}</span></div>
+          <div class="hof-name">${i + 1}. ${e.gen > 1 ? `<span class="hof-gen">${e.gen}세</span> ` : ""}${e.name} <span class="hof-grade">${e.grade}</span></div>
           ${e.team} · ${e.seasons}시즌 · WAR ${(+e.warSum).toFixed(1)} · 🏆${e.rings} · 점수 ${e.score}
         </div>`;
       box.appendChild(div);

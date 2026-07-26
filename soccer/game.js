@@ -62,6 +62,22 @@ const SURVIVAL_ROUNDS = ["구단 트라이아웃", "2군 테스트", "1군 콜�
 
 // ---------- 상태 ----------
 const SAVE_KEY = "winger-save-v1";
+
+// ---------- 🧬 유산(환생) ----------
+// 환생하면 커리어를 마치고 '다음 세대'가 유산을 이어받아요.
+// 은퇴(명예의 전당 등록)와 달리 기록은 남기지 않고, 대신 영구 보너스를 넘겨줍니다.
+// 보너스는 sqrt로 완만하게 오르고 상한이 있어 폭주하지 않아요.
+const LEGACY_KEY = SAVE_KEY + "-legacy";
+const LEGACY_TALENT_CAP = 0.25;   // 시작 재능 보너스 상한
+function loadLegacy() {
+  try { const l = JSON.parse(localStorage.getItem(LEGACY_KEY)); if (l && typeof l.pts === "number") return l; } catch {}
+  return { pts: 0, gen: 0 };
+}
+function saveLegacy(l) { try { localStorage.setItem(LEGACY_KEY, JSON.stringify(l)); } catch {} }
+const legacyTalentBonus = (pts) => Math.min(0.03 * Math.sqrt(Math.max(pts, 0)), LEGACY_TALENT_CAP);
+const legacyMoneyBonus = (pts) => Math.round(pts * 300);
+// 은퇴 점수 → 이번 환생으로 얻는 유산 포인트
+const legacyGain = (score) => Math.max(1, Math.floor(Math.sqrt(Math.max(score, 0) / 10)));
 let S = null;
 let ev = null; // 진행 중인 대회/프로 도전
 
@@ -78,7 +94,7 @@ function rollStats(pos) {
   const talents = {};
   for (const d of STAT_DEFS) {
     stats[d.key] = randInt(24, 38);
-    talents[d.key] = rand(0.8, 1.45);
+    talents[d.key] = Math.min(rand(0.8, 1.45) + legacyTalentBonus(loadLegacy().pts), TALENT_MAX);
   }
   stats[POS_INFO[pos].stat] = clamp(stats[POS_INFO[pos].stat] + 8, 0, STAT_CAP);
   talents[POS_INFO[pos].stat] = Math.max(talents[POS_INFO[pos].stat], 1.05);
@@ -257,7 +273,7 @@ function awakenTalent(key, logFn) {
   const ok = confirm(
     `🔮 ${d.name} 재능 각성 시도!\n\n` +
     `성공 확률 ${Math.round(p * 100)}% (돌파가 깊을수록 올라가요)\n` +
-    `· 성공: 재능(⭐)이 영구히 상승\n` +
+    `· 성공: 재능(⭐)이 영구히 상승 — 훈련 효율이 평균 ${Math.round(0.225 / S.talents[key] * 100)}% 빨라져요\n` +
     `· 실패: 낮은 확률로 재능이 살짝 하락\n` +
     `· 성공하든 실패하든 ${d.name} 수치는 크게 낮아져서 다시 키워야 해요\n\n진행할까요?`
   );
