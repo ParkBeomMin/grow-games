@@ -147,6 +147,7 @@ h2 { font-size: 1.6rem; margin: 8px 0 6px; color: var(--accent); }
 /* ---------- 메인 HUD ---------- */
 .hud {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
   background: var(--bg2);
@@ -436,6 +437,14 @@ h2 { font-size: 1.6rem; margin: 8px 0 6px; color: var(--accent); }
 .tm-done-miss { border-color: var(--accent2); }
 .hud-battle { margin-top: 6px; }
 .hud-right { display: flex; flex-direction: column; align-items: flex-end; }
+/* 🎛️ HUD 액션 버튼 — 세로로 쌓이면 헤더가 너무 길어져서 아래 한 줄로 빼요.
+   좁은 화면에선 알아서 다음 줄로 넘어가요. */
+.hud-acts {
+  flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 6px;
+  justify-content: flex-end; margin-top: 10px; padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+.hud-acts .hud-battle { margin-top: 0; }
 
 /* ---------- 자금 · 상점 ---------- */
 .hud-money { font-size: 0.78rem; color: var(--accent); margin-top: 4px; }
