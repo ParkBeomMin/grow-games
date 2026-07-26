@@ -23,7 +23,7 @@
   <link rel="stylesheet" href="../base.css" />
   <!-- ?v= 는 캐시 무효화용. game.js/style.css 고칠 때마다 같이 올려주세요
        (GitHub Pages가 정적 파일에 max-age=600을 붙여서, 안 올리면 최대 10분간 옛 파일이 떠요) -->
-  <link rel="stylesheet" href="style.css?v=14" />
+  <link rel="stylesheet" href="style.css?v=15" />
 </head>
 <body>
   <main id="app">
@@ -42,8 +42,8 @@
     </header>
 
     <div class="hud2">
-      <div class="hud2-money" id="hud-code">💾 0줄</div>
-      <div class="hud2-sub"><span id="hud-sec">0줄/초</span> · <span id="hud-so">🧾 스톡옵션 0</span></div>
+      <div class="hud2-money" id="hud-code">💾 잔액 0줄</div>
+      <div class="hud2-sub"><span id="hud-sec">0줄/초</span> · <span id="hud-asset" title="장비·자동화에 투자한 금액의 평가액이에요. 기업가치에 포함돼요.">💼 자산 0줄</span> · <span id="hud-so">🧾 스톡옵션 0</span></div>
     </div>
 
     <button class="clicker" id="clicker">
@@ -110,7 +110,7 @@
       <div class="end-crown">👑</div>
       <h2 class="end-title">데카콘 등극!</h2>
       <div class="end-company" id="end-company">🦄 스타트업</div>
-      <p class="end-desc">누적 코드 10조 줄 돌파. 당신의 회사가 시장을 지배합니다.</p>
+      <p class="end-desc">기업가치 6조 줄 돌파. 당신의 회사가 시장을 지배합니다.</p>
       <div class="end-stats" id="end-stats"></div>
       <div id="end-ad"></div>
       <button class="btn btn-exit" id="btn-end-exit">🚀 Exit하고 새 창업</button>
@@ -124,6 +124,6 @@
   <script src="../stats.js"></script>
   <script src="../fx.js"></script>
   <script src="../ads.js"></script>
-  <script src="game.js?v=14"></script>
+  <script src="game.js?v=15"></script>
 </body>
 </html>

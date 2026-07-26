@@ -45,18 +45,23 @@ const EQUIP = [
   { id: "timestop", emoji: "⏳",  name: "시간 정지 디버깅",      per: 80000, cost: 6e9,   req: 3 },
 ];
 
+// 장비·자동화를 사면 구매액의 (1-ASSET_KEEP)만큼이 감가로 날아가요.
+// 그래서 기업가치가 눈에 띄게 내려갔다가, 늘어난 생산으로 다시 채워집니다.
+const ASSET_KEEP = 0.6;
+// 단계 기준선은 '기업가치' 기준 — 예전 누적 기준선의 정확히 0.6배라
+// 진행 속도는 그대로이고, 기존 저장본이 강등되지 않아요.
 const STAGES = [
-  { v: 0,    emoji: "🌱", name: "부트스트랩" },
-  { v: 5e3,  emoji: "🌿", name: "프리시드" },
-  { v: 3e5,  emoji: "🌾", name: "시드 투자" },
-  { v: 1e7,  emoji: "📈", name: "시리즈 A" },
-  { v: 3e8,  emoji: "🚀", name: "시리즈 B" },
-  { v: 1e10, emoji: "💫", name: "시리즈 C" },
-  { v: 1e11, emoji: "🦄", name: "유니콘" },
-  { v: 1e13, emoji: "👑", name: "데카콘" },
+  { v: 0,     emoji: "🌱", name: "부트스트랩" },
+  { v: 3e3,   emoji: "🌿", name: "프리시드" },
+  { v: 1.8e5, emoji: "🌾", name: "시드 투자" },
+  { v: 6e6,   emoji: "📈", name: "시리즈 A" },
+  { v: 1.8e8, emoji: "🚀", name: "시리즈 B" },
+  { v: 6e9,   emoji: "💫", name: "시리즈 C" },
+  { v: 6e10,  emoji: "🦄", name: "유니콘" },
+  { v: 6e12,  emoji: "👑", name: "데카콘" },
 ];
-const EXIT_UNLOCK = 1e7;      // 시리즈 A부터 Exit 가능
-const FINAL_STAGE = 1e13;     // 데카콘 = 엔딩 트리거
+const EXIT_UNLOCK = 6e6;      // 시리즈 A부터 Exit 가능
+const FINAL_STAGE = 6e12;     // 데카콘 = 엔딩 트리거
 
 const BOOST_DUR = 60000;   // 부스터 지속 60초
 const BOOST_CD = 300000;   // 쿨다운 5분
@@ -124,6 +129,9 @@ function fresh() {
     gens: {}, equip: {}, // 자동화 보유수 / 장비 보유수
     so: 0, exits: 0,
     earnedRun: 0, earnedAll: 0, bestRun: 0,
+    spent: 0,            // 이번 판에 장비·자동화에 쓴 코드(줄)
+    peakVal: 0,          // 이번 판 최고 기업가치 — 단계·Exit 보상 기준
+    valConv: 1,          // 기업가치 체계 전환 완료 표시
     buffUntil: 0, boostCdUntil: 0,
     startedAt: Date.now(), endedAt: 0, playMs: 0,
     savedAt: Date.now(),
@@ -140,6 +148,11 @@ function load() {
       S.endedAt = S.endedAt || 0;
       S.playMs = S.playMs || 0;
       S.bestRun = S.bestRun || S.earnedRun || 0;
+      // 기업가치 체계로 이관 — 예전 저장본은 '누적 생산 − 잔액'이 곧 지출이에요
+      if (typeof S.spent !== "number") S.spent = Math.max(0, (S.earnedRun || 0) - (S.code || 0));
+      if (!S.valConv) { S.bestRun = (S.bestRun || 0) * ASSET_KEEP; S.valConv = 1; }
+      S.peakVal = Math.max(S.peakVal || 0, S.code + S.spent * ASSET_KEEP);
+      S.bestRun = Math.max(S.bestRun || 0, S.peakVal);
       return true;
     }
   } catch { /* noop */ }
@@ -167,11 +180,17 @@ const clickBase = () => 1 + EQUIP.reduce((s, e) => s + (S.equip[e.id] || 0) * e.
 const clickValue = () => clickBase() * prestigeMult() * buffMult();
 const genCost = (g) => Math.ceil(g.cost * Math.pow(1.15, S.gens[g.id] || 0));
 const equipCost = (e) => Math.ceil(e.cost * Math.pow(1.15, S.equip[e.id] || 0));
-const valuation = () => S.earnedRun;
+// 💼 보유 자산 = 지금까지 장비·자동화에 투자한 금액의 ASSET_KEEP만큼
+const assetVal = () => (S.spent || 0) * ASSET_KEEP;
+// 🏦 기업가치(라이브) — 사면 감가만큼 즉시 내려가요
+const valuation = () => S.code + assetVal();
+// 단계·Exit 보상은 '이번 판 최고 기업가치' 기준 — 구매 때문에 강등되거나
+// 보상이 줄어들지 않게 하려는 장치예요.
+const peakVal = () => Math.max(S.peakVal || 0, valuation());
 const stageOf = (v) => { let st = STAGES[0]; for (const s of STAGES) if (v >= s.v) st = s; return st; };
 const nextStage = (v) => STAGES.find((s) => s.v > v) || null;
 // 첫 Exit(시리즈 A)에서 SO 10 = 생산 ×2.0 — 리셋이 확실히 이득이 되게
-const exitSO = () => Math.floor(10 * Math.sqrt(S.earnedRun / EXIT_UNLOCK));
+const exitSO = () => Math.floor(10 * Math.sqrt(peakVal() / EXIT_UNLOCK));
 // 해금 여부 — req가 없으면 처음부터, 있으면 Exit 횟수 충족 시
 const unlocked = (it) => !it.req || S.exits >= it.req;
 
@@ -244,6 +263,7 @@ function buyGen(g) {
   const cost = genCost(g);
   if (!unlocked(g) || S.code < cost) return;
   S.code -= cost;
+  S.spent = (S.spent || 0) + cost;
   S.gens[g.id] = (S.gens[g.id] || 0) + 1;
   save(); renderAll();
 }
@@ -251,6 +271,7 @@ function buyEquip(e) {
   const cost = equipCost(e);
   if (!unlocked(e) || S.code < cost) return;
   S.code -= cost;
+  S.spent = (S.spent || 0) + cost;
   S.equip[e.id] = (S.equip[e.id] || 0) + 1;
   save(); renderAll();
 }
@@ -272,10 +293,10 @@ function useBoost() {
 
 // ---------- Exit (프레스티지) ----------
 function doExit() {
-  if (valuation() < EXIT_UNLOCK) return;
+  if (peakVal() < EXIT_UNLOCK) return;
   const gain = exitSO();
   if (gain < 1) return;
-  const label = stageOf(valuation()).name;
+  const label = stageOf(peakVal()).name;
   const nextExits = S.exits + 1;
   const opening = [...GENERATORS, ...EQUIP].filter((it) => it.req === nextExits);
   const unlockMsg = opening.length
@@ -291,6 +312,7 @@ function doExit() {
   S.so += gain;
   S.exits += 1;
   S.code = 0; S.gens = {}; S.equip = {}; S.earnedRun = 0;
+  S.spent = 0; S.peakVal = 0;
   S.buffUntil = 0;
   addLog(`🚀 Exit 성공! 스톡옵션 +${gain} (통산 ${S.exits}회, 누적 SO ${S.so})`);
   if (window.Fx) Fx.celebrate("champion", `🚀 Exit! 스톡옵션 +${gain}`, "#btn-exit");
@@ -311,7 +333,7 @@ function hhmm(ms) {
   return (d ? `${d}일 ` : "") + (d || h ? `${h}시간 ` : "") + `${m}분`;
 }
 function checkEnding() {
-  if (S.endedAt || valuation() < FINAL_STAGE) return;
+  if (S.endedAt || peakVal() < FINAL_STAGE) return;
   S.endedAt = Date.now();
   addLog("👑 데카콘 등극! 시장을 지배하는 회사가 되었어요.");
   if (window.Fx) Fx.celebrate("ending", "👑 데카콘 등극!");
@@ -322,7 +344,7 @@ function checkEnding() {
 function showEnding() {
   $("end-company").textContent = "🦄 " + S.company;
   $("end-stats").innerHTML = [
-    ["🏢 최종 기업가치", lines(valuation())],
+    ["🏢 최고 기업가치", lines(peakVal())],
     ["💾 통산 생산 코드", lines(S.earnedAll)],
     ["🚀 Exit 횟수", S.exits + "회"],
     ["🧾 누적 스톡옵션", S.so + " (×" + prestigeMult().toFixed(2) + ")"],
@@ -372,7 +394,7 @@ function spawnBug() {
     caught = true;
     const gain = bugReward();
     S.code += gain; S.earnedRun += gain; S.earnedAll += gain;
-    if (S.earnedRun > S.bestRun) S.bestRun = S.earnedRun;
+    if (valuation() > (S.peakVal || 0)) S.peakVal = valuation();
     addLog(`🐛✅ 버그를 잡았어요! 핫픽스 보상 +${lines(gain)}`);
     if (window.Fx) Fx.burst(el, "✨", 10);
     el.classList.add("squash");
@@ -580,18 +602,23 @@ function closeHof() { $("hof").classList.add("hidden"); }
 // ---------- 렌더 ----------
 function renderHud() {
   const now = Date.now();
-  const v = valuation(), st = stageOf(v), ns = nextStage(v);
-  $("hud-code").textContent = "💾 " + lines(S.code);
+  // 큰 숫자(진행바)는 라이브 기업가치, 단계 배지는 최고 기록 — 강등은 없어요
+  const v = valuation(), pv = peakVal(), st = stageOf(pv), ns = nextStage(pv);
+  $("hud-code").textContent = "💾 잔액 " + lines(S.code);
   $("hud-sec").textContent = linesRate(perSec()) + "/초";
+  $("hud-asset").textContent = "💼 자산 " + lines(assetVal());
   $("hud-so").textContent = "🧾 스톡옵션 " + S.so + " (×" + prestigeMult().toFixed(2) + ")";
   $("clicker-label").textContent = `눌러서 코딩! 💾 +${fmt(clickValue())}줄`;
   $("stage-name").textContent = `${st.emoji} ${st.name}`;
-  $("stage-val").textContent = "누적 " + lines(v);
+  $("stage-val").textContent = "🏦 " + lines(v);
+  $("stage-val").title = "기업가치 = 잔액 + 보유 자산. 장비·자동화를 사면 감가만큼 내려가요.";
   const bar = $("stage-bar");
   if (ns) {
     const pct = Math.max(0, Math.min(100, ((v - st.v) / (ns.v - st.v)) * 100));
     bar.style.width = pct + "%";
-    $("stage-next").textContent = `다음: ${ns.emoji} ${ns.name} (${lines(ns.v)})`;
+    // 방금 지른 직후엔 라이브 값이 최고치보다 낮아요 — 그 격차를 같이 보여줘요
+    const behind = pv - v > (ns.v - st.v) * 0.01 ? ` · 최고 ${lines(pv)}` : "";
+    $("stage-next").textContent = `다음: ${ns.emoji} ${ns.name} (${lines(ns.v)})${behind}`;
   } else {
     bar.style.width = "100%";
     $("stage-next").textContent = "🏆 최종 단계 도달!";
@@ -686,7 +713,9 @@ function tick() {
   lastTick = now;
   const gain = perSec() * dt;
   if (gain > 0) { S.code += gain; S.earnedRun += gain; S.earnedAll += gain; }
-  if (S.earnedRun > S.bestRun) S.bestRun = S.earnedRun;
+  const pv = valuation();
+  if (pv > (S.peakVal || 0)) S.peakVal = pv;
+  if (S.peakVal > S.bestRun) S.bestRun = S.peakVal;
   checkEnding();
   renderHud();
   if (now - lastListRender > 500) { renderEquip(); renderGens(); renderLog(); lastListRender = now; }
