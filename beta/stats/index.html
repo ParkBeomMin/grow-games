@@ -31,6 +31,7 @@
     section { background: var(--bg2); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; margin-bottom: 16px; }
     section h2 { font-size: 1rem; margin-bottom: 14px; display: flex; align-items: center; gap: 6px; }
     .tabs { display: flex; gap: 6px; margin-bottom: 16px; overflow-x: auto; scrollbar-width: thin; padding: 8px 4px; position: sticky; top: 0; z-index: 20; background: var(--bg); -webkit-overflow-scrolling: touch; }
+    .tabs[hidden] { display: none; }
     .tab { flex: 0 0 auto; white-space: nowrap; padding: 8px 14px; border: 1px solid var(--line); background: var(--bg2); color: var(--dim); border-radius: 999px; cursor: pointer; font-size: .88rem; }
     .tab.on { border-color: var(--accent); color: var(--accent); font-weight: 700; }
     .bar-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; font-size: .85rem; }
@@ -97,7 +98,9 @@
     let activeGame = null;   // 현재 탭 (GAMES의 키)
 
     const gameFromHash = () => {
-      const h = decodeURIComponent(location.hash.replace(/^#/, ""));
+      const raw = location.hash.replace(/^#/, "");
+      let h = raw;
+      try { h = decodeURIComponent(raw); } catch { /* 잘못된 % 인코딩이면 원문 그대로 봐요 */ }
       return Object.prototype.hasOwnProperty.call(GAMES, h) ? h : GAME_KEYS[0];
     };
 
@@ -157,7 +160,7 @@
       return html;
     }
 
-    // 퍼널 막대의 표시 순서예요. 예전엔 함수 안에서 매번 만들었어요.
+    // 퍼널 막대의 표시 순서예요.
     const FUNNEL_ORDER = ["visit", "pwa_install", "pwa_launch", "new_player", "draft", "debut", "ending", "pro_enter", "season_end", "year_end", "exit", "decacorn", "retire", "battle", "bonus"];
 
     function funnelSection(rows, hofByGame, game) {
@@ -290,6 +293,7 @@ grant select on public.stats_summary, public.stats_choices, public.stats_daily t
 
     // 전역 KPI + 합산 방문 추이 — 탭과 무관하게 항상 보여요.
     function renderOverview() {
+      if (!STATE) return;
       const summary = STATE.summary;
       const totalVisits = summary.filter((r) => r.event === "visit").reduce((a, r) => a + r.players, 0);
       const totalNew = summary.filter((r) => r.event === "new_player").reduce((a, r) => a + r.total, 0);
@@ -322,11 +326,15 @@ grant select on public.stats_summary, public.stats_choices, public.stats_daily t
     function renderTabs() {
       if (!STATE) { $("tabs").hidden = true; $("tabs").innerHTML = ""; return; }
       $("tabs").innerHTML = GAME_KEYS.map((g) =>
-        `<button type="button" class="tab${g === activeGame ? " on" : ""}" data-game="${g}">${GAMES[g]}</button>`
+        `<button type="button" class="tab${g === activeGame ? " on" : ""}" data-game="${g}"${g === activeGame ? ' aria-current="true"' : ""}>${GAMES[g]}</button>`
       ).join("");
       // 해시로 오른쪽 끝 탭에 바로 들어오면 칩이 스크롤 밖에 있어요.
       const on = $("tabs").querySelector(".tab.on");
-      if (on) on.scrollIntoView({ inline: "center", block: "nearest" });
+      if (on) {
+        // 브라우저 기본 스크롤 API는 문서까지 세로로 밀어 KPI를 지나쳐요. 탭 바 안에서 가로 위치만 맞춰요.
+        const bar = $("tabs");
+        bar.scrollLeft = on.offsetLeft - (bar.clientWidth - on.offsetWidth) / 2;
+      }
     }
 
     function renderPanel() {
@@ -342,9 +350,11 @@ grant select on public.stats_summary, public.stats_choices, public.stats_daily t
     }
 
     async function load() {
+      // 캐시를 먼저 비워요. fetch가 도는 동안 hashchange가 나도 낡은 데이터를 그리지 않아요.
+      STATE = null;
       $("overview").innerHTML = `<p class="empty">불러오는 중…</p>`;
-      $("tabs").hidden = true;
-      $("panel").innerHTML = "";
+      renderTabs();    // STATE가 null이라 탭을 숨기고 비워요
+      renderPanel();   // STATE가 null이라 패널을 비워요
 
       let summary, choices, daily, failed = false;
       try { summary = await getView("stats_summary"); } catch { failed = true; }
@@ -359,9 +369,7 @@ grant select on public.stats_summary, public.stats_choices, public.stats_daily t
       }
 
       if (failed || !summary) {
-        // 집계 뷰가 없으면 탭이 의미 없어요 — 안내 카드만 남기고 캐시도 비워요.
-        // (STATE를 남겨두면 이후 hashchange가 낡은 데이터를 패널에 다시 그려요)
-        STATE = null;
+        // 집계 뷰가 없으면 탭이 의미 없어요 — 안내 카드만 남겨요. (STATE는 위에서 이미 비웠어요)
         $("overview").innerHTML = setupCard("아직 집계 뷰가 없거나 접근할 수 없어요.");
         wireCopy();
         return;
