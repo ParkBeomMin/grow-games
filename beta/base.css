@@ -593,3 +593,4 @@ h2 { font-size: 1.6rem; margin: 8px 0 6px; color: var(--accent); }
 .rank-more { display: block; width: 100%; margin-top: 10px; }
 .hof-gap { text-align: center; color: var(--dim); letter-spacing: 4px; padding: 6px 0; }
 .rank-table .hof-gap-row td { text-align: center; color: var(--dim); letter-spacing: 4px; padding: 4px 0; }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
