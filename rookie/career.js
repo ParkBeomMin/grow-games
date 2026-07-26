@@ -647,12 +647,28 @@ window.Career = (() => {
     save();
     const won = s.winner === P.myTeam;
     const label = Postseason.LABEL[s.round];
+    const line = {
+      text: won ? `🎉 ${label} 승리! (${myW}-${opW})` : `😢 ${label} 탈락… (${myW}-${opW})`,
+      cls: won ? "good" : "bad",
+    };
+    /* 가을야구에 들어간 뒤로는 남은 시리즈가 전부 내 경기예요. 그래서 라운드를 이기면
+     * 연출 화면에 띄울 게 이 한 줄뿐이라, 결과 카드를 지우고 빈 상자를 보여주게 돼요.
+     * 그 자리에서 축하만 하고 바로 다음 라운드 화면으로 넘어가요.
+     * 탈락·한국시리즈는 결산으로 가면서 다른 팀 결과도 함께 흘려보내야 해서 그대로 둬요. */
+    let cheering = false;
+    const nextRound = () => {
+      if (cheering) return;                 // 연출 중 두 번 눌리면 대진이 두 칸 밀려요
+      cheering = true;
+      $("btn-tour-next").disabled = true;
+      if (!window.Fx) return advancePostseason();
+      Fx.confetti({ emojis: ["🎉", "🍂", "✨"], count: 50 });
+      Fx.flash(`🎉 ${label} 승리! ${myW}-${opW}`);
+      setTimeout(() => advancePostseason(), 900);
+    };
     return {
       extra,
       nextLabel: won ? (s.round === "ks" ? "🏆 시즌 결산" : "🍂 다음 라운드로") : "🏁 시즌 결산",
-      nextFn: () => advancePostseason([
-        { text: won ? `🎉 ${label} 승리! (${myW}-${opW})` : `😢 ${label} 탈락… (${myW}-${opW})`, cls: won ? "good" : "bad" },
-      ]),
+      nextFn: won && s.round !== "ks" ? nextRound : () => advancePostseason([line]),
     };
   }
 
