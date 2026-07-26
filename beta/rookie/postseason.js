@@ -58,7 +58,9 @@
    * str은 initSeason이 팀마다 부여하는 0.36~0.62 값이에요.
    * 상위 시드에 홈 어드밴티지 0.04를 얹어요. */
   function simSeries(round, aName, bName, strA, strB, aHead) {
-    const p = Math.max(0.2, Math.min(0.8, 0.5 + (strA - strB) * 1.2 + 0.04));
+    // 계수와 홈 어드밴티지는 2000시즌 시뮬로 맞췄어요. 1위가 시리즈 하나만 이기면 되는
+    // 구조라 이 값에서도 1위 우승률이 60% 근처예요 — 더 낮추면 팀 전력이 무의미해져요.
+    const p = Math.max(0.2, Math.min(0.8, 0.5 + (strA - strB) * 0.6 + 0.02));
     let s = mkSeries(round, aName, bName, aHead);
     // 최대 경기 수만큼만 돌아요 — 어떤 경우에도 무한루프가 안 나요.
     for (let i = 0; i < MAX_GAMES[round] && !s.done; i++) {
