@@ -448,7 +448,15 @@ window.IdolCareer = (() => {
     const ret = document.createElement("button");
     ret.className = "btn btn-ghost";
     ret.textContent = "🎓 은퇴하기";
-    ret.onclick = () => enshrine();
+    ret.onclick = () => {
+      if (!confirm(
+        `🎓 여기서 커리어를 마칠까요?\n\n` +
+        `· 명예의 전당에 기록이 남아요\n` + retireSummary() +
+        `· 등급: ${gradeOfScore(careerScore())}\n\n` +
+        `⚠️ 되돌릴 수 없어요.\n\n진행할까요?`
+      )) return;
+      enshrine();
+    };
     act.appendChild(ret);
     if (window.Ads) window.Ads.display($("ad-career"));
     show("screen-career");
@@ -517,6 +525,20 @@ window.IdolCareer = (() => {
       `이제 ${nextGen + 1}세가 더 높은 재능으로 출발해요!`
     );
     location.reload();
+  }
+
+  /* 🎓 은퇴 확인창에 넣을 요약. 되돌릴 수 없는 선택이라 뭐가 남는지 보여줘요. */
+  function retireSummary() {
+    const c = S.career || {};
+    const awards = [
+      (c.wins || 0) ? `🏆우승 ${c.wins}` : "",
+      (c.daesang || 0) ? `🎖️대상 ${c.daesang}` : "",
+      (c.bonsang || 0) ? `🏅본상 ${c.bonsang}` : "",
+      (c.rookie || 0) ? "🌟신인상" : "",
+    ].filter(Boolean).join(" · ");
+    const years = (c.years || []).length;
+    return `    ${S.name} · ${years}년차\n`
+      + (awards ? `    ${awards}\n` : "    수상 기록 없음\n");
   }
 
   function enshrine() {
