@@ -222,11 +222,12 @@ function renderLog() { $("ev-log").innerHTML = S.log.map((l, i) => `<div class="
 
 // ---------- 터미널 출력 ----------
 let lastLineIdx = -1;
-function termPush(text, boot) {
+function termPush(text, boot, auto) {
   const body = $("term-body");
   if (!body) return;
   const el = document.createElement("span");
-  el.className = "term-line" + (boot ? " boot" : "");
+  // auto = 조직이 자동으로 뽑아낸 줄. 내가 친 줄과 색으로 구분해요.
+  el.className = "term-line" + (boot ? " boot" : "") + (auto ? " auto" : "");
   const p = document.createElement("span");
   p.className = "p"; p.textContent = ">";
   el.append(p, " " + text);
@@ -234,11 +235,11 @@ function termPush(text, boot) {
   while (body.childElementCount > TERM_MAX) body.removeChild(body.firstElementChild);
 }
 function termBoot() { BOOT_LINES.forEach((l) => termPush(l, true)); }
-function termCode() {
+function termCode(auto) {
   let i = Math.floor(Math.random() * CODE_LINES.length);
   if (i === lastLineIdx) i = (i + 1) % CODE_LINES.length; // 같은 줄 연속 방지
   lastLineIdx = i;
-  termPush(CODE_LINES[i], false);
+  termPush(CODE_LINES[i], false, auto);
 }
 
 // ---------- 클릭 ----------
@@ -248,34 +249,58 @@ function onClick(e) {
   termCode();
   floatText(e, "+" + fmt(v));
 }
-function floatText(e, txt) {
+function floatText(e, txt, auto) {
   const c = $("clicker");
   const f = document.createElement("span");
-  f.className = "float-num";
+  f.className = "float-num" + (auto ? " auto" : "");
   f.textContent = txt;
   const r = c.getBoundingClientRect();
-  f.style.left = ((e && e.clientX ? e.clientX - r.left : r.width / 2) + (Math.random() * 30 - 15)) + "px";
-  f.style.top = (e && e.clientY ? e.clientY - r.top : r.height / 2) + "px";
+  // 자동 생산은 클릭 위치가 없어서 화면 폭에 흩뿌려요 (한자리에 겹치지 않게)
+  const x = e && e.clientX ? e.clientX - r.left : r.width * (0.2 + Math.random() * 0.6);
+  const y = e && e.clientY ? e.clientY - r.top : r.height * (0.35 + Math.random() * 0.4);
+  f.style.left = (x + (Math.random() * 30 - 15)) + "px";
+  f.style.top = y + "px";
   c.appendChild(f);
   setTimeout(() => f.remove(), 900);
 }
 
 // ---------- 구매 ----------
+// 목록은 매번 다시 그려져서 :active가 남지 않아요. 그래서 눌린 결과를
+// 애니메이션으로 따로 알려줍니다. 못 사면 왜 안 되는지도 보여줘요.
+function buyFx(id, ok, badge) {
+  const el = document.querySelector(`.gen[data-id="${id}"]`);
+  if (!el) return;
+  const cls = ok ? "bought" : "nope";
+  el.classList.remove("bought", "nope");
+  void el.offsetWidth;                       // 연타해도 애니메이션이 다시 시작되게
+  el.classList.add(cls);
+  setTimeout(() => el.classList.remove(cls), 620);
+  if (!badge) return;
+  const b = document.createElement("span");
+  b.className = "gen-pop" + (ok ? "" : " bad");
+  b.textContent = badge;
+  el.appendChild(b);
+  setTimeout(() => b.remove(), 800);
+}
 function buyGen(g) {
   const cost = genCost(g);
-  if (!unlocked(g) || S.code < cost) return;
+  if (!unlocked(g)) return;
+  if (S.code < cost) { buyFx(g.id, false, `${fmt(cost - S.code)} 부족`); return; }
   S.code -= cost;
   S.spent = (S.spent || 0) + cost;
   S.gens[g.id] = (S.gens[g.id] || 0) + 1;
   save(); renderAll();
+  buyFx(g.id, true, `초당 +${fmt(g.per)}`);   // renderAll 뒤에 걸어야 새 노드에 붙어요
 }
 function buyEquip(e) {
   const cost = equipCost(e);
-  if (!unlocked(e) || S.code < cost) return;
+  if (!unlocked(e)) return;
+  if (S.code < cost) { buyFx(e.id, false, `${fmt(cost - S.code)} 부족`); return; }
   S.code -= cost;
   S.spent = (S.spent || 0) + cost;
   S.equip[e.id] = (S.equip[e.id] || 0) + 1;
   save(); renderAll();
+  buyFx(e.id, true, `클릭당 +${fmt(e.per)}`);
 }
 
 // ---------- AI 리팩토링 부스터 (2배 · 5분 쿨다운 · 추후 보상형 광고) ----------
@@ -765,12 +790,23 @@ function setTab(tab) {
 
 // ---------- 루프 ----------
 let lastTick = Date.now(), lastListRender = 0;
+// 자동 생산 연출 — 조직이 뽑아낸 만큼 모았다가 주기마다 한 줄씩 찍어요.
+// 매 틱(0.1초)마다 찍으면 터미널이 읽을 수 없게 흘러가서 간격을 뒀어요.
+const AUTO_TERM_MS = 700;
+let autoAccum = 0, lastAutoAt = 0;
 function tick() {
   const now = Date.now();
   const dt = Math.min((now - lastTick) / 1000, 1);
   lastTick = now;
   const gain = perSec() * dt;
-  if (gain > 0) { S.code += gain; S.earnedRun += gain; S.earnedAll += gain; }
+  if (gain > 0) { S.code += gain; S.earnedRun += gain; S.earnedAll += gain; autoAccum += gain; }
+  // 탭이 가려져 있으면 연출을 쌓아두지 않아요 (돌아왔을 때 몰아서 터지지 않게)
+  if (document.hidden) { autoAccum = 0; lastAutoAt = now; }
+  else if (autoAccum >= 1 && now - lastAutoAt >= AUTO_TERM_MS) {
+    termCode(true);
+    floatText(null, "+" + fmt(autoAccum), true);
+    autoAccum = 0; lastAutoAt = now;
+  }
   const pv = valuation();
   if (pv > (S.peakVal || 0)) S.peakVal = pv;
   if (S.peakVal > S.bestRun) S.bestRun = S.peakVal;
