@@ -23,7 +23,7 @@
   <link rel="stylesheet" href="../base.css" />
   <!-- ?v= 는 캐시 무효화용. game.js/style.css 고칠 때마다 같이 올려주세요
        (GitHub Pages가 정적 파일에 max-age=600을 붙여서, 안 올리면 최대 10분간 옛 파일이 떠요) -->
-  <link rel="stylesheet" href="style.css?v=18" />
+  <link rel="stylesheet" href="style.css?v=19" />
 </head>
 <body>
   <main id="app">
@@ -32,7 +32,7 @@
         <div class="company" id="company-name">🦄 스타트업</div>
         <a class="series-link" href="../">🎮 시리즈</a>
       </div>
-      <!-- 지금 창업 중인 회사 수 — Match.count로 주기적으로 갱신돼요 -->
+      <!-- 시리즈 누적 사용자 수 — Match.totalUsers()로 5분마다 갱신돼요 -->
       <p class="uni-count hidden" id="uni-count"></p>
       <div class="stage-row">
         <span class="stage-name" id="stage-name"></span>
@@ -126,6 +126,6 @@
   <script src="../stats.js"></script>
   <script src="../fx.js"></script>
   <script src="../ads.js"></script>
-  <script src="game.js?v=18"></script>
+  <script src="game.js?v=19"></script>
 </body>
 </html>
