@@ -322,7 +322,10 @@ h2 { font-size: 1.6rem; margin: 8px 0 6px; color: var(--accent); }
 #av-zoom { width: 100%; margin: 12px 0 4px; accent-color: var(--accent); }
 .av-actions { display: flex; gap: 8px; }
 .av-actions .btn { flex: 1; margin-top: 6px; padding: 10px; font-size: 1rem; }
-.hud-id { display: flex; align-items: center; gap: 10px; }
+/* 프로의 팀 정보 줄이 길어서 오른쪽 블록을 아래로 밀어내곤 했어요.
+   min-width: 0 을 줘야 긴 글이 줄바꿈되면서 오른쪽 자리를 지켜줘요. */
+.hud-id { display: flex; align-items: center; gap: 10px; flex: 1 1 auto; min-width: 0; }
+.hud-left { min-width: 0; }   /* 이게 없으면 긴 팀 정보가 안 접히고 폭을 밀어내요 */
 .hud-avatar {
   width: 44px; height: 44px; border-radius: 50%;
   border: 2px solid var(--accent); object-fit: cover;
@@ -440,6 +443,7 @@ h2 { font-size: 1.6rem; margin: 8px 0 6px; color: var(--accent); }
 .hud-right {
   display: flex; flex-wrap: wrap; align-items: baseline;
   justify-content: flex-end; gap: 2px 10px;
+  flex: 0 0 auto; margin-left: auto;   /* 줄이 바뀌어도 항상 오른쪽에 붙어요 */
 }
 /* 🎛️ HUD 액션 버튼 — 세로로 쌓이면 헤더가 너무 길어져서 아래 한 줄로 빼요.
    좁은 화면에선 알아서 다음 줄로 넘어가요. */
