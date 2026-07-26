@@ -298,6 +298,14 @@ window.Career = (() => {
     return clamp(0.42 + (core * clutchAvg() - 50) / 160 + (S.condition - 50) / 600 - agePen, 0.25, 0.72);
   }
 
+  // 경기 화면 제목 — 포스트시즌엔 정규시즌 경기 번호 대신 라운드·차수를 써요.
+  const gameLabel = () => (inPost()
+    ? `${Postseason.LABEL[S.post.myRound]} ${S.post.gameNo}차전`
+    : `G${S.season.game + 1}`);
+  const seasonLabel = () => (inPost()
+    ? `🍂 ${S.age}살 가을야구 — ${S.team}`
+    : `⚾ ${S.age}살 시즌 — ${S.team}`);
+
   function playProGame() {
     const sn = S.season;
     const post = inPost();
@@ -332,10 +340,10 @@ window.Career = (() => {
     const ourBg = randInt(0, 3);
     for (let i = 0; i < oppRuns; i++) story.oppInn[randInt(0, 8)]++;
     for (let i = 0; i < ourBg; i++) story.ourInn[randInt(0, 8)]++;
-    $("tour-title").textContent = `⚾ ${S.age}살 시즌 — ${S.team}`;
+    $("tour-title").textContent = seasonLabel();
     show("screen-tournament");
     renderGameSim({
-      title: `G${S.season.game + 1} vs ${opp}`,
+      title: `${gameLabel()} vs ${opp}`,
       oppName: opp,
       homeName: S.team,
       perf, story,
@@ -364,10 +372,10 @@ window.Career = (() => {
     for (let i = 0; i < ourBg; i++) story.ourInn[randInt(0, 7)]++;
     const bullpen = randInt(0, 2);
     for (let i = 0; i < bullpen; i++) story.oppInn[randInt(Math.min(ip, 8), 8)]++;
-    $("tour-title").textContent = `⚾ ${S.age}살 시즌 — ${S.team}`;
+    $("tour-title").textContent = seasonLabel();
     show("screen-tournament");
     renderGameSim({
-      title: `G${S.season.game + 1} vs ${opp} (선발 등판)`,
+      title: `${gameLabel()} vs ${opp} (선발 등판)`,
       oppName: opp,
       homeName: S.team,
       perf, story,
@@ -382,7 +390,7 @@ window.Career = (() => {
 
   // 등판 없는 날 / 구원 등판 — 짧은 카드
   function quickGame(mode, opp) {
-    $("tour-title").textContent = `📺 G${S.season.game + 1} — ${S.team} vs ${opp}`;
+    $("tour-title").textContent = `📺 ${gameLabel()} — ${S.team} vs ${opp}`;
     $("tour-round").textContent = S.role;
     $("tour-card").innerHTML = `<div class="pbp" id="pbp-pro"></div><div id="game-result"></div><div id="game-moment"></div>`;
     show("screen-tournament");
