@@ -436,7 +436,11 @@ h2 { font-size: 1.6rem; margin: 8px 0 6px; color: var(--accent); }
 .tm-done-perfect { border-color: #6ee7a0; }
 .tm-done-miss { border-color: var(--accent2); }
 .hud-battle { margin-top: 6px; }
-.hud-right { display: flex; flex-direction: column; align-items: flex-end; }
+/* 턴 표시와 자금을 한 줄에 우측 정렬해요. 좁아서 안 들어가면 알아서 접혀요. */
+.hud-right {
+  display: flex; flex-wrap: wrap; align-items: baseline;
+  justify-content: flex-end; gap: 2px 10px;
+}
 /* 🎛️ HUD 액션 버튼 — 세로로 쌓이면 헤더가 너무 길어져서 아래 한 줄로 빼요.
    좁은 화면에선 알아서 다음 줄로 넘어가요. */
 .hud-acts {
@@ -447,7 +451,7 @@ h2 { font-size: 1.6rem; margin: 8px 0 6px; color: var(--accent); }
 .hud-acts .hud-battle { margin-top: 0; }
 
 /* ---------- 자금 · 상점 ---------- */
-.hud-money { font-size: 0.78rem; color: var(--accent); margin-top: 4px; }
+.hud-money { font-size: 0.78rem; color: var(--accent); }
 .bar-fill.stat.over { background: linear-gradient(90deg, #ffe29a, #ffb84d); }
 .shop-money { font-family: "Jua", sans-serif; color: var(--accent); font-size: 1.05rem; margin: 6px 0 12px; }
 .shop-item {
