@@ -157,20 +157,18 @@
       return html;
     }
 
-    function funnelSection(rows, hofByGame) {
-      let html = "";
-      for (const game of Object.keys(GAMES)) {
-        const g = rows.filter((r) => r.game === game);
-        if (!g.length) continue;
-        const order = ["visit", "pwa_install", "pwa_launch", "new_player", "draft", "debut", "ending", "pro_enter", "season_end", "year_end", "exit", "decacorn", "retire", "battle", "bonus"];
-        g.sort((a, b) => order.indexOf(a.event) - order.indexOf(b.event));
-        const max = Math.max(...g.map((r) => r.total));
-        const hofN = hofByGame ? (hofByGame[game] || 0) : null;
-        html += `<section class="funnel"><h2>${GAMES[game]} · 이벤트별 발생${hofN != null ? ` · 🏛️명전 ${hofN}명` : ""}</h2>${
-          g.map((r) => bar(EVENT_LABEL[r.event] || r.event, r.total, max)).join("")
-        }</section>`;
-      }
-      return html;
+    // 퍼널 막대의 표시 순서예요. 예전엔 함수 안에서 매번 만들었어요.
+    const FUNNEL_ORDER = ["visit", "pwa_install", "pwa_launch", "new_player", "draft", "debut", "ending", "pro_enter", "season_end", "year_end", "exit", "decacorn", "retire", "battle", "bonus"];
+
+    function funnelSection(rows, hofByGame, game) {
+      const g = rows.filter((r) => r.game === game);
+      if (!g.length) return "";
+      g.sort((a, b) => FUNNEL_ORDER.indexOf(a.event) - FUNNEL_ORDER.indexOf(b.event));
+      const max = Math.max(...g.map((r) => r.total));
+      const hofN = hofByGame ? (hofByGame[game] || 0) : null;
+      return `<section class="funnel"><h2>📈 이벤트별 발생${hofN != null ? ` · 🏛️명전 ${hofN}명` : ""}</h2>${
+        g.map((r) => bar(EVENT_LABEL[r.event] || r.event, r.total, max)).join("")
+      }</section>`;
     }
 
     // 🦄 더 유니콘 — 방치형이라 지표가 달라요 (포지션 대신 Exit·스톡옵션·최고 단계)
@@ -337,6 +335,7 @@ grant select on public.stats_summary, public.stats_choices, public.stats_daily t
       const parts = [
         dailySection(STATE.daily, game),
         choiceSection(STATE.choices, game),
+        funnelSection(STATE.summary, STATE.hofByGame, game),
       ];
       $("panel").innerHTML = parts.join("").trim() || emptyCard(game);
     }
