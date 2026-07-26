@@ -109,7 +109,8 @@ window.Career = (() => {
     stats.innerHTML = "";
     for (const d of STAT_DEFS[S.pos]) {
       const v = Math.round(S.stats[d.key]);
-      const stars = "⭐".repeat(clamp(Math.round((S.talents[d.key] - 0.6) * 4), 1, 5));
+      const tv = S.talents[d.key];
+      const stars = "⭐".repeat(talentStars(tv)) + (isTalentMax(tv) ? " MAX" : "");
       const row = document.createElement("div");
       row.className = "stat-row";
       row.innerHTML = `

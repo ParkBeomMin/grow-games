@@ -91,7 +91,7 @@ function renderRoll() {
     fill: "rgba(192, 123, 255, 0.28)",
   });
   $("roll-stars").innerHTML = STAT_DEFS
-    .map((d) => `${d.emoji} ${d.name} ${"⭐".repeat(clamp(Math.round((pendingRoll.talents[d.key] - 0.6) * 4), 1, 5))}`)
+    .map((d) => `${d.emoji} ${d.name} ${"⭐".repeat(talentStars(pendingRoll.talents[d.key]))}`)
     .join(" · ") + `<br/>⭐ = 잠재력 — 별이 많은 능력치일수록 연습 효율이 높아요`;
 }
 $("btn-reroll")?.addEventListener("click", () => {
@@ -187,11 +187,21 @@ $("btn-home-pro")?.addEventListener("click", goHome);
 
 
 // ---------- 재능 각성 ----------
+// 재능 상한. 별 표시는 talentStars()가 이 값을 5성에 맞춰 환산해요.
+const TALENT_MAX = 1.8;
+const talentStars = (t) => clamp(Math.round(((t - 0.6) / (TALENT_MAX - 0.6)) * 5), 1, 5);
+const isTalentMax = (t) => t >= TALENT_MAX - 1e-9;
 function awakenTalent(key, logFn) {
   const defs = Array.isArray(STAT_DEFS) ? STAT_DEFS : STAT_DEFS[S.pos];
   const d = defs.find((x) => x.key === key);
   const v = Math.round(S.stats[key]);
   if (!d || v < 100) return false;
+  // 재능이 상한(TALENT_MAX)이면 각성해도 오르는 게 없어요.
+  // 예전엔 '성공'이 뜨면서 스탯만 45~60으로 깎여 순손실이었습니다.
+  if (S.talents[key] >= TALENT_MAX - 1e-9) {
+    alert(`✨ ${d.name} 재능은 이미 최대(⭐⭐⭐⭐⭐ MAX)예요!\n\n더 올릴 수 없으니 각성 대신 수치를 계속 키워보세요.`);
+    return false;
+  }
   const p = Math.min(0.25 + (v - 100) * 0.015, 0.75);
   const ok = confirm(
     `🔮 ${d.name} 재능 각성 시도!\n\n` +
@@ -202,7 +212,7 @@ function awakenTalent(key, logFn) {
   );
   if (!ok) return false;
   if (Math.random() < p) {
-    S.talents[key] = Math.min(S.talents[key] + rand(0.15, 0.3), 1.8);
+    S.talents[key] = Math.min(S.talents[key] + rand(0.15, 0.3), TALENT_MAX);
     S.stats[key] = randInt(45, 60);
     logFn(`🔮✨ ${d.name} 재능 각성 성공!! 잠재력이 한 단계 피어났어요 (수치 ${Math.round(S.stats[key])}부터 재도전)`);
   } else if (Math.random() < 0.1) {
@@ -576,7 +586,8 @@ function renderMain() {
   statsBox.innerHTML = "";
   for (const d of STAT_DEFS) {
     const v = Math.round(S.stats[d.key]);
-    const stars = "⭐".repeat(clamp(Math.round((S.talents[d.key] - 0.6) * 4), 1, 5));
+    const tv = S.talents[d.key];
+    const stars = "⭐".repeat(talentStars(tv)) + (isTalentMax(tv) ? " MAX" : "");
     const row = document.createElement("div");
     row.className = "stat-row";
     row.innerHTML = `

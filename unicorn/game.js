@@ -331,6 +331,70 @@ function showEnding() {
 }
 function closeEnding() { $("ending").classList.add("hidden"); }
 
+// ---------- 🐛 버그 잡기 ----------
+// 화면을 보고 있을 때만 가끔 벌레가 기어다녀요. 탭하면 보상, 놓치면 코드가 조금 줄어요.
+// (자리를 비운 동안엔 등장하지 않아요 — 방치형인데 안 보는 사이 손해 보면 안 되니까)
+const BUG_GAP_MIN = 45000, BUG_GAP_MAX = 100000; // 등장 간격
+const BUG_LIFE = 9000;                            // 놓치기까지 시간
+const BUG_KINDS = ["🐛", "🪲", "🦗", "🕷️"];
+let bugTimer = null, bugEl = null;
+
+function bugReward() { return Math.max(perSec() * 30, clickValue() * 25, 10); }
+function bugPenalty() { return Math.min(S.code * 0.02, Math.max(perSec() * 8, clickValue() * 10)); }
+
+function scheduleBug() {
+  clearTimeout(bugTimer);
+  bugTimer = setTimeout(spawnBug, BUG_GAP_MIN + Math.random() * (BUG_GAP_MAX - BUG_GAP_MIN));
+}
+function spawnBug() {
+  // 화면이 안 보이거나 이미 한 마리 있으면 다음 기회로
+  if (document.hidden || bugEl || document.querySelector(".end-wrap:not(.hidden)")) { scheduleBug(); return; }
+  const el = document.createElement("button");
+  el.className = "bug";
+  el.type = "button";
+  el.setAttribute("aria-label", "버그 잡기");
+  el.textContent = pick(BUG_KINDS);
+  const fromLeft = Math.random() < 0.5;
+  el.style.top = (18 + Math.random() * 64) + "vh";
+  el.style.setProperty("--from", fromLeft ? "-14vw" : "108vw");
+  el.style.setProperty("--to", fromLeft ? "108vw" : "-14vw");
+  el.style.setProperty("--dur", BUG_LIFE + "ms");
+  el.style.setProperty("--flip", fromLeft ? "1" : "-1");
+  document.body.appendChild(el);
+  bugEl = el;
+
+  let caught = false;
+  el.addEventListener("pointerdown", (e) => {
+    e.preventDefault(); e.stopPropagation();
+    if (caught) return;
+    caught = true;
+    const gain = bugReward();
+    S.code += gain; S.earnedRun += gain; S.earnedAll += gain;
+    if (S.earnedRun > S.bestRun) S.bestRun = S.earnedRun;
+    addLog(`🐛✅ 버그를 잡았어요! 핫픽스 보상 +${lines(gain)}`);
+    el.classList.add("squash");
+    setTimeout(() => removeBug(), 260);
+    save(); renderAll();
+  });
+
+  setTimeout(() => {
+    if (caught) return;
+    const loss = bugPenalty();
+    if (loss > 0) {
+      S.code = Math.max(0, S.code - loss);
+      addLog(`🐛💥 버그를 놓쳤어요… 장애로 코드 ${lines(loss)} 유실!`);
+    } else {
+      addLog("🐛… 버그가 도망갔어요. (다행히 잃을 코드가 없었네요)");
+    }
+    removeBug();
+    save(); renderAll();
+  }, BUG_LIFE);
+}
+function removeBug() {
+  if (bugEl) { bugEl.remove(); bugEl = null; }
+  scheduleBug();
+}
+
 // ---------- 사명 짓기 ----------
 // 새 게임을 시작할 때(그리고 상단 회사명을 눌렀을 때) 이름을 직접 정할 수 있어요.
 let namingDone = null; // 확인 시 실행할 콜백
@@ -655,6 +719,9 @@ function init() {
   window.addEventListener("beforeunload", save);
   // 방문·PWA 집계 + 이후 이벤트의 게임명 지정 (없으면 game이 "unknown"으로 기록돼요)
   if (window.Stats) Stats.init("unicorn");
+  scheduleBug();  // 🐛 버그 등장 예약
+  // 탭이 다시 보이면 타이머를 새로 잡아요 (백그라운드 동안 몰려 나오지 않게)
+  document.addEventListener("visibilitychange", () => { if (!document.hidden && !bugEl) scheduleBug(); });
   // 새로 시작하는 판이면 사명부터 정하고 들어가요
   if (isNew) openNaming("new");
 }

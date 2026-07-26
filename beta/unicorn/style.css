@@ -204,3 +204,19 @@ body {
 .hof-score { font-family: "Jua", sans-serif; color: var(--accent); font-size: 0.92rem; flex: none; }
 
 .uni-foot { text-align: center; padding: 18px 0 40px; display: flex; gap: 8px; justify-content: center; }
+
+/* 🐛 버그 잡기 — 방치 중 가끔 화면을 기어다녀요 */
+.bug {
+  position: fixed; z-index: 55; left: 0;
+  border: 0; background: transparent; padding: 8px; line-height: 1;
+  font-size: 2rem; cursor: pointer;
+  filter: drop-shadow(0 3px 6px rgba(0,0,0,.5));
+  touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+  animation: bugWalk var(--dur, 9000ms) linear forwards, bugWiggle .35s ease-in-out infinite;
+}
+@keyframes bugWalk {
+  from { transform: translateX(var(--from, -14vw)) scaleX(var(--flip, 1)); }
+  to   { transform: translateX(var(--to, 108vw)) scaleX(var(--flip, 1)); }
+}
+@keyframes bugWiggle { 50% { margin-top: -4px; } }
+.bug.squash { animation: none; transform: scale(1.6); opacity: 0; transition: transform .25s, opacity .25s; }
