@@ -473,7 +473,7 @@ window.Career = (() => {
     save();
     const extra = `<div class="tour-pts">💰 수당 +${pay}만 · ${S.team} ${sn.teamW}승 ${sn.teamL}패 · 현재 ${myRank()}위</div>`;
     if (sn.game >= sn.total) {
-      return { extra, nextLabel: "🏁 시즌 결산", nextFn: finishSeason };
+      return { extra, nextLabel: "🍂 정규시즌 종료", nextFn: enterPostseason };
     }
     return {
       extra,
@@ -511,6 +511,85 @@ window.Career = (() => {
       while (idx < feeds.length) apply(feeds[idx++]);
       done();
     };
+  }
+
+  const inPost = () => !!(S.post && S.post.myRound && !S.post.eliminated);
+
+  /* 정규시즌이 끝나면 최종 순위로 가을야구 진출을 가려요. 6위 이하면 바로 결산이에요. */
+  function enterPostseason() {
+    const sn = S.season;
+    const standings = [
+      { name: S.team, w: sn.teamW, l: sn.teamL, str: 0.5 },
+      ...sn.others.map((o) => ({ name: o.name, w: o.w, l: o.l, str: o.str })),
+    ].sort((a, b) => b.w - a.w);
+
+    const bracket = Postseason.buildBracket(standings, S.team);
+    if (!bracket) {                       // 6위 이하 — 가을야구 없음
+      S.post = null;
+      save();
+      playFeeds("🍂 가을야구", [
+        { text: `정규시즌 ${myRank()}위 — 가을야구 진출에 실패했어요`, cls: "bad" },
+        { text: "5위 안에 들어야 가을야구에 나갈 수 있어요" },
+      ], finishSeason);
+      return;
+    }
+
+    S.post = {
+      series: bracket.series,
+      myTeam: S.team,
+      myRank: bracket.myRank,
+      myRound: bracket.myRound,
+      gameNo: 1,
+      eliminated: false,
+      wonKS: false,
+      // 자동 시뮬에 쓸 팀 강도 (내 팀 것은 안 써요 — 내 경기는 직접 치르니까요)
+      str: standings.reduce((m, t) => ((m[t.name] = t.str), m), {}),
+      stats: S.pos === "batter"
+        ? { ab: 0, hits: 0, hr: 0, sb: 0 }
+        : { ip: 0, k: 0, er: 0, wins: 0, saves: 0, g: 0 },
+    };
+    save();
+    advancePostseason([{ text: `🍂 ${bracket.myRank}위로 가을야구에 진출했어요!`, cls: "good" }]);
+  }
+
+  /* 대진을 앞으로 굴려요. 내가 나설 시리즈를 만나면 멈추고 화면을 그려요.
+   * 내가 안 낀 라운드는 팀 강도로 자동 판정해서 연출로 흘려보내요. */
+  function advancePostseason(seed) {
+    const P = S.post;
+    const feeds = seed ? seed.slice() : [];
+
+    for (;;) {
+      P.series = Postseason.feedWinner(P.series);
+      const idx = P.series.findIndex((s) => !s.done && s.b != null);
+      if (idx < 0) break;                        // 남은 시리즈 없음 = 가을야구 종료
+
+      const s = P.series[idx];
+      const mine = !P.eliminated && (s.a === P.myTeam || s.b === P.myTeam);
+      if (mine) {
+        P.myRound = s.round;
+        // 와일드카드는 4위가 1승을 안고 시작하니 그만큼 빼야 차수가 맞아요
+        P.gameNo = s.aw + s.bw + 1 - (s.round === "wc" ? 1 : 0);
+        save();
+        const go = () => { renderPost(); show("screen-pro"); };
+        if (feeds.length) playFeeds("🍂 가을야구", feeds, go); else go();
+        return;
+      }
+
+      P.series[idx] = Postseason.simSeries(
+        s.round, s.a, s.b, P.str[s.a], P.str[s.b], s.round === "wc" ? 1 : 0
+      );
+      const r = P.series[idx];
+      feeds.push({ text: `${Postseason.LABEL[r.round]}  ${r.a} ${r.aw}-${r.bw} ${r.b} → ${r.winner} 진출` });
+    }
+
+    // 가을야구 종료 — 우승 여부를 확정하고 결산으로
+    const ks = P.series[3];
+    P.wonKS = !!(ks.done && ks.winner === P.myTeam);
+    P.myRound = null;
+    save();
+    if (P.wonKS) feeds.push({ text: "🏆 한국시리즈 우승!! 헹가래의 주인공이 됐어요", cls: "good" });
+    else if (ks.done) feeds.push({ text: `🏆 ${ks.winner}이(가) 한국시리즈 우승을 차지했어요` });
+    if (feeds.length) playFeeds("🍂 가을야구", feeds, finishSeason); else finishSeason();
   }
 
   function finishSeason() {
