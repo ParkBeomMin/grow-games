@@ -176,7 +176,7 @@
     function unicornSection(hofRows) {
       if (!hofRows) return "";
       const es = hofRows.filter((r) => r.game === "unicorn" && r.data).map((r) => r.data);
-      if (!es.length) return `<section><h2>🦄 더 유니콘 · 창업가 기록</h2><p class="empty">아직 은퇴한 창업가가 없어요.</p></section>`;
+      if (!es.length) return "";   // 빈 상태 안내는 renderPanel의 emptyCard가 맡아요
 
       const num = (v) => (typeof v === "number" && isFinite(v) ? v : 0);
       const deca = es.filter((e) => e.stage === "데카콘").length;
@@ -184,7 +184,7 @@
       const avgExit = es.reduce((s, e) => s + num(e.exits), 0) / es.length;
       const maxSo = Math.max(...es.map((e) => num(e.so)));
 
-      let html = `<section><h2>🦄 더 유니콘 · 창업가 기록</h2>
+      let html = `<section><h2>🏢 창업가 기록</h2>
         <div class="kpis">
           <div class="kpi"><div class="n">${es.length.toLocaleString()}</div><div class="l">🏛️ 은퇴 창업가</div></div>
           <div class="kpi"><div class="n">${deca.toLocaleString()}</div><div class="l">👑 데카콘 달성</div></div>
@@ -198,7 +198,7 @@
       const si = UNI_STAGES.filter((s) => byStage[s]).map((s) => [s, byStage[s]]);
       if (si.length) {
         const smax = Math.max(...si.map((x) => x[1]));
-        html += `<section><h2>🦄 더 유니콘 · 최고 단계 분포</h2>${si.map(([k, v]) => bar(k, v, smax)).join("")}</section>`;
+        html += `<section><h2>📊 최고 단계 분포</h2>${si.map(([k, v]) => bar(k, v, smax)).join("")}</section>`;
       }
 
       // Exit 횟수 분포
@@ -208,13 +208,13 @@
       const ei = order.filter((k) => byExit[k]).map((k) => [k, byExit[k]]);
       if (ei.length) {
         const emax = Math.max(...ei.map((x) => x[1]));
-        html += `<section><h2>🦄 더 유니콘 · Exit 횟수 분포</h2>${ei.map(([k, v]) => bar(k, v, emax)).join("")}</section>`;
+        html += `<section><h2>🚀 Exit 횟수 분포</h2>${ei.map(([k, v]) => bar(k, v, emax)).join("")}</section>`;
       }
 
       // 상위 기록
       const top = [...es].sort((a, b) => num(b.score) - num(a.score)).slice(0, 5);
       const tmax = num(top[0].score);
-      html += `<section><h2>🦄 더 유니콘 · 최고 기록 TOP ${top.length}</h2>${
+      html += `<section><h2>🏆 최고 기록 TOP ${top.length}</h2>${
         top.map((e, i) => bar(`${i + 1}. ${e.name || "-"} (${e.stage || "-"} · Exit ${num(e.exits)}회)`, num(e.score), tmax)).join("")
       }<p class="empty" style="margin-top:8px">최고 기록: ${esc(best.name || "-")} · ${esc(best.grade || "-")}</p></section>`;
       return html;
@@ -335,6 +335,7 @@ grant select on public.stats_summary, public.stats_choices, public.stats_daily t
       const parts = [
         dailySection(STATE.daily, game),
         choiceSection(STATE.choices, game),
+        game === "unicorn" ? unicornSection(STATE.hofRows) : "",
         funnelSection(STATE.summary, STATE.hofByGame, game),
       ];
       $("panel").innerHTML = parts.join("").trim() || emptyCard(game);
