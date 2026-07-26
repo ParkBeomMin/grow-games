@@ -477,22 +477,21 @@ function explainAsset() {
   );
 }
 
-// ---------- 시리즈 누적 사용자 수 ----------
+// ---------- 더 유니콘 플레이어 수 ----------
 // register는 id가 같으면 무시돼요(resolution=ignore-duplicates). 여러 번 불러도
-// 이 기기는 한 번만 집계되고 전적도 덮이지 않아요. 유니콘도 등록해둬야
-// 유니콘만 하는 사람이 총 사용자 수에 빠지지 않아요.
+// 이 기기는 한 번만 집계되고 전적도 덮이지 않아요.
+// 등록은 v2.1.0부터 시작돼서, 그 전부터 하던 사람은 한 번 접속해야 잡혀요.
 function registerCompany() {
   if (window.Match && window.Match.enabled()) window.Match.register("unicorn", S.company);
 }
-// 시리즈 전체 사용자 수예요(유니콘만이 아니라 8종 합계, 기기 중복 제거).
-// count()보다 무거운 조회라 주기를 길게 잡았어요 — 어차피 천천히 변해요.
-const COUNT_POLL_MS = 300000;
-const COUNT_CACHE = "unicorn-total-users";
+// 더 유니콘에 등록된 기기 수(누적)예요. 동시 접속자가 아니라 '지금까지 플레이한 사람'.
+const COUNT_POLL_MS = 60000;
+const COUNT_CACHE = "unicorn-player-count";
 let lastCountAt = 0;
 function paintCount(n) {
   if (!n) return;
   const el = $("uni-count");
-  el.innerHTML = `🌏 지금까지 <b>${n.toLocaleString()}명</b>이 시리즈를 플레이했어요`;
+  el.innerHTML = `🦄 지금까지 <b>${n.toLocaleString()}명</b>이 더 유니콘을 플레이했어요`;
   el.classList.remove("hidden");
 }
 function refreshCount(force) {
@@ -502,7 +501,7 @@ function refreshCount(force) {
   const now = Date.now();
   if (!force && now - lastCountAt < COUNT_POLL_MS) return;
   lastCountAt = now;
-  window.Match.totalUsers().then((n) => {
+  window.Match.count("unicorn").then((n) => {
     if (!n) return;                    // 집계 전이거나 실패 — 직전 값을 그대로 둬요
     try { localStorage.setItem(COUNT_CACHE, String(n)); } catch {}
     paintCount(n);

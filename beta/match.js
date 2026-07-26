@@ -108,33 +108,6 @@ window.Match = (() => {
     }
   }
 
-  // 시리즈 전체 사용자 수 — players.id가 "<게임>-<기기ID>"이고 기기ID(grow-player-id)는
-  // 8개 게임이 공유해요. 한 사람이 여러 게임을 하면 행이 여러 개라, 접두어를 떼고
-  // 중복을 지워야 진짜 사용자 수가 나옵니다.
-  // (행이 MAX_SCAN을 넘어가면 실제보다 적게 나와요 — 그때는 DB에 count(distinct) RPC를 두세요)
-  const MAX_SCAN = 5000;
-  async function totalUsers() {
-    if (!enabled()) return null;
-    try {
-      const res = await fetch(
-        `${SUPABASE_URL}/rest/v1/players?select=id&limit=${MAX_SCAN}`,
-        { headers: headers() }
-      );
-      if (!res.ok) return null;
-      const arr = await res.json();
-      if (!Array.isArray(arr)) return null;
-      const set = new Set();
-      for (const r of arr) {
-        const id = String(r.id || "");
-        const i = id.indexOf("-");
-        set.add(i < 0 ? id : id.slice(i + 1));
-      }
-      return set.size;
-    } catch {
-      return null;
-    }
-  }
-
   // 해당 게임의 플레이어 풀 (레이팅 내림차순, 최대 200명)
   async function roster(game) {
     if (!enabled()) return null;
@@ -206,5 +179,5 @@ window.Match = (() => {
     }
   }
 
-  return { enabled, playerId, submit, roster, register, count, totalUsers, submitHof, fetchHof, backfillHof };
+  return { enabled, playerId, submit, roster, register, count, submitHof, fetchHof, backfillHof };
 })();
