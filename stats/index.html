@@ -307,13 +307,16 @@ grant select on public.stats_summary, public.stats_choices, public.stats_daily t
         <div class="kpi"><div class="n">${totalVisits.toLocaleString()}</div><div class="l">순 방문자</div></div>
         <div class="kpi"><div class="n">${totalNew.toLocaleString()}</div><div class="l">새 캐릭터</div></div>
         <div class="kpi"><div class="n">${totalInstall.toLocaleString()}</div><div class="l">📲 앱 설치 수</div></div>
-        <div class="kpi"><div class="n">${totalPwaUsers.toLocaleString()}</div><div class="l">📲 앱 사용 기기</div></div>
+        <div class="kpi"><div class="n">${totalPwaUsers.toLocaleString()}</div><div class="l">📲 앱으로 실행</div></div>
         <div class="kpi"><div class="n">${totalBattle.toLocaleString()}</div><div class="l">배틀 횟수</div></div>
         <div class="kpi"><div class="n">${totalRetire.toLocaleString()}</div><div class="l">은퇴 이벤트</div></div>
         ${hofTotal != null ? `<div class="kpi"><div class="n">${hofTotal.toLocaleString()}</div><div class="l">🏛️ 명예의 전당</div></div>` : ""}
       </div>
       ${hofTotal != null && hofTotal !== totalRetire
         ? `<p class="empty" style="margin:-12px 0 20px">ℹ️ 은퇴 이벤트(${totalRetire})는 통계 도입 이후 집계, 명예의 전당(${hofTotal})은 전체 은퇴자 명단이라 숫자가 달라요.</p>`
+        : ""}
+      ${totalInstall !== totalPwaUsers
+        ? `<p class="empty" style="margin:-12px 0 20px">ℹ️ 앱 설치(${totalInstall})는 <b>안드로이드·PC에서만</b> 잡혀요 — 아이폰은 '홈 화면에 추가'를 해도 브라우저가 설치 이벤트를 주지 않아요. 앱으로 실행(${totalPwaUsers})은 <b>게임별로</b> 세서, 한 사람이 여러 게임을 설치하면 그만큼 더해집니다. 그래서 실행이 설치보다 클 수 있어요.</p>`
         : ""}`;
 
       html += dailySection(STATE.daily, null);
