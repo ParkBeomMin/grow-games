@@ -1,3 +1,10 @@
 /* 더 루키 — 그라운드 그린 테마
  * 공용 스타일은 ../base.css (기본 팔레트가 이 게임의 테마).
  * 색을 바꾸고 싶으면 idol/style.css처럼 :root 변수만 덮어쓰면 돼요. */
+
+/* 📊 프로 화면 순위표 — 기본은 접혀 있어요 (펼치면 훈련 버튼이 화면 밖으로 밀려서요) */
+.standings-box { margin: 0 0 10px; border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; }
+.standings-box > summary { cursor: pointer; font-size: .85rem; color: var(--cream); list-style: none; }
+.standings-box > summary::-webkit-details-marker { display: none; }
+.standings-box > summary::before { content: "▸ "; color: var(--dim); }
+.standings-box[open] > summary::before { content: "▾ "; }

@@ -102,6 +102,7 @@ window.Career = (() => {
     $("pro-team").textContent = `⚾ ${S.team} · ${S.role || ""} · ${S.age}세 · ${S.proYear}년차 · 종합 ${Math.round(overall())}`;
     $("pro-turn").textContent = S.season ? `G ${S.season.game}/${S.season.total} · ${myRank()}위` : `캠프 훈련 ${3 - S.camp}/3`;
     $("pro-money").textContent = `💰 ${fmtMoney(S.money || 0)}`;
+    renderStandings();
   $("pro-cond-num").textContent = Math.round(S.condition);
     $("pro-cond-bar").style.width = `${S.condition}%`;
 
@@ -272,6 +273,17 @@ window.Career = (() => {
 
   function myRank() {
     return S.season.others.filter((o) => o.w > S.season.teamW).length + 1;
+  }
+
+  // 📊 프로 화면의 접이식 순위표. 시즌 중이 아니면 숨겨요.
+  function renderStandings() {
+    const box = $("pro-standings");
+    if (!box) return;
+    if (!S.season) { box.hidden = true; return; }
+    box.hidden = false;
+    $("pro-standings-sum").textContent =
+      `📊 ${myRank()}위 · ${S.season.teamW}승 ${S.season.teamL}패`;
+    $("pro-standings-body").innerHTML = standingsHTML();
   }
 
   function nextOpp() {
@@ -552,6 +564,8 @@ window.Career = (() => {
     S.money = (S.money || 0) + salary;
     S.age += 1;
     const finalW = sn.teamW, finalL = sn.teamL;
+    // 결산 화면에서 보여줄 최종 순위표를 남겨둬요 (S.season을 곧 지우니까요)
+    S.lastStandings = standingsHTML();
     S.season = null;
     S.pendingGame = false;
     save();
@@ -590,6 +604,7 @@ window.Career = (() => {
         s.war >= 0.5 ? "아쉬움이 남는 시즌" : "혹독한 시즌…"
       }</div>
       <div class="draft-team">${S.team} · ${s.line} · WAR ${s.war.toFixed(1)}</div>
+      ${S.lastStandings ? `<div class="hint">📊 최종 순위</div>${S.lastStandings}` : ""}
       <table class="season-table season-career"><thead><tr><th>시즌</th><th>나이</th><th>성적</th><th>WAR</th></tr></thead><tbody>${rows}</tbody></table>
       ${moreHint}
       <div class="draft-summary">
