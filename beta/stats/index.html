@@ -136,28 +136,25 @@
         <div class="bar-track"><div class="bar-fill ${cls}" style="width:${max ? Math.max(2, (val / max) * 100) : 2}%"></div>
         <span class="bar-val">${val.toLocaleString()}</span></div></div>`;
 
-    function choiceSection(rows) {
-      let html = "";
-      for (const game of Object.keys(GAMES)) {
-        const g = rows.filter((r) => r.game === game && r.choice);
-        if (!g.length) continue;
-        const agg = {};
-        for (const r of g) { const c = normChoice(r.choice); agg[c] = (agg[c] || 0) + r.n; }
-        const items = Object.entries(agg).sort((a, b) => b[1] - a[1]);
-        const max = items[0][1];
-        const title = game === "rookie" ? "지역 선택 분포" : "소속사 선택 분포";
-        html += `<section><h2>${GAMES[game]} · ${title}</h2>${items.map(([k, v]) => bar(k, v, max)).join("")}</section>`;
+    // 배경 분포 + 포지션 분포를 한 문자열로 돌려줘요. 데이터가 없으면 빈 문자열이에요.
+    function choiceSection(rows, game) {
+      const g = rows.filter((r) => r.game === game && r.choice);
+      if (!g.length) return "";
 
-        // 포지션 분포
-        const pos = {};
-        for (const r of g) if (r.pos) pos[r.pos] = (pos[r.pos] || 0) + r.n;
-        const pi = Object.entries(pos).sort((a, b) => b[1] - a[1]);
-        if (pi.length) {
-          const pmax = pi[0][1];
-          html += `<section><h2>${GAMES[game]} · 포지션 분포</h2>${pi.map(([k, v]) => bar(POS[k] || k, v, pmax)).join("")}</section>`;
-        }
+      const agg = {};
+      for (const r of g) { const c = normChoice(r.choice); agg[c] = (agg[c] || 0) + r.n; }
+      const items = Object.entries(agg).sort((a, b) => b[1] - a[1]);
+      const max = items[0][1];
+      let html = `<section><h2>🗺️ 배경 선택 분포</h2>${items.map(([k, v]) => bar(k, v, max)).join("")}</section>`;
+
+      const pos = {};
+      for (const r of g) if (r.pos) pos[r.pos] = (pos[r.pos] || 0) + r.n;
+      const pi = Object.entries(pos).sort((a, b) => b[1] - a[1]);
+      if (pi.length) {
+        const pmax = pi[0][1];
+        html += `<section><h2>🧢 포지션 분포</h2>${pi.map(([k, v]) => bar(POS[k] || k, v, pmax)).join("")}</section>`;
       }
-      return html || `<section><h2>선택 분포</h2><p class="empty">아직 새 캐릭터 데이터가 없어요.</p></section>`;
+      return html;
     }
 
     function funnelSection(rows, hofByGame) {
@@ -339,6 +336,7 @@ grant select on public.stats_summary, public.stats_choices, public.stats_daily t
       const game = activeGame;
       const parts = [
         dailySection(STATE.daily, game),
+        choiceSection(STATE.choices, game),
       ];
       $("panel").innerHTML = parts.join("").trim() || emptyCard(game);
     }
