@@ -30,9 +30,9 @@
     .kpi .l { font-size: .78rem; color: var(--dim); margin-top: 2px; }
     section { background: var(--bg2); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; margin-bottom: 16px; }
     section h2 { font-size: 1rem; margin-bottom: 14px; display: flex; align-items: center; gap: 6px; }
-    .tabs { display: flex; gap: 6px; margin-bottom: 16px; }
-    .tab { flex: 1; padding: 9px; border: 1px solid var(--line); background: var(--bg2); color: var(--dim); border-radius: 10px; cursor: pointer; font-size: .9rem; }
-    .tab.on { border-color: var(--accent); color: var(--accent); }
+    .tabs { display: flex; gap: 6px; margin-bottom: 16px; overflow-x: auto; scrollbar-width: thin; padding: 8px 4px; position: sticky; top: 0; z-index: 20; background: var(--bg); -webkit-overflow-scrolling: touch; }
+    .tab { flex: 0 0 auto; white-space: nowrap; padding: 8px 14px; border: 1px solid var(--line); background: var(--bg2); color: var(--dim); border-radius: 999px; cursor: pointer; font-size: .88rem; }
+    .tab.on { border-color: var(--accent); color: var(--accent); font-weight: 700; }
     .bar-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; font-size: .85rem; }
     .bar-label { width: 96px; flex-shrink: 0; color: var(--dim); text-align: right; }
     .bar-track { flex: 1; background: #0a0f18; border-radius: 6px; height: 22px; position: relative; overflow: hidden; }
@@ -74,7 +74,9 @@
     <h1>📊 통계 대시보드</h1>
     <p class="sub">키우기 시리즈 · <a class="home" href="../">🎮 게임으로</a> · <button class="refresh" id="refresh">↻ 새로고침</button> · <button class="refresh" id="lockout">🔒 잠그기</button></p>
 
-    <div id="content"><p class="empty">불러오는 중…</p></div>
+    <div id="overview"><p class="empty">불러오는 중…</p></div>
+    <nav class="tabs" id="tabs" hidden></nav>
+    <div id="panel"></div>
   </div>
 
   <script src="../env.js"></script>
@@ -271,7 +273,7 @@ grant select on public.stats_summary, public.stats_choices, public.stats_daily t
     }
 
     async function load() {
-      $("content").innerHTML = `<p class="empty">불러오는 중…</p>`;
+      $("overview").innerHTML = `<p class="empty">불러오는 중…</p>`;
       let summary, choices, daily, failed = false;
       try { summary = await getView("stats_summary"); } catch { failed = true; }
       try { choices = await getView("stats_choices"); } catch { failed = true; }
@@ -285,7 +287,7 @@ grant select on public.stats_summary, public.stats_choices, public.stats_daily t
       }
 
       if (failed || !summary) {
-        $("content").innerHTML = setupCard("아직 집계 뷰가 없거나 접근할 수 없어요.");
+        $("overview").innerHTML = setupCard("아직 집계 뷰가 없거나 접근할 수 없어요.");
         wireCopy();
         return;
       }
@@ -316,7 +318,7 @@ grant select on public.stats_summary, public.stats_choices, public.stats_daily t
       html += funnelSection(summary, hofByGame);
 
       if (!summary.length) html = setupCard("뷰는 있는데 아직 수집된 데이터가 없어요.") + html;
-      $("content").innerHTML = html;
+      $("overview").innerHTML = html;
       wireCopy();
     }
 
