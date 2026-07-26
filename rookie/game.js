@@ -518,8 +518,16 @@ const GEAR_TIERS = [
   { n: "I", bonus: 3, price: 300 },
   { n: "II", bonus: 5, price: 900 },
   { n: "III", bonus: 8, price: 2500 },
-  { n: "IV", bonus: 12, price: 9000 },
-  { n: "V", bonus: 16, price: 25000 },
+  { n: "IV", bonus: 12, price: 7000 },
+  { n: "V", bonus: 16, price: 16000 },
+];
+/* 🩹 컨디션 회복 — 휴식은 턴을 쓰지만 이건 돈으로 대신해요.
+   싸게 두면 컨디션 관리가 의미를 잃어서, 프로 한 시즌 수입으로 십수 개 정도만
+   살 수 있게 잡았어요. */
+const RECOVERY = [
+  { emoji: "🥤", name: "이온음료", heal: 25, price: 300 },
+  { emoji: "💊", name: "피로회복제", heal: 50, price: 800 },
+  { emoji: "💉", name: "영양주사", heal: 100, price: 2000 },
 ];
 let shopReturn = "screen-main";
 function openShop(returnTo) {
@@ -558,6 +566,37 @@ function renderShop() {
     }
     box.appendChild(div);
   }
+  // 🩹 컨디션 회복 — 가득이면 한 줄 안내만 보여줘요
+  if ((S.condition || 0) >= 100) {
+    const d = document.createElement("div");
+    d.className = "shop-item owned";
+    d.innerHTML = `<span class="si-emoji">🩹</span><div class="si-info"><div class="si-name">컨디션이 가득해요!</div>회복 아이템은 지쳤을 때 다시 들러주세요 ✨</div>`;
+    box.appendChild(d);
+  } else {
+    for (const it of RECOVERY) {
+      const d = document.createElement("div");
+      d.className = "shop-item";
+      const label = it.heal >= 100 ? "컨디션 완전 회복" : `컨디션 +${it.heal}`;
+      d.innerHTML = `
+        <span class="si-emoji">${it.emoji}</span>
+        <div class="si-info"><div class="si-name">${it.name}</div>${label} · ${fmtMoney(it.price)}</div>
+        <button class="mini-btn">구매</button>`;
+      d.querySelector(".mini-btn").onclick = () => {
+        if ((S.money || 0) < it.price) {
+          alert("자금이 부족해요! 수당이나 광고 보상으로 모아봐요 💰");
+          return;
+        }
+        S.money -= it.price;
+        const before = Math.round(S.condition);
+        S.condition = clamp(S.condition + it.heal, 0, 100);
+        save();
+        renderShop();
+        alert(`${it.emoji} ${it.name} 사용!\n\n컨디션 ${before} → ${Math.round(S.condition)}`);
+      };
+      box.appendChild(d);
+    }
+  }
+
   // 🎁 보너스 보상 (30분 쿨다운) — 팝업으로 진행
   const left = adCooldownLeft();
   const adRow = $("ad-row");
@@ -1728,7 +1767,8 @@ function showDraft() {
 const HELP_SECTIONS = [
   { emoji: "🏋️", title: "훈련과 컨디션", body:
     "매달 훈련이나 휴식을 골라요. 훈련은 능력치를 올리고 컨디션을 깎아요.\n" +
-    "컨디션이 낮은 채로 계속 훈련하면 부상 위험이 커져요. 무리하지 말고 쉬어 가세요." },
+    "컨디션이 낮은 채로 계속 훈련하면 부상 위험이 커져요. 무리하지 말고 쉬어 가세요.\n" +
+    "급할 땐 🛍️상점의 회복 아이템으로 컨디션을 채울 수 있어요. 휴식과 달리 턴을 쓰지 않아요." },
   { emoji: "⭐", title: "재능과 각성", body:
     "능력치 옆의 별은 두 가지에 영향을 줘요.\n" +
     "① 훈련 효율 — 별이 많을수록 같은 훈련으로 더 많이 올라요.\n" +
@@ -1751,6 +1791,7 @@ const HELP_SECTIONS = [
   { emoji: "💰", title: "돈 벌기와 쓰기", body:
     "고교 때는 대회 수당이, 프로에서는 경기 수당과 시즌 연봉이 들어와요.\n" +
     "🛍️상점에서 장비를 사면 능력치가 바로 올라요. 등급은 순서대로만 살 수 있어요.\n" +
+    "같은 상점에서 컨디션 회복 아이템도 팔아요 — 🥤300만 · 💊800만 · 💉2,000만.\n" +
     "30분마다 🎁특훈으로 무료 훈련을 한 번 받을 수 있어요." },
 ];
 
