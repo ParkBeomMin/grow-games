@@ -16,6 +16,8 @@ body {
 .company { font-family: "Jua", sans-serif; font-size: 1.5rem; color: var(--accent); }
 .series-link { color: var(--dim); font-size: 0.8rem; text-decoration: none; }
 .series-link:hover { color: var(--sky); }
+/* 눌러서 설명을 볼 수 있는 지표 (자산) */
+.tapinfo { cursor: pointer; border-bottom: 1px dotted currentColor; }
 /* 지금 창업 중인 회사 수 — 1분마다 갱신돼요 */
 .uni-count { font-size: 0.74rem; color: var(--dim); margin: 4px 0 0; }
 .uni-count b { color: var(--sky); }

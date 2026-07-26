@@ -204,14 +204,16 @@ function fmt(n) {
   const s = x >= 100 ? String(Math.round(x)) : x.toFixed(2).replace(/\.?0+$/, "");
   return s + UNITS[t];
 }
-const lines = (n) => fmt(n) + "줄";
-// 생산 속도용 — 100 미만 소수도 '0.1줄'처럼 보이게 (내림 때문에 0으로 보이지 않게)
+// 이 게임의 화폐는 '코드라인'이에요. 좁은 자리(부제·아이템 행)에서는
+// 앞에서 단위를 이미 밝혔으니 숫자만 씁니다.
+const lines = (n) => fmt(n) + " 코드라인";
+// 생산 속도용 — 100 미만 소수도 '0.1'처럼 보이게 (내림 때문에 0으로 보이지 않게)
 function rate(n) {
   if (n <= 0) return "0";
   if (n < 100) { const r = Math.round(n * 10) / 10; return Number.isInteger(r) ? String(r) : r.toFixed(1); }
   return fmt(n);
 }
-const linesRate = (n) => rate(n) + "줄";
+const linesRate = (n) => rate(n) + " 코드라인";
 const mmss = (ms) => { const t = Math.ceil(ms / 1000); return Math.floor(t / 60) + ":" + String(t % 60).padStart(2, "0"); };
 
 // ---------- 로그 ----------
@@ -345,7 +347,7 @@ function showEnding() {
   $("end-company").textContent = "🦄 " + S.company;
   $("end-stats").innerHTML = [
     ["🏢 최고 기업가치", lines(peakVal())],
-    ["💾 통산 생산 코드", lines(S.earnedAll)],
+    ["💾 통산 생산량", lines(S.earnedAll)],
     ["🚀 Exit 횟수", S.exits + "회"],
     ["🧾 누적 스톡옵션", S.so + " (×" + prestigeMult().toFixed(2) + ")"],
     ["⏱️ 플레이 타임", hhmm(playTime())],
@@ -407,7 +409,7 @@ function spawnBug() {
     const loss = bugPenalty();
     if (loss > 0) {
       S.code = Math.max(0, S.code - loss);
-      addLog(`🐛💥 버그를 놓쳤어요… 장애로 코드 ${lines(loss)} 유실!`);
+      addLog(`🐛💥 버그를 놓쳤어요… 장애로 ${lines(loss)} 유실!`);
     } else {
       addLog("🐛… 버그가 도망갔어요. (다행히 잃을 코드가 없었네요)");
     }
@@ -456,6 +458,23 @@ function confirmName() {
   save(); renderAll();
   registerCompany();                  // 창업·개명 시 풀에 등록 (중복은 무시돼요)
   if (namingDone) { const cb = namingDone; namingDone = null; cb(); }
+}
+
+// ---------- 자산이 뭔가요 ----------
+// HUD의 '🏗️ 자산'을 누르면 뜨는 설명. 모바일에선 title 툴팁이 안 보여서
+// 탭으로도 확인할 수 있게 해뒀어요.
+function explainAsset() {
+  const keep = Math.round(ASSET_KEEP * 100);
+  alert(
+    `🏗️ 자산 — ${lines(assetVal())}\n\n` +
+    `장비·조직에 투자한 코드라인의 평가액이에요 (투자액의 ${keep}%).\n\n` +
+    `🏦 기업가치 = 💾 보유 코드라인 + 🏗️ 자산\n` +
+    `= ${fmt(S.code)} + ${fmt(assetVal())} = ${lines(valuation())}\n\n` +
+    `그래서 뭔가 사면 감가 ${100 - keep}%만큼 기업가치가 잠깐 내려갔다가,\n` +
+    `늘어난 생산으로 다시 채워지고 그 위로 올라가요.\n\n` +
+    `단계와 Exit 보상은 '이번 판 최고 기업가치'로 정해지니\n` +
+    `사도 강등되거나 손해 보지 않아요.`
+  );
 }
 
 // ---------- 창업 중인 회사 수 ----------
@@ -626,21 +645,21 @@ function renderHud() {
   const now = Date.now();
   // 큰 숫자(진행바)는 라이브 기업가치, 단계 배지는 최고 기록 — 강등은 없어요
   const v = valuation(), pv = peakVal(), st = stageOf(pv), ns = nextStage(pv);
-  $("hud-code").textContent = "💾 잔액 " + lines(S.code);
-  $("hud-sec").textContent = linesRate(perSec()) + "/초";
-  $("hud-asset").textContent = "💼 자산 " + lines(assetVal());
+  $("hud-code").textContent = "💾 " + lines(S.code);
+  $("hud-sec").textContent = "초당 " + rate(perSec());
+  $("hud-asset").textContent = "🏗️ 자산 " + fmt(assetVal());
   $("hud-so").textContent = "🧾 스톡옵션 " + S.so + " (×" + prestigeMult().toFixed(2) + ")";
-  $("clicker-label").textContent = `눌러서 코딩! 💾 +${fmt(clickValue())}줄`;
+  $("clicker-label").textContent = `눌러서 코딩! 💾 +${fmt(clickValue())} 코드라인`;
   $("stage-name").textContent = `${st.emoji} ${st.name}`;
-  $("stage-val").textContent = "🏦 " + lines(v);
-  $("stage-val").title = "기업가치 = 잔액 + 보유 자산. 장비·자동화를 사면 감가만큼 내려가요.";
+  $("stage-val").textContent = "🏦 기업가치 " + fmt(v);
+  $("stage-val").title = "기업가치 = 보유 코드라인 + 자산. 장비·조직을 사면 감가만큼 내려가요.";
   const bar = $("stage-bar");
   if (ns) {
     const pct = Math.max(0, Math.min(100, ((v - st.v) / (ns.v - st.v)) * 100));
     bar.style.width = pct + "%";
     // 방금 지른 직후엔 라이브 값이 최고치보다 낮아요 — 그 격차를 같이 보여줘요
-    const behind = pv - v > (ns.v - st.v) * 0.01 ? ` · 최고 ${lines(pv)}` : "";
-    $("stage-next").textContent = `다음: ${ns.emoji} ${ns.name} (${lines(ns.v)})${behind}`;
+    const behind = pv - v > (ns.v - st.v) * 0.01 ? ` · 최고 ${fmt(pv)}` : "";
+    $("stage-next").textContent = `다음: ${ns.emoji} ${ns.name} (${fmt(ns.v)})${behind}`;
   } else {
     bar.style.width = "100%";
     $("stage-next").textContent = "🏆 최종 단계 도달!";
@@ -656,7 +675,7 @@ function renderHud() {
   // Exit 버튼
   const exitBtn = $("btn-exit");
   if (v >= EXIT_UNLOCK) { exitBtn.disabled = false; exitBtn.innerHTML = `🚀 Exit — 매각하고 재창업 (스톡옵션 +${exitSO()})`; }
-  else { exitBtn.disabled = true; exitBtn.innerHTML = `🔒 Exit — 시리즈 A(${lines(EXIT_UNLOCK)})부터`; }
+  else { exitBtn.disabled = true; exitBtn.innerHTML = `🔒 Exit — 시리즈 A(기업가치 ${fmt(EXIT_UNLOCK)})부터`; }
 
   // 은퇴 — 조건 충족 시에만 노출 (아무 때나 끝낼 수 있게)
   $("btn-retire").classList.toggle("hidden", !canRetire());
@@ -673,7 +692,7 @@ function itemHTML(item, cnt, cost, can, unit) {
           <b>???</b>
           <span class="gen-desc">Exit ${item.req}회 달성 시 해금</span>
         </span>
-        <span class="gen-right"><span class="gen-lv">${unit} +${fmt(item.per)}줄</span></span>
+        <span class="gen-right"><span class="gen-lv">${unit} +${fmt(item.per)}</span></span>
       </button>`;
   }
   return `
@@ -681,7 +700,7 @@ function itemHTML(item, cnt, cost, can, unit) {
       <span class="gen-emoji">${item.emoji}</span>
       <span class="gen-info">
         <b>${item.name}</b>
-        <span class="gen-desc">${unit} +${fmt(item.per)}줄</span>
+        <span class="gen-desc">${unit} +${fmt(item.per)}</span>
       </span>
       <span class="gen-right">
         <span class="gen-lv">Lv.${cnt}</span>
@@ -751,8 +770,8 @@ function offlineReward() {
   if (earn < 1) return;
   S.code += earn; S.earnedRun += earn; S.earnedAll += earn;
   const mins = Math.round(elapsed / 60);
-  addLog(`💤 자리를 비운 ${mins}분 동안 ${lines(earn)}의 코드를 뽑았어요! (오프라인 50%)`);
-  setTimeout(() => alert(`💤 자동 개발 완료!\n\n자리를 비운 ${mins}분 동안\n${lines(earn)}의 코드를 뽑아뒀어요. (오프라인 50% 효율)`), 300);
+  addLog(`💤 자리를 비운 ${mins}분 동안 ${lines(earn)}을 뽑았어요! (오프라인 50%)`);
+  setTimeout(() => alert(`💤 자동 개발 완료!\n\n자리를 비운 ${mins}분 동안\n${lines(earn)}을 뽑아뒀어요. (오프라인 50% 효율)`), 300);
 }
 
 // ---------- 초기화 ----------
@@ -779,6 +798,7 @@ function init() {
   $("btn-name-ok").addEventListener("click", confirmName);
   $("name-input").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); confirmName(); } });
   $("company-name").addEventListener("click", () => openNaming("rename"));
+  $("hud-asset").addEventListener("click", explainAsset);
   document.querySelectorAll(".tab").forEach((b) => b.addEventListener("click", () => setTab(b.dataset.tab)));
   $("btn-reset").addEventListener("click", () => {
     if (confirm("정말 처음부터 다시 시작할까요? 모든 진행(스톡옵션 포함)이 사라져요!")) {
