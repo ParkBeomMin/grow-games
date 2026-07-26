@@ -653,17 +653,20 @@ window.Career = (() => {
     };
     /* 가을야구에 들어간 뒤로는 남은 시리즈가 전부 내 경기예요. 그래서 라운드를 이기면
      * 연출 화면에 띄울 게 이 한 줄뿐이라, 결과 카드를 지우고 빈 상자를 보여주게 돼요.
-     * 그 자리에서 축하만 하고 바로 다음 라운드 화면으로 넘어가요.
+     * 대신 결과 화면 위에서 축하만 하고, 다음 라운드로는 버튼을 눌러야 넘어가요.
      * 탈락·한국시리즈는 결산으로 가면서 다른 팀 결과도 함께 흘려보내야 해서 그대로 둬요. */
+    const nextName = Postseason.LABEL[ROUND_ORDER[ROUND_ORDER.indexOf(s.round) + 1]];
     let cheering = false;
     const nextRound = () => {
-      if (cheering) return;                 // 연출 중 두 번 눌리면 대진이 두 칸 밀려요
+      if (cheering) return;                 // 축하 도중 다시 눌려도 대진이 밀리지 않게요
       cheering = true;
-      $("btn-tour-next").disabled = true;
-      if (!window.Fx) return advancePostseason();
-      Fx.confetti({ emojis: ["🎉", "🍂", "✨"], count: 50 });
-      Fx.flash(`🎉 ${label} 승리! ${myW}-${opW}`);
-      setTimeout(() => advancePostseason(), 900);
+      if (window.Fx) {
+        Fx.confetti({ emojis: ["🎉", "🍂", "✨"], count: 50 });
+        Fx.flash(`🎉 ${label} 승리! ${myW}-${opW}`);
+      }
+      const btn = $("btn-tour-next");
+      btn.textContent = `⚾ ${nextName}로`;
+      btn.onclick = () => advancePostseason();
     };
     return {
       extra,
@@ -677,26 +680,39 @@ window.Career = (() => {
     $("tour-round").textContent = "";
     $("tour-card").innerHTML = `<div class="pbp" id="pbp-pro"></div>`;
     show("screen-tournament");
-    let idx = 0, timer = null;
-    const apply = (f) => {
+    let idx = 0, timer = null, finished = false;
+    const apply = (f, withFx) => {
       const div = document.createElement("div");
       if (f.cls) div.className = f.cls;
       div.textContent = f.text;
       $("pbp-pro").appendChild(div);
       $("pbp-pro").scrollTop = $("pbp-pro").scrollHeight;
+      if (withFx && f.fx && window.Fx) f.fx();
     };
-    const done = () => { clearInterval(timer); onDone(); };
-    timer = setInterval(() => {
+    const done = () => {
+      if (finished) return;               // 빨리 감기를 두 번 누르면 결산이 두 번 돌아요
+      finished = true;
+      clearTimeout(timer);
+      onDone();
+    };
+    /* 이펙트가 붙은 줄은 연출이 끝날 때까지 다음 줄을 미뤄요.
+     * 수상이 여러 개면 예전엔 한꺼번에 겹쳐 떠서 뭘 받았는지 안 보였어요. */
+    const step = () => {
       if (idx >= feeds.length) { done(); return; }
-      apply(feeds[idx++]);
-    }, 600);
+      const f = feeds[idx++];
+      apply(f, true);
+      timer = setTimeout(step, f.fx ? 1700 : 600);
+    };
+    timer = setTimeout(step, 300);
     $("btn-tour-next").textContent = "⏩ 빨리 감기";
     $("btn-tour-next").onclick = () => {
-      while (idx < feeds.length) apply(feeds[idx++]);
+      clearTimeout(timer);
+      while (idx < feeds.length) apply(feeds[idx++], false);   // 건너뛸 땐 이펙트는 생략해요
       done();
     };
   }
 
+  const ROUND_ORDER = ["wc", "semi", "po", "ks"];
   const inPost = () => !!(S.post && S.post.myRound && !S.post.eliminated);
 
   /* 정규시즌이 끝나면 최종 순위로 가을야구 진출을 가려요. 6위 이하면 바로 결산이에요. */
@@ -923,10 +939,12 @@ window.Career = (() => {
         ? "🏆 한국시리즈 우승 — 첫 반지예요!"
         : `🏆 한국시리즈 우승 — 통산 ${S.career.rings}번째 반지예요`,
       cls: "good",
+      fx: () => Fx.celebrate("champion", "🏆 한국시리즈 우승!"),
     });
-    if (champ && window.Fx) Fx.celebrate("champion", "🏆 우승!");
-    for (const a of awards) feeds.push({ text: `🎖️ ${a} 수상!`, cls: "good" });
-    if (awards.length && window.Fx) Fx.celebrate("award", `🎖️ ${awards.join(" · ")}!`);
+    // 수상은 하나씩 따로 띄워요 — 합쳐 놓으면 무엇을 받았는지 눈에 안 들어와요
+    for (const a of awards) {
+      feeds.push({ text: `🎖️ ${a} 수상!`, cls: "good", fx: () => Fx.celebrate("award", `🎖️ ${a} 수상!`) });
+    }
     feeds.push({ text: `💰 시즌 연봉 정산 +${fmtMoney(salary)}`, cls: "good" });
     playFeeds(`📺 ${S.proYear}년차 시즌 결산`, feeds, seasonReport);
   }
