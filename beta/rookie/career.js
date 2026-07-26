@@ -269,9 +269,16 @@ window.Career = (() => {
     const rows = [
       { name: S.team, w: S.season.teamW, l: S.season.teamL, me: true },
       ...S.season.others,
-    ].sort((a, b) => b.w - a.w);
-    return `<table class="rank-table season-standings"><thead><tr><th>#</th><th>팀</th><th>승-패</th></tr></thead>
-      <tbody>${rows.map((t, i) => `<tr class="${t.me ? "me" : ""}"><td>${i + 1}</td><td>${t.name}</td><td>${t.w}-${t.l}</td></tr>`).join("")}</tbody></table>`;
+    ].sort((a, b) => b.w - a.w || a.l - b.l);
+    // 게임차 = ((1위 승 - 우리 승) + (우리 패 - 1위 패)) / 2 — 야구 표준 계산이에요.
+    // 반 게임 차가 나오니 .5는 살리고 .0은 떼요. 공동 1위는 전부 '-'로 보여요.
+    const top = rows[0];
+    const gb = (t) => {
+      const g = ((top.w - t.w) + (t.l - top.l)) / 2;
+      return g <= 0 ? "-" : g.toFixed(1).replace(/\.0$/, "");
+    };
+    return `<table class="rank-table season-standings"><thead><tr><th>#</th><th>팀</th><th>승-패</th><th>게임차</th></tr></thead>
+      <tbody>${rows.map((t, i) => `<tr class="${t.me ? "me" : ""}"><td>${i + 1}</td><td>${t.name}</td><td>${t.w}-${t.l}</td><td>${gb(t)}</td></tr>`).join("")}</tbody></table>`;
   }
 
   function myRank() {
