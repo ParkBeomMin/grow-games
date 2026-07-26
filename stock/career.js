@@ -553,8 +553,20 @@ window.StockCareer = (() => {
       }
     }
     list.sort((a, b) => b.score - a.score);
+    hofShown = 20;
+    drawHof(list, localIds);
+  }
+
+  // 더 보기로 20명씩 늘리고, 내 기록이 목록 밖이면 하단에 고정해서 보여줘요
+  let hofShown = 20;
+  function drawHof(list, localIds) {
+    const box = $("hof-list");
     box.innerHTML = list.length ? "" : `<p class="hint">아직 아무도 없어요. 첫 전설이 되어보세요!</p>`;
-    list.slice(0, 100).forEach((e, i) => {
+    const myIdx = list.findIndex((x) => localIds.has(x.id));
+    const view = list.slice(0, hofShown).map((e, i) => ({ e, i }));
+    if (myIdx >= hofShown) view.push({ gap: true }, { e: list[myIdx], i: myIdx });
+    view.forEach(({ e, i, gap }) => {
+      if (gap) { const gp = document.createElement("div"); gp.className = "hof-gap"; gp.textContent = "⋯"; box.appendChild(gp); return; }
       const div = document.createElement("div");
       div.className = "hof-card" + (localIds.has(e.id) ? " me" : "");
       div.innerHTML = `
@@ -565,6 +577,14 @@ window.StockCareer = (() => {
         </div>`;
       box.appendChild(div);
     });
+    const left = list.length - Math.min(list.length, hofShown);
+    if (left > 0) {
+      const more = document.createElement("button");
+      more.className = "mini-btn rank-more";
+      more.textContent = `▾ 더 보기 (${left}명 남음)`;
+      more.onclick = () => { hofShown += 20; drawHof(list, localIds); };
+      box.appendChild(more);
+    }
   }
 
   // ---------- 랜덤 매칭 (공용 ../match.js — Supabase 연동) ----------
@@ -719,12 +739,25 @@ window.StockCareer = (() => {
       }
     }
     rows.sort((x, y) => y.rating - x.rating);
+    rankShown = 15;
+    drawRanking(rows, global);
+  }
+
+  // 더 보기로 15명씩 늘리고, 내 순위가 목록 밖이면 하단에 고정해서 보여줘요
+  let rankShown = 15;
+  function drawRanking(rows, global) {
+    const myIdx = rows.findIndex((r) => !r.ghost);
+    const row = (r, i) => `<tr class="${r.ghost ? "" : "me"}"><td>${i + 1}</td><td>${r.name}</td><td>${r.w}승 ${r.l}패</td><td>${r.rating}</td></tr>`;
+    const shown = rows.slice(0, rankShown).map(row).join("");
+    const pinned = myIdx >= rankShown ? `<tr class="hof-gap-row"><td colspan="4">⋯</td></tr>` + row(rows[myIdx], myIdx) : "";
+    const left = rows.length - Math.min(rows.length, rankShown);
     $("battle-rank").innerHTML = `
-      <h2 class="rank-title">🏅 ${global ? "글로벌" : "로컬"} 배틀 랭킹</h2>
-      <table class="rank-table"><thead><tr><th>#</th><th>투자자</th><th>전적</th><th>레이팅</th></tr></thead>
-      <tbody>${rows.slice(0, 15).map((r, i) =>
-        `<tr class="${r.ghost ? "" : "me"}"><td>${i + 1}</td><td>${r.name}</td><td>${r.w}승 ${r.l}패</td><td>${r.rating}</td></tr>`
-      ).join("")}</tbody></table>`;
+      <h2 class="rank-title">🏅 ${global ? "글로벌" : "로컬"} 배틀 랭킹 <span class="rank-total">${rows.length}명</span></h2>
+      <table class="rank-table"><thead><tr><th>#</th><th>선수</th><th>전적</th><th>레이팅</th></tr></thead>
+      <tbody>${shown}${pinned}</tbody></table>
+      ${left > 0 ? `<button class="mini-btn rank-more" id="btn-rank-more">▾ 더 보기 (${left}명 남음)</button>` : ""}`;
+    const mb = $("btn-rank-more");
+    if (mb) mb.onclick = () => { rankShown += 15; drawRanking(rows, global); };
   }
 
   // ---------- 초기화 ----------

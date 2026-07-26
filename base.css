@@ -535,3 +535,9 @@ h2 { font-size: 1.6rem; margin: 8px 0 6px; color: var(--accent); }
   background: rgba(160,120,255,.18); color: #c9aaff;
   font-size: 0.68rem; vertical-align: middle;
 }
+
+/* 랭킹·명예의 전당 — 더 보기 / 내 순위 고정 */
+.rank-title .rank-total { font-family: "Gowun Dodum", sans-serif; font-size: .78rem; color: var(--dim); margin-left: 6px; }
+.rank-more { display: block; width: 100%; margin-top: 10px; }
+.hof-gap { text-align: center; color: var(--dim); letter-spacing: 4px; padding: 6px 0; }
+.rank-table .hof-gap-row td { text-align: center; color: var(--dim); letter-spacing: 4px; padding: 4px 0; }

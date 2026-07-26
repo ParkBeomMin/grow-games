@@ -535,6 +535,14 @@ async function showHof() {
   scope.textContent = online
     ? (list.length ? "🌏 전 세계 창업가 순위" : "🌏 전 세계 순위")
     : "📡 서버에 연결하지 못했어요 — 내 기기 기록만 표시";
+  hofShown = 20;
+  drawHof(list, localIds, online);
+}
+
+// 더 보기로 20명씩 늘리고, 내 기록이 목록 밖이면 하단에 고정해요
+let hofShown = 20;
+function drawHof(list, localIds, online) {
+  const box = $("hof-list");
   if (!list.length) {
     box.innerHTML = online
       ? `<p class="hint">아직 은퇴한 창업가가 없어요. 첫 전설이 되어보세요! 🦄</p>`
@@ -542,7 +550,11 @@ async function showHof() {
     return;
   }
   box.innerHTML = "";
-  list.slice(0, 100).forEach((e, i) => {
+  const myIdx = list.findIndex((x) => localIds.has(x.id));
+  const view = list.slice(0, hofShown).map((e, i) => ({ e, i }));
+  if (myIdx >= hofShown) view.push({ gap: true }, { e: list[myIdx], i: myIdx });
+  view.forEach(({ e, i, gap }) => {
+    if (gap) { const gp = document.createElement("div"); gp.className = "hof-gap"; gp.textContent = "⋯"; box.appendChild(gp); return; }
     const div = document.createElement("div");
     div.className = "hof-row" + (localIds.has(e.id) ? " me" : "");
     div.innerHTML = `
@@ -554,6 +566,14 @@ async function showHof() {
       <span class="hof-score">${(e.score || 0).toLocaleString()}</span>`;
     box.appendChild(div);
   });
+  const left = list.length - Math.min(list.length, hofShown);
+  if (left > 0) {
+    const more = document.createElement("button");
+    more.className = "mini-btn rank-more";
+    more.textContent = `▾ 더 보기 (${left}명 남음)`;
+    more.onclick = () => { hofShown += 20; drawHof(list, localIds, online); };
+    box.appendChild(more);
+  }
 }
 function closeHof() { $("hof").classList.add("hidden"); }
 
