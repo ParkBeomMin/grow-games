@@ -836,11 +836,18 @@ window.Career = (() => {
       raw = { ...t, avg };
     } else {
       const era = (t.er * 9) / Math.max(t.ip, 1);
+      /* 실제 WAR과 같은 뼈대예요 — 대체선수(자책 5.7)보다 몇 점을 아꼈는지 구하고,
+       * 던진 이닝만큼 곱해 '1승 ≈ 10점'으로 환산합니다.
+       * 예전에는 이닝을 아예 안 봐서, 79이닝 마무리(WAR 7.8)가
+       * 174이닝 에이스(WAR 5.1)보다 높게 나오는 역전이 있었어요.
+       * 승수·세이브 가산은 실제 WAR엔 없지만, 수상 투표가 그걸 본다는 걸 반영했어요. */
+      const REPL_ERA = 5.7, RUNS_PER_WIN = 10;
+      const runsSaved = ((REPL_ERA - era) / 9) * t.ip;
       if (S.role === "마무리 투수") {
-        war = clamp((4.2 - era) * 1.2 + t.saves * 0.08, -1.5, 12);
+        war = clamp(runsSaved / RUNS_PER_WIN + t.saves * 0.02, -1.5, 12);
         line = `평균자책 ${era.toFixed(2)} · ${t.saves}세이브 · ${t.k}탈삼진`;
       } else {
-        war = clamp((4.5 - era) * 1.6 + t.wins * 0.12, -1.5, 12);
+        war = clamp(runsSaved / RUNS_PER_WIN + t.wins * 0.05, -1.5, 12);
         line = `평균자책 ${era.toFixed(2)} · ${t.wins}승 · ${t.k}탈삼진`;
       }
       raw = { ...t, era };
@@ -862,9 +869,12 @@ window.Career = (() => {
     }
     /* 골든글러브는 MVP와 별개로 판정해요.
      * 예전에는 else if라서 MVP를 받으면 골든글러브를 아예 못 받았고,
-     * 그 바람에 리그 최고 시즌이 상을 덜 받는 역전이 있었어요. */
+     * 그 바람에 리그 최고 시즌이 상을 덜 받는 역전이 있었어요.
+     *
+     * 컷은 투수가 더 높아요. 골든글러브는 리그에 10자리인데 투수는 그중 1자리라,
+     * 모든 투수가 한 자리를 두고 겨루거든요. 야수는 포지션 안에서만 겨룹니다. */
     if (war >= 4.5) {
-      const posBar = rand(4.2, 6.2); // 포지션 상위권 컷
+      const posBar = S.pos === "batter" ? rand(4.2, 6.2) : rand(5.2, 7.2);
       if (war >= posBar) { awards.push("골든글러브"); S.career.gg += 1; }
     }
     if (champ) S.career.rings += 1;
