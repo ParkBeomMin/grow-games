@@ -491,7 +491,7 @@ let lastCountAt = 0;
 function paintCount(n) {
   if (!n) return;
   const el = $("uni-count");
-  el.innerHTML = `🦄 지금까지 <b>${n.toLocaleString()}명</b>이 더 유니콘을 플레이했어요`;
+  el.innerHTML = `🦄 지금까지 <b>${n.toLocaleString()}개</b>의 회사가 창업했어요`;
   el.classList.remove("hidden");
 }
 function refreshCount(force) {
