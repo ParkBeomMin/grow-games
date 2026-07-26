@@ -75,7 +75,9 @@ function loadLegacy() {
 }
 function saveLegacy(l) { try { localStorage.setItem(LEGACY_KEY, JSON.stringify(l)); } catch {} }
 const legacyTalentBonus = (pts) => Math.min(0.03 * Math.sqrt(Math.max(pts, 0)), LEGACY_TALENT_CAP);
-const legacyMoneyBonus = (pts) => Math.round(pts * 300);
+const LEGACY_MONEY_CAP = 15000;   // 시작 자금 상한 (대략 한 시즌 수입)
+// 재능 보너스와 같은 모양이에요 — √로 완만히 오르고 누적 70쯤에서 함께 포화해요.
+const legacyMoneyBonus = (pts) => Math.min(Math.round(1800 * Math.sqrt(Math.max(pts, 0))), LEGACY_MONEY_CAP);
 // 은퇴 점수 → 이번 환생으로 얻는 유산 포인트
 const legacyGain = (score) => Math.max(1, Math.floor(Math.sqrt(Math.max(score, 0) / 10)));
 let S = null;
@@ -123,7 +125,8 @@ function newState(market, pos, name, roll) {
     market: market.id, pos, name,
     year: 1, month: 1,
     stats, talents,
-    money: 0,
+    // 🧬 환생 유산으로 받은 시작 자금이에요. 유산이 없으면 0이에요.
+    money: legacyMoneyBonus(loadLegacy().pts),
     gear: {},
     condition: 80,
     fandom: 0, // 실력·평판(깃허브 스타) 지수
