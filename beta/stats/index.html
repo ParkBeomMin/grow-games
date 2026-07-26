@@ -89,6 +89,18 @@
     const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
 
     const GAMES = { rookie: "⚾ 더 루키", idol: "🎤 더 트레이니", stock: "📈 더 인베스터", soccer: "⚽ 더 윙어", dev: "💻 더 커밋", chef: "🍜 더 셰프", stream: "📺 더 스트리머", unicorn: "🦄 더 유니콘" };
+
+    // ---------- 탭 상태 ----------
+    // URL 해시가 단일 진실 원천이에요. 클릭·뒤로가기·링크 진입이 모두 hashchange 한 곳을 타요.
+    const GAME_KEYS = Object.keys(GAMES);
+    let STATE = null;        // load()가 채우는 fetch 결과 캐시
+    let activeGame = null;   // 현재 탭 (GAMES의 키)
+
+    const gameFromHash = () => {
+      const h = decodeURIComponent(location.hash.replace(/^#/, ""));
+      return GAMES[h] ? h : GAME_KEYS[0];
+    };
+
     const POS = {
       batter: "타자", pitcher: "투수", vocal: "보컬", dance: "댄스", rap: "랩",
       value: "가치투자", scalp: "단타", news: "정보매매", port: "분산투자",
@@ -272,32 +284,20 @@ grant select on public.stats_summary, public.stats_choices, public.stats_daily t
       } catch { return null; }
     }
 
-    async function load() {
-      $("overview").innerHTML = `<p class="empty">불러오는 중…</p>`;
-      let summary, choices, daily, failed = false;
-      try { summary = await getView("stats_summary"); } catch { failed = true; }
-      try { choices = await getView("stats_choices"); } catch { failed = true; }
-      try { daily = await getView("stats_daily"); } catch { failed = true; }
-      const hofRows = await getHof();
-      let hofTotal = null, hofByGame = null;
-      if (hofRows) {
-        hofByGame = {};
-        for (const r of hofRows) hofByGame[r.game] = (hofByGame[r.game] || 0) + 1;
-        hofTotal = hofRows.length;
-      }
+    function emptyCard(game) {
+      return `<section><h2>${GAMES[game]}</h2><p class="empty">아직 수집된 데이터가 없어요.<br>플레이어가 새 캐릭터를 만들면 여기에 분포와 퍼널이 뜨기 시작해요.</p></section>`;
+    }
 
-      if (failed || !summary) {
-        $("overview").innerHTML = setupCard("아직 집계 뷰가 없거나 접근할 수 없어요.");
-        wireCopy();
-        return;
-      }
-
+    // 전역 KPI + 합산 방문 추이 — 탭과 무관하게 항상 보여요.
+    function renderOverview() {
+      const summary = STATE.summary;
       const totalVisits = summary.filter((r) => r.event === "visit").reduce((a, r) => a + r.players, 0);
       const totalNew = summary.filter((r) => r.event === "new_player").reduce((a, r) => a + r.total, 0);
       const totalBattle = summary.filter((r) => r.event === "battle").reduce((a, r) => a + r.total, 0);
       const totalRetire = summary.filter((r) => r.event === "retire").reduce((a, r) => a + r.total, 0);
       const totalInstall = summary.filter((r) => r.event === "pwa_install").reduce((a, r) => a + r.total, 0);
       const totalPwaUsers = summary.filter((r) => r.event === "pwa_launch").reduce((a, r) => a + r.players, 0);
+      const hofTotal = STATE.hofTotal;
 
       let html = `<div class="kpis">
         <div class="kpi"><div class="n">${totalVisits.toLocaleString()}</div><div class="l">순 방문자</div></div>
@@ -312,14 +312,61 @@ grant select on public.stats_summary, public.stats_choices, public.stats_daily t
         ? `<p class="empty" style="margin:-12px 0 20px">ℹ️ 은퇴 이벤트(${totalRetire})는 통계 도입 이후 집계, 명예의 전당(${hofTotal})은 전체 은퇴자 명단이라 숫자가 달라요.</p>`
         : ""}`;
 
-      html += dailySection(daily || []);
-      html += choiceSection(choices || []);
-      html += unicornSection(hofRows);
-      html += funnelSection(summary, hofByGame);
+      html += dailySection(STATE.daily, null);
 
       if (!summary.length) html = setupCard("뷰는 있는데 아직 수집된 데이터가 없어요.") + html;
       $("overview").innerHTML = html;
       wireCopy();
+    }
+
+    function renderTabs() {
+      $("tabs").innerHTML = GAME_KEYS.map((g) =>
+        `<button type="button" class="tab${g === activeGame ? " on" : ""}" data-game="${g}">${GAMES[g]}</button>`
+      ).join("");
+      // 해시로 오른쪽 끝 탭에 바로 들어오면 칩이 스크롤 밖에 있어요.
+      const on = $("tabs").querySelector(".tab.on");
+      if (on) on.scrollIntoView({ inline: "center", block: "nearest" });
+    }
+
+    function renderPanel() {
+      if (!STATE) return;
+      const game = activeGame;
+      const parts = [];   // Task 3~6에서 섹션이 하나씩 채워져요
+      $("panel").innerHTML = parts.join("").trim() || emptyCard(game);
+    }
+
+    async function load() {
+      $("overview").innerHTML = `<p class="empty">불러오는 중…</p>`;
+      $("tabs").hidden = true;
+      $("panel").innerHTML = "";
+
+      let summary, choices, daily, failed = false;
+      try { summary = await getView("stats_summary"); } catch { failed = true; }
+      try { choices = await getView("stats_choices"); } catch { failed = true; }
+      try { daily = await getView("stats_daily"); } catch { failed = true; }
+      const hofRows = await getHof();
+      let hofTotal = null, hofByGame = null;
+      if (hofRows) {
+        hofByGame = {};
+        for (const r of hofRows) hofByGame[r.game] = (hofByGame[r.game] || 0) + 1;
+        hofTotal = hofRows.length;
+      }
+
+      if (failed || !summary) {
+        // 집계 뷰가 없으면 탭이 의미 없어요 — 안내 카드만 남겨요.
+        $("overview").innerHTML = setupCard("아직 집계 뷰가 없거나 접근할 수 없어요.");
+        wireCopy();
+        return;
+      }
+
+      STATE = { summary, choices: choices || [], daily: daily || [], hofRows, hofByGame, hofTotal };
+      // 새로고침일 땐 보던 탭을 유지하고, 첫 진입이면 해시에서 읽어요.
+      activeGame = activeGame || gameFromHash();
+
+      renderOverview();
+      $("tabs").hidden = false;
+      renderTabs();
+      renderPanel();
     }
 
     function wireCopy() {
@@ -333,6 +380,17 @@ grant select on public.stats_summary, public.stats_choices, public.stats_daily t
     }
 
     $("refresh").onclick = load;
+
+    // 탭 클릭은 해시만 바꿔요. 렌더는 hashchange 한 곳이 전담해서 경로가 하나로 모여요.
+    $("tabs").addEventListener("click", (e) => {
+      const btn = e.target.closest(".tab");
+      if (btn) location.hash = btn.dataset.game;
+    });
+    window.addEventListener("hashchange", () => {
+      activeGame = gameFromHash();
+      renderTabs();
+      renderPanel();
+    });
 
     // ---------- 방문 추이 막대 툴팁 (마우스오버 / 클릭·탭) ----------
     // load()가 내용을 다시 그려도 유지되도록 document에 위임해요.
