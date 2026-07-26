@@ -1460,6 +1460,16 @@ function renderGameSim(cfg) {
     }, resolveMoment);
   }
 
+  /* 미니게임 결과와 스코어보드를 맞춰줘요.
+   * 이닝별 점수는 무작위로 흩뿌리기 때문에 마지막 타석이 늘 동점 상황인 건 아니에요.
+   * 그래서 승패만 먼저 정하면 "5:4로 이겼는데 패배" 같은 모순이 생겨요.
+   * 승패는 유저가 미니게임으로 따낸 결과이니 그대로 두고, 점수를 거기에 맞춥니다. */
+  function reconcileScore(win) {
+    const need = win ? totals.opp + 1 - totals.our : totals.our + 1 - totals.opp;
+    if (need <= 0) return;                    // 이미 결과와 점수가 맞아요
+    applyStep({ addR: [win ? "our" : "opp", need] });
+  }
+
   function resolveMoment(res) {
     const flipWin = () => Math.random() < clamp(0.5 + (overall() - 50) / 250, 0.3, 0.7);
     let win;
@@ -1506,7 +1516,8 @@ function renderGameSim(cfg) {
       perf.pts = Math.max(perf.ip * 2 + perf.k * 2.5 - perf.runs * 2.5, -12);
       perf.line = `${S.name}: ${perf.ip}이닝 ${perf.k}탈삼진 ${perf.runs}실점`;
     }
-    applyStep({ feeds: [{ text: `📢 경기 종료 — ${totals.our}:${totals.opp}`, cls: win ? "good" : "bad" }] });
+    reconcileScore(win);
+    applyStep({ feeds: [{ text: `📢 경기 종료 — ${cfg.homeName} ${totals.our} : ${totals.opp} ${opp}`, cls: win ? "good" : "bad" }] });
     showResult(win, res === "perfect" ? 6 : 0);
   }
 
@@ -1533,7 +1544,7 @@ function renderGameSim(cfg) {
     if (totals.our === totals.opp) {
       applyStep({ addR: [win ? "our" : "opp", 1], feeds: [{ text: win ? "🔥 연장 끝에 승리!" : "💧 연장 끝에 석패…", cls: win ? "good" : "bad" }] });
     }
-    applyStep({ feeds: [{ text: `📢 경기 종료 — ${totals.our}:${totals.opp}`, cls: win ? "good" : "bad" }] });
+    applyStep({ feeds: [{ text: `📢 경기 종료 — ${cfg.homeName} ${totals.our} : ${totals.opp} ${opp}`, cls: win ? "good" : "bad" }] });
     showResult(win, 0);
   }
   // 9회초까지 홈팀(우리)이 앞서 있으면 9회말은 진행하지 않아요 (실제 야구 규칙)
