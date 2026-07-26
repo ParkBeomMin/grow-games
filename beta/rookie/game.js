@@ -509,10 +509,10 @@ $("btn-record-back")?.addEventListener("click", () => show(recordReturn));
 
 // ---------- 장비 상점 ----------
 const GEAR_TIERS = [
-  { n: "I", bonus: 3, price: 500 },
-  { n: "II", bonus: 5, price: 1500 },
-  { n: "III", bonus: 8, price: 4000 },
-  { n: "IV", bonus: 12, price: 10000 },
+  { n: "I", bonus: 3, price: 300 },
+  { n: "II", bonus: 5, price: 900 },
+  { n: "III", bonus: 8, price: 2500 },
+  { n: "IV", bonus: 12, price: 9000 },
   { n: "V", bonus: 16, price: 25000 },
 ];
 let shopReturn = "screen-main";
@@ -1004,7 +1004,8 @@ function playTourGame() {
       } else {
         S.hsTotals.ip += perf.ip; S.hsTotals.k += perf.k; S.hsTotals.runs += perf.runs;
       }
-      const pay = win ? 60 + tour.round * 25 : 25;
+      // 고교 3년 총수입이 장비 최하 등급에도 못 미치던 걸 올렸어요 (플레이어 피드백)
+      const pay = win ? 120 + tour.round * 50 : 50;
       S.money = (S.money || 0) + pay;
       tour.totalPts += pts;
       S.condition = clamp(S.condition - 6, 0, 100);
@@ -1019,7 +1020,7 @@ function playTourGame() {
       if (champion) {
         S.trophies.push(`${S.year}학년 ${tour.name} 우승`);
         S.scout += 30;
-        S.money = (S.money || 0) + 300;
+        S.money = (S.money || 0) + 600;
         tour.totalPts += 30;
       }
       return { extra, nextLabel: champion ? "🏆 우승 세리머니!" : "대회 마치기", nextFn: () => finishTournament(champion, roundName) };
