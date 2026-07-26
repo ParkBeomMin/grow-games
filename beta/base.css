@@ -336,7 +336,10 @@ h2 { font-size: 1.6rem; margin: 8px 0 6px; color: var(--accent); }
 }
 
 /* ---------- 경기/무대 중계 연출 ---------- */
+/* 연장에 들어가면 이닝 칸이 10·11회로 늘어나요. 좁은 화면에서 넘칠 때만 가로로 밀려요. */
+.sb-wrap { overflow-x: auto; margin-bottom: 10px; }
 .scoreboard { width: 100%; border-collapse: collapse; font-size: 0.7rem; margin-bottom: 10px; }
+.sb-wrap .scoreboard { margin-bottom: 0; min-width: 100%; }
 .scoreboard th, .scoreboard td { border: 1px solid var(--line); padding: 3px 1px; text-align: center; color: var(--dim); min-width: 16px; }
 .scoreboard tbody th { color: var(--cream); font-family: "Jua", sans-serif; font-size: 0.72rem; padding: 3px 4px; }
 .scoreboard .sb-r { color: var(--accent); font-weight: bold; }
@@ -429,6 +432,20 @@ h2 { font-size: 1.6rem; margin: 8px 0 6px; color: var(--accent); }
 .tm-lg-perfect { background: var(--accent); opacity: 0.75; }
 .tm-lg-good { background: rgba(110, 231, 160, 0.55); }
 .tm-legend-tip { margin: 2px 0 0; font-size: 0.7rem; color: var(--dim); opacity: 0.85; text-align: center; }
+
+/* 🔔 구원 등판 점수판 — 1~2이닝 등판에 9이닝 표는 과해서 점수만 크게 보여줘요 */
+.relief-score {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  background: rgba(0, 0, 0, .25); border: 1px solid var(--line); border-radius: 12px;
+  padding: 10px 12px; margin-bottom: 10px;
+}
+.relief-score .rs-name { font-size: .78rem; color: var(--dim); min-width: 54px; text-align: center; }
+.relief-score .rs-num {
+  font-family: "Jua", sans-serif; font-size: 1.5rem; color: var(--text);
+  min-width: 28px; text-align: center; transition: color .2s ease;
+}
+.relief-score .rs-lead { color: var(--accent); }
+.relief-score .rs-sep { color: var(--dim); font-size: 1.1rem; }
 .tm-marker {
   position: absolute; top: -2px; bottom: -2px; width: 4px; margin-left: -2px;
   background: #fff; border-radius: 2px; box-shadow: 0 0 6px rgba(255,255,255,.8);

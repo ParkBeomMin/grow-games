@@ -1027,7 +1027,13 @@ function playTourGame() {
     0.15, 0.92
   );
   const perf = S.pos === "batter" ? batterLine() : pitcherLine();
-  const interactive = Math.random() < 0.55;
+  /* 9회 위기를 유저가 직접 막는 연출은 '그 이닝까지 내가 던지고 있을 때'만 성립해요.
+   * 예전에는 스태미나가 모자라 5회에 내려간 투수도 9회에 다시 불러올렸는데,
+   * 야구 규칙상 교체된 투수는 그 경기에 다시 못 올라옵니다.
+   * 이제 8회까지 끌고 간 투수만 9회를 마무리해 완투로 이어져요.
+   * 스태미나가 부족하면 중간에 내려가고, 대신 경기 중 랜덤 미니게임으로 참여합니다. */
+  const canFinish = S.pos === "batter" || perf.ip >= 8;
+  const interactive = canFinish && Math.random() < 0.55;
   const preWin = interactive ? null : Math.random() < p;
   const story = S.pos === "batter"
     ? batterStory(preWin, perf, interactive)
@@ -1182,13 +1188,22 @@ function pitcherStory(win, perf, interactive) {
   }
 
   if (interactive) {
+    // 선발이 일찍 내려갔다면 불펜이 맡은 이닝에도 실점이 생겨요.
+    // 이걸 빼먹으면 6~8회가 늘 0으로 찍혀서, 5회 강판인데도 상대가 9이닝 무득점인
+    // '완봉 스코어보드'가 나왔어요.
+    if (ip < 8) {
+      const bullpen = randInt(0, 1);
+      for (let i = 0; i < bullpen; i++) oppInn[randInt(ip, 7)]++;
+      for (let i = ip; i < 8; i++) {
+        if (oppInn[i] > 0) events.push({ inn: i + 1, half: "초", text: `불펜이 ${oppInn[i]}점을 내줬어요 💦`, cls: "bad" });
+      }
+    }
     // 9회초 시작 시점에 1점 앞선 리드, 마지막 위기를 유저가 직접 막음
     const oppTotal8 = oppInn.slice(0, 8).reduce((a, b) => a + b, 0);
     addRuns(ourInn, oppTotal8 + 1, 0, 7);
     for (let i = 0; i < 8; i++) {
       if (ourInn[i] > 0) events.push({ inn: i + 1, half: "말", text: `우리 타선이 ${ourInn[i]}점 지원! 🔥`, cls: "good" });
     }
-    if (ip < 8) events.push({ inn: 8, half: "초", text: `불펜이 버텨준 사이, 9회를 앞두고 ${S.name}이(가) 다시 공을 쥡니다 🔥`, cls: "" });
     return { ourInn, oppInn, events, moment: { half: "초" } };
   }
 
@@ -1331,23 +1346,28 @@ function renderGameSim(cfg) {
   const heads = Array.from({ length: 9 }, (_, i) => `<th>${i + 1}</th>`).join("");
   const cells = (side) => Array.from({ length: 9 }, (_, i) => `<td id="sb-${side}-${i}"></td>`).join("");
   $("tour-card").innerHTML = `
+    <div class="sb-wrap">
     <table class="scoreboard">
-      <thead><tr><th></th>${heads}<th>R</th></tr></thead>
+      <thead><tr id="sb-head"><th></th>${heads}<th>R</th></tr></thead>
       <tbody>
-        <tr><th>${opp.slice(0, 4)}</th>${cells("opp")}<td class="sb-r" id="sb-r-opp">0</td></tr>
-        <tr><th>${cfg.homeName.slice(0, 4)}</th>${cells("our")}<td class="sb-r" id="sb-r-our">0</td></tr>
+        <tr id="sb-row-opp"><th>${opp.slice(0, 4)}</th>${cells("opp")}<td class="sb-r" id="sb-r-opp">0</td></tr>
+        <tr id="sb-row-our"><th>${cfg.homeName.slice(0, 4)}</th>${cells("our")}<td class="sb-r" id="sb-r-our">0</td></tr>
       </tbody>
     </table>
+    </div>
     <div class="pbp" id="pbp"></div>
     <div id="game-moment"></div>
     <div id="game-result"></div>`;
 
   const evFor = (inn, half) => story.events.filter((e) => e.inn === inn && e.half === half);
-  // 경기 중 랜덤 미니게임 — 35% 확률로 2~7회 중 한 이닝에 등장 (프로 지정 모먼트가 있으면 생략)
+  // 경기 중 랜덤 미니게임 — 2~7회 중 한 이닝에 등장 (프로 지정 모먼트가 있으면 생략)
   const isBat = S.pos === "batter";
   const proAb = story.proAb || null;
   const proCrisis = story.proCrisis || null;
-  const midInn = (!proAb && !proCrisis && Math.random() < 0.35) ? randInt(2, 7) : -1;
+  /* 스태미나가 모자라 9회 위기가 없는 투수 경기는 등장 확률을 올려요.
+   * 안 그러면 초반 투수는 경기 내내 구경만 하게 돼요. */
+  const midChance = (!interactive && !isBat) ? 0.7 : 0.35;
+  const midInn = (!proAb && !proCrisis && Math.random() < midChance) ? randInt(2, 7) : -1;
   const midHalf = isBat ? "말" : "초";
   const steps = [{ feeds: [{ text: `⚾ ${cfg.title} — 플레이볼!` }] }];
   for (let i = 0; i < 9; i++) {
@@ -1372,11 +1392,6 @@ function renderGameSim(cfg) {
       const [side, i, v] = s.cell;
       $(`sb-${side}-${i}`).textContent = v;
       totals[side] += v;
-      $(`sb-r-${side}`).textContent = totals[side];
-    }
-    if (s.addR) {
-      const [side, n] = s.addR;
-      totals[side] += n;
       $(`sb-r-${side}`).textContent = totals[side];
     }
     for (const f of s.feeds || []) {
@@ -1495,6 +1510,27 @@ function renderGameSim(cfg) {
     $(`sb-r-${side}`).textContent = totals[side];
   }
 
+  /* 연장 이닝 칸을 새로 붙여요.
+   * 예전에는 연장 득점을 R에만 더해서 "이닝 합 3인데 R은 4"처럼 보였어요. */
+  let lastInn = 8;                            // 현재 마지막 이닝의 0-based 인덱스
+  function addExtraInning(side, n) {
+    lastInn += 1;
+    const innNo = lastInn + 1;
+    const head = $("sb-head");
+    const th = document.createElement("th");
+    th.textContent = innNo;
+    head.insertBefore(th, head.lastElementChild);
+    for (const s of ["opp", "our"]) {
+      const row = $(`sb-row-${s}`);
+      const td = document.createElement("td");
+      td.id = `sb-${s}-${lastInn}`;
+      td.textContent = s === side ? n : 0;
+      row.insertBefore(td, row.lastElementChild);
+    }
+    totals[side] += n;
+    $(`sb-r-${side}`).textContent = totals[side];
+  }
+
   /* 마지막 승부가 극적이려면 점수판도 그 상황이어야 해요.
    * 이닝 점수는 무작위로 흩뿌려서, 그냥 두면 "1점 차 역전 찬스"인데 3점 앞서 있기도 했어요.
    * 8회 칸에 점수를 얹어 '타자는 1점 뒤 / 투수는 1점 앞'으로 맞춰둡니다.
@@ -1533,7 +1569,7 @@ function renderGameSim(cfg) {
   function reconcileScore(win) {
     const need = win ? totals.opp + 1 - totals.our : totals.our + 1 - totals.opp;
     if (need <= 0) return;                    // 이미 결과와 점수가 맞아요
-    applyStep({ addR: [win ? "our" : "opp", need] });
+    bumpCell(win ? "our" : "opp", lastInn, need);
   }
 
   function resolveMoment(res) {
@@ -1548,7 +1584,8 @@ function renderGameSim(cfg) {
       } else if (res === "good") {
         win = flipWin();
         applyStep({ cell: ["our", 8, 1], feeds: [{ text: `9회말 · ${S.name}, 극적인 동점 적시타! ⚡`, cls: "good" }] });
-        applyStep({ addR: [win ? "our" : "opp", 1], feeds: [{ text: win ? "🔥 연장 10회, 끝내기 승리!" : "💧 연장 접전 끝에 아쉬운 역전패…", cls: win ? "good" : "bad" }] });
+        addExtraInning(win ? "our" : "opp", 1);
+        applyStep({ feeds: [{ text: win ? "🔥 연장 10회, 끝내기 승리!" : "💧 연장 접전 끝에 아쉬운 역전패…", cls: win ? "good" : "bad" }] });
         perf.baseHits += 1;
         perf.highlight = win ? "⚡ 동점 적시타로 경기를 살려냈어요!" : "⚡ 동점 적시타에도 아쉬운 연장 패배…";
       } else {
@@ -1568,7 +1605,8 @@ function renderGameSim(cfg) {
       } else if (res === "good") {
         win = flipWin();
         applyStep({ cell: ["opp", 8, 1], feeds: [{ text: "9회초 · 1실점으로 동점을 허용했지만 추가 실점은 막았어요", cls: "" }] });
-        applyStep({ addR: [win ? "our" : "opp", 1], feeds: [{ text: win ? "🔥 연장 10회말, 우리 타선의 끝내기!" : "💧 연장 접전 끝에 아쉬운 패배…", cls: win ? "good" : "bad" }] });
+        addExtraInning(win ? "our" : "opp", 1);
+        applyStep({ feeds: [{ text: win ? "🔥 연장 10회말, 우리 타선의 끝내기!" : "💧 연장 접전 끝에 아쉬운 패배…", cls: win ? "good" : "bad" }] });
         perf.runs += 1;
       } else {
         win = false;
@@ -1579,6 +1617,7 @@ function renderGameSim(cfg) {
       if (!perf.highlight || res === "good") {
         perf.highlight = win ? "🔥 위기를 버텨 승리를 지켜냈어요!" : perf.highlight;
       }
+      perf.ip = Math.min(perf.ip + 1, 9); // 방금 9회를 직접 막았으니 이닝에 반영해요
       perf.pts = Math.max(perf.ip * 2 + perf.k * 2.5 - perf.runs * 2.5, -12);
       perf.line = `${S.name}: ${perf.ip}이닝 ${perf.k}탈삼진 ${perf.runs}실점`;
     }
@@ -1608,7 +1647,8 @@ function renderGameSim(cfg) {
     // 미니게임이 점수를 바꿨을 수 있으니 최종 스코어 기준으로 승패 판정
     const win = totals.our > totals.opp ? true : totals.our < totals.opp ? false : preWin;
     if (totals.our === totals.opp) {
-      applyStep({ addR: [win ? "our" : "opp", 1], feeds: [{ text: win ? "🔥 연장 끝에 승리!" : "💧 연장 끝에 석패…", cls: win ? "good" : "bad" }] });
+      addExtraInning(win ? "our" : "opp", 1);
+      applyStep({ feeds: [{ text: win ? "🔥 연장 끝에 승리!" : "💧 연장 끝에 석패…", cls: win ? "good" : "bad" }] });
     }
     applyStep({ feeds: [{ text: `📢 경기 종료 — ${cfg.homeName} ${totals.our} : ${totals.opp} ${opp}`, cls: win ? "good" : "bad" }] });
     showResult(win, 0);
