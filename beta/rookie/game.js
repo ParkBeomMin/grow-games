@@ -5,37 +5,37 @@
 const REGIONS = [
   {
     id: "seoul", name: "서울", emoji: "🏙️",
-    school: "서울고", teams: ["LG 트윈스", "두산 베어스", "키움 히어로즈"],
+    school: "한강고", teams: ["서울 코메츠", "남산 팰컨스", "강남 스파크스"],
     win: 0.70, growth: 1.0, spot: 1.1,
     desc: "미디어와 스카우트가 몰리는 수도. 주목받기 좋아요",
   },
   {
     id: "gyeongin", name: "인천·경기", emoji: "🌊",
-    school: "인천고", teams: ["SSG 랜더스", "KT 위즈"],
+    school: "서해고", teams: ["인천 앵커스", "수원 나이츠"],
     win: 0.62, growth: 1.05, spot: 1.0,
     desc: "탄탄한 유망주 산실. 성장 환경이 좋아요",
   },
   {
     id: "chungcheong", name: "대전·충청", emoji: "🌰",
-    school: "대전고", teams: ["한화 이글스"],
+    school: "백제고", teams: ["금강 크레인스"],
     win: 0.58, growth: 1.1, spot: 1.05,
     desc: "팀은 약하지만 출전 기회가 많아 크게 성장해요",
   },
   {
     id: "honam", name: "광주·전라", emoji: "🍚",
-    school: "광주제일고", teams: ["KIA 타이거즈"],
+    school: "빛고을고", teams: ["무등 블레이즈"],
     win: 0.78, growth: 0.92, spot: 0.95,
     desc: "최강 명문. 우승은 쉽지만 주전 경쟁이 치열해요",
   },
   {
     id: "daegu", name: "대구·경북", emoji: "🍎",
-    school: "대구상원고", teams: ["삼성 라이온즈"],
+    school: "달구벌고", teams: ["팔공 썬더스"],
     win: 0.72, growth: 0.97, spot: 1.0,
     desc: "전통의 야구 도시. 밸런스가 좋아요",
   },
   {
     id: "busan", name: "부산·경남", emoji: "⚓",
-    school: "부산고", teams: ["롯데 자이언츠", "NC 다이노스"],
+    school: "오륙도고", teams: ["부산 타이푼스", "창원 웨이브스"],
     win: 0.74, growth: 0.95, spot: 1.0,
     desc: "구도(球都) 부산. 열광적인 응원 속에 큰 무대 경험",
   },
@@ -146,8 +146,28 @@ const overall = () => {
 // ---------- 저장 — 선수 여러 명(슬롯) 지원 ----------
 const SLOTS_KEY = SAVE_KEY + "-slots";
 let curSlot = null;
+// 실존 구단·학교 이름을 가상 이름으로 바꾸면서, 이미 저장된 기록도 함께 옮겨요.
+// (안 옮기면 예전에 시작한 사람은 계속 옛 이름이 보여요)
+const RENAMED = {
+  "LG 트윈스": "서울 코메츠", "두산 베어스": "남산 팰컨스", "키움 히어로즈": "강남 스파크스",
+  "SSG 랜더스": "인천 앵커스", "KT 위즈": "수원 나이츠",
+  "한화 이글스": "금강 크레인스", "KIA 타이거즈": "무등 블레이즈",
+  "삼성 라이온즈": "팔공 썬더스", "롯데 자이언츠": "부산 타이푼스", "NC 다이노스": "창원 웨이브스",
+  "서울고": "한강고", "인천고": "서해고", "대전고": "백제고",
+  "광주제일고": "빛고을고", "대구상원고": "달구벌고", "부산고": "오륙도고",
+};
+const renamed = (v) => (typeof v === "string" && RENAMED[v]) || v;
+function migrateNames(obj) {
+  if (!obj || typeof obj !== "object") return obj;
+  for (const k of Object.keys(obj)) {
+    const v = obj[k];
+    if (typeof v === "string") obj[k] = renamed(v);
+    else if (v && typeof v === "object") migrateNames(v);
+  }
+  return obj;
+}
 function loadSlots() {
-  try { return JSON.parse(localStorage.getItem(SLOTS_KEY)) || {}; } catch { return {}; }
+  try { return migrateNames(JSON.parse(localStorage.getItem(SLOTS_KEY)) || {}); } catch { return {}; }
 }
 function saveSlots(sl) { localStorage.setItem(SLOTS_KEY, JSON.stringify(sl)); }
 // 예전 단일 저장 → 슬롯으로 이사

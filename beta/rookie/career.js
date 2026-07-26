@@ -19,7 +19,9 @@ window.Career = (() => {
     { id: "g8", name: "연습생 신화 백지명", bp: 180 },
   ];
 
-  const loadHof = () => JSON.parse(localStorage.getItem(HOF_KEY) || "[]");
+  // 명예의 전당에 남은 옛 구단·학교 이름도 새 이름으로 보여줘요
+  // (서버에 이미 올라간 기록은 못 바꾸니, 표시할 때 갈아끼웁니다)
+  const loadHof = () => migrateNames(JSON.parse(localStorage.getItem(HOF_KEY) || "[]"));
   const saveHof = (list) => localStorage.setItem(HOF_KEY, JSON.stringify(list));
   const loadBattle = () => JSON.parse(localStorage.getItem(BATTLE_KEY) || "{}");
   const saveBattle = (d) => localStorage.setItem(BATTLE_KEY, JSON.stringify(d));
@@ -977,7 +979,8 @@ window.Career = (() => {
     const local = loadHof().filter((e) => e.game === "rookie");
     const localIds = new Set(local.map((e) => e.id));
     let list = local, global = false;
-    const remote = window.Match ? await window.Match.fetchHof("rookie") : null;
+    // 서버 기록에도 옛 이름이 남아 있어요 — 표시할 때 새 이름으로 갈아끼웁니다
+    const remote = migrateNames(window.Match ? await window.Match.fetchHof("rookie") : null);
     if (remote && remote.length) {
       global = true;
       const seen = new Set();
