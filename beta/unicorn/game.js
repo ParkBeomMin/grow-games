@@ -456,6 +456,7 @@ function confirmName() {
   S.company = v || randomCompany();   // 비워두면 추천 이름으로
   $("naming").classList.add("hidden");
   save(); renderAll();
+  markFounded();                      // 창업 완료 — 실제 플레이 시작 지점
   if (namingDone) { const cb = namingDone; namingDone = null; cb(); }
 }
 
@@ -477,9 +478,19 @@ function explainAsset() {
 }
 
 // ---------- 더 유니콘 창업 수 ----------
-// 통계 뷰(stats_summary)의 순 방문 기기 수를 써요.
-// players 테이블 등록은 v2.1.0부터라 그 전 플레이어가 통째로 빠졌는데,
-// 방문 이벤트는 훨씬 전부터 쌓여 있어서 실제 수에 가까워요.
+// '창업했다' = 회사 이름을 정하고 실제로 판을 시작한 사람.
+// visit(페이지 연 기기)에는 열어보고 바로 닫은 사람도 섞이니, 창업 시점에
+// new_player를 따로 남겨요. 기기당 딱 한 번만 기록합니다.
+const FOUNDED_KEY = "unicorn-founded";
+function markFounded() {
+  try {
+    if (localStorage.getItem(FOUNDED_KEY)) return;
+    localStorage.setItem(FOUNDED_KEY, "1");
+  } catch { /* 저장 못 해도 기록은 남겨요 */ }
+  if (window.Stats) Stats.log("new_player");
+}
+
+// 통계 뷰(stats_summary)에서 창업(new_player)한 순 기기 수를 읽어요.
 // 뷰 전체를 집계하는 조회라 주기를 길게 잡았습니다.
 const COUNT_POLL_MS = 300000;
 const COUNT_CACHE = "unicorn-player-count";
@@ -497,7 +508,7 @@ function refreshCount(force) {
   const now = Date.now();
   if (!force && now - lastCountAt < COUNT_POLL_MS) return;
   lastCountAt = now;
-  window.Stats.players("unicorn").then((n) => {
+  window.Stats.players("unicorn", "new_player").then((n) => {
     if (!n) return;                    // 집계 전이거나 실패 — 직전 값을 그대로 둬요
     try { localStorage.setItem(COUNT_CACHE, String(n)); } catch {}
     paintCount(n);
@@ -826,6 +837,7 @@ function init() {
     if (!bugEl) scheduleBug();
     refreshCount();   // 돌아왔을 때 한 번 (COUNT_POLL_MS 안이면 건너뛰어요)
   });
+  if (!isNew) markFounded();           // 이미 창업해둔 기존 플레이어도 한 번 집계
   refreshCount(true);
   // 백그라운드에서는 굳이 두드리지 않아요
   setInterval(() => { if (!document.hidden) refreshCount(); }, COUNT_POLL_MS);

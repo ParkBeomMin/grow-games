@@ -94,15 +94,18 @@ window.Stats = (() => {
     } catch { /* noop */ }
   }
 
-  // 게임별 '순 방문 기기 수' — 집계 뷰 stats_summary에서 읽어요.
+  // 게임별 '해당 이벤트를 남긴 순 기기 수' — 집계 뷰 stats_summary에서 읽어요.
   // events 원본은 anon에 insert만 열려 있고, 이 뷰만 select가 허용돼 있어요.
   // (뷰 정의는 통계 대시보드의 SETUP_SQL 참고 — game, event, total, players)
-  async function players(game) {
+  // event 기본값은 visit(페이지를 연 기기). 실제 플레이 수를 원하면
+  // new_player처럼 게임이 직접 남기는 이벤트를 넘기세요.
+  async function players(game, event) {
     if (window.GROW_ENV && window.GROW_ENV.beta) return null;   // 베타는 상용 수치를 안 봐요
     if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return null;
     try {
       const res = await fetch(
-        `${SUPABASE_URL}/rest/v1/stats_summary?game=eq.${encodeURIComponent(game)}&event=eq.visit&select=players`,
+        `${SUPABASE_URL}/rest/v1/stats_summary?game=eq.${encodeURIComponent(game)}` +
+        `&event=eq.${encodeURIComponent(event || "visit")}&select=players`,
         { headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` } }
       );
       if (!res.ok) return null;                                  // 뷰가 아직 없으면 조용히 포기
