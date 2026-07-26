@@ -300,12 +300,19 @@ window.Career = (() => {
 
   function playProGame() {
     const sn = S.season;
-    const opp = nextOpp();
+    const post = inPost();
+    const opp = post ? postOpp() : nextOpp();
     const isBat = S.pos === "batter";
     let mode = "full";
     if (!isBat) {
-      if (S.role === "선발 투수") mode = sn.game % 5 === 0 ? "full" : "bench";
-      else mode = Math.random() < (S.role === "마무리 투수" ? 0.55 : 0.45) ? "relief" : "bench";
+      // 가을야구는 단축 로테이션이에요 — 선발은 4경기마다, 불펜은 등판 확률이 올라가요
+      if (S.role === "선발 투수") {
+        const n = post ? S.post.gameNo - 1 : sn.game;
+        mode = n % (post ? 4 : 5) === 0 ? "full" : "bench";
+      } else {
+        const p = S.role === "마무리 투수" ? (post ? 0.70 : 0.55) : (post ? 0.60 : 0.45);
+        mode = Math.random() < p ? "relief" : "bench";
+      }
     }
     if (mode === "full") {
       if (isBat) proBatterGame(opp);
@@ -450,6 +457,7 @@ window.Career = (() => {
 
   // 경기 종료 후 공통 처리 — 팀/리그/개인 기록 갱신
   function finishProGame(win, perf) {
+    if (inPost()) return finishPostGame(win, perf);
     const sn = S.season;
     sn.game += 1;
     if (win) sn.teamW += 1; else sn.teamL += 1;
@@ -485,6 +493,55 @@ window.Career = (() => {
         renderPro();
         show("screen-pro");
       },
+    };
+  }
+
+  /* 포스트시즌 경기 결과 — 시리즈를 굴리고, 기록은 정규시즌과 분리해 쌓아요.
+   * 실제 야구도 포스트시즌 타율을 정규시즌에 합치지 않아요. */
+  function finishPostGame(win, perf) {
+    const P = S.post;
+    const idx = P.series.findIndex((s) => s.round === P.myRound);
+    const before = P.series[idx];
+    const iAmA = before.a === P.myTeam;
+    P.series[idx] = Postseason.advanceSeries(before, iAmA ? win : !win);
+    const s = P.series[idx];
+
+    const t = P.stats;
+    if (perf) {
+      if (S.pos === "batter") {
+        t.ab += perf.ab; t.hits += perf.hits; t.hr += perf.hr; t.sb += perf.sb;
+      } else {
+        t.ip += perf.ip; t.k += perf.k; t.er += perf.runs || 0; t.g += 1;
+        if (S.role === "선발 투수" && win && perf.ip >= 5) t.wins += 1;
+        if (S.role === "마무리 투수" && win) t.saves += 1;
+      }
+    }
+    const pay = win ? 80 : 40;              // 가을야구 수당은 정규시즌의 두 배예요
+    S.money = (S.money || 0) + pay;
+    S.condition = clamp(S.condition - randInt(3, 6), 0, 100);
+
+    const myW = iAmA ? s.aw : s.bw, opW = iAmA ? s.bw : s.aw;
+    const extra = `<div class="tour-pts">💰 수당 +${pay}만 · 시리즈 ${myW}-${opW}</div>`;
+
+    if (!s.done) {
+      P.gameNo += 1;
+      save();
+      return { extra, nextLabel: `🍂 ${P.gameNo}차전으로`, nextFn: () => { renderPost(); show("screen-pro"); } };
+    }
+
+    // 시리즈 종료 — 라운드 사이엔 이동일·휴식일이 있어 컨디션이 회복돼요
+    S.condition = clamp(S.condition + 15, 0, 100);
+    if (s.winner !== P.myTeam) P.eliminated = true;
+    P.gameNo = 1;
+    save();
+    const won = s.winner === P.myTeam;
+    const label = Postseason.LABEL[s.round];
+    return {
+      extra,
+      nextLabel: won ? "🍂 다음 라운드로" : "🏁 시즌 결산",
+      nextFn: () => advancePostseason([
+        { text: won ? `🎉 ${label} 승리! (${myW}-${opW})` : `😢 ${label} 탈락… (${myW}-${opW})`, cls: won ? "good" : "bad" },
+      ]),
     };
   }
 
@@ -550,6 +607,51 @@ window.Career = (() => {
     };
     save();
     advancePostseason([{ text: `🍂 ${bracket.myRank}위로 가을야구에 진출했어요!`, cls: "good" }]);
+  }
+
+  const mySeries = () => (S.post ? S.post.series.find((s) => s.round === S.post.myRound) : null);
+  const postOpp = () => { const s = mySeries(); return s ? (s.a === S.post.myTeam ? s.b : s.a) : ""; };
+
+  /* 포스트시즌 중의 프로 화면. 시리즈 중엔 훈련이 없어요(실제로도 경기만 있어요).
+   * 능력치·컨디션 표시는 renderPro와 같은 요소를 그대로 써요. */
+  function renderPost() {
+    const P = S.post, s = mySeries();
+    const myW = s.a === P.myTeam ? s.aw : s.bw;
+    const opW = s.a === P.myTeam ? s.bw : s.aw;
+    const label = Postseason.LABEL[s.round];
+
+    $("pro-name").textContent = `${S.name} (${S.pos === "batter" ? "타자" : "투수"})`;
+    $("pro-team").textContent = `⚾ ${S.team} · ${S.role || ""} · ${S.age}세 · ${S.proYear}년차 · 종합 ${Math.round(overall())}`;
+    $("pro-turn").textContent = `🍂 ${label} ${P.gameNo}차전`;
+    $("pro-money").textContent = `💰 ${fmtMoney(S.money || 0)}`;
+    $("pro-cond-num").textContent = Math.round(S.condition);
+    $("pro-cond-bar").style.width = `${S.condition}%`;
+
+    // 순위표 자리에 시리즈 현황을 보여줘요
+    const box = $("pro-standings");
+    box.hidden = false;
+    box.open = true;
+    $("pro-standings-sum").textContent = `🍂 ${label} · 시리즈 ${myW}-${opW}`;
+    $("pro-standings-body").innerHTML = `<table class="rank-table"><tbody>${
+      S.post.series.map((x) => {
+        const line = x.done
+          ? `${x.a} ${x.aw}-${x.bw} ${x.b} → ${x.winner}`
+          : x.b == null ? `${x.a} vs (미정)` : `${x.a} ${x.aw}-${x.bw} ${x.b}`;
+        return `<tr class="${x.round === P.myRound ? "me" : ""}"><td>${Postseason.LABEL[x.round]}</td><td>${line}</td></tr>`;
+      }).join("")
+    }</tbody></table>`;
+
+    $("pro-stats").innerHTML = "";
+    $("pro-camp-title").textContent = `${label} ${P.gameNo}차전 — ${S.team} vs ${postOpp()}`;
+    const acts = $("pro-actions");
+    acts.innerHTML = "";
+    const go = document.createElement("button");
+    go.className = "action-btn rest go-game";
+    go.innerHTML = `<span class="a-emoji">⚾</span>경기 시작<span class="a-sub">시리즈 ${myW}-${opW} · ${s.need}선승제</span>`;
+    go.onclick = playProGame;
+    acts.appendChild(go);
+
+    $("pro-log").innerHTML = (S.proLog || []).map((l, i) => `<div class="${i === 0 ? "new" : ""}">${l}</div>`).join("");
   }
 
   /* 대진을 앞으로 굴려요. 내가 나설 시리즈를 만나면 멈추고 화면을 그려요.
