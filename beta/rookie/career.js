@@ -709,7 +709,10 @@ window.Career = (() => {
     const t = P.stats;
     if (S.pos === "batter") {
       if (!t.ab) return "";
-      return `🍂 가을야구 ${t.ab}타수 ${t.hits}안타${t.hr ? ` ${t.hr}홈런` : ""} (타율 ${(t.hits / t.ab).toFixed(3).slice(1)})`;
+      // 타율은 야구 관례대로 앞의 0을 떼요. 다만 1.000은 떼면 .000이 돼서 그대로 둬요.
+      const avg = t.hits / t.ab;
+      const avgTxt = avg >= 1 ? avg.toFixed(3) : avg.toFixed(3).slice(1);
+      return `🍂 가을야구 ${t.ab}타수 ${t.hits}안타${t.hr ? ` ${t.hr}홈런` : ""} (타율 ${avgTxt})`;
     }
     if (!t.g) return "";
     return `🍂 가을야구 ${t.g}경기 ${t.ip}이닝 ${t.k}탈삼진 ${t.er}자책`;
@@ -779,7 +782,7 @@ window.Career = (() => {
       { text: `🏁 정규시즌 종료 — 최종 ${rank}위 (${finalW}승 ${finalL}패)`, cls: rank <= 3 ? "good" : rank >= 8 ? "bad" : "" },
     ];
     if (postLine) feeds.push({ text: postLine });
-    if (champ) feeds.push({ text: "🏆 한국시리즈 우승!! 헹가래의 주인공이 됐어요", cls: "good" });
+    if (champ) feeds.push({ text: `🏆 한국시리즈 우승 — 통산 ${S.career.rings}번째 반지예요`, cls: "good" });
     if (champ && window.Fx) Fx.celebrate("champion", "🏆 우승!");
     for (const a of awards) feeds.push({ text: `🎖️ ${a} 수상!`, cls: "good" });
     if (awards.length && window.Fx) Fx.celebrate("award", `🎖️ ${awards.join(" · ")}!`);
