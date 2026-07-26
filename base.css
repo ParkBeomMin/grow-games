@@ -188,6 +188,8 @@ h2 { font-size: 1.6rem; margin: 8px 0 6px; color: var(--accent); }
   flex-direction: column;
   gap: 8px;
 }
+/* 포스트시즌처럼 능력치를 비우는 화면에서 빈 상자만 남지 않게 */
+.stats:empty { display: none; }
 .stat-row { display: flex; align-items: center; gap: 8px; }
 .stat-name { width: 62px; font-size: .85rem; }
 .stat-row .bar { flex: 1; height: 10px; }
