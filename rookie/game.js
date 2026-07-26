@@ -1441,9 +1441,30 @@ function renderGameSim(cfg) {
     });
   }
 
+  // 특정 이닝 칸에 점수를 더해요. R가 이닝 합과 어긋나지 않게 칸에도 반영합니다.
+  function bumpCell(side, i, n) {
+    const el = $(`sb-${side}-${i}`);
+    el.textContent = (+(el.textContent || 0)) + n;
+    totals[side] += n;
+    $(`sb-r-${side}`).textContent = totals[side];
+  }
+
+  /* 마지막 승부가 극적이려면 점수판도 그 상황이어야 해요.
+   * 이닝 점수는 무작위로 흩뿌려서, 그냥 두면 "1점 차 역전 찬스"인데 3점 앞서 있기도 했어요.
+   * 8회 칸에 점수를 얹어 '타자는 1점 뒤 / 투수는 1점 앞'으로 맞춰둡니다.
+   * 이렇게 해두면 이후 분기(끝내기·동점·삼진)가 저절로 점수와 맞아떨어져요. */
+  function stageClutch() {
+    const want = isBat ? -1 : 1;              // 우리 - 상대
+    const cur = totals.our - totals.opp;
+    if (cur === want) return;
+    if (cur < want) bumpCell("our", 7, want - cur);
+    else bumpCell("opp", 7, cur - want);
+  }
+
   function beginMoment() {
     momentOn = true;
     clearInterval(simTimer);
+    stageClutch();
     applyStep({ feeds: [{ text: isBat
       ? `⚡ 9회말 2아웃, 1점 차 역전 찬스! ${S.name}의 타석!`
       : `⚡ 9회초 1점 차 리드, 2아웃 만루 위기! ${S.name}의 결정구!`, cls: "good" }] });
