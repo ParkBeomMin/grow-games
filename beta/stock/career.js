@@ -287,9 +287,9 @@ window.StockCareer = (() => {
     // 주간 수익률 랭킹 발표
     function weeklyChart() {
       const myScore =
-        S.stats[POS_INFO[S.pos].stat] * 0.32 +
+        (S.stats[POS_INFO[S.pos].stat] * 0.32 +
         S.stats.capital * 0.22 +
-        ((S.stats.analysis + S.stats.reflex + S.stats.info) / 3) * 0.2 +
+        ((S.stats.analysis + S.stats.reflex + S.stats.info) / 3) * 0.2) * clutch(POS_INFO[S.pos].stat) +
         S.condition / 8 + (S.fandom || 0) / 45 + miniBonus + rand(-5, 5) - 45;
       const rows = [
         { name: S.group, score: myScore, me: true },

@@ -233,9 +233,9 @@ window.WingerCareer = (() => {
     show("screen-stage");
 
     const myScore =
-      S.stats[POS_INFO[S.pos].stat] * 0.32 +
+      (S.stats[POS_INFO[S.pos].stat] * 0.32 +
       S.stats.stamina * 0.22 +
-      ((S.stats.shoot + S.stats.pass + S.stats.dribble) / 3) * 0.2 +
+      ((S.stats.shoot + S.stats.pass + S.stats.dribble) / 3) * 0.2) * clutch(POS_INFO[S.pos].stat) +
       S.condition / 8 + (S.fandom || 0) / 45 + rand(-5, 5) + 20;
     const rating = clamp(myScore / 10, 1, 10);
     const c = matchContribution(rating);

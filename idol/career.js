@@ -287,9 +287,9 @@ window.IdolCareer = (() => {
     // 주간 차트 발표
     function weeklyChart() {
       const myScore =
-        S.stats[POS_INFO[S.pos].stat] * 0.32 +
+        (S.stats[POS_INFO[S.pos].stat] * 0.32 +
         S.stats.charm * 0.22 +
-        ((S.stats.vocal + S.stats.dance + S.stats.rap) / 3) * 0.2 +
+        ((S.stats.vocal + S.stats.dance + S.stats.rap) / 3) * 0.2) * clutch(POS_INFO[S.pos].stat) +
         S.condition / 8 + (S.fandom || 0) / 45 + miniBonus + rand(-5, 5);
       const rows = [
         { name: S.group, score: myScore, me: true },

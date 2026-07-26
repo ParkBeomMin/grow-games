@@ -215,6 +215,18 @@ const transLv = (key) => (S.trans && S.trans[key]) || 0;
 const transTotal = () => Object.values((S && S.trans) || {}).reduce((a, b) => a + b, 0);
 const statCap = (key) => STAT_CAP + transLv(key) * TRANS_CAP_STEP;
 const transP = (lv) => Math.max(TRANS_P0 - lv * TRANS_PDEC, TRANS_PMIN);
+// 재능은 훈련 속도뿐 아니라 '큰 순간'에도 작용해요 (클러치 보정).
+// 스탯에 이미 반영된 걸 또 곱하는 이중 이득이 되지 않게 폭을 좁혔어요:
+// 평균 재능(1.3) 기준 ±6%, 초월 단계로 최대 +6%p 추가 → 총 0.90 ~ 1.16배.
+const CLUTCH_SCALE = 0.12;
+function clutch(key) {
+  const t = (S && S.talents && S.talents[key]) || 1.3;
+  return clamp(1 + (t - 1.3) * CLUTCH_SCALE + Math.min(transLv(key) * 0.004, 0.06), 0.9, 1.16);
+}
+function clutchAvg() {
+  const ks = Object.keys((S && S.talents) || {});
+  return ks.length ? ks.reduce((a, k) => a + clutch(k), 0) / ks.length : 1;
+}
 function transcendTitle(n) {
   if (n >= 40) return "🔱 신화의 영역";
   if (n >= 25) return "🌌 무아지경";

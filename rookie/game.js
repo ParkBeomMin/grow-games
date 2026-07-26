@@ -224,6 +224,18 @@ const transLv = (key) => (S.trans && S.trans[key]) || 0;
 const transTotal = () => Object.values((S && S.trans) || {}).reduce((a, b) => a + b, 0);
 const statCap = (key) => STAT_CAP + transLv(key) * TRANS_CAP_STEP;
 const transP = (lv) => Math.max(TRANS_P0 - lv * TRANS_PDEC, TRANS_PMIN);
+// 재능은 훈련 속도뿐 아니라 '큰 순간'에도 작용해요 (클러치 보정).
+// 스탯에 이미 반영된 걸 또 곱하는 이중 이득이 되지 않게 폭을 좁혔어요:
+// 평균 재능(1.3) 기준 ±6%, 초월 단계로 최대 +6%p 추가 → 총 0.90 ~ 1.16배.
+const CLUTCH_SCALE = 0.12;
+function clutch(key) {
+  const t = (S && S.talents && S.talents[key]) || 1.3;
+  return clamp(1 + (t - 1.3) * CLUTCH_SCALE + Math.min(transLv(key) * 0.004, 0.06), 0.9, 1.16);
+}
+function clutchAvg() {
+  const ks = Object.keys((S && S.talents) || {});
+  return ks.length ? ks.reduce((a, k) => a + clutch(k), 0) / ks.length : 1;
+}
 function transcendTitle(n) {
   if (n >= 40) return "🔱 신화의 영역";
   if (n >= 25) return "🌌 무아지경";
@@ -1273,7 +1285,7 @@ function renderGameSim(cfg) {
       const doRes = (res) => {
         let txt, cls = "good", runs = 0;
         if (res === "perfect") {
-          if (Math.random() < 0.35 + S.stats.power / 400) {
+          if (Math.random() < (0.35 + S.stats.power / 400) * clutch("power")) {
             perf.hr += 1; perf.hits += 1; runs = randInt(1, 2);
             txt = `${S.name}, 큼지막한 홈런!! 💥`;
           } else {
@@ -1281,11 +1293,11 @@ function renderGameSim(cfg) {
             txt = `${S.name}, 총알 같은 2루타! ⚡ (1타점)`;
           }
         } else if (res === "good") {
-          if (Math.random() < clamp(0.22 + S.stats.contact / 320, 0.22, 0.55)) {
+          if (Math.random() < clamp((0.22 + S.stats.contact / 320) * clutch("contact"), 0.22, 0.6)) {
             perf.hits += 1;
             runs = Math.random() < 0.4 ? 1 : 0;
             txt = `${S.name}, 안타! 🏏${runs ? " (1타점)" : ""}`;
-            if (Math.random() < S.stats.run / 400) { perf.sb += 1; txt += " 이어서 도루! 👟"; }
+            if (Math.random() < S.stats.run / 400 * clutch("run")) { perf.sb += 1; txt += " 이어서 도루! 👟"; }
           } else {
             cls = "";
             txt = `${S.name}, 잘 맞았지만 야수 정면… 아쉬운 타구`;

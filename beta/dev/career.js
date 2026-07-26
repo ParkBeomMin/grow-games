@@ -285,9 +285,9 @@ window.DevCareer = (() => {
     // 주간 성과(기여도) 랭킹 발표
     function weeklyChart() {
       const myScore =
-        S.stats[POS_INFO[S.pos].stat] * 0.32 +
+        (S.stats[POS_INFO[S.pos].stat] * 0.32 +
         S.stats.collab * 0.22 +
-        ((S.stats.algo + S.stats.cs + S.stats.coding) / 3) * 0.2 +
+        ((S.stats.algo + S.stats.cs + S.stats.coding) / 3) * 0.2) * clutch(POS_INFO[S.pos].stat) +
         S.condition / 8 + (S.fandom || 0) / 45 + miniBonus + rand(-5, 5) + 20;
       const rows = [
         { name: S.name, score: myScore, me: true },

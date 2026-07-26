@@ -267,7 +267,7 @@ window.Career = (() => {
       ? S.stats.contact * 0.45 + S.stats.power * 0.35 + S.stats.run * 0.1 + S.stats.defense * 0.1
       : S.stats.velocity * 0.35 + S.stats.control * 0.35 + S.stats.breaking * 0.2 + S.stats.stamina * 0.1;
     const agePen = S.age >= 31 ? (S.age - 30) * 0.02 : 0;
-    return clamp(0.42 + (core - 50) / 160 + (S.condition - 50) / 600 - agePen, 0.25, 0.72);
+    return clamp(0.42 + (core * clutchAvg() - 50) / 160 + (S.condition - 50) / 600 - agePen, 0.25, 0.72);
   }
 
   function playProGame() {

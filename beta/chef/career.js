@@ -282,9 +282,9 @@ window.ChefCareer = (() => {
     // 주간 손님 평점 랭킹 발표
     function weeklyChart() {
       const myScore =
-        S.stats[POS_INFO[S.pos].stat] * 0.32 +
+        (S.stats[POS_INFO[S.pos].stat] * 0.32 +
         S.stats.stamina * 0.22 +
-        ((S.stats.knife + S.stats.taste + S.stats.creativity) / 3) * 0.2 +
+        ((S.stats.knife + S.stats.taste + S.stats.creativity) / 3) * 0.2) * clutch(POS_INFO[S.pos].stat) +
         S.condition / 8 + (S.fandom || 0) / 45 + miniBonus + rand(-5, 5) + 20;
       const rows = [
         { name: S.name, score: myScore, me: true },
