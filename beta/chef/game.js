@@ -189,8 +189,59 @@ $("btn-home-pro")?.addEventListener("click", goHome);
 // ---------- 재능 각성 ----------
 // 재능 상한. 별 표시는 talentStars()가 이 값을 5성에 맞춰 환산해요.
 const TALENT_MAX = 1.8;
+// ✨ 초월 각성 — 재능이 MAX에 닿은 뒤의 엔드게임.
+// 재능은 1.8로 고정(올리면 훈련↑→단계↑ 되먹임으로 폭주해요). 대신 단계마다
+// 그 스탯의 상한이 조금 올라 계속 훈련할 공간이 생기고, 실질 보상은
+// 명예의 전당 점수 가산이에요. 성공률이 단계마다 떨어져 자연히 느려집니다.
+const TRANS_CAP_STEP = 6;   // 단계당 스탯 상한 증가
+const TRANS_P0 = 0.45, TRANS_PDEC = 0.03, TRANS_PMIN = 0.15;
+const transLv = (key) => (S.trans && S.trans[key]) || 0;
+const transTotal = () => Object.values((S && S.trans) || {}).reduce((a, b) => a + b, 0);
+const statCap = (key) => STAT_CAP + transLv(key) * TRANS_CAP_STEP;
+const transP = (lv) => Math.max(TRANS_P0 - lv * TRANS_PDEC, TRANS_PMIN);
+function transcendTitle(n) {
+  if (n >= 40) return "🔱 신화의 영역";
+  if (n >= 25) return "🌌 무아지경";
+  if (n >= 12) return "✨ 초월자";
+  if (n >= 1) return "🌠 각성 너머";
+  return "";
+}
 const talentStars = (t) => clamp(Math.round(((t - 0.6) / (TALENT_MAX - 0.6)) * 5), 1, 5);
 const isTalentMax = (t) => t >= TALENT_MAX - 1e-9;
+// 재능 MAX 이후 — 상한까지 채운 스탯으로 초월에 도전해요.
+function transcend(key, d, v, logFn) {
+  const cap = statCap(key);
+  if (v < cap) {
+    alert(
+      `✨ ${d.name} 재능은 이미 최대(⭐⭐⭐⭐⭐ MAX)예요!\n\n` +
+      `이제부터는 🌠 초월 각성에 도전할 수 있어요.\n` +
+      `· 조건: ${d.name} 수치를 상한(${cap})까지 채우기 — 지금 ${v}\n` +
+      `· 초월 1단계마다 상한 +${TRANS_CAP_STEP}, 명예의 전당 점수 +25`
+    );
+    return false;
+  }
+  const lv = transLv(key);
+  const p = transP(lv);
+  if (!confirm(
+    `🌠 ${d.name} 초월 각성 (현재 ✨${lv})\n\n` +
+    `성공 확률 ${Math.round(p * 100)}% — 단계가 오를수록 낮아져요\n` +
+    `· 성공: ✨${lv + 1} 달성, 상한 ${cap} → ${cap + TRANS_CAP_STEP}, 명예의 전당 +25점\n` +
+    `· 실패: ${d.name} 수치만 초기화 (재능은 이미 MAX라 잃지 않아요)\n\n도전할까요?`
+  )) return false;
+
+  S.trans = S.trans || {};
+  if (Math.random() < p) {
+    S.trans[key] = lv + 1;
+    S.stats[key] = randInt(45, 60);
+    logFn(`🌠✨ ${d.name} 초월 ${lv + 1}단계 달성!! 상한이 ${statCap(key)}까지 열렸어요`);
+  } else {
+    S.stats[key] = randInt(45, 60);
+    logFn(`🌠💦 초월 실패… ${d.name} ${Math.round(S.stats[key])}부터 다시 (✨${lv} 유지)`);
+  }
+  save();
+  return true;
+}
+
 function awakenTalent(key, logFn) {
   const defs = Array.isArray(STAT_DEFS) ? STAT_DEFS : STAT_DEFS[S.pos];
   const d = defs.find((x) => x.key === key);
@@ -198,10 +249,7 @@ function awakenTalent(key, logFn) {
   if (!d || v < 100) return false;
   // 재능이 상한(TALENT_MAX)이면 각성해도 오르는 게 없어요.
   // 예전엔 '성공'이 뜨면서 스탯만 45~60으로 깎여 순손실이었습니다.
-  if (S.talents[key] >= TALENT_MAX - 1e-9) {
-    alert(`✨ ${d.name} 재능은 이미 최대(⭐⭐⭐⭐⭐ MAX)예요!\n\n더 올릴 수 없으니 각성 대신 수치를 계속 키워보세요.`);
-    return false;
-  }
+  if (S.talents[key] >= TALENT_MAX - 1e-9) return transcend(key, d, v, logFn);
   const p = Math.min(0.25 + (v - 100) * 0.015, 0.75);
   const ok = confirm(
     `🔮 ${d.name} 재능 각성 시도!\n\n` +
@@ -281,7 +329,7 @@ function showAdTrainModal(rerender) {
       let gain = rand(2.2, 4.2) * S.talents[d.key];
       if (S.stats[d.key] >= 100) gain *= 0.5;
       gain = Math.round(gain * 10) / 10;
-      S.stats[d.key] = clamp(S.stats[d.key] + gain, 0, STAT_CAP);
+      S.stats[d.key] = clamp(S.stats[d.key] + gain, 0, statCap(d.key));
       localStorage.setItem(AD_CD_KEY, Date.now());
       save();
       if (window.Stats) Stats.log("bonus", { type: "train" });
@@ -345,8 +393,9 @@ function renderShop() {
         }
         S.money -= tier.price;
         S.gear = S.gear || {};
+  S.trans = S.trans || {};
         S.gear[`${d.key}-${tier.n}`] = true;
-        S.stats[d.key] = clamp(S.stats[d.key] + tier.bonus, 0, STAT_CAP);
+        S.stats[d.key] = clamp(S.stats[d.key] + tier.bonus, 0, statCap(d.key));
         save();
         renderShop();
       };
@@ -586,8 +635,8 @@ function renderMain() {
   statsBox.innerHTML = "";
   for (const d of STAT_DEFS) {
     const v = Math.round(S.stats[d.key]);
-    const tv = S.talents[d.key];
-    const stars = "⭐".repeat(talentStars(tv)) + (isTalentMax(tv) ? " MAX" : "");
+    const tv = S.talents[d.key], tl = transLv(d.key);
+    const stars = "⭐".repeat(talentStars(tv)) + (isTalentMax(tv) ? (tl ? ` ✨${tl}` : " MAX") : "");
     const row = document.createElement("div");
     row.className = "stat-row";
     row.innerHTML = `
@@ -670,7 +719,7 @@ function doTraining(def) {
   const failP = S.condition < 40 ? 0.15 : 0.07;
   if (Math.random() < failP) {
     const loss = Math.round(rand(0.5, 1.5) * 10) / 10;
-    S.stats[def.key] = clamp(S.stats[def.key] - loss, 0, STAT_CAP);
+    S.stats[def.key] = clamp(S.stats[def.key] - loss, 0, statCap(def.key));
     S.condition = clamp(S.condition - randInt(6, 10), 0, 100);
     addLog(`😵 ${def.name} 수련이 영 안 풀렸어요… -${loss.toFixed(1)} (${Math.round(S.stats[def.key])})`);
     maybeEvent();
@@ -684,7 +733,7 @@ function doTraining(def) {
   let gain = rand(2.2, 4.2) * S.talents[def.key] * m.growth * condMod * buffMod;
   if (S.stats[def.key] >= 100) gain *= 0.5;
   gain = Math.round(gain * 10) / 10;
-  S.stats[def.key] = clamp(S.stats[def.key] + gain, 0, STAT_CAP);
+  S.stats[def.key] = clamp(S.stats[def.key] + gain, 0, statCap(def.key));
   S.condition = clamp(S.condition - randInt(12, 18), 0, 100);
   addLog(`${def.emoji} ${def.name} 수련 완료! +${gain.toFixed(1)} (${Math.round(S.stats[def.key])})`);
 
@@ -694,7 +743,7 @@ function doTraining(def) {
 
 function doRest() {
   S.condition = clamp(S.condition + randInt(30, 42), 0, 100);
-  S.stats.stamina = clamp(S.stats.stamina + 0.5, 0, STAT_CAP);
+  S.stats.stamina = clamp(S.stats.stamina + 0.5, 0, statCap("stamina"));
   addLog(`🛌 푹 쉬었어요. 컨디션 회복! (${Math.round(S.condition)})`);
   maybeEvent();
   endMonth();
@@ -706,7 +755,7 @@ function maybeEvent() {
   const events = [
     () => {
       const d = pick(STAT_DEFS);
-      S.stats[d.key] = clamp(S.stats[d.key] + 3, 0, STAT_CAP);
+      S.stats[d.key] = clamp(S.stats[d.key] + 3, 0, statCap(d.key));
       addLog(`🧑‍🍳 셰프님의 특별 지도! ${d.name} +3`);
     },
     () => {
@@ -727,7 +776,7 @@ function maybeEvent() {
       addLog(`🔥 라이벌 셰프의 신메뉴에 자극받았어요! 다음 수련 효율 1.5배`);
     },
     () => {
-      S.stats.stamina = clamp(S.stats.stamina + 2, 0, STAT_CAP);
+      S.stats.stamina = clamp(S.stats.stamina + 2, 0, statCap("stamina"));
       addLog(`🏃 새벽 시장 다니는 루틴이 몸에 붙었어요. 체력 +2`);
     },
     () => {

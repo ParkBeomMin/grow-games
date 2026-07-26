@@ -129,8 +129,8 @@ window.WingerCareer = (() => {
     stats.innerHTML = "";
     for (const d of STAT_DEFS) {
       const v = Math.round(S.stats[d.key]);
-      const tv = S.talents[d.key];
-      const stars = "⭐".repeat(talentStars(tv)) + (isTalentMax(tv) ? " MAX" : "");
+      const tv = S.talents[d.key], tl = transLv(d.key);
+      const stars = "⭐".repeat(talentStars(tv)) + (isTalentMax(tv) ? (tl ? ` ✨${tl}` : " MAX") : "");
       const row = document.createElement("div");
       row.className = "stat-row";
       row.innerHTML = `
@@ -195,7 +195,7 @@ window.WingerCareer = (() => {
       const failP = S.condition < 40 ? 0.15 : 0.07;
       if (Math.random() < failP) {
         const loss = Math.round(rand(0.5, 1.5) * 10) / 10;
-        S.stats[def.key] = clamp(S.stats[def.key] - loss, 0, STAT_CAP);
+        S.stats[def.key] = clamp(S.stats[def.key] - loss, 0, statCap(def.key));
         S.condition = clamp(S.condition - randInt(6, 10), 0, 100);
         proLog(`😵 ${def.name} 훈련이 꼬였어요… -${loss.toFixed(1)}`);
         S.camp -= 1;
@@ -207,7 +207,7 @@ window.WingerCareer = (() => {
       let gain = rand(1.8, 3.6) * S.talents[def.key] * yearMod * condMod;
       if (S.stats[def.key] >= 100) gain *= 0.5;
       gain = Math.round(gain * 10) / 10;
-      S.stats[def.key] = clamp(S.stats[def.key] + gain, 0, STAT_CAP);
+      S.stats[def.key] = clamp(S.stats[def.key] + gain, 0, statCap(def.key));
       S.condition = clamp(S.condition - randInt(10, 16), 0, 100);
       proLog(`${def.emoji} ${def.name} 훈련 +${gain.toFixed(1)} (${Math.round(S.stats[def.key])})`);
     } else {
@@ -350,8 +350,8 @@ window.WingerCareer = (() => {
     S.career.years.push({ y: S.proYear, hype: Math.round(hype * 10) / 10, wins, sales, dFan, awards, goals: gg, assists: ga, defense: gd, apps });
     if (window.Stats) Stats.log("year_end", { y: S.proYear, wins, sales, goals: gg, assists: ga });
     for (const d of STAT_DEFS) {
-      if (S.proYear <= 3) S.stats[d.key] = clamp(S.stats[d.key] + rand(0, 1) * S.talents[d.key], 0, STAT_CAP);
-      else if (S.proYear >= 8) S.stats[d.key] = clamp(S.stats[d.key] - rand(0.6, 1.8), 0, STAT_CAP);
+      if (S.proYear <= 3) S.stats[d.key] = clamp(S.stats[d.key] + rand(0, 1) * S.talents[d.key], 0, statCap(d.key));
+      else if (S.proYear >= 8) S.stats[d.key] = clamp(S.stats[d.key] - rand(0.6, 1.8), 0, statCap(d.key));
     }
     const income = sales * 3 + wins * 40;
     S.money = (S.money || 0) + income;
@@ -415,7 +415,8 @@ window.WingerCareer = (() => {
     const c = S.career || { years: [], wins: 0, daesang: 0, bonsang: 0, rookie: 0 };
     const score = Math.round(
       S.fandom * 0.5 + c.wins * 6 + c.daesang * 50 + c.bonsang * 15 + c.rookie * 20 +
-      (c.years ? c.years.length : 0) * 5 + (S.trophies ? S.trophies.length : 0) * 8 + (S.center ? 30 : 0)
+      (c.years ? c.years.length : 0) * 5 + (S.trophies ? S.trophies.length : 0) * 8 + (S.center ? 30 : 0) +
+      transTotal() * 25   // ✨ 초월 단계 보너스
     );
     const entry = {
       id: "w" + Date.now(),
@@ -429,8 +430,9 @@ window.WingerCareer = (() => {
       assists: (c.assists || 0) + ((S.youth && S.youth.a) || 0),
       apps: (c.apps || 0) + (S.stages || 0),
       finalOvr: Math.round(overall()),
+      trans: transTotal(),
       score,
-      grade: gradeOfScore(score),
+      grade: gradeOfScore(score) + (transTotal() ? ` · ${transcendTitle(transTotal())}` : ""),
     };
     const hof = loadHof();
     hof.push(entry);
