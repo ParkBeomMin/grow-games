@@ -859,7 +859,11 @@ window.Career = (() => {
     const leagueBest = Math.max(...Array.from({ length: 6 }, () => rand(3.5, 7.8)));
     if (war >= 5.5 && war >= leagueBest) {
       awards.push("MVP"); S.career.mvp += 1;
-    } else if (war >= 4.5) {
+    }
+    /* 골든글러브는 MVP와 별개로 판정해요.
+     * 예전에는 else if라서 MVP를 받으면 골든글러브를 아예 못 받았고,
+     * 그 바람에 리그 최고 시즌이 상을 덜 받는 역전이 있었어요. */
+    if (war >= 4.5) {
       const posBar = rand(4.2, 6.2); // 포지션 상위권 컷
       if (war >= posBar) { awards.push("골든글러브"); S.career.gg += 1; }
     }
