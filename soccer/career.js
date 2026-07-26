@@ -622,29 +622,49 @@ window.WingerCareer = (() => {
           <p class="av-note">${matchEnabled() ? "🌍 전 세계 플레이어 풀에서 실력이 비슷한 상대를 찾아요" : "🤖 오프라인 모드 — 매칭 서버 연결 전까진 봇과 매칭돼요"}</p>
         </div>`;
       $("btn-fight").onclick = async () => {
-        const me = list[+$("battle-me").value];
-        $("btn-fight").textContent = "🔍 상대 찾는 중…";
-        const roster = await fetchRoster();
-        let opp;
-        const pool = (roster || []).filter((r) => !r.mine);
-        if (pool.length) {
-          pool.sort((a, b) => Math.abs(a.bp - me.bp) - Math.abs(b.bp - me.bp));
-          const o = pick(pool.slice(0, 6));
-          opp = { id: "r-" + o.id, name: o.name, bp: o.bp, remote: true };
-        } else {
-          const g = pick(GHOSTS);
-          opp = { ...g, name: `${g.name} (봇)` };
+        if (battling) return;
+        battling = true;
+        const btn = $("btn-fight");
+        btn.disabled = true;
+        btn.textContent = "🔍 상대 찾는 중…";
+        try {
+          const me = list[+$("battle-me").value];
+          const roster = await fetchRoster();
+          let opp;
+          const pool = (roster || []).filter((r) => !r.mine);
+          if (pool.length) {
+            pool.sort((a, b) => Math.abs(a.bp - me.bp) - Math.abs(b.bp - me.bp));
+            const o = pick(pool.slice(0, 6));
+            opp = { id: "r-" + o.id, name: o.name, bp: o.bp, remote: true };
+          } else {
+            const g = pick(GHOSTS);
+            opp = { ...g, name: `${g.name} (봇)` };
+          }
+          btn.textContent = "⚔️ 배틀 진행 중…";
+          fight(me, opp);   // 잠금은 finishFight에서 풀어요
+        } catch (e) {
+          resetFightBtn();   // 실패해도 다시 시도할 수 있게 잠금은 풀어줘요
+          throw e;           // 원인은 삼키지 않고 그대로 드러내요
         }
-        $("btn-fight").textContent = "🎲 랜덤 매칭 시작";
-        fight(me, opp);
       };
     }
+    // 배틀 도중에 나갔다 다시 들어와도 잠긴 채로 남지 않게 초기화해요.
+    clearInterval(battleTimer);
+    battling = false;
     $("battle-view").innerHTML = "";
     renderRanking();
     show("screen-battle");
   }
 
   let battleTimer = null;
+  // 매칭 요청부터 결과 표시까지 버튼을 잠가요. 안 잠그면 배틀 연출(약 3초) 중에
+  // 다시 눌려서 진행 중이던 배틀이 결과 없이 사라져요.
+  let battling = false;
+  function resetFightBtn() {
+    battling = false;
+    const btn = $("btn-fight");
+    if (btn) { btn.disabled = false; btn.textContent = "🎲 랜덤 매칭 시작"; }
+  }
   function fight(me, opp) {
     const p = clamp(0.5 + (me.bp - opp.bp) / 700, 0.08, 0.92);
     const win = Math.random() < p;
@@ -692,6 +712,7 @@ window.WingerCareer = (() => {
     $("battle-result").innerHTML = `
       <div class="tour-vs">${win ? `${me.name} 승리! 🎉` : `${opp.name} 승리… 💧`} <span class="score-final">${a} : ${b}</span></div>
       <div class="tour-pts">레이팅 ${delta >= 0 ? "+" : ""}${delta} → ${rm.rating}</div>`;
+    resetFightBtn();
     renderRanking();
   }
 
