@@ -43,5 +43,38 @@
     };
   }
 
-  window.Postseason = { NEED, MAX_GAMES, LABEL, roundOfRank, buildBracket };
+  /* 한 경기 결과를 시리즈에 반영해 새 객체를 돌려줘요 (원본은 그대로).
+   * aWon이 true면 상위 시드가 이긴 거예요. 이미 끝난 시리즈면 그대로 돌려줘요. */
+  function advanceSeries(series, aWon) {
+    if (series.done) return { ...series };
+    const s = { ...series };
+    if (aWon) s.aw += 1; else s.bw += 1;
+    if (s.aw >= s.need) { s.done = true; s.winner = s.a; }
+    else if (s.bw >= s.need) { s.done = true; s.winner = s.b; }
+    return s;
+  }
+
+  /* NPC끼리의 시리즈를 팀 강도로 끝까지 돌려요.
+   * str은 initSeason이 팀마다 부여하는 0.36~0.62 값이에요.
+   * 상위 시드에 홈 어드밴티지 0.04를 얹어요. */
+  function simSeries(round, aName, bName, strA, strB, aHead) {
+    const p = Math.max(0.2, Math.min(0.8, 0.5 + (strA - strB) * 1.2 + 0.04));
+    let s = mkSeries(round, aName, bName, aHead);
+    // 최대 경기 수만큼만 돌아요 — 어떤 경우에도 무한루프가 안 나요.
+    for (let i = 0; i < MAX_GAMES[round] && !s.done; i++) {
+      s = advanceSeries(s, Math.random() < p);
+    }
+    return s;
+  }
+
+  /* 끝난 시리즈의 승자를 바로 다음 라운드의 b 자리에 채운 새 배열을 돌려줘요. */
+  function feedWinner(series) {
+    const out = series.map((s) => ({ ...s }));
+    for (let i = 0; i + 1 < out.length; i++) {
+      if (out[i].done && out[i + 1].b == null) out[i + 1].b = out[i].winner;
+    }
+    return out;
+  }
+
+  window.Postseason = { NEED, MAX_GAMES, LABEL, roundOfRank, buildBracket, advanceSeries, simSeries, feedWinner };
 })();
