@@ -447,7 +447,7 @@ window.ChefCareer = (() => {
         `🎓 여기서 커리어를 마칠까요?\n\n` +
         `· 명예의 전당에 기록이 남아요\n` + retireSummary() +
         `· 등급: ${gradeOfScore(careerScore())}\n\n` +
-        `⚠️ 되돌릴 수 없어요. 유산을 남기려면 '환생'을 선택하세요.\n\n진행할까요?`
+        `⚠️ 되돌릴 수 없어요.\n\n진행할까요?`
       )) return;
       enshrine();
     };
