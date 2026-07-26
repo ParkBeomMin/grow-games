@@ -192,8 +192,8 @@ h2 { font-size: 1.6rem; margin: 8px 0 6px; color: var(--accent); }
 .stat-name { width: 62px; font-size: .85rem; }
 .stat-row .bar { flex: 1; height: 10px; }
 .stat-val { width: 34px; text-align: right; font-size: .85rem; color: var(--sky); }
-/* 별 + MAX/✨단계 — 한 줄에 들어가도록 폭을 넉넉히 */
-.stat-pot { width: 76px; font-size: .7rem; color: var(--accent); letter-spacing: -1px; white-space: nowrap; }
+/* 별 + MAX/✨단계 — 한 줄에 들어가되, ✨단계가 붙으면 내용만큼 늘어나요 (막대가 대신 줄어듦) */
+.stat-pot { flex: 0 0 auto; min-width: 76px; font-size: .7rem; color: var(--accent); letter-spacing: -1px; white-space: nowrap; }
 .stat-pot .tr { color: #c9aaff; letter-spacing: 0; }
 
 /* ---------- 행동 ---------- */
@@ -450,6 +450,25 @@ h2 { font-size: 1.6rem; margin: 8px 0 6px; color: var(--accent); }
 
 /* ---------- 재능 각성 ---------- */
 .awaken-btn { color: var(--accent); border-color: var(--accent); flex-shrink: 0; padding: 4px 8px; }
+/* 상한까지 꽉 채워 각성 조건을 만족한 상태 */
+.awaken-btn.ready { color: #ffe29a; border-color: #ffd166; background: rgba(255, 209, 102, .12); animation: awakenPulse 1.6s ease-in-out infinite; }
+.stat-val.max { color: #ffd166; font-weight: 700; }
+/* 상한 도달 — 훈련 버튼 자리를 각성 버튼이 대신해요 */
+.action-btn.awaken-act {
+  background: linear-gradient(180deg, #2b1f3f, #1d1630);
+  border-color: #b48cff;
+  color: #f0e6ff;
+  animation: awakenPulse 1.8s ease-in-out infinite;
+}
+.action-btn.awaken-act .a-sub { color: #c9aaff; }
+.action-btn.awaken-act:hover { border-color: #ffd166; }
+@keyframes awakenPulse {
+  0%, 100% { box-shadow: 0 0 0 rgba(180, 140, 255, 0); }
+  50% { box-shadow: 0 0 10px rgba(180, 140, 255, .55); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .awaken-btn.ready, .action-btn.awaken-act { animation: none; }
+}
 
 /* ---------- 광고 보상 팝업 · 보너스 슬롯 ---------- */
 .ad-modal { min-width: 260px; }

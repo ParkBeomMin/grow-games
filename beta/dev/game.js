@@ -217,6 +217,10 @@ const transLv = (key) => (S.trans && S.trans[key]) || 0;
 const transTotal = () => Object.values((S && S.trans) || {}).reduce((a, b) => a + b, 0);
 const statCap = (key) => STAT_CAP + transLv(key) * TRANS_CAP_STEP;
 const transP = (lv) => Math.max(TRANS_P0 - lv * TRANS_PDEC, TRANS_PMIN);
+// 상한에 닿은 능력치는 더 훈련해도 오르지 않아요(턴만 소모).
+// 그래서 그 능력치의 행동 버튼은 각성/초월로 바뀝니다.
+const atCap = (key) => Math.round(S.stats[key]) >= statCap(key);
+const awakenP = (v) => Math.min(0.25 + (v - 100) * 0.015, 0.75);
 // 재능은 훈련 속도뿐 아니라 '큰 순간'에도 작용해요 (클러치 보정).
 // 스탯에 이미 반영된 걸 또 곱하는 이중 이득이 되지 않게 폭을 좁혔어요:
 // 평균 재능(1.3) 기준 ±6%, 초월 단계로 최대 +6%p 추가 → 총 0.90 ~ 1.16배.
@@ -281,7 +285,7 @@ function awakenTalent(key, logFn) {
   // 재능이 상한(TALENT_MAX)이면 각성해도 오르는 게 없어요.
   // 예전엔 '성공'이 뜨면서 스탯만 45~60으로 깎여 순손실이었습니다.
   if (S.talents[key] >= TALENT_MAX - 1e-9) return transcend(key, d, v, logFn);
-  const p = Math.min(0.25 + (v - 100) * 0.015, 0.75);
+  const p = awakenP(v);
   const ok = confirm(
     `🔮 ${d.name} 재능 각성 시도!\n\n` +
     `성공 확률 ${Math.round(p * 100)}% (돌파가 깊을수록 올라가요)\n` +
@@ -357,7 +361,8 @@ function showAdTrainModal(rerender) {
   const closeBtn = ov.querySelector(".ad-modal-close");
   window.Ads.rewarded((ok) => {
     if (ok) {
-      const d = pick(statDefs());
+      const pool = statDefs().filter((x) => !atCap(x.key));
+      const d = pick(pool.length ? pool : statDefs());
       let gain = rand(2.2, 4.2) * S.talents[d.key];
       if (S.stats[d.key] >= 100) gain *= 0.5;
       gain = Math.round(gain * 10) / 10;
@@ -674,12 +679,12 @@ function renderMain() {
     row.innerHTML = `
       <span class="stat-name">${d.emoji} ${d.name}</span>
       <div class="bar"><div class="bar-fill stat${v > 100 ? " over" : ""}" style="width:${Math.min(v, 100)}%"></div></div>
-      <span class="stat-val">${v}</span>
+      <span class="stat-val${v >= statCap(d.key) ? " max" : ""}" title="상한 ${statCap(d.key)}">${v}</span>
       <span class="stat-pot" title="잠재력 — 별이 많을수록 공부 효율이 높아요">${stars}</span>`;
     if (v >= 100) {
       const aw = document.createElement("button");
-      aw.className = "mini-btn awaken-btn";
-      aw.textContent = "🔮 각성";
+      aw.className = "mini-btn awaken-btn" + (v >= statCap(d.key) ? " ready" : "");
+      aw.textContent = isTalentMax(tv) ? "🌠 초월" : "🔮 각성";
       aw.onclick = () => { if (awakenTalent(d.key, addLog)) renderMain(); };
       row.appendChild(aw);
     }
@@ -690,9 +695,18 @@ function renderMain() {
   actBox.innerHTML = "";
   for (const d of STAT_DEFS) {
     const btn = document.createElement("button");
-    btn.className = "action-btn";
-    btn.innerHTML = `<span class="a-emoji">${d.emoji}</span>${d.name} 공부<span class="a-sub">${d.sub}</span>`;
-    btn.onclick = () => doTraining(d);
+    // 상한에 닿았으면 공부 대신 각성에 도전해요 (턴 낭비 방지)
+    if (atCap(d.key)) {
+      const tmax = isTalentMax(S.talents[d.key]);
+      const pct = Math.round((tmax ? transP(transLv(d.key)) : awakenP(Math.round(S.stats[d.key]))) * 100);
+      btn.className = "action-btn awaken-act";
+      btn.innerHTML = `<span class="a-emoji">${tmax ? "🌠" : "🔮"}</span>${d.name} ${tmax ? "초월 각성" : "재능 각성"}<span class="a-sub">상한 ${statCap(d.key)} 도달 · 성공률 ${pct}%</span>`;
+      btn.onclick = () => { if (awakenTalent(d.key, addLog)) renderMain(); };
+    } else {
+      btn.className = "action-btn";
+      btn.innerHTML = `<span class="a-emoji">${d.emoji}</span>${d.name} 공부<span class="a-sub">${d.sub}</span>`;
+      btn.onclick = () => doTraining(d);
+    }
     actBox.appendChild(btn);
   }
   actBox.appendChild(makeAdSlotButton(renderMain));
@@ -740,6 +754,8 @@ function renderLog() {
 
 // ---------- 행동 ----------
 function doTraining(def) {
+  // 상한에 닿았으면 공부은 턴만 소모돼요 — 각성으로 돌려줍니다
+  if (atCap(def.key)) { if (awakenTalent(def.key, addLog)) renderMain(); return; }
   const m = marketOf();
 
   if (S.condition < 25 && Math.random() < 0.4) {
