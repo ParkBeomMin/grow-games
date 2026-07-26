@@ -454,7 +454,29 @@ function confirmName() {
   S.company = v || randomCompany();   // 비워두면 추천 이름으로
   $("naming").classList.add("hidden");
   save(); renderAll();
+  registerCompany();                  // 창업·개명 시 풀에 등록 (중복은 무시돼요)
   if (namingDone) { const cb = namingDone; namingDone = null; cb(); }
+}
+
+// ---------- 창업 중인 회사 수 ----------
+// register는 id가 같으면 무시돼요(resolution=ignore-duplicates). 여러 번 불러도
+// 이 기기의 회사는 한 번만 집계되고 전적도 덮이지 않아요.
+function registerCompany() {
+  if (window.Match && window.Match.enabled()) window.Match.register("unicorn", S.company);
+}
+const COUNT_POLL_MS = 60000;
+let lastCountAt = 0;
+function refreshCount(force) {
+  if (!window.Match || !window.Match.enabled()) return;
+  const now = Date.now();
+  if (!force && now - lastCountAt < COUNT_POLL_MS) return;
+  lastCountAt = now;
+  window.Match.count("unicorn").then((n) => {
+    if (!n) return;                   // 집계 전이거나 실패 — 빈 줄을 남기지 않아요
+    const el = $("uni-count");
+    el.innerHTML = `🌏 지금 <b>${n.toLocaleString()}개</b>의 회사가 창업 중이에요`;
+    el.classList.remove("hidden");
+  });
 }
 
 // ---------- 명예의 전당 / 은퇴 ----------
@@ -773,7 +795,16 @@ function init() {
   if (window.Stats) Stats.init("unicorn");
   scheduleBug();  // 🐛 버그 등장 예약
   // 탭이 다시 보이면 타이머를 새로 잡아요 (백그라운드 동안 몰려 나오지 않게)
-  document.addEventListener("visibilitychange", () => { if (!document.hidden && !bugEl) scheduleBug(); });
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) return;
+    if (!bugEl) scheduleBug();
+    refreshCount();   // 돌아왔을 때 한 번 (COUNT_POLL_MS 안이면 건너뛰어요)
+  });
+  // 창업 중인 회사 수 — 기존 플레이어도 집계되게 이미 판이 있으면 바로 등록해요
+  if (!isNew) registerCompany();
+  refreshCount(true);
+  // 백그라운드에서는 굳이 두드리지 않아요
+  setInterval(() => { if (!document.hidden) refreshCount(); }, COUNT_POLL_MS);
   // 새로 시작하는 판이면 사명부터 정하고 들어가요
   if (isNew) openNaming("new");
 }
