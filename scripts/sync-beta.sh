@@ -4,7 +4,7 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
-CONTENT="rookie idol stock dev chef stream soccer unicorn stats index.html env.js match.js stats.js ads.js base.css timing.js radar.js manifest.webmanifest sw.js icon-192.png icon-512.png"
+CONTENT="rookie idol stock dev chef stream soccer unicorn stats index.html env.js match.js stats.js ads.js fx.js base.css timing.js radar.js manifest.webmanifest sw.js icon-192.png icon-512.png"
 mkdir -p beta
 for item in $CONTENT; do
   [ -e "$item" ] && cp -a "$item" beta/

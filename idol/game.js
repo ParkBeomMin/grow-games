@@ -268,6 +268,7 @@ function transcend(key, d, v, logFn) {
     S.trans[key] = lv + 1;
     S.stats[key] = randInt(45, 60);
     logFn(`🌠✨ ${d.name} 초월 ${lv + 1}단계 달성!! 상한이 ${statCap(key)}까지 열렸어요`);
+    if (window.Fx) Fx.celebrate("transcend", `🌠 초월 ${lv + 1}단계!`, ".awaken-btn");
   } else {
     S.stats[key] = randInt(45, 60);
     logFn(`🌠💦 초월 실패… ${d.name} ${Math.round(S.stats[key])}부터 다시 (✨${lv} 유지)`);
@@ -298,6 +299,7 @@ function awakenTalent(key, logFn) {
     S.talents[key] = Math.min(S.talents[key] + rand(0.15, 0.3), TALENT_MAX);
     S.stats[key] = randInt(45, 60);
     logFn(`🔮✨ ${d.name} 재능 각성 성공!! 잠재력이 한 단계 피어났어요 (수치 ${Math.round(S.stats[key])}부터 재도전)`);
+    if (window.Fx) Fx.celebrate("awaken", `⭐ ${d.name} 각성 성공!`, ".awaken-btn");
   } else if (Math.random() < 0.1) {
     S.talents[key] = Math.max(S.talents[key] - 0.1, 0.8);
     S.stats[key] = randInt(30, 50);
@@ -676,7 +678,7 @@ function renderMain() {
   for (const d of STAT_DEFS) {
     const v = Math.round(S.stats[d.key]);
     const tv = S.talents[d.key], tl = transLv(d.key);
-    const stars = "⭐".repeat(talentStars(tv)) + (isTalentMax(tv) ? (tl ? ` ✨${tl}` : " MAX") : "");
+    const stars = "⭐".repeat(talentStars(tv)) + (isTalentMax(tv) ? (tl ? ` <span class="tr">✨${tl}</span>` : " MAX") : "");
     const row = document.createElement("div");
     row.className = "stat-row";
     row.innerHTML = `

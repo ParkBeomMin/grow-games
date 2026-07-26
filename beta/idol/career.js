@@ -128,7 +128,7 @@ window.IdolCareer = (() => {
     for (const d of STAT_DEFS) {
       const v = Math.round(S.stats[d.key]);
       const tv = S.talents[d.key], tl = transLv(d.key);
-      const stars = "⭐".repeat(talentStars(tv)) + (isTalentMax(tv) ? (tl ? ` ✨${tl}` : " MAX") : "");
+      const stars = "⭐".repeat(talentStars(tv)) + (isTalentMax(tv) ? (tl ? ` <span class="tr">✨${tl}</span>` : " MAX") : "");
       const row = document.createElement("div");
       row.className = "stat-row";
       row.innerHTML = `
@@ -384,6 +384,7 @@ window.IdolCareer = (() => {
       if (hype >= posBar) { awards.push("본상"); S.career.bonsang += 1; }
     }
     S.career.sales += sales;
+    if (awards.length && window.Fx) Fx.celebrate("award", `🎖️ ${awards.join(" · ")}!`);
     S.career.years.push({ y: S.proYear, hype: Math.round(hype * 10) / 10, wins, sales, dFan, awards });
     if (window.Stats) Stats.log("year_end", { y: S.proYear, wins, sales });
     // 초반엔 성장, 8년차부터는 서서히 하락

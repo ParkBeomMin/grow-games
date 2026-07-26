@@ -293,6 +293,7 @@ function doExit() {
   S.code = 0; S.gens = {}; S.equip = {}; S.earnedRun = 0;
   S.buffUntil = 0;
   addLog(`🚀 Exit 성공! 스톡옵션 +${gain} (통산 ${S.exits}회, 누적 SO ${S.so})`);
+  if (window.Fx) Fx.celebrate("champion", `🚀 Exit! 스톡옵션 +${gain}`, "#btn-exit");
   if (opening.length) addLog(`🔓 ${opening.map((o) => o.name).join(", ")} 해금!`);
   if (window.Stats) Stats.log("exit", { exits: S.exits, so: S.so, stage: label });
   save(); renderAll();
@@ -313,6 +314,7 @@ function checkEnding() {
   if (S.endedAt || valuation() < FINAL_STAGE) return;
   S.endedAt = Date.now();
   addLog("👑 데카콘 등극! 시장을 지배하는 회사가 되었어요.");
+  if (window.Fx) Fx.celebrate("ending", "👑 데카콘 등극!");
   if (window.Stats) Stats.log("decacorn", { exits: S.exits, so: S.so, playMin: Math.round(playTime() / 60000) });
   save();
   showEnding();
@@ -372,6 +374,7 @@ function spawnBug() {
     S.code += gain; S.earnedRun += gain; S.earnedAll += gain;
     if (S.earnedRun > S.bestRun) S.bestRun = S.earnedRun;
     addLog(`🐛✅ 버그를 잡았어요! 핫픽스 보상 +${lines(gain)}`);
+    if (window.Fx) Fx.burst(el, "✨", 10);
     el.classList.add("squash");
     setTimeout(() => removeBug(), 260);
     save(); renderAll();

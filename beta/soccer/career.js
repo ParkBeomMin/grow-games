@@ -130,7 +130,7 @@ window.WingerCareer = (() => {
     for (const d of STAT_DEFS) {
       const v = Math.round(S.stats[d.key]);
       const tv = S.talents[d.key], tl = transLv(d.key);
-      const stars = "⭐".repeat(talentStars(tv)) + (isTalentMax(tv) ? (tl ? ` ✨${tl}` : " MAX") : "");
+      const stars = "⭐".repeat(talentStars(tv)) + (isTalentMax(tv) ? (tl ? ` <span class="tr">✨${tl}</span>` : " MAX") : "");
       const row = document.createElement("div");
       row.className = "stat-row";
       row.innerHTML = `
@@ -347,6 +347,7 @@ window.WingerCareer = (() => {
     S.career.teamW = (S.career.teamW || 0) + (act.teamW || 0);
     S.career.teamD = (S.career.teamD || 0) + (act.teamD || 0);
     S.career.teamL = (S.career.teamL || 0) + (act.teamL || 0);
+    if (awards.length && window.Fx) Fx.celebrate("award", `🎖️ ${awards.join(" · ")}!`);
     S.career.years.push({ y: S.proYear, hype: Math.round(hype * 10) / 10, wins, sales, dFan, awards, goals: gg, assists: ga, defense: gd, apps });
     if (window.Stats) Stats.log("year_end", { y: S.proYear, wins, sales, goals: gg, assists: ga });
     for (const d of STAT_DEFS) {

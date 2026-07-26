@@ -110,7 +110,7 @@ window.Career = (() => {
     for (const d of STAT_DEFS[S.pos]) {
       const v = Math.round(S.stats[d.key]);
       const tv = S.talents[d.key], tl = transLv(d.key);
-      const stars = "⭐".repeat(talentStars(tv)) + (isTalentMax(tv) ? (tl ? ` ✨${tl}` : " MAX") : "");
+      const stars = "⭐".repeat(talentStars(tv)) + (isTalentMax(tv) ? (tl ? ` <span class="tr">✨${tl}</span>` : " MAX") : "");
       const row = document.createElement("div");
       row.className = "stat-row";
       row.innerHTML = `
@@ -544,7 +544,9 @@ window.Career = (() => {
       { text: `🏁 정규시즌 종료 — 최종 ${rank}위 (${finalW}승 ${finalL}패)`, cls: rank <= 3 ? "good" : rank >= 8 ? "bad" : "" },
     ];
     if (champ) feeds.push({ text: "🏆 한국시리즈 우승!! 헹가래의 주인공이 됐어요", cls: "good" });
+    if (champ && window.Fx) Fx.celebrate("champion", "🏆 우승!");
     for (const a of awards) feeds.push({ text: `🎖️ ${a} 수상!`, cls: "good" });
+    if (awards.length && window.Fx) Fx.celebrate("award", `🎖️ ${awards.join(" · ")}!`);
     feeds.push({ text: `💰 시즌 연봉 정산 +${fmtMoney(salary)}`, cls: "good" });
     playFeeds(`📺 ${S.proYear}년차 시즌 결산`, feeds, seasonReport);
   }

@@ -192,7 +192,9 @@ h2 { font-size: 1.6rem; margin: 8px 0 6px; color: var(--accent); }
 .stat-name { width: 62px; font-size: .85rem; }
 .stat-row .bar { flex: 1; height: 10px; }
 .stat-val { width: 34px; text-align: right; font-size: .85rem; color: var(--sky); }
-.stat-pot { width: 58px; font-size: .7rem; color: var(--accent); letter-spacing: -1px; }
+/* 별 + MAX/✨단계 — 한 줄에 들어가도록 폭을 넉넉히 */
+.stat-pot { width: 76px; font-size: .7rem; color: var(--accent); letter-spacing: -1px; white-space: nowrap; }
+.stat-pot .tr { color: #c9aaff; letter-spacing: 0; }
 
 /* ---------- 행동 ---------- */
 .actions-title { margin-bottom: 8px; color: var(--cream); }
@@ -268,8 +270,9 @@ h2 { font-size: 1.6rem; margin: 8px 0 6px; color: var(--accent); }
   padding-top: 12px;
   text-align: left;
 }
-.draft-actions { display: flex; gap: 10px; }
-.draft-actions .btn { flex: 1; }
+/* 버튼이 3개 이상이면 좁은 화면에서 글자가 쪼개져요 — 줄바꿈 허용 + 최소 폭 확보 */
+.draft-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.draft-actions .btn { flex: 1 1 140px; min-width: 0; white-space: nowrap; padding-left: 12px; padding-right: 12px; }
 
 @media (max-width: 380px) {
   .card-grid { grid-template-columns: 1fr; }
