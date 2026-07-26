@@ -30,9 +30,10 @@
     .kpi .l { font-size: .78rem; color: var(--dim); margin-top: 2px; }
     section { background: var(--bg2); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; margin-bottom: 16px; }
     section h2 { font-size: 1rem; margin-bottom: 14px; display: flex; align-items: center; gap: 6px; }
-    .tabs { display: flex; gap: 6px; margin-bottom: 16px; }
-    .tab { flex: 1; padding: 9px; border: 1px solid var(--line); background: var(--bg2); color: var(--dim); border-radius: 10px; cursor: pointer; font-size: .9rem; }
-    .tab.on { border-color: var(--accent); color: var(--accent); }
+    .tabs { display: flex; gap: 6px; margin-bottom: 16px; overflow-x: auto; scrollbar-width: thin; padding: 8px 4px; position: sticky; top: 0; z-index: 20; background: var(--bg); -webkit-overflow-scrolling: touch; }
+    .tabs[hidden] { display: none; }
+    .tab { flex: 0 0 auto; white-space: nowrap; padding: 8px 14px; border: 1px solid var(--line); background: var(--bg2); color: var(--dim); border-radius: 999px; cursor: pointer; font-size: .88rem; }
+    .tab.on { border-color: var(--accent); color: var(--accent); font-weight: 700; }
     .bar-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; font-size: .85rem; }
     .bar-label { width: 96px; flex-shrink: 0; color: var(--dim); text-align: right; }
     .bar-track { flex: 1; background: #0a0f18; border-radius: 6px; height: 22px; position: relative; overflow: hidden; }
@@ -74,7 +75,9 @@
     <h1>📊 통계 대시보드</h1>
     <p class="sub">키우기 시리즈 · <a class="home" href="../">🎮 게임으로</a> · <button class="refresh" id="refresh">↻ 새로고침</button> · <button class="refresh" id="lockout">🔒 잠그기</button></p>
 
-    <div id="content"><p class="empty">불러오는 중…</p></div>
+    <div id="overview"><p class="empty">불러오는 중…</p></div>
+    <nav class="tabs" id="tabs" hidden></nav>
+    <div id="panel"></div>
   </div>
 
   <script src="../env.js"></script>
@@ -87,6 +90,20 @@
     const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
 
     const GAMES = { rookie: "⚾ 더 루키", idol: "🎤 더 트레이니", stock: "📈 더 인베스터", soccer: "⚽ 더 윙어", dev: "💻 더 커밋", chef: "🍜 더 셰프", stream: "📺 더 스트리머", unicorn: "🦄 더 유니콘" };
+
+    // ---------- 탭 상태 ----------
+    // URL 해시가 단일 진실 원천이에요. 클릭·뒤로가기·링크 진입이 모두 hashchange 한 곳을 타요.
+    const GAME_KEYS = Object.keys(GAMES);
+    let STATE = null;        // load()가 채우는 fetch 결과 캐시
+    let activeGame = null;   // 현재 탭 (GAMES의 키)
+
+    const gameFromHash = () => {
+      const raw = location.hash.replace(/^#/, "");
+      let h = raw;
+      try { h = decodeURIComponent(raw); } catch { /* 잘못된 % 인코딩이면 원문 그대로 봐요 */ }
+      return Object.prototype.hasOwnProperty.call(GAMES, h) ? h : GAME_KEYS[0];
+    };
+
     const POS = {
       batter: "타자", pitcher: "투수", vocal: "보컬", dance: "댄스", rap: "랩",
       value: "가치투자", scalp: "단타", news: "정보매매", port: "분산투자",
@@ -122,44 +139,39 @@
         <div class="bar-track"><div class="bar-fill ${cls}" style="width:${max ? Math.max(2, (val / max) * 100) : 2}%"></div>
         <span class="bar-val">${val.toLocaleString()}</span></div></div>`;
 
-    function choiceSection(rows) {
-      let html = "";
-      for (const game of Object.keys(GAMES)) {
-        const g = rows.filter((r) => r.game === game && r.choice);
-        if (!g.length) continue;
-        const agg = {};
-        for (const r of g) { const c = normChoice(r.choice); agg[c] = (agg[c] || 0) + r.n; }
-        const items = Object.entries(agg).sort((a, b) => b[1] - a[1]);
-        const max = items[0][1];
-        const title = game === "rookie" ? "지역 선택 분포" : "소속사 선택 분포";
-        html += `<section><h2>${GAMES[game]} · ${title}</h2>${items.map(([k, v]) => bar(k, v, max)).join("")}</section>`;
+    // 배경 분포 + 포지션 분포를 한 문자열로 돌려줘요. 데이터가 없으면 빈 문자열이에요.
+    function choiceSection(rows, game) {
+      const g = rows.filter((r) => r.game === game && r.choice);
+      if (!g.length) return "";
 
-        // 포지션 분포
-        const pos = {};
-        for (const r of g) if (r.pos) pos[r.pos] = (pos[r.pos] || 0) + r.n;
-        const pi = Object.entries(pos).sort((a, b) => b[1] - a[1]);
-        if (pi.length) {
-          const pmax = pi[0][1];
-          html += `<section><h2>${GAMES[game]} · 포지션 분포</h2>${pi.map(([k, v]) => bar(POS[k] || k, v, pmax)).join("")}</section>`;
-        }
-      }
-      return html || `<section><h2>선택 분포</h2><p class="empty">아직 새 캐릭터 데이터가 없어요.</p></section>`;
-    }
+      const agg = {};
+      for (const r of g) { const c = normChoice(r.choice); agg[c] = (agg[c] || 0) + r.n; }
+      const items = Object.entries(agg).sort((a, b) => b[1] - a[1]);
+      const max = items[0][1];
+      let html = `<section><h2>🗺️ 배경 선택 분포</h2>${items.map(([k, v]) => bar(k, v, max)).join("")}</section>`;
 
-    function funnelSection(rows, hofByGame) {
-      let html = "";
-      for (const game of Object.keys(GAMES)) {
-        const g = rows.filter((r) => r.game === game);
-        if (!g.length) continue;
-        const order = ["visit", "pwa_install", "pwa_launch", "new_player", "draft", "debut", "ending", "pro_enter", "season_end", "year_end", "exit", "decacorn", "retire", "battle", "bonus"];
-        g.sort((a, b) => order.indexOf(a.event) - order.indexOf(b.event));
-        const max = Math.max(...g.map((r) => r.total));
-        const hofN = hofByGame ? (hofByGame[game] || 0) : null;
-        html += `<section class="funnel"><h2>${GAMES[game]} · 이벤트별 발생${hofN != null ? ` · 🏛️명전 ${hofN}명` : ""}</h2>${
-          g.map((r) => bar(EVENT_LABEL[r.event] || r.event, r.total, max)).join("")
-        }</section>`;
+      const pos = {};
+      for (const r of g) if (r.pos) pos[r.pos] = (pos[r.pos] || 0) + r.n;
+      const pi = Object.entries(pos).sort((a, b) => b[1] - a[1]);
+      if (pi.length) {
+        const pmax = pi[0][1];
+        html += `<section><h2>🧢 포지션 분포</h2>${pi.map(([k, v]) => bar(POS[k] || k, v, pmax)).join("")}</section>`;
       }
       return html;
+    }
+
+    // 퍼널 막대의 표시 순서예요.
+    const FUNNEL_ORDER = ["visit", "pwa_install", "pwa_launch", "new_player", "draft", "debut", "ending", "pro_enter", "season_end", "year_end", "exit", "decacorn", "retire", "battle", "bonus"];
+
+    function funnelSection(rows, hofByGame, game) {
+      const g = rows.filter((r) => r.game === game);
+      if (!g.length) return "";
+      g.sort((a, b) => FUNNEL_ORDER.indexOf(a.event) - FUNNEL_ORDER.indexOf(b.event));
+      const max = Math.max(...g.map((r) => r.total));
+      const hofN = hofByGame ? (hofByGame[game] || 0) : null;
+      return `<section class="funnel"><h2>📈 이벤트별 발생${hofN != null ? ` · 🏛️명전 ${hofN}명` : ""}</h2>${
+        g.map((r) => bar(EVENT_LABEL[r.event] || r.event, r.total, max)).join("")
+      }</section>`;
     }
 
     // 🦄 더 유니콘 — 방치형이라 지표가 달라요 (포지션 대신 Exit·스톡옵션·최고 단계)
@@ -167,7 +179,7 @@
     function unicornSection(hofRows) {
       if (!hofRows) return "";
       const es = hofRows.filter((r) => r.game === "unicorn" && r.data).map((r) => r.data);
-      if (!es.length) return `<section><h2>🦄 더 유니콘 · 창업가 기록</h2><p class="empty">아직 은퇴한 창업가가 없어요.</p></section>`;
+      if (!es.length) return "";   // 빈 상태 안내는 renderPanel의 emptyCard가 맡아요
 
       const num = (v) => (typeof v === "number" && isFinite(v) ? v : 0);
       const deca = es.filter((e) => e.stage === "데카콘").length;
@@ -175,7 +187,7 @@
       const avgExit = es.reduce((s, e) => s + num(e.exits), 0) / es.length;
       const maxSo = Math.max(...es.map((e) => num(e.so)));
 
-      let html = `<section><h2>🦄 더 유니콘 · 창업가 기록</h2>
+      let html = `<section><h2>🏢 창업가 기록</h2>
         <div class="kpis">
           <div class="kpi"><div class="n">${es.length.toLocaleString()}</div><div class="l">🏛️ 은퇴 창업가</div></div>
           <div class="kpi"><div class="n">${deca.toLocaleString()}</div><div class="l">👑 데카콘 달성</div></div>
@@ -189,7 +201,7 @@
       const si = UNI_STAGES.filter((s) => byStage[s]).map((s) => [s, byStage[s]]);
       if (si.length) {
         const smax = Math.max(...si.map((x) => x[1]));
-        html += `<section><h2>🦄 더 유니콘 · 최고 단계 분포</h2>${si.map(([k, v]) => bar(k, v, smax)).join("")}</section>`;
+        html += `<section><h2>📊 최고 단계 분포</h2>${si.map(([k, v]) => bar(k, v, smax)).join("")}</section>`;
       }
 
       // Exit 횟수 분포
@@ -199,21 +211,23 @@
       const ei = order.filter((k) => byExit[k]).map((k) => [k, byExit[k]]);
       if (ei.length) {
         const emax = Math.max(...ei.map((x) => x[1]));
-        html += `<section><h2>🦄 더 유니콘 · Exit 횟수 분포</h2>${ei.map(([k, v]) => bar(k, v, emax)).join("")}</section>`;
+        html += `<section><h2>🚀 Exit 횟수 분포</h2>${ei.map(([k, v]) => bar(k, v, emax)).join("")}</section>`;
       }
 
       // 상위 기록
       const top = [...es].sort((a, b) => num(b.score) - num(a.score)).slice(0, 5);
       const tmax = num(top[0].score);
-      html += `<section><h2>🦄 더 유니콘 · 최고 기록 TOP ${top.length}</h2>${
+      html += `<section><h2>🏆 최고 기록 TOP ${top.length}</h2>${
         top.map((e, i) => bar(`${i + 1}. ${e.name || "-"} (${e.stage || "-"} · Exit ${num(e.exits)}회)`, num(e.score), tmax)).join("")
       }<p class="empty" style="margin-top:8px">최고 기록: ${esc(best.name || "-")} · ${esc(best.grade || "-")}</p></section>`;
       return html;
     }
 
-    function dailySection(rows) {
+    // game이 null이면 전 게임 합산(#overview), 게임 키면 그 게임만(#panel)이에요.
+    function dailySection(rows, game) {
+      const src = game ? rows.filter((r) => r.game === game) : rows;
       const byDay = {};
-      for (const r of rows) {
+      for (const r of src) {
         byDay[r.day] = byDay[r.day] || { visits: 0, np: 0 };
         byDay[r.day].visits += r.visits || 0;
         byDay[r.day].np += r.new_players || 0;
@@ -221,7 +235,10 @@
       const days = Object.keys(byDay).sort().slice(-14);
       if (!days.length) return "";
       const max = Math.max(...days.map((d) => byDay[d].visits), 1);
-      return `<section><h2>📅 최근 방문 추이 (일별 순 방문 기기)</h2>
+      const title = game
+        ? "📅 방문 추이 (일별 순 방문 기기)"
+        : "📅 최근 방문 추이 (전 게임 합산 · 일별 순 방문 기기)";
+      return `<section><h2>${title}</h2>
         <p class="empty" style="margin:-6px 0 10px">막대를 누르거나 마우스를 올리면 상세 숫자를 볼 수 있어요</p>
         <div class="spark">${days.map((d) => {
           const v = byDay[d].visits;
@@ -270,32 +287,21 @@ grant select on public.stats_summary, public.stats_choices, public.stats_daily t
       } catch { return null; }
     }
 
-    async function load() {
-      $("content").innerHTML = `<p class="empty">불러오는 중…</p>`;
-      let summary, choices, daily, failed = false;
-      try { summary = await getView("stats_summary"); } catch { failed = true; }
-      try { choices = await getView("stats_choices"); } catch { failed = true; }
-      try { daily = await getView("stats_daily"); } catch { failed = true; }
-      const hofRows = await getHof();
-      let hofTotal = null, hofByGame = null;
-      if (hofRows) {
-        hofByGame = {};
-        for (const r of hofRows) hofByGame[r.game] = (hofByGame[r.game] || 0) + 1;
-        hofTotal = hofRows.length;
-      }
+    function emptyCard(game) {
+      return `<section><h2>${GAMES[game]}</h2><p class="empty">아직 수집된 데이터가 없어요.<br>플레이어가 새 캐릭터를 만들면 여기에 분포와 퍼널이 뜨기 시작해요.</p></section>`;
+    }
 
-      if (failed || !summary) {
-        $("content").innerHTML = setupCard("아직 집계 뷰가 없거나 접근할 수 없어요.");
-        wireCopy();
-        return;
-      }
-
+    // 전역 KPI + 합산 방문 추이 — 탭과 무관하게 항상 보여요.
+    function renderOverview() {
+      if (!STATE) return;
+      const summary = STATE.summary;
       const totalVisits = summary.filter((r) => r.event === "visit").reduce((a, r) => a + r.players, 0);
       const totalNew = summary.filter((r) => r.event === "new_player").reduce((a, r) => a + r.total, 0);
       const totalBattle = summary.filter((r) => r.event === "battle").reduce((a, r) => a + r.total, 0);
       const totalRetire = summary.filter((r) => r.event === "retire").reduce((a, r) => a + r.total, 0);
       const totalInstall = summary.filter((r) => r.event === "pwa_install").reduce((a, r) => a + r.total, 0);
       const totalPwaUsers = summary.filter((r) => r.event === "pwa_launch").reduce((a, r) => a + r.players, 0);
+      const hofTotal = STATE.hofTotal;
 
       let html = `<div class="kpis">
         <div class="kpi"><div class="n">${totalVisits.toLocaleString()}</div><div class="l">순 방문자</div></div>
@@ -310,14 +316,79 @@ grant select on public.stats_summary, public.stats_choices, public.stats_daily t
         ? `<p class="empty" style="margin:-12px 0 20px">ℹ️ 은퇴 이벤트(${totalRetire})는 통계 도입 이후 집계, 명예의 전당(${hofTotal})은 전체 은퇴자 명단이라 숫자가 달라요.</p>`
         : ""}`;
 
-      html += dailySection(daily || []);
-      html += choiceSection(choices || []);
-      html += unicornSection(hofRows);
-      html += funnelSection(summary, hofByGame);
+      html += dailySection(STATE.daily, null);
 
       if (!summary.length) html = setupCard("뷰는 있는데 아직 수집된 데이터가 없어요.") + html;
-      $("content").innerHTML = html;
+      $("overview").innerHTML = html;
       wireCopy();
+    }
+
+    function renderTabs() {
+      if (!STATE) { $("tabs").hidden = true; $("tabs").innerHTML = ""; return; }
+      $("tabs").innerHTML = GAME_KEYS.map((g) =>
+        `<button type="button" class="tab${g === activeGame ? " on" : ""}" data-game="${g}"${g === activeGame ? ' aria-current="true"' : ""}>${GAMES[g]}</button>`
+      ).join("");
+      // 해시로 오른쪽 끝 탭에 바로 들어오면 칩이 스크롤 밖에 있어요.
+      const on = $("tabs").querySelector(".tab.on");
+      if (on) {
+        // scrollIntoView는 문서까지 세로로 밀어 KPI를 지나쳐요. 탭 바 안에서 가로 위치만 맞춰요.
+        const tabsBar = $("tabs");
+        tabsBar.scrollLeft = on.offsetLeft - (tabsBar.clientWidth - on.offsetWidth) / 2;
+      }
+    }
+
+    function renderPanel() {
+      if (!STATE) { $("panel").innerHTML = ""; return; }
+      const game = activeGame;
+      const parts = [
+        dailySection(STATE.daily, game),
+        choiceSection(STATE.choices, game),
+        game === "unicorn" ? unicornSection(STATE.hofRows) : "",
+        funnelSection(STATE.summary, STATE.hofByGame, game),
+      ];
+      $("panel").innerHTML = parts.join("").trim() || emptyCard(game);
+    }
+
+    async function load() {
+      // 캐시를 먼저 비워요. fetch가 도는 동안 hashchange가 나도 낡은 데이터를 그리지 않아요.
+      STATE = null;
+      $("overview").innerHTML = `<p class="empty">불러오는 중…</p>`;
+      renderTabs();    // STATE가 null이라 탭을 숨기고 비워요
+      renderPanel();   // STATE가 null이라 패널을 비워요
+
+      let summary, choices, daily, failed = false;
+      try { summary = await getView("stats_summary"); } catch { failed = true; }
+      try { choices = await getView("stats_choices"); } catch { failed = true; }
+      try { daily = await getView("stats_daily"); } catch { failed = true; }
+      const hofRows = await getHof();
+      let hofTotal = null, hofByGame = null;
+      if (hofRows) {
+        hofByGame = {};
+        for (const r of hofRows) hofByGame[r.game] = (hofByGame[r.game] || 0) + 1;
+        hofTotal = hofRows.length;
+      }
+
+      if (failed || !summary) {
+        // 집계 뷰가 없으면 탭이 의미 없어요 — 안내 카드만 남겨요.
+        // ↻를 연타하면 load()가 겹쳐 도는데, 늦게 끝난 실패가 먼저 성공한 실행의 STATE와
+        // 펼쳐진 탭을 만날 수 있어요. 그래서 여기서 한 번 더 비워요.
+        // STATE를 남겨두면 이후 hashchange가 낡은 데이터를 패널에 다시 그려요.
+        STATE = null;
+        renderTabs();
+        renderPanel();
+        $("overview").innerHTML = setupCard("아직 집계 뷰가 없거나 접근할 수 없어요.");
+        wireCopy();
+        return;
+      }
+
+      STATE = { summary, choices: choices || [], daily: daily || [], hofRows, hofByGame, hofTotal };
+      // 새로고침일 땐 보던 탭을 유지하고, 첫 진입이면 해시에서 읽어요.
+      activeGame = activeGame || gameFromHash();
+
+      renderOverview();
+      $("tabs").hidden = false;
+      renderTabs();
+      renderPanel();
     }
 
     function wireCopy() {
@@ -331,6 +402,17 @@ grant select on public.stats_summary, public.stats_choices, public.stats_daily t
     }
 
     $("refresh").onclick = load;
+
+    // 탭 클릭은 해시만 바꿔요. 렌더는 hashchange 한 곳이 전담해서 경로가 하나로 모여요.
+    $("tabs").addEventListener("click", (e) => {
+      const btn = e.target.closest(".tab");
+      if (btn) location.hash = btn.dataset.game;
+    });
+    window.addEventListener("hashchange", () => {
+      activeGame = gameFromHash();
+      renderTabs();
+      renderPanel();
+    });
 
     // ---------- 방문 추이 막대 툴팁 (마우스오버 / 클릭·탭) ----------
     // load()가 내용을 다시 그려도 유지되도록 document에 위임해요.
