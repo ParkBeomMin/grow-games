@@ -679,7 +679,7 @@
     },
   };
   var LABEL = {
-    rookie: "⚾ 더 루키", idol: "🎤 아이돌", stock: "📈 주식", dev: "💻 개발자",
+    rookie: "⚾ 야구", idol: "🎤 아이돌", stock: "📈 주식", dev: "💻 개발자",
     chef: "🍳 요리사", stream: "📺 스트리머", soccer: "⚽ 축구", unicorn: "🦄 유니콘",
   };
 
