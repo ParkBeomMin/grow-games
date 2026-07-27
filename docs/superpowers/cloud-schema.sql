@@ -155,7 +155,9 @@ begin
 end;
 $$;
 
-revoke all on function public.cloud_account_of(text) from anon, authenticated;
+-- 내부 헬퍼는 밖에서 못 부르게 막아요.
+-- PUBLIC 부여분까지 회수해야 해요 — 함수는 만들 때 PUBLIC에 EXECUTE가 자동으로 붙거든요.
+revoke all on function public.cloud_account_of(text) from public, anon, authenticated;
 grant execute on function public.cloud_push(text, text, jsonb)   to anon;
 grant execute on function public.cloud_meta(text)                to anon;
 grant execute on function public.cloud_pull(text, text)          to anon;
