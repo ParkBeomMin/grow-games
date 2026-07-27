@@ -172,6 +172,7 @@ function save() {
   if (S.sessionStart) { S.playMs = (S.playMs || 0) + (now - S.sessionStart); S.sessionStart = now; }
   S.savedAt = now;
   try { localStorage.setItem(SAVE_KEY, JSON.stringify(S)); } catch {}
+  if (window.Cloud) Cloud.touch();
 }
 
 // ---------- 계산 ----------
@@ -350,6 +351,7 @@ function doExit() {
   if (opening.length) addLog(`🔓 ${opening.map((o) => o.name).join(", ")} 해금!`);
   if (window.Stats) Stats.log("exit", { exits: S.exits, so: S.so, stage: label });
   save(); renderAll();
+  if (window.Cloud) Cloud.mark();
   alert(
     `🎉 Exit 완료!\n\n스톡옵션 ${gain}개를 챙기고 새 창업을 시작합니다.\n이제 생산 배수 ×${prestigeMult().toFixed(2)}!` +
     (opening.length ? `\n\n🔓 해금: ${opening.map((o) => o.name).join(", ")}` : "")
@@ -608,6 +610,7 @@ function finishRetire() {
   S = fresh();
   S.sessionStart = Date.now();
   save();
+  if (window.Cloud) Cloud.mark();
   $("ending").classList.add("hidden");
   renderAll();
   alert(
@@ -885,3 +888,10 @@ function init() {
   if (isNew) openNaming("new");
 }
 init();
+
+/* ☁️ 클라우드 세이브 연결 — 타이틀 진입 시 서버와 맞춰요 (유니콘은 타이틀 화면이 없어
+ * init() 직후 바로 붙어요) */
+if (window.Cloud) {
+  Cloud.init("unicorn");
+  $("btn-cloud")?.addEventListener("click", () => Cloud.openModal());
+}

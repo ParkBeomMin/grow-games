@@ -402,6 +402,7 @@ window.IdolCareer = (() => {
     S.career.sales += sales;
     if (awards.length && window.Fx) Fx.celebrate("award", `🎖️ ${awards.join(" · ")}!`);
     S.career.years.push({ y: S.proYear, hype: Math.round(hype * 10) / 10, wins, sales, dFan, awards });
+    if (window.Cloud) Cloud.mark();
     if (window.Stats) Stats.log("year_end", { y: S.proYear, wins, sales });
     // 초반엔 성장, 8년차부터는 서서히 하락
     for (const d of STAT_DEFS) {
@@ -519,6 +520,7 @@ window.IdolCareer = (() => {
     saveLegacy({ pts: nextPts, gen: nextGen });
     if (window.Stats) Stats.log("rebirth", { gen: nextGen, pts: nextPts, score: sc });
     clearSave();
+    if (window.Cloud) Cloud.mark();
     alert(
       `🧬 ${S.name}의 커리어가 막을 내렸어요.\n\n` +
       `유산 ${gain}을 남겨 누적 ${nextPts}이 됐습니다.\n` +
@@ -564,6 +566,7 @@ window.IdolCareer = (() => {
     if (window.Match) window.Match.submitHof("idol", entry);
     if (window.Stats) Stats.log("retire", { years: entry.seasons, wins: entry.wins, score: entry.score });
     clearSave();
+    if (window.Cloud) Cloud.mark();
 
     $("career-title").textContent = "🏛️ 은퇴식";
     $("career-card").innerHTML = `

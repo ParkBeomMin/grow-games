@@ -930,6 +930,7 @@ window.Career = (() => {
     if (champ) S.career.rings += 1;
     S.career.warSum = Math.round((S.career.warSum + Math.max(war, 0)) * 10) / 10;
     S.career.seasons.push({ y: S.proYear, age: S.age, war, line, rank, champ, awards, role: S.role, raw });
+    if (window.Cloud) Cloud.mark();
     if (window.Stats) Stats.log("season_end", { y: S.proYear, war, rank, champ });
 
     for (const d of STAT_DEFS[S.pos]) {
@@ -1481,6 +1482,7 @@ window.Career = (() => {
     saveLegacy({ pts: nextPts, gen: nextGen });
     if (window.Stats) Stats.log("rebirth", { gen: nextGen, pts: nextPts, score: sc });
     clearSave();
+    if (window.Cloud) Cloud.mark();
     alert(
       `🧬 ${S.name}의 커리어가 막을 내렸어요.\n\n` +
       `유산 ${gain}을 남겨 누적 ${nextPts}이 됐습니다.\n` +
@@ -1527,6 +1529,7 @@ window.Career = (() => {
     if (window.Match) window.Match.submitHof("rookie", entry);
     if (window.Stats) Stats.log("retire", { seasons: entry.seasons, war: entry.warSum, score: entry.score });
     clearSave();
+    if (window.Cloud) Cloud.mark();
 
     $("career-title").textContent = "🏛️ 은퇴식";
     $("career-card").innerHTML = `

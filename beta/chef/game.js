@@ -166,6 +166,7 @@ function save() {
   const sl = loadSlots();
   sl[curSlot] = S;
   saveSlots(sl);
+  if (window.Cloud) Cloud.touch();
 }
 function clearSave() {
   if (!curSlot) return;
@@ -1332,3 +1333,9 @@ $("btn-help-pro")?.addEventListener("click", openHelp);
 // ---------- 시작 ----------
 initTitle();
 if (window.Stats) Stats.init("chef");
+
+/* ☁️ 클라우드 세이브 연결 — 타이틀 진입 시 서버와 맞춰요 */
+if (window.Cloud) {
+  Cloud.init("chef");
+  $("btn-cloud")?.addEventListener("click", () => Cloud.openModal());
+}
