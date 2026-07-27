@@ -227,6 +227,27 @@
       .catch(function () { syncEnd(false, gen); /* 그 외에는 조용히 넘어가요 */ });
   }
 
+  /* 8종을 한꺼번에 올려요.
+   * 평소 전송은 지금 열어둔 게임 하나만 다뤄요. 그래서 코드를 발급하자마자
+   * 다른 기기에서 연동하면, 아직 안 올라간 게임들이 "기록 없음"으로 보였어요.
+   * 코드를 발급한다는 건 "이제 다른 기기로 옮긴다"는 뜻이니 그때 전부 올려요. */
+  function pushAll() {
+    var tok = token();
+    if (!tok) return Promise.resolve();
+    var jobs = GAMES.filter(function (g) {
+      return !awaiting[g] && Object.keys(collect(g)).length;
+    }).map(function (g) {
+      return rpc("cloud_push", { p_token: tok, p_game: tag(g), p_data: collect(g) })
+        .then(function (at) { set(syncKey(g), String(at)); set(dirtyKey(g), "0"); })
+        .catch(function () {});
+    });
+    if (!jobs.length) return Promise.resolve();
+    lastPush = Date.now();
+    var gen = syncStart();
+    return Promise.all(jobs).then(function () { syncEnd(true, gen); pushShared(); },
+                                  function () { syncEnd(false, gen); });
+  }
+
   function pushShared() {
     var v = get(SHARED_KEY);
     if (v === null) return;
@@ -654,6 +675,7 @@
       rpc("cloud_issue", { p_token: tok }).then(function (code) {
         set("grow-cloud-issued", "1");
         set(CODE_KEY, code);                     // 다시 열어도 볼 수 있게 이 기기에 남겨둬요
+        pushAll();                               // 코드를 받는 순간 8종을 다 올려둬요
         ov.querySelector("#cloud-out").innerHTML = codeBlock(code);
         wireCopy(ov, code);
         btn.disabled = false;
@@ -898,6 +920,16 @@
                   ' <span class="cloud-ago">(' + a.from + ')</span>' + agoTag(a.when) + '</div>';
         });
       }
+      /* 양쪽 다 아무것도 없을 때. 고를 것도 가져올 것도 없는데 예전엔
+       * "고른 대로 기록 맞추기"만 덩그러니 떠서, 뭘 하라는 건지 알 수 없었어요. */
+      if (!auto.length && !pick.length) {
+        var ovEmpty = shell(
+          '<p class="av-title">🔗 기기를 연결했어요</p>' +
+          '<p>아직 양쪽 어디에도 저장된 기록이 없어요.<br/>' +
+          '게임을 한 번 진행하면 자동으로 백업되고, 다른 기기에서도 이어서 할 수 있어요.</p>'
+        );
+        return ovEmpty;
+      }
       if (pick.length) html += '<p>⚠️ 양쪽 모두 기록이 있어요. 어느 쪽을 남길지 골라주세요. 고르지 않은 쪽은 사라져요.</p>';
       pick.forEach(function (p) {
         html += '<div class="cloud-pick"><b>' + esc(LABEL[p.g]) + '</b>' +
@@ -906,7 +938,9 @@
             agoTag(p.when) + '</label>' +
           '</div>';
       });
-      html += '<button class="btn btn-primary" id="cloud-done">고른 대로 기록 맞추기</button>';
+      // 고를 게 없으면 "고른 대로"라고 하지 않아요 — 그냥 가져오는 것뿐이에요.
+      html += '<button class="btn btn-primary" id="cloud-done">' +
+        (pick.length ? "고른 대로 기록 맞추기" : "기록 가져오기") + '</button>';
 
       var ov = shell(html);
       // 붙잡는 건 orphanLedger()가 claim 직후에 이미 해뒀어요. 여기서는 풀지 않아요 —
