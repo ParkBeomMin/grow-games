@@ -179,5 +179,7 @@ window.Match = (() => {
     }
   }
 
-  return { enabled, playerId, submit, roster, register, count, submitHof, fetchHof, backfillHof };
+  // cloud.js가 같은 접속 정보를 쓰도록 내보내요 (키를 두 곳에 두지 않으려고요)
+  return { enabled, playerId, submit, roster, register, count, submitHof, fetchHof, backfillHof,
+           cfg: { url: SUPABASE_URL, key: SUPABASE_ANON_KEY } };
 })();

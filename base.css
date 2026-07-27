@@ -312,10 +312,12 @@ h2 { font-size: 1.6rem; margin: 8px 0 6px; color: var(--accent); }
   position: fixed; inset: 0; background: rgba(0, 0, 0, 0.7);
   display: flex; align-items: center; justify-content: center; z-index: 50;
 }
+/* 게임이 여럿 나열되면 모달이 화면보다 길어져서, 폰에서는 맨 아래 확인 버튼에
+   손이 안 닿았어요. 안에서 스크롤되게 높이를 묶어둡니다. */
 .av-modal {
   background: var(--bg2); border: 2px solid var(--line);
   border-radius: 18px; padding: 18px; text-align: center;
-  max-width: 92vw;
+  max-width: 92vw; max-height: 88vh; overflow-y: auto; overscroll-behavior: contain;
 }
 .av-title { font-family: "Jua", sans-serif; color: var(--cream); margin-bottom: 10px; }
 #av-canvas { border-radius: 12px; touch-action: none; cursor: grab; background: #000; max-width: 80vw; }
@@ -432,6 +434,61 @@ h2 { font-size: 1.6rem; margin: 8px 0 6px; color: var(--accent); }
 .tm-lg-perfect { background: var(--accent); opacity: 0.75; }
 .tm-lg-good { background: rgba(110, 231, 160, 0.55); }
 .tm-legend-tip { margin: 2px 0 0; font-size: 0.7rem; color: var(--dim); opacity: 0.85; text-align: center; }
+
+/* ☁️ 클라우드 세이브 — 동기화 표시, 알림 토스트, 연동 모달 */
+
+/* 동기화 표시(스펙 6.3) — 우측 상단 알약.
+   자동 저장마다 깜빡이지 않도록, cloud.js가 오래 걸린 전송에만 켭니다.
+   position:fixed 라 레이아웃을 밀지 않고, pointer-events:none 이라 터치를 먹지 않아요. */
+/* z-index는 모달(.av-overlay, 50)보다 낮게 둡니다. 폰처럼 좁은 화면에서는 알약 자리와
+   모달의 우측 상단이 겹쳐서, 위에 뜨면 고르는 화면 위로 글자가 떠 보여요. */
+.cloud-sync {
+  position: fixed; right: 10px; top: 10px; z-index: 40; pointer-events: none;
+  background: rgba(10, 15, 12, .78); border: 1px solid var(--line);
+  color: var(--cream); font-size: .72rem; padding: 6px 11px; border-radius: 99px;
+  box-shadow: 0 2px 8px rgba(0,0,0,.35); white-space: nowrap;
+  animation: cloudin .2s ease;
+}
+/* 사라지기 직전에만 서서히 흐려져요 (지속 시간은 cloud.js의 제거 타이머와 맞춰둡니다) */
+.cloud-sync-ok { animation: cloudin .2s ease, cloudout .35s ease 1.15s forwards; }
+.cloud-sync-off { animation: cloudin .2s ease, cloudout .35s ease 1.65s forwards; }
+@keyframes cloudout { to { opacity: 0; } }
+
+/* 토스트 — 동기화가 끝난 뒤 사용자에게 하는 말 (같은 자리를 쓰고 이쪽이 우선이에요)
+   알약과 마찬가지로 pointer-events:none — 1.8초 동안 그 구석의 탭을 삼키면 안 돼요. */
+.cloud-toast {
+  position: fixed; right: 10px; top: 10px; z-index: 9998; pointer-events: none;
+  background: rgba(10, 15, 12, .88); border: 1px solid var(--line);
+  color: var(--cream); font-size: .74rem; padding: 7px 12px; border-radius: 99px;
+  box-shadow: 0 2px 10px rgba(0,0,0,.4); animation: cloudin .25s ease;
+}
+@keyframes cloudin { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .cloud-toast, .cloud-sync, .cloud-sync-ok, .cloud-sync-off { animation: none; }
+}
+
+/* 연동 화면은 게임 8종이 다 뜰 수 있어서 제일 길어져요 (.av-modal에서 스크롤을 받아요) */
+.cloud-modal { width: 420px; max-width: 92vw; text-align: left; }
+/* 코드 옆 복사 버튼 — 클립보드 쓰기는 이 클릭(사용자 제스처) 안에서만 확실히 돼요 */
+.cloud-copy { padding: 8px 14px; font-size: .85rem; margin-bottom: 8px; }
+.cloud-modal p { font-size: .82rem; color: var(--dim); line-height: 1.65; margin-bottom: 12px; }
+.cloud-code {
+  display: block; font-family: ui-monospace, monospace; font-size: .95rem; color: var(--accent);
+  background: rgba(0,0,0,.3); border: 1px dashed var(--line); border-radius: 10px;
+  padding: 10px; margin: 10px 0; text-align: center; word-break: break-all; user-select: all;
+}
+.cloud-note { color: var(--sky) !important; }
+.cloud-sep { border: 0; border-top: 1px solid var(--line); margin: 16px 0; }
+.cloud-row { display: flex; gap: 8px; }
+.cloud-row input {
+  flex: 1; min-width: 0; background: var(--bg2); border: 2px solid var(--line);
+  border-radius: 10px; color: var(--text); font-size: .9rem; padding: 10px;
+}
+.cloud-row .btn { width: auto; margin: 0; padding: 10px 14px; white-space: nowrap; }
+.cloud-pick { margin: 10px 0; font-size: .82rem; color: var(--text); }
+.cloud-pick label { display: block; padding: 6px 0; cursor: pointer; }
+/* "(2시간 전)" — 스펙 5.4·6.2. 어느 쪽이 최근인지 알려주는 곁말이라 흐리게 둬요 */
+.cloud-ago { color: var(--dim); font-size: .76rem; }
 
 /* 🔔 구원 등판 점수판 — 1~2이닝 등판에 9이닝 표는 과해서 점수만 크게 보여줘요 */
 .relief-score {

@@ -166,6 +166,7 @@ function save() {
   const sl = loadSlots();
   sl[curSlot] = S;
   saveSlots(sl);
+  if (window.Cloud) Cloud.touch();
 }
 function clearSave() {
   if (!curSlot) return;
@@ -1317,6 +1318,10 @@ const HELP_SECTIONS = [
     "활동 수당과 정산으로 돈이 들어와요.\n" +
     "🛍️상점에서 장비를 사면 능력치가 바로 올라요. 등급은 순서대로만 살 수 있어요.\n" +
     "30분마다 🎁특훈으로 무료 훈련을 한 번 받을 수 있어요." },
+  { emoji: "💾", title: "기록 보관", body:
+    "기록은 이 기기의 브라우저에 저장되고, 서버에도 자동 백업돼요.\n" +
+    "기기를 바꾸거나 브라우저 데이터를 지우면 이 기기의 기록은 사라져요.\n" +
+    "타이틀 화면의 🔗 기록 연동에서 코드를 복사해 두면 새 기기에서 그대로 이어받을 수 있어요." },
 ];
 
 function openHelp() {
@@ -1328,3 +1333,9 @@ $("btn-help-pro")?.addEventListener("click", openHelp);
 // ---------- 시작 ----------
 initTitle();
 if (window.Stats) Stats.init("stream");
+
+/* ☁️ 클라우드 세이브 연결 — 타이틀 진입 시 서버와 맞춰요 */
+if (window.Cloud) {
+  Cloud.init("stream");
+  $("btn-cloud")?.addEventListener("click", () => Cloud.openModal());
+}

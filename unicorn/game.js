@@ -162,14 +162,19 @@ function load() {
 }
 // 초기화 중에는 저장을 완전히 막아요.
 // (지우고 reload하면 beforeunload의 save()가 방금 지운 데이터를 되살려버려요)
+// 클라우드가 다른 기기 기록을 막 적용했을 때도 같은 이유로 막아요.
+// 이 게임은 beforeunload에 save()를 걸어둬서, 클라우드가 reload하는 순간
+// 아직 메모리에 남은 옛 상태가 방금 받아온 기록을 덮어써 버려요.
 let wiping = false;
 function save() {
   if (wiping) return;
+  if (window.Cloud && window.Cloud.frozen) return;
   const now = Date.now();
   // 플레이 타임 누적 (sessionStart는 init에서 잡아요)
   if (S.sessionStart) { S.playMs = (S.playMs || 0) + (now - S.sessionStart); S.sessionStart = now; }
   S.savedAt = now;
   try { localStorage.setItem(SAVE_KEY, JSON.stringify(S)); } catch {}
+  if (window.Cloud) Cloud.touch();
 }
 
 // ---------- 계산 ----------
@@ -348,6 +353,7 @@ function doExit() {
   if (opening.length) addLog(`🔓 ${opening.map((o) => o.name).join(", ")} 해금!`);
   if (window.Stats) Stats.log("exit", { exits: S.exits, so: S.so, stage: label });
   save(); renderAll();
+  if (window.Cloud) Cloud.mark();
   alert(
     `🎉 Exit 완료!\n\n스톡옵션 ${gain}개를 챙기고 새 창업을 시작합니다.\n이제 생산 배수 ×${prestigeMult().toFixed(2)}!` +
     (opening.length ? `\n\n🔓 해금: ${opening.map((o) => o.name).join(", ")}` : "")
@@ -606,6 +612,7 @@ function finishRetire() {
   S = fresh();
   S.sessionStart = Date.now();
   save();
+  if (window.Cloud) Cloud.mark();
   $("ending").classList.add("hidden");
   renderAll();
   alert(
@@ -888,3 +895,10 @@ function init() {
   if (isNew) openNaming("new");
 }
 init();
+
+/* ☁️ 클라우드 세이브 연결 — 타이틀 진입 시 서버와 맞춰요 (유니콘은 타이틀 화면이 없어
+ * init() 직후 바로 붙어요) */
+if (window.Cloud) {
+  Cloud.init("unicorn");
+  $("btn-cloud")?.addEventListener("click", () => Cloud.openModal());
+}
