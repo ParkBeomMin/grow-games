@@ -1,4 +1,4 @@
-/* 프로 커리어 · 명예의 전당 · 배틀 아레나 — 더 루키 확장
+/* 프로 커리어 · 명예의 전당 · 배틀 아레나 — 더 드래프트 확장
  * game.js의 전역(S, $, rand, randInt, pick, clamp, shuffle, show, save, clearSave,
  * STAT_DEFS, overall)을 사용하므로 반드시 game.js 뒤에 로드해야 해요. */
 "use strict";

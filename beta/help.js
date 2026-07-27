@@ -1,7 +1,7 @@
 /* ❓ 공용 도움말 모달 — match.js·fx.js처럼 전역으로 노출해요.
  * base.css의 .av-overlay / .av-modal 스타일을 그대로 재사용해요.
  *
- *   Help.open("⚾ 더 루키 도움말", [
+ *   Help.open("⚾ 더 드래프트 도움말", [
  *     { emoji: "🏋️", title: "훈련과 컨디션", body: "매달 훈련이나 휴식을 골라요.\n컨디션이 낮으면 부상 위험이 커져요." },
  *   ]);
  */

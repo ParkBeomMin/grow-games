@@ -1,4 +1,4 @@
-/* 더 루키 ⚾ 야구선수 키우기 */
+/* 더 드래프트 ⚾ 야구선수 키우기 */
 "use strict";
 
 // ---------- 데이터 ----------
@@ -1788,7 +1788,7 @@ function showDraft() {
     </div>`;
 
   $("btn-share").onclick = () => {
-    const text = `⚾ 더 루키 결과\n${r.school} ${S.name} — ${title}\n${teamLine}\n주목도 ${Math.round(S.scout)} / ${trophyLine}`;
+    const text = `⚾ 더 드래프트 결과\n${r.school} ${S.name} — ${title}\n${teamLine}\n주목도 ${Math.round(S.scout)} / ${trophyLine}`;
     navigator.clipboard?.writeText(text).then(
       () => ($("btn-share").textContent = "✅ 복사 완료!"),
       () => ($("btn-share").textContent = "복사 실패 😢")
@@ -1841,7 +1841,7 @@ const HELP_SECTIONS = [
 ];
 
 function openHelp() {
-  if (window.Help) window.Help.open("⚾ 더 루키 도움말", HELP_SECTIONS);
+  if (window.Help) window.Help.open("⚾ 더 드래프트 도움말", HELP_SECTIONS);
 }
 $("btn-help-main")?.addEventListener("click", openHelp);
 $("btn-help-pro")?.addEventListener("click", openHelp);

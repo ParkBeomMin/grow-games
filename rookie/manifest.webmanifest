@@ -1,6 +1,6 @@
 {
-  "name": "더 루키 — 야구선수 키우기",
-  "short_name": "더 루키",
+  "name": "더 드래프트 — 야구선수 키우기",
+  "short_name": "더 드래프트",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
