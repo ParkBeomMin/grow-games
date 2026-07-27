@@ -433,6 +433,33 @@ h2 { font-size: 1.6rem; margin: 8px 0 6px; color: var(--accent); }
 .tm-lg-good { background: rgba(110, 231, 160, 0.55); }
 .tm-legend-tip { margin: 2px 0 0; font-size: 0.7rem; color: var(--dim); opacity: 0.85; text-align: center; }
 
+/* ☁️ 클라우드 세이브 — 동기화 배지와 연동 모달 */
+.cloud-toast {
+  position: fixed; right: 10px; top: 10px; z-index: 9998;
+  background: rgba(10, 15, 12, .88); border: 1px solid var(--line);
+  color: var(--cream); font-size: .74rem; padding: 7px 12px; border-radius: 99px;
+  box-shadow: 0 2px 10px rgba(0,0,0,.4); animation: cloudin .25s ease;
+}
+@keyframes cloudin { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .cloud-toast { animation: none; } }
+
+.cloud-modal { width: 420px; max-width: 92vw; text-align: left; }
+.cloud-modal p { font-size: .82rem; color: var(--dim); line-height: 1.65; margin-bottom: 12px; }
+.cloud-code {
+  display: block; font-family: ui-monospace, monospace; font-size: .95rem; color: var(--accent);
+  background: rgba(0,0,0,.3); border: 1px dashed var(--line); border-radius: 10px;
+  padding: 10px; margin: 10px 0; text-align: center; word-break: break-all; user-select: all;
+}
+.cloud-sep { border: 0; border-top: 1px solid var(--line); margin: 16px 0; }
+.cloud-row { display: flex; gap: 8px; }
+.cloud-row input {
+  flex: 1; min-width: 0; background: var(--bg2); border: 2px solid var(--line);
+  border-radius: 10px; color: var(--text); font-size: .9rem; padding: 10px;
+}
+.cloud-row .btn { width: auto; margin: 0; padding: 10px 14px; white-space: nowrap; }
+.cloud-pick { margin: 10px 0; font-size: .82rem; color: var(--text); }
+.cloud-pick label { display: block; padding: 6px 0; cursor: pointer; }
+
 /* 🔔 구원 등판 점수판 — 1~2이닝 등판에 9이닝 표는 과해서 점수만 크게 보여줘요 */
 .relief-score {
   display: flex; align-items: center; justify-content: center; gap: 8px;
