@@ -275,6 +275,19 @@ function clutch(key) {
   const t = (S && S.talents && S.talents[key]) || 1.3;
   return clamp(1 + (t - 1.3) * CLUTCH_SCALE + Math.min(transLv(key) * 0.004, 0.06), 0.9, 1.16);
 }
+/* 🔥 위기 실점 — 타자 타석 판정과 같은 뼈대예요.
+ * 예전에는 퍼펙트가 실점 0을 확정해서, 위기를 다 막으면 시즌 ERA 0.45가 나왔어요.
+ * 이제 제구가 억제 수준을 정하고 판정이 배수로 흔들어요.
+ * 선발(game.js)과 구원 등판(career.js)이 같은 식을 씁니다. */
+function crisisRuns(res, oppStr) {
+  const hold = clamp(0.02 + S.stats.control / 300 - ((typeof oppStr === "number" ? oppStr : 0.49) - 0.49) * 0.6,
+    0.10, 0.90) * clutch("control");
+  if (res === "perfect") return Math.random() < hold ? 0 : 1;
+  if (res === "good") return Math.random() < hold * 0.35 ? 0 : randInt(1, 2);
+  // 실투해도 최소 실점으로 끊을 때가 있어요. 2~3 고정이면 저스탯 자동 진행에서
+  // 이 항 하나가 실점을 지배해 첫 시즌 ERA가 7점대로 튑니다.
+  return randInt(1, 3);
+}
 function clutchAvg() {
   const ks = Object.keys((S && S.talents) || {});
   return ks.length ? ks.reduce((a, k) => a + clutch(k), 0) / ks.length : 1;
@@ -1246,7 +1259,9 @@ const miniZone = (stat) => clamp(13 + stat * 0.22 + (S.condition - 50) * 0.08, 1
 // 🤖 미니게임 자동 진행 — 스탯 기반 확률로 즉시 판정
 const autoMiniOn = () => localStorage.getItem("grow-auto-mini") === "1";
 function autoRes(stat) {
-  const pPerfect = clamp(0.12 + stat * 0.003 + (S.condition - 50) * 0.001, 0.08, 0.5);
+  // 상한을 0.5 → 0.42로 내려 자동이 수동을 따라잡지 못하게 하고,
+  // 기울기를 0.003 → 0.004로 올려 자동에서도 스탯이 더 드러나게 했어요.
+  const pPerfect = clamp(0.10 + stat * 0.004 + (S.condition - 50) * 0.001, 0.08, 0.42);
   const pMiss = clamp(0.4 - stat * 0.002, 0.08, 0.4);
   const r = Math.random();
   return r < pPerfect ? "perfect" : r < pPerfect + pMiss ? "miss" : "good";
@@ -1343,6 +1358,9 @@ let simTimer = null;
 // cfg: { title, oppName, homeName, perf, story, interactive, preWin, onFinish(win,bonus)→{extra,nextLabel,nextFn} }
 function renderGameSim(cfg) {
   const { oppName: opp, perf, story, interactive, preWin } = cfg;
+  // 상대 팀 전력. career.js가 teamStrOf(상대)를 넘겨줘요.
+  // 고교 대회처럼 안 넘기는 경로는 리그 평균(0.49)으로 봅니다.
+  const oppStr = () => (typeof cfg.oppStr === "number" ? cfg.oppStr : 0.49);
   $("tour-round").textContent = cfg.title;
   const heads = Array.from({ length: 9 }, (_, i) => `<th>${i + 1}</th>`).join("");
   const cells = (side) => Array.from({ length: 9 }, (_, i) => `<td id="sb-${side}-${i}"></td>`).join("");
@@ -1421,27 +1439,32 @@ function renderGameSim(cfg) {
       applyStep({ feeds: [{ text: `🧢 ${i + 1}회말, ${S.name}의 타석!`, cls: "good" }] });
       const doRes = (res) => {
         let txt, cls = "good", runs = 0;
-        if (res === "perfect") {
-          if (Math.random() < (0.35 + S.stats.power / 400) * clutch("power")) {
-            perf.hr += 1; perf.hits += 1; runs = randInt(1, 2);
+        /* 예전에는 퍼펙트가 확정 안타였어요. 그래서 미니게임 실력이 곧 타율이 돼
+         * 타율 .95에 시즌 400홈런이 나왔고, WAR이 상한 12에 눌려 변별력을 잃었어요.
+         * 이제 스탯이 수준을 정하고 판정은 배수로 흔들어요 — 잘 맞아도 야수 정면일 수 있어요.
+         * 상대 팀 전력이 섞여서 강팀을 만나면 어려워집니다. */
+        const hitP = clamp(0.16 + S.stats.contact / 800 - (oppStr() - 0.49) * 0.55, 0.10, 0.46)
+          * clutch("contact");
+        const mult = res === "perfect" ? 1.12 : res === "good" ? 1.0 : 0.40;
+        if (Math.random() < clamp(hitP * mult, 0, 0.95)) {
+          perf.hits += 1;
+          if (Math.random() < clamp(S.stats.power / 600, 0.03, 0.30)) {
+            perf.hr += 1; runs = randInt(1, 2);
             txt = `${S.name}, 큼지막한 홈런!! 💥`;
-          } else {
-            perf.hits += 1; runs = 1;
+          } else if (res === "perfect") {
+            runs = 1;
             txt = `${S.name}, 총알 같은 2루타! ⚡ (1타점)`;
-          }
-        } else if (res === "good") {
-          if (Math.random() < clamp((0.22 + S.stats.contact / 320) * clutch("contact"), 0.22, 0.6)) {
-            perf.hits += 1;
+          } else {
             runs = Math.random() < 0.4 ? 1 : 0;
             txt = `${S.name}, 안타! 🏏${runs ? " (1타점)" : ""}`;
-            if (Math.random() < S.stats.run / 400 * clutch("run")) { perf.sb += 1; txt += " 이어서 도루! 👟"; }
-          } else {
-            cls = "";
-            txt = `${S.name}, 잘 맞았지만 야수 정면… 아쉬운 타구`;
           }
-        } else {
+          if (Math.random() < S.stats.run / 400 * clutch("run")) { perf.sb += 1; txt += " 이어서 도루! 👟"; }
+        } else if (res === "miss") {
           cls = "";
           txt = `${S.name}, ${pick(OUT_TXT)}`;
+        } else {
+          cls = "";
+          txt = `${S.name}, 잘 맞았지만 야수 정면… 아쉬운 타구`;
         }
         story.ourInn[i] += runs;
         applyStep({ cell: ["our", i, story.ourInn[i]], feeds: [{ text: `${i + 1}회말 · ${txt}`, cls }] });
@@ -1454,10 +1477,19 @@ function renderGameSim(cfg) {
     } else {
       applyStep({ feeds: [{ text: `🔥 ${i + 1}회초, 주자가 쌓이며 위기!`, cls: "bad" }] });
       const doRes = (res) => {
-        let runs, txt, cls;
-        if (res === "perfect") { runs = 0; perf.k += 2; txt = "연속 탈삼진으로 위기 탈출!! 🧊"; cls = "good"; }
-        else if (res === "good") { runs = randInt(0, 1); txt = runs ? "1실점으로 최소 실점 방어" : "범타 처리로 무실점! 🧤"; cls = runs ? "" : "good"; }
-        else { runs = 2; txt = "통한의 적시타… 2실점 💧"; cls = "bad"; }
+        const runs = crisisRuns(res, oppStr());
+        let txt, cls;
+        if (runs === 0) {
+          if (res === "perfect") { perf.k += 2; txt = "연속 탈삼진으로 위기 탈출!! 🧊"; }
+          else txt = "범타 처리로 위기 탈출! 🧤";
+          cls = "good";
+        } else if (runs === 1) {
+          txt = res === "perfect" ? "잘 던졌지만 빗맞은 안타… 1실점" : "1실점으로 최소 실점 방어";
+          cls = "";
+        } else {
+          txt = `통한의 적시타… ${runs}실점 💧`;
+          cls = "bad";
+        }
         story.oppInn[i] += runs;
         perf.runs = (perf.runs || 0) + runs;
         applyStep({ cell: ["opp", i, story.oppInn[i]], feeds: [{ text: `${i + 1}회초 · ${txt}`, cls }] });
