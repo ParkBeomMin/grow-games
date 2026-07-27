@@ -312,10 +312,12 @@ h2 { font-size: 1.6rem; margin: 8px 0 6px; color: var(--accent); }
   position: fixed; inset: 0; background: rgba(0, 0, 0, 0.7);
   display: flex; align-items: center; justify-content: center; z-index: 50;
 }
+/* 게임이 여럿 나열되면 모달이 화면보다 길어져서, 폰에서는 맨 아래 확인 버튼에
+   손이 안 닿았어요. 안에서 스크롤되게 높이를 묶어둡니다. */
 .av-modal {
   background: var(--bg2); border: 2px solid var(--line);
   border-radius: 18px; padding: 18px; text-align: center;
-  max-width: 92vw;
+  max-width: 92vw; max-height: 88vh; overflow-y: auto; overscroll-behavior: contain;
 }
 .av-title { font-family: "Jua", sans-serif; color: var(--cream); margin-bottom: 10px; }
 #av-canvas { border-radius: 12px; touch-action: none; cursor: grab; background: #000; max-width: 80vw; }
@@ -433,7 +435,10 @@ h2 { font-size: 1.6rem; margin: 8px 0 6px; color: var(--accent); }
 .tm-lg-good { background: rgba(110, 231, 160, 0.55); }
 .tm-legend-tip { margin: 2px 0 0; font-size: 0.7rem; color: var(--dim); opacity: 0.85; text-align: center; }
 
-/* ☁️ 클라우드 세이브 — 동기화 배지와 연동 모달 */
+/* ☁️ 클라우드 세이브 — 알림 토스트와 연동 모달
+   동기화는 백그라운드에서 조용히 일어나고, 끝난 뒤에만 토스트로 알려줘요.
+   진행 배지는 없어요 — 자동 저장마다 배지가 깜빡이면 오히려 방해가 돼서
+   일부러 넣지 않았습니다. */
 .cloud-toast {
   position: fixed; right: 10px; top: 10px; z-index: 9998;
   background: rgba(10, 15, 12, .88); border: 1px solid var(--line);
@@ -443,7 +448,10 @@ h2 { font-size: 1.6rem; margin: 8px 0 6px; color: var(--accent); }
 @keyframes cloudin { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .cloud-toast { animation: none; } }
 
+/* 연동 화면은 게임 8종이 다 뜰 수 있어서 제일 길어져요 (.av-modal에서 스크롤을 받아요) */
 .cloud-modal { width: 420px; max-width: 92vw; text-align: left; }
+/* 코드 옆 복사 버튼 — 클립보드 쓰기는 이 클릭(사용자 제스처) 안에서만 확실히 돼요 */
+.cloud-copy { padding: 8px 14px; font-size: .85rem; margin-bottom: 8px; }
 .cloud-modal p { font-size: .82rem; color: var(--dim); line-height: 1.65; margin-bottom: 12px; }
 .cloud-code {
   display: block; font-family: ui-monospace, monospace; font-size: .95rem; color: var(--accent);

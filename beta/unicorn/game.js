@@ -160,9 +160,13 @@ function load() {
 }
 // 초기화 중에는 저장을 완전히 막아요.
 // (지우고 reload하면 beforeunload의 save()가 방금 지운 데이터를 되살려버려요)
+// 클라우드가 다른 기기 기록을 막 적용했을 때도 같은 이유로 막아요.
+// 이 게임은 beforeunload에 save()를 걸어둬서, 클라우드가 reload하는 순간
+// 아직 메모리에 남은 옛 상태가 방금 받아온 기록을 덮어써 버려요.
 let wiping = false;
 function save() {
   if (wiping) return;
+  if (window.Cloud && window.Cloud.frozen) return;
   const now = Date.now();
   // 플레이 타임 누적 (sessionStart는 init에서 잡아요)
   if (S.sessionStart) { S.playMs = (S.playMs || 0) + (now - S.sessionStart); S.sessionStart = now; }

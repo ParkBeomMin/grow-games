@@ -95,13 +95,44 @@
     return out;
   }
 
-  function apply(game, obj) {
+  function writeKeys(game, obj) {
     keysOf(game).forEach(function (k) {
       try {
         if (Object.prototype.hasOwnProperty.call(obj, k)) localStorage.setItem(k, obj[k]);
         else localStorage.removeItem(k);
       } catch (e) {}
     });
+  }
+
+  /* 받아온 기록을 로컬에 씁니다. 성공하면 true.
+   * 빈 꾸러미는 무조건 거절해요 — 한 번도 안 해본 게임이 dirty로 잘못 표시되면
+   * 빈 {}가 서버에 올라가고, 진짜 기록을 가진 반대편 기기가 그걸 받아
+   * 게임 하나를 통째로 지워버려요. 지우는 건 되돌릴 수 없으니 여기서 막습니다. */
+  function apply(game, obj) {
+    if (!obj || typeof obj !== "object" || !Object.keys(obj).length) return false;
+    writeKeys(game, obj);
+    freeze(game, obj);
+    return true;
+  }
+
+  /* reload 경합 막기.
+   * unicorn/game.js는 beforeunload에 save()를 걸어둬서, 방금 받아온 기록 위에
+   * 아직 메모리에 남아 있는 옛 상태를 덮어써 버려요. 게다가 syncKey는 이미
+   * "서버와 같음"으로 바뀐 뒤라 그 손실은 영영 복구되지 않아요.
+   * 두 겹으로 막습니다.
+   *  ① window.Cloud.frozen — 게임 쪽 save()가 이 깃발을 보면 쉬어요.
+   *  ② 언로드 직전에 받아온 값을 한 번 더 써요. 리스너는 게임보다 나중에 등록되니
+   *     게임의 save()가 먼저 돌고 우리가 마지막에 덮어써서 최종값이 보장돼요. */
+  var pending = [];          // 적용한 기록 — 언로드 직전에 다시 써요
+  var pendingHooked = false;
+  function freeze(game, obj) {
+    if (window.Cloud) window.Cloud.frozen = true;
+    pending.push({ g: game, o: obj });
+    if (pendingHooked) return;
+    pendingHooked = true;
+    var redo = function () { pending.forEach(function (p) { writeKeys(p.g, p.o); }); };
+    window.addEventListener("beforeunload", redo);
+    window.addEventListener("pagehide", redo);
   }
 
   var cur = null;           // 현재 게임 이름
@@ -115,8 +146,12 @@
     if (!game || !SAVE[game]) return Promise.resolve();
     var tok = token();
     if (!tok) return Promise.resolve(); // 기기 정체성이 없으면 클라우드는 조용히 쉬어요
+    // 빈 꾸러미는 올리지 않아요 — 한 번도 안 해본 게임을 {}로 덮어쓰면
+    // 진짜 기록을 가진 다른 기기가 그걸 받아 게임 하나를 통째로 지워요.
+    var data = collect(game);
+    if (!Object.keys(data).length) return Promise.resolve();
     lastPush = Date.now();
-    return rpc("cloud_push", { p_token: tok, p_game: tag(game), p_data: collect(game) })
+    return rpc("cloud_push", { p_token: tok, p_game: tag(game), p_data: data })
       .then(function (at) {
         set(syncKey(game), String(at));
         set(dirtyKey(game), "0");
@@ -177,8 +212,16 @@
     if (!tok) return Promise.resolve(); // 기기 정체성이 없으면 클라우드는 조용히 쉬어요
     return rpc("cloud_pull", { p_token: tok, p_game: tag(game) }).then(function (rows) {
       if (!rows || !rows.length) return;
-      apply(game, rows[0].data);
-      set(syncKey(game), String(rows[0].updated));
+      var row = rows[0];
+      if (!apply(game, row.data)) {
+        // 서버 쪽이 빈 꾸러미예요. 지우지 않고, 대신 이 기기 기록을 올려 서버를 바로잡아요.
+        // (syncKey는 갱신해둬야 켤 때마다 같은 빈 기록을 다시 받아오지 않아요)
+        set(syncKey(game), String(row.updated));
+        set(dirtyKey(game), "1");
+        push(game);
+        return;
+      }
+      set(syncKey(game), String(row.updated));
       set(dirtyKey(game), "0");
       toast("☁️ 다른 기기 기록을 불러왔어요");
       setTimeout(function () { location.reload(); }, 900);
@@ -217,8 +260,41 @@
     return ov;
   }
 
+  /* 코드 복사.
+   * 클립보드 쓰기는 사용자가 누른 그 순간(사용자 활성화) 안에서만 허용돼요.
+   * iOS/사파리는 fetch의 .then() 안에서 부르면 거절해요 — 그래서 발급 직후의
+   * 자동 복사는 "되면 좋고"일 뿐이고, 진짜 믿을 수 있는 길은 아래 복사 버튼이에요.
+   * 그마저 막히면 코드를 선택해두고 직접 복사하라고 알려줘요 (조용히 삼키지 않아요). */
+  function selectCode(ov) {
+    var el = ov.querySelector("#cloud-code");
+    if (!el) return;
+    try {
+      var r = document.createRange();
+      r.selectNodeContents(el);
+      var sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(r);
+    } catch (e) {}
+  }
+  function copyCode(code, ov) {
+    var ok = function () { _toast("복사됐어요 ✓"); };
+    var no = function () { selectCode(ov); _toast("코드를 길게 눌러 직접 복사해주세요"); };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      try { navigator.clipboard.writeText(code).then(ok, no); return; } catch (e) {}
+    }
+    no();
+  }
+
   function openModal() {
     var issued = get("grow-cloud-issued") === "1";
+    // 저장소를 못 쓰면 기기 정체성이 없어서 클라우드 자체가 성립하지 않아요.
+    // 요청을 쏘는 대신 솔직하게 알려줘요.
+    if (!token()) {
+      shell('<p class="av-title">☁️ 기록 연동</p>' +
+        '<p>이 브라우저에서는 기록 연동을 쓸 수 없어요.<br/>' +
+        '시크릿 모드이거나 저장 공간이 막혀 있어요. 일반 창에서 다시 열어주세요.</p>');
+      return;
+    }
     var ov = shell(
       '<p class="av-title">🔗 기록 연동</p>' +
       '<p>이 기기의 기록은 자동으로 백업되고 있어요.<br/>' +
@@ -238,16 +314,23 @@
 
     ov.querySelector("#cloud-issue").onclick = function () {
       var btn = this;
+      var tok = token();
+      if (!tok) { ov.querySelector("#cloud-out").innerHTML = '<p>⚠️ 이 브라우저에서는 코드를 발급할 수 없어요.</p>'; return; }
       btn.disabled = true;
-      rpc("cloud_issue", { p_token: token() }).then(function (code) {
+      rpc("cloud_issue", { p_token: tok }).then(function (code) {
         set("grow-cloud-issued", "1");
         ov.querySelector("#cloud-out").innerHTML =
-          '<code class="cloud-code">' + esc(code) + '</code>' +
-          '<p>이 코드는 지금만 보여요. 꼭 저장해두세요.</p>';
+          '<code class="cloud-code" id="cloud-code">' + esc(code) + '</code>' +
+          '<button class="btn btn-ghost cloud-copy" id="cloud-copy">📋 코드 복사</button>' +
+          '<p>이 코드는 지금만 보여요. 꼭 저장해두세요.<br/>' +
+          '복사가 안 되면 위 코드를 길게 눌러 직접 복사하시면 돼요.</p>';
+        ov.querySelector("#cloud-copy").onclick = function () { copyCode(code, ov); };
         btn.disabled = false;
         btn.textContent = "🔄 새 코드 발급 (지금 코드는 무효가 돼요)";
+        // 되는 브라우저(데스크톱·안드로이드)에서는 바로 복사해줘요. iOS에서 막히면
+        // 위 복사 버튼이 받아주니, 여기서는 실패해도 화면을 어지럽히지 않아요.
         if (navigator.clipboard && navigator.clipboard.writeText) {
-          navigator.clipboard.writeText(code).then(function () { _toast("복사됨 ✓"); }).catch(function () {});
+          try { navigator.clipboard.writeText(code).then(function () { _toast("복사됐어요 ✓"); }, function () {}); } catch (e) {}
         }
       }).catch(function () {
         btn.disabled = false;
@@ -259,10 +342,14 @@
       var v = ov.querySelector("#cloud-code-input").value.trim();
       var msg = ov.querySelector("#cloud-msg");
       if (!v) { msg.innerHTML = '<p>코드를 입력해주세요.</p>'; return; }
+      var tok = token();
+      if (!tok) { msg.innerHTML = '<p>⚠️ 이 브라우저에서는 기록 연동을 쓸 수 없어요.</p>'; return; }
       this.disabled = true;
-      rpc("cloud_claim", { p_token: token(), p_code: v }).then(function (ok) {
+      rpc("cloud_claim", { p_token: tok, p_code: v }).then(function (ok) {
         if (!ok) { msg.innerHTML = '<p>⚠️ 코드가 맞지 않거나 이미 사용됐어요.</p>'; return; }
-        set(dirtyKey(cur), "1");           // 로컬 진행이 있을 수 있으니 충돌 판정을 거치게 해요
+        // init() 전에 모달을 열었으면 cur가 없어요. 그때 dirtyKey(null)을 쓰면
+        // "grow-cloud-dirty-null"이라는 아무도 안 보는 키가 생겨요.
+        if (cur) set(dirtyKey(cur), "1");  // 로컬 진행이 있을 수 있으니 충돌 판정을 거치게 해요
         _toast("연결됐어요");
         closeModal();
         openLink();
@@ -286,14 +373,14 @@
     stream: function (s) { return s.phase === "stream-pro" ? "전업 스트리머 " + (s.proYear || 0) + "년차" : (s.year || 1) + "년차 스트리머"; },
     soccer: function (s) { return s.phase === "soccer-pro" ? "프로 " + (s.proYear || 0) + "시즌" : "유스 " + (s.year || 1) + "년차"; },
     unicorn: function (s) {
+      // beta/unicorn/game.js의 STAGES와 같은 표예요 (기준선·이름 모두 그쪽이 원본이에요)
+      var STAGES = [
+        [0, "부트스트랩"], [3e3, "프리시드"], [1.8e5, "시드 투자"], [6e6, "시리즈 A"],
+        [1.8e8, "시리즈 B"], [6e9, "시리즈 C"], [6e10, "유니콘"], [6e12, "데카콘"],
+      ];
       var v = s.bestRun || s.peakVal || 0;
-      var name = "창업 준비";
-      if (v >= 6e10) name = "유니콘";
-      else if (v >= 6e9) name = "시리즈 C";
-      else if (v >= 1.8e8) name = "시리즈 B";
-      else if (v >= 6e6) name = "시리즈 A";
-      else if (v >= 1.8e5) name = "시드 투자";
-      else if (v >= 3e3) name = "프리시드";
+      var name = STAGES[0][1];
+      STAGES.forEach(function (st) { if (v >= st[0]) name = st[1]; });
       return s.exits ? name + " · Exit " + s.exits + "회" : name;
     },
   };
@@ -302,22 +389,64 @@
     chef: "🍳 요리사", stream: "📺 스트리머", soccer: "⚽ 축구", unicorn: "🦄 유니콘",
   };
 
+  /* 한 줄 요약.
+   *
+   * 저장 모양이 게임마다 달라요. 8종 중 7종은 SAVE[게임]+"-slots"에 슬롯 맵을 써요
+   *   { 슬롯id: { …게임상태…, savedAt: <ms> }, … }
+   * 평키(SAVE[게임])는 슬롯으로 이사시킨 뒤 지워지는 흔적일 뿐이라, 평키만 보면
+   * 7종 전부 "기록 없음"으로 보여요. 진짜 기록을 두고 없다고 말하면 플레이어가
+   * 그대로 눌러버리고 세이브가 날아가요.
+   * 대표 슬롯은 각 게임 game.js의 slotDesc/showSlotPicker와 같은 규칙 —
+   * savedAt이 가장 최근인 슬롯이에요.
+   * unicorn만 평키 하나에 상태를 통째로 담아요. */
   function summarize(game, obj) {
+    if (!obj) return null;
+    var f = SUMMARY[game];
+    var one = function (st) {
+      if (!st || typeof st !== "object") return null;
+      try { return f ? f(st) : "기록 있음"; } catch (e) { return "기록 있음"; }
+    };
+
+    if (game === "unicorn") {
+      try {
+        var raw = obj[SAVE[game]];
+        if (!raw) return null;
+        return one(JSON.parse(raw));
+      } catch (e) { return "기록 있음"; }
+    }
+
+    var sl;
     try {
-      var raw = obj && obj[SAVE[game]];
-      if (!raw) return null;
-      var s = JSON.parse(raw);
-      var f = SUMMARY[game];
-      return f ? f(s) : "기록 있음";
+      var rawSl = obj[SAVE[game] + "-slots"];
+      if (!rawSl) return null;
+      sl = JSON.parse(rawSl);
     } catch (e) { return "기록 있음"; }
+    if (!sl || typeof sl !== "object") return null;
+
+    var ids = Object.keys(sl);
+    if (!ids.length) return null;
+    var best = null;
+    ids.forEach(function (id) {
+      var st = sl[id];
+      if (!st || typeof st !== "object") return;
+      if (!best || (st.savedAt || 0) > (sl[best].savedAt || 0)) best = id;
+    });
+    var txt = one(best === null ? null : sl[best]);
+    if (!txt) return null;
+    // 캐릭터를 여러 명 키우는 사람이 있어요. 대표 한 명만 보이면 "이거 하나뿐인가?"
+    // 싶어서 나머지를 날려버릴 수 있으니 몇 개인지 같이 알려줘요.
+    if (ids.length > 1) txt += " · 캐릭터 " + ids.length + "명";
+    return txt;
   }
 
   var GAMES = Object.keys(SAVE);
 
-  /* 연결 직후 화면 — 한쪽에만 있는 게임은 자동으로 합치고,
-   * 양쪽 모두 있는 게임만 고르게 해요. */
+  /* 연결 직후 화면 — 한쪽에만 있는 게임은 그대로 맞추고,
+   * 양쪽 모두 있는 게임만 고르게 해요. (섞지 않아요) */
   function openLink() {
-    rpc("cloud_pull", { p_token: token(), p_game: null }).then(function (rows) {
+    var tok = token();
+    if (!tok) { _toast("이 브라우저에서는 기록 연동을 쓸 수 없어요"); return; }
+    rpc("cloud_pull", { p_token: tok, p_game: null }).then(function (rows) {
       var remote = {};
       (rows || []).forEach(function (r) {
         var g = String(r.game).replace(/^beta:/, "");
@@ -327,40 +456,72 @@
       GAMES.forEach(function (g) {
         var mine = summarize(g, collect(g));
         var theirs = remote[g] ? summarize(g, remote[g].data) : null;
-        if (mine && theirs) pick.push({ g: g, mine: mine, theirs: theirs });
-        else if (theirs) auto.push({ g: g, from: "다른 기기", txt: theirs });
+        if (mine && theirs) {
+          // 기본값은 이 기기예요. 서버가 확실히 더 최신일 때만 저쪽으로 넘겨요.
+          // 기기 시계는 안 봐요 — 서버가 찍어준 두 시각(remote.updated 대 syncKey)만 비교해요.
+          var synced = get(syncKey(g));
+          var up = remote[g].updated;
+          var remoteNewer = !!up && (!synced || Date.parse(up) > Date.parse(synced));
+          pick.push({ g: g, mine: mine, theirs: theirs, remoteNewer: remoteNewer });
+        } else if (theirs) auto.push({ g: g, from: "다른 기기", txt: theirs });
         else if (mine) auto.push({ g: g, from: "이 기기", txt: mine });
       });
 
       var html = '<p class="av-title">🔗 기기를 연결했어요</p>';
       if (auto.length) {
-        html += '<p>자동으로 합쳐진 기록</p>';
+        html += '<p>한쪽에만 있는 기록이에요. 양쪽을 이 상태로 맞출게요.</p>';
         auto.forEach(function (a) {
           html += '<div class="cloud-pick">' + esc(LABEL[a.g]) + ' — ' + esc(a.txt) +
                   ' <span style="color:var(--dim)">(' + a.from + ')</span></div>';
         });
       }
+      if (pick.length) html += '<p>⚠️ 양쪽 모두 기록이 있어요. 어느 쪽을 남길지 골라주세요. 고르지 않은 쪽은 사라져요.</p>';
       pick.forEach(function (p) {
-        html += '<p>⚠️ 양쪽 모두 기록이 있어요. 골라주세요.</p>' +
-          '<div class="cloud-pick"><b>' + esc(LABEL[p.g]) + '</b>' +
-          '<label><input type="radio" name="pk-' + p.g + '" value="mine"/> 이 기기 — ' + esc(p.mine) + '</label>' +
-          '<label><input type="radio" name="pk-' + p.g + '" value="theirs" checked/> 다른 기기 — ' + esc(p.theirs) + '</label>' +
+        var m = p.remoteNewer ? "" : " checked";
+        var t = p.remoteNewer ? " checked" : "";
+        html += '<div class="cloud-pick"><b>' + esc(LABEL[p.g]) + '</b>' +
+          '<label><input type="radio" name="pk-' + p.g + '" value="mine"' + m + '/> 이 기기 — ' + esc(p.mine) + '</label>' +
+          '<label><input type="radio" name="pk-' + p.g + '" value="theirs"' + t + '/> 다른 기기 — ' + esc(p.theirs) + '</label>' +
           '</div>';
       });
-      html += '<button class="btn btn-primary" id="cloud-done">연결 완료</button>';
+      html += '<button class="btn btn-primary" id="cloud-done">고른 대로 기록 맞추기</button>';
 
       var ov = shell(html);
       ov.querySelector("#cloud-done").onclick = function () {
+        var pulled = [], kept = [];
         pick.forEach(function (p) {
           var sel = ov.querySelector('input[name="pk-' + p.g + '"]:checked');
-          if (sel && sel.value === "theirs") apply(p.g, remote[p.g].data);
+          if (sel && sel.value === "theirs") pulled.push(p.g); else kept.push(p.g);
         });
         auto.forEach(function (a) {
-          if (a.from === "다른 기기") apply(a.g, remote[a.g].data);
+          if (a.from === "다른 기기") pulled.push(a.g); else kept.push(a.g);
         });
-        GAMES.forEach(function (g) { set(dirtyKey(g), "1"); });
+
+        // 받아온 게임은 "서버와 같음"으로 적어둬요. 이걸 안 해두면 켤 때마다
+        // 방금 해결한 게임이 또 충돌 화면으로 올라와요.
+        pulled.forEach(function (g) {
+          var row = remote[g];
+          if (row && apply(g, row.data)) {
+            set(syncKey(g), String(row.updated));
+            set(dirtyKey(g), "0");
+          } else {
+            set(dirtyKey(g), "1");   // 서버가 비어 있었어요 — 지우지 말고 이 기기 것을 올려요
+          }
+        });
+        // 이 기기 것을 남긴 게임만 올릴 거리가 있어요.
+        // 한 번도 안 해본 게임까지 dirty로 찍으면 빈 {}가 올라가서
+        // 반대편 기기의 진짜 기록이 지워져요. 그래서 여기만 표시해요.
+        kept.forEach(function (g) {
+          set(dirtyKey(g), "1");
+          // 서버 쪽 버전을 "이미 보고 이 기기 것으로 정했다"고 적어둬요.
+          // 이걸 빼먹으면 다음에 켤 때 dirty × 서버가-더-최신이 다시 성립해서
+          // 방금 고른 게임이 또 충돌 화면으로 올라와요.
+          var row = remote[g];
+          if (row && row.updated) set(syncKey(g), String(row.updated));
+        });
+
         closeModal();
-        _toast("불러왔어요");
+        _toast("기록을 맞췄어요");
         setTimeout(function () { location.reload(); }, 700);
       };
     }).catch(function () { _toast("불러오기에 실패했어요"); });
@@ -369,7 +530,9 @@
   /* 충돌 — 같은 게임을 두 기기에서 각각 진행했을 때 */
   function onConflict(game, updated) {
     var mine = summarize(game, collect(game));
-    rpc("cloud_pull", { p_token: token(), p_game: tag(game) }).then(function (rows) {
+    var tok = token();
+    if (!tok) return; // 기기 정체성이 없으면 클라우드는 조용히 쉬어요
+    rpc("cloud_pull", { p_token: tok, p_game: tag(game) }).then(function (rows) {
       if (!rows || !rows.length) return;
       var theirs = summarize(game, rows[0].data);
       var ov = shell(
@@ -381,7 +544,12 @@
       );
       ov.querySelector("#cloud-keep").onclick = function () { closeModal(); push(game); _toast("이 기기 기록을 올렸어요"); };
       ov.querySelector("#cloud-take").onclick = function () {
-        apply(game, rows[0].data);
+        if (!apply(game, rows[0].data)) {
+          // 서버가 빈 꾸러미였어요 — 지우지 않고 이 기기 것을 지켜요
+          closeModal();
+          _toast("다른 기기에 가져올 기록이 없어요");
+          return;
+        }
         set(syncKey(game), String(rows[0].updated));
         set(dirtyKey(game), "0");
         closeModal();
@@ -397,6 +565,6 @@
   };
   window.Cloud._t = {
     token: token, keysOf: keysOf, collect: collect, apply: apply,
-    rpc: rpc, tag: tag, decide: decide, summarize: summarize,
+    rpc: rpc, tag: tag, decide: decide, summarize: summarize, openLink: openLink,
   };
 })();
