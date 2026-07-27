@@ -129,10 +129,24 @@
   var reloadPlanned = false;
   var freezeWatch = null;
 
+  var RELOAD_GRACE = 2000;   // 새로고침이 진짜 일어났다면 이 안에 페이지가 사라져요
+
   // 새로고침 예약 — frozen 깃발과 짝이에요. 여기를 거쳐야 깃발이 계속 유지돼요.
+  //
+  // 다만 "예약했다"가 "일어난다"는 아니에요. reload()가 던지거나(구형 웹뷰·정책 차단),
+  // 조용히 무시되면 reloadPlanned가 한 방향 걸쇠로 남아서 freeze()의 감시 타이머가
+  // 깃발을 못 풀어요. 그러면 유니콘 save()가 그 세션 내내 멈춰버려요.
+  // 그래서 시킨 뒤 잠깐 기다렸다가, 페이지가 아직 살아 있으면 걸쇠를 되돌려요.
+  // (언로드 재기록 훅은 그대로 남아 있어서 되돌려도 안전해요)
   function reloadSoon(ms) {
     reloadPlanned = true;
-    setTimeout(function () { try { location.reload(); } catch (e) {} }, ms || 0);
+    setTimeout(function () {
+      try { location.reload(); } catch (e) {}
+      setTimeout(function () {
+        reloadPlanned = false;
+        if (window.Cloud) window.Cloud.frozen = false;
+      }, RELOAD_GRACE);
+    }, ms || 0);
   }
 
   function freeze(game, obj) {
@@ -259,8 +273,12 @@
    * 모르고 계속 두면 곤란하니까요.
    * position:fixed + pointer-events:none 이라 레이아웃을 밀지도, 터치를 막지도 않아요. */
   var SYNC_WAIT = 400;
-  var syncTimer = null;
-  var syncOn = false;      // 지금 화면에 "동기화중"을 띄웠나
+  var SYNC_MAX = 20000;    // 진행 표시의 천장 — 응답이 영영 안 와도 여기서 걷어요
+  var syncTimer = null;    // 진행 표시를 켤 예약
+  var syncCap = null;      // 진행 표시를 강제로 걷을 예약
+  var syncShown = false;   // 지금 화면에 "동기화중"을 띄웠나
+  var syncLive = 0;        // 아직 안 끝난 전송 수 (겹칠 수 있어요)
+  var syncBad = false;     // 이번 묶음에 실패가 하나라도 있었나
 
   function syncPill(text, cls, ms) {
     if (!document.body) return;
@@ -279,23 +297,44 @@
     el._t = ms ? setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, ms) : null;
   }
 
+  /* 전송은 겹쳐요. mark()로 한 번 올리는 사이에 탭이 백그라운드로 가면
+   * visibilitychange가 두 번째 push를 띄우죠. 이걸 불리언 하나로 관리하면
+   *   ① 두 번째 syncStart()가 첫 번째의 "떠 있음"을 지우고
+   *   ② 먼저 끝난 첫 번째가 두 번째의 타이머를 걷어가서
+   *   ③ 아무도 알약을 못 치우고 "☁️ 동기화중…"이 세션 내내 남아요.
+   * 그래서 켜고 끄는 대신 "몇 개가 살아 있나"를 세고, 마지막 하나가 끝날 때만 말해요.
+   * 게다가 응답이 영영 안 오는 요청도 있으니 진행 표시에 천장(SYNC_MAX)을 둬요 —
+   * 알약이 자기 요청보다 오래 사는 일은 없어야 해요. */
+  function syncClear() {
+    if (syncTimer) { clearTimeout(syncTimer); syncTimer = null; }
+    if (syncCap) { clearTimeout(syncCap); syncCap = null; }
+  }
+
   function syncStart() {
-    if (syncTimer) clearTimeout(syncTimer);
-    syncOn = false;
+    syncLive++;
+    if (syncTimer || syncShown) return;   // 이미 예약됐거나 떠 있으면 그대로 둬요
     syncTimer = setTimeout(function () {
-      syncTimer = null; syncOn = true;
+      syncTimer = null;
+      if (!syncLive) return;
+      syncShown = true;
       syncPill("☁️ 동기화중…", "", 0);
+      syncCap = setTimeout(function () {
+        // 천장에 닿았어요 = 이 정도 걸리면 사실상 끊긴 거예요. 솔직하게 알리고 걷어요.
+        syncCap = null; syncShown = false; syncLive = 0; syncBad = false;
+        syncPill("오프라인", "cloud-sync-off", 2000);
+      }, SYNC_MAX);
     }, SYNC_WAIT);
   }
 
   function syncEnd(ok) {
-    if (syncTimer) { clearTimeout(syncTimer); syncTimer = null; }
-    if (ok) {
-      if (syncOn) syncPill("✓ 저장됨", "cloud-sync-ok", 1500);   // 금방 끝난 저장은 조용히 넘어가요
-    } else {
-      syncPill("오프라인", "cloud-sync-off", 2000);
-    }
-    syncOn = false;
+    if (syncLive > 0) syncLive--;
+    if (!ok) syncBad = true;
+    if (syncLive > 0) return;   // 아직 남은 전송이 있어요 — 다 끝나면 한 번만 말해요
+    syncClear();
+    var bad = syncBad, was = syncShown;
+    syncBad = false; syncShown = false;
+    if (bad) syncPill("오프라인", "cloud-sync-off", 2000);
+    else if (was) syncPill("✓ 저장됨", "cloud-sync-ok", 1500);   // 금방 끝난 저장은 조용히 넘어가요
   }
 
   var esc = function (s) { return String(s).replace(/[&<>]/g, function (c) {
@@ -346,13 +385,51 @@
       sel.addRange(r);
     } catch (e) {}
   }
-  function copyCode(code, ov) {
-    var ok = function () { _toast("복사됐어요 ✓"); };
+  /* 스펙 6.1 — 버튼 자체가 1.5초간 "복사됨 ✓"으로 바뀌어요.
+   * 토스트만으로는 방금 누른 손가락 아래에서 아무 일도 안 일어난 것처럼 보여요.
+   * (성공 토스트는 뺐어요 — 버튼이 이미 말하고 있고, 토스트는 동기화 알약 자리를
+   *  1.8초 빼앗아요. 실패 안내는 "이렇게 하세요"라 토스트로 남겨둬요.) */
+  var COPIED_MS = 1500;
+  function flashCopied(btn) {
+    if (!btn) return;
+    if (btn._ct) { clearTimeout(btn._ct); } else { btn._label = btn.textContent; }
+    btn.textContent = "복사됨 ✓";
+    btn._ct = setTimeout(function () {
+      btn._ct = null;
+      if (btn._label) btn.textContent = btn._label;
+    }, COPIED_MS);
+  }
+  function copyCode(code, ov, btn) {
+    var ok = function () { flashCopied(btn); };
     var no = function () { selectCode(ov); _toast("코드를 길게 눌러 직접 복사해주세요"); };
     if (navigator.clipboard && navigator.clipboard.writeText) {
       try { navigator.clipboard.writeText(code).then(ok, no); return; } catch (e) {}
     }
     no();
+  }
+
+  /* cloud_claim이 성공한 직후에 부르는 장부 정리.
+   *
+   * claim은 이 기기의 토큰을 **상대 계정으로 옮겨 붙여요.** 원래 계정은 설계상 버려져요.
+   * 그런데 여태 쌓아둔 grow-cloud-synced-* 는 전부 그 버려진 계정 기준의 시각이에요.
+   * 그대로 두면 5.3 판정이 옛 계정의 도장과 새 계정의 행을 비교하게 돼요 — 거짓말이죠.
+   *
+   * 여기서 정리하지 않으면 연결 화면을 못 끝냈을 때(cloud_pull 실패, 닫기, 바깥 탭)
+   * 로컬에만 있던 기록이 다음 실행에서 dirty=false + syncKey 없음/엉뚱함 → "pull"로 떨어져
+   * **묻지도 않고** 서버 사본으로 덮여 사라져요. 코드는 1회용이라 화면을 다시 열 수도 없고,
+   * 옛 계정은 닿을 수 없어요. 되돌릴 방법이 없는 손실이에요.
+   *
+   * 그래서 로컬에 기록이 있는 게임은 전부 "사람이 정해야 함"(dirty=1 + 도장 없음)으로
+   * 되돌려, 스펙 6.2가 약속한 대로 다음 실행에서 충돌 화면을 반드시 거치게 해요.
+   * 기록이 없는 게임은 잃을 게 없으니 dirty로 찍지 않아요 — 찍으면 빈 꾸러미가
+   * 올라가서 반대편 기기의 진짜 기록을 지워요. (도장만 지워 두면 pull이 정상 동작해요)
+   *
+   * 연결 화면의 확인 버튼은 어차피 다루는 게임마다 두 값을 다시 써주니 영향이 없어요. */
+  function orphanLedger() {
+    GAMES.forEach(function (g) {
+      try { localStorage.removeItem(syncKey(g)); } catch (e) {}
+      if (hasData(collect(g))) set(dirtyKey(g), "1");
+    });
   }
 
   function openModal() {
@@ -394,13 +471,14 @@
           '<button class="btn btn-ghost cloud-copy" id="cloud-copy">📋 코드 복사</button>' +
           '<p>이 코드는 지금만 보여요. 꼭 저장해두세요.<br/>' +
           '복사가 안 되면 위 코드를 길게 눌러 직접 복사하시면 돼요.</p>';
-        ov.querySelector("#cloud-copy").onclick = function () { copyCode(code, ov); };
+        var copyBtn = ov.querySelector("#cloud-copy");
+        copyBtn.onclick = function () { copyCode(code, ov, copyBtn); };
         btn.disabled = false;
         btn.textContent = "🔄 새 코드 발급 (지금 코드는 무효가 돼요)";
         // 되는 브라우저(데스크톱·안드로이드)에서는 바로 복사해줘요. iOS에서 막히면
         // 위 복사 버튼이 받아주니, 여기서는 실패해도 화면을 어지럽히지 않아요.
         if (navigator.clipboard && navigator.clipboard.writeText) {
-          try { navigator.clipboard.writeText(code).then(function () { _toast("복사됐어요 ✓"); }, function () {}); } catch (e) {}
+          try { navigator.clipboard.writeText(code).then(function () { flashCopied(copyBtn); }, function () {}); } catch (e) {}
         }
       }).catch(function () {
         btn.disabled = false;
@@ -417,9 +495,7 @@
       this.disabled = true;
       rpc("cloud_claim", { p_token: tok, p_code: v }).then(function (ok) {
         if (!ok) { msg.innerHTML = '<p>⚠️ 코드가 맞지 않거나 이미 사용됐어요.</p>'; return; }
-        // init() 전에 모달을 열었으면 cur가 없어요. 그때 dirtyKey(null)을 쓰면
-        // "grow-cloud-dirty-null"이라는 아무도 안 보는 키가 생겨요.
-        if (cur) set(dirtyKey(cur), "1");  // 로컬 진행이 있을 수 있으니 충돌 판정을 거치게 해요
+        orphanLedger();
         _toast("연결됐어요");
         closeModal();
         openLink();
@@ -472,6 +548,23 @@
    * 대표 슬롯은 각 게임 game.js의 slotDesc/showSlotPicker와 같은 규칙 —
    * savedAt이 가장 최근인 슬롯이에요.
    * unicorn만 평키 하나에 상태를 통째로 담아요. */
+  /* 캐릭터 세이브는 없고 곁가지 기록만 남은 기기예요.
+   * 이걸 그냥 "기록 있음"이라고 하면 진짜 커리어와 글자 그대로 똑같이 보여요.
+   * 그러면 기본 선택(이 기기)을 그대로 받아들인 사람이 반대편 기기의 진짜 커리어를
+   * 이 껍데기로 덮어쓰고, 그 기기는 다음에 켤 때 묻지 않는 pull로 자기 기록을 지워요.
+   * 존재 판정은 그대로 두고(있는 걸 없다고 하면 안 되니까) 무엇이 있는지만 말해줘요. */
+  function sideOnly(game, obj) {
+    var parts = [];
+    if (game === "unicorn") {
+      if (obj["unicorn-founded"] != null) parts.push("창업 흔적");
+    } else if (obj[SAVE[game] + "-legacy"] != null) {
+      parts.push("환생 유산");
+    }
+    if (BATTLE[game] && obj[BATTLE[game]] != null) parts.push("대전 기록");
+    if (!parts.length) return null;
+    return parts.join("·") + "만 있어요";
+  }
+
   function summarize(game, obj) {
     if (!obj || typeof obj !== "object" || !Object.keys(obj).length) return null;
     var f = SUMMARY[game];
@@ -486,7 +579,7 @@
       try { return one(JSON.parse(raw)); } catch (e) { return "기록 있음"; }
     };
 
-    if (game === "unicorn") return flat() || "기록 있음";
+    if (game === "unicorn") return flat() || sideOnly(game, obj) || "기록 있음";
 
     var rawSl = obj[SAVE[game] + "-slots"];
     var sl = null, broken = false;
@@ -512,10 +605,11 @@
       }
       // 슬롯 맵이 비어 있어요 = 게임이 스스로 "캐릭터 없음"이라 적어둔 상태예요.
       // 이건 못 읽은 게 아니라서, 평키에 남은 게 없으면 설명할 내용이 없어요.
-      // (그래도 키 자체는 있으니 화면에서는 hasData/describe가 "기록 있음"으로 받아줘요)
-      return flat();
+      // (그래도 키 자체는 있으니 화면에서는 hasData/describe가 받아줘요)
+      return flat() || sideOnly(game, obj);
     }
-    return flat() || "기록 있음";
+    // 슬롯 키 자체가 없어요. 평키도 없다면 남은 건 곁가지 기록뿐이에요.
+    return flat() || sideOnly(game, obj) || "기록 있음";
   }
 
   // "있냐 없냐"는 백업 대상과 똑같은 기준으로 봐요.
@@ -524,7 +618,29 @@
   // 화면에 쓸 문구. 있는데 설명을 못 만들면 "기록 있음"으로라도 보여줘요.
   function describe(game, obj) {
     if (!hasData(obj)) return null;
-    return summarize(game, obj) || "기록 있음";
+    return summarize(game, obj) || sideOnly(game, obj) || "기록 있음";
+  }
+
+  /* 스펙 5.4·6.2의 "(2시간 전)".
+   * 여기서만 기기 시계를 써요. 시계가 틀어져 있으면 이 문구만 어긋나고
+   * 판정(decide/openLink)은 서버가 찍어준 두 시각만 비교하니 영향이 없어요. */
+  function ago(iso) {
+    var t = Date.parse(iso);
+    if (!t) return "";
+    var m = Math.floor((Date.now() - t) / 60000);
+    if (m < 1) return "방금 전";
+    if (m < 60) return m + "분 전";
+    var h = Math.floor(m / 60);
+    if (h < 24) return h + "시간 전";
+    var d = Math.floor(h / 24);
+    if (d < 30) return d + "일 전";
+    if (d < 365) return Math.floor(d / 30) + "개월 전";
+    return Math.floor(d / 365) + "년 전";
+  }
+  // 화면에 붙일 조각. 읽을 수 없는 시각이면 아무것도 안 붙여요.
+  function agoTag(iso) {
+    var s = ago(iso);
+    return s ? ' <span class="cloud-ago">(' + esc(s) + ')</span>' : "";
   }
 
   var GAMES = Object.keys(SAVE);
@@ -553,9 +669,9 @@
           var synced = get(syncKey(g));
           var up = remote[g].updated;
           var remoteNewer = !!up && !!synced && Date.parse(up) > Date.parse(synced);
-          pick.push({ g: g, mine: mine, theirs: theirs, remoteNewer: remoteNewer });
-        } else if (theirs) auto.push({ g: g, from: "다른 기기", txt: theirs });
-        else if (mine) auto.push({ g: g, from: "이 기기", txt: mine });
+          pick.push({ g: g, mine: mine, theirs: theirs, remoteNewer: remoteNewer, when: up });
+        } else if (theirs) auto.push({ g: g, from: "다른 기기", txt: theirs, when: remote[g].updated });
+        else if (mine) auto.push({ g: g, from: "이 기기", txt: mine, when: null });
       });
 
       var html = '<p class="av-title">🔗 기기를 연결했어요</p>';
@@ -566,7 +682,7 @@
                 '이 기기 것은 그 게임을 열 때 서버로 올라가요.</p>';
         auto.forEach(function (a) {
           html += '<div class="cloud-pick">' + esc(LABEL[a.g]) + ' — ' + esc(a.txt) +
-                  ' <span style="color:var(--dim)">(' + a.from + ')</span></div>';
+                  ' <span class="cloud-ago">(' + a.from + ')</span>' + agoTag(a.when) + '</div>';
         });
       }
       if (pick.length) html += '<p>⚠️ 양쪽 모두 기록이 있어요. 어느 쪽을 남길지 골라주세요. 고르지 않은 쪽은 사라져요.</p>';
@@ -575,7 +691,8 @@
         var t = p.remoteNewer ? " checked" : "";
         html += '<div class="cloud-pick"><b>' + esc(LABEL[p.g]) + '</b>' +
           '<label><input type="radio" name="pk-' + p.g + '" value="mine"' + m + '/> 이 기기 — ' + esc(p.mine) + '</label>' +
-          '<label><input type="radio" name="pk-' + p.g + '" value="theirs"' + t + '/> 다른 기기 — ' + esc(p.theirs) + '</label>' +
+          '<label><input type="radio" name="pk-' + p.g + '" value="theirs"' + t + '/> 다른 기기 — ' + esc(p.theirs) +
+            agoTag(p.when) + '</label>' +
           '</div>';
       });
       html += '<button class="btn btn-primary" id="cloud-done">고른 대로 기록 맞추기</button>';
@@ -634,10 +751,26 @@
     rpc("cloud_pull", { p_token: tok, p_game: tag(game) }).then(function (rows) {
       if (!rows || !rows.length) return;
       var theirs = describe(game, rows[0].data);
+
+      /* 이 기기에 아무것도 없는데 dirty만 서 있는 경우가 실제로 있어요.
+       * (연결 화면에서 '다른 기기'로 고른 게임의 서버 꾸러미가 비어 있었던 경우 등)
+       * 이때 충돌 화면을 띄우면 "이 기기 — 기록 없음"을 고르라고 하는 꼴이고,
+       * 그 버튼은 push()가 빈 꾸러미를 걸러 아무것도 안 하면서 "올렸어요"라고
+       * 거짓말한 뒤 깃발을 그대로 둬요 → 켤 때마다 같은 화면이 영원히 돌아와요.
+       * 고를 게 없으면 물을 것도 없어요. 잃을 로컬이 없으니 서버 것을 받고 장부만 맞춰요. */
+      if (!mine) {
+        var applied = apply(game, rows[0].data);
+        set(syncKey(game), String(rows[0].updated));
+        set(dirtyKey(game), "0");
+        if (applied) { toast("☁️ 다른 기기 기록을 불러왔어요"); reloadSoon(900); }
+        return;
+      }
+
       var ov = shell(
         '<p class="av-title">⚠️ 두 기기에서 각각 진행됐어요</p>' +
-        '<div class="cloud-pick">이 기기 &nbsp; ' + esc(LABEL[game]) + ' — ' + esc(mine || "기록 없음") + '</div>' +
-        '<div class="cloud-pick">다른 기기 &nbsp; ' + esc(LABEL[game]) + ' — ' + esc(theirs || "기록 없음") + '</div>' +
+        '<div class="cloud-pick">이 기기 &nbsp; ' + esc(LABEL[game]) + ' — ' + esc(mine) + '</div>' +
+        '<div class="cloud-pick">다른 기기 &nbsp; ' + esc(LABEL[game]) + ' — ' + esc(theirs || "기록 없음") +
+          agoTag(rows[0].updated) + '</div>' +
         '<button class="btn btn-primary" id="cloud-keep">이 기기 것 쓰기</button>' +
         '<button class="btn btn-ghost" id="cloud-take">다른 기기 것 쓰기</button>'
       );
@@ -666,5 +799,8 @@
     token: token, keysOf: keysOf, collect: collect, apply: apply,
     rpc: rpc, tag: tag, decide: decide, summarize: summarize, openLink: openLink,
     hasData: hasData, describe: describe, syncStart: syncStart, syncEnd: syncEnd,
+    sideOnly: sideOnly, ago: ago, orphanLedger: orphanLedger,
+    // 검증용 — 진행 표시의 대기/천장 시간을 줄여 천장 동작을 몇 초 안에 확인해요
+    setSyncTiming: function (wait, max) { SYNC_WAIT = wait; SYNC_MAX = max; },
   };
 })();

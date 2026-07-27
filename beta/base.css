@@ -452,9 +452,10 @@ h2 { font-size: 1.6rem; margin: 8px 0 6px; color: var(--accent); }
 .cloud-sync-off { animation: cloudin .2s ease, cloudout .35s ease 1.65s forwards; }
 @keyframes cloudout { to { opacity: 0; } }
 
-/* 토스트 — 동기화가 끝난 뒤 사용자에게 하는 말 (같은 자리를 쓰고 이쪽이 우선이에요) */
+/* 토스트 — 동기화가 끝난 뒤 사용자에게 하는 말 (같은 자리를 쓰고 이쪽이 우선이에요)
+   알약과 마찬가지로 pointer-events:none — 1.8초 동안 그 구석의 탭을 삼키면 안 돼요. */
 .cloud-toast {
-  position: fixed; right: 10px; top: 10px; z-index: 9998;
+  position: fixed; right: 10px; top: 10px; z-index: 9998; pointer-events: none;
   background: rgba(10, 15, 12, .88); border: 1px solid var(--line);
   color: var(--cream); font-size: .74rem; padding: 7px 12px; border-radius: 99px;
   box-shadow: 0 2px 10px rgba(0,0,0,.4); animation: cloudin .25s ease;
@@ -483,6 +484,8 @@ h2 { font-size: 1.6rem; margin: 8px 0 6px; color: var(--accent); }
 .cloud-row .btn { width: auto; margin: 0; padding: 10px 14px; white-space: nowrap; }
 .cloud-pick { margin: 10px 0; font-size: .82rem; color: var(--text); }
 .cloud-pick label { display: block; padding: 6px 0; cursor: pointer; }
+/* "(2시간 전)" — 스펙 5.4·6.2. 어느 쪽이 최근인지 알려주는 곁말이라 흐리게 둬요 */
+.cloud-ago { color: var(--dim); font-size: .76rem; }
 
 /* 🔔 구원 등판 점수판 — 1~2이닝 등판에 9이닝 표는 과해서 점수만 크게 보여줘요 */
 .relief-score {
