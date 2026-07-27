@@ -39,6 +39,12 @@ ok "재발급 후 옛 코드는 무효"  "$(Q cloud_claim "{\"p_token\":\"$D\",\
 ok "새 코드는 유효"           "$(Q cloud_claim "{\"p_token\":\"$D\",\"p_code\":\"$CODE2\"}")" '"ok": true'
 
 ok "짧은 토큰 거절"           "$(Q cloud_claim "{\"p_token\":\"x\",\"p_code\":\"$CODE2\"}")" 'bad_token'
+
+# 누가 마지막으로 올렸는지 — 자기 충돌을 막는 근거예요 (시계와 무관)
+Q cloud_push "{\"p_token\":\"$A\",\"p_game\":\"beta:rookie\",\"p_data\":{\"who\":\"A2\"}}" >/dev/null
+ok "내가 올린 행은 mine=true"   "$(Q cloud_meta "{\"p_token\":\"$A\"}")" '"mine":true'
+ok "남이 올린 행은 mine=false"  "$(Q cloud_meta "{\"p_token\":\"$B\"}")" '"mine":false'
+ok "pull에도 mine이 실림"       "$(Q cloud_pull "{\"p_token\":\"$A\",\"p_game\":\"beta:rookie\"}")" '"mine":true' 
 ok "모르는 게임 거절"         "$(Q cloud_push "{\"p_token\":\"$A\",\"p_game\":\"evil\",\"p_data\":{}}")" '알 수 없는 게임'
 
 for t in cloud_account cloud_device cloud_save cloud_code; do

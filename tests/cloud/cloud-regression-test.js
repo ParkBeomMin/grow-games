@@ -22,9 +22,14 @@ const blob = (o) => JSON.stringify(o);
 const ROOKIE_A = blob({ s1: { name: "박프로", phase: "pro", proYear: 9, savedAt: 5000 } });
 const IDOL_A_LONG = blob({ s9: { name: "이연습", phase: "idol-pro", proYear: 7, savedAt: 4000 } });  // A의 몇 달치
 const IDOL_B_NEW = blob({ sB: { name: "새연습", phase: "trainee", year: 1, savedAt: 9000 } });        // B의 하루치
-// 저장 시각이 A와 똑같은 B의 기록. 어느 쪽이 더 최근인지 가릴 수 없어서 사람에게 묻는 경우를 만든다.
-// (savedAt이 다르면 도장이 있는 기기에서는 자동으로 최신에 맞춰서 충돌 화면이 아예 안 뜬다)
-const IDOL_B_SAME_TIME = blob({ sB: { name: "새연습", phase: "trainee", year: 1, savedAt: 4000 } });
+/* 어느 쪽이 더 최근인지 **견줄 근거가 없는** 기록 = savedAt이 아예 없는 옛 세이브.
+ * 예전에는 "양쪽 savedAt을 똑같이" 두어 충돌 화면을 띄웠는데, 그건 잘못된 흉내였다.
+ * 시각이 같다는 건 같은 세이브라는 뜻이고(자기가 올린 걸 되받은 경우),
+ * 이제 cloud.js가 그걸 알아보고 조용히 정리한다 — 물어볼 일이 아니다.
+ * 진짜로 못 가리는 경우는 한쪽이라도 savedAt이 없을 때다. progressAt()이 0을 돌려주고
+ * 0은 falsy라 자동 판정 조건(mineAt && theirsAt)이 서지 않아 사람에게 묻는다. */
+const IDOL_A_NO_TIME = blob({ sA: { name: "이연습", phase: "idol-pro", proYear: 7 } });   // A의 몇 달치, 시각 없음
+const IDOL_B_NO_TIME = blob({ sB: { name: "새연습", phase: "trainee", year: 1 } });        // B의 하루치, 시각 없음
 
 function mk(routes, opt) {
   const vc = new VirtualConsole();   // jsdom의 location.reload 미구현 경고를 삼킨다
@@ -202,11 +207,12 @@ function mk(routes, opt) {
   }
   {
     // 충돌 화면에서 '다른 기기 것 쓰기'를 눌렀는데 못 쓴 경우
-    // (양쪽 savedAt이 같아야 자동 판정이 서지 않아 실제로 화면이 뜬다)
+    // 서버 쪽 세이브에 savedAt이 없어야(= 견줄 근거가 없어야) 자동 판정이 서지 않고 실제로 화면이 뜬다.
+    // 이 기기는 4000, 서버는 시각 없음 → progressAt(서버)=0 → 물어보는 갈래.
     const UP = "2026-07-27T09:00:00Z";
     const { window, LS, $ } = mk({
       cloud_meta: [{ game: "beta:idol", updated: UP }],
-      cloud_pull: [{ game: "beta:idol", updated: UP, data: { "trainee-save-v1-slots": IDOL_B_SAME_TIME } }],
+      cloud_pull: [{ game: "beta:idol", updated: UP, data: { "trainee-save-v1-slots": IDOL_B_NO_TIME } }],
     });
     LS.setItem("trainee-save-v1-slots", IDOL_A_LONG);
     LS.setItem("grow-cloud-dirty-idol", "1");
@@ -411,22 +417,104 @@ function mk(routes, opt) {
     check(!!$("#cloud-keep"), "도장이 없으면 이 기기가 더 최근이어도 물어본다");
   }
   {
-    // 시각이 같으면 가릴 수 없다 → 물어보고, 왜 묻는지도 말해준다
+    // 양쪽 다 savedAt이 없다 = 견줄 근거가 아예 없다 → 물어보고, 왜 묻는지도 말해준다.
+    // 서로 다른 기록인데(A의 몇 달치 vs B의 하루치) 어느 게 나중인지 알 방법이 없는 진짜 애매한 경우다.
     const UP = "2026-07-27T09:00:00Z";
     const { window, LS, $ } = mk({
       cloud_meta: [{ game: "beta:idol", updated: UP }],
-      cloud_pull: [{ game: "beta:idol", updated: UP, data: { "trainee-save-v1-slots": IDOL_B_SAME_TIME } }],
+      cloud_pull: [{ game: "beta:idol", updated: UP, data: { "trainee-save-v1-slots": IDOL_B_NO_TIME } }],
       cloud_push: "2026-07-27T10:00:00Z",
     });
-    LS.setItem("trainee-save-v1-slots", IDOL_A_LONG);         // 양쪽 savedAt 4000
+    LS.setItem("trainee-save-v1-slots", IDOL_A_NO_TIME);      // 양쪽 다 savedAt 없음
     LS.setItem("grow-cloud-dirty-idol", "1");
     LS.setItem("grow-cloud-synced-idol", "2026-07-27T01:00:00Z");
     window.Cloud.init("idol");
     await tick(60);
-    check(!!$("#cloud-keep"), "저장 시각이 같으면 자동으로 정하지 않고 물어본다");
+    check(!!$("#cloud-keep"), "양쪽 다 저장 시각이 없으면 자동으로 정하지 않고 물어본다");
     const txt = $(".cloud-modal") ? $(".cloud-modal").textContent : "";
     check(/알 수 없어서/.test(txt), `왜 묻는지 화면이 말해준다 — "${txt.replace(/\s+/g, " ").slice(0, 60)}"`);
-    check(LS.getItem("trainee-save-v1-slots") === IDOL_A_LONG, "고르기 전에는 이 기기 기록이 그대로다");
+    check(LS.getItem("trainee-save-v1-slots") === IDOL_A_NO_TIME, "고르기 전에는 이 기기 기록이 그대로다");
+  }
+  {
+    /* 반대로 **저장 시각이 똑같으면** 같은 세이브다. 고를 게 없으니 묻지 않는다.
+     * 서버 행이 이 기기가 올린 바로 그 꾸러미(IDOL_A_LONG)를 그대로 돌려준다. */
+    const UP = "2026-07-27T09:00:00Z";
+    const { window, LS, $, calls } = mk({
+      cloud_meta: [{ game: "beta:idol", updated: UP }],
+      cloud_pull: [{ game: "beta:idol", updated: UP, data: { "trainee-save-v1-slots": IDOL_A_LONG } }],
+      cloud_push: "2026-07-27T10:00:00Z",
+    });
+    LS.setItem("trainee-save-v1-slots", IDOL_A_LONG);         // 양쪽 savedAt 4000 — 같은 세이브
+    LS.setItem("grow-cloud-dirty-idol", "1");
+    LS.setItem("grow-cloud-synced-idol", "2026-07-27T01:00:00Z");
+    window.Cloud.init("idol");
+    await tick(60);
+    check(!$("#cloud-keep") && !$("#cloud-take") && !$(".cloud-overlay"),
+      "저장 시각이 같으면 화면을 띄우지 않는다 (자기가 올린 걸 두고 고르라고 하지 않는다)");
+    check(LS.getItem("trainee-save-v1-slots") === IDOL_A_LONG, "기록은 그대로다 (덮지도 지우지도 않는다)");
+    check(LS.getItem("grow-cloud-synced-idol") === UP,
+      `도장을 서버 시각으로 옮긴다 (synced=${LS.getItem("grow-cloud-synced-idol")})`);
+    check(LS.getItem("grow-cloud-dirty-idol") === "0",
+      `장부가 '올릴 것 없음'으로 정리된다 (dirty=${LS.getItem("grow-cloud-dirty-idol")})`);
+    check(window.Cloud._t.decide("idol", UP) !== "conflict",
+      `다음 실행에서 다시 묻지 않는다 — 고리가 끊긴다 (지금은 "${window.Cloud._t.decide("idol", UP)}")`);
+    // 붙잡은 걸 풀어야 이번 실행에서도 평소대로 전송이 나간다 (awaiting에 갇히면 안 된다)
+    window.Cloud.touch();
+    await tick(40);
+    check(calls.some((c) => c.fn === "cloud_push" && c.body.p_game === "beta:idol"),
+      "결정 잠금이 풀려 이번 실행의 자동 저장이 평소대로 올라간다");
+  }
+  {
+    /* 사용자가 실제로 겪은 길 — 새 브라우저, 기록 없음, 몇 판 하고 타이틀로 돌아왔더니
+     * 자기 자신과 충돌 화면이 떴다.
+     *
+     * ① 게임을 한다 → dirty=1
+     * ② 화면을 떠난다(pagehide) → keepalive 전송이 서버엔 닿지만, 페이지가 사라져
+     *    "올렸다"고 적는 .then은 영영 안 돈다 (여기서는 응답을 영원히 붙잡아 흉내낸다)
+     * ③ 다시 켠다 → 서버 행은 새로 생겼는데 로컬은 도장 없이 dirty=1 → decide()는 conflict
+     * ④ 그런데 서버에 있는 건 이 기기가 올린 바로 그 세이브다 → 화면이 뜨면 안 된다 */
+    const PLAYED = blob({ sP: { name: "김신입", phase: "trainee", year: 1, savedAt: 7000 } });
+    const UP = "2026-07-27T09:00:00Z";
+
+    // ①② 첫 실행 — 떠날 때 전송이 나가고 .then은 안 돈다
+    let sent = null;
+    const one = mk({
+      cloud_meta: [],                                   // 새 브라우저: 서버에 아직 아무 줄도 없다
+      cloud_push: (b) => { sent = b.p_data; return new Promise(() => {}); },  // 서버엔 닿았다, 응답만 안 온다
+    });
+    one.LS.setItem("trainee-save-v1-slots", PLAYED);    // 몇 판 했다
+    one.window.Cloud.init("idol");
+    await tick(40);
+    one.window.Cloud.touch();                           // save() 한 번 = dirty=1
+    one.window.dispatchEvent(new one.window.Event("pagehide"));   // 타이틀로 나가며 페이지가 사라진다
+    await tick(40);
+    check(!!sent && sent["trainee-save-v1-slots"] === PLAYED, "떠나는 길의 전송이 서버에 닿는다");
+    check(one.LS.getItem("grow-cloud-synced-idol") === null,
+      `.then이 안 돌아 도장이 안 찍힌다 (synced=${one.LS.getItem("grow-cloud-synced-idol")})`);
+    check(one.LS.getItem("grow-cloud-dirty-idol") === "1", "장부도 '올릴 거리 있음'인 채로 남는다");
+
+    // ③④ 다시 켠다 — 장부는 ②가 남긴 그대로, 서버에는 ②가 올린 줄이 있다
+    /* 여기 응답에는 mine을 **일부러 안 싣는다.** 진짜 서버라면 이 줄을 쓴 게 이 기기라
+     * mine:true를 보내고, 그러면 '누가 썼나' 가드가 먼저 잡아 아래 갈래를 안 탄다.
+     * 이 블록이 지키는 건 그 다음 안전망(저장 시각이 같으면 같은 세이브)이다.
+     * mine을 쓰는 갈래는 cloud-writer-test.js가 따로 본다. */
+    const two = mk({
+      cloud_meta: [{ game: "beta:idol", updated: UP }],
+      cloud_pull: [{ game: "beta:idol", updated: UP, data: sent }],   // 서버가 돌려주는 건 내가 올린 그것
+      cloud_push: "2026-07-27T10:00:00Z",
+    });
+    two.LS.setItem("trainee-save-v1-slots", PLAYED);
+    two.LS.setItem("grow-cloud-dirty-idol", "1");       // 도장은 없다 (한 번도 못 찍었다)
+    check(two.window.Cloud._t.decide("idol", UP) === "conflict",
+      "판정은 여전히 충돌이다 (도장 없음 + 서버가 더 최신 — 여기까지는 바뀐 게 없다)");
+    two.window.Cloud.init("idol");
+    await tick(60);
+    check(!two.$(".cloud-overlay"),
+      `자기가 올린 기록을 두고 충돌 화면을 띄우지 않는다 — "${two.$(".cloud-modal") ? two.$(".cloud-modal").textContent.replace(/\s+/g, " ").slice(0, 50) : ""}"`);
+    check(two.LS.getItem("trainee-save-v1-slots") === PLAYED, "기록은 그대로다");
+    check(two.LS.getItem("grow-cloud-synced-idol") === UP && two.LS.getItem("grow-cloud-dirty-idol") === "0",
+      `이번엔 장부가 정리된다 (synced=${two.LS.getItem("grow-cloud-synced-idol")}, dirty=${two.LS.getItem("grow-cloud-dirty-idol")})`);
+    check(two.window.Cloud._t.decide("idol", UP) === "none", "그래서 다음 실행에서도 조용하다");
   }
   {
     // savedAt이 아예 없는 세이브(아주 옛날 기록)도 가릴 수 없다 → 물어본다

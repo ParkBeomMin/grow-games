@@ -168,3 +168,4 @@ grant execute on function public.cloud_claim(text, text)         to anon;
 --   1) cloud-schema.sql        (이 파일)
 --   2) cloud-claim-fix.sql     (cloud_claim 반환형을 jsonb로 — 같은 기기 입력 시 코드가 타던 문제)
 --   3) cloud-reusable.sql      (코드를 재사용 가능하게 — 재발급 전까지 유효)
+--   4) cloud-writer.sql        (세이브 행에 마지막으로 올린 기기를 기록 — 자기 충돌 제거)

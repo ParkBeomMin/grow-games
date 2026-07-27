@@ -369,8 +369,26 @@
     var tok = token();
     if (!tok) return; // 기기 정체성이 없으면 클라우드는 조용히 쉬어요
     rpc("cloud_meta", { p_token: tok }).then(function (rows) {
-      var mine = null;
-      (rows || []).forEach(function (r) { if (r.game === tag(game)) mine = r.updated; });
+      var mine = null, iWrote = false;
+      (rows || []).forEach(function (r) {
+        if (r.game !== tag(game)) return;
+        mine = r.updated;
+        iWrote = r.mine === true;   // 이 행을 마지막으로 올린 게 이 기기인가 (서버가 알려줘요)
+      });
+      /* 내가 올린 행이면 충돌일 수가 없어요 — 내 로컬은 그것과 같거나 그보다 최신이에요.
+       *
+       * 화면을 떠날 때 보내는 전송(pagehide)은 keepalive라 서버엔 닿는데,
+       * 페이지가 사라져서 '올렸다'고 적는 코드가 못 돌아요. 그러면 다음에 켤 때
+       * 서버가 더 최신인데 로컬은 '안 올림' 상태라 자기 자신과 충돌했어요.
+       * 저장 시각으로는 못 가려요 — 같은 세이브면 시각이 같아 판단이 안 서고,
+       * 올린 뒤 한 판 더 했으면 시각이 달라져 '다른 기기'처럼 보여요.
+       * 누가 썼는지는 시계와 무관하게 정확해요. */
+      if (iWrote) {
+        set(syncKey(game), String(mine));
+        var act0 = get(dirtyKey(game)) === "1" ? "push" : "none";
+        if (act0 === "push") push(game);
+        return;
+      }
       var act = decide(game, mine);
       if (act === "pull" && played) {
         // 이미 손을 댄 뒤예요. 묻지 않는 pull은 새로고침을 부르니 여기서는 하지 않아요.
@@ -1125,6 +1143,28 @@
        * 그건 "두 기기가 같은 줄기를 나눠 가진" 상황이 아니라, 이 기기에만 있는
        * 기록을 처음 만난 상황이에요. 옛 폰에 몇 달치가 남아 있는데 새 폰에서 오늘
        * 조금 한 게 더 최근이라고 덮으면 되돌릴 수 없어요. */
+      /* 이 행을 내가 올렸으면 충돌이 아니에요 (서버가 mine으로 알려줘요).
+       * init()에서 이미 걸러지지만 window.Cloud.onConflict로 직접 부를 수도 있어요. */
+      if (rows[0].mine === true) {
+        set(syncKey(game), String(rows[0].updated));
+        releaseDecision([game]);
+        if (get(dirtyKey(game)) === "1") push(game);
+        return;
+      }
+
+      /* 저장 시각이 같으면 같은 세이브예요. 고를 게 없어요.
+       *
+       * 이게 실제로 자주 생겨요. 화면을 떠날 때 pagehide로 밀어넣는 전송은
+       * keepalive라 서버엔 도착하는데, 페이지가 사라져서 "올렸다"고 적는 .then이
+       * 안 돌아요. 그러면 다음에 켤 때 서버가 더 최신인데 로컬은 여전히 '안 올림'
+       * 상태라, 자기가 올린 기록을 상대로 충돌 화면이 떴어요. */
+      if (mineAt && theirsAt && mineAt === theirsAt) {
+        set(syncKey(game), String(rows[0].updated));
+        set(dirtyKey(game), "0");
+        releaseDecision([game]);
+        return;
+      }
+
       var everSynced = !!get(syncKey(game));
       if (everSynced && mineAt && theirsAt && mineAt !== theirsAt) {
         if (theirsAt > mineAt) {
@@ -1193,7 +1233,7 @@
   };
   window.Cloud._t = {
     token: token, keysOf: keysOf, collect: collect, apply: apply, writeKeys: writeKeys,
-    rpc: rpc, tag: tag, decide: decide, summarize: summarize, openLink: openLink,
+    rpc: rpc, tag: tag, decide: decide, summarize: summarize, progressAt: progressAt, openLink: openLink,
     hasData: hasData, describe: describe, syncStart: syncStart, syncEnd: syncEnd,
     sideOnly: sideOnly, ago: ago, orphanLedger: orphanLedger,
     // 검증용 — 진행 표시의 대기/천장 시간을 줄여 천장 동작을 몇 초 안에 확인해요

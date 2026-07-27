@@ -11,7 +11,9 @@
 const fs = require("fs");
 const SP = __dirname;
 const { JSDOM, VirtualConsole } = require(__dirname + "/jsdom.js");
-const CLOUD = "/workspace/grow-games/beta/cloud.js";
+// CLOUD 환경변수로 검사 대상 파일을 바꿀 수 있다 (수정 전 파일로 돌려 실패를 먼저 확인하려고)
+//   CLOUD=/…/cloud-before.js node cloud-behavior-test.js
+const CLOUD = process.env.CLOUD || "/workspace/grow-games/beta/cloud.js";
 const SRC = fs.readFileSync(CLOUD, "utf8");
 
 let fail = 0;
@@ -922,12 +924,12 @@ const tick = (ms) => new Promise((r) => setTimeout(r, ms || 25));
   }
   {
     // 충돌 화면 — 유니콘은 탭 전환 없이도 touch()만으로 전송이 나간다 (쉬지 않고 저장하는 게임)
-    // 양쪽 savedAt을 똑같이 둔다 = 어느 쪽이 더 최근인지 가릴 수 없어 실제로 사람에게 묻는 경우다.
-    // (다르면 자동으로 최신에 맞춰서 이 화면 자체가 안 뜬다 — 그 갈래는 27)에서 따로 본다)
+    // 서버 쪽 세이브에 savedAt이 없다 = 어느 쪽이 더 최근인지 견줄 근거가 없어 실제로 사람에게 묻는 경우다.
+    // (양쪽 시각이 **같으면** 같은 세이브라 조용히 정리된다 — 물어보는 경우가 아니다. 26)에서 따로 본다)
     const UP = "2026-07-27T05:00:00Z";
     const { window, calls, LS, $ } = mk({
       cloud_meta: [{ game: "beta:unicorn", updated: UP }],
-      cloud_pull: [{ game: "beta:unicorn", updated: UP, data: { "unicorn-save-v1": JSON.stringify({ company: "저쪽", bestRun: 6e9, savedAt: unicornSave.savedAt }) } }],
+      cloud_pull: [{ game: "beta:unicorn", updated: UP, data: { "unicorn-save-v1": JSON.stringify({ company: "저쪽", bestRun: 6e9 }) } }],
       cloud_push: "2026-07-27T09:00:00Z",
     });
     LS.setItem("unicorn-save-v1", JSON.stringify(unicornSave));
@@ -951,11 +953,11 @@ const tick = (ms) => new Promise((r) => setTimeout(r, ms || 25));
   }
   {
     // 충돌 화면을 닫아버린 경우 — 역시 아무것도 올라가지 않고 장부가 남는다
-    // (위와 같은 이유로 양쪽 savedAt이 같다 = 진짜로 물어보는 경우)
+    // (위와 같은 이유로 서버 쪽에 savedAt이 없다 = 견줄 근거가 없어 진짜로 물어보는 경우)
     const UP = "2026-07-27T05:00:00Z";
     const { window, calls, LS, $ } = mk({
       cloud_meta: [{ game: "beta:unicorn", updated: UP }],
-      cloud_pull: [{ game: "beta:unicorn", updated: UP, data: { "unicorn-save-v1": JSON.stringify({ company: "저쪽", bestRun: 6e9, savedAt: unicornSave.savedAt }) } }],
+      cloud_pull: [{ game: "beta:unicorn", updated: UP, data: { "unicorn-save-v1": JSON.stringify({ company: "저쪽", bestRun: 6e9 }) } }],
       cloud_push: "2026-07-27T09:00:00Z",
     });
     LS.setItem("unicorn-save-v1", JSON.stringify(unicornSave));
@@ -1089,9 +1091,9 @@ const tick = (ms) => new Promise((r) => setTimeout(r, ms || 25));
     check(pushesFor(calls, "unicorn") === 0,
       `화면이 뜨기 전이라도 물어볼 게 있으면 올리지 않는다 (푸시 ${pushesFor(calls, "unicorn")}회)`);
 
-    // 양쪽 savedAt이 같다 = 가릴 수 없어 실제로 화면이 뜨는 경우
+    // 서버 쪽에 savedAt이 없다 = 견줄 근거가 없어 실제로 화면이 뜨는 경우
     release([{ game: "beta:unicorn", updated: UP,
-      data: { "unicorn-save-v1": JSON.stringify({ company: "저쪽", bestRun: 6e9, savedAt: unicornSave.savedAt }) } }]);
+      data: { "unicorn-save-v1": JSON.stringify({ company: "저쪽", bestRun: 6e9 }) } }]);
     await tick(60);
     check(!!$("#cloud-keep"), "왕복이 끝나면 화면이 뜬다");
   }
@@ -1202,6 +1204,121 @@ const tick = (ms) => new Promise((r) => setTimeout(r, ms || 25));
     await tick(1300);
     check(!$(".cloud-overlay"), "저장소를 못 쓰면(토큰 없음) 발급 권유가 뜨지 않는다");
     proto.getItem = oGet; proto.setItem = oSet;
+  }
+
+  // ============================================================
+  /* 새 브라우저로 시작해 몇 판 하고 타이틀로 돌아왔더니 "두 기기에서 각각 진행됐어요"가
+   * **자기 자신과** 떴다. 양쪽 다 "야구 — 고교 1학년"이고, 화면은 어느 쪽이 더 최근인지
+   * 알 수 없다고 했다. 서버에 있던 건 이 기기가 pagehide에서 밀어넣은 바로 그 세이브였다.
+   * keepalive라 요청은 살아남지만 페이지가 사라져 "올렸다"고 적는 .then이 안 돈다.
+   *
+   * 여기서는 unicorn(평키)과 7종(슬롯 맵) 두 저장 모양 모두에서 확인한다 —
+   * progressAt()이 두 모양을 각각 다르게 읽기 때문이다. */
+  group("26) 저장 시각이 같으면 같은 세이브다 — 자기 자신과 고르라고 하지 않는다");
+  {
+    // unicorn(평키) — 서버 행이 이 기기가 올린 그 꾸러미를 그대로 돌려준다 (savedAt 6000 동일)
+    const UP = "2026-07-27T05:00:00Z";
+    const { window, calls, LS, $ } = mk({
+      cloud_meta: [{ game: "beta:unicorn", updated: UP }],
+      cloud_pull: [{ game: "beta:unicorn", updated: UP, data: { "unicorn-save-v1": JSON.stringify(unicornSave) } }],
+      cloud_push: "2026-07-27T09:00:00Z",
+    });
+    LS.setItem("unicorn-save-v1", JSON.stringify(unicornSave));
+    LS.setItem("grow-cloud-dirty-unicorn", "1");
+    window.Cloud.init("unicorn");
+    await tick(60);
+    check(!$(".cloud-overlay"), "평키 게임도 화면을 띄우지 않는다");
+    check(LS.getItem("unicorn-save-v1") === JSON.stringify(unicornSave), "기록은 그대로다");
+    check(LS.getItem("grow-cloud-synced-unicorn") === UP,
+      `도장이 서버 시각으로 찍힌다 (synced=${LS.getItem("grow-cloud-synced-unicorn")})`);
+    check(LS.getItem("grow-cloud-dirty-unicorn") === "0",
+      `장부가 정리된다 (dirty=${LS.getItem("grow-cloud-dirty-unicorn")})`);
+    check(window.Cloud._t.decide("unicorn", UP) !== "conflict",
+      `다음 실행 판정이 충돌이 아니다 — 고리가 끊긴다 ("${window.Cloud._t.decide("unicorn", UP)}")`);
+    // 결정 잠금(awaiting)이 풀렸는지 = 이번 실행의 자동 저장이 평소대로 나가는지
+    window.Cloud.touch();
+    goBackground(window);
+    await tick(40);
+    check(pushesFor(calls, "unicorn") >= 1,
+      `붙잡힌 채로 남지 않는다 — 자동 저장이 평소대로 올라간다 (푸시 ${pushesFor(calls, "unicorn")}회)`);
+  }
+  {
+    // 7종(슬롯 맵) — 사용자가 실제로 겪은 길을 pagehide까지 그대로 돌린다
+    const UP = "2026-07-27T05:00:00Z";
+    // ① 새 브라우저. 기록이 없다가 몇 판 해서 슬롯 하나가 생겼다.
+    let sent = null;
+    const one = mk({
+      cloud_meta: [],                                    // 서버에 아직 아무 줄도 없다
+      cloud_push: (b) => { sent = b.p_data; return new Promise(() => {}); },  // 닿긴 하는데 응답이 안 온다
+    });
+    one.LS.setItem("rookie-save-v1-slots", slotsBlob(rookieSlots));
+    one.window.Cloud.init("rookie");
+    await tick(40);
+    one.window.Cloud.touch();                            // 게임 save()
+    one.window.dispatchEvent(new one.window.Event("pagehide"));   // 타이틀로 나간다 → keepalive 전송
+    await tick(40);
+    check(!!sent && sent["rookie-save-v1-slots"] === slotsBlob(rookieSlots),
+      "떠나는 길의 전송이 서버에 닿는다");
+    check(one.LS.getItem("grow-cloud-synced-rookie") === null && one.LS.getItem("grow-cloud-dirty-rookie") === "1",
+      `.then이 안 돌아 장부가 '안 올림'인 채로 남는다 (synced=${one.LS.getItem("grow-cloud-synced-rookie")}, dirty=${one.LS.getItem("grow-cloud-dirty-rookie")})`);
+
+    /* ② 다시 켠다 — ①이 남긴 장부 그대로, 서버에는 ①이 올린 줄이 있다.
+     * 응답에 mine은 **일부러 안 싣는다.** 진짜 서버라면 mine:true라 '누가 썼나' 가드가
+     * 먼저 잡고, 그러면 여기서 보려는 안전망(저장 시각이 같으면 같은 세이브)이 안 돈다.
+     * mine 갈래는 cloud-writer-test.js가 따로 본다. */
+    const two = mk({
+      cloud_meta: [{ game: "beta:rookie", updated: UP }],
+      cloud_pull: [{ game: "beta:rookie", updated: UP, data: sent }],
+      cloud_push: "2026-07-27T09:00:00Z",
+    });
+    two.LS.setItem("rookie-save-v1-slots", slotsBlob(rookieSlots));
+    two.LS.setItem("grow-cloud-dirty-rookie", "1");
+    check(two.window.Cloud._t.decide("rookie", UP) === "conflict",
+      "판정은 여전히 충돌이다 (도장 없음 + 서버가 더 최신)");
+    two.window.Cloud.init("rookie");
+    await tick(60);
+    check(!two.$(".cloud-overlay"),
+      `그래도 화면은 뜨지 않는다 — "${two.$(".cloud-modal") ? two.$(".cloud-modal").textContent.replace(/\s+/g, " ").slice(0, 50) : ""}"`);
+    check(two.LS.getItem("rookie-save-v1-slots") === slotsBlob(rookieSlots), "기록은 그대로다");
+    check(two.window.Cloud._t.decide("rookie", UP) === "none", "다음 실행에서도 조용하다");
+  }
+  {
+    /* 여기까지 조용해졌다고 해서, **한 번도 올린 적 없는** 기록을 자동으로 덮는 일이
+     * 생기면 안 된다. 시각이 다르면(= 다른 세이브면) 도장 없는 기기는 여전히 반드시 묻는다. */
+    const UP = "2026-07-27T05:00:00Z";
+    const { window, LS, $ } = mk({
+      cloud_meta: [{ game: "beta:rookie", updated: UP }],
+      // 서버 쪽 savedAt 3000 < 이 기기 5000 — 이 기기가 명백히 더 최근인데도 물어야 한다
+      cloud_pull: [{ game: "beta:rookie", updated: UP, data: { "rookie-save-v1-slots": slotsBlob(idolSlots) } }],
+      cloud_push: "2026-07-27T09:00:00Z",
+    });
+    LS.setItem("rookie-save-v1-slots", slotsBlob(rookieSlots));   // savedAt 최대 5000
+    LS.setItem("grow-cloud-dirty-rookie", "1");                   // 도장은 없다 = 한 번도 안 올렸다
+    window.Cloud.init("rookie");
+    await tick(60);
+    check(!!$("#cloud-keep") && !!$("#cloud-take"),
+      "올린 적 없는 기기는 한쪽이 명백히 최근이어도 여전히 묻는다");
+    check(LS.getItem("rookie-save-v1-slots") === slotsBlob(rookieSlots), "고르기 전에는 기록이 그대로다");
+    check(LS.getItem("grow-cloud-synced-rookie") === null, "고르기 전에는 도장도 찍지 않는다");
+  }
+  {
+    // 한쪽에 savedAt이 없으면 견줄 근거가 없다 → 묻고, 왜 묻는지도 화면이 말한다
+    const UP = "2026-07-27T05:00:00Z";
+    const { window, LS, $ } = mk({
+      cloud_meta: [{ game: "beta:unicorn", updated: UP }],
+      cloud_pull: [{ game: "beta:unicorn", updated: UP, data: { "unicorn-save-v1": JSON.stringify({ company: "저쪽", bestRun: 6e9 }) } }],
+      cloud_push: "2026-07-27T09:00:00Z",
+    });
+    LS.setItem("unicorn-save-v1", JSON.stringify(unicornSave));   // 이쪽만 savedAt 6000
+    LS.setItem("grow-cloud-dirty-unicorn", "1");
+    LS.setItem("grow-cloud-synced-unicorn", "2026-07-27T01:00:00Z");
+    window.Cloud.init("unicorn");
+    await tick(60);
+    check(!!$("#cloud-keep"), "한쪽에 저장 시각이 없으면 묻는다");
+    const txt = $(".cloud-modal") ? $(".cloud-modal").textContent : "";
+    check(/알 수 없어서/.test(txt),
+      `왜 묻는지 화면이 말해준다 — "${txt.replace(/\s+/g, " ").slice(0, 60)}"`);
+    check(LS.getItem("grow-cloud-synced-unicorn") === "2026-07-27T01:00:00Z", "고르기 전에는 도장이 그대로다");
   }
 
   console.log(fail ? `\n❌ 실패 ${fail}건` : "\n✅ 통과");
