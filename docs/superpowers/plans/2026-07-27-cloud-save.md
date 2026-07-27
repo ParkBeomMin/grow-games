@@ -15,7 +15,10 @@
 - 빌드 도구·번들러·npm 의존성을 추가하지 않는다. 브라우저가 직접 로드하는 파일만 쓴다.
 - 모든 네트워크 실패를 삼킨다. 게임 진행을 막는 코드를 넣지 않는다.
 - 주석과 사용자 문구는 한국어. 기존 파일의 "~요" 말투를 따른다.
-- Supabase 접속 정보는 `beta/match.js:28-30`의 상수를 재사용한다. 새로 하드코딩하지 않는다.
+- Supabase 접속 정보는 **`beta/match.js`가 내보내는 `Match.cfg`를 읽어 쓴다.** `cloud.js`에
+  URL·키를 다시 하드코딩하지 않는다. `match.js`의 `return {...}`에 `cfg: { url: SUPABASE_URL,
+  key: SUPABASE_ANON_KEY }`를 추가하는 것이 이 계획에서 허용하는 유일한 `match.js` 변경이다.
+  `index.html`에서 `match.js`가 `cloud.js`보다 먼저 로드되므로 순서 문제는 없다.
 - service_role 키는 Doppler `GROW_GAMES_SUPABASE_SERVICE_ROLE_KEY`에서만 읽고, **어떤 파일에도 쓰지 않는다.**
 - 기기 시계(`Date.now()`)를 동기화 판정에 쓰지 않는다. 판정은 서버 `updated`와 로컬 `dirty` 플래그로만 한다.
 - 커밋 메시지는 한국어, 끝에 `Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>` 포함.
@@ -26,6 +29,7 @@
 |---|---|
 | `scratchpad/cloud-schema.sql` (임시, 커밋 안 함) | 테이블·함수 DDL. Task 1에서 적용 후 스펙에 반영 |
 | `beta/cloud.js` (신규) | 토큰 관리, RPC 호출, 동기화 판정, 모달 UI, 토스트 |
+| `beta/match.js` (수정, 한 줄) | Supabase 접속 정보를 `Match.cfg`로 내보냄 |
 | `beta/base.css` (수정) | 동기화 배지·모달 전용 스타일 |
 | `beta/<game>/index.html` × 8 (수정) | 버튼 1줄 + 스크립트 1줄 |
 | `beta/<game>/game.js` × 8 (수정) | `Cloud.init` 호출 + `Cloud.touch()` |
@@ -345,6 +349,7 @@ const { JSDOM } = require(SP + "/node_modules/jsdom");
 const dom = new JSDOM("<!doctype html><body></body>", { runScripts: "outside-only", url: "https://x.test/rookie/" });
 const { window } = dom;
 window.GROW_ENV = { beta: true };
+window.Match = { cfg: { url: "https://x.test", key: "anon" } };
 const calls = [];
 window.fetch = (url, opt) => {
   calls.push({ url, body: JSON.parse(opt.body) });
@@ -395,6 +400,16 @@ setTimeout(() => {
 Run: `cd /workspace/grow-games && node /tmp/claude-0/-workspace/e471dffd-68a9-4271-9b48-58c8b140bbbb/scratchpad/cloud-test.js`
 Expected: FAIL — `ENOENT ... beta/cloud.js`
 
+- [ ] **Step 3a: `beta/match.js`가 접속 정보를 내보내게 한다**
+
+`beta/match.js` 마지막 줄의 `return {...}`을 아래로 바꾼다. 다른 부분은 건드리지 않는다.
+
+```js
+  // cloud.js가 같은 접속 정보를 쓰도록 내보내요 (키를 두 곳에 두지 않으려고요)
+  return { enabled, playerId, submit, roster, register, count, submitHof, fetchHof, backfillHof,
+           cfg: { url: SUPABASE_URL, key: SUPABASE_ANON_KEY } };
+```
+
 - [ ] **Step 3: `beta/cloud.js` 작성**
 
 ```js
@@ -407,8 +422,8 @@ Expected: FAIL — `ENOENT ... beta/cloud.js`
 (function () {
   "use strict";
 
-  var URL_ = "https://dlbpvzgwwcgphlhymncx.supabase.co";
-  var KEY_ = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRsYnB2emd3d2NncGhsaHltbmN4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ3ODA3MTMsImV4cCI6MjEwMDM1NjcxM30.tyLMO8o_i5OTmKaRudFd5LATDjmjVzL8M2NM_4EoeBc";
+  // 접속 정보는 match.js가 내보내는 걸 씁니다 (키를 두 곳에 두지 않으려고요)
+  var CFG = (window.Match && window.Match.cfg) || null;
 
   var TOKEN_KEY = "grow-cloud-token";
   var PUSH_GAP = 2 * 60 * 1000;   // 2분
@@ -462,9 +477,10 @@ Expected: FAIL — `ENOENT ... beta/cloud.js`
   var tag = function (game) { return (isBeta ? "beta:" : "") + game; };
 
   function rpc(fn, body) {
-    return fetch(URL_ + "/rest/v1/rpc/" + fn, {
+    if (!CFG) return Promise.reject(new Error("Match.cfg 없음"));
+    return fetch(CFG.url + "/rest/v1/rpc/" + fn, {
       method: "POST",
-      headers: { apikey: KEY_, Authorization: "Bearer " + KEY_, "Content-Type": "application/json" },
+      headers: { apikey: CFG.key, Authorization: "Bearer " + CFG.key, "Content-Type": "application/json" },
       body: JSON.stringify(body),
       keepalive: true,
     }).then(function (r) {
@@ -585,6 +601,7 @@ const { JSDOM } = require(SP + "/node_modules/jsdom");
 const dom = new JSDOM("<!doctype html><body></body>", { runScripts: "outside-only", url: "https://x.test/rookie/" });
 const { window } = dom;
 window.GROW_ENV = { beta: true };
+window.Match = { cfg: { url: "https://x.test", key: "anon" } };
 window.fetch = () => Promise.reject(new Error("off"));
 window.eval(fs.readFileSync("/workspace/grow-games/beta/cloud.js", "utf8"));
 
@@ -730,6 +747,7 @@ const { JSDOM } = require(SP + "/node_modules/jsdom");
 const dom = new JSDOM("<!doctype html><body></body>", { runScripts: "outside-only", url: "https://x.test/rookie/" });
 const { window } = dom;
 window.GROW_ENV = { beta: true };
+window.Match = { cfg: { url: "https://x.test", key: "anon" } };
 let copied = null;
 window.navigator.clipboard = { writeText: (t) => { copied = t; return Promise.resolve(); } };
 window.fetch = (url) => Promise.resolve({
