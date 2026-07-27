@@ -508,14 +508,18 @@ const tick = (ms) => new Promise((r) => setTimeout(r, ms || 25));
   // ============================================================
   group("14) 동기화 표시 (스펙 6.3)");
   {
-    // 금방 끝나는 자동 저장은 화면에 아무것도 남기지 않는다
+    // 전송이 끝나면 "저장됨"을 남겨요 — 백업이 돌고 있다는 걸 눈으로 봐야
+    // 안심하고 기기를 옮길 수 있어요. (예전엔 400ms 안에 끝나면 감췄는데,
+    // 대부분의 저장이 그보다 빨라서 표시가 사실상 안 보였어요)
     const { window, LS, $ } = mk({ cloud_meta: [], cloud_push: "2026-07-27T00:00:00Z" });
     LS.setItem("rookie-save-v1-slots", slotsBlob(rookieSlots));
     window.Cloud.init("rookie");
     await tick();
     window.Cloud.mark();
     await tick(120);
-    check(!$(".cloud-sync"), "빠른 전송에는 표시가 뜨지 않는다 (자동 저장마다 깜빡이지 않음)");
+    const pill = $(".cloud-sync");
+    check(!!pill && /저장됨/.test(pill.textContent),
+      `전송이 끝나면 '저장됨'이 뜬다 — "${pill && pill.textContent}"`);
   }
   {
     // 오래 걸리는 전송은 '동기화중…' → '✓ 저장됨' → 사라짐

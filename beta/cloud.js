@@ -11,7 +11,12 @@
   var CFG = (window.Match && window.Match.cfg) || null;
 
   var TOKEN_KEY = "grow-cloud-token";
-  var PUSH_GAP = 2 * 60 * 1000;   // 2분
+  /* 저장할 때마다 올리면 낭비라 간격을 두는데, 2분은 너무 길었어요.
+   * 경기 한 판이 2분이 안 걸려서, B에서 한 판 하고 바로 A로 넘어가면
+   * B가 아직 안 올린 상태였어요. 그러면 A가 옛 기록을 받고 거기서 플레이해
+   * 양쪽이 갈라져요. 경기가 끝날 때 save()가 불리니, 간격을 20초로 줄이면
+   * 한 판 끝날 때마다 올라가면서 연타에는 낭비하지 않아요. */
+  var PUSH_GAP = 20 * 1000;
 
   // 게임별 저장 키 (beta/<game>/game.js의 상수와 일치해야 해요)
   var SAVE = {
@@ -353,9 +358,13 @@
   function init(game) {
     cur = game;
     watchPlay();
+    /* 화면을 떠날 때 밀어넣어요. iOS 사파리는 탭을 버릴 때 visibilitychange가
+     * 안 오는 경우가 있어서 pagehide도 같이 걸어요. push()가 이미 중복을 걸러요. */
+    var leave = function () { if (get(dirtyKey(game)) === "1") push(game); };
     document.addEventListener("visibilitychange", function () {
-      if (document.visibilityState === "hidden" && get(dirtyKey(game)) === "1") push(game);
+      if (document.visibilityState === "hidden") leave();
     });
+    window.addEventListener("pagehide", leave);
     // 타이틀 진입 시 서버 상태만 가볍게 확인해요
     var tok = token();
     if (!tok) return; // 기기 정체성이 없으면 클라우드는 조용히 쉬어요
@@ -412,12 +421,12 @@
   /* 6.3절 동기화 표시 — 우측 상단의 작은 알약.
    *   전송 중 ☁️ 동기화중…  / 성공 ✓ 저장됨 (1.5초) / 실패 오프라인 (2초)
    *
-   * 자동 저장마다 깜빡이면 오히려 방해가 돼요. 그래서 SYNC_WAIT보다 오래 걸린
-   * 전송에만 켜요. 대부분의 저장은 눈 깜짝할 새에 끝나서 화면에 아무것도 안 남고,
-   * 진짜로 네트워크가 굼뜰 때만 보여요. 실패는 빨라도 알려줘요 — 오프라인인 걸
-   * 모르고 계속 두면 곤란하니까요.
+   * 처음엔 400ms 안에 끝나는 전송은 감췄어요 — 자동 저장마다 깜빡일까 봐서요.
+   * 그런데 대부분의 저장이 그보다 빨라서 표시가 사실상 안 보였어요.
+   * 전송 간격이 20초라 깜빡일 일이 없으니 이제 바로 켜고, 끝나면 '저장됨'을 남겨요.
+   * 백업이 돌고 있다는 걸 눈으로 확인할 수 있어야 안심하고 기기를 옮길 수 있어요.
    * position:fixed + pointer-events:none 이라 레이아웃을 밀지도, 터치를 막지도 않아요. */
-  var SYNC_WAIT = 400;
+  var SYNC_WAIT = 0;
   var SYNC_MAX = 20000;    // 진행 표시의 천장 — 응답이 영영 안 와도 여기서 걷어요
   var syncTimer = null;    // 진행 표시를 켤 예약
   var syncCap = null;      // 진행 표시를 강제로 걷을 예약
@@ -487,7 +496,7 @@
     var bad = syncBad, was = syncShown;
     syncBad = false; syncShown = false;
     if (bad) syncPill("오프라인", "cloud-sync-off", 2000);
-    else if (was) syncPill("✓ 저장됨", "cloud-sync-ok", 1500);   // 금방 끝난 저장은 조용히 넘어가요
+    else syncPill("✓ 저장됨", "cloud-sync-ok", 1500);
   }
 
   var esc = function (s) { return String(s).replace(/[&<>]/g, function (c) {
