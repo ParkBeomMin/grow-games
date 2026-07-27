@@ -1082,12 +1082,18 @@ window.Career = (() => {
   const strLabel = (v) =>
     v >= 0.56 ? "🏆 우승 후보" : v >= 0.50 ? "📈 상위권" : v >= 0.44 ? "😐 중위권" : "🌱 리빌딩";
 
+  /* 나이 계수 — 구단이 사는 건 지금 성적만이 아니라 남은 전성기예요.
+   * 실제 FA 시장도 20대 후반이 정점이고 30줄부터 값이 빠져요.
+   * 기울기를 완만하게 잡은 이유: 나이가 들면 스탯이 깎이고 그게 이미 WAR에
+   * 반영돼요. 여기서 세게 곱하면 같은 노화를 두 번 감점하게 됩니다. */
+  const ageValueMod = (a) => (a <= 25 ? 1.1 : a <= 29 ? 1 : clamp(1 - (a - 29) * 0.06, 0.35, 1));
+
   /* 시장 가치 0~100 — 최근 3시즌 WAR가 주력이고 현재 기량이 보조예요.
-   * 이 값이 FA 제안 규모와 트레이드 난이도를 함께 좌우해요. */
+   * 여기에 나이를 곱해요. 이 값이 FA 제안 규모와 트레이드 난이도를 함께 좌우해요. */
   function marketValue() {
     const last3 = (S.career.seasons || []).slice(-3);
     const avgWar = last3.length ? last3.reduce((a, x) => a + Math.max(x.war, 0), 0) / last3.length : 0;
-    return Math.round(clamp(avgWar * 11 + overall() * 0.35, 0, 100));
+    return Math.round(clamp((avgWar * 11 + overall() * 0.35) * ageValueMod(S.age), 0, 100));
   }
 
   const moveTitle = (t) => { $("move-title").textContent = t; };
@@ -1163,6 +1169,12 @@ window.Career = (() => {
       <div class="draft-emoji">💼</div>
       <div class="draft-title">${S.proYear}년차 — 자유계약선수</div>
       <div class="draft-team">시장 가치 ${mv} / 100 · 제안 ${offers.length}건</div>
+      ${(() => {
+        const am = ageValueMod(S.age);
+        if (am > 1) return `<div class="hint">🌱 ${S.age}세 — 남은 전성기가 길어 웃돈이 붙어요 (×${am.toFixed(2)})</div>`;
+        if (am < 1) return `<div class="hint">⏳ ${S.age}세 — 나이가 시장 가치를 깎아요 (×${am.toFixed(2)})</div>`;
+        return "";
+      })()}
       <div class="hint">계약금이 큰 팀일수록 전력이 아쉬운 경우가 많아요. 우승을 노릴지, 목돈을 챙길지 골라주세요.</div>
       <div class="offer-list">${offers.map((o, i) => `
         <button class="offer" data-i="${i}">
