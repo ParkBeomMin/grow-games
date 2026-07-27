@@ -1068,6 +1068,11 @@ window.Career = (() => {
   const TRADE_COND_ROUND = 8;   // 협상 한 라운드당 컨디션
   const TRADE_COND_FAIL = 20;   // 시즌 중 무산되면 추가로 깎이는 컨디션
   const TRADE_FRONT_PENALTY = 12; // 시즌 중엔 전력 이탈이라 구단이 더 꺼려요
+  /* 팬 여론 문턱. 여론은 승낙 확률에 관여하지 않고, 성사된 뒤에만 쓰여요. */
+  const FANS_CONTENDER = 45;  // 이 위여야 우승 후보가 행선지 후보에 들어와요
+  const FANS_EXTRA = 65;      // 이 위면 행선지가 한 팀 늘어요
+  const FANS_WELCOME = 60;    // 이 위면 환영 계약금이 붙어요
+  const WELCOME_MAX = 3000;   // 여론 100일 때의 환영 계약금
 
   // 팀 전력 — 한 번 정해두고 시즌마다 조금씩 흔들려요. 저장본에도 남아서
   // '작년에 강했던 팀'이 올해도 대체로 강해요.
@@ -1213,14 +1218,45 @@ window.Career = (() => {
 
   /* 협상 카드. front = 구단 프런트의 태도, fans = 팬 여론.
    * 어느 쪽도 공짜가 없어서 매 라운드 저울질을 하게 돼요. */
+  /* 협상 카드. front = 구단 프런트의 태도, fans = 팬 여론.
+   * 어느 쪽도 공짜가 없어서 매 라운드 저울질을 하게 돼요.
+   * 같은 협상에서 한 번 쓴 카드는 다시 나오지 않아요 — 3라운드 동안
+   * 무엇을 남겨둘지 계산하게 만들려고요. */
   const TRADE_CARDS = [
-    { id: "talk",  label: "🤝 단장과 진솔한 면담", desc: "무난하지만 확실해요", front: [10, 18], fans: [0, 0] },
-    { id: "press", label: "📰 언론에 흘리기",      desc: "구단은 싫어하고 팬은 주목해요", front: [-14, -6], fans: [12, 22] },
-    { id: "pay",   label: "💰 연봉 삭감 감수",     desc: "지갑을 열어 길을 트는 방법", front: [16, 26], fans: [-12, -4], cost: true },
-    { id: "ring",  label: "🏆 우승 도전 명분",     desc: "우리 팀이 강하면 역효과예요", front: [12, 20], fans: [8, 16], contender: true },
-    { id: "fan",   label: "🙇 팬들께 직접 호소",   desc: "여론은 얻지만 프런트는 불편해요", front: [-8, -2], fans: [16, 26] },
-    { id: "quiet", label: "🧊 조용히 기다리기",     desc: "잡음은 없지만 관심도 식어요", front: [6, 12], fans: [-14, -6] },
+    { id: "talk",   label: "🤝 단장과 진솔한 면담", desc: "무난하지만 확실해요",            front: [10, 18], fans: [0, 0] },
+    { id: "mates",  label: "🗣️ 동료들의 지지",      desc: "라커룸이 편을 들어줘요",          front: [8, 16],  fans: [4, 10] },
+    { id: "ring",   label: "🏆 우승 도전 명분",     desc: "우리 팀이 강하면 역효과예요",      front: [12, 20], fans: [8, 16], contender: true },
+    { id: "family", label: "🙏 가족 사정 호소",     desc: "구단도 사람 사정은 봐줘요",        front: [10, 16], fans: [6, 12] },
+    { id: "quiet",  label: "🧊 조용히 기다리기",     desc: "잡음은 없지만 관심도 식어요",      front: [6, 12],  fans: [-14, -6] },
+    { id: "thanks", label: "🎤 팀에 감사 인터뷰",   desc: "여론은 얻지만 구단은 미지근해요",   front: [2, 8],   fans: [12, 20] },
+    { id: "fan",    label: "🙇 팬들께 직접 호소",   desc: "여론은 얻지만 프런트는 불편해요",   front: [-8, -2], fans: [16, 26] },
+    { id: "press",  label: "📰 언론에 흘리기",      desc: "구단은 싫어하고 팬은 주목해요",     front: [-14, -6], fans: [12, 22] },
+    { id: "pay",    label: "💰 연봉 삭감 감수",     desc: "지갑을 열어 길을 트는 방법",       front: [16, 26], fans: [-12, -4], cost: 3000 },
+    { id: "fund",   label: "🎁 구단 발전기금",      desc: "확실하지만 아주 비싸요",           front: [24, 34], fans: [0, 0],    cost: 8000 },
+    { id: "strike", label: "🧨 훈련 거부",          desc: "가장 강한 수 · 몸과 여론을 갈아넣어요", front: [22, 34], fans: [-20, -12], cond: 15 },
+    { id: "rumor",  label: "💼 타 구단 관심설",     desc: "먹히면 크지만 역풍도 커요",        front: [18, 28], fans: [0, 0],
+                    gamble: 0.55, bad: { front: [-12, -4], fans: [-8, 0] } },
   ];
+
+  /* 승낙 확률. 화면과 판정이 반드시 같은 값을 써야 해서 함수로 뽑았어요.
+   * 두 곳에 같은 식을 두면 한쪽만 고쳐져 어긋나요. */
+  const tradeOdds = (front) => clamp((front - 40) / 50, 0.05, 0.95);
+
+  // 시작 태도로 구단 분위기를 읽어줘요 — 숫자만 보면 감이 안 와요
+  const tradeMood = (f) =>
+    f >= 55 ? "구단도 재편을 고민하는 눈치예요"
+    : f >= 35 ? "구단은 아직 마음을 정하지 못한 것 같아요"
+    : f >= 20 ? "구단은 널 놓칠 생각이 없어 보여요"
+    : "구단은 절대 못 놓겠다는 분위기예요";
+
+  /* 구단 반응은 태도 변화량으로 골라요. 카드마다 전용 문구를 두면 카드가 늘 때마다
+   * 문구도 따라 늘고, 도박 카드처럼 결과가 갈리는 경우를 못 맞춰요. */
+  const frontReaction = (df) =>
+    df >= 22 ? "단장이 처음으로 고개를 끄덕였어요"
+    : df >= 12 ? "단장이 잠시 말을 멈췄어요…"
+    : df >= 1 ? "구단은 별말 없이 들어줬어요"
+    : df >= -8 ? "구단은 떨떠름한 표정이에요"
+    : "구단은 불쾌한 기색을 감추지 않았어요";
 
   function startTrade() {
     // 협상 도중 화면을 벗어났다 오면 그 자리에서 이어가요
@@ -1232,7 +1268,8 @@ window.Career = (() => {
       const rank = S.season ? myRank() : last ? last.rank : 5;
       // 잘하는 선수일수록 안 놔주고, 팀이 하위권이면(리빌딩) 쉽게 놔줘요
       const raw = 48 - (mv - 40) * 0.42 + (rank - 5) * 3.4 - (S.season ? TRADE_FRONT_PENALTY : 0);
-      S.trade = { round: 1, front: Math.round(clamp(raw, 8, 76)), fans: 50, log: [], paid: 0 };
+      const front = Math.round(clamp(raw, 8, 76));
+      S.trade = { round: 1, front, fans: 50, log: [], paid: 0, used: [], mood: tradeMood(front) };
     }
     renderTrade();
     show("screen-move");
@@ -1252,15 +1289,21 @@ window.Career = (() => {
 
   function renderTrade() {
     const T = S.trade;
-    const cards = shuffle(TRADE_CARDS.filter((c) => !(c.id === "pay" && (S.money || 0) < 3000))).slice(0, 3);
+    T.used = T.used || [];
+    // 이미 쓴 카드와 돈이 모자란 카드는 빼요
+    const pool = TRADE_CARDS.filter((c) => !T.used.includes(c.id) && !(c.cost && (S.money || 0) < c.cost));
+    const cards = shuffle(pool).slice(0, 3);
+    const pct = Math.round(tradeOdds(T.front) * 100);
     moveTitle("🔁 트레이드 요청");
     moveCard(`
       <div class="draft-emoji">🔁</div>
       <div class="draft-title">협상 ${T.round} / ${TRADE_ROUNDS} 라운드</div>
       <div class="draft-team">${S.team} 프런트와 이야기 중이에요</div>
+      ${T.round === 1 && T.mood ? `<div class="hint">💬 ${T.mood}</div>` : ""}
       ${gaugeHTML("🏢 구단 태도", T.front, "scout")}
+      <div class="hint">✅ 지금 승낙 확률 <b>${pct}%</b> — 구단 태도로만 정해져요 (42 이하는 5%, 90이면 95%)</div>
       ${gaugeHTML("📣 팬 여론", T.fans, "cond")}
-      <div class="hint">구단 태도가 60을 넘겨야 보내줘요. 팬 여론이 35 밑이면 성사돼도 뒷맛이 씁니다.</div>
+      <div class="hint">📣 여론은 성사된 뒤에 쓰여요 — 45↑ 우승 후보도 데려가요 · 65↑ 행선지 +1팀 · 60↑ 환영 계약금 · 35↓ 이적 후 적응이 힘들어요</div>
       ${T.log.length ? `<div class="neg-log">${T.log.map((l) => `<div>${l}</div>`).join("")}</div>` : ""}`);
     moveActions(cards.map((c) => ({
       label: `${c.label}<span class="a-sub">${c.desc}</span>`,
@@ -1270,18 +1313,34 @@ window.Career = (() => {
 
   function playTradeCard(c) {
     const T = S.trade;
-    let df = randInt(c.front[0], c.front[1]);
-    let dn = randInt(c.fans[0], c.fans[1]);
+    T.used = T.used || [];
+    T.used.push(c.id);                    // 같은 협상에서 다시 안 나와요
+
+    // 💼 타 구단 관심설 — 먹히면 크고 아니면 역풍이에요
+    const flop = c.gamble ? Math.random() >= c.gamble : false;
+    const eff = flop ? c.bad : c;
+    let df = randInt(eff.front[0], eff.front[1]);
+    let dn = randInt(eff.fans[0], eff.fans[1]);
     // 우승 도전 명분은 우리 팀이 이미 강하면 먹히지 않아요
     if (c.contender && teamStrOf(S.team) >= 0.53) { df = -randInt(6, 12); dn = -randInt(2, 8); }
-    if (c.cost) { const pay = Math.min(S.money || 0, 3000); S.money -= pay; T.paid += pay; }
+
+    if (c.cost) { const pay = Math.min(S.money || 0, c.cost); S.money -= pay; T.paid += pay; }
+    // 🧨 훈련 거부의 몸값. 오프시즌은 캠프가 컨디션을 80으로 다시 세워서
+    // 깎아봐야 사라져요 — 그쪽 대가는 여론 하락이에요.
+    if (c.cond && S.season) S.condition = clamp(S.condition - c.cond, 0, 100);
     // 시즌 중 협상은 경기에 집중이 안 돼요. 오프시즌에는 깎이지 않아요.
     if (S.season) S.condition = clamp(S.condition - TRADE_COND_ROUND, 0, 100);
+
     T.front = clamp(T.front + df, 0, 100);
     T.fans = clamp(T.fans + dn, 0, 100);
     const sign = (v) => (v >= 0 ? `+${v}` : `${v}`);
+    const gambleTxt = c.gamble ? (flop ? "역풍이 불었어요! " : "제대로 먹혔어요! ") : "";
     T.log.unshift(`${c.label} → 구단 ${sign(df)} · 여론 ${sign(dn)}`
-      + `${c.cost ? " · 💰 3000만 지출" : ""}${S.season ? ` · 🩹 컨디션 -${TRADE_COND_ROUND}` : ""}`);
+      + `${c.cost ? ` · 💰 ${c.cost}만 지출` : ""}`
+      + `${c.cond && S.season ? ` · 🩹 컨디션 -${c.cond}` : ""}`
+      + `${S.season ? ` · 🩹 컨디션 -${TRADE_COND_ROUND}` : ""}`
+      // 이 문자열은 innerHTML로 들어가요. \n은 HTML에서 접히니 <br>을 씁니다.
+      + `<br>💬 ${gambleTxt}${frontReaction(df)}`);
     T.round += 1;
     save();
     if (T.round > TRADE_ROUNDS) finishTrade();
@@ -1312,11 +1371,17 @@ window.Career = (() => {
       moveActions([{ label: mid ? "← 팀으로 돌아가기" : "← 결산으로", ghost: true, onClick: tradeBack }]);
       return;
     }
-    // 승낙 — 나를 원하는 구단을 추려요 (전력이 셀수록 여론이 좋아야 붙어요)
+    /* 승낙 — 나를 원하는 구단을 추려요.
+     * 우승 후보는 여론이 받쳐줘야 붙어요. 예전엔 시장 가치 55 이상이면 이 조건을
+     * 통째로 우회해서, 잘하는 선수에게 여론이 아무 의미가 없었어요.
+     * 그 우회를 없앴어요 — 여론을 챙길지 구단 태도를 밀지가 진짜 저울질이 되게요. */
     const mv = marketValue();
+    // 기본은 3팀까지, 여론이 받쳐주면 한 팀 더. 안쪽 상한을 빼면 시장 가치가 높은
+    // 선수는 기본이 이미 4가 돼서 여론 보너스가 아무 일도 안 해요.
+    const slots = clamp(Math.min(3, 1 + Math.floor(mv / 30)) + (T.fans >= FANS_EXTRA ? 1 : 0), 2, 4);
     const pool = shuffle(KBO_TEAMS.filter((t) => t !== S.team))
-      .filter((t) => teamStrOf(t) < 0.52 || T.fans >= 45 || mv >= 55)
-      .slice(0, Math.max(2, Math.min(3, 1 + Math.floor(mv / 30))));
+      .filter((t) => teamStrOf(t) < 0.52 || T.fans >= FANS_CONTENDER)
+      .slice(0, slots);
     // 시즌 중엔 새 팀의 현재 성적도 보여줘요 — 가을야구 진출이 걸린 정보예요
     const rec = (name) => {
       const o = S.season && S.season.others.find((x) => x.name === name);
@@ -1325,13 +1390,19 @@ window.Career = (() => {
     const suitors = (pool.length ? pool : shuffle(KBO_TEAMS.filter((t) => t !== S.team)).slice(0, 2))
       .map((name) => ({ name, str: teamStrOf(name), rec: rec(name) }));
     const sour = T.fans < 35;
+    /* 환영 계약금 — 팬이 반기면 새 구단이 지갑을 열어요.
+     * 트레이드는 원래 이적료가 0이라(FA와 달리) 여론을 챙길 이유가 하나 더 생겨요. */
+    const welcome = T.fans >= FANS_WELCOME
+      ? Math.round(((T.fans - FANS_WELCOME) / (100 - FANS_WELCOME)) * WELCOME_MAX / 100) * 100
+      : 0;
     moveTitle("🔁 트레이드 승낙!");
     moveCard(`
       <div class="draft-emoji">🤝</div>
       <div class="draft-title">구단이 길을 열어줬어요</div>
       <div class="draft-team">승낙 확률 ${Math.round(p * 100)}% · 팬 여론 ${Math.round(T.fans)}</div>
       ${sour ? `<div class="hint">⚠️ 여론이 차가워요. 새 팀에서도 시선이 곱지 않아 적응이 힘들 거예요.</div>` : ""}
-      <div class="hint">어느 팀으로 갈지 골라주세요.</div>
+      ${welcome ? `<div class="hint">🎉 팬들이 반겨요 — 환영 계약금 ${fmtMoney(welcome)}이 함께 들어와요</div>` : ""}
+      <div class="hint">어느 팀으로 갈지 골라주세요. (${suitors.length}팀)</div>
       <div class="offer-list">${suitors.map((o, i) => `
         <button class="offer" data-i="${i}">
           <span class="offer-team">${o.name}</span>
@@ -1341,10 +1412,11 @@ window.Career = (() => {
       b.onclick = () => {
         const o = suitors[+b.dataset.i];
         if (!confirm(`${o.name} 로 이적할까요?\n\n· 팀 전력 ${strLabel(o.str)}`
+          + (welcome ? `\n· 환영 계약금 ${fmtMoney(welcome)}` : "")
           + (o.rec ? `\n· 현재 성적${o.rec}\n\n남은 시즌을 이 팀에서 뛰어요. 내 기록은 그대로 이어져요.` : ""))) return;
         if (sour) S.tradeSour = true;
         S.trade = null;
-        moveTo(o.name, "trade", 0);
+        moveTo(o.name, "trade", welcome);
         if (window.Fx) Fx.celebrate("award", `🔁 ${o.name} 이적!`);
         tradeBack();
       };
