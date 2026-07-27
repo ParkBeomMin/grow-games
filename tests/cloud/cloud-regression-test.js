@@ -22,6 +22,9 @@ const blob = (o) => JSON.stringify(o);
 const ROOKIE_A = blob({ s1: { name: "박프로", phase: "pro", proYear: 9, savedAt: 5000 } });
 const IDOL_A_LONG = blob({ s9: { name: "이연습", phase: "idol-pro", proYear: 7, savedAt: 4000 } });  // A의 몇 달치
 const IDOL_B_NEW = blob({ sB: { name: "새연습", phase: "trainee", year: 1, savedAt: 9000 } });        // B의 하루치
+// 저장 시각이 A와 똑같은 B의 기록. 어느 쪽이 더 최근인지 가릴 수 없어서 사람에게 묻는 경우를 만든다.
+// (savedAt이 다르면 도장이 있는 기기에서는 자동으로 최신에 맞춰서 충돌 화면이 아예 안 뜬다)
+const IDOL_B_SAME_TIME = blob({ sB: { name: "새연습", phase: "trainee", year: 1, savedAt: 4000 } });
 
 function mk(routes, opt) {
   const vc = new VirtualConsole();   // jsdom의 location.reload 미구현 경고를 삼킨다
@@ -199,10 +202,11 @@ function mk(routes, opt) {
   }
   {
     // 충돌 화면에서 '다른 기기 것 쓰기'를 눌렀는데 못 쓴 경우
+    // (양쪽 savedAt이 같아야 자동 판정이 서지 않아 실제로 화면이 뜬다)
     const UP = "2026-07-27T09:00:00Z";
     const { window, LS, $ } = mk({
       cloud_meta: [{ game: "beta:idol", updated: UP }],
-      cloud_pull: [{ game: "beta:idol", updated: UP, data: { "trainee-save-v1-slots": IDOL_B_NEW } }],
+      cloud_pull: [{ game: "beta:idol", updated: UP, data: { "trainee-save-v1-slots": IDOL_B_SAME_TIME } }],
     });
     LS.setItem("trainee-save-v1-slots", IDOL_A_LONG);
     LS.setItem("grow-cloud-dirty-idol", "1");
@@ -323,6 +327,153 @@ function mk(routes, opt) {
     let done = false;
     await Promise.race([window.Cloud.settle(200).then(() => { done = true; }), tick(1200)]);
     check(done, `응답이 안 와도 상한에서 돌아온다 (${Date.now() - t0}ms)`);
+  }
+
+  // ============================================================
+  /* 두 기기를 번갈아 쓰면 켤 때마다 똑같아 보이는 두 줄을 놓고 고르라는 화면이 떴다.
+   * 이제 어느 쪽이 더 최근에 저장됐는지(savedAt) 가릴 수 있으면 묻지 않고 맞춘다.
+   * 단, 이 기기가 **한 번도 올린 적 없는** 기록은 절대 자동으로 덮지 않는다. */
+  group("G) 어느 쪽이 더 최근인지 알면 묻지 않고 맞춘다");
+  {
+    // 서버가 더 최근 + 이미 올려본 적 있는 기기 → 묻지 않고 받아온다
+    const UP = "2026-07-27T09:00:00Z";
+    const { window, LS, $, calls } = mk({
+      cloud_meta: [{ game: "beta:idol", updated: UP }],
+      cloud_pull: [{ game: "beta:idol", updated: UP, data: { "trainee-save-v1-slots": IDOL_B_NEW } }],
+      cloud_push: "2026-07-27T10:00:00Z",
+    });
+    LS.setItem("trainee-save-v1-slots", IDOL_A_LONG);        // savedAt 4000
+    LS.setItem("grow-cloud-dirty-idol", "1");
+    LS.setItem("grow-cloud-synced-idol", "2026-07-27T01:00:00Z");   // 올려본 적 있는 기기
+    window.Cloud.init("idol");
+    await tick(60);
+    check(!$("#cloud-keep") && !$("#cloud-take"), "서버가 더 최근이면 화면을 띄우지 않는다");
+    check(LS.getItem("trainee-save-v1-slots") === IDOL_B_NEW, "더 최근에 저장된 서버 기록으로 맞춘다");
+    check(LS.getItem("grow-cloud-synced-idol") === UP && LS.getItem("grow-cloud-dirty-idol") === "0",
+      `장부가 '서버와 같음'으로 정리된다 (synced=${LS.getItem("grow-cloud-synced-idol")}, dirty=${LS.getItem("grow-cloud-dirty-idol")})`);
+    const t = $(".cloud-toast");
+    check(!!t && /최근/.test(t.textContent), `무슨 일이 일어났는지 말해준다 — "${t && t.textContent}"`);
+    check(calls.filter((c) => c.fn === "cloud_push" && c.body.p_game === "beta:idol").length === 0,
+      "받아오는 쪽이니 올리지는 않는다");
+  }
+  {
+    // 이 기기가 더 최근 + 이미 올려본 적 있는 기기 → 묻지 않고 올린다 (로컬은 그대로)
+    const UP = "2026-07-27T09:00:00Z";
+    const { window, LS, $, calls } = mk({
+      cloud_meta: [{ game: "beta:idol", updated: UP }],
+      cloud_pull: [{ game: "beta:idol", updated: UP, data: { "trainee-save-v1-slots": IDOL_A_LONG } }],  // savedAt 4000
+      cloud_push: "2026-07-27T10:00:00Z",
+    });
+    LS.setItem("trainee-save-v1-slots", IDOL_B_NEW);          // savedAt 9000 — 이쪽이 더 최근
+    LS.setItem("grow-cloud-dirty-idol", "1");
+    LS.setItem("grow-cloud-synced-idol", "2026-07-27T01:00:00Z");
+    window.Cloud.init("idol");
+    await tick(60);
+    check(!$("#cloud-keep") && !$("#cloud-take"), "이 기기가 더 최근이어도 화면을 띄우지 않는다");
+    check(LS.getItem("trainee-save-v1-slots") === IDOL_B_NEW, "이 기기 기록은 손대지 않는다");
+    const p = calls.find((c) => c.fn === "cloud_push" && c.body.p_game === "beta:idol");
+    check(!!p && p.body.p_data["trainee-save-v1-slots"] === IDOL_B_NEW, "대신 이 기기 것을 서버로 올린다");
+    check(LS.getItem("grow-cloud-synced-idol") === "2026-07-27T10:00:00Z" &&
+      LS.getItem("grow-cloud-dirty-idol") === "0",
+      `올린 뒤 장부가 정리된다 (synced=${LS.getItem("grow-cloud-synced-idol")}, dirty=${LS.getItem("grow-cloud-dirty-idol")})`);
+  }
+  {
+    /* Critical — 한 번도 올린 적 없는 기록은 '더 최근'이라는 이유로도 덮지 않는다.
+     * 옛 폰에 몇 달치가 있는데 새 폰에서 오늘 조금 한 게 더 최근이라고 덮으면 되돌릴 수 없다. */
+    const UP = "2026-07-27T09:00:00Z";
+    const { window, LS, $, calls } = mk({
+      cloud_meta: [{ game: "beta:idol", updated: UP }],
+      cloud_pull: [{ game: "beta:idol", updated: UP, data: { "trainee-save-v1-slots": IDOL_B_NEW } }],  // savedAt 9000
+      cloud_push: "2026-07-27T10:00:00Z",
+    });
+    LS.setItem("trainee-save-v1-slots", IDOL_A_LONG);         // savedAt 4000 — 서버 쪽이 더 최근
+    // 도장 없음 = 이 기기는 이 게임을 한 번도 올린 적이 없다 (기존 사용자가 전부 이 상태다)
+    window.Cloud.init("idol");
+    await tick(60);
+    check(!!$("#cloud-keep") && !!$("#cloud-take"),
+      "올린 적 없는 기기에서는 서버가 더 최근이어도 반드시 물어본다");
+    check(LS.getItem("trainee-save-v1-slots") === IDOL_A_LONG, "고르기 전에는 이 기기 기록이 그대로다");
+    check(LS.getItem("grow-cloud-synced-idol") === null, "고르기 전에는 도장도 찍지 않는다");
+    check(calls.filter((c) => c.fn === "cloud_push" && c.body.p_game === "beta:idol").length === 0,
+      "고르기 전에는 올리지도 않는다");
+  }
+  {
+    // 반대 방향도 같다 — 이 기기가 더 최근이어도, 올린 적이 없으면 묻는다
+    const UP = "2026-07-27T09:00:00Z";
+    const { window, LS, $ } = mk({
+      cloud_meta: [{ game: "beta:idol", updated: UP }],
+      cloud_pull: [{ game: "beta:idol", updated: UP, data: { "trainee-save-v1-slots": IDOL_A_LONG } }],  // savedAt 4000
+      cloud_push: "2026-07-27T10:00:00Z",
+    });
+    LS.setItem("trainee-save-v1-slots", IDOL_B_NEW);          // savedAt 9000 — 이쪽이 더 최근
+    window.Cloud.init("idol");
+    await tick(60);
+    check(!!$("#cloud-keep"), "도장이 없으면 이 기기가 더 최근이어도 물어본다");
+  }
+  {
+    // 시각이 같으면 가릴 수 없다 → 물어보고, 왜 묻는지도 말해준다
+    const UP = "2026-07-27T09:00:00Z";
+    const { window, LS, $ } = mk({
+      cloud_meta: [{ game: "beta:idol", updated: UP }],
+      cloud_pull: [{ game: "beta:idol", updated: UP, data: { "trainee-save-v1-slots": IDOL_B_SAME_TIME } }],
+      cloud_push: "2026-07-27T10:00:00Z",
+    });
+    LS.setItem("trainee-save-v1-slots", IDOL_A_LONG);         // 양쪽 savedAt 4000
+    LS.setItem("grow-cloud-dirty-idol", "1");
+    LS.setItem("grow-cloud-synced-idol", "2026-07-27T01:00:00Z");
+    window.Cloud.init("idol");
+    await tick(60);
+    check(!!$("#cloud-keep"), "저장 시각이 같으면 자동으로 정하지 않고 물어본다");
+    const txt = $(".cloud-modal") ? $(".cloud-modal").textContent : "";
+    check(/알 수 없어서/.test(txt), `왜 묻는지 화면이 말해준다 — "${txt.replace(/\s+/g, " ").slice(0, 60)}"`);
+    check(LS.getItem("trainee-save-v1-slots") === IDOL_A_LONG, "고르기 전에는 이 기기 기록이 그대로다");
+  }
+  {
+    // savedAt이 아예 없는 세이브(아주 옛날 기록)도 가릴 수 없다 → 물어본다
+    const UP = "2026-07-27T09:00:00Z";
+    const NO_TIME = blob({ sX: { name: "무시각", phase: "trainee", year: 3 } });
+    const { window, LS, $ } = mk({
+      cloud_meta: [{ game: "beta:idol", updated: UP }],
+      cloud_pull: [{ game: "beta:idol", updated: UP, data: { "trainee-save-v1-slots": NO_TIME } }],
+      cloud_push: "2026-07-27T10:00:00Z",
+    });
+    LS.setItem("trainee-save-v1-slots", IDOL_A_LONG);
+    LS.setItem("grow-cloud-dirty-idol", "1");
+    LS.setItem("grow-cloud-synced-idol", "2026-07-27T01:00:00Z");
+    window.Cloud.init("idol");
+    await tick(60);
+    check(!!$("#cloud-keep"), "한쪽에 저장 시각이 없으면 물어본다");
+    const txt = $(".cloud-modal") ? $(".cloud-modal").textContent : "";
+    check(/알 수 없어서/.test(txt), "왜 묻는지 화면이 말해준다");
+    check(LS.getItem("trainee-save-v1-slots") === IDOL_A_LONG, "이 기기 기록은 그대로다");
+  }
+  {
+    /* 자동으로 받아오다 저장소에 못 쓴 경우 — 도장을 옮기면 받지도 못한 기록과
+     * "같다"고 믿고 다음 전송이 반대편의 진짜 기록을 덮는다. 질문도 열린 채로 남아야 한다. */
+    const UP = "2026-07-27T09:00:00Z";
+    const { window, LS, $ } = mk({
+      cloud_meta: [{ game: "beta:idol", updated: UP }],
+      cloud_pull: [{ game: "beta:idol", updated: UP, data: { "trainee-save-v1-slots": IDOL_B_NEW } }],
+      cloud_push: "2026-07-27T10:00:00Z",
+    });
+    LS.setItem("trainee-save-v1-slots", IDOL_A_LONG);
+    LS.setItem("grow-cloud-dirty-idol", "1");
+    LS.setItem("grow-cloud-synced-idol", "2026-07-27T01:00:00Z");
+    const proto = Object.getPrototypeOf(LS);
+    const oSet = proto.setItem;
+    proto.setItem = function (k, v) {
+      if (/^trainee-save-v1/.test(k)) throw new Error("QuotaExceeded");
+      return oSet.call(this, k, v);
+    };
+    window.Cloud.init("idol");
+    await tick(60);
+    proto.setItem = oSet;
+    check(LS.getItem("grow-cloud-synced-idol") === "2026-07-27T01:00:00Z",
+      `못 썼으면 도장을 옮기지 않는다 (synced=${LS.getItem("grow-cloud-synced-idol")})`);
+    check(LS.getItem("grow-cloud-dirty-idol") === "1", "장부가 '결정 필요'로 남는다");
+    check(LS.getItem("trainee-save-v1-slots") === IDOL_A_LONG, "이 기기 기록은 그대로다");
+    check(!$(".cloud-toast"), "받지도 못했으면서 '맞췄어요'라고 하지 않는다");
+    check(window.Cloud._t.decide("idol", UP) === "conflict", "다음 실행에서 다시 물어본다");
   }
 
   console.log(fail ? `\n❌ 실패 ${fail}건` : "\n✅ 통과");

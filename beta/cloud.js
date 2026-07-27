@@ -815,6 +815,32 @@
     return parts.join("·") + "만 있어요";
   }
 
+  /* 이 꾸러미가 마지막으로 저장된 시각. 8종 모두 세이브 안에 savedAt을 넣어요.
+   * 슬롯 맵이면 가장 최근 슬롯의 값, 평키면 그 값이에요. 못 찾으면 0.
+   *
+   * 기기 시계라 완벽하진 않아요. 하지만 "어느 쪽이 더 진행됐나"를 알려면
+   * 결국 세이브가 스스로 말해주는 시각을 볼 수밖에 없어요. 서버 updated는
+   * '언제 올렸나'라서, 오래된 세이브를 방금 올린 기기가 이겨버려요. */
+  function progressAt(game, obj) {
+    if (!obj) return 0;
+    var best = 0;
+    var take = function (raw) {
+      if (!raw) return;
+      try {
+        var v = JSON.parse(raw);
+        if (!v || typeof v !== "object") return;
+        if (typeof v.savedAt === "number") { if (v.savedAt > best) best = v.savedAt; return; }
+        Object.keys(v).forEach(function (k) {          // 슬롯 맵
+          var st = v[k];
+          if (st && typeof st === "object" && typeof st.savedAt === "number" && st.savedAt > best) best = st.savedAt;
+        });
+      } catch (e) { /* 못 읽으면 판단 근거가 없는 거예요 */ }
+    };
+    take(obj[SAVE[game] + "-slots"]);
+    take(obj[SAVE[game]]);
+    return best;
+  }
+
   function summarize(game, obj) {
     if (!obj || typeof obj !== "object" || !Object.keys(obj).length) return null;
     var f = SUMMARY[game];
@@ -1080,8 +1106,37 @@
         return;
       }
 
+      /* 어느 쪽이 더 최근에 저장됐는지 알 수 있으면 묻지 않고 최신으로 맞춰요.
+       * 기기를 오가며 플레이하면 이 상황이 매번 생기는데, 그때마다 똑같아 보이는
+       * 두 줄을 놓고 고르라고 하면 쓸 수가 없어요. 판단이 설 때만 자동으로 하고,
+       * 못 가릴 때(시각이 없거나 같을 때)만 아래 화면으로 물어봐요. */
+      var mineAt = progressAt(game, collect(game));
+      var theirsAt = progressAt(game, rows[0].data);
+      /* 단, 이 게임을 한 번도 올린 적 없으면(도장 없음) 절대 자동으로 정하지 않아요.
+       * 그건 "두 기기가 같은 줄기를 나눠 가진" 상황이 아니라, 이 기기에만 있는
+       * 기록을 처음 만난 상황이에요. 옛 폰에 몇 달치가 남아 있는데 새 폰에서 오늘
+       * 조금 한 게 더 최근이라고 덮으면 되돌릴 수 없어요. */
+      var everSynced = !!get(syncKey(game));
+      if (everSynced && mineAt && theirsAt && mineAt !== theirsAt) {
+        if (theirsAt > mineAt) {
+          if (!apply(game, rows[0].data)) return;
+          set(syncKey(game), String(rows[0].updated));
+          set(dirtyKey(game), "0");
+          releaseDecision([game]);
+          toast("☁️ 더 최근에 진행한 기록으로 맞췄어요");
+          reloadSoon(900);
+        } else {
+          // 이 기기가 더 최근이에요. 올리면 반대편이 다음에 켤 때 받아가요.
+          releaseDecision([game]);
+          push(game);
+          toast("☁️ 이 기기 기록이 더 최근이라 그대로 둬요");
+        }
+        return;
+      }
+
       var ov = shell(
         '<p class="av-title">⚠️ 두 기기에서 각각 진행됐어요</p>' +
+        '<p class="cloud-note">어느 쪽이 더 최근인지 알 수 없어서 여쭤봐요.</p>' +
         '<div class="cloud-pick">이 기기 &nbsp; ' + esc(LABEL[game]) + ' — ' + esc(mine) + '</div>' +
         '<div class="cloud-pick">다른 기기 &nbsp; ' + esc(LABEL[game]) + ' — ' + esc(theirs || "기록 없음") +
           agoTag(rows[0].updated) + '</div>' +

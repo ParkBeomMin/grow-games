@@ -16,7 +16,7 @@ doppler run -- bash tests/cloud/server-e2e.sh    # 실서버 (선택)
 | `cloud-ui-test.js` | 연동 모달, 코드 발급, 클립보드 |
 | `cloud-behavior-test.js` | 화면에서 고른 결과가 localStorage에 정확히 반영되는지 |
 | `cloud-manual-check.js` | 실제 저장 모양(슬롯 맵·평키)으로 만든 픽스처 검증 |
-| `cloud-regression-test.js` | 기존 플레이어 업그레이드 경로 (도장 없는 세이브) |
+| `cloud-regression-test.js` | 기존 플레이어 업그레이드 경로 (도장 없는 세이브) · savedAt으로 최신을 가려 자동으로 맞추는 갈래 |
 | `career-cloud-test.js` | 결산·은퇴·환생에서 mark()가 최신 상태를 올리는지 |
 | `cloud-pushall-test.js` | 코드 발급 시 8종을 다 올리는지, 결정 중인 게임은 건너뛰는지 |
 | `cloud-link-screen-test.js` | 연동 화면이 빈 상태·충돌 없음·충돌 있음에 맞게 바뀌는지 |

@@ -918,10 +918,12 @@ const tick = (ms) => new Promise((r) => setTimeout(r, ms || 25));
   }
   {
     // 충돌 화면 — 유니콘은 탭 전환 없이도 touch()만으로 전송이 나간다 (쉬지 않고 저장하는 게임)
+    // 양쪽 savedAt을 똑같이 둔다 = 어느 쪽이 더 최근인지 가릴 수 없어 실제로 사람에게 묻는 경우다.
+    // (다르면 자동으로 최신에 맞춰서 이 화면 자체가 안 뜬다 — 그 갈래는 27)에서 따로 본다)
     const UP = "2026-07-27T05:00:00Z";
     const { window, calls, LS, $ } = mk({
       cloud_meta: [{ game: "beta:unicorn", updated: UP }],
-      cloud_pull: [{ game: "beta:unicorn", updated: UP, data: { "unicorn-save-v1": JSON.stringify({ company: "저쪽", bestRun: 6e9, savedAt: 9 }) } }],
+      cloud_pull: [{ game: "beta:unicorn", updated: UP, data: { "unicorn-save-v1": JSON.stringify({ company: "저쪽", bestRun: 6e9, savedAt: unicornSave.savedAt }) } }],
       cloud_push: "2026-07-27T09:00:00Z",
     });
     LS.setItem("unicorn-save-v1", JSON.stringify(unicornSave));
@@ -945,10 +947,11 @@ const tick = (ms) => new Promise((r) => setTimeout(r, ms || 25));
   }
   {
     // 충돌 화면을 닫아버린 경우 — 역시 아무것도 올라가지 않고 장부가 남는다
+    // (위와 같은 이유로 양쪽 savedAt이 같다 = 진짜로 물어보는 경우)
     const UP = "2026-07-27T05:00:00Z";
     const { window, calls, LS, $ } = mk({
       cloud_meta: [{ game: "beta:unicorn", updated: UP }],
-      cloud_pull: [{ game: "beta:unicorn", updated: UP, data: { "unicorn-save-v1": JSON.stringify({ company: "저쪽", bestRun: 6e9, savedAt: 9 }) } }],
+      cloud_pull: [{ game: "beta:unicorn", updated: UP, data: { "unicorn-save-v1": JSON.stringify({ company: "저쪽", bestRun: 6e9, savedAt: unicornSave.savedAt }) } }],
       cloud_push: "2026-07-27T09:00:00Z",
     });
     LS.setItem("unicorn-save-v1", JSON.stringify(unicornSave));
@@ -1082,8 +1085,9 @@ const tick = (ms) => new Promise((r) => setTimeout(r, ms || 25));
     check(pushesFor(calls, "unicorn") === 0,
       `화면이 뜨기 전이라도 물어볼 게 있으면 올리지 않는다 (푸시 ${pushesFor(calls, "unicorn")}회)`);
 
+    // 양쪽 savedAt이 같다 = 가릴 수 없어 실제로 화면이 뜨는 경우
     release([{ game: "beta:unicorn", updated: UP,
-      data: { "unicorn-save-v1": JSON.stringify({ company: "저쪽", bestRun: 6e9, savedAt: 9 }) } }]);
+      data: { "unicorn-save-v1": JSON.stringify({ company: "저쪽", bestRun: 6e9, savedAt: unicornSave.savedAt }) } }]);
     await tick(60);
     check(!!$("#cloud-keep"), "왕복이 끝나면 화면이 뜬다");
   }
