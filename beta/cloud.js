@@ -528,12 +528,17 @@
     closeModal();
     var ov = document.createElement("div");
     ov.className = "av-overlay cloud-overlay";
+    // closeLabel이 빈 문자열이면 아래 버튼을 아예 달지 않아요.
+    // 고를 게 없는 화면에 갈래를 두 개 두면, 결과가 같은데도 고르라고 하는 셈이에요.
     ov.innerHTML = '<div class="av-modal cloud-modal">' + inner +
-      '<div class="av-actions"><button class="btn btn-ghost cloud-close">' +
-      esc(closeLabel || "닫기") + '</button></div></div>';
+      (closeLabel === ""
+        ? ""
+        : '<div class="av-actions"><button class="btn btn-ghost cloud-close">' +
+          esc(closeLabel || "닫기") + '</button></div>') + '</div>';
     ov.addEventListener("click", function (e) { if (e.target === ov) closeModal(); });
     document.body.appendChild(ov);
-    ov.querySelector(".cloud-close").onclick = closeModal;
+    var cb = ov.querySelector(".cloud-close");
+    if (cb) cb.onclick = closeModal;
     return ov;
   }
 
@@ -929,12 +934,14 @@
       });
 
       var html = '<p class="av-title">🔗 기기를 연결했어요</p>' +
-        '<p class="cloud-note">연결은 이미 끝났어요. 여기서는 <b>어느 기록을 남길지</b>만 정해요.</p>';
+        (pick.length
+          ? '<p class="cloud-note">연결은 이미 끝났어요. 여기서는 <b>어느 기록을 남길지</b>만 정해요.</p>'
+          : '<p class="cloud-note">연결은 이미 끝났어요.</p>');
       if (auto.length) {
         // "양쪽을 맞춘다"고 하면 안 돼요. 이 기기에만 있는 기록은 그 게임을 열어야
         // 서버로 올라가서, 지금 당장 반대편 기기에 보이지는 않아요.
-        html += '<p>한쪽에만 있는 기록이에요. 다른 기기 것은 지금 가져오고, ' +
-                '이 기기 것은 그 게임을 열 때 서버로 올라가요.</p>';
+        html += '<p>' + (pick.length ? '한쪽에만 있는 기록이에요. ' : '') +
+                '다른 기기 것은 지금 가져오고, 이 기기 것은 그 게임을 열 때 서버로 올라가요.</p>';
         auto.forEach(function (a) {
           html += '<div class="cloud-pick">' + esc(LABEL[a.g]) + ' — ' + esc(a.txt) +
                   ' <span class="cloud-ago">(' + a.from + ')</span>' + agoTag(a.when) + '</div>';
@@ -960,10 +967,13 @@
           '</div>';
       });
       // 고를 게 없으면 "고른 대로"라고 하지 않아요 — 그냥 가져오는 것뿐이에요.
+      /* 고를 게 없으면 갈래를 주지 않아요.
+       * "나중에 하기"를 눌러도 각 게임을 열 때 어차피 자동으로 받아와서 결과가 같아요.
+       * 결과가 같은 두 버튼은 고민만 시켜요. */
       html += '<button class="btn btn-primary" id="cloud-done">' +
-        (pick.length ? "고른 대로 기록 맞추기" : "기록 가져오기") + '</button>';
+        (pick.length ? "고른 대로 기록 맞추기" : "확인") + '</button>';
 
-      var ov = shell(html, pick.length ? "나중에 정하기" : "나중에 하기");
+      var ov = shell(html, pick.length ? "나중에 정하기" : "");
       // 붙잡는 건 orphanLedger()가 claim 직후에 이미 해뒀어요. 여기서는 풀지 않아요 —
       // 아래 확인 버튼(= 사람이 실제로 고른 순간)에서만 풀어줘요.
       ov.querySelector("#cloud-done").onclick = function () {

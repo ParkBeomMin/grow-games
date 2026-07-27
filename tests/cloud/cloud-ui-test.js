@@ -568,18 +568,18 @@ const issueCalls = (calls) => calls.filter((c) => c.fn === "cloud_issue").length
       `정할 게 남은 연결 화면의 닫기 버튼은 '나중에 정하기'라고 말한다 (실제: "${closeA && closeA.textContent}")`);
   }
   {
-    // b) 한쪽에만 기록이 있어 고를 게 없는(그냥 받아오기만 하는) 연결 화면 — "나중에 하기".
+    // b) 고를 게 없는 연결 화면 — 확인 하나뿐이고 닫기 버튼이 없어요.
     const { window, LS, $ } = mk({ cloud_pull: [] });
     LS.setItem(SAVE.rookie + "-slots", JSON.stringify({ s1: { phase: "pro", proYear: 1, savedAt: 1 } }));
     window.Cloud._t.openLink();
     await tick(40);
 
     const modal = $(".cloud-modal");
-    check(!!modal && /기록 가져오기/.test(modal.textContent),
-      `고를 게 없는 화면이 맞다 — 버튼이 '기록 가져오기'다 (전제 확인, 실제: "${modal && modal.textContent}")`);
+    check(!!modal && /확인/.test(modal.textContent),
+      `고를 게 없는 화면이 맞다 — 버튼이 '확인'이다 (전제 확인, 실제: "${modal && modal.textContent}")`);
     const closeB = $(".cloud-close");
-    check(!!closeB && closeB.textContent === "나중에 하기",
-      `고를 게 없는 연결 화면의 닫기 버튼은 '나중에 하기'라고 말한다 (실제: "${closeB && closeB.textContent}")`);
+    check(!closeB,
+      `고를 게 없는 연결 화면엔 닫기 버튼이 없다 (실제: "${closeB && closeB.textContent}")`);
   }
   {
     // c) 양쪽 다 기록이 없는 빈 연결 화면 — "확인" (여기엔 취소할 결정 자체가 없다).

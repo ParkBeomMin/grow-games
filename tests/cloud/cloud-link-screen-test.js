@@ -7,7 +7,7 @@
  *
  * 고친 내용:
  *   - 양쪽 다 기록이 없으면 고르는 버튼 없이 설명만 보여준다.
- *   - 고를 게 없이 가져오기만 하면 되면(한쪽에만 있는 게임들뿐) 버튼이 "기록 가져오기".
+ *   - 고를 게 없으면(한쪽에만 있는 게임들뿐) 버튼은 "확인" 하나뿐이고 닫기 버튼이 없다.
  *   - 진짜 고를 게 있으면(양쪽 다 있는 게임이 하나라도 있으면) 버튼이 "고른 대로 기록 맞추기".
  *
  * 픽스처는 반드시 디스크의 실제 저장 모양이어야 한다 — 7종은 <SAVE_KEY>-slots 슬롯 맵,
@@ -80,7 +80,7 @@ const snapshot = (LS) => JSON.stringify(Object.keys(LS).sort().map((k) => [k, LS
   }
 
   // ============================================================
-  group("4) 한쪽에만 있는 기록뿐인 연결 화면 — '기록 가져오기'로만 말한다");
+  group("4) 한쪽에만 있는 기록뿐인 연결 화면 — 확인 하나뿐, 갈래를 주지 않는다");
   {
     const UP = "2026-07-27T05:00:00Z";
     // 이 기기: rookie만 있다. 서버(다른 기기): idol만 있다. 겹치는 게임이 하나도 없다.
@@ -96,8 +96,10 @@ const snapshot = (LS) => JSON.stringify(Object.keys(LS).sort().map((k) => [k, LS
 
     const btn = $("#cloud-done");
     check(!!btn, "확인 버튼이 있다 (가져올 게 있으므로)");
-    check(!!btn && btn.textContent.trim() === "기록 가져오기",
-      `고를 게 없으니 버튼이 '기록 가져오기'다 — "${btn && btn.textContent}"`);
+    check(!!btn && btn.textContent.trim() === "확인",
+      `고를 게 없으니 버튼이 '확인'이다 — "${btn && btn.textContent}"`);
+    check(!$(".cloud-close"),
+      "결과가 같은 두 갈래를 주지 않는다 — 닫기 버튼이 없다");
     check(btn ? btn.textContent.indexOf("고른 대로") === -1 : true,
       "'고른 대로'라는 말은 쓰지 않는다 (고를 게 없으니)");
     check(!$('input[type="radio"]'), "고를 게 없으니 라디오도 없다");
