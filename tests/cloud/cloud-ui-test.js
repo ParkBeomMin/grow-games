@@ -332,8 +332,8 @@ const issueCalls = (calls) => calls.filter((c) => c.fn === "cloud_issue").length
     check(!!box && /이미 연결돼 있어요/.test(box.textContent),
       `이미 연결돼 있다는 안내가 뜬다 — "${box && box.textContent}"`);
     const relink = $("#cloud-relink");
-    check(!!relink && /다른 기기 기록 다시 보기/.test(relink.textContent),
-      `'다른 기기 기록 다시 보기' 버튼이 있다 — "${relink && relink.textContent}"`);
+    check(!!relink && /어느 기록을 남길지 고르기/.test(relink.textContent),
+      `'어느 기록을 남길지 고르기' 버튼이 있다 — "${relink && relink.textContent}"`);
   }
 
   // ============================================================
@@ -352,7 +352,7 @@ const issueCalls = (calls) => calls.filter((c) => c.fn === "cloud_issue").length
   }
 
   // ============================================================
-  group("11) '다른 기기 기록 다시 보기'를 누르면 코드 없이 연결 화면이 열리고, cloud_claim은 나가지 않는다");
+  group("11) '어느 기록을 남길지 고르기'를 누르면 코드 없이 연결 화면이 열리고, cloud_claim은 나가지 않는다");
   {
     const { window, $, calls } = mk({
       cloud_meta: [{ game: "beta:rookie", updated: "2026-07-27T00:00:00Z" }],
@@ -389,8 +389,8 @@ const issueCalls = (calls) => calls.filter((c) => c.fn === "cloud_issue").length
     const msg = $("#cloud-msg");
     check(!!msg && /한 번 쓰면 사라져요/.test(msg.textContent),
       `코드는 한 번 쓰면 사라진다는 설명이 덧붙는다 — "${msg && msg.textContent}"`);
-    check(!!msg && /다른 기기 기록 다시 보기/.test(msg.textContent),
-      `'다른 기기 기록 다시 보기' 버튼을 가리킨다 — "${msg && msg.textContent}"`);
+    check(!!msg && /어느 기록을 남길지 고르기/.test(msg.textContent),
+      `'어느 기록을 남길지 고르기' 버튼을 가리킨다 — "${msg && msg.textContent}"`);
   }
 
   // ============================================================

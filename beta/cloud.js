@@ -640,7 +640,7 @@
         if (!box || !rows || !rows.length) return;
         box.innerHTML = '<hr class="cloud-sep"/>' +
           '<p>이 기기는 이미 연결돼 있어요. 코드를 다시 넣지 않아도 돼요.</p>' +
-          '<button class="btn btn-ghost" id="cloud-relink">📂 다른 기기 기록 다시 보기</button>';
+          '<button class="btn btn-ghost" id="cloud-relink">📂 어느 기록을 남길지 고르기</button>';
         box.querySelector("#cloud-relink").onclick = function () { closeModal(); openLink(); };
       }).catch(function () {});
     })();
@@ -691,7 +691,7 @@
               '코드는 그대로 살아 있어요.</p>'
             : '<p>⚠️ 코드가 맞지 않거나 이미 사용됐어요.<br/>' +
               '연동 코드는 한 번 쓰면 사라져요. 이미 연결하셨다면 아래 ' +
-              '"다른 기기 기록 다시 보기"를 쓰시면 돼요.</p>';
+              '"어느 기록을 남길지 고르기"를 쓰시면 돼요.</p>';
           return;
         }
         // 계정이 바뀌었으니 내가 갖고 있던 코드는 이제 남의 계정 것이에요
