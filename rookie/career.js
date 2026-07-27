@@ -393,7 +393,11 @@ window.Career = (() => {
     const perf = { pts: 0, line: "", highlight: "", ab: abs, hits: 0, hr: 0, sb: 0 };
     const story = { ourInn: Array(9).fill(0), oppInn: Array(9).fill(0), events: [], proAb: abInns };
     const oppRuns = randInt(1, 5);
-    const ourBg = randInt(0, 3);
+    /* 팀 동료가 내는 점수예요. 예전에는 randInt(0,3)(평균 1.5점)이었는데,
+     * 그건 내가 혼자 4점 넘게 뽑아내던 시절에 맞춰진 값이에요. 타격을 실제
+     * 야구 수준으로 되돌리면서 팀도 같이 점수를 내야 승패가 말이 됩니다.
+     * 소속팀 전력을 섞어서 강팀으로 이적하면 실제로 더 이깁니다. */
+    const ourBg = clamp(randInt(1, 4) + Math.round((teamStrOf(S.team) - 0.49) * 6), 0, 6);
     for (let i = 0; i < oppRuns; i++) story.oppInn[randInt(0, 8)]++;
     for (let i = 0; i < ourBg; i++) story.ourInn[randInt(0, 8)]++;
     $("tour-title").textContent = seasonLabel();
