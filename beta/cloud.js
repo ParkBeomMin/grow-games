@@ -174,8 +174,29 @@
   var get = function (k) { try { return localStorage.getItem(k); } catch (e) { return null; } };
   var set = function (k, v) { try { localStorage.setItem(k, v); } catch (e) {} };
 
+  /* 사람이 고르는 중인 게임 — 화면이 결론 날 때까지 서버를 건드리지 않아요. (스펙 5.4
+   * "고르기 전에는 어느 쪽도 바꾸지 않는다")
+   *
+   * 연결 화면·충돌 화면은 "어느 쪽을 남길까요"를 묻고 있어요. 그런데 그 게임을 겨누는
+   * 배경 전송이 두 갈래로 이미 걸려 있어요 — init()의 visibilitychange(탭 전환·화면 잠금)와
+   * touch()의 2분 주기 전송(방금 claim한 직후라 lastPush=0이니 첫 저장에서 바로 나가요).
+   * 유니콘처럼 쉼 없이 저장하는 게임은 탭을 옮기지 않아도 걸려요.
+   *
+   * 물어보는 중에 전송이 나가면 "이 기기 것 쓰기"를 사용자 대신 눌러버리는 셈이에요.
+   * 게다가 그 뒤 '다른 기기'를 고르면 화면이 붙잡고 있던 **전송 이전의** 서버 시각으로
+   * 도장을 찍어요. 그러면 양쪽 기기 모두 다음 실행에서 "서버가 더 최신"으로 판정해
+   * 묻지 않는 pull을 돌리고, 방금 고른 기록이 배경 전송본으로 되돌아가요.
+   * 화면 한 번 안 보여주고 커리어가 사라지는, 되돌릴 수 없는 손실이에요.
+   *
+   * 그래서 화면이 결론 날 때까지(고르기·닫기 모두) 그 게임의 push를 막아요.
+   * 장부(dirty)는 건드리지 않으니, 버리고 나가도 다음 실행에서 다시 물어봐요. */
+  var awaiting = {};
+  function holdDecision(games) { games.forEach(function (g) { awaiting[g] = true; }); }
+  function releaseDecision(games) { games.forEach(function (g) { delete awaiting[g]; }); }
+
   function push(game) {
     if (!game || !SAVE[game]) return Promise.resolve();
+    if (awaiting[game]) return Promise.resolve();   // 사람이 고르는 중이에요
     var tok = token();
     if (!tok) return Promise.resolve(); // 기기 정체성이 없으면 클라우드는 조용히 쉬어요
     // 빈 꾸러미는 올리지 않아요 — 한 번도 안 해본 게임을 {}로 덮어쓰면
@@ -183,15 +204,15 @@
     var data = collect(game);
     if (!Object.keys(data).length) return Promise.resolve();
     lastPush = Date.now();
-    syncStart();
+    var gen = syncStart();
     return rpc("cloud_push", { p_token: tok, p_game: tag(game), p_data: data })
       .then(function (at) {
         set(syncKey(game), String(at));
         set(dirtyKey(game), "0");
-        syncEnd(true);
+        syncEnd(true, gen);
         pushShared();
       })
-      .catch(function () { syncEnd(false); /* 그 외에는 조용히 넘어가요 */ });
+      .catch(function () { syncEnd(false, gen); /* 그 외에는 조용히 넘어가요 */ });
   }
 
   function pushShared() {
@@ -279,6 +300,7 @@
   var syncShown = false;   // 지금 화면에 "동기화중"을 띄웠나
   var syncLive = 0;        // 아직 안 끝난 전송 수 (겹칠 수 있어요)
   var syncBad = false;     // 이번 묶음에 실패가 하나라도 있었나
+  var syncGen = 0;         // 천장에 닿아 세어둔 걸 버릴 때마다 올라가는 세대 번호
 
   function syncPill(text, cls, ms) {
     if (!document.body) return;
@@ -312,7 +334,7 @@
 
   function syncStart() {
     syncLive++;
-    if (syncTimer || syncShown) return;   // 이미 예약됐거나 떠 있으면 그대로 둬요
+    if (syncTimer || syncShown) return syncGen;   // 이미 예약됐거나 떠 있으면 그대로 둬요
     syncTimer = setTimeout(function () {
       syncTimer = null;
       if (!syncLive) return;
@@ -320,13 +342,20 @@
       syncPill("☁️ 동기화중…", "", 0);
       syncCap = setTimeout(function () {
         // 천장에 닿았어요 = 이 정도 걸리면 사실상 끊긴 거예요. 솔직하게 알리고 걷어요.
+        // 여기서 세대를 넘겨요. 아직 날아다니던 요청이 나중에 응답을 물고 돌아와도
+        // 이미 없는 셈 친 전송이라, 그때 syncEnd가 돌면 그 사이 시작된 **새** 전송의
+        // 알약을 대신 걷어가거나 엉뚱한 "오프라인"을 띄워요. 옛 세대는 그냥 무시해요.
+        syncGen++;
         syncCap = null; syncShown = false; syncLive = 0; syncBad = false;
         syncPill("오프라인", "cloud-sync-off", 2000);
       }, SYNC_MAX);
     }, SYNC_WAIT);
+    return syncGen;
   }
 
-  function syncEnd(ok) {
+  // gen은 syncStart()가 돌려준 세대 번호예요. 안 넘기면(옛 호출·검증용) 그대로 받아줘요.
+  function syncEnd(ok, gen) {
+    if (gen !== undefined && gen !== syncGen) return;   // 천장에서 이미 걷어낸 전송이에요
     if (syncLive > 0) syncLive--;
     if (!ok) syncBad = true;
     if (syncLive > 0) return;   // 아직 남은 전송이 있어요 — 다 끝나면 한 번만 말해요
@@ -352,9 +381,14 @@
     setTimeout(function () { el.remove(); }, ms || 1800);
   }
 
+  /* 지금 떠 있는 화면이 붙잡고 있는 게임들 — 화면이 사라질 때 풀어줘요.
+   * 고르기·닫기·바깥 탭 어느 길로 닫혀도 여기를 지나가요. shell()이 새 화면을 만들기
+   * 전에 closeModal()을 먼저 부르니, 목록은 화면을 만든 **뒤에** 채워야 해요. */
+  var closeRelease = [];
   function closeModal() {
     var ov = document.querySelector(".cloud-overlay");
     if (ov) ov.remove();
+    if (closeRelease.length) { releaseDecision(closeRelease); closeRelease = []; }
   }
 
   function shell(inner) {
@@ -430,6 +464,11 @@
       try { localStorage.removeItem(syncKey(g)); } catch (e) {}
       if (hasData(collect(g))) set(dirtyKey(g), "1");
     });
+    // 방금 dirty로 세운 게임들은 곧바로 배경 전송의 표적이 돼요(visibilitychange·touch).
+    // 연결 화면이 결론 날 때까지 붙잡아 둡니다.
+    // cloud_pull이 실패해 화면조차 못 띄운 경우에는 물어볼 기회가 아예 없으니
+    // 이번 실행 내내 붙잡아 둬요 — 장부는 dirty로 남아 다음 실행에서 다시 물어봐요.
+    holdDecision(GAMES);
   }
 
   function openModal() {
@@ -618,7 +657,15 @@
   // 화면에 쓸 문구. 있는데 설명을 못 만들면 "기록 있음"으로라도 보여줘요.
   function describe(game, obj) {
     if (!hasData(obj)) return null;
-    return summarize(game, obj) || sideOnly(game, obj) || "기록 있음";
+    var txt = summarize(game, obj) || sideOnly(game, obj) || "기록 있음";
+    /* 커리어와 환생 유산이 한 기기에 같이 있는 경우가 있어요.
+     * 한쪽을 고르면 게임이 통째로 바뀌므로(5.3, 섞지 않아요) 유산도 같이 사라지는데,
+     * 요약이 커리어만 말하면 사라진다는 걸 아무도 모른 채 고르게 돼요.
+     * 동작을 바꾸지는 않고(통째 교체가 의도한 방식이에요) 무엇이 걸려 있는지만 덧붙여요.
+     * 곁가지만 있는 기기는 sideOnly가 이미 "환생 유산…"이라고 말하니 겹쳐 쓰지 않아요. */
+    var lk = game === "unicorn" ? null : SAVE[game] + "-legacy";
+    if (lk && obj[lk] != null && txt.indexOf("환생 유산") === -1) txt += " · 환생 유산도 함께";
+    return txt;
   }
 
   /* 스펙 5.4·6.2의 "(2시간 전)".
@@ -661,15 +708,16 @@
         var mine = describe(g, collect(g));
         var theirs = remote[g] ? describe(g, remote[g].data) : null;
         if (mine && theirs) {
-          // 기본값은 이 기기예요. 서버가 확실히 더 최신일 때만 저쪽으로 넘겨요.
-          // 기기 시계는 안 봐요 — 서버가 찍어준 두 시각(remote.updated 대 syncKey)만 비교해요.
-          // syncKey가 없다 = 이 기기가 아직 한 번도 못 올렸다는 뜻이라,
-          // 오히려 서버에 사본이 없는 가장 위험한 기록이에요. "서버가 더 최신"으로
-          // 치면 안 돼요 — 기능을 막 켠 사람은 전부 이 상태라 전부 저쪽으로 넘어가요.
-          var synced = get(syncKey(g));
-          var up = remote[g].updated;
-          var remoteNewer = !!up && !!synced && Date.parse(up) > Date.parse(synced);
-          pick.push({ g: g, mine: mine, theirs: theirs, remoteNewer: remoteNewer, when: up });
+          // 기본 선택은 **언제나 이 기기**예요.
+          //
+          // 스펙 6.2는 "서버가 더 최신이면 다른 기기"라고 적었지만, 이 화면에 오는 길은
+          // 코드 넣기(claim) 직후 하나뿐이고 그 세 줄 위에서 orphanLedger()가
+          // grow-cloud-synced-* 를 전부 지워요. 비교할 도장이 남아 있지 않아요.
+          // 설령 남았더라도 그건 claim으로 버려진 **옛 계정** 기준 시각이라,
+          // 새 계정의 updated와는 애초에 견줄 수 없는 값이에요.
+          // 비교할 수 없는 두 시각을 억지로 재는 대신, 잃으면 되돌릴 수 없는 쪽
+          // (아직 서버에 사본이 없는 이 기기)을 기본으로 둡니다.
+          pick.push({ g: g, mine: mine, theirs: theirs, when: remote[g].updated });
         } else if (theirs) auto.push({ g: g, from: "다른 기기", txt: theirs, when: remote[g].updated });
         else if (mine) auto.push({ g: g, from: "이 기기", txt: mine, when: null });
       });
@@ -687,17 +735,17 @@
       }
       if (pick.length) html += '<p>⚠️ 양쪽 모두 기록이 있어요. 어느 쪽을 남길지 골라주세요. 고르지 않은 쪽은 사라져요.</p>';
       pick.forEach(function (p) {
-        var m = p.remoteNewer ? "" : " checked";
-        var t = p.remoteNewer ? " checked" : "";
         html += '<div class="cloud-pick"><b>' + esc(LABEL[p.g]) + '</b>' +
-          '<label><input type="radio" name="pk-' + p.g + '" value="mine"' + m + '/> 이 기기 — ' + esc(p.mine) + '</label>' +
-          '<label><input type="radio" name="pk-' + p.g + '" value="theirs"' + t + '/> 다른 기기 — ' + esc(p.theirs) +
+          '<label><input type="radio" name="pk-' + p.g + '" value="mine" checked/> 이 기기 — ' + esc(p.mine) + '</label>' +
+          '<label><input type="radio" name="pk-' + p.g + '" value="theirs"/> 다른 기기 — ' + esc(p.theirs) +
             agoTag(p.when) + '</label>' +
           '</div>';
       });
       html += '<button class="btn btn-primary" id="cloud-done">고른 대로 기록 맞추기</button>';
 
       var ov = shell(html);
+      // 이 화면이 결론 날 때까지 아무 게임도 서버로 올리지 않아요 (닫기·바깥 탭도 여기를 지나가요)
+      closeRelease = GAMES.slice();
       ov.querySelector("#cloud-done").onclick = function () {
         var pulled = [], kept = [];
         pick.forEach(function (p) {
@@ -710,6 +758,12 @@
 
         // 받아온 게임은 "서버와 같음"으로 적어둬요. 이걸 안 해두면 켤 때마다
         // 방금 해결한 게임이 또 충돌 화면으로 올라와요.
+        //
+        // 여기 찍는 시각은 위 cloud_pull이 돌려준 값이라, 화면을 보는 동안 다른 기기가
+        // 같은 게임을 올렸다면 이미 지난 시각이에요. 그래도 안전한 쪽으로 틀려요 —
+        // 서버가 우리 도장보다 새로우니 다음 실행에서 pull이나 충돌 화면으로 이어지고,
+        // 어느 쪽도 사용자에게 묻지 않고 기록을 지우지 않아요.
+        // (지금 응답의 시각으로 다시 받아오면 그 사이 변경을 조용히 삼키게 돼요)
         pulled.forEach(function (g) {
           var row = remote[g];
           if (row && apply(g, row.data)) {
@@ -730,6 +784,8 @@
           // 서버 쪽 버전을 "이미 보고 이 기기 것으로 정했다"고 적어둬요.
           // 이걸 빼먹으면 다음에 켤 때 dirty × 서버가-더-최신이 다시 성립해서
           // 방금 고른 게임이 또 충돌 화면으로 올라와요.
+          // 위와 같은 이유로 이 시각도 화면을 여는 순간의 값이에요. 그 사이 서버가 움직였다면
+          // 충돌 화면이 한 번 더 뜰 뿐, 안전한 쪽으로 틀려요.
           var row = remote[g];
           if (row && row.updated) set(syncKey(g), String(row.updated));
         });
@@ -774,7 +830,22 @@
         '<button class="btn btn-primary" id="cloud-keep">이 기기 것 쓰기</button>' +
         '<button class="btn btn-ghost" id="cloud-take">다른 기기 것 쓰기</button>'
       );
-      ov.querySelector("#cloud-keep").onclick = function () { closeModal(); push(game); _toast("이 기기 기록을 올렸어요"); };
+      // 화면이 결론 날 때까지 이 게임은 서버로 올라가지 않아요 (닫기·바깥 탭도 closeModal을 지나가요)
+      holdDecision([game]);
+      closeRelease = [game];
+
+      // closeModal()이 먼저예요 — 그래야 붙잡아둔 걸 풀고 push가 실제로 나가요.
+      // 그리고 아직 안 끝난 일을 끝났다고 말하지 않아요. push()는 실패를 삼키니
+      // 성공 여부는 장부(dirty)가 대신 말해줘요. (토스트가 떠 있는 동안은 동기화 알약이
+      // 자리를 양보하므로, 실패를 여기서 말해주지 않으면 사용자는 영영 알 수 없어요)
+      ov.querySelector("#cloud-keep").onclick = function () {
+        closeModal();
+        _toast("이 기기 기록을 올리는 중이에요");
+        push(game).then(function () {
+          if (get(dirtyKey(game)) === "0") _toast("이 기기 기록을 올렸어요");
+          else _toast("지금은 서버에 못 보냈어요. 다음에 다시 시도할게요");
+        });
+      };
       ov.querySelector("#cloud-take").onclick = function () {
         if (!apply(game, rows[0].data)) {
           // 서버가 빈 꾸러미였어요 — 지우지 않고 이 기기 것을 지켜요
