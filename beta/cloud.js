@@ -125,8 +125,26 @@
    *     게임의 save()가 먼저 돌고 우리가 마지막에 덮어써서 최종값이 보장돼요. */
   var pending = [];          // 적용한 기록 — 언로드 직전에 다시 써요
   var pendingHooked = false;
+  var FREEZE_GRACE = 2000;   // 이 안에 새로고침이 예약되지 않으면 깃발을 풀어요
+  var reloadPlanned = false;
+  var freezeWatch = null;
+
+  // 새로고침 예약 — frozen 깃발과 짝이에요. 여기를 거쳐야 깃발이 계속 유지돼요.
+  function reloadSoon(ms) {
+    reloadPlanned = true;
+    setTimeout(function () { try { location.reload(); } catch (e) {} }, ms || 0);
+  }
+
   function freeze(game, obj) {
     if (window.Cloud) window.Cloud.frozen = true;
+    // 이 깃발은 "곧 새로고침한다"는 전제에서만 안전해요. 새로고침하지 않는 apply()가
+    // 나중에 생기면 유니콘 저장이 그 세션 내내 조용히 멈춰버려요. 그래서 잠깐 기다렸다가
+    // 새로고침 예약이 없으면 스스로 풀어요. (언로드 재기록은 그대로 남아 있어서 안전해요)
+    if (freezeWatch) clearTimeout(freezeWatch);
+    freezeWatch = setTimeout(function () {
+      freezeWatch = null;
+      if (!reloadPlanned && window.Cloud) window.Cloud.frozen = false;
+    }, FREEZE_GRACE);
     pending.push({ g: game, o: obj });
     if (pendingHooked) return;
     pendingHooked = true;
@@ -151,13 +169,15 @@
     var data = collect(game);
     if (!Object.keys(data).length) return Promise.resolve();
     lastPush = Date.now();
+    syncStart();
     return rpc("cloud_push", { p_token: tok, p_game: tag(game), p_data: data })
       .then(function (at) {
         set(syncKey(game), String(at));
         set(dirtyKey(game), "0");
+        syncEnd(true);
         pushShared();
       })
-      .catch(function () { /* 조용히 넘어가요 */ });
+      .catch(function () { syncEnd(false); /* 그 외에는 조용히 넘어가요 */ });
   }
 
   function pushShared() {
@@ -203,7 +223,7 @@
       var act = decide(game, mine);
       if (act === "push") push(game);
       else if (act === "pull") pullAndApply(game);
-      else if (act === "conflict") window.Cloud.onConflict(game, mine);
+      else if (act === "conflict") window.Cloud.onConflict(game);
     }).catch(function () {});
   }
 
@@ -224,11 +244,59 @@
       set(syncKey(game), String(row.updated));
       set(dirtyKey(game), "0");
       toast("☁️ 다른 기기 기록을 불러왔어요");
-      setTimeout(function () { location.reload(); }, 900);
+      reloadSoon(900);
     }).catch(function () {});
   }
 
   function toast(msg) { if (window.Cloud._toast) window.Cloud._toast(msg); }
+
+  /* 6.3절 동기화 표시 — 우측 상단의 작은 알약.
+   *   전송 중 ☁️ 동기화중…  / 성공 ✓ 저장됨 (1.5초) / 실패 오프라인 (2초)
+   *
+   * 자동 저장마다 깜빡이면 오히려 방해가 돼요. 그래서 SYNC_WAIT보다 오래 걸린
+   * 전송에만 켜요. 대부분의 저장은 눈 깜짝할 새에 끝나서 화면에 아무것도 안 남고,
+   * 진짜로 네트워크가 굼뜰 때만 보여요. 실패는 빨라도 알려줘요 — 오프라인인 걸
+   * 모르고 계속 두면 곤란하니까요.
+   * position:fixed + pointer-events:none 이라 레이아웃을 밀지도, 터치를 막지도 않아요. */
+  var SYNC_WAIT = 400;
+  var syncTimer = null;
+  var syncOn = false;      // 지금 화면에 "동기화중"을 띄웠나
+
+  function syncPill(text, cls, ms) {
+    if (!document.body) return;
+    // 토스트가 떠 있으면 같은 자리라 자리를 양보해요 (토스트는 사용자에게 하는 말이라 우선)
+    if (document.querySelector(".cloud-toast")) return;
+    var el = document.querySelector(".cloud-sync");
+    if (!el) {
+      el = document.createElement("div");
+      el.setAttribute("role", "status");
+      el.setAttribute("aria-live", "polite");
+      document.body.appendChild(el);
+    }
+    el.className = "cloud-sync" + (cls ? " " + cls : "");
+    el.textContent = text;
+    if (el._t) clearTimeout(el._t);
+    el._t = ms ? setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, ms) : null;
+  }
+
+  function syncStart() {
+    if (syncTimer) clearTimeout(syncTimer);
+    syncOn = false;
+    syncTimer = setTimeout(function () {
+      syncTimer = null; syncOn = true;
+      syncPill("☁️ 동기화중…", "", 0);
+    }, SYNC_WAIT);
+  }
+
+  function syncEnd(ok) {
+    if (syncTimer) { clearTimeout(syncTimer); syncTimer = null; }
+    if (ok) {
+      if (syncOn) syncPill("✓ 저장됨", "cloud-sync-ok", 1500);   // 금방 끝난 저장은 조용히 넘어가요
+    } else {
+      syncPill("오프라인", "cloud-sync-off", 2000);
+    }
+    syncOn = false;
+  }
 
   var esc = function (s) { return String(s).replace(/[&<>]/g, function (c) {
     return { "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]; }); };
@@ -236,6 +304,8 @@
   function _toast(msg, ms) {
     var old = document.querySelector(".cloud-toast");
     if (old) old.remove();
+    var pill = document.querySelector(".cloud-sync");   // 같은 자리를 쓰니 토스트가 우선이에요
+    if (pill) { if (pill._t) clearTimeout(pill._t); pill.remove(); }
     var el = document.createElement("div");
     el.className = "cloud-toast";
     el.textContent = msg;
@@ -389,54 +459,72 @@
     chef: "🍳 요리사", stream: "📺 스트리머", soccer: "⚽ 축구", unicorn: "🦄 유니콘",
   };
 
-  /* 한 줄 요약.
+  /* 한 줄 요약 — "설명"만 담당해요. "있냐 없냐"는 hasData()가 따로 봅니다.
    *
    * 저장 모양이 게임마다 달라요. 8종 중 7종은 SAVE[게임]+"-slots"에 슬롯 맵을 써요
    *   { 슬롯id: { …게임상태…, savedAt: <ms> }, … }
-   * 평키(SAVE[게임])는 슬롯으로 이사시킨 뒤 지워지는 흔적일 뿐이라, 평키만 보면
-   * 7종 전부 "기록 없음"으로 보여요. 진짜 기록을 두고 없다고 말하면 플레이어가
-   * 그대로 눌러버리고 세이브가 날아가요.
+   * 그런데 이 슬롯 이사는 **그 게임 페이지를 열 때** 한 번 일어나요. 이사 전부터
+   * 안 열어본 게임은 아직 평키(SAVE[게임])에만 기록이 있고, 환생 유산(-legacy)이나
+   * 대전 기록(grow-battle-*)만 가진 사람도 있어요. 이걸 "없음"으로 말해버리면
+   * 그 게임은 "서버에만 있음"으로 분류돼 고를 기회도 없이 지워져요.
+   * 그래서 여기서는 어떤 경우에도 "있는 걸 없다고" 하지 않아요.
+   *   ① 슬롯 맵의 최신 슬롯 → ② 평키 → ③ 그래도 못 읽으면 "기록 있음"
    * 대표 슬롯은 각 게임 game.js의 slotDesc/showSlotPicker와 같은 규칙 —
    * savedAt이 가장 최근인 슬롯이에요.
    * unicorn만 평키 하나에 상태를 통째로 담아요. */
   function summarize(game, obj) {
-    if (!obj) return null;
+    if (!obj || typeof obj !== "object" || !Object.keys(obj).length) return null;
     var f = SUMMARY[game];
     var one = function (st) {
       if (!st || typeof st !== "object") return null;
       try { return f ? f(st) : "기록 있음"; } catch (e) { return "기록 있음"; }
     };
+    // 평키 — 7종에서는 이사 전 기록, unicorn에서는 유일한 저장 위치예요
+    var flat = function () {
+      var raw = obj[SAVE[game]];
+      if (!raw) return null;
+      try { return one(JSON.parse(raw)); } catch (e) { return "기록 있음"; }
+    };
 
-    if (game === "unicorn") {
-      try {
-        var raw = obj[SAVE[game]];
-        if (!raw) return null;
-        return one(JSON.parse(raw));
-      } catch (e) { return "기록 있음"; }
+    if (game === "unicorn") return flat() || "기록 있음";
+
+    var rawSl = obj[SAVE[game] + "-slots"];
+    var sl = null, broken = false;
+    if (rawSl) {
+      try { sl = JSON.parse(rawSl); } catch (e) { broken = true; }
     }
+    if (broken) return flat() || "기록 있음";
 
-    var sl;
-    try {
-      var rawSl = obj[SAVE[game] + "-slots"];
-      if (!rawSl) return null;
-      sl = JSON.parse(rawSl);
-    } catch (e) { return "기록 있음"; }
-    if (!sl || typeof sl !== "object") return null;
+    if (sl && typeof sl === "object") {
+      var ids = Object.keys(sl);
+      var best = null;
+      ids.forEach(function (id) {
+        var st = sl[id];
+        if (!st || typeof st !== "object") return;
+        if (best === null || (st.savedAt || 0) > (sl[best].savedAt || 0)) best = id;
+      });
+      var txt = best === null ? null : one(sl[best]);
+      if (txt) {
+        // 캐릭터를 여러 명 키우는 사람이 있어요. 대표 한 명만 보이면 "이거 하나뿐인가?"
+        // 싶어서 나머지를 날려버릴 수 있으니 몇 개인지 같이 알려줘요.
+        if (ids.length > 1) txt += " · 캐릭터 " + ids.length + "명";
+        return txt;
+      }
+      // 슬롯 맵이 비어 있어요 = 게임이 스스로 "캐릭터 없음"이라 적어둔 상태예요.
+      // 이건 못 읽은 게 아니라서, 평키에 남은 게 없으면 설명할 내용이 없어요.
+      // (그래도 키 자체는 있으니 화면에서는 hasData/describe가 "기록 있음"으로 받아줘요)
+      return flat();
+    }
+    return flat() || "기록 있음";
+  }
 
-    var ids = Object.keys(sl);
-    if (!ids.length) return null;
-    var best = null;
-    ids.forEach(function (id) {
-      var st = sl[id];
-      if (!st || typeof st !== "object") return;
-      if (!best || (st.savedAt || 0) > (sl[best].savedAt || 0)) best = id;
-    });
-    var txt = one(best === null ? null : sl[best]);
-    if (!txt) return null;
-    // 캐릭터를 여러 명 키우는 사람이 있어요. 대표 한 명만 보이면 "이거 하나뿐인가?"
-    // 싶어서 나머지를 날려버릴 수 있으니 몇 개인지 같이 알려줘요.
-    if (ids.length > 1) txt += " · 캐릭터 " + ids.length + "명";
-    return txt;
+  // "있냐 없냐"는 백업 대상과 똑같은 기준으로 봐요.
+  // collect()가 담아 올리는 게 있다면, 화면은 절대 "이 기기엔 없음"이라고 말하면 안 돼요.
+  function hasData(obj) { return !!obj && typeof obj === "object" && Object.keys(obj).length > 0; }
+  // 화면에 쓸 문구. 있는데 설명을 못 만들면 "기록 있음"으로라도 보여줘요.
+  function describe(game, obj) {
+    if (!hasData(obj)) return null;
+    return summarize(game, obj) || "기록 있음";
   }
 
   var GAMES = Object.keys(SAVE);
@@ -454,14 +542,17 @@
       });
       var auto = [], pick = [];
       GAMES.forEach(function (g) {
-        var mine = summarize(g, collect(g));
-        var theirs = remote[g] ? summarize(g, remote[g].data) : null;
+        var mine = describe(g, collect(g));
+        var theirs = remote[g] ? describe(g, remote[g].data) : null;
         if (mine && theirs) {
           // 기본값은 이 기기예요. 서버가 확실히 더 최신일 때만 저쪽으로 넘겨요.
           // 기기 시계는 안 봐요 — 서버가 찍어준 두 시각(remote.updated 대 syncKey)만 비교해요.
+          // syncKey가 없다 = 이 기기가 아직 한 번도 못 올렸다는 뜻이라,
+          // 오히려 서버에 사본이 없는 가장 위험한 기록이에요. "서버가 더 최신"으로
+          // 치면 안 돼요 — 기능을 막 켠 사람은 전부 이 상태라 전부 저쪽으로 넘어가요.
           var synced = get(syncKey(g));
           var up = remote[g].updated;
-          var remoteNewer = !!up && (!synced || Date.parse(up) > Date.parse(synced));
+          var remoteNewer = !!up && !!synced && Date.parse(up) > Date.parse(synced);
           pick.push({ g: g, mine: mine, theirs: theirs, remoteNewer: remoteNewer });
         } else if (theirs) auto.push({ g: g, from: "다른 기기", txt: theirs });
         else if (mine) auto.push({ g: g, from: "이 기기", txt: mine });
@@ -469,7 +560,10 @@
 
       var html = '<p class="av-title">🔗 기기를 연결했어요</p>';
       if (auto.length) {
-        html += '<p>한쪽에만 있는 기록이에요. 양쪽을 이 상태로 맞출게요.</p>';
+        // "양쪽을 맞춘다"고 하면 안 돼요. 이 기기에만 있는 기록은 그 게임을 열어야
+        // 서버로 올라가서, 지금 당장 반대편 기기에 보이지는 않아요.
+        html += '<p>한쪽에만 있는 기록이에요. 다른 기기 것은 지금 가져오고, ' +
+                '이 기기 것은 그 게임을 열 때 서버로 올라가요.</p>';
         auto.forEach(function (a) {
           html += '<div class="cloud-pick">' + esc(LABEL[a.g]) + ' — ' + esc(a.txt) +
                   ' <span style="color:var(--dim)">(' + a.from + ')</span></div>';
@@ -511,6 +605,9 @@
         // 이 기기 것을 남긴 게임만 올릴 거리가 있어요.
         // 한 번도 안 해본 게임까지 dirty로 찍으면 빈 {}가 올라가서
         // 반대편 기기의 진짜 기록이 지워져요. 그래서 여기만 표시해요.
+        // 주의: 여기서 실제로 올라가는 건 지금 열려 있는 게임 하나뿐이에요.
+        // 나머지는 dirty 표시만 남고, 그 게임 페이지를 열 때 init()이 올려요.
+        // 그래서 안내 문구도 "지금 양쪽이 같아진다"고 말하면 안 돼요.
         kept.forEach(function (g) {
           set(dirtyKey(g), "1");
           // 서버 쪽 버전을 "이미 보고 이 기기 것으로 정했다"고 적어둬요.
@@ -521,20 +618,22 @@
         });
 
         closeModal();
-        _toast("기록을 맞췄어요");
-        setTimeout(function () { location.reload(); }, 700);
+        _toast("골라주신 대로 정리했어요");
+        reloadSoon(700);
       };
     }).catch(function () { _toast("불러오기에 실패했어요"); });
   }
 
-  /* 충돌 — 같은 게임을 두 기기에서 각각 진행했을 때 */
-  function onConflict(game, updated) {
-    var mine = summarize(game, collect(game));
+  /* 충돌 — 같은 게임을 두 기기에서 각각 진행했을 때.
+   * 서버 시각은 아래 cloud_pull이 돌려주는 값(rows[0].updated)을 그대로 써요.
+   * 부르는 쪽이 알고 있던 시각을 또 받지 않아요 — 안 쓰면서 받으면 헷갈리니까요. */
+  function onConflict(game) {
+    var mine = describe(game, collect(game));
     var tok = token();
     if (!tok) return; // 기기 정체성이 없으면 클라우드는 조용히 쉬어요
     rpc("cloud_pull", { p_token: tok, p_game: tag(game) }).then(function (rows) {
       if (!rows || !rows.length) return;
-      var theirs = summarize(game, rows[0].data);
+      var theirs = describe(game, rows[0].data);
       var ov = shell(
         '<p class="av-title">⚠️ 두 기기에서 각각 진행됐어요</p>' +
         '<div class="cloud-pick">이 기기 &nbsp; ' + esc(LABEL[game]) + ' — ' + esc(mine || "기록 없음") + '</div>' +
@@ -553,7 +652,7 @@
         set(syncKey(game), String(rows[0].updated));
         set(dirtyKey(game), "0");
         closeModal();
-        setTimeout(function () { location.reload(); }, 400);
+        reloadSoon(400);
       };
     }).catch(function () {});
   }
@@ -566,5 +665,6 @@
   window.Cloud._t = {
     token: token, keysOf: keysOf, collect: collect, apply: apply,
     rpc: rpc, tag: tag, decide: decide, summarize: summarize, openLink: openLink,
+    hasData: hasData, describe: describe, syncStart: syncStart, syncEnd: syncEnd,
   };
 })();
