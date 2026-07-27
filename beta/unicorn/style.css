@@ -48,13 +48,28 @@ body {
 .clicker:active { transform: translateY(4px); box-shadow: 0 4px 0 #0a1024, inset 0 0 40px rgba(100,255,218,.1); }
 .clicker:active .term-body { background: rgba(100,255,218,.03); }
 
+/* 상단 띠는 창 장식이 아니라 '상태 표시줄'이에요 — 브랜치 · 내 사명 · 실시간 생산량.
+   장식만 하던 자리에 정보를 넣어서 클릭하는 동안 눈을 안 떼도 되게 했어요. */
 .term-bar {
-  display: flex; align-items: center; gap: 6px; padding: 9px 12px;
+  display: flex; align-items: center; gap: 8px; padding: 8px 12px;
   background: #161f38; border-bottom: 1px solid var(--line); pointer-events: none;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.7rem;
 }
-.term-dot { width: 10px; height: 10px; border-radius: 50%; display: block; }
-.term-dot.r { background: #ff5f57; } .term-dot.y { background: #febc2e; } .term-dot.g { background: #28c840; }
-.term-title { margin-left: 6px; color: var(--dim); font-size: 0.72rem; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.term-branch {
+  flex: 0 0 auto; color: var(--accent); background: rgba(100,255,218,.1);
+  border: 1px solid rgba(100,255,218,.25); border-radius: 999px; padding: 1px 8px;
+}
+/* 사명이 길어도 띠가 밀리지 않게 — 가운데만 줄어들어요 */
+.term-path { min-width: 0; color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.term-live {
+  flex: 0 0 auto; margin-left: auto; color: var(--sky);
+  display: flex; align-items: center; gap: 5px; white-space: nowrap;
+}
+.term-live i { width: 6px; height: 6px; border-radius: 50%; background: var(--sky); animation: livePulse 1.4s ease-in-out infinite; }
+/* 아직 조직이 없어 자동 생산이 0일 때 — 깜빡임을 멈춰서 '멈춰 있음'을 알려줘요 */
+.term-live.idle { color: var(--dim); }
+.term-live.idle i { background: var(--dim); animation: none; }
+@keyframes livePulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .3; transform: scale(.65); } }
 
 .term-body {
   display: flex; flex-direction: column; justify-content: flex-end;

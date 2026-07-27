@@ -66,10 +66,12 @@ const FINAL_STAGE = 6e12;     // 데카콘 = 엔딩 트리거
 const BOOST_DUR = 60000;   // 부스터 지속 60초
 const BOOST_CD = 300000;   // 쿨다운 5분
 
-// 사명 추천 — 통짜 이름 + (앞말 × 뒷말) 조합으로 매번 다르게 뽑아요
-const COMPANY_NAMES = ["토스트", "당근파이", "쿠키페이", "배달의민속", "네이비어", "카카옹", "라인프렌드", "우아한형아들", "비바리버블릭", "센드버그"];
+// 사명 추천 — 통짜 이름 + (앞말 × 뒷말) 조합으로 매번 다르게 뽑아요.
+// 실존 기업을 비튼 이름은 쓰지 않아요 — 한 글자만 바꾼 이름은 패러디보다
+// 오인에 가깝고, 광고가 붙은 서비스라 '재미로 했다'는 항변이 약해요.
+const COMPANY_NAMES = ["코드밥", "밤샘컴퍼니", "라면스택", "새벽배포", "머지머지", "판교드림", "버그헌터스", "커밋하우스", "무한루프", "데브밀"];
 const NAME_HEAD = [
-  "토스", "당근", "쿠키", "배달", "네이비", "카카", "라인", "우아", "비바", "센드",
+  "루프", "커밋", "머지", "스택", "캐시", "토큰", "커널", "베타", "알파", "오로라",
   "크래프트", "하이퍼", "넥스트", "딥", "퀀텀", "노바", "제로", "코드", "픽셀", "버그",
   "무한", "새벽", "라면", "심야", "월세", "치킨", "라떼", "떡상", "존버", "폭풍",
 ];
@@ -692,6 +694,11 @@ function renderHud() {
   $("hud-asset").textContent = "🏗️ 자산 " + fmt(assetVal());
   $("hud-so").textContent = "🧾 스톡옵션 " + S.so + " (×" + prestigeMult().toFixed(2) + ")";
   $("clicker-label").textContent = `눌러서 코딩! 💾 +${fmt(clickValue())} 코드라인`;
+  // 터미널 상태 표시줄 — 작업 경로는 내 사명, 오른쪽은 조직이 뽑아내는 속도
+  const ps = perSec();
+  $("term-path").textContent = "~/" + S.company;
+  $("term-live").lastChild.textContent = ps > 0 ? rate(ps) + "/초" : "대기";
+  $("term-live").classList.toggle("idle", ps <= 0);
   $("stage-name").textContent = `${st.emoji} ${st.name}`;
   $("stage-val").textContent = "🏦 기업가치 " + fmt(v);
   $("stage-val").title = "기업가치 = 보유 코드라인 + 자산. 장비·조직을 사면 감가만큼 내려가요.";

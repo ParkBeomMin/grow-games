@@ -24,7 +24,7 @@
   <link rel="stylesheet" href="../base.css" />
   <!-- ?v= 는 캐시 무효화용. game.js/style.css 고칠 때마다 같이 올려주세요
        (GitHub Pages가 정적 파일에 max-age=600을 붙여서, 안 올리면 최대 10분간 옛 파일이 떠요) -->
-  <link rel="stylesheet" href="style.css?v=24" />
+  <link rel="stylesheet" href="style.css?v=26" />
 </head>
 <body>
   <main id="app">
@@ -51,8 +51,9 @@
 
     <button class="clicker" id="clicker">
       <span class="term-bar">
-        <span class="term-dot r"></span><span class="term-dot y"></span><span class="term-dot g"></span>
-        <span class="term-title">~/유니콘 — main</span>
+        <span class="term-branch">git:main</span>
+        <span class="term-path" id="term-path">~/유니콘</span>
+        <span class="term-live idle" id="term-live"><i></i>대기</span>
       </span>
       <span class="term-body" id="term-body"></span>
       <span class="term-caret">▌</span>
@@ -127,6 +128,6 @@
   <script src="../stats.js"></script>
   <script src="../fx.js"></script>
   <script src="../ads.js"></script>
-  <script src="game.js?v=24"></script>
+  <script src="game.js?v=26"></script>
 </body>
 </html>
