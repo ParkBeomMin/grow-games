@@ -521,12 +521,16 @@
     if (ov) ov.remove();
   }
 
-  function shell(inner) {
+  /* closeLabel을 주면 아래 버튼 문구를 바꿔요.
+   * 연동 직후 화면에서 "닫기"는 되돌려지는 것처럼 읽혀요 — 코드를 넣은 순간
+   * 연결은 이미 끝났고, 그 화면에서 정하는 건 어느 기록을 남길지뿐이에요. */
+  function shell(inner, closeLabel) {
     closeModal();
     var ov = document.createElement("div");
     ov.className = "av-overlay cloud-overlay";
     ov.innerHTML = '<div class="av-modal cloud-modal">' + inner +
-      '<div class="av-actions"><button class="btn btn-ghost cloud-close">닫기</button></div></div>';
+      '<div class="av-actions"><button class="btn btn-ghost cloud-close">' +
+      esc(closeLabel || "닫기") + '</button></div></div>';
     ov.addEventListener("click", function (e) { if (e.target === ov) closeModal(); });
     document.body.appendChild(ov);
     ov.querySelector(".cloud-close").onclick = closeModal;
@@ -660,10 +664,25 @@
       rpc("cloud_meta", { p_token: tok }).then(function (rows) {
         var box = ov.querySelector("#cloud-linked");
         if (!box || !rows || !rows.length) return;
+
+        /* 정할 게 남았을 때만 버튼을 띄워요.
+         * 늘 세워두면 아직 결정이 밀려 있는 것처럼 읽혀요 — 실제로는 겹치는 게임이
+         * 없으면 각 게임을 열 때 알아서 받아와서 물어볼 게 없어요.
+         * 겹침 판정은 meta만으로 돼요 (본문 없이 어느 게임이 서버에 있는지만 알면 되니까요). */
+        var both = [];
+        (rows || []).forEach(function (r) {
+          var g = String(r.game).replace(/^beta:/, "");
+          if (SAVE[g] && Object.keys(collect(g)).length) both.push(g);
+        });
+
         box.innerHTML = '<hr class="cloud-sep"/>' +
           '<p>이 기기는 이미 연결돼 있어요. 코드를 다시 넣지 않아도 돼요.</p>' +
-          '<button class="btn btn-ghost" id="cloud-relink">📂 어느 기록을 남길지 고르기</button>';
-        box.querySelector("#cloud-relink").onclick = function () { closeModal(); openLink(); };
+          (both.length
+            ? '<p>양쪽 모두 기록이 있는 게임이 ' + both.length + '개 있어요. 어느 쪽을 남길지 정해주세요.</p>' +
+              '<button class="btn btn-ghost" id="cloud-relink">📂 어느 기록을 남길지 고르기</button>'
+            : '<p>겹치는 기록은 없어요. 각 게임을 열면 알아서 맞춰져요.</p>');
+        var relink = box.querySelector("#cloud-relink");
+        if (relink) relink.onclick = function () { closeModal(); openLink(); };
       }).catch(function () {});
     })();
 
@@ -909,7 +928,8 @@
         else if (mine) auto.push({ g: g, from: "이 기기", txt: mine, when: null });
       });
 
-      var html = '<p class="av-title">🔗 기기를 연결했어요</p>';
+      var html = '<p class="av-title">🔗 기기를 연결했어요</p>' +
+        '<p class="cloud-note">연결은 이미 끝났어요. 여기서는 <b>어느 기록을 남길지</b>만 정해요.</p>';
       if (auto.length) {
         // "양쪽을 맞춘다"고 하면 안 돼요. 이 기기에만 있는 기록은 그 게임을 열어야
         // 서버로 올라가서, 지금 당장 반대편 기기에 보이지는 않아요.
@@ -926,7 +946,8 @@
         var ovEmpty = shell(
           '<p class="av-title">🔗 기기를 연결했어요</p>' +
           '<p>아직 양쪽 어디에도 저장된 기록이 없어요.<br/>' +
-          '게임을 한 번 진행하면 자동으로 백업되고, 다른 기기에서도 이어서 할 수 있어요.</p>'
+          '게임을 한 번 진행하면 자동으로 백업되고, 다른 기기에서도 이어서 할 수 있어요.</p>',
+          "확인"
         );
         return ovEmpty;
       }
@@ -942,7 +963,7 @@
       html += '<button class="btn btn-primary" id="cloud-done">' +
         (pick.length ? "고른 대로 기록 맞추기" : "기록 가져오기") + '</button>';
 
-      var ov = shell(html);
+      var ov = shell(html, pick.length ? "나중에 정하기" : "나중에 하기");
       // 붙잡는 건 orphanLedger()가 claim 직후에 이미 해뒀어요. 여기서는 풀지 않아요 —
       // 아래 확인 버튼(= 사람이 실제로 고른 순간)에서만 풀어줘요.
       ov.querySelector("#cloud-done").onclick = function () {

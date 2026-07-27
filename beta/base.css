@@ -477,6 +477,7 @@ h2 { font-size: 1.6rem; margin: 8px 0 6px; color: var(--accent); }
   background: rgba(0,0,0,.3); border: 1px dashed var(--line); border-radius: 10px;
   padding: 10px; margin: 10px 0; text-align: center; word-break: break-all; user-select: all;
 }
+.cloud-note { color: var(--sky) !important; }
 .cloud-sep { border: 0; border-top: 1px solid var(--line); margin: 16px 0; }
 .cloud-row { display: flex; gap: 8px; }
 .cloud-row input {

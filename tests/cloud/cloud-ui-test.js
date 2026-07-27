@@ -318,12 +318,40 @@ const issueCalls = (calls) => calls.filter((c) => c.fn === "cloud_issue").length
   }
 
   // ============================================================
-  group("9) 이미 연결된 기기 — cloud_meta가 기록을 돌려주면 '다시 보기' 섹션이 뜬다");
+  group("9) 이미 연결된 기기, 겹치는 기록이 있을 때 — '다시 보기' 섹션과 개수가 뜬다");
   {
-    // 실제로 있었던 버그: 코드는 한 번 쓰면 사라지는데, claim은 이미 성공해 기기가
-    // 연결된 뒤 확인 화면(openLink)을 취소하면, 다시 코드를 넣을 방법이 없었다.
-    // cloud_meta가 이 계정에 저장된 기록(rows)이 있다고 알려주면, 코드 없이도
-    // 그 화면을 다시 열 수 있는 버튼을 보여준다.
+    // 새 동작: relink 버튼은 "cloud_meta가 보고하는 게임을 이 기기도 로컬에 갖고 있을 때"만
+    // 뜬다. 그걸 실제로 검증하려면 겹치도록 로컬에도 진짜 저장 모양(슬롯 맵)으로 기록을
+    // 심어둬야 한다 — 안 그러면(예전처럼 그냥 cloud_meta만 스텁하면) relink가 영영 안 뜬다.
+    // 두 게임(rookie·idol)을 겹치게 해서 안내 문구의 개수 표기(2개)까지 함께 확인한다.
+    const { window, LS, $, calls } = mk({
+      cloud_meta: [
+        { game: "beta:rookie", updated: "2026-07-27T00:00:00Z" },
+        { game: "beta:idol", updated: "2026-07-27T00:00:00Z" },
+      ],
+    });
+    LS.setItem(SAVE.rookie + "-slots", JSON.stringify({ s1: { phase: "pro", proYear: 1, savedAt: 1 } }));
+    LS.setItem(SAVE.idol + "-slots", JSON.stringify({ s1: { phase: "idol-pro", proYear: 1, savedAt: 1 } }));
+    window.Cloud.openModal();
+    await tick(40);
+
+    check(calls.some((c) => c.fn === "cloud_meta"), "모달을 열면 cloud_meta가 나간다");
+    const box = $("#cloud-linked");
+    check(!!box && /이미 연결돼 있어요/.test(box.textContent),
+      `이미 연결돼 있다는 안내가 뜬다 — "${box && box.textContent}"`);
+    check(!!box && /2개/.test(box.textContent),
+      `겹치는 게임 수(2개)가 안내에 나온다 — "${box && box.textContent}"`);
+    const relink = $("#cloud-relink");
+    check(!!relink && /어느 기록을 남길지 고르기/.test(relink.textContent),
+      `겹치는 기록이 있으면 '어느 기록을 남길지 고르기' 버튼이 뜬다 — "${relink && relink.textContent}"`);
+  }
+
+  // ============================================================
+  group("10) 이미 연결된 기기, 겹치는 기록이 없을 때 — 안내만 뜨고 재보기 버튼은 없다");
+  {
+    // cloud_meta는 계정에 rookie 기록이 있다고 하지만, 이 기기는 rookie를 한 번도
+    // 열어본 적이 없다(로컬에 아무 키도 없다) — 실제로 "겹치는 게 없는" 상황.
+    // 예전엔 이럴 때도 재보기 버튼이 늘 떠서 "아직 정할 게 남았다"는 오해를 줬다.
     const { window, $, calls } = mk({
       cloud_meta: [{ game: "beta:rookie", updated: "2026-07-27T00:00:00Z" }],
     });
@@ -333,14 +361,15 @@ const issueCalls = (calls) => calls.filter((c) => c.fn === "cloud_issue").length
     check(calls.some((c) => c.fn === "cloud_meta"), "모달을 열면 cloud_meta가 나간다");
     const box = $("#cloud-linked");
     check(!!box && /이미 연결돼 있어요/.test(box.textContent),
-      `이미 연결돼 있다는 안내가 뜬다 — "${box && box.textContent}"`);
-    const relink = $("#cloud-relink");
-    check(!!relink && /어느 기록을 남길지 고르기/.test(relink.textContent),
-      `'어느 기록을 남길지 고르기' 버튼이 있다 — "${relink && relink.textContent}"`);
+      `겹치는 기록이 없어도 '이미 연결돼 있어요' 줄은 그대로 뜬다 — "${box && box.textContent}"`);
+    check(!!box && /겹치는 기록은 없어요/.test(box.textContent),
+      `겹치는 기록이 없다는 안내가 뜬다 — "${box && box.textContent}"`);
+    check(!$("#cloud-relink"),
+      "겹치는 기록이 없으니 재보기 버튼은 뜨지 않는다 — 결정할 게 없는데 버튼만 있으면 '아직 정할 게 있다'는 착각을 준다");
   }
 
   // ============================================================
-  group("10) 아직 연결 안 한 기기 — cloud_meta가 빈 배열이면 섹션 자체가 없다");
+  group("11) 아직 연결 안 한 기기 — cloud_meta가 빈 배열이면 섹션 자체가 없다");
   {
     // 한 번도 연결한 적 없는 기기에 "이미 연결돼 있어요"라고 말하면 그게 더 큰 오해다.
     const { window, $ } = mk({ cloud_meta: [] });
@@ -355,13 +384,16 @@ const issueCalls = (calls) => calls.filter((c) => c.fn === "cloud_issue").length
   }
 
   // ============================================================
-  group("11) '어느 기록을 남길지 고르기'를 누르면 코드 없이 연결 화면이 열리고, cloud_claim은 나가지 않는다");
+  group("12) '어느 기록을 남길지 고르기'를 누르면 코드 없이 연결 화면이 열리고, cloud_claim은 나가지 않는다");
   {
-    const { window, $, calls } = mk({
+    // relink 버튼이 뜨려면 겹치는 로컬 기록이 있어야 한다 — 그래야 이 테스트의
+    // 전제("재보기 버튼이 있다")가 실제 동작을 검증하는 것이지, 우연히 통과하는 게 아니다.
+    const { window, LS, $, calls } = mk({
       cloud_meta: [{ game: "beta:rookie", updated: "2026-07-27T00:00:00Z" }],
       cloud_pull: [],
       cloud_claim: { ok: true },   // 스텁은 해두되, 실제로는 절대 불려선 안 된다
     });
+    LS.setItem(SAVE.rookie + "-slots", JSON.stringify({ s1: { phase: "pro", proYear: 1, savedAt: 1 } }));
     window.Cloud.openModal();
     await tick(40);
     const relink = $("#cloud-relink");
@@ -381,7 +413,7 @@ const issueCalls = (calls) => calls.filter((c) => c.fn === "cloud_issue").length
   }
 
   // ============================================================
-  group("12) not_found 문구는 재발급으로 무효가 된다는 것과, 되돌아갈 버튼을 함께 안내한다");
+  group("13) not_found 문구는 재발급으로 무효가 된다는 것과, 되돌아갈 버튼을 함께 안내한다");
   {
     const { window, $ } = mk({ cloud_claim: { ok: false, reason: "not_found" } });
     window.Cloud.openModal();
@@ -397,7 +429,7 @@ const issueCalls = (calls) => calls.filter((c) => c.fn === "cloud_issue").length
   }
 
   // ============================================================
-  group("13) 저장소를 못 쓰면(token() null) 이 경로에서 cloud_meta조차 나가지 않는다");
+  group("14) 저장소를 못 쓰면(token() null) 이 경로에서 cloud_meta조차 나가지 않는다");
   {
     const { window, $, calls, LS } = mk({
       cloud_meta: [{ game: "beta:rookie", updated: "2026-07-27T00:00:00Z" }],
@@ -419,7 +451,7 @@ const issueCalls = (calls) => calls.filter((c) => c.fn === "cloud_issue").length
   }
 
   // ============================================================
-  group("14) cloud_meta 요청이 실패해도 모달은 멀쩡히 쓸 수 있다");
+  group("15) cloud_meta 요청이 실패해도 모달은 멀쩡히 쓸 수 있다");
   {
     // cloud_meta 라우트를 일부러 안 두어(mk가 undefined route를 reject) 실패를 흉내낸다.
     const CODE = "ISSUED-AFTER-META-FAIL-0000";
@@ -449,7 +481,7 @@ const issueCalls = (calls) => calls.filter((c) => c.fn === "cloud_issue").length
   }
 
   // ============================================================
-  group("15) 코드는 1회용이 아니다 — 같은 코드를 두 번째 기기가 또 claim해도 성공하고, 장부 정리를 똑같이 한다");
+  group("16) 코드는 1회용이 아니다 — 같은 코드를 두 번째 기기가 또 claim해도 성공하고, 장부 정리를 똑같이 한다");
   {
     // 예전엔 cloud_claim 성공 시 서버가 코드 행을 지워, 다음 기기는 not_found를 받았다.
     // 이제는 cloud_issue가 새 코드를 낼 때만 옛 코드가 무효화되고, claim은 코드를 지우지
@@ -507,6 +539,60 @@ const issueCalls = (calls) => calls.filter((c) => c.fn === "cloud_issue").length
     // 두 기기의 결과가 서로 다르게 갈리지 않았는지 — 같은 코드, 같은 처리.
     check(B.LS.getItem("grow-cloud-issued") === C.LS.getItem("grow-cloud-issued"),
       "기기 B와 기기 C의 발급 플래그 처리 결과가 같다 (둘 다 같은 코드를 성공 claim했다)");
+  }
+
+  // ============================================================
+  group("17) 닫기 버튼 문구 — '닫기'는 취소처럼 읽히는데, 연결은 이미 끝나 있다");
+  {
+    // a) 양쪽 다 기록이 있어 고를 게 남은 연결 화면 — "나중에 정하기".
+    // openLink()는 claim 뒤에만 불리는 내부 함수라 window.Cloud._t로 바로 불러
+    // claim 왕복 없이 이 화면 자체(그리고 그 안의 닫기 버튼 문구)만 검증한다.
+    const { window, LS, $ } = mk({
+      cloud_pull: [{
+        game: "beta:rookie",
+        data: { "rookie-save-v1-slots": JSON.stringify({ s1: { phase: "pro", proYear: 2, savedAt: 5 } }) },
+        updated: "2026-07-27T00:00:00Z",
+      }],
+    });
+    LS.setItem(SAVE.rookie + "-slots", JSON.stringify({ s1: { phase: "pro", proYear: 1, savedAt: 1 } }));
+    window.Cloud._t.openLink();
+    await tick(40);
+
+    const modal = $(".cloud-modal");
+    check(!!modal && /연결은 이미 끝났어요/.test(modal.textContent),
+      `연결 화면에 '연결은 이미 끝났다' 안내가 있다 — "${modal && modal.textContent}"`);
+    check(!!modal && /어느 기록을 남길지/.test(modal.textContent), "그 안내가 '무엇을 정하는지'를 말한다 (전제 확인)");
+    check(!!modal && /고르지 않은 쪽은 사라져요/.test(modal.textContent), "정할 게 있는 화면이 맞다 (전제 확인)");
+    const closeA = $(".cloud-close");
+    check(!!closeA && closeA.textContent === "나중에 정하기",
+      `정할 게 남은 연결 화면의 닫기 버튼은 '나중에 정하기'라고 말한다 (실제: "${closeA && closeA.textContent}")`);
+  }
+  {
+    // b) 한쪽에만 기록이 있어 고를 게 없는(그냥 받아오기만 하는) 연결 화면 — "나중에 하기".
+    const { window, LS, $ } = mk({ cloud_pull: [] });
+    LS.setItem(SAVE.rookie + "-slots", JSON.stringify({ s1: { phase: "pro", proYear: 1, savedAt: 1 } }));
+    window.Cloud._t.openLink();
+    await tick(40);
+
+    const modal = $(".cloud-modal");
+    check(!!modal && /기록 가져오기/.test(modal.textContent),
+      `고를 게 없는 화면이 맞다 — 버튼이 '기록 가져오기'다 (전제 확인, 실제: "${modal && modal.textContent}")`);
+    const closeB = $(".cloud-close");
+    check(!!closeB && closeB.textContent === "나중에 하기",
+      `고를 게 없는 연결 화면의 닫기 버튼은 '나중에 하기'라고 말한다 (실제: "${closeB && closeB.textContent}")`);
+  }
+  {
+    // c) 양쪽 다 기록이 없는 빈 연결 화면 — "확인" (여기엔 취소할 결정 자체가 없다).
+    const { window, $ } = mk({ cloud_pull: [] });
+    window.Cloud._t.openLink();
+    await tick(40);
+
+    const modal = $(".cloud-modal");
+    check(!!modal && /아직 양쪽 어디에도 저장된 기록이 없어요/.test(modal.textContent),
+      `빈 연결 화면이 맞다 (전제 확인, 실제: "${modal && modal.textContent}")`);
+    const closeC = $(".cloud-close");
+    check(!!closeC && closeC.textContent === "확인",
+      `빈 연결 화면의 닫기 버튼은 '확인'이라고 말한다 (실제: "${closeC && closeC.textContent}")`);
   }
 
   console.log(fail ? `\n❌ 실패 ${fail}건` : "\n✅ 통과");
