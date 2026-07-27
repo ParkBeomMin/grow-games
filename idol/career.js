@@ -395,7 +395,11 @@ window.IdolCareer = (() => {
     const leagueBest = Math.max(...Array.from({ length: 6 }, () => rand(3.5, 7.8)));
     if (hype >= 5.5 && hype >= leagueBest) {
       awards.push("대상"); S.career.daesang += 1;
-    } else if (hype >= 4.5) {
+    }
+    /* 본상은(는) 대상과(와) 별개로 판정해요.
+     * 예전에는 else if라서 대상을(를) 받으면 본상을(를) 아예 못 받았어요.
+     * 가장 잘한 시즌이 오히려 상을 덜 받는 역전이 났습니다. */
+    if (hype >= 4.5) {
       const posBar = rand(4.2, 6.2);
       if (hype >= posBar) { awards.push("본상"); S.career.bonsang += 1; }
     }

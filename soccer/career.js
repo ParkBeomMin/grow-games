@@ -236,9 +236,14 @@ window.WingerCareer = (() => {
   }
 
   // ---------- 리그 경기 (주 1회, 주간 활약 경쟁) ----------
+  /* 평점은 10점 만점이에요.
+   * 순위 점수(score)에는 결정적 순간 보정(±8)과 흔들림(±4)이 평점 뒤에 얹혀서
+   * 최대 112까지 올라가요. 그건 MOM 순위를 가리는 값이지 평점이 아닌데,
+   * 그대로 10으로 나눠 보여줘서 10.7 같은 평점이 찍혔어요.
+   * 순서는 원래 점수로 가리고, 보여줄 때만 10점으로 맞춥니다. */
   function chartHTML(rows) {
     return `<table class="rank-table season-standings"><thead><tr><th>#</th><th>선수</th><th>평점</th></tr></thead>
-      <tbody>${rows.map((r, i) => `<tr class="${r.me ? "me" : ""}"><td>${i + 1}</td><td>${r.name}</td><td>${(r.score / 10).toFixed(1)}</td></tr>`).join("")}</tbody></table>`;
+      <tbody>${rows.map((r, i) => `<tr class="${r.me ? "me" : ""}"><td>${i + 1}</td><td>${r.name}</td><td>${clamp(r.score / 10, 1, 10).toFixed(1)}</td></tr>`).join("")}</tbody></table>`;
   }
 
   function playShow() {
@@ -350,7 +355,11 @@ window.WingerCareer = (() => {
     const leagueBest = Math.max(...Array.from({ length: 6 }, () => rand(3.5, 7.8)));
     if (hype >= 5.5 && hype >= leagueBest) {
       awards.push("리그MVP"); S.career.daesang += 1;
-    } else if (hype >= 4.5) {
+    }
+    /* 베스트11은(는) 리그MVP과(와) 별개로 판정해요.
+     * 예전에는 else if라서 리그MVP을(를) 받으면 베스트11을(를) 아예 못 받았어요.
+     * 가장 잘한 시즌이 오히려 상을 덜 받는 역전이 났습니다. */
+    if (hype >= 4.5) {
       const posBar = rand(4.2, 6.2);
       if (hype >= posBar) { awards.push("베스트11"); S.career.bonsang += 1; }
     }
