@@ -23,7 +23,12 @@ window.StockCareer = (() => {
   const loadHof = () => JSON.parse(localStorage.getItem(HOF_KEY) || "[]");
   const saveHof = (list) => localStorage.setItem(HOF_KEY, JSON.stringify(list));
   const loadBattle = () => JSON.parse(localStorage.getItem(BATTLE_KEY) || "{}");
-  const saveBattle = (d) => localStorage.setItem(BATTLE_KEY, JSON.stringify(d));
+  // 대전 기록도 백업 대상(keysOf)이에요. touch()로 표시해두지 않으면 다음 pull에
+  // 조용히 덮여 사라져요.
+  const saveBattle = (d) => {
+    localStorage.setItem(BATTLE_KEY, JSON.stringify(d));
+    if (window.Cloud) Cloud.touch();
+  };
   const bpOf = (score, ovr) => Math.round(score * 0.4 + ovr * 3);
 
   // ---------- 엔딩 훅 ----------
@@ -402,7 +407,6 @@ window.StockCareer = (() => {
     S.career.sales += sales;
     if (awards.length && window.Fx) Fx.celebrate("award", `🎖️ ${awards.join(" · ")}!`);
     S.career.years.push({ y: S.proYear, hype: Math.round(hype * 10) / 10, wins, sales, dFan, awards });
-    if (window.Cloud) Cloud.mark();
     if (window.Stats) Stats.log("year_end", { y: S.proYear, wins, sales });
     for (const d of STAT_DEFS) {
       if (S.proYear <= 3) S.stats[d.key] = clamp(S.stats[d.key] + rand(0, 1) * S.talents[d.key], 0, statCap(d.key));
@@ -413,6 +417,10 @@ window.StockCareer = (() => {
     S.activity = null;
     S.pendingShow = false;
     save();
+    // 결산이 끝난 뒤에 올려요. save()보다 먼저 부르면 collect()가 **지난 시즌** 상태를
+    // 담아 올리고 dirty=0 · 새 도장까지 찍어요. 바로 뒤 save()가 dirty를 다시 세워도
+    // 방금 켜진 2분 잠금에 막혀서, 다른 기기는 한 시즌 전 상태를 받게 돼요.
+    if (window.Cloud) Cloud.mark();
     yearReport();
   }
 
@@ -525,7 +533,11 @@ window.StockCareer = (() => {
       `유산 ${gain}을 남겨 누적 ${nextPts}이 됐습니다.\n` +
       `이제 ${nextGen + 1}세가 더 높은 재능으로 출발해요!`
     );
-    location.reload();
+    // 전송이 끝나야 '올렸음' 도장이 찍혀요. 안 기다리고 새로고침하면 keepalive 덕에
+    // 요청은 살아남아도 도장은 안 찍혀서, 혼자 쓰는 기기인데도 다음 실행에 충돌 화면이
+    // 떠요. settle()은 상한이 있어 네트워크가 느려도 오래 붙잡지 않아요.
+    if (window.Cloud && window.Cloud.settle) Cloud.settle().then(() => location.reload());
+    else location.reload();
   }
 
   /* 🎓 은퇴 확인창에 넣을 요약. 되돌릴 수 없는 선택이라 뭐가 남는지 보여줘요. */

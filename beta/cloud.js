@@ -95,22 +95,31 @@
     return out;
   }
 
+  /* 키를 하나라도 못 쓰면 false를 돌려줘요.
+   * 저장 공간이 중간에 차면 슬롯은 써졌는데 -legacy는 못 쓰는 '반쪽 세이브'가 돼요.
+   * 그걸 성공이라고 말하면 부르는 쪽이 도장(syncKey)과 dirty=0을 찍어버려서,
+   * 이 기기는 받지도 못한 기록과 "같다"고 믿고 다음 전송으로 반대편 기기의
+   * 더 새로운 세이브를 덮어써요. 그래서 실패는 반드시 위로 전해요. */
   function writeKeys(game, obj) {
+    var ok = true;
     keysOf(game).forEach(function (k) {
       try {
         if (Object.prototype.hasOwnProperty.call(obj, k)) localStorage.setItem(k, obj[k]);
         else localStorage.removeItem(k);
-      } catch (e) {}
+      } catch (e) { ok = false; }
     });
+    return ok;
   }
 
   /* 받아온 기록을 로컬에 씁니다. 성공하면 true.
    * 빈 꾸러미는 무조건 거절해요 — 한 번도 안 해본 게임이 dirty로 잘못 표시되면
    * 빈 {}가 서버에 올라가고, 진짜 기록을 가진 반대편 기기가 그걸 받아
-   * 게임 하나를 통째로 지워버려요. 지우는 건 되돌릴 수 없으니 여기서 막습니다. */
+   * 게임 하나를 통째로 지워버려요. 지우는 건 되돌릴 수 없으니 여기서 막습니다.
+   * 저장소에 못 쓴 경우에도 false예요 — 부르는 쪽은 장부를 건드리지 말고
+   * 다음 실행에서 다시 시도해야 해요. */
   function apply(game, obj) {
     if (!obj || typeof obj !== "object" || !Object.keys(obj).length) return false;
-    writeKeys(game, obj);
+    if (!writeKeys(game, obj)) return false;
     freeze(game, obj);
     return true;
   }
@@ -233,17 +242,41 @@
     if (Date.now() - lastPush > PUSH_GAP) push(cur);
   }
 
+  /* 되돌릴 수 없는 선택(환생) 직후처럼 곧바로 새로고침하는 자리를 위한 짧은 대기.
+   * mark()가 띄운 전송의 .then이 돌아야 "올렸음" 도장(syncKey·dirty=0)이 찍혀요.
+   * 그걸 안 기다리고 reload하면 keepalive 덕에 POST는 살아남지만 도장은 안 찍혀서,
+   * 혼자 쓰는 기기인데도 다음 실행에서 자기 업로드와 자기 세이브를 견주는
+   * 충돌 화면이 떠요. 그렇다고 무작정 기다리면 네트워크가 느릴 때 화면이 멈춘 것처럼
+   * 보이니 상한을 둬요 — 상한에 걸려도 잃는 건 없고, 그때는 충돌 화면이 한 번 뜰 뿐이에요. */
+  var SETTLE_MAX = 1500;
+  var lastMark = null;
+  function settle(ms) {
+    var p = lastMark;
+    if (!p || typeof p.then !== "function") return Promise.resolve();
+    return new Promise(function (done) {
+      var fired = false;
+      var fin = function () { if (!fired) { fired = true; done(); } };
+      setTimeout(fin, ms || SETTLE_MAX);
+      p.then(fin, fin);
+    });
+  }
+
   function mark() {
-    if (!cur) return;
-    push(cur);
+    if (!cur) return Promise.resolve();
+    lastMark = push(cur);
     // 첫 은퇴처럼 "잃을 게 생긴" 순간에 한 번만 권해요. 그 뒤로는 조르지 않아요.
     // 저장소를 못 쓰면(token() null) 애초에 기능이 성립하지 않으니 권하지 않아요.
     if (get("grow-cloud-issued") !== "1" && get("grow-cloud-asked") !== "1" && token()) {
-      set("grow-cloud-asked", "1");
       setTimeout(function () {
         // 연동·충돌 화면은 "어느 쪽을 남길까요"를 묻고 있어요. 그 위에 이 권유가 겹쳐 뜨면
         // 사용자가 결정 화면 대신 이 팝업에 답해버릴 수 있어요. 그런 순간엔 건너뛰어요.
         if (awaiting[cur]) return;
+        // "권했다"는 도장은 **실제로 보여준 뒤에** 찍어요. 먼저 찍어두면 위 guard에
+        // 걸려 건너뛴 사람에게 두 번 다시 권하지 않게 되는데, 이 권유가 영구 손실을
+        // 막아주는 유일한 안내예요. 못 보여줬으면 다음 기회에 다시 권해야 해요.
+        // (1.2초 안에 mark()가 두 번 오면 타이머도 둘이라 여기서 한 번 더 확인해요)
+        if (get("grow-cloud-issued") === "1" || get("grow-cloud-asked") === "1") return;
+        set("grow-cloud-asked", "1");
         var ov = shell(
           '<p class="av-title">💾 기록을 지킬까요?</p>' +
           '<p>지금 기록은 이 기기에만 있어요.<br/>' +
@@ -254,6 +287,7 @@
         ov.querySelector("#cloud-go").onclick = function () { closeModal(); openModal(); };
       }, 1200);
     }
+    return lastMark;
   }
 
   /* 5.3절 판정 — 기기 시계를 쓰지 않아요.
@@ -261,6 +295,22 @@
   function decide(game, serverUpdated) {
     var dirty = get(dirtyKey(game)) === "1";
     var synced = get(syncKey(game));
+    /* 도장이 없다 = 이 기기에서 **한 번도 올린 적이 없다**는 뜻이에요.
+     * 그런데 로컬에 기록이 있다면, 그 기록은 서버 어디에도 사본이 없어요.
+     * 여기서 dirty를 false로 보면 "안 건드림 × 서버가 더 최신" 한 갈래로 떨어져
+     * 묻지도 않고 pull이 돌고, 되돌릴 수 없이 사라져요.
+     *
+     * 실제로 모든 기존 사용자가 이 길 위에 있어요. 옛 기기에서 코드만 발급하면
+     * 그 순간 열어둔 게임 하나만 올라가고 나머지 일곱은 도장이 없어요.
+     * 새 기기에서 그중 한 게임을 시작하면(= 서버에 행이 생기면), 옛 기기에서
+     * 그 게임을 여는 순간 몇 달치 커리어가 하루치로 조용히 덮여요.
+     * (claim한 기기 쪽은 orphanLedger()가 이미 이 규칙을 씁니다 — 판정도 같아야 해요.)
+     * 스펙 5.1의 dirty 정의 "마지막 전송 이후 로컬 세이브가 바뀌었는지"로 봐도,
+     * 한 번도 보낸 적이 없으면 참이에요.
+     *
+     * 로컬에 기록이 **없으면** 건드리지 않아요 — 새 기기가 코드를 넣고 처음 받아오는
+     * 정상 경로(묻지 않는 pull)가 바로 그 경우예요. */
+    if (!synced && hasData(collect(game))) dirty = true;
     var remoteNewer = !!serverUpdated && (!synced || Date.parse(serverUpdated) > Date.parse(synced));
     if (dirty && remoteNewer) return "conflict";
     if (dirty) return "push";
@@ -268,8 +318,20 @@
     return "none";
   }
 
+  /* 사람이 이미 놀기 시작했나. cloud_meta 왕복이 느리면(모바일이면 수 초) 응답이
+   * 돌아올 때는 이미 캐릭터를 고르고 진행 중일 수 있어요. 그 위에 묻지 않는 pull이
+   * 새로고침을 걸면 아직 저장 안 된 진행이 사라져요. */
+  var played = false;
+  function watchPlay() {
+    var on = function () { played = true; };
+    ["pointerdown", "touchstart", "keydown"].forEach(function (ev) {
+      document.addEventListener(ev, on, { capture: true, passive: true });
+    });
+  }
+
   function init(game) {
     cur = game;
+    watchPlay();
     document.addEventListener("visibilitychange", function () {
       if (document.visibilityState === "hidden" && get(dirtyKey(game)) === "1") push(game);
     });
@@ -280,6 +342,13 @@
       var mine = null;
       (rows || []).forEach(function (r) { if (r.game === tag(game)) mine = r.updated; });
       var act = decide(game, mine);
+      if (act === "pull" && played) {
+        // 이미 손을 댄 뒤예요. 묻지 않는 pull은 새로고침을 부르니 여기서는 하지 않아요.
+        // 로컬에 기록이 있으면 다음 실행에서 사람이 고르도록 장부만 세워두고,
+        // 없으면(새 기기가 처음 받아오는 경우) 그냥 다음 실행에 받아요 — 잃을 게 없어요.
+        if (hasData(collect(game))) set(dirtyKey(game), "1");
+        return;
+      }
       if (act === "push") push(game);
       else if (act === "pull") pullAndApply(game);
       else if (act === "conflict") {
@@ -298,7 +367,7 @@
     return rpc("cloud_pull", { p_token: tok, p_game: tag(game) }).then(function (rows) {
       if (!rows || !rows.length) return;
       var row = rows[0];
-      if (!apply(game, row.data)) {
+      if (!hasData(row.data)) {
         // 서버 쪽이 빈 꾸러미예요. 지우지 않고, 대신 이 기기 기록을 올려 서버를 바로잡아요.
         // (syncKey는 갱신해둬야 켤 때마다 같은 빈 기록을 다시 받아오지 않아요)
         set(syncKey(game), String(row.updated));
@@ -306,6 +375,10 @@
         push(game);
         return;
       }
+      // 받아왔는데 저장소에 못 썼어요(용량 초과 등). 장부는 손대지 않아요 —
+      // 여기서 도장을 찍으면 받지도 못한 기록과 "같다"고 믿고, 다음 전송이
+      // 반대편 기기의 더 새로운 세이브를 이 반쪽짜리로 덮어써요.
+      if (!apply(game, row.data)) return;
       set(syncKey(game), String(row.updated));
       set(dirtyKey(game), "0");
       toast("☁️ 다른 기기 기록을 불러왔어요");
@@ -800,14 +873,21 @@
         // 서버가 우리 도장보다 새로우니 다음 실행에서 pull이나 충돌 화면으로 이어지고,
         // 어느 쪽도 사용자에게 묻지 않고 기록을 지우지 않아요.
         // (지금 응답의 시각으로 다시 받아오면 그 사이 변경을 조용히 삼키게 돼요)
+        var writeFail = false;
         pulled.forEach(function (g) {
           var row = remote[g];
-          if (row && apply(g, row.data)) {
-            set(syncKey(g), String(row.updated));
-            set(dirtyKey(g), "0");
-          } else {
+          if (!row || !hasData(row.data)) {
             set(dirtyKey(g), "1");   // 서버가 비어 있었어요 — 지우지 말고 이 기기 것을 올려요
+            return;
           }
+          if (!apply(g, row.data)) {
+            // 저장소에 못 썼어요. 장부를 건드리지 않아요 — orphanLedger()가 세워둔
+            // "결정 필요"(dirty=1 · 도장 없음)가 그대로 남아 다음 실행에서 다시 물어봐요.
+            writeFail = true;
+            return;
+          }
+          set(syncKey(g), String(row.updated));
+          set(dirtyKey(g), "0");
         });
         // 이 기기 것을 남긴 게임만 올릴 거리가 있어요.
         // 한 번도 안 해본 게임까지 dirty로 찍으면 빈 {}가 올라가서
@@ -829,7 +909,11 @@
         // 사람이 골랐어요 — 이제 배경 전송을 풀어줘도 사용자 대신 누르는 게 아니에요
         releaseDecision(GAMES);
         closeModal();
-        _toast("골라주신 대로 정리했어요");
+        // 못 쓴 게 있으면 "정리했어요"라고 말하면 안 돼요. 장부는 그대로라 다음 실행에서
+        // 다시 물어보고, 이 기기 기록은 아직 그대로 있어요.
+        _toast(writeFail
+          ? "일부는 이 기기에 저장하지 못했어요. 저장 공간을 비우고 다시 시도해주세요"
+          : "골라주신 대로 정리했어요");
         reloadSoon(700);
       };
     }).catch(function () { _toast("불러오기에 실패했어요"); });
@@ -859,10 +943,19 @@
        * 거짓말한 뒤 깃발을 그대로 둬요 → 켤 때마다 같은 화면이 영원히 돌아와요.
        * 고를 게 없으면 물을 것도 없어요. 잃을 로컬이 없으니 서버 것을 받고 장부만 맞춰요. */
       if (!mine) {
-        var applied = apply(game, rows[0].data);
+        if (!hasData(rows[0].data)) {
+          // 양쪽 다 비었어요 — 잃을 게 없으니 장부만 맞춰 같은 화면이 반복되지 않게 해요
+          set(syncKey(game), String(rows[0].updated));
+          set(dirtyKey(game), "0");
+          return;
+        }
+        // 저장소에 못 썼으면 장부를 건드리지 않아요 — 받지도 못한 기록과 "같다"고
+        // 적어두면 다음 전송이 반대편 기기의 진짜 기록을 덮어써요.
+        if (!apply(game, rows[0].data)) return;
         set(syncKey(game), String(rows[0].updated));
         set(dirtyKey(game), "0");
-        if (applied) { toast("☁️ 다른 기기 기록을 불러왔어요"); reloadSoon(900); }
+        toast("☁️ 다른 기기 기록을 불러왔어요");
+        reloadSoon(900);
         return;
       }
 
@@ -888,10 +981,16 @@
       };
       ov.querySelector("#cloud-take").onclick = function () {
         releaseDecision([game]);   // 사람이 골랐어요
-        if (!apply(game, rows[0].data)) {
+        if (!hasData(rows[0].data)) {
           // 서버가 빈 꾸러미였어요 — 지우지 않고 이 기기 것을 지켜요
           closeModal();
           _toast("다른 기기에 가져올 기록이 없어요");
+          return;
+        }
+        if (!apply(game, rows[0].data)) {
+          // 저장소에 못 썼어요. 도장을 찍지 않아 다음 실행에서 다시 물어봐요.
+          closeModal();
+          _toast("이 기기에 저장하지 못했어요. 저장 공간을 비우고 다시 시도해주세요");
           return;
         }
         set(syncKey(game), String(rows[0].updated));
@@ -903,12 +1002,12 @@
   }
 
   window.Cloud = {
-    init: init, touch: touch, mark: mark,
+    init: init, touch: touch, mark: mark, settle: settle,
     openModal: openModal, onConflict: onConflict,
     _toast: _toast, _pull: pullAndApply,
   };
   window.Cloud._t = {
-    token: token, keysOf: keysOf, collect: collect, apply: apply,
+    token: token, keysOf: keysOf, collect: collect, apply: apply, writeKeys: writeKeys,
     rpc: rpc, tag: tag, decide: decide, summarize: summarize, openLink: openLink,
     hasData: hasData, describe: describe, syncStart: syncStart, syncEnd: syncEnd,
     sideOnly: sideOnly, ago: ago, orphanLedger: orphanLedger,
