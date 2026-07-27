@@ -401,6 +401,7 @@ window.Career = (() => {
     renderGameSim({
       title: `${gameLabel()} vs ${opp}`,
       oppName: opp,
+      oppStr: teamStrOf(opp),   // 상대가 강할수록 치기 어렵고 막기 어려워요
       homeName: S.team,
       perf, story,
       interactive: false,
@@ -433,6 +434,7 @@ window.Career = (() => {
     renderGameSim({
       title: `${gameLabel()} vs ${opp} (선발 등판)`,
       oppName: opp,
+      oppStr: teamStrOf(opp),   // 상대가 강할수록 치기 어렵고 막기 어려워요
       homeName: S.team,
       perf, story,
       interactive: false,
@@ -539,12 +541,20 @@ window.Career = (() => {
     btn.textContent = "🔥 위기!";
 
     const resolve = (res) => {
-      /* 실점 폭은 개편 전 구원 등판(평균 0.28실점)에서 너무 벌어지지 않게 잡았어요.
-       * 미니게임으로 실력이 반영되는 만큼 평균은 조금 올라가요. */
-      let runs, txt, cls;
-      if (res === "perfect") { runs = 0; perf.k += 2; txt = "연속 탈삼진으로 위기 탈출!! 🧊"; cls = "good"; }
-      else if (res === "good") { runs = Math.random() < 0.3 ? 1 : 0; perf.k += 1; txt = runs ? "1실점으로 최소 실점 방어" : "범타 처리로 무실점! 🧤"; cls = runs ? "" : "good"; }
-      else { runs = randInt(1, 2); txt = `통한의 적시타… ${runs}실점 💧`; cls = "bad"; }
+      // 선발 위기와 같은 식을 써요 (game.js의 crisisRuns)
+      const runs = crisisRuns(res, teamStrOf(opp));
+      let txt, cls;
+      if (runs === 0) {
+        perf.k += res === "perfect" ? 2 : 1;
+        txt = res === "perfect" ? "연속 탈삼진으로 위기 탈출!! 🧊" : "범타 처리로 위기 탈출! 🧤";
+        cls = "good";
+      } else if (runs === 1) {
+        txt = res === "perfect" ? "잘 던졌지만 빗맞은 안타… 1실점" : "1실점으로 최소 실점 방어";
+        cls = "";
+      } else {
+        txt = `통한의 적시타… ${runs}실점 💧`;
+        cls = "bad";
+      }
       perf.runs = runs;
 
       let our = our0, their = their0 + runs;
@@ -914,8 +924,11 @@ window.Career = (() => {
     // 수상은 '리그 내 상대 비교' — 가상 경쟁자들의 WAR와 겨뤄 최고면 수상해요.
     // (압도적인 시즌은 랜덤에 밀려 MVP를 놓치지 않아요)
     const awards = [];
-    if (S.proYear === 1 && war >= 3.5) {
-      const bestRookie = Math.max(...Array.from({ length: 4 }, () => rand(1.5, 4.2)));
+    /* 컷을 3.5 → 1.5로 내렸어요. 타격·투구 판정을 다시 잡으면서 WAR 스케일이
+     * 내려갔고, 새 모델의 1년차는 WAR 0 언저리예요. 예전 컷으로는 신인왕이
+     * 아예 나오지 않습니다. 경쟁자 분포도 같은 비율로 낮췄어요. */
+    if (S.proYear === 1 && war >= 1.5) {
+      const bestRookie = Math.max(...Array.from({ length: 4 }, () => rand(0.5, 2.5)));
       if (war >= bestRookie) { awards.push("신인왕"); S.career.roy += 1; }
     }
     const leagueBest = Math.max(...Array.from({ length: 6 }, () => rand(3.5, 7.8)));
@@ -941,7 +954,9 @@ window.Career = (() => {
       if (S.age <= 25) S.stats[d.key] = clamp(S.stats[d.key] + rand(0, 1.2) * S.talents[d.key], 0, statCap(d.key));
       else if (S.age >= 31) S.stats[d.key] = clamp(S.stats[d.key] - rand(0.8, 2.2) - (S.age - 31) * 0.35, 0, statCap(d.key));
     }
-    const salary = 3000 + Math.round(Math.max(war, 0) * 1500);
+    /* WAR 계수를 1500 → 2500으로 올렸어요. 판정 재조정으로 WAR이 절반 아래로
+     * 내려가서, 그대로 두면 2.10.0·2.11.0에서 완화한 경제가 다시 빡빡해져요. */
+    const salary = 3000 + Math.round(Math.max(war, 0) * 2500);
     S.money = (S.money || 0) + salary;
     S.age += 1;
     const finalW = sn.teamW, finalL = sn.teamL;
@@ -1434,12 +1449,17 @@ window.Career = (() => {
   }
 
   // ---------- 명예의 전당 ----------
+  /* 컷을 새 WAR 스케일에 맞춰 올렸어요. 예전 800은 개편 전 모델에서 4년이면
+   * 닿아 이미 너무 낮았습니다. 점수 식(careerScore)은 그대로 두고 컷만 옮겨요 —
+   * 둘 다 건드리면 무엇이 결과를 바꿨는지 알 수 없어져요.
+   * 개편 전에 쌓인 기록은 점수가 부풀려져 있어 대부분 최고 등급으로 남아요.
+   * 기록을 지우지 않기로 한 대가이고, 초창기 밸런스의 흔적으로 둡니다. */
   function gradeOfScore(sc) {
-    if (sc >= 800) return "🐐 불멸의 레전드";
-    if (sc >= 500) return "👑 명예의 전당 헌액";
-    if (sc >= 300) return "🌟 구단 레전드";
-    if (sc >= 150) return "💪 준수한 커리어";
-    if (sc >= 60) return "🧢 저니맨";
+    if (sc >= 1200) return "🐐 불멸의 레전드";
+    if (sc >= 700) return "👑 명예의 전당 헌액";
+    if (sc >= 380) return "🌟 구단 레전드";
+    if (sc >= 180) return "💪 준수한 커리어";
+    if (sc >= 70) return "🧢 저니맨";
     return "🌱 짧고 굵은 야구 인생";
   }
 
