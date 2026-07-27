@@ -278,6 +278,7 @@ function transcend(key, d, v, logFn) {
   } else {
     S.stats[key] = randInt(45, 60);
     logFn(`🌠💦 초월 실패… ${d.name} ${Math.round(S.stats[key])}부터 다시 (✨${lv} 유지)`);
+    if (window.Fx) { Fx.burst(".awaken-btn", "💦", 8); Fx.flash(`💦 ${d.name} 초월 실패…`); }
   }
   save();
   return true;
@@ -309,9 +310,12 @@ function awakenTalent(key, logFn) {
     S.talents[key] = Math.max(S.talents[key] - 0.1, 0.8);
     S.stats[key] = randInt(30, 50);
     logFn(`🔮💧 각성 실패… 무리한 시도에 재능까지 살짝 잃었어요 (${Math.round(S.stats[key])})`);
+    // 실패에 연출이 없어서 "아무 일도 안 일어났다 = 오류"로 읽혔어요 (플레이어 제보)
+    if (window.Fx) { Fx.burst(".awaken-btn", "💧", 10); Fx.flash(`💧 ${d.name} 각성 실패… 재능도 잃었어요`); }
   } else {
     S.stats[key] = randInt(30, 50);
     logFn(`🔮💦 각성 실패… ${d.name} ${Math.round(S.stats[key])}부터 다시 담금질!`);
+    if (window.Fx) { Fx.burst(".awaken-btn", "💦", 8); Fx.flash(`💦 ${d.name} 각성 실패…`); }
   }
   save();
   return true;
