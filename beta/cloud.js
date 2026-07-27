@@ -160,7 +160,9 @@
       if (document.visibilityState === "hidden" && get(dirtyKey(game)) === "1") push(game);
     });
     // 타이틀 진입 시 서버 상태만 가볍게 확인해요
-    rpc("cloud_meta", { p_token: token() }).then(function (rows) {
+    var tok = token();
+    if (!tok) return; // 기기 정체성이 없으면 클라우드는 조용히 쉬어요
+    rpc("cloud_meta", { p_token: tok }).then(function (rows) {
       var mine = null;
       (rows || []).forEach(function (r) { if (r.game === tag(game)) mine = r.updated; });
       var act = decide(game, mine);
@@ -171,7 +173,9 @@
   }
 
   function pullAndApply(game) {
-    return rpc("cloud_pull", { p_token: token(), p_game: tag(game) }).then(function (rows) {
+    var tok = token();
+    if (!tok) return Promise.resolve(); // 기기 정체성이 없으면 클라우드는 조용히 쉬어요
+    return rpc("cloud_pull", { p_token: tok, p_game: tag(game) }).then(function (rows) {
       if (!rows || !rows.length) return;
       apply(game, rows[0].data);
       set(syncKey(game), String(rows[0].updated));
