@@ -233,7 +233,28 @@
     if (Date.now() - lastPush > PUSH_GAP) push(cur);
   }
 
-  function mark() { if (cur) push(cur); }
+  function mark() {
+    if (!cur) return;
+    push(cur);
+    // 첫 은퇴처럼 "잃을 게 생긴" 순간에 한 번만 권해요. 그 뒤로는 조르지 않아요.
+    // 저장소를 못 쓰면(token() null) 애초에 기능이 성립하지 않으니 권하지 않아요.
+    if (get("grow-cloud-issued") !== "1" && get("grow-cloud-asked") !== "1" && token()) {
+      set("grow-cloud-asked", "1");
+      setTimeout(function () {
+        // 연동·충돌 화면은 "어느 쪽을 남길까요"를 묻고 있어요. 그 위에 이 권유가 겹쳐 뜨면
+        // 사용자가 결정 화면 대신 이 팝업에 답해버릴 수 있어요. 그런 순간엔 건너뛰어요.
+        if (awaiting[cur]) return;
+        var ov = shell(
+          '<p class="av-title">💾 기록을 지킬까요?</p>' +
+          '<p>지금 기록은 이 기기에만 있어요.<br/>' +
+          '브라우저 데이터를 지우거나 기기를 바꾸면 사라져요.<br/>' +
+          '연동 코드를 하나 받아두면 새 기기에서 그대로 이어받을 수 있어요.</p>' +
+          '<button class="btn btn-primary" id="cloud-go">🔗 코드 받기</button>'
+        );
+        ov.querySelector("#cloud-go").onclick = function () { closeModal(); openModal(); };
+      }, 1200);
+    }
+  }
 
   /* 5.3절 판정 — 기기 시계를 쓰지 않아요.
    * dirty(내가 안 올린 변경이 있나) × 서버가 더 최신인가, 네 갈래예요. */
