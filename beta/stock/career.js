@@ -400,7 +400,11 @@ window.StockCareer = (() => {
     const leagueBest = Math.max(...Array.from({ length: 6 }, () => rand(3.5, 7.8)));
     if (hype >= 5.5 && hype >= leagueBest) {
       awards.push("올해의투자자"); S.career.daesang += 1;
-    } else if (hype >= 4.5) {
+    }
+    /* 베스트개미은(는) 올해의투자자과(와) 별개로 판정해요.
+     * 예전에는 else if라서 올해의투자자을(를) 받으면 베스트개미을(를) 아예 못 받았어요.
+     * 가장 잘한 시즌이 오히려 상을 덜 받는 역전이 났습니다. */
+    if (hype >= 4.5) {
       const posBar = rand(4.2, 6.2);
       if (hype >= posBar) { awards.push("베스트개미"); S.career.bonsang += 1; }
     }
