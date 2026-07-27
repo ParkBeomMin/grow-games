@@ -230,14 +230,34 @@ window.Cloud = {
 ```
 
 세이브를 읽고 쓰는 방법은 게임이 넘겨주지 않고 **`cloud.js`가 게임별 키 목록으로 안다.**
-8종의 localStorage 키가 규칙적(`<game>-save-v1`, `-slots`, `-legacy`, `grow-hof-v1` 등)이라
-이쪽이 단순하다. 게임 코드 변경을 `Cloud.mark()`/`touch()` 호출 두 곳으로 줄일 수 있다.
+게임 코드 변경을 `Cloud.mark()`/`touch()` 호출 두 곳으로 줄일 수 있다.
 
 - 읽기 — 그 게임의 키 전부를 모아 하나의 객체로
 - 쓰기 — 객체를 localStorage에 되돌려 쓰고 `location.reload()`
 
-`grow-hof-v1`(명예의 전당)과 `grow-battle-v1`은 8종이 **공유하는** 키다. 게임별 세이브에
-넣으면 서로 덮어쓴다. 그래서 이 둘은 `game = "_shared"` 행으로 따로 저장한다.
+### 6.0 실제 저장 키 (코드에서 확인함)
+
+| 게임 | `SAVE_KEY` | 배틀 키 |
+|---|---|---|
+| rookie | `rookie-save-v1` | `grow-battle-v1` |
+| idol | `trainee-save-v1` | `grow-battle-idol-v1` |
+| stock | `investor-save-v1` | `grow-battle-stock-v1` |
+| dev | `devgrow-save-v1` | `grow-battle-dev-v1` |
+| chef | `chef-save-v1` | `grow-battle-chef-v1` |
+| stream | `streamer-save-v1` | `grow-battle-stream-v1` |
+| soccer | `winger-save-v1` | `grow-battle-soccer-v1` |
+| unicorn | `unicorn-save-v1` | 없음 (`unicorn-founded` 사용) |
+
+7종은 `SAVE_KEY + "-slots"`, `SAVE_KEY + "-legacy"`를 함께 쓴다. 유니콘은 둘 다 없고
+`unicorn-founded`가 있다.
+
+**`grow-hof-v1`(명예의 전당)만 8종이 공유한다.** 배틀 키는 게임별로 다르므로 공유가 아니다
+(루키만 접미사 없이 `grow-battle-v1`이라 공유처럼 보이지만 루키 전용이다).
+
+따라서 게임별 세이브에 넣으면 서로 덮어쓰는 키는 `grow-hof-v1` 하나뿐이며,
+이것만 `game = "_shared"` 행으로 따로 저장한다.
+
+`grow-auto-mini`(미니게임 자동 진행)와 `grow-player-id`는 **기기 설정**이라 동기화하지 않는다.
 
 각 `index.html` 변경은 두 줄이다.
 
