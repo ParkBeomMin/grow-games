@@ -141,8 +141,8 @@ const issueCalls = (calls) => calls.filter((c) => c.fn === "cloud_issue").length
     window.Cloud.openModal();
     const reissue = $("#cloud-issue");
     check(!!reissue, "저장된 코드가 있어도 재발급 버튼이 있다");
-    check(!!reissue && /무효/.test(reissue.textContent),
-      `재발급 버튼에 '지금 코드는 무효가 돼요' 경고가 있다 — "${reissue && reissue.textContent}"`);
+    check(!!reissue && /더 못 들어와요/.test(reissue.textContent),
+      `재발급 버튼이 옛 코드가 막힌다는 걸 경고한다 — "${reissue && reissue.textContent}"`);
     check(!!reissue && !/복사/.test(reissue.textContent),
       "재발급 버튼 자체는 '복사'를 말하지 않는다 (복사와 재발급이 분리돼 있다)");
     const copyBtn = $("#cloud-copy");
@@ -188,6 +188,7 @@ const issueCalls = (calls) => calls.filter((c) => c.fn === "cloud_issue").length
       await tick(40);
       check(issueCalls(calls) === 1, `재발급 버튼을 누르면 cloud_issue가 나간다 (${issueCalls(calls)}회)`);
       check(LS.getItem(CODE_KEY) === NEW, `저장된 코드가 새 코드로 교체된다 (실제: ${LS.getItem(CODE_KEY)})`);
+      check(LS.getItem("grow-cloud-issued") === "1", "재발급 후에도 발급 플래그는 계속 1이다");
       const txt = $(".cloud-modal").textContent;
       check(txt.indexOf(NEW) !== -1, "화면에도 새 코드가 보인다");
       check(txt.indexOf(OLD) === -1, "옛 코드는 더 이상 화면에 보이지 않는다");
@@ -300,7 +301,7 @@ const issueCalls = (calls) => calls.filter((c) => c.fn === "cloud_issue").length
   }
 
   // ============================================================
-  group("8) not_found — 코드가 없거나 이미 쓴 코드는 여전히 원래 경고문을 보여준다");
+  group("8) not_found — 없는 코드는 오타·재발급을 짚어 안내한다");
   {
     const { window, $ } = mk({ cloud_claim: { ok: false, reason: "not_found" } });
     window.Cloud.openModal();
@@ -309,8 +310,10 @@ const issueCalls = (calls) => calls.filter((c) => c.fn === "cloud_issue").length
     await tick(40);
 
     const msg = $("#cloud-msg");
-    check(!!msg && /코드가 맞지 않거나 이미 사용됐어요/.test(msg.textContent),
-      `not_found에는 원래 경고문이 그대로 뜬다 — "${msg && msg.textContent}"`);
+    check(!!msg && /코드를 찾을 수 없어요/.test(msg.textContent),
+      `not_found 경고문이 뜬다 — "${msg && msg.textContent}"`);
+    check(!!msg && !/한 번 쓰면 사라/.test(msg.textContent),
+      "이제 일회용이 아니므로 '한 번 쓰면 사라진다'고 말하지 않는다");
     check(!!msg && !/이 기기에서 발급한 코드/.test(msg.textContent), "same_device 안내와 섞이지 않는다");
   }
 
@@ -378,7 +381,7 @@ const issueCalls = (calls) => calls.filter((c) => c.fn === "cloud_issue").length
   }
 
   // ============================================================
-  group("12) not_found 문구는 코드가 한 번 쓰면 사라진다는 것과, '다시 보기' 버튼을 함께 안내한다");
+  group("12) not_found 문구는 재발급으로 무효가 된다는 것과, 되돌아갈 버튼을 함께 안내한다");
   {
     const { window, $ } = mk({ cloud_claim: { ok: false, reason: "not_found" } });
     window.Cloud.openModal();
@@ -387,8 +390,8 @@ const issueCalls = (calls) => calls.filter((c) => c.fn === "cloud_issue").length
     await tick(40);
 
     const msg = $("#cloud-msg");
-    check(!!msg && /한 번 쓰면 사라져요/.test(msg.textContent),
-      `코드는 한 번 쓰면 사라진다는 설명이 덧붙는다 — "${msg && msg.textContent}"`);
+    check(!!msg && /새 코드를 발급/.test(msg.textContent),
+      `재발급하면 옛 코드가 무효가 된다는 설명이 덧붙는다 — "${msg && msg.textContent}"`);
     check(!!msg && /어느 기록을 남길지 고르기/.test(msg.textContent),
       `'어느 기록을 남길지 고르기' 버튼을 가리킨다 — "${msg && msg.textContent}"`);
   }
@@ -443,6 +446,67 @@ const issueCalls = (calls) => calls.filter((c) => c.fn === "cloud_issue").length
     await tick(60);
     check(calls.filter((c) => c.fn === "cloud_claim").length === 1,
       "cloud_meta 실패 후에도 claim 요청이 정상적으로 나간다");
+  }
+
+  // ============================================================
+  group("15) 코드는 1회용이 아니다 — 같은 코드를 두 번째 기기가 또 claim해도 성공하고, 장부 정리를 똑같이 한다");
+  {
+    // 예전엔 cloud_claim 성공 시 서버가 코드 행을 지워, 다음 기기는 not_found를 받았다.
+    // 이제는 cloud_issue가 새 코드를 낼 때만 옛 코드가 무효화되고, claim은 코드를 지우지
+    // 않는다 — 같은 코드를 기기 B가 쓰고 나서 기기 C가 또 써도 {ok:true}가 온다.
+    //
+    // 클라이언트는 이 재사용 여부를 스스로 알 방법이 없다 — 서버가 돌려주는 {ok:true}만
+    // 본다. 그래서 이 테스트로 확인할 수 있는 것은 "서버가 재사용을 허락했을 때 클라이언트가
+    // 올바르게 반응하는가"이지, "서버가 실제로 재사용을 허락하는가"가 아니다(그건 이미 실서버로
+    // 확인됨 — 과제 설명 참고). 같은 이유로 이 테스트는 예전(1회용) 클라이언트를 상대로도
+    // 그대로 통과한다: 예전 클라이언트도 {ok:true}를 받으면 코드가 새것이든 재사용된 것이든
+    // 구분하지 않고 똑같은 성공 처리를 했다. 이건 코드가 실제로 살아있는지(서버 상태)가 아니라
+    // 클라이언트의 성공 경로에 "이미 한 번 쓴 코드"를 특별 취급하는 로직이 몰래 들어오지
+    // 않았는지를 잡아내는 회귀 고정핀이다.
+    const SHARED_CODE = "SHARED-CODE-B4C4-D4E4-F4A4-0000";
+
+    async function deviceClaims(rookieSlotSavedAt) {
+      const { LS, window, $, calls } = mk({
+        cloud_claim: { ok: true },
+        cloud_pull: [],   // openLink()가 p_game:null로 부른다 — 두 기기 다 상대 사본은 없다고 흉내
+      });
+      // 이 기기(순전히 claim만 하는 쪽)에는 발급한 코드가 없고, 정리 대상이 될 자기 기록만 있다.
+      LS.setItem("rookie-save-v1-slots", JSON.stringify({
+        s1: { phase: "pro", proYear: 1, savedAt: rookieSlotSavedAt },
+      }));
+      LS.setItem("grow-cloud-synced-rookie", "2026-07-20T00:00:00Z");   // claim 전의 진짜 도장
+
+      window.Cloud.openModal();
+      $("#cloud-code-input").value = SHARED_CODE;
+      $("#cloud-claim").click();
+      await tick(40);   // claim 처리 + orphanLedger + closeModal + openLink 시작
+      await tick(40);   // openLink()의 cloud_pull 응답 처리
+
+      return { LS, window, $, calls };
+    }
+
+    const B = await deviceClaims(1000);
+    const C = await deviceClaims(2000);
+
+    [{ label: "기기 B(첫 claim)", d: B }, { label: "기기 C(같은 코드로 두 번째 claim)", d: C }].forEach(({ label, d }) => {
+      const claimCalls = d.calls.filter((c) => c.fn === "cloud_claim");
+      check(claimCalls.length === 1 && claimCalls[0].body.p_code === SHARED_CODE,
+        `${label}: cloud_claim이 같은 코드로 정확히 1회 나간다 (실제: ${JSON.stringify(claimCalls.map((c) => c.body.p_code))})`);
+      check(d.LS.getItem(CODE_KEY) === null, `${label}: 성공 처리로 저장된 코드(있었다면)가 지워진다`);
+      check(d.LS.getItem("grow-cloud-issued") === "0", `${label}: 발급 플래그가 0으로 정리된다`);
+      check(d.LS.getItem("grow-cloud-synced-rookie") === null,
+        `${label}: orphanLedger가 옛 계정 기준 도장을 지운다 (실제: ${d.LS.getItem("grow-cloud-synced-rookie")})`);
+      check(d.LS.getItem("grow-cloud-dirty-rookie") === "1",
+        `${label}: 로컬 기록이 있던 게임은 사람이 정하도록 dirty=1로 되돌린다`);
+      check(d.calls.filter((c) => c.fn === "cloud_pull").length === 1,
+        `${label}: 연결 화면을 위해 cloud_pull이 정확히 1회 나간다`);
+      const modalTxt = d.$(".cloud-modal") ? d.$(".cloud-modal").textContent : "";
+      check(/기기를 연결했어요/.test(modalTxt), `${label}: 연결 화면이 뜬다 — "${modalTxt}"`);
+    });
+
+    // 두 기기의 결과가 서로 다르게 갈리지 않았는지 — 같은 코드, 같은 처리.
+    check(B.LS.getItem("grow-cloud-issued") === C.LS.getItem("grow-cloud-issued"),
+      "기기 B와 기기 C의 발급 플래그 처리 결과가 같다 (둘 다 같은 코드를 성공 claim했다)");
   }
 
   console.log(fail ? `\n❌ 실패 ${fail}건` : "\n✅ 통과");

@@ -552,7 +552,8 @@
   function codeBlock(code) {
     return '<code class="cloud-code" id="cloud-code">' + esc(code) + '</code>' +
       '<button class="btn btn-ghost cloud-copy" id="cloud-copy">📋 코드 복사</button>' +
-      '<p>이 코드를 다른 기기의 "불러오기"에 붙여넣으세요. 한 번 쓰면 사라져요.<br/>' +
+      '<p>이 코드를 다른 기기의 "불러오기"에 붙여넣으세요.<br/>' +
+      '기기 여러 대에 몇 번이든 쓸 수 있고, 새 코드를 발급하면 그때 무효가 돼요.<br/>' +
       '복사가 안 되면 위 코드를 길게 눌러 직접 복사하시면 돼요.</p>';
   }
   function wireCopy(ov, code) {
@@ -615,7 +616,7 @@
       '한 번 연결해두면 8개 게임 기록이 양쪽에서 자동으로 맞춰져요.</p>' +
       (kept
         ? '<div id="cloud-out">' + codeBlock(kept) + '</div>' +
-          '<button class="btn btn-ghost" id="cloud-issue">🔄 새 코드 발급 (지금 코드는 무효가 돼요)</button>'
+          '<button class="btn btn-ghost" id="cloud-issue">🔄 새 코드 발급 (옛 코드로는 더 못 들어와요)</button>'
         : '<button class="btn btn-primary" id="cloud-issue">🔗 연동 코드 발급</button>' +
           '<div id="cloud-out"></div>') +
       '<hr class="cloud-sep"/>' +
@@ -629,8 +630,8 @@
     if (kept) wireCopy(ov, kept);
 
     /* 이미 연결된 기기라면 코드가 더 필요 없어요.
-     * 연동 코드는 한 번 쓰면 사라지는데, 확인 화면에서 취소하고 다시 하려던 분들이
-     * "이미 사용됐어요"를 보고 실패로 오해했어요 — 실은 연결은 이미 끝나 있어요.
+     * 확인 화면에서 취소하고 다시 하려던 분들이 실패로 오해했어요 —
+     * 실은 코드를 넣은 순간 연결은 이미 끝나 있어요.
      * 서버에 내 계정 기록이 있으면 코드 없이 그 화면을 다시 열 수 있게 해줘요. */
     (function () {
       var tok = token();
@@ -657,7 +658,7 @@
         wireCopy(ov, code);
         btn.disabled = false;
         btn.className = "btn btn-ghost";
-        btn.textContent = "🔄 새 코드 발급 (지금 코드는 무효가 돼요)";
+        btn.textContent = "🔄 새 코드 발급 (옛 코드로는 더 못 들어와요)";
         // 되는 브라우저(데스크톱·안드로이드)에서는 바로 복사해줘요. iOS에서 막히면
         // 위 복사 버튼이 받아주니, 여기서는 실패해도 화면을 어지럽히지 않아요.
         if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -689,9 +690,10 @@
           msg.innerHTML = why === "same_device"
             ? '<p>이 기기에서 발급한 코드예요. <b>다른 기기</b>의 "불러오기"에 붙여넣어 주세요.<br/>' +
               '코드는 그대로 살아 있어요.</p>'
-            : '<p>⚠️ 코드가 맞지 않거나 이미 사용됐어요.<br/>' +
-              '연동 코드는 한 번 쓰면 사라져요. 이미 연결하셨다면 아래 ' +
-              '"어느 기록을 남길지 고르기"를 쓰시면 돼요.</p>';
+            : '<p>⚠️ 코드를 찾을 수 없어요.<br/>' +
+              '오타가 없는지 확인해주세요. 그 기기에서 <b>새 코드를 발급</b>했다면 ' +
+              '옛 코드는 무효예요.<br/>' +
+              '이미 연결하셨다면 아래 "어느 기록을 남길지 고르기"를 쓰시면 돼요.</p>';
           return;
         }
         // 계정이 바뀌었으니 내가 갖고 있던 코드는 이제 남의 계정 것이에요

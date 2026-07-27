@@ -6,6 +6,7 @@
 npm i jsdom --prefix tests/cloud     # 처음 한 번만
 for f in tests/cloud/*-test.js tests/cloud/cloud-manual-check.js; do node "$f" || break; done
 node tests/cloud/dom-test.js "$PWD/beta/rookie"
+doppler run -- bash tests/cloud/server-e2e.sh    # 실서버 (선택)
 ```
 
 | 파일 | 무엇을 보나 |
@@ -20,11 +21,16 @@ node tests/cloud/dom-test.js "$PWD/beta/rookie"
 | `cloud-wire-test.js` | 8종이 브라우저 순서대로 로드됐을 때 실제로 동작하는지 |
 | `help-section-test.js` | 7종 도움말에 기록 보관 절이 그려지는지 |
 | `dom-test.js` | 루키 경기 흐름 회귀 (클라우드와 무관한 기존 검증) |
+| `server-e2e.sh` | **실서버 RPC** — 코드 재사용·재발급 무효화·RLS 잠금 |
 
 ## 주의
 
 **픽스처는 반드시 디스크의 실제 저장 모양으로 만드세요.** 7종은 `<SAVE_KEY>-slots`
 슬롯 맵을 쓰고 유니콘만 평평한 키를 씁니다. 구현이 기대하는 모양으로 픽스처를 만들면
 검증이 구현을 따라 하기만 해서, 기능이 완전히 죽어 있는데도 통과합니다. 실제로 두 번 겪었어요.
+
+**jsdom 검증은 fetch를 스텁해서 서버 동작을 못 봅니다.** 코드가 재사용 가능한지,
+재발급이 옛 코드를 죽이는지 같은 건 서버 상태라 `server-e2e.sh`에서만 확인돼요.
+스키마를 건드렸다면 그쪽도 꼭 돌려주세요.
 
 CSS 렌더링은 여기서 확인할 수 없어요. 배포 후 실기기로 봐야 합니다.
