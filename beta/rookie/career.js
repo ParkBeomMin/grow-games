@@ -188,12 +188,14 @@ window.Career = (() => {
      * 경기일에 눌러도 상관없거든요. */
     if (inSeasonTrade()) {
       const tr = document.createElement("button");
-      tr.className = "action-btn";
+      // 훈련 타일과 성격이 달라요. 휴식·경기 시작과 같이 3칸을 다 쓰는 가로 버튼으로 둡니다.
+      tr.className = "action-btn rest";
       tr.dataset.key = "__trade";
       const left = TRADE_CLOSE - S.season.game;
+      // 가로 배치라 한 줄에 늘어서요. 서브 문구가 길면 넘쳐서 짧게 씁니다.
       const sub = S.trade ? "협상 이어하기"
-        : left <= 0 ? "오늘이 마감이에요 · 컨디션을 씁니다"
-        : `마감까지 ${left}경기 · 컨디션을 씁니다`;
+        : left <= 0 ? "오늘이 마감 · 컨디션 소모"
+        : `마감까지 ${left}경기 · 컨디션 소모`;
       tr.innerHTML = `<span class="a-emoji">🔁</span>트레이드 요청<span class="a-sub">${sub}</span>`;
       tr.onclick = startTrade;
       box.appendChild(tr);
