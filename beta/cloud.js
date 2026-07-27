@@ -42,9 +42,11 @@
   }
 
   // 128비트 무작위. crypto가 없으면 Math.random으로 떨어져요 (아주 오래된 브라우저)
+  // 저장소를 못 읽고 못 쓰면 null을 돌려줘요 — 기기 정체성이 없으면 클라우드는 그냥 쉬어야 해요.
+  // "nostorage" 같은 고정값을 주면 서로 다른 기기가 같은 계정으로 겹쳐 써버려요.
   function token() {
     var t = null;
-    try { t = localStorage.getItem(TOKEN_KEY); } catch (e) { return "nostorage"; }
+    try { t = localStorage.getItem(TOKEN_KEY); } catch (e) { t = null; }
     if (t) return t;
     var raw = "";
     if (window.crypto && window.crypto.getRandomValues) {
@@ -54,7 +56,11 @@
     } else {
       for (var j = 0; j < 4; j++) raw += Math.random().toString(16).slice(2, 10);
     }
-    try { localStorage.setItem(TOKEN_KEY, raw); } catch (e) {}
+    try {
+      localStorage.setItem(TOKEN_KEY, raw);
+    } catch (e) {
+      return null; // 저장이 안 되면 매번 새 토큰이 생기니, 차라리 정체성 없음으로 취급해요
+    }
     return raw;
   }
 
@@ -102,8 +108,10 @@
 
   function push(game) {
     if (!game || !SAVE[game]) return Promise.resolve();
+    var tok = token();
+    if (!tok) return Promise.resolve(); // 기기 정체성이 없으면 클라우드는 조용히 쉬어요
     lastPush = Date.now();
-    return rpc("cloud_push", { p_token: token(), p_game: tag(game), p_data: collect(game) })
+    return rpc("cloud_push", { p_token: tok, p_game: tag(game), p_data: collect(game) })
       .then(function (at) {
         set(syncKey(game), String(at));
         set(dirtyKey(game), "0");
@@ -115,7 +123,9 @@
   function pushShared() {
     var v = get(SHARED_KEY);
     if (v === null) return;
-    rpc("cloud_push", { p_token: token(), p_game: tag(SHARED_GAME), p_data: { "grow-hof-v1": v } })
+    var tok = token();
+    if (!tok) return; // 기기 정체성이 없으면 클라우드는 조용히 쉬어요
+    rpc("cloud_push", { p_token: tok, p_game: tag(SHARED_GAME), p_data: { "grow-hof-v1": v } })
       .catch(function () {});
   }
 
