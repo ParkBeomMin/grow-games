@@ -1,40 +1,260 @@
+/* 연동 모달 UI 검증 — 발급/복사/재발급 버튼과 클립보드.
+ *
+ * 실제로 있었던 버그: 버튼 하나(📋 계정 연동 코드 복사하기)가 "복사"라고 읽히는데
+ * 누르면 서버에서 코드를 새로 발급했다(기존 코드는 그 순간 무효화). 사용자가 "복사"인
+ * 줄 알고 또 누르면 방금 받은 코드가 조용히 죽었다. 게다가 모달을 닫으면 코드를 다시 볼
+ * 방법이 없어서, 적어두기 전에 실수로 닫은 사람은 영구히 코드를 잃었다.
+ *
+ * 고친 내용:
+ *   - 발급한 코드를 grow-cloud-code에 남겨 모달을 다시 열어도 보인다.
+ *   - 저장된 코드가 있으면 "📋 코드 복사"(복사 전용)와 "🔄 새 코드 발급(경고 포함)"이 분리된다.
+ *   - 저장된 코드가 없으면 최초 버튼은 "복사"라고 말하지 않는다("🔗 연동 코드 발급").
+ *   - 다른 기기의 코드를 성공적으로 claim하면(계정이 바뀌므로) 저장된 코드와 발급 플래그를 지운다.
+ *   - grow-cloud-code는 keysOf()/collect()에 없어 다른 기기로 동기화되지 않는다.
+ *
+ * CLOUD 환경변수로 검사 대상 파일을 바꿀 수 있다 (수정 전 파일로 돌려 실패를 먼저 확인하려고).
+ *   CLOUD=/…/cloud-before.js node cloud-ui-test.js
+ */
 "use strict";
 const fs = require("fs");
-const SP = __dirname;
-const { JSDOM } = require(__dirname + "/jsdom.js");
-const dom = new JSDOM("<!doctype html><body></body>", { runScripts: "outside-only", url: "https://x.test/rookie/" });
-const { window } = dom;
-window.GROW_ENV = { beta: true };
-window.Match = { cfg: { url: "https://x.test", key: "anon" } };
-let copied = null;
-window.navigator.clipboard = { writeText: (t) => { copied = t; return Promise.resolve(); } };
-window.fetch = (url) => Promise.resolve({
-  ok: true,
-  json: () => Promise.resolve(/cloud_issue/.test(url) ? "ABCD-EFGH-JKMN-PQRS-TUVW-XYZ2" : []),
-});
-window.eval(fs.readFileSync("/workspace/grow-games/beta/cloud.js", "utf8"));
+const { JSDOM, VirtualConsole } = require(__dirname + "/jsdom.js");
+const CLOUD = process.env.CLOUD || "/workspace/grow-games/beta/cloud.js";
+const SRC = fs.readFileSync(CLOUD, "utf8");
 
 let fail = 0;
 const check = (ok, msg) => { console.log(`${ok ? "✅" : "❌"} ${msg}`); if (!ok) fail++; };
-const $ = (s) => window.document.querySelector(s);
+const group = (t) => console.log(`\n— ${t}`);
+const tick = (ms) => new Promise((r) => setTimeout(r, ms || 30));
 
-window.Cloud.init("rookie");
-window.Cloud.openModal();
-check(!!$(".cloud-modal"), "모달이 열린다");
-check(!!$("#cloud-issue"), "코드 발급 버튼이 있다");
-check(!!$("#cloud-code-input"), "코드 입력칸이 있다");
+// 게임별 저장 키 — 실제 game.js 상수와 일치해야 픽스처가 디스크 모양과 같다.
+const SAVE = {
+  rookie: "rookie-save-v1", idol: "trainee-save-v1", stock: "investor-save-v1",
+  dev: "devgrow-save-v1", chef: "chef-save-v1", stream: "streamer-save-v1",
+  soccer: "winger-save-v1", unicorn: "unicorn-save-v1",
+};
+const GAMES = Object.keys(SAVE);
+const CODE_KEY = "grow-cloud-code";
 
-$("#cloud-issue").click();
-setTimeout(() => {
-  check(copied === "ABCD-EFGH-JKMN-PQRS-TUVW-XYZ2", `클립보드에 복사됨 (${copied})`);
-  check(/ABCD-EFGH/.test($(".cloud-modal").textContent), "코드가 화면에도 보인다");
+/* routes: { fn이름: 고정값 | (body)=>값 }. 지정 안 한 fn을 부르면 테스트가 바로 드러나게 reject. */
+function mk(routes) {
+  const vc = new VirtualConsole();   // jsdom의 location.reload 미구현 경고를 삼킨다
+  const dom = new JSDOM("<!doctype html><body></body>", {
+    runScripts: "outside-only", url: "https://x.test/rookie/", virtualConsole: vc,
+  });
+  const { window } = dom;
+  window.GROW_ENV = { beta: true };
+  window.Match = { cfg: { url: "https://x.test", key: "anon" } };
+  let copied = null;
+  window.navigator.clipboard = { writeText: (t) => { copied = t; return Promise.resolve(); } };
+  const calls = [];
+  window.fetch = (url, opt) => {
+    const fn = String(url).split("/rpc/")[1];
+    const body = JSON.parse(opt.body);
+    calls.push({ fn, body });
+    const h = routes && routes[fn];
+    if (h === undefined) return Promise.reject(new Error("route 없음: " + fn));
+    const v = typeof h === "function" ? h(body) : h;
+    return Promise.resolve(v && typeof v.then === "function"
+      ? v.then((x) => ({ ok: true, json: () => Promise.resolve(x) }))
+      : { ok: true, json: () => Promise.resolve(v) });
+  };
+  window.eval(SRC);
+  return {
+    window, calls, LS: window.localStorage,
+    $: (s) => window.document.querySelector(s),
+    getCopied: () => copied,
+  };
+}
 
-  window.Cloud._toast("테스트");
-  check(!!$(".cloud-toast"), "토스트가 뜬다");
+const issueCalls = (calls) => calls.filter((c) => c.fn === "cloud_issue").length;
 
-  $(".cloud-close").click();
-  check(!$(".cloud-modal"), "닫기로 사라진다");
+(async function () {
+  // ============================================================
+  group("0) 모달 기본 요소");
+  {
+    const CODE = "ABCD-EFGH-JKMN-PQRS-TUVW-XYZ2";
+    const { window, $ } = mk({ cloud_issue: CODE });
+    window.Cloud.init("rookie");
+    window.Cloud.openModal();
+    check(!!$(".cloud-modal"), "모달이 열린다");
+    check(!!$("#cloud-issue"), "발급/재발급 버튼이 있다");
+    check(!!$("#cloud-code-input"), "코드 입력칸이 있다");
+    window.Cloud._toast("테스트");
+    check(!!$(".cloud-toast"), "토스트가 뜬다");
+    $(".cloud-close").click();
+    check(!$(".cloud-modal"), "닫기로 사라진다");
+  }
 
-  console.log(fail ? "\n❌ 실패" : "\n✅ 통과");
+  // ============================================================
+  group("1) 발급한 코드는 모달을 다시 열어도 그대로 보인다 — 새 cloud_issue 없이 (사용자의 실제 불만)");
+  {
+    const CODE = "ABCD-EFGH-JKMN-PQRS-TUVW-XYZ2";
+    const { window, LS, $, calls, getCopied } = mk({ cloud_issue: CODE });
+    window.Cloud.init("rookie");
+    window.Cloud.openModal();
+    $("#cloud-issue").click();
+    await tick(40);
+
+    check($(".cloud-modal").textContent.indexOf(CODE) !== -1, "발급 직후 코드가 화면에 보인다");
+    check(LS.getItem(CODE_KEY) === CODE, `발급한 코드가 로컬(${CODE_KEY})에 남는다 (실제: ${LS.getItem(CODE_KEY)})`);
+    check(issueCalls(calls) === 1, `여기까지 cloud_issue는 1회만 나갔다 (${issueCalls(calls)}회)`);
+
+    $(".cloud-close").click();
+    check(!$(".cloud-modal"), "닫기로 모달이 사라진다");
+
+    window.Cloud.openModal();
+    const txt2 = $(".cloud-modal").textContent;
+    check(txt2.indexOf(CODE) !== -1, "다시 열면 같은 코드가 그대로 보인다 — 예전엔 여기서 코드를 영영 잃었다");
+    check(issueCalls(calls) === 1, `재오픈만으로는 새 cloud_issue가 나가지 않는다 (누적 ${issueCalls(calls)}회)`);
+
+    const copyBtn = $("#cloud-copy");
+    check(!!copyBtn, "재오픈 화면에도 복사 버튼이 있다");
+    if (copyBtn) {
+      copyBtn.click();
+      await tick(20);
+      check(getCopied() === CODE, `복사 버튼이 실제로 코드를 클립보드에 복사한다 (${getCopied()})`);
+      check(issueCalls(calls) === 1, `복사 버튼을 눌러도 cloud_issue는 늘지 않는다 (누적 ${issueCalls(calls)}회)`);
+    } else {
+      check(false, "복사 버튼이 없어 재오픈 화면에서 복사를 확인할 수 없다");
+      check(false, "");
+    }
+  }
+
+  // ============================================================
+  group("2) 버튼 라벨 — 발급 전엔 '복사'로 읽히지 않고, 재발급엔 경고가 붙는다");
+  {
+    // 저장된 코드가 없는 상태 — 최초 발급 버튼
+    const { window, $ } = mk({});
+    window.Cloud.openModal();
+    const btn = $("#cloud-issue");
+    check(!!btn, "저장된 코드가 없을 때도 발급 버튼이 있다");
+    check(!!btn && !/복사/.test(btn.textContent),
+      `저장된 코드가 없을 때 버튼 문구가 '복사'를 말하지 않는다 — "${btn && btn.textContent}"`);
+    check(!!btn && /발급/.test(btn.textContent),
+      `버튼이 발급 동작임을 스스로 말한다 — "${btn && btn.textContent}"`);
+  }
+  {
+    // 저장된 코드가 있는 상태 — 복사 버튼과 재발급 버튼이 분리돼 있다
+    const CODE = "KEPT-CODE-0000-1111-2222-3333";
+    const { LS, window, $ } = mk({});
+    LS.setItem(CODE_KEY, CODE);
+    window.Cloud.openModal();
+    const reissue = $("#cloud-issue");
+    check(!!reissue, "저장된 코드가 있어도 재발급 버튼이 있다");
+    check(!!reissue && /무효/.test(reissue.textContent),
+      `재발급 버튼에 '지금 코드는 무효가 돼요' 경고가 있다 — "${reissue && reissue.textContent}"`);
+    check(!!reissue && !/복사/.test(reissue.textContent),
+      "재발급 버튼 자체는 '복사'를 말하지 않는다 (복사와 재발급이 분리돼 있다)");
+    const copyBtn = $("#cloud-copy");
+    check(!!copyBtn && /코드 복사/.test(copyBtn.textContent),
+      `복사 전용 버튼이 따로 있다 — "${copyBtn && copyBtn.textContent}"`);
+  }
+
+  // ============================================================
+  group("3) '코드 복사'는 복사만 하고, 새로 발급하지 않는다");
+  {
+    const CODE = "COPY-ONLY-CODE-AAAA-BBBB-CCCC";
+    const { LS, window, $, calls, getCopied } = mk({ cloud_issue: "SHOULD-NOT-BE-CALLED" });
+    LS.setItem(CODE_KEY, CODE);
+    window.Cloud.openModal();
+    const copyBtn = $("#cloud-copy");
+    check(!!copyBtn, "코드가 저장돼 있으면 '코드 복사' 버튼이 존재한다");
+    if (copyBtn) {
+      copyBtn.click();
+      await tick(30);
+      check(getCopied() === CODE, `복사 버튼을 누르면 저장된 코드가 클립보드에 복사된다 (${getCopied()})`);
+      check(issueCalls(calls) === 0, `복사만으로는 cloud_issue가 나가지 않는다 (${issueCalls(calls)}회)`);
+      check(LS.getItem(CODE_KEY) === CODE, "저장된 코드도 그대로다 (교체되지 않는다)");
+    } else {
+      check(false, "복사 전용 동작을 확인할 수 없다 (복사 버튼 부재)");
+      check(false, "");
+      check(false, "");
+    }
+  }
+
+  // ============================================================
+  group("4) '새 코드 발급'은 실제로 발급하고, 저장된 코드를 새 코드로 교체한다");
+  {
+    const OLD = "OLD-CODE-1111-2222-3333-4444";
+    const NEW = "NEW-CODE-5555-6666-7777-8888";
+    let n = 0;
+    const { LS, window, $, calls } = mk({ cloud_issue: () => { n++; return n === 1 ? NEW : "UNEXPECTED"; } });
+    LS.setItem(CODE_KEY, OLD);
+    window.Cloud.openModal();
+    const reissue = $("#cloud-issue");
+    check(!!reissue, "재발급 버튼이 있다");
+    if (reissue) {
+      reissue.click();
+      await tick(40);
+      check(issueCalls(calls) === 1, `재발급 버튼을 누르면 cloud_issue가 나간다 (${issueCalls(calls)}회)`);
+      check(LS.getItem(CODE_KEY) === NEW, `저장된 코드가 새 코드로 교체된다 (실제: ${LS.getItem(CODE_KEY)})`);
+      const txt = $(".cloud-modal").textContent;
+      check(txt.indexOf(NEW) !== -1, "화면에도 새 코드가 보인다");
+      check(txt.indexOf(OLD) === -1, "옛 코드는 더 이상 화면에 보이지 않는다");
+    } else {
+      check(false, "재발급 동작을 확인할 수 없다 (버튼 부재)");
+      check(false, ""); check(false, ""); check(false, "");
+    }
+  }
+
+  // ============================================================
+  group("5) 성공적인 claim은 저장된 코드를 지운다 — 계정이 바뀌어 옛 코드는 남의 것");
+  {
+    const CODE = "MINE-CODE-AAAA-BBBB-CCCC-DDDD";
+    const { LS, window, $ } = mk({
+      cloud_claim: true,
+      cloud_pull: [],   // openLink()가 p_game:null로 부른다 — 한쪽에도 기록이 없으니 빈 화면
+    });
+    LS.setItem(CODE_KEY, CODE);
+    LS.setItem("grow-cloud-issued", "1");
+    window.Cloud.openModal();
+    $("#cloud-code-input").value = "SOME-OTHER-DEVICES-CODE";
+    $("#cloud-claim").click();
+    await tick(40);   // claim 처리 + orphanLedger + closeModal + openLink 시작
+    await tick(40);   // openLink()의 cloud_pull 응답 처리
+
+    check(LS.getItem(CODE_KEY) === null, `claim 성공 후 저장된 코드가 지워진다 (실제: ${LS.getItem(CODE_KEY)})`);
+    check(LS.getItem("grow-cloud-issued") === "0", `발급 플래그도 꺼진다 (실제: ${LS.getItem("grow-cloud-issued")})`);
+
+    // claim 뒤에 뜨는 "기기를 연결했어요" 화면을 닫고, 모달을 다시 열어 상태를 확인한다.
+    if ($(".cloud-modal")) $(".cloud-close").click();
+    window.Cloud.openModal();
+    const txt = $(".cloud-modal").textContent;
+    check(txt.indexOf(CODE) === -1, "claim 뒤 모달에 옛 코드가 더 이상 보이지 않는다");
+    const btn = $("#cloud-issue");
+    check(!!btn && /발급/.test(btn.textContent) && !/무효/.test(btn.textContent),
+      `claim 뒤에는 재발급이 아니라 최초 발급 버튼으로 보인다 (다른 계정 코드를 보여주지 않는다) — "${btn && btn.textContent}"`);
+    check(!$("#cloud-copy"), "보여줄 코드가 없으니 복사 버튼도 없다");
+  }
+
+  // ============================================================
+  group("6) grow-cloud-code는 어떤 게임의 collect()/keysOf()에도 실려 나가지 않는다 (다른 기기로 동기화 금지)");
+  {
+    const { LS, window } = mk({});
+    const T = window.Cloud._t;
+    LS.setItem(CODE_KEY, "SHOULD-NEVER-SYNC-0000-1111-2222");
+
+    // 실제 저장 모양대로 픽스처를 채운다: 7종은 -slots 슬롯 맵 + -legacy, unicorn만 평키.
+    GAMES.forEach((g) => {
+      if (g === "unicorn") {
+        LS.setItem(SAVE[g], JSON.stringify({ bestRun: 7e10, exits: 1 }));
+        LS.setItem("unicorn-founded", "1");
+      } else {
+        LS.setItem(SAVE[g] + "-slots", JSON.stringify({ s1: { phase: "pro", proYear: 1, savedAt: 1 } }));
+        LS.setItem(SAVE[g] + "-legacy", "100");
+      }
+    });
+
+    GAMES.forEach((g) => {
+      const collected = T.collect(g);
+      check(!Object.prototype.hasOwnProperty.call(collected, CODE_KEY),
+        `${g}: collect() 결과에 ${CODE_KEY}가 없다 (실제 키: ${Object.keys(collected).join(", ")})`);
+      const keys = T.keysOf(g);
+      check(keys.indexOf(CODE_KEY) === -1,
+        `${g}: keysOf()가 ${CODE_KEY}를 돌려주지 않는다 (실제: ${keys.join(", ")})`);
+    });
+  }
+
+  console.log(fail ? `\n❌ 실패 ${fail}건` : "\n✅ 통과");
   process.exit(fail ? 1 : 0);
-}, 30);
+})().catch((e) => { console.error("테스트 자체가 터졌어요:", e); process.exit(1); });

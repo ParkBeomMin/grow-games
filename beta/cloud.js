@@ -542,6 +542,24 @@
       if (btn._label) btn.textContent = btn._label;
     }, COPIED_MS);
   }
+  /* 발급한 코드를 이 기기에 남겨둬요.
+   * 서버엔 해시만 두지만, 이 기기는 이미 토큰으로 같은 권한을 갖고 있어서
+   * 코드를 여기 두는 걸로 위험이 늘지 않아요. 대신 모달을 닫았다 열어도
+   * 코드를 다시 볼 수 있어요 — 예전엔 다시 보려면 새로 발급하는 수밖에 없어서,
+   * 적어두기 전에 실수로 닫으면 그대로 잃었어요. */
+  var CODE_KEY = "grow-cloud-code";
+
+  function codeBlock(code) {
+    return '<code class="cloud-code" id="cloud-code">' + esc(code) + '</code>' +
+      '<button class="btn btn-ghost cloud-copy" id="cloud-copy">📋 코드 복사</button>' +
+      '<p>이 코드를 다른 기기의 "불러오기"에 붙여넣으세요. 한 번 쓰면 사라져요.<br/>' +
+      '복사가 안 되면 위 코드를 길게 눌러 직접 복사하시면 돼요.</p>';
+  }
+  function wireCopy(ov, code) {
+    var b = ov.querySelector("#cloud-copy");
+    if (b) b.onclick = function () { copyCode(code, ov, b); };
+  }
+
   function copyCode(code, ov, btn) {
     var ok = function () { flashCopied(btn); };
     var no = function () { selectCode(ov); _toast("코드를 길게 눌러 직접 복사해주세요"); };
@@ -581,7 +599,7 @@
   }
 
   function openModal() {
-    var issued = get("grow-cloud-issued") === "1";
+    var kept = get(CODE_KEY);          // 지난번에 발급한 코드 (있으면 그대로 보여줘요)
     // 저장소를 못 쓰면 기기 정체성이 없어서 클라우드 자체가 성립하지 않아요.
     // 요청을 쏘는 대신 솔직하게 알려줘요.
     if (!token()) {
@@ -595,10 +613,11 @@
       '<p>이 기기의 기록은 자동으로 백업되고 있어요.<br/>' +
       '다른 기기에서도 이어서 하려면 연동 코드를 받아 그 기기에 붙여넣으세요.<br/>' +
       '한 번 연결해두면 8개 게임 기록이 양쪽에서 자동으로 맞춰져요.</p>' +
-      '<button class="btn btn-primary" id="cloud-issue">' +
-        (issued ? "🔄 새 코드 발급 (지금 코드는 무효가 돼요)" : "📋 계정 연동 코드 복사하기") +
-      '</button>' +
-      '<div id="cloud-out"></div>' +
+      (kept
+        ? '<div id="cloud-out">' + codeBlock(kept) + '</div>' +
+          '<button class="btn btn-ghost" id="cloud-issue">🔄 새 코드 발급 (지금 코드는 무효가 돼요)</button>'
+        : '<button class="btn btn-primary" id="cloud-issue">🔗 연동 코드 발급</button>' +
+          '<div id="cloud-out"></div>') +
       '<hr class="cloud-sep"/>' +
       '<p>다른 기기에서 쓰던 코드가 있나요?</p>' +
       '<div class="cloud-row">' +
@@ -606,6 +625,7 @@
         '<button class="btn btn-ghost" id="cloud-claim">불러오기</button>' +
       '</div><div id="cloud-msg"></div>'
     );
+    if (kept) wireCopy(ov, kept);
 
     ov.querySelector("#cloud-issue").onclick = function () {
       var btn = this;
@@ -614,19 +634,20 @@
       btn.disabled = true;
       rpc("cloud_issue", { p_token: tok }).then(function (code) {
         set("grow-cloud-issued", "1");
-        ov.querySelector("#cloud-out").innerHTML =
-          '<code class="cloud-code" id="cloud-code">' + esc(code) + '</code>' +
-          '<button class="btn btn-ghost cloud-copy" id="cloud-copy">📋 코드 복사</button>' +
-          '<p>이 코드는 지금만 보여요. 꼭 저장해두세요.<br/>' +
-          '복사가 안 되면 위 코드를 길게 눌러 직접 복사하시면 돼요.</p>';
-        var copyBtn = ov.querySelector("#cloud-copy");
-        copyBtn.onclick = function () { copyCode(code, ov, copyBtn); };
+        set(CODE_KEY, code);                     // 다시 열어도 볼 수 있게 이 기기에 남겨둬요
+        ov.querySelector("#cloud-out").innerHTML = codeBlock(code);
+        wireCopy(ov, code);
         btn.disabled = false;
+        btn.className = "btn btn-ghost";
         btn.textContent = "🔄 새 코드 발급 (지금 코드는 무효가 돼요)";
         // 되는 브라우저(데스크톱·안드로이드)에서는 바로 복사해줘요. iOS에서 막히면
         // 위 복사 버튼이 받아주니, 여기서는 실패해도 화면을 어지럽히지 않아요.
         if (navigator.clipboard && navigator.clipboard.writeText) {
-          try { navigator.clipboard.writeText(code).then(function () { flashCopied(copyBtn); }, function () {}); } catch (e) {}
+          try {
+            navigator.clipboard.writeText(code).then(function () {
+              flashCopied(ov.querySelector("#cloud-copy"));
+            }, function () {});
+          } catch (e) {}
         }
       }).catch(function () {
         btn.disabled = false;
@@ -643,6 +664,9 @@
       this.disabled = true;
       rpc("cloud_claim", { p_token: tok, p_code: v }).then(function (ok) {
         if (!ok) { msg.innerHTML = '<p>⚠️ 코드가 맞지 않거나 이미 사용됐어요.</p>'; return; }
+        // 계정이 바뀌었으니 내가 갖고 있던 코드는 이제 남의 계정 것이에요
+        try { localStorage.removeItem(CODE_KEY); } catch (e) {}
+        set("grow-cloud-issued", "0");
         orphanLedger();
         _toast("연결됐어요");
         closeModal();
