@@ -163,3 +163,7 @@ grant execute on function public.cloud_meta(text)                to anon;
 grant execute on function public.cloud_pull(text, text)          to anon;
 grant execute on function public.cloud_issue(text)               to anon;
 grant execute on function public.cloud_claim(text, text)         to anon;
+
+-- ⚠️ 이 파일 이후에 적용한 변경이 있어요. 새 환경에 세울 땐 순서대로 실행하세요:
+--   1) cloud-schema.sql        (이 파일)
+--   2) cloud-claim-fix.sql     (cloud_claim 반환형을 jsonb로 — 같은 기기 입력 시 코드가 타던 문제)

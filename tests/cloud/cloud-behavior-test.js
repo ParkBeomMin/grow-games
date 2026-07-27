@@ -340,7 +340,7 @@ const tick = (ms) => new Promise((r) => setTimeout(r, ms || 25));
   // ============================================================
   group("9) 토큰이 없으면 요청을 쏘지 않는다");
   {
-    const { window, calls, LS } = mk({ cloud_meta: [], cloud_pull: [], cloud_issue: "X", cloud_claim: true });
+    const { window, calls, LS } = mk({ cloud_meta: [], cloud_pull: [], cloud_issue: "X", cloud_claim: { ok: true } });
     const proto = Object.getPrototypeOf(LS);
     const oGet = proto.getItem, oSet = proto.setItem;
     proto.getItem = function () { throw new Error("차단"); };
@@ -398,7 +398,7 @@ const tick = (ms) => new Promise((r) => setTimeout(r, ms || 25));
   // ============================================================
   group("11) init() 전에 openModal을 열어도 null 키를 쓰지 않는다");
   {
-    const { window, LS, $ } = mk({ cloud_claim: true, cloud_pull: [] });
+    const { window, LS, $ } = mk({ cloud_claim: { ok: true }, cloud_pull: [] });
     window.Cloud.openModal();          // init() 없이
     $("#cloud-code-input").value = "AAAA-BBBB-CCCC";
     $("#cloud-claim").click();
@@ -488,7 +488,7 @@ const tick = (ms) => new Promise((r) => setTimeout(r, ms || 25));
     // 스펙 6.2의 "서버가 더 최신이면 다른 기기" 분기는 제품에서 도달할 수 없다.
     const UP = "2026-07-27T05:00:00Z";
     const { window, LS, $ } = mk({
-      cloud_claim: true,
+      cloud_claim: { ok: true },
       cloud_meta: [],
       cloud_pull: [{ game: "beta:rookie", updated: UP, data: { "rookie-save-v1-slots": slotsBlob(idolSlots) } }],
     });
@@ -586,7 +586,7 @@ const tick = (ms) => new Promise((r) => setTimeout(r, ms || 25));
     const chefFlat = JSON.stringify({ name: "최셰프", phase: "chef-pro", proYear: 8 });
     let pulls = 0;
     const { window, LS, $ } = mk({
-      cloud_claim: true,
+      cloud_claim: { ok: true },
       cloud_pull: () => { pulls++; return Promise.reject(new Error("네트워크 불안정")); },
       cloud_meta: [],
       cloud_push: "2026-07-27T09:00:00Z",
@@ -620,7 +620,7 @@ const tick = (ms) => new Promise((r) => setTimeout(r, ms || 25));
   {
     // 닫기로 화면을 버리는 경우도 같다
     const { window, LS, $ } = mk({
-      cloud_claim: true,
+      cloud_claim: { ok: true },
       cloud_pull: [{ game: "beta:rookie", updated: "2026-07-27T05:00:00Z", data: { "rookie-save-v1-slots": slotsBlob(idolSlots) } }],
       cloud_meta: [],
     });
@@ -849,7 +849,7 @@ const tick = (ms) => new Promise((r) => setTimeout(r, ms || 25));
     // 화면이 "어느 쪽을 남길까요"를 묻는 동안 폰이 잠기면 B의 기록이 올라가서는 안 된다.
     const UP = "2026-07-27T05:00:00Z";
     const { window, calls, LS, $ } = mk({
-      cloud_claim: true,
+      cloud_claim: { ok: true },
       cloud_meta: [],
       cloud_pull: [{ game: "beta:rookie", updated: UP, data: { "rookie-save-v1-slots": slotsBlob(idolSlots) } }],
       cloud_push: "2026-07-27T09:00:00Z",
@@ -885,7 +885,7 @@ const tick = (ms) => new Promise((r) => setTimeout(r, ms || 25));
     // 연결 화면을 그냥 닫아버린 경우 — 장부는 dirty로 남아 다음 실행에서 다시 물어야 한다
     const UP = "2026-07-27T05:00:00Z";
     const { window, calls, LS, $ } = mk({
-      cloud_claim: true,
+      cloud_claim: { ok: true },
       cloud_meta: [],
       cloud_pull: [{ game: "beta:rookie", updated: UP, data: { "rookie-save-v1-slots": slotsBlob(idolSlots) } }],
       cloud_push: "2026-07-27T09:00:00Z",

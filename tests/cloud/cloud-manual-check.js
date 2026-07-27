@@ -115,7 +115,7 @@ const rookieRemote = { "rookie-save-v1-slots": JSON.stringify({ s9: { phase: "pr
 const idolRemote = { "trainee-save-v1-slots": JSON.stringify({ s5: { phase: "trainee", year: 1, savedAt: 500 } }) };
 
 const w2 = mkWindow((url) => {
-  if (/cloud_claim/.test(url)) return Promise.resolve({ ok: true, json: () => Promise.resolve(true) });
+  if (/cloud_claim/.test(url)) return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true }) });
   if (/cloud_pull/.test(url)) return Promise.resolve({ ok: true, json: () => Promise.resolve([
     { game: "beta:idol", data: idolRemote, updated: "2026-07-27T00:00:00Z" },
     { game: "beta:rookie", data: rookieRemote, updated: "2026-07-27T00:00:00Z" },

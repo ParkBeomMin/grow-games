@@ -200,6 +200,10 @@ const issueCalls = (calls) => calls.filter((c) => c.fn === "cloud_issue").length
   // ============================================================
   group("5) 성공적인 claim은 저장된 코드를 지운다 — 계정이 바뀌어 옛 코드는 남의 것");
   {
+    // cloud_claim은 이제 jsonb({ok:true/false, reason})를 돌려준다. 이 테스트는
+    // 일부러 예전 모양(bare true)을 그대로 스텁해 둔다 — 클라이언트가 "res === true"도
+    // 여전히 성공으로 받아준다는 약속(하위 호환)을 핀으로 고정하기 위해서다.
+    // 다른 모든 테스트는 새 모양 {ok:true}로 스텁한다.
     const CODE = "MINE-CODE-AAAA-BBBB-CCCC-DDDD";
     const { LS, window, $ } = mk({
       cloud_claim: true,
@@ -253,6 +257,61 @@ const issueCalls = (calls) => calls.filter((c) => c.fn === "cloud_issue").length
       check(keys.indexOf(CODE_KEY) === -1,
         `${g}: keysOf()가 ${CODE_KEY}를 돌려주지 않는다 (실제: ${keys.join(", ")})`);
     });
+  }
+
+  // ============================================================
+  group("7) same_device — 이 기기가 발급한 코드를 자기 자신에게 붙여넣은 실제 버그");
+  {
+    // 실제로 있었던 버그: 코드를 발급한 뒤 (자연스럽게, 테스트 삼아) 같은 기기의
+    // 불러오기 칸에 그대로 붙여넣으면 "코드가 맞지 않거나 이미 사용됐어요"가 떴는데,
+    // 서버는 같은 계정 분기에서 그 코드를 실제로 지워버렸다 — 시도해 본 것만으로 코드가 죽었다.
+    // 고친 서버는 same_device일 때 코드를 지우지 않고 살려둔다. 클라이언트도 그에 맞게
+    // 계정 전환 장부정리(orphanLedger)·모달 닫기·연결 화면 열기를 전부 건너뛰어야 한다.
+    const CODE = "SELF-CODE-AAAA-BBBB-CCCC-DDDD";
+    const { LS, window, $, calls } = mk({
+      cloud_claim: { ok: false, reason: "same_device" },
+    });
+    LS.setItem(CODE_KEY, CODE);
+    LS.setItem("grow-cloud-issued", "1");
+    LS.setItem("rookie-save-v1-slots", JSON.stringify({ s1: { phase: "pro", proYear: 1, savedAt: 1 } }));
+    LS.setItem("grow-cloud-synced-rookie", "2026-07-27T01:00:00Z");   // 진짜 도장 — 지워지면 안 된다
+
+    window.Cloud.openModal();
+    $("#cloud-code-input").value = CODE;
+    $("#cloud-claim").click();
+    await tick(40);
+
+    const msg = $("#cloud-msg");
+    check(!!msg && /이 기기에서 발급한 코드/.test(msg.textContent),
+      `이 기기가 발급했다는 안내가 뜬다 — "${msg && msg.textContent}"`);
+    check(!!msg && /다른\s*기기/.test(msg.textContent), "다른 기기에 붙여넣으라고 안내한다");
+    check(!!msg && /코드는 그대로 살아/.test(msg.textContent), "코드가 살아있다고 안내한다");
+    check(!!msg && !/맞지 않거나 이미 사용됐어요/.test(msg.textContent),
+      "예전의 오해를 부르던 '맞지 않거나 이미 사용됐어요' 문구는 뜨지 않는다 — 이게 버그의 핵심");
+
+    check(LS.getItem(CODE_KEY) === CODE, `same_device에서는 저장된 코드가 지워지지 않는다 (실제: ${LS.getItem(CODE_KEY)})`);
+    check(LS.getItem("grow-cloud-issued") === "1", "발급 플래그도 그대로 남는다");
+    check(LS.getItem("grow-cloud-synced-rookie") === "2026-07-27T01:00:00Z",
+      "same_device는 계정 전환 장부정리(orphanLedger)를 하지 않는다 — 진짜 도장이 지워지지 않는다");
+    check(calls.filter((c) => c.fn === "cloud_pull").length === 0,
+      "same_device는 연결 화면(cloud_pull)을 열지 않는다");
+    check(!!$(".cloud-modal"), "연동 모달이 닫히지 않고 그대로 열려 있다");
+    check(!$('input[name="pk-rookie"]'), "고르는 화면(연결 화면) 요소가 나타나지 않는다");
+  }
+
+  // ============================================================
+  group("8) not_found — 코드가 없거나 이미 쓴 코드는 여전히 원래 경고문을 보여준다");
+  {
+    const { window, $ } = mk({ cloud_claim: { ok: false, reason: "not_found" } });
+    window.Cloud.openModal();
+    $("#cloud-code-input").value = "NO-SUCH-CODE-0000";
+    $("#cloud-claim").click();
+    await tick(40);
+
+    const msg = $("#cloud-msg");
+    check(!!msg && /코드가 맞지 않거나 이미 사용됐어요/.test(msg.textContent),
+      `not_found에는 원래 경고문이 그대로 뜬다 — "${msg && msg.textContent}"`);
+    check(!!msg && !/이 기기에서 발급한 코드/.test(msg.textContent), "same_device 안내와 섞이지 않는다");
   }
 
   console.log(fail ? `\n❌ 실패 ${fail}건` : "\n✅ 통과");

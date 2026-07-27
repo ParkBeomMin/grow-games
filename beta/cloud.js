@@ -662,8 +662,18 @@
       var tok = token();
       if (!tok) { msg.innerHTML = '<p>⚠️ 이 브라우저에서는 기록 연동을 쓸 수 없어요.</p>'; return; }
       this.disabled = true;
-      rpc("cloud_claim", { p_token: tok, p_code: v }).then(function (ok) {
-        if (!ok) { msg.innerHTML = '<p>⚠️ 코드가 맞지 않거나 이미 사용됐어요.</p>'; return; }
+      rpc("cloud_claim", { p_token: tok, p_code: v }).then(function (res) {
+        /* 서버가 사유를 알려줘요. 예전엔 true/false뿐이라 "이 기기에서 발급한 코드"까지
+         * "맞지 않거나 이미 사용됐어요"로 뭉뚱그려 안내했어요. */
+        var ok = res === true || (res && res.ok === true);
+        if (!ok) {
+          var why = res && res.reason;
+          msg.innerHTML = why === "same_device"
+            ? '<p>이 기기에서 발급한 코드예요. <b>다른 기기</b>의 "불러오기"에 붙여넣어 주세요.<br/>' +
+              '코드는 그대로 살아 있어요.</p>'
+            : '<p>⚠️ 코드가 맞지 않거나 이미 사용됐어요.</p>';
+          return;
+        }
         // 계정이 바뀌었으니 내가 갖고 있던 코드는 이제 남의 계정 것이에요
         try { localStorage.removeItem(CODE_KEY); } catch (e) {}
         set("grow-cloud-issued", "0");
