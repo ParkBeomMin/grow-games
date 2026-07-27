@@ -440,8 +440,10 @@ h2 { font-size: 1.6rem; margin: 8px 0 6px; color: var(--accent); }
 /* 동기화 표시(스펙 6.3) — 우측 상단 알약.
    자동 저장마다 깜빡이지 않도록, cloud.js가 오래 걸린 전송에만 켭니다.
    position:fixed 라 레이아웃을 밀지 않고, pointer-events:none 이라 터치를 먹지 않아요. */
+/* z-index는 모달(.av-overlay, 50)보다 낮게 둡니다. 폰처럼 좁은 화면에서는 알약 자리와
+   모달의 우측 상단이 겹쳐서, 위에 뜨면 고르는 화면 위로 글자가 떠 보여요. */
 .cloud-sync {
-  position: fixed; right: 10px; top: 10px; z-index: 9997; pointer-events: none;
+  position: fixed; right: 10px; top: 10px; z-index: 40; pointer-events: none;
   background: rgba(10, 15, 12, .78); border: 1px solid var(--line);
   color: var(--cream); font-size: .72rem; padding: 6px 11px; border-radius: 99px;
   box-shadow: 0 2px 8px rgba(0,0,0,.35); white-space: nowrap;

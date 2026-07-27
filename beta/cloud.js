@@ -188,8 +188,11 @@
    * 묻지 않는 pull을 돌리고, 방금 고른 기록이 배경 전송본으로 되돌아가요.
    * 화면 한 번 안 보여주고 커리어가 사라지는, 되돌릴 수 없는 손실이에요.
    *
-   * 그래서 화면이 결론 날 때까지(고르기·닫기 모두) 그 게임의 push를 막아요.
-   * 장부(dirty)는 건드리지 않으니, 버리고 나가도 다음 실행에서 다시 물어봐요. */
+   * 그래서 "물어볼 게 있다"고 정해지는 순간부터 그 게임의 push를 막고, 푸는 건
+   * **사람이 실제로 고른 순간**뿐이에요. 세우는 곳은 화면이 아니라 판정이에요 —
+   * 화면을 띄우려면 왕복이 한 번 더 필요한데, 그 사이에도 게임은 무방비니까요.
+   * 취소하거나 왕복이 실패하면 붙잡은 채로 둬요. 장부(dirty)도 그대로라
+   * 그 게임의 백업만 이번 실행 동안 쉬고, 다음 실행에서 다시 물어봐요. */
   var awaiting = {};
   function holdDecision(games) { games.forEach(function (g) { awaiting[g] = true; }); }
   function releaseDecision(games) { games.forEach(function (g) { delete awaiting[g]; }); }
@@ -258,7 +261,13 @@
       var act = decide(game, mine);
       if (act === "push") push(game);
       else if (act === "pull") pullAndApply(game);
-      else if (act === "conflict") window.Cloud.onConflict(game);
+      else if (act === "conflict") {
+        // 물어볼 게 있다는 건 **여기서** 정해져요. 화면을 띄우려면 왕복이 한 번 더 필요한데
+        // 그 사이(모바일이면 수 초)에도 dirty=1이라 화면 잠금·자동 저장이 전송을 띄워요.
+        // 붙잡는 시점을 화면이 아니라 판정에 맞춰야 그 창이 닫혀요.
+        holdDecision([game]);
+        window.Cloud.onConflict(game);
+      }
     }).catch(function () {});
   }
 
@@ -381,14 +390,20 @@
     setTimeout(function () { el.remove(); }, ms || 1800);
   }
 
-  /* 지금 떠 있는 화면이 붙잡고 있는 게임들 — 화면이 사라질 때 풀어줘요.
-   * 고르기·닫기·바깥 탭 어느 길로 닫혀도 여기를 지나가요. shell()이 새 화면을 만들기
-   * 전에 closeModal()을 먼저 부르니, 목록은 화면을 만든 **뒤에** 채워야 해요. */
-  var closeRelease = [];
+  /* 화면을 닫는다고 붙잡은 걸 풀지는 않아요 — 푸는 건 오직 사람이 실제로 고른 순간뿐이에요.
+   *
+   * 닫기 버튼·바깥 탭으로 나가는 건 "안 고르겠다"는 뜻이에요. 그런데 그 순간 장부는
+   * 여전히 dirty=1이고 lastPush=0이라, 여기서 풀어주면 **바로 다음 자동 저장 한 번**이
+   * '이 기기 것 쓰기'를 사용자 대신 눌러버려요. 그러면 dirty=0 · 새 도장이 찍혀서
+   * 질문 자체가 영영 사라지고, 반대편 기기는 다음 실행에서 묻지 않는 pull로
+   * 자기 커리어를 그 기록으로 덮어써요. 아무에게도 안 묻고 일어나는 손실이에요.
+   *
+   * 그래서 취소하면 그 게임의 백업은 이번 실행 내내 쉬어요. localStorage가 항상 주(主)라
+   * 잃는 건 없고(5.5), 장부가 dirty로 남아 스펙 5.4의 "다음 실행 때 다시 뜬다"가
+   * 비로소 진짜가 돼요. */
   function closeModal() {
     var ov = document.querySelector(".cloud-overlay");
     if (ov) ov.remove();
-    if (closeRelease.length) { releaseDecision(closeRelease); closeRelease = []; }
   }
 
   function shell(inner) {
@@ -744,8 +759,8 @@
       html += '<button class="btn btn-primary" id="cloud-done">고른 대로 기록 맞추기</button>';
 
       var ov = shell(html);
-      // 이 화면이 결론 날 때까지 아무 게임도 서버로 올리지 않아요 (닫기·바깥 탭도 여기를 지나가요)
-      closeRelease = GAMES.slice();
+      // 붙잡는 건 orphanLedger()가 claim 직후에 이미 해뒀어요. 여기서는 풀지 않아요 —
+      // 아래 확인 버튼(= 사람이 실제로 고른 순간)에서만 풀어줘요.
       ov.querySelector("#cloud-done").onclick = function () {
         var pulled = [], kept = [];
         pick.forEach(function (p) {
@@ -790,6 +805,8 @@
           if (row && row.updated) set(syncKey(g), String(row.updated));
         });
 
+        // 사람이 골랐어요 — 이제 배경 전송을 풀어줘도 사용자 대신 누르는 게 아니에요
+        releaseDecision(GAMES);
         closeModal();
         _toast("골라주신 대로 정리했어요");
         reloadSoon(700);
@@ -804,7 +821,13 @@
     var mine = describe(game, collect(game));
     var tok = token();
     if (!tok) return; // 기기 정체성이 없으면 클라우드는 조용히 쉬어요
+    // 아래 왕복이 돌아오기 전에도 이 게임은 손대지 않아요. init()에서 이미 붙잡았지만
+    // 밖에서 직접 부를 수도 있으니(window.Cloud.onConflict) 여기서 한 번 더 세워둬요.
+    holdDecision([game]);
     rpc("cloud_pull", { p_token: tok, p_game: tag(game) }).then(function (rows) {
+      // 아래 두 갈래(서버 행 없음 · 로컬 없음)는 사람이 고른 게 아니라서 붙잡은 걸 풀지 않아요.
+      // 어차피 잃을 게 없어요 — 로컬이 비었으면 push()가 빈 꾸러미를 걸러내고,
+      // 서버 행이 없으면 다음 실행에서 그냥 push로 떨어져요.
       if (!rows || !rows.length) return;
       var theirs = describe(game, rows[0].data);
 
@@ -830,23 +853,20 @@
         '<button class="btn btn-primary" id="cloud-keep">이 기기 것 쓰기</button>' +
         '<button class="btn btn-ghost" id="cloud-take">다른 기기 것 쓰기</button>'
       );
-      // 화면이 결론 날 때까지 이 게임은 서버로 올라가지 않아요 (닫기·바깥 탭도 closeModal을 지나가요)
-      holdDecision([game]);
-      closeRelease = [game];
-
-      // closeModal()이 먼저예요 — 그래야 붙잡아둔 걸 풀고 push가 실제로 나가요.
-      // 그리고 아직 안 끝난 일을 끝났다고 말하지 않아요. push()는 실패를 삼키니
+      // 아직 안 끝난 일을 끝났다고 말하지 않아요. push()는 실패를 삼키니
       // 성공 여부는 장부(dirty)가 대신 말해줘요. (토스트가 떠 있는 동안은 동기화 알약이
       // 자리를 양보하므로, 실패를 여기서 말해주지 않으면 사용자는 영영 알 수 없어요)
       ov.querySelector("#cloud-keep").onclick = function () {
         closeModal();
         _toast("이 기기 기록을 올리는 중이에요");
+        releaseDecision([game]);   // 사람이 골랐어요 — 바로 아래 전송이 나갈 수 있게 풀어줘요
         push(game).then(function () {
           if (get(dirtyKey(game)) === "0") _toast("이 기기 기록을 올렸어요");
           else _toast("지금은 서버에 못 보냈어요. 다음에 다시 시도할게요");
         });
       };
       ov.querySelector("#cloud-take").onclick = function () {
+        releaseDecision([game]);   // 사람이 골랐어요
         if (!apply(game, rows[0].data)) {
           // 서버가 빈 꾸러미였어요 — 지우지 않고 이 기기 것을 지켜요
           closeModal();
