@@ -623,9 +623,27 @@
       '<div class="cloud-row">' +
         '<input id="cloud-code-input" placeholder="코드를 붙여넣으세요" autocomplete="off"/>' +
         '<button class="btn btn-ghost" id="cloud-claim">불러오기</button>' +
-      '</div><div id="cloud-msg"></div>'
+      '</div><div id="cloud-msg"></div>' +
+      '<div id="cloud-linked"></div>'
     );
     if (kept) wireCopy(ov, kept);
+
+    /* 이미 연결된 기기라면 코드가 더 필요 없어요.
+     * 연동 코드는 한 번 쓰면 사라지는데, 확인 화면에서 취소하고 다시 하려던 분들이
+     * "이미 사용됐어요"를 보고 실패로 오해했어요 — 실은 연결은 이미 끝나 있어요.
+     * 서버에 내 계정 기록이 있으면 코드 없이 그 화면을 다시 열 수 있게 해줘요. */
+    (function () {
+      var tok = token();
+      if (!tok) return;
+      rpc("cloud_meta", { p_token: tok }).then(function (rows) {
+        var box = ov.querySelector("#cloud-linked");
+        if (!box || !rows || !rows.length) return;
+        box.innerHTML = '<hr class="cloud-sep"/>' +
+          '<p>이 기기는 이미 연결돼 있어요. 코드를 다시 넣지 않아도 돼요.</p>' +
+          '<button class="btn btn-ghost" id="cloud-relink">📂 다른 기기 기록 다시 보기</button>';
+        box.querySelector("#cloud-relink").onclick = function () { closeModal(); openLink(); };
+      }).catch(function () {});
+    })();
 
     ov.querySelector("#cloud-issue").onclick = function () {
       var btn = this;
@@ -671,7 +689,9 @@
           msg.innerHTML = why === "same_device"
             ? '<p>이 기기에서 발급한 코드예요. <b>다른 기기</b>의 "불러오기"에 붙여넣어 주세요.<br/>' +
               '코드는 그대로 살아 있어요.</p>'
-            : '<p>⚠️ 코드가 맞지 않거나 이미 사용됐어요.</p>';
+            : '<p>⚠️ 코드가 맞지 않거나 이미 사용됐어요.<br/>' +
+              '연동 코드는 한 번 쓰면 사라져요. 이미 연결하셨다면 아래 ' +
+              '"다른 기기 기록 다시 보기"를 쓰시면 돼요.</p>';
           return;
         }
         // 계정이 바뀌었으니 내가 갖고 있던 코드는 이제 남의 계정 것이에요

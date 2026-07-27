@@ -314,6 +314,137 @@ const issueCalls = (calls) => calls.filter((c) => c.fn === "cloud_issue").length
     check(!!msg && !/이 기기에서 발급한 코드/.test(msg.textContent), "same_device 안내와 섞이지 않는다");
   }
 
+  // ============================================================
+  group("9) 이미 연결된 기기 — cloud_meta가 기록을 돌려주면 '다시 보기' 섹션이 뜬다");
+  {
+    // 실제로 있었던 버그: 코드는 한 번 쓰면 사라지는데, claim은 이미 성공해 기기가
+    // 연결된 뒤 확인 화면(openLink)을 취소하면, 다시 코드를 넣을 방법이 없었다.
+    // cloud_meta가 이 계정에 저장된 기록(rows)이 있다고 알려주면, 코드 없이도
+    // 그 화면을 다시 열 수 있는 버튼을 보여준다.
+    const { window, $, calls } = mk({
+      cloud_meta: [{ game: "beta:rookie", updated: "2026-07-27T00:00:00Z" }],
+    });
+    window.Cloud.openModal();
+    await tick(40);
+
+    check(calls.some((c) => c.fn === "cloud_meta"), "모달을 열면 cloud_meta가 나간다");
+    const box = $("#cloud-linked");
+    check(!!box && /이미 연결돼 있어요/.test(box.textContent),
+      `이미 연결돼 있다는 안내가 뜬다 — "${box && box.textContent}"`);
+    const relink = $("#cloud-relink");
+    check(!!relink && /다른 기기 기록 다시 보기/.test(relink.textContent),
+      `'다른 기기 기록 다시 보기' 버튼이 있다 — "${relink && relink.textContent}"`);
+  }
+
+  // ============================================================
+  group("10) 아직 연결 안 한 기기 — cloud_meta가 빈 배열이면 섹션 자체가 없다");
+  {
+    // 한 번도 연결한 적 없는 기기에 "이미 연결돼 있어요"라고 말하면 그게 더 큰 오해다.
+    const { window, $ } = mk({ cloud_meta: [] });
+    window.Cloud.openModal();
+    await tick(40);
+
+    const box = $("#cloud-linked");
+    check(!!box && box.innerHTML === "", `기록이 없으면 섹션이 비어 있다 (실제: "${box && box.innerHTML}")`);
+    check(!$("#cloud-relink"), "재보기 버튼이 나타나지 않는다");
+    check(!/이미 연결돼 있어요/.test(window.document.body.textContent),
+      "'이미 연결돼 있어요' 문구 자체가 화면 어디에도 없다");
+  }
+
+  // ============================================================
+  group("11) '다른 기기 기록 다시 보기'를 누르면 코드 없이 연결 화면이 열리고, cloud_claim은 나가지 않는다");
+  {
+    const { window, $, calls } = mk({
+      cloud_meta: [{ game: "beta:rookie", updated: "2026-07-27T00:00:00Z" }],
+      cloud_pull: [],
+      cloud_claim: { ok: true },   // 스텁은 해두되, 실제로는 절대 불려선 안 된다
+    });
+    window.Cloud.openModal();
+    await tick(40);
+    const relink = $("#cloud-relink");
+    check(!!relink, "재보기 버튼이 있다 (전제 확인)");
+    if (relink) {
+      relink.click();
+      await tick(40);
+      check(!$(".cloud-modal") || /기기를 연결했어요/.test($(".cloud-modal").textContent),
+        `클릭하면 코드 입력 모달이 아니라 연결(merge) 화면이 뜬다 — "${$(".cloud-modal") ? $(".cloud-modal").textContent : "(모달 없음)"}"`);
+      check(calls.filter((c) => c.fn === "cloud_pull").length === 1,
+        `openLink()의 cloud_pull이 정확히 1회 나간다 (${calls.filter((c) => c.fn === "cloud_pull").length}회)`);
+      check(calls.filter((c) => c.fn === "cloud_claim").length === 0,
+        `재보기는 코드를 안 쓰니 cloud_claim은 단 한 번도 나가지 않는다 (${calls.filter((c) => c.fn === "cloud_claim").length}회)`);
+    } else {
+      check(false, ""); check(false, ""); check(false, "");
+    }
+  }
+
+  // ============================================================
+  group("12) not_found 문구는 코드가 한 번 쓰면 사라진다는 것과, '다시 보기' 버튼을 함께 안내한다");
+  {
+    const { window, $ } = mk({ cloud_claim: { ok: false, reason: "not_found" } });
+    window.Cloud.openModal();
+    $("#cloud-code-input").value = "NO-SUCH-CODE-0000";
+    $("#cloud-claim").click();
+    await tick(40);
+
+    const msg = $("#cloud-msg");
+    check(!!msg && /한 번 쓰면 사라져요/.test(msg.textContent),
+      `코드는 한 번 쓰면 사라진다는 설명이 덧붙는다 — "${msg && msg.textContent}"`);
+    check(!!msg && /다른 기기 기록 다시 보기/.test(msg.textContent),
+      `'다른 기기 기록 다시 보기' 버튼을 가리킨다 — "${msg && msg.textContent}"`);
+  }
+
+  // ============================================================
+  group("13) 저장소를 못 쓰면(token() null) 이 경로에서 cloud_meta조차 나가지 않는다");
+  {
+    const { window, $, calls, LS } = mk({
+      cloud_meta: [{ game: "beta:rookie", updated: "2026-07-27T00:00:00Z" }],
+    });
+    const proto = Object.getPrototypeOf(LS);
+    const oGet = proto.getItem, oSet = proto.setItem;
+    proto.getItem = function () { throw new Error("차단"); };
+    proto.setItem = function () { throw new Error("차단"); };
+
+    window.Cloud.openModal();
+    await tick(40);
+    proto.getItem = oGet; proto.setItem = oSet;
+
+    check(calls.filter((c) => c.fn === "cloud_meta").length === 0,
+      `저장소를 못 쓰면 이 경로의 cloud_meta도 나가지 않는다 (${calls.filter((c) => c.fn === "cloud_meta").length}회)`);
+    check(!$("#cloud-relink"), "재보기 버튼도 당연히 없다");
+    check(!/이미 연결돼 있어요/.test(window.document.body.textContent),
+      "'이미 연결돼 있어요' 문구가 뜨지 않는다 — 기기 정체성이 없으니 판단할 수 없다");
+  }
+
+  // ============================================================
+  group("14) cloud_meta 요청이 실패해도 모달은 멀쩡히 쓸 수 있다");
+  {
+    // cloud_meta 라우트를 일부러 안 두어(mk가 undefined route를 reject) 실패를 흉내낸다.
+    const CODE = "ISSUED-AFTER-META-FAIL-0000";
+    const { window, $, calls } = mk({
+      cloud_issue: CODE,
+      cloud_claim: { ok: true },
+      cloud_pull: [],
+    });
+    window.Cloud.openModal();
+    await tick(60);   // cloud_meta 실패(reject)가 조용히 가라앉을 시간
+
+    const box = $("#cloud-linked");
+    check(!!box && box.innerHTML === "", "cloud_meta가 실패해도 섹션은 비어 있을 뿐, 깨지지 않는다");
+    check(!$("#cloud-relink"), "재보기 버튼도 없다 (실패했으니 뭐라 말할 근거가 없다)");
+
+    // 발급이 여전히 동작한다
+    $("#cloud-issue").click();
+    await tick(40);
+    check($(".cloud-modal").textContent.indexOf(CODE) !== -1, "cloud_meta 실패 후에도 코드 발급은 그대로 동작한다");
+
+    // claim도 여전히 동작한다
+    $("#cloud-code-input").value = "SOME-CODE";
+    $("#cloud-claim").click();
+    await tick(60);
+    check(calls.filter((c) => c.fn === "cloud_claim").length === 1,
+      "cloud_meta 실패 후에도 claim 요청이 정상적으로 나간다");
+  }
+
   console.log(fail ? `\n❌ 실패 ${fail}건` : "\n✅ 통과");
   process.exit(fail ? 1 : 0);
 })().catch((e) => { console.error("테스트 자체가 터졌어요:", e); process.exit(1); });
