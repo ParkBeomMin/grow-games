@@ -49,11 +49,16 @@
     try { t = localStorage.getItem(TOKEN_KEY); } catch (e) { t = null; }
     if (t) return t;
     var raw = "";
+    var gotRandom = false;
     if (window.crypto && window.crypto.getRandomValues) {
-      var a = new Uint8Array(16);
-      window.crypto.getRandomValues(a);
-      for (var i = 0; i < a.length; i++) raw += ("0" + a[i].toString(16)).slice(-2);
-    } else {
+      try {
+        var a = new Uint8Array(16);
+        window.crypto.getRandomValues(a);
+        for (var i = 0; i < a.length; i++) raw += ("0" + a[i].toString(16)).slice(-2);
+        gotRandom = true;
+      } catch (e) { raw = ""; }
+    }
+    if (!gotRandom) {
       for (var j = 0; j < 4; j++) raw += Math.random().toString(16).slice(2, 10);
     }
     try {
@@ -137,13 +142,49 @@
 
   function mark() { if (cur) push(cur); }
 
+  /* 5.3절 판정 — 기기 시계를 쓰지 않아요.
+   * dirty(내가 안 올린 변경이 있나) × 서버가 더 최신인가, 네 갈래예요. */
+  function decide(game, serverUpdated) {
+    var dirty = get(dirtyKey(game)) === "1";
+    var synced = get(syncKey(game));
+    var remoteNewer = !!serverUpdated && (!synced || Date.parse(serverUpdated) > Date.parse(synced));
+    if (dirty && remoteNewer) return "conflict";
+    if (dirty) return "push";
+    if (remoteNewer) return "pull";
+    return "none";
+  }
+
   function init(game) {
     cur = game;
     document.addEventListener("visibilitychange", function () {
       if (document.visibilityState === "hidden" && get(dirtyKey(game)) === "1") push(game);
     });
+    // 타이틀 진입 시 서버 상태만 가볍게 확인해요
+    rpc("cloud_meta", { p_token: token() }).then(function (rows) {
+      var mine = null;
+      (rows || []).forEach(function (r) { if (r.game === tag(game)) mine = r.updated; });
+      var act = decide(game, mine);
+      if (act === "push") push(game);
+      else if (act === "pull") pullAndApply(game);
+      else if (act === "conflict") window.Cloud.onConflict(game, mine);
+    }).catch(function () {});
   }
 
-  window.Cloud = { init: init, touch: touch, mark: mark };
-  window.Cloud._t = { token: token, keysOf: keysOf, collect: collect, apply: apply, rpc: rpc, tag: tag };
+  function pullAndApply(game) {
+    return rpc("cloud_pull", { p_token: token(), p_game: tag(game) }).then(function (rows) {
+      if (!rows || !rows.length) return;
+      apply(game, rows[0].data);
+      set(syncKey(game), String(rows[0].updated));
+      set(dirtyKey(game), "0");
+      toast("☁️ 다른 기기 기록을 불러왔어요");
+      setTimeout(function () { location.reload(); }, 900);
+    }).catch(function () {});
+  }
+
+  // 충돌 화면은 Task 4에서 채워요. 그전까지는 아무것도 안 해요.
+  function onConflict() {}
+  function toast(msg) { if (window.Cloud._toast) window.Cloud._toast(msg); }
+
+  window.Cloud = { init: init, touch: touch, mark: mark, onConflict: onConflict, _pull: pullAndApply };
+  window.Cloud._t = { token: token, keysOf: keysOf, collect: collect, apply: apply, rpc: rpc, tag: tag, decide: decide };
 })();
