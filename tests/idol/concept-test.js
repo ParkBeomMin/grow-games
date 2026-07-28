@@ -162,13 +162,145 @@ check(!!act1 && validIds.has(act1.hot) && validIds.has(act1.cold),
 check(!!act1 && Array.isArray(act1.rumor) && act1.rumor.length === 2 && act1.rumor.includes(act1.hot),
   `activity의 rumor에도 실제 hot이 들어 있다 (${act1 && JSON.stringify(act1.rumor)})`);
 
+// ---------- 20~27) 컨셉 선택 화면 — 전부 게임 입구(버튼 클릭)로만 도달해요 ----------
+/* renderConcept()을 직접 부르지 않아요. 준비 화면의 음방 무대 액션(.go-game)을 실제로
+ * 눌러서 화면에 닿고, 거기서 DOM을 읽어 확인해요. "함수는 있는데 브라우저에선 못 가는"
+ * 기능을 다섯 번 겪은 저장소라서요. */
+const T2 = Career2._t;
+const goBtn2 = () => w2.document.querySelector("#pro-actions .go-game");
+const cards2 = () => Array.from(w2.document.querySelectorAll("#screen-concept .concept-card"));
+const nameOf2 = (id) => (T2.CONCEPTS.find((c) => c.id === id) || {}).name;
+const finishStage2 = () => {
+  $2("btn-stage-next").click();   // ⏩ 빨리 감기 → 미니게임 자동 → 주간 차트
+  $2("btn-stage-next").click();   // 다음 무대 준비 / 다음 컴백 → 준비 화면
+};
+// 준비 화면에서 연습 턴을 소진해 무대 버튼이 뜰 때까지 (게이트를 우회하지 않아요)
+const untilGo2 = () => {
+  let guard = 0;
+  while (activeScreen2() === "screen-pro" && !goBtn2() && guard++ < 10) restBtn2().click();
+  return !!goBtn2();
+};
+
+check(!!goBtn2(), "1차 컴백 시작 버튼(.go-game)이 준비 화면에 있다");
+goBtn2().click();
+check(activeScreen2() === "screen-concept",
+  `음방 무대 액션을 누르면 컨셉 선택 화면이 뜬다 (${activeScreen2()})`);
+check(!$2("screen-stage").classList.contains("active"), "이때 무대 화면(screen-stage)은 안 보인다");
+
+check(cards2().length === 4, `.concept-card가 4개다 (${cards2().length})`);
+const rumorCards2 = cards2().filter((c) => c.classList.contains("concept-rumor"));
+const plainCards2 = cards2().filter((c) => !c.classList.contains("concept-rumor"));
+check(rumorCards2.length === 2, `.concept-rumor가 붙은 카드가 정확히 2개다 (${rumorCards2.length})`);
+const rumorCids2 = rumorCards2.map((c) => c.dataset.cid).sort().join(",");
+check(rumorCids2 === [...act1.rumor].sort().join(","),
+  `소문 카드의 data-cid 집합이 act.rumor와 같다 (카드 ${rumorCids2} vs act ${[...act1.rumor].sort().join(",")})`);
+
+/* 정보 누설 방지 — 이 화면은 act.rumor만 본다.
+ * 카드는 4장 다 그리니까 '식상 컨셉의 이름이 화면에 아예 없다'로는 잴 수 없어요.
+ * 대신 (a) 소문 줄에 식상이 안 섞이는지, (b) 확정을 가리키는 낱말이 없는지,
+ * (c) 카드끼리 서로 구분되는 표시가 없는지를 봐요. 배수가 새면 (c)에서 잡혀요. */
+const conceptText2 = $2("screen-concept").textContent;
+const rumorLine2 = $2("concept-rumor-line").textContent;
+check(act1.rumor.every((id) => rumorLine2.includes(nameOf2(id))),
+  `소문 줄에 rumor 2종의 이름이 그대로 나온다 (${rumorLine2.trim()})`);
+check(act1.rumor.includes(act1.cold) || !rumorLine2.includes(nameOf2(act1.cold)),
+  `확정 식상(${nameOf2(act1.cold)})은 소문 줄에 등장하지 않는다`);
+const leakWords2 = ["확정", "식상", "유행", "진짜", "정답", "배수"];
+const leaked2 = leakWords2.filter((wd) => conceptText2.includes(wd));
+check(leaked2.length === 0, `화면 어디에도 확정을 가리키는 낱말이 없다 (${leaked2.join(",") || "없음"})`);
+
+// 카드에서 컨셉 고유 내용(이모지·이름·설명·숫자)을 지운 뒤 남는 껍데기를 비교해요
+const norm2 = (el) => {
+  const c = T2.CONCEPTS.find((x) => x.id === el.dataset.cid) || { emoji: "", name: "", desc: "" };
+  // data-cid는 속성 값만 지워요 — 통째로 치환하면 클래스명(c-emoji)의 "emo"까지 먹혀요
+  return el.outerHTML
+    .replace(/data-cid="[^"]*"/, 'data-cid="·"')
+    .split(c.emoji).join("·")
+    .split(c.name).join("·")
+    .split(c.desc).join("·")
+    .replace(/\d+/g, "N");
+};
+check(norm2(rumorCards2[0]) === norm2(rumorCards2[1]),
+  "소문 카드 2장은 서로 구분되지 않는다 (둘 중 어느 쪽이 진짜 유행인지 표시가 없다)");
+check(plainCards2.length === 2 && norm2(plainCards2[0]) === norm2(plainCards2[1]),
+  "소문 밖 카드 2장도 서로 구분되지 않는다 (식상 표시가 없다)");
+
+/* 예상 판매량 — 소스에서 뽑은 expectedSales로 계산해 비교해요. 숫자를 적어두지 않아요.
+ * 유행 배수가 곱해져 있으면 값이 어긋나서 실패해요. */
+const S2 = T2.state();
+const salesBad2 = cards2().filter((el) => {
+  const c = T2.CONCEPTS.find((x) => x.id === el.dataset.cid);
+  const shown = Number((el.querySelector(".c-sales").textContent.match(/\d+/) || [0])[0]);
+  return shown !== T2.expectedSales(S2.stats, c, S2.fandom, act1.cbWins);
+});
+check(salesBad2.length === 0,
+  `카드 4장의 예상 판매량이 expectedSales와 정확히 일치한다 (어긋난 카드 ${salesBad2.map((e) => e.dataset.cid).join(",") || "없음"})`);
+// 위 검사가 실효 있는지 — 배수가 붙었다면 실제로 숫자가 달라지는 상황인지 확인해요
+const hotC2 = T2.CONCEPTS.find((c) => c.id === act1.hot);
+const otherId2 = T2.CONCEPTS.map((c) => c.id).find((id) => id !== act1.hot);
+const pureHot2 = T2.expectedSales(S2.stats, hotC2, S2.fandom, act1.cbWins);
+const mulHot2 = Math.round(pureHot2 * T2.trendMul(hotC2, { hot: act1.hot, cold: otherId2 }));
+check(mulHot2 !== pureHot2,
+  `유행 배수가 얹혔다면 숫자가 달라지는 상황이다 — 위 검사가 실효 있다 (순수 ${pureHot2} vs 배수 ${mulHot2})`);
+
+// 카드를 클릭하면 그 컨셉이 확정돼요
+const picked2 = cards2()[1];
+const pickedId2 = picked2.dataset.cid;
+picked2.click();
+check(T2.state().activity.concept === pickedId2,
+  `카드를 클릭하면 act.concept이 그 카드의 data-cid가 된다 (${pickedId2} → ${T2.state().activity.concept})`);
+check(activeScreen2() === "screen-stage", `고르고 나면 무대로 넘어간다 (${activeScreen2()})`);
+
+// 같은 컴백 안에서 다시 진입하면 선택 화면을 건너뛰어요
+finishStage2();
+check(untilGo2(), "다음 주 무대 버튼이 다시 뜬다");
+check(T2.state().activity.concept === pickedId2, "컴백이 이어지는 동안 고른 컨셉이 유지된다");
+goBtn2().click();
+check(activeScreen2() === "screen-stage",
+  `컨셉을 이미 고른 컴백은 선택 화면을 건너뛰고 바로 무대로 간다 (${activeScreen2()})`);
+
+// 옛 세이브 — concept은 있는데 hot/cold/rumor가 없는 상태로 진입해도 선택 화면이 안 떠요
+finishStage2();
+check(untilGo2(), "옛 세이브 검사 전 무대 버튼이 다시 뜬다");
+const oldAct2 = T2.state().activity;
+oldAct2.concept = "cool";
+delete oldAct2.hot;
+delete oldAct2.cold;
+delete oldAct2.rumor;
+goBtn2().click();
+check(activeScreen2() === "screen-stage",
+  `concept이 이미 있는 옛 세이브(hot·rumor 없음)로 진입해도 선택 화면이 안 뜬다 (${activeScreen2()})`);
+finishStage2();
+
+// 소문이 없는 옛 세이브가 컴백 중간에 업데이트를 맞아도 화면이 그려져요 (act.rumor || [])
+check(untilGo2(), "소문 없는 옛 세이브 검사 전 무대 버튼이 다시 뜬다");
+oldAct2.concept = null;
+goBtn2().click();
+check(activeScreen2() === "screen-concept", `소문이 없어도 컨셉 선택 화면은 뜬다 (${activeScreen2()})`);
+check(cards2().length === 4 && cards2().every((c) => !c.classList.contains("concept-rumor")),
+  `소문이 없는 옛 세이브에서는 소문 배지가 하나도 안 붙는다 (카드 ${cards2().length}장 · 배지 ${cards2().filter((c) => c.classList.contains("concept-rumor")).length}개)`);
+check($2("concept-rumor-line").textContent.includes("잠잠"),
+  `소문이 없으면 안내 문구로 대신한다 (${$2("concept-rumor-line").textContent.trim()})`);
+cards2()[0].click();
+check(activeScreen2() === "screen-stage" && oldAct2.concept === "cool",
+  `소문이 없어도 카드를 골라 무대로 넘어갈 수 있다 (${activeScreen2()} · ${oldAct2.concept})`);
+finishStage2();
+
 // 한 주를 실제로 소화해요 — 화면 버튼만 눌러서 (standings-test.js의 playWeek과 동일한 방식)
+const gateLog2 = [];   // 컨셉 게이트가 열린 시점 기록 (몇 차 컴백에서, 그때 concept이 뭐였는지)
 function playWeek2() {
   let guard = 0;
   while (activeScreen2() === "screen-pro" && guard++ < 10) {
     const go = w2.document.querySelector("#pro-actions .go-game");
     if (go) { go.click(); break; }
     restBtn2().click();
+  }
+  // 새 컴백이면 컨셉 게이트를 먼저 지나야 무대가 열려요 (게이트를 우회하지 않아요)
+  if (activeScreen2() === "screen-concept") {
+    // 화면이 뜬 그 순간의 concept 값을 남겨둬요 — 컴백마다 null로 돌아가는지 여기서 봐요
+    gateLog2.push({ cb: Career2._t.state().activity.cb, before: Career2._t.state().activity.concept });
+    const card = w2.document.querySelector("#concept-list .concept-card");
+    if (card) card.click();
   }
   if (activeScreen2() !== "screen-stage") return false;
   $2("btn-stage-next").click();        // ⏩ 빨리 감기 → 미니게임 자동 → 주간 차트
@@ -183,7 +315,14 @@ while (Career2._t.state().activity.cb === 1 && weeks2 < 8) { check(playWeek2(), 
 check(Career2._t.state().activity.cb === 2, `1차 컴백이 끝나면 2차 컴백으로 넘어간다 (${Career2._t.state().activity.cb}차)`);
 
 const act2 = Career2._t.state().activity;
-check(!!act2 && act2.concept === null, "2차 컴백이 시작되면 concept이 다시 null로 돌아간다");
+/* 2차 컴백이 시작되면 concept이 null로 돌아가서 선택 화면이 다시 열려요.
+ * 게이트가 생긴 뒤로는 playWeek2가 그 화면을 지나며 컨셉을 고르니, 루프가 끝난 시점의
+ * act2.concept은 이미 채워져 있어요. 그래서 '화면이 열린 그 순간'의 값을 봐요. */
+const gate2 = gateLog2.find((g) => g.cb === 2);
+check(!!gate2, "2차 컴백에서도 컨셉 선택 화면이 다시 열린다");
+check(!!gate2 && gate2.before === null,
+  `2차 컴백이 시작되면 concept이 다시 null로 돌아간다 (선택 화면 진입 시 ${gate2 && JSON.stringify(gate2.before)})`);
+check(!!act2 && act2.concept !== null, "선택 화면에서 고른 컨셉이 2차 컴백에 남는다");
 check(!!act2 && validIds.has(act2.hot) && validIds.has(act2.cold),
   `2차 컴백도 hot·cold가 새로 굴려져 CONCEPTS의 id다 (hot=${act2 && act2.hot}, cold=${act2 && act2.cold})`);
 check(!!act2 && Array.isArray(act2.rumor) && act2.rumor.length === 2 && act2.rumor.includes(act2.hot),

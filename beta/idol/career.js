@@ -212,7 +212,11 @@ window.IdolCareer = (() => {
       go.innerHTML = S.activity.week === 0
         ? `<span class="a-emoji">💿</span>${S.activity.cb}차 컴백 시작<span class="a-sub">티저 · 뮤비 공개 → 첫 무대</span>`
         : `<span class="a-emoji">🎤</span>음방 무대<span class="a-sub">W${S.activity.week + 1}/${S.activity.weekTotal} 주간 차트 경쟁</span>`;
-      go.onclick = playShow;
+      // 컨셉을 아직 안 골랐으면 무대 대신 컨셉 선택 화면으로 보내요. 이 한 줄이 게이트 전부예요.
+      go.onclick = () => {
+        if (!S.activity.concept) { renderConcept(); show("screen-concept"); return; }
+        playShow();
+      };
       box.appendChild(go);
     }
 
@@ -383,6 +387,43 @@ window.IdolCareer = (() => {
     // 진짜 유행이 항상 앞에 오면 첫 칸만 보고 답을 알아요. 순서를 섞습니다.
     const rumor = Math.random() < 0.5 ? [hot, other] : [other, hot];
     return { hot, cold, rumor };
+  }
+
+  /* 컴백 시작 전 컨셉 고르기 — 소문 2종만 보여줘요.
+   * 확정 유행(act.hot)은 여기서 절대 읽지 않아요. 고른 뒤에 공개됩니다.
+   * 예상 판매량에도 유행 배수를 얹지 않아요. 아직 확정이 아니니까요.
+   * 여기서 확정 유행이 새어 나가면 정답이 확정돼서 고민이 사라져요 — 이 설계의 전부예요. */
+  function renderConcept() {
+    const act = S.activity;
+    const rumor = act.rumor || [];
+    const names = rumor
+      .map((id) => CONCEPTS.find((c) => c.id === id))
+      .filter(Boolean)
+      .map((c) => `${c.emoji} ${c.name}`);
+    $("concept-title").textContent = `🎬 ${S.proYear}년차 ${act.cb}차 컴백 — 컨셉 정하기`;
+    $("concept-rumor-line").innerHTML = names.length === 2
+      ? `🗣 업계 소문: 이번 시즌은 <b>${names[0]}</b> 아니면 <b>${names[1]}</b> 이 온대요`
+      : `🗣 이번 시즌은 소문이 잠잠해요`;
+
+    $("concept-list").innerHTML = CONCEPTS.map((c) => {
+      const est = expectedSales(S.stats, c, S.fandom, act.cbWins);
+      const isRumor = rumor.includes(c.id);
+      return `<button class="concept-card ${isRumor ? "concept-rumor" : ""}" data-cid="${c.id}">
+        <span class="c-emoji">${c.emoji}</span>
+        <span><span class="c-name">${c.name}${isRumor ? `<span class="concept-badge">🗣 소문</span>` : ""}</span><br><span class="c-desc">${c.desc}</span></span>
+        <span class="c-sales">~ ${est}만 장</span>
+      </button>`;
+    }).join("");
+
+    $("concept-list").querySelectorAll(".concept-card").forEach((el) => {
+      el.onclick = () => {
+        S.activity.concept = el.dataset.cid;
+        save();
+        // Task 4에서 여기가 renderReveal() + show("screen-reveal")로 바뀌어요.
+        // 지금은 무대를 바로 열어요 (playShow가 안에서 show("screen-stage")까지 해요).
+        playShow();
+      };
+    });
   }
 
   function playShow() {

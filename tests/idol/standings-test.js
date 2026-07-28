@@ -278,6 +278,12 @@ function playWeek() {
     if (go) { go.click(); break; }
     restBtn().click();
   }
+  /* 새 컴백은 컨셉 선택 화면(screen-concept)을 먼저 지나야 무대가 열려요.
+   * 게이트를 우회하지 않고, 플레이어처럼 카드를 하나 클릭해서 통과해요. */
+  if (activeScreen() === "screen-concept") {
+    const card = w.document.querySelector("#concept-list .concept-card");
+    if (card) card.click();
+  }
   if (activeScreen() !== "screen-stage") return false;
   $("btn-stage-next").click();        // ⏩ 빨리 감기 → 미니게임 자동 → 주간 차트
   $("btn-stage-next").click();        // 다음 무대 준비 / 다음 컴백 / 연말 결산

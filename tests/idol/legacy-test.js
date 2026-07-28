@@ -38,8 +38,11 @@ check(/years\.push\(\{ y: S\.proYear[^}]*sales/.test(SRC), "연차 기록에 sal
  * 업데이트 직후 활동 중이던 세이브에서 undefined가 나온다 — 마이그레이션이 필요해진다.
  * concept·hot·cold는 컴백 컨셉(Task 1)이 추가한 새 필드지만, conceptOf·trendMul이
  * 없는 값을 각각 청량(cool)·배수 1로 방어하도록 짜여 있어 마이그레이션이 필요
- * 없다 — 그래서 화이트리스트에 같이 넣는다. */
-const OLD_ACT_FIELDS = ["cb", "cbTotal", "week", "weekTotal", "wins", "sales", "hypeSum", "cbHype", "cbWins", "rivals", "concept", "hot", "cold"];
+ * 없다 — 그래서 화이트리스트에 같이 넣는다.
+ * rumor(Task 3)도 같은 이유다. 컨셉 선택 화면이 `act.rumor || []`로 받아서, 소문이
+ * 없는 옛 세이브는 배지 없는 카드 4장과 "소문이 잠잠해요" 안내를 보게 된다 —
+ * 그 경로는 concept-test.js가 실제 화면에서 확인한다. */
+const OLD_ACT_FIELDS = ["cb", "cbTotal", "week", "weekTotal", "wins", "sales", "hypeSum", "cbHype", "cbWins", "rivals", "concept", "hot", "cold", "rumor"];
 const DOM = ["innerHTML", "appendChild", "textContent", "className", "style"];  // yearReport의 동명 지역변수는 DOM 엘리먼트다
 const readFields = [...new Set((SRC.match(/\bact\.[a-zA-Z]+/g) || []).map((s) => s.slice(4)))].filter((f) => !DOM.includes(f));
 const unknown = readFields.filter((f) => !OLD_ACT_FIELDS.includes(f));
