@@ -59,7 +59,7 @@ window.IdolCareer = (() => {
     S.group = pick(GROUP_NAMES);
     S.center = !!center;
     S.proYear = 0;
-    S.career = { years: [], wins: 0, daesang: 0, bonsang: 0, rookie: 0, sales: 0 };
+    S.career = { years: [], wins: 0, daesang: 0, bonsang: 0, rookie: 0, sales: 0, tours: 0 };
     S.proLog = [];
     if (window.Stats) Stats.log("debut", { group: S.group, center: !!center });
     startPrep();
@@ -401,6 +401,23 @@ window.IdolCareer = (() => {
         btn.onclick = finishYear;
       }
     }
+  }
+
+  /* 🌏 월드투어 — 정상에 오른 뒤에만 열리는 후반 목표예요.
+   * 상을 노린 육성과 팬덤을 노린 육성 둘 다 길이 되게 '또는'으로 뒀어요.
+   *
+   * ⚠️ 이 수치는 임시예요. 너무 쉽게 열리면 후반 목표가 아니라 그냥 다음
+   * 단계가 되고, 다 본 뒤에 할 게 없어져요. 강하게 키운 플레이어 기준
+   * 6~8년차에 열리도록 Task 7에서 다시 잽니다. */
+  const TOUR_DAESANG = 3;
+  const TOUR_FANDOM = 8000;
+  function tourReady() {
+    return (S.career.daesang || 0) >= TOUR_DAESANG || (S.fandom || 0) >= TOUR_FANDOM;
+  }
+
+  // 도시 수는 팬덤이 정해요 — 4곳에서 시작해 8곳까지 늘어나요
+  function tourCities() {
+    return clamp(4 + Math.floor((S.fandom || 0) / 4000), 4, 8);
   }
 
   // ---------- 연말 결산 ----------
