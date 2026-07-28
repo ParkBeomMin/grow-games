@@ -398,7 +398,9 @@ h2 { font-size: 1.6rem; margin: 8px 0 6px; color: var(--accent); }
 .season-career th:nth-child(2), .season-career td:nth-child(2) { width: 46px; }
 .season-career th:nth-child(4), .season-career td:nth-child(4) { width: 38px; }
 .season-career td { vertical-align: top; word-break: keep-all; }
-.season-career .sn-y, .season-career .sn-role { white-space: nowrap; }
+.season-career .sn-y, .season-career .sn-role, .season-career .sn-team { white-space: nowrap; }
+/* 이적한 시즌은 눈에 띄게 — 칼럼을 훑으며 언제 팀을 옮겼는지 바로 보이게 */
+.season-career .sn-team.moved { color: var(--accent); }
 .season-career .sn-y { color: var(--cream); }
 .season-career .sn-age { display: block; font-size: 0.64rem; opacity: .65; }
 .season-career .sn-line { text-align: left; }

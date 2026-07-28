@@ -299,6 +299,23 @@ function transcendTitle(n) {
   if (n >= 1) return "🌠 각성 너머";
   return "";
 }
+/* 🔁 몇 년차에 어느 팀이었나.
+ * 시즌 기록에 team을 저장하기 시작한 건 2.21.0부터라, 그 전 기록은
+ * 이적 이력(S.moves)에서 역산합니다. 이적이 없으면 늘 지금 팀이에요. */
+function teamOfSeason(x) {
+  if (x && x.team) return x.team;
+  const moves = (S && S.moves) || [];
+  if (!moves.length) return (S && S.team) || "";
+  let team = moves[0].from;                       // 데뷔 팀
+  for (const m of moves) {
+    // 오프시즌 이적은 다음 시즌부터, 시즌 중 이적은 그 시즌부터
+    if (x.y >= (m.inSeason ? m.y : m.y + 1)) team = m.to;
+  }
+  return team;
+}
+// 표가 좁아서 첫 낱말만 써요 ("청우 크레인스" → "청우")
+const shortTeam = (name) => (name ? String(name).split(" ")[0] : "-");
+
 const talentStars = (t) => clamp(Math.round(((t - 0.6) / (TALENT_MAX - 0.6)) * 5), 1, 5);
 const isTalentMax = (t) => t >= TALENT_MAX - 1e-9;
 // 스탯 100 이상(한계 돌파)부터 도전 가능. 깊이 돌파할수록 성공 확률 상승.
@@ -493,19 +510,22 @@ function renderRecord() {
   if (S.career && S.career.seasons.length) {
     // 수상은 이름까지 — "몇 년차에 뭘 탔는지"가 연도별 기록의 핵심이라 🎖️만으론 부족해요
     const AWARD_TAG = { MVP: "MVP", 골든글러브: "GG", 신인왕: "신인왕" };
-    const rows = S.career.seasons.map((x) => {
+    const rows = S.career.seasons.map((x, i) => {
       const badges =
         (x.champ ? `<span class="sn-tag champ">🏆우승</span>` : "") +
         (x.awards || []).map((a) => `<span class="sn-tag award">🎖️${AWARD_TAG[a] || a}</span>`).join("");
+      const team = teamOfSeason(x);
+      const moved = i > 0 && team !== teamOfSeason(S.career.seasons[i - 1]);
       return `<tr>
         <td class="sn-y">${x.y}년차${x.age ? `<span class="sn-age">${x.age}세</span>` : ""}</td>
+        <td class="sn-team${moved ? " moved" : ""}" title="${team}">${shortTeam(team)}</td>
         <td class="sn-role">${x.role ? x.role.replace(" 투수", "").replace(" 타자", "") : "-"}</td>
         <td class="sn-line">${x.line}${badges ? `<span class="sn-tags">${badges}</span>` : ""}</td>
         <td class="sn-war">${x.war.toFixed(1)}</td>
       </tr>`;
     }).join("");
     proHtml = `
-      <table class="season-table season-career"><thead><tr><th>시즌</th><th>보직</th><th>성적</th><th>WAR</th></tr></thead><tbody>${rows}</tbody></table>
+      <table class="season-table season-career"><thead><tr><th>시즌</th><th>팀</th><th>보직</th><th>성적</th><th>WAR</th></tr></thead><tbody>${rows}</tbody></table>
       <div>통산 ${S.career.seasons.length}시즌 · WAR ${S.career.warSum.toFixed(1)} · 🏆 ${S.career.rings} · MVP ${S.career.mvp} · GG ${S.career.gg}${S.career.roy ? " · 신인왕" : ""}</div>`;
   }
   const defs = STAT_DEFS[S.pos];

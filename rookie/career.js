@@ -951,7 +951,7 @@ window.Career = (() => {
     }
     if (champ) S.career.rings += 1;
     S.career.warSum = Math.round((S.career.warSum + Math.max(war, 0)) * 10) / 10;
-    S.career.seasons.push({ y: S.proYear, age: S.age, war, line, rank, champ, awards, role: S.role, raw });
+    S.career.seasons.push({ y: S.proYear, age: S.age, war, line, rank, champ, awards, role: S.role, team: S.team, raw });
     if (window.Stats) Stats.log("season_end", { y: S.proYear, war, rank, champ });
 
     for (const d of STAT_DEFS[S.pos]) {
@@ -1167,7 +1167,10 @@ window.Career = (() => {
     S.team = team;
     S.money = (S.money || 0) + (bonus || 0);
     S.moves = S.moves || [];
-    S.moves.push({ y: S.proYear, age: S.age, from, to: team, type });
+    /* inSeason이 있어야 몇 년차 기록에 어느 팀을 쓸지 가릅니다.
+     * 오프시즌 이적은 다음 시즌부터, 시즌 중 이적은 그 시즌부터 새 팀이에요.
+     * 이 필드가 없는 옛 기록은 전부 오프시즌 이적입니다(시즌 중 이적은 2.14.0부터). */
+    S.moves.push({ y: S.proYear, age: S.age, from, to: team, type, inSeason: !!S.season });
     proLog(`${type === "fa" ? "💼" : "🔁"} ${from} → ${team} 이적! (${type === "fa" ? "FA 계약" : "트레이드"})`);
     if (window.Stats) Stats.log("transfer", { type, from, to: team, y: S.proYear });
     save();
