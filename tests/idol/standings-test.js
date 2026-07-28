@@ -31,6 +31,8 @@ const parts = {
   WK: /const WEEKS_PER_CB = [^;]+;/,
   seedC: /const RIVAL_FAN_SEED = [^;]+;/,
   roll: /function rollRivals\(\)[\s\S]*?\n  \}/,
+  CONCEPTS: /const CONCEPTS = \[[\s\S]*?\n  \];/,
+  trend: /function rollTrend\(\)[\s\S]*?\n  \}/,
   init: /function initActivity\(\)[\s\S]*?\n  \}/,
   after: /function afterPrep\(\)[\s\S]*?\n  \}/,
   seed: /function seedFandom\([\s\S]*?\n  \}/,
@@ -64,6 +66,8 @@ const wire = new Function("rand", "randInt", "RIVAL_GROUPS", "els", `
   ${got.WK}
   ${got.seedC}
   ${got.roll}
+  ${got.CONCEPTS}
+  ${got.trend}
   ${got.init}
   ${got.after}
   ${got.seed}

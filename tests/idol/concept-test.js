@@ -83,5 +83,111 @@ check(lowFan <= midFan && midFan <= highFan,
   `팬덤이 오르면 expectedSales가 단조 증가한다 (${lowFan} → ${midFan} → ${highFan})`);
 check(lowFan < highFan, `팬덤 차이가 실제로 값을 움직인다 (${lowFan} vs ${highFan})`);
 
+// ---------- 14~17) rollTrend — 소문 2종 ----------
+const { rollTrend } = Career._t;
+check(typeof rollTrend === "function", "rollTrend이 _t로 노출된다");
+if (typeof rollTrend !== "function") { console.log("\n❌ 실패"); process.exit(1); }
+
+const validIds = new Set(CONCEPTS.map((c) => c.id));
+let badHotCold = 0, badRumor = 0, rumorFirst = 0, rumorSecond = 0;
+const hotSeen = new Set();
+for (let i = 0; i < 300; i++) {
+  const r = rollTrend();
+  if (!validIds.has(r.hot) || !validIds.has(r.cold)) badHotCold++;
+  hotSeen.add(r.hot);
+  const rumorOk = Array.isArray(r.rumor) && r.rumor.length === 2
+    && r.rumor[0] !== r.rumor[1] && r.rumor.includes(r.hot);
+  if (!rumorOk) badRumor++;
+  if (r.rumor && r.rumor[0] === r.hot) rumorFirst++;
+  if (r.rumor && r.rumor[1] === r.hot) rumorSecond++;
+}
+check(badHotCold === 0, "300회 모두 hot·cold가 CONCEPTS의 id다");
+check(hotSeen.size === 4, `300회 중 hot이 4종 전부 나온다 (${[...hotSeen].sort().join(",")})`);
+check(badRumor === 0, "300회 전부 rumor 길이 2 · 서로 다른 값 · hot을 포함한다");
+check(rumorFirst > 0 && rumorSecond > 0,
+  `rumor 안에서 hot의 위치가 고정되지 않는다 (앞칸 ${rumorFirst}회, 뒤칸 ${rumorSecond}회)`);
+
+// ---------- 18~19) 게임 입구를 통해 확인 (jsdom, standings-test.js와 같은 부트스트랩) ----------
+let page2 = fs.readFileSync(path.join(DIR, "index.html"), "utf8")
+  .replace(/<script src="([^"]+)"><\/script>/g, (m0, src) => {
+    const p = path.resolve(DIR, src);
+    return fs.existsSync(p) ? `<script>\n${fs.readFileSync(p, "utf8")}\n</script>` : "";
+  });
+page2 = page2.replace("</head>", `<script>${PRELUDE}</script></head>`);
+page2 = page2.replace("</body>", `<script>
+  window.__get = (n) => eval(n);
+  window.__set = (n, v) => { window.__v = v; eval(n + " = window.__v"); };
+</script></body>`);
+
+const dom2 = new JSDOM(page2, { runScripts: "dangerously", pretendToBeVisual: true, url: "https://x.test/idol/" });
+const w2 = dom2.window;
+w2.Ads = { display() {}, init() {} };
+w2.Stats = { log() {} };
+const $2 = (id) => w2.document.getElementById(id);
+const activeScreen2 = () => (w2.document.querySelector(".screen.active") || {}).id;
+const get2 = w2.__get, set2 = w2.__set;
+
+const Career2 = w2.Career || w2.IdolCareer;
+check(!!Career2, "두 번째 페이지에서도 Career 모듈이 로드된다");
+check(typeof Career2?._t?.state === "function", "state가 _t로 노출된다");
+if (!Career2 || typeof Career2._t.state !== "function") { console.log("\n❌ 실패"); process.exit(1); }
+
+set2("S", get2('newState(AGENCIES[0], "vocal", "테스트")'));
+const G2 = get2("S");
+G2.phase = "idol-pro";
+G2.group = "테스트팀";
+G2.center = true;
+G2.proYear = 1;
+G2.camp = 1;
+G2.activity = null;
+G2.pendingShow = false;
+G2.proLog = [];
+G2.fandom = 500;
+G2.money = 3000;
+G2.condition = 90;
+for (const k of Object.keys(G2.stats)) G2.stats[k] = 100;
+G2.career = { years: [], wins: 0, daesang: 0, bonsang: 0, rookie: 0, sales: 0, tours: 0 };
+delete G2.standings;
+
+Career2.showActivity();
+const restBtn2 = () => Array.from(w2.document.querySelectorAll("#pro-actions .action-btn"))
+  .find((b) => b.dataset.key === "__rest" && !b.disabled);
+restBtn2().click(); // 마지막 연습 턴 소진 → 1차 컴백 시작
+
+const act1 = Career2._t.state().activity;
+check(!!act1, "컴백이 시작되면 activity가 채워진다");
+check(!!act1 && act1.concept === null, "고르기 전에는 concept이 null이다");
+check(!!act1 && validIds.has(act1.hot) && validIds.has(act1.cold),
+  `activity에도 hot·cold가 CONCEPTS의 id로 채워진다 (hot=${act1 && act1.hot}, cold=${act1 && act1.cold})`);
+check(!!act1 && Array.isArray(act1.rumor) && act1.rumor.length === 2 && act1.rumor.includes(act1.hot),
+  `activity의 rumor에도 실제 hot이 들어 있다 (${act1 && JSON.stringify(act1.rumor)})`);
+
+// 한 주를 실제로 소화해요 — 화면 버튼만 눌러서 (standings-test.js의 playWeek과 동일한 방식)
+function playWeek2() {
+  let guard = 0;
+  while (activeScreen2() === "screen-pro" && guard++ < 10) {
+    const go = w2.document.querySelector("#pro-actions .go-game");
+    if (go) { go.click(); break; }
+    restBtn2().click();
+  }
+  if (activeScreen2() !== "screen-stage") return false;
+  $2("btn-stage-next").click();        // ⏩ 빨리 감기 → 미니게임 자동 → 주간 차트
+  $2("btn-stage-next").click();        // 다음 무대 준비 / 다음 컴백
+  return true;
+}
+
+// 1차 컴백은 6주예요. 6주째 무대가 끝나도 cb는 그대로고, 다음 번 연습(afterPrep)에서
+// 컴백 롤오버가 일어나요 — 그래서 7번째 playWeek2() 호출까지 지켜봐야 cb가 2로 넘어가요.
+let weeks2 = 0;
+while (Career2._t.state().activity.cb === 1 && weeks2 < 8) { check(playWeek2(), `1차 컴백 진행 중 무대가 소화된다 (${weeks2 + 1}회차)`); weeks2++; }
+check(Career2._t.state().activity.cb === 2, `1차 컴백이 끝나면 2차 컴백으로 넘어간다 (${Career2._t.state().activity.cb}차)`);
+
+const act2 = Career2._t.state().activity;
+check(!!act2 && act2.concept === null, "2차 컴백이 시작되면 concept이 다시 null로 돌아간다");
+check(!!act2 && validIds.has(act2.hot) && validIds.has(act2.cold),
+  `2차 컴백도 hot·cold가 새로 굴려져 CONCEPTS의 id다 (hot=${act2 && act2.hot}, cold=${act2 && act2.cold})`);
+check(!!act2 && Array.isArray(act2.rumor) && act2.rumor.length === 2 && act2.rumor.includes(act2.hot),
+  `2차 컴백의 rumor에도 새 hot이 들어 있다 (${act2 && JSON.stringify(act2.rumor)})`);
+
 console.log(fail ? "\n❌ 실패" : "\n✅ 통과");
 process.exit(fail ? 1 : 0);

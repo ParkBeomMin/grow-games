@@ -40,6 +40,8 @@ const parts = {
   roll: /function rollRivals\(\)[\s\S]*?\n  \}/,
   init: /function initActivity\(\)[\s\S]*?\n  \}/,
   after: /function afterPrep\(\)[\s\S]*?\n  \}/,
+  CONCEPTS: /const CONCEPTS = \[[\s\S]*?\n  \];/,
+  trend: /function rollTrend\(\)[\s\S]*?\n  \}/,
 };
 const got = {};
 for (const [k, re] of Object.entries(parts)) {
@@ -48,16 +50,20 @@ for (const [k, re] of Object.entries(parts)) {
   got[k] = mm[0];
 }
 // save/renderPrep/show는 화면·저장이라 여기선 무의미하다. 빈 함수로 세운다.
-const wire = new Function("rand", "RIVAL_GROUPS", `
+// initActivity/afterPrep가 이제 rollTrend()도 부르므로 CONCEPTS·randInt까지 같이 세운다.
+const randInt = (a, b) => Math.floor(rand(a, b + 1));
+const wire = new Function("rand", "randInt", "RIVAL_GROUPS", `
   let S;
   const save = () => {}, renderPrep = () => {}, show = () => {};
   ${got.CB}
   ${got.WK}
   ${got.roll}
+  ${got.CONCEPTS}
+  ${got.trend}
   ${got.init}
   ${got.after}
   return { set: (x) => { S = x; }, get: () => S, afterPrep };
-`)(rand, RIVAL_GROUPS);
+`)(rand, randInt, RIVAL_GROUPS);
 
 const meanPop = (rs) => rs.reduce((a, r) => a + r.pop, 0) / rs.length;
 // startPrep()이 하는 일: 연차를 올리고 camp를 채우고 activity를 비운다.

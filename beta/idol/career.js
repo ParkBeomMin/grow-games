@@ -100,10 +100,12 @@ window.IdolCareer = (() => {
   }
 
   function initActivity() {
+    const tr = rollTrend();
     S.activity = {
       cb: 1, cbTotal: CB_PER_YEAR,
       week: 0, weekTotal: WEEKS_PER_CB,
       wins: 0, sales: 0, hypeSum: 0, cbHype: 0, cbWins: 0,
+      concept: null, hot: tr.hot, cold: tr.cold, rumor: tr.rumor,
       rivals: rollRivals(),
     };
   }
@@ -113,11 +115,16 @@ window.IdolCareer = (() => {
     if (S.camp > 0) { renderPrep(); return; }
     if (!S.activity) initActivity();
     else if (S.activity.week >= S.activity.weekTotal) {
-      // 다음 컴백 시작
+      // 다음 컴백 시작 — 컨셉을 다시 고르고 유행도 새로 굴려요
+      const tr = rollTrend();
       S.activity.cb += 1;
       S.activity.week = 0;
       S.activity.cbHype = 0;
       S.activity.cbWins = 0;
+      S.activity.concept = null;
+      S.activity.hot = tr.hot;
+      S.activity.cold = tr.cold;
+      S.activity.rumor = tr.rumor;
       S.activity.rivals = rollRivals();
     }
     S.pendingShow = true;
@@ -362,6 +369,20 @@ window.IdolCareer = (() => {
     let base = 0;
     for (const k in concept.w) base += (stats[k] || 0) * concept.w[k];
     return Math.max(1, Math.round(base * SALES_K + (fandom || 0) * 0.05 + (cbWins || 0) * 4));
+  }
+
+  /* 컴백마다 유행 하나, 식상 하나를 굴려요. 같은 게 뽑히면 상쇄돼서 배수가 안 붙어요.
+   * rumor는 고르기 전에 보여줄 후보 2종이에요. 진짜 유행이 반드시 들어 있어서
+   * 플레이어는 반반 확률에 걸지 말지를 판단하게 돼요.
+   * 전부 공개하면 정답이 확정돼 고민이 사라지고, 전부 감추면 유행이 순수 운이 됩니다. */
+  function rollTrend() {
+    const hot = CONCEPTS[randInt(0, CONCEPTS.length - 1)].id;
+    const cold = CONCEPTS[randInt(0, CONCEPTS.length - 1)].id;
+    let other;
+    do { other = CONCEPTS[randInt(0, CONCEPTS.length - 1)].id; } while (other === hot);
+    // 진짜 유행이 항상 앞에 오면 첫 칸만 보고 답을 알아요. 순서를 섞습니다.
+    const rumor = Math.random() < 0.5 ? [hot, other] : [other, hot];
+    return { hot, cold, rumor };
   }
 
   function playShow() {
@@ -1160,7 +1181,7 @@ window.IdolCareer = (() => {
 
   return {
     // 검증용 창구예요 — 산식만 열어둡니다. 게임 코드에서는 쓰지 마세요.
-    _t: { tourGrade, tourReady, tourCities, CONCEPTS, conceptOf, trendMul, expectedSales },
+    _t: { tourGrade, tourReady, tourCities, CONCEPTS, conceptOf, trendMul, expectedSales, rollTrend, state: () => S },
     onEnding,
     refreshPro: renderPrep,
     showHof,
