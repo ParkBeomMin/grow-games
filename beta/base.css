@@ -392,17 +392,22 @@ h2 { font-size: 1.6rem; margin: 8px 0 6px; color: var(--accent); }
 .season-table th, .season-table td { border-bottom: 1px solid var(--line); padding: 5px 4px; text-align: center; color: var(--dim); }
 .season-table th { color: var(--cream); font-weight: 400; }
 
-/* 연도별 통산 기록표 — 좁은 칸이 세로로 쪼개지지 않게 폭을 고정해요 */
+/* 연도별 통산 기록표 — 좁은 칸이 세로로 쪼개지지 않게 폭을 고정해요.
+   ⚠️ table-layout:fixed + nth-child라 칼럼을 더하거나 빼면 폭이 통째로 밀립니다.
+   시즌 결산표(4칸)와 📊 기록표(5칸)가 같은 클래스를 쓰므로 아래처럼 나눠서 잡아요. */
 .season-career { table-layout: fixed; }
+/* 시즌 결산 — 시즌 · 나이 · 성적 · WAR */
 .season-career th:nth-child(1), .season-career td:nth-child(1) { width: 60px; }
-.season-career th:nth-child(2), .season-career td:nth-child(2) { width: 46px; }
+.season-career th:nth-child(2), .season-career td:nth-child(2) { width: 50px; }
 .season-career th:nth-child(4), .season-career td:nth-child(4) { width: 38px; }
+/* 📊 기록도 4칸이에요 — 소속(팀+보직)을 한 칸에 쌓습니다.
+   칼럼을 하나 더 두면 '성적'이 그만큼 좁아져 세로로 접혀요. */
 .season-career td { vertical-align: top; word-break: keep-all; }
 .season-career .sn-y, .season-career .sn-role, .season-career .sn-team { white-space: nowrap; }
 /* 이적한 시즌은 눈에 띄게 — 칼럼을 훑으며 언제 팀을 옮겼는지 바로 보이게 */
 .season-career .sn-team.moved { color: var(--accent); }
 .season-career .sn-y { color: var(--cream); }
-.season-career .sn-age { display: block; font-size: 0.64rem; opacity: .65; }
+.season-career .sn-age, .season-career .sn-role { display: block; font-size: 0.64rem; opacity: .65; }
 .season-career .sn-line { text-align: left; }
 .season-career .sn-war { color: var(--cream); }
 .sn-tags { display: block; margin-top: 2px; }
