@@ -1249,7 +1249,7 @@ function showEnding(survivedFinal, lastRound) {
     teamLine = "다음 시즌 재도전";
     msg = "이번엔 여기까지. 하지만 고정 시청자는 계속 늘고 있어요.";
   } else if (score >= 330) {
-    emoji = "📹"; title = "유튜브 전향";
+    emoji = "📹"; title = "영상 크리에이터 전향";
     teamLine = "편집 콘텐츠로 커리어 시작";
     msg = "라이브는 접었지만 쌓인 감각이 있어요. 편집 영상으로 역주행을 노려요!";
   } else {

@@ -1268,7 +1268,7 @@ function showEnding(survivedFinal, lastRound) {
     msg = "이번엔 여기까지. 하지만 회사는 아직 당신을 믿고 있어요.";
   } else if (score >= 330) {
     emoji = "📹"; title = "홀로서기 선언";
-    teamLine = "유튜브 채널 개설 → 역주행 노리기";
+    teamLine = "영상 채널 개설 → 역주행 노리기";
     msg = "예선 탈락… 하지만 쌓인 팬덤이 있어요. 커버 영상으로 역주행을 노려봐요!";
   } else {
     emoji = "🎒"; title = "연습실과 작별";

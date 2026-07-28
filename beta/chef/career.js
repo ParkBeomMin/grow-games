@@ -8,7 +8,7 @@ window.ChefCareer = (() => {
   const BATTLE_KEY = "grow-battle-chef-v1";
 
   const GHOSTS = [
-    { id: "cg1", name: "미쉐린 3스타 거장", bp: 690 },
+    { id: "cg1", name: "고메가이드 3스타 거장", bp: 690 },
     { id: "cg2", name: "철판 위의 신 불꽃손", bp: 640 },
     { id: "cg3", name: "한식 대가 손맛", bp: 560 },
     { id: "cg4", name: "디저트 아티스트 슈가", bp: 470 },
@@ -84,7 +84,7 @@ window.ChefCareer = (() => {
   const WEEKS_PER_CB = 6;
   const CB_LABELS = ["상반기", "하반기"];
   const cbLabel = (n) => CB_LABELS[n - 1] || `${n}차`;
-  const RIVAL_GROUPS = ["미쉐린 셰프", "불꽃 철판왕", "한식 명인", "디저트 장인", "라이벌 오너", "베테랑 셰프", "괴물 신입", "방송 스타셰프"];
+  const RIVAL_GROUPS = ["고메가이드 셰프", "불꽃 철판왕", "한식 명인", "디저트 장인", "라이벌 오너", "베테랑 셰프", "괴물 신입", "방송 스타셰프"];
 
   function rollRivals() {
     return RIVAL_GROUPS.map((name) => ({ name, pop: rand(52, 88) }));
@@ -473,7 +473,7 @@ window.ChefCareer = (() => {
   function gradeOfScore(sc) {
     if (sc >= 850) return "🐐 요리계의 전설";
     if (sc >= 600) return "👑 명예의 전당 헌액";
-    if (sc >= 400) return "🌟 미쉐린 스타 셰프";
+    if (sc >= 400) return "🌟 고메가이드 스타 셰프";
     if (sc >= 220) return "💪 지역 맛집 오너";
     if (sc >= 90) return "🧢 알아주는 동네 맛집";
     return "🌱 짧지만 뜨거웠던 주방";

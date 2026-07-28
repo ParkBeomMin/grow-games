@@ -9,7 +9,7 @@ const MARKETS = [
     desc: "체계적인 기본기. 안정적이지만 개성은 천천히 붙어요",
   },
   {
-    id: "fine", name: "파인다이닝", emoji: "🍽️", tier: "미쉐린 코스",
+    id: "fine", name: "파인다이닝", emoji: "🍽️", tier: "고메가이드 코스",
     debut: 0.62, growth: 1.12, spot: 1.15,
     desc: "최고급 주방. 성장은 빠르지만 압박이 살인적이에요",
   },
@@ -46,7 +46,7 @@ const POS_INFO = {
   chinese: { name: "중식", stat: "speed" },
 };
 
-const CHEF_NAMES = ["도마", "칼든손", "맛의달인", "불꽃요리", "간잘맞춤", "플레이팅", "미쉐린", "막내셰프", "수셰프", "오너셰프", "손맛", "황금레시피"];
+const CHEF_NAMES = ["도마", "칼든손", "맛의달인", "불꽃요리", "간잘맞춤", "플레이팅", "쓰리스타", "막내셰프", "수셰프", "오너셰프", "손맛", "황금레시피"];
 
 const STAGE_TYPES = [
   { name: "기본기 심사", main: "knife", aux: "speed" },
@@ -1233,7 +1233,7 @@ function showEnding(survivedFinal, lastRound) {
 
   let emoji, title, teamLine, msg;
   if (survivedFinal && score >= 520) {
-    emoji = "👑"; title = "미쉐린 스타 셰프!";
+    emoji = "👑"; title = "고메가이드 스타 셰프!";
     teamLine = `${m.name} 출신 — 별을 단 오너셰프`;
     msg = "역대급 재능! 개업한 레스토랑이 단숨에 별을 받았어요.";
   } else if (survivedFinal) {
