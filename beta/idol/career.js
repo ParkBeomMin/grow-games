@@ -89,7 +89,12 @@ window.IdolCareer = (() => {
 
   function rollRivals() {
     // 해마다 3%씩 강해져요. 멈춰 있으면 밀리지만, 성실히 키우면 계속 앞서요.
-    // 5%로 하면 9년차에 중위권이 무너져요 (시뮬레이션으로 확인했어요).
+    // 이 성장률이 실제로 먹히는 건 주간 점수의 팬덤 항에 상한이 걸려 있기 때문이에요.
+    // 상한이 없던 시절엔 팬덤이 혼자 불어나서, 훈련을 아예 멈춘 플레이어조차
+    // 해마다 라이벌을 더 크게 따돌렸어요 (성장의 부호가 뒤집혀 있었어요).
+    // 값을 바꿀 땐 tests/idol/weekly-test.js의 승률 표로 확인하세요.
+    // 지금 3%는 그 표(중위권은 후반에 좁혀지고, 잘 키운 아이돌은 계속 강함)에
+    // 맞춘 값이에요 — 올릴수록 중위권이 더 빨리 무너집니다.
     const grow = 1 + Math.max(0, (S.proYear || 1) - 1) * 0.03;
     return RIVAL_GROUPS.map((name) => ({ name, pop: rand(52, 88) * grow }));
   }
@@ -309,12 +314,16 @@ window.IdolCareer = (() => {
     }
 
     // 주간 차트 발표
+    /* 주간 점수의 축은 능력치예요. 팬덤 항에는 상한(FANDOM_CAP)이 있어요 —
+     * 팬덤은 활동만 해도 저절로 쌓이는 값이라, 상한이 없으면 훈련을 멈춰도
+     * 점수가 해마다 올라가서 라이벌 성장(rollRivals의 3%)을 통째로 덮어버려요. */
+    const FANDOM_CAP = 16;
     function weeklyChart() {
       const myScore =
         (S.stats[POS_INFO[S.pos].stat] * 0.32 +
         S.stats.charm * 0.22 +
         ((S.stats.vocal + S.stats.dance + S.stats.rap) / 3) * 0.2) * clutch(POS_INFO[S.pos].stat) +
-        S.condition / 8 + (S.fandom || 0) / 45 + miniBonus + rand(-5, 5);
+        S.condition / 8 + Math.min((S.fandom || 0) / 45, FANDOM_CAP) + miniBonus + rand(-5, 5);
       const rows = [
         { name: S.group, score: myScore, me: true },
         ...act.rivals.map((r) => ({ name: r.name, score: r.pop + rand(-8, 8) })),
