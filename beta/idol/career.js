@@ -346,7 +346,16 @@ window.IdolCareer = (() => {
       const cbDone = act.week >= act.weekTotal;
       let extraLine = "";
       if (cbDone) {
-        const cbSales = Math.max(1, Math.round(S.fandom * 0.05 + act.cbWins * 6 + act.cbHype * 4 + rand(-4, 4)));
+        /* 초동 판매량 — 이 게임의 고유 축이에요.
+         * 예전에는 hype에서 파생됐는데, hype가 순위 기반이라 천장에 붙으면
+         * 판매량도 같이 멈췄어요. 이제 능력치에서 직접 자라요.
+         *   매력 → 화제성, 무대 완성도(보컬·댄스·랩) → 음악적 완성도,
+         *   팬덤 → 초동을 받쳐주는 고정층
+         * 상한이 없어서 능력치를 올린 만큼 계속 커져요. */
+        const stage = (S.stats.vocal + S.stats.dance + S.stats.rap) / 3;
+        const cbSales = Math.max(1, Math.round(
+          S.stats.charm * 0.55 + stage * 0.75 + S.fandom * 0.05 + act.cbWins * 4 + rand(-4, 4)
+        ));
         act.sales += cbSales;
         extraLine = `<div class="tour-pts">💿 ${act.cb}차 컴백 종료 — 1위 ${act.cbWins}회 · 초동 ${cbSales}만 장</div>`;
       }
