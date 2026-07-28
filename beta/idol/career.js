@@ -135,6 +135,7 @@ window.IdolCareer = (() => {
     $("pro-money").textContent = `💰 ${fmtMoney(S.money || 0)}`;
   $("pro-cond-num").textContent = Math.round(S.condition);
     $("pro-cond-bar").style.width = `${S.condition}%`;
+    renderStandings();
 
     const stats = $("pro-stats");
     stats.innerHTML = "";
@@ -253,6 +254,79 @@ window.IdolCareer = (() => {
       <tbody>${rows.map((r, i) => `<tr class="${r.me ? "me" : ""}"><td>${i + 1}</td><td>${r.name}</td><td>${Math.round(r.score)}</td></tr>`).join("")}</tbody></table>`;
   }
 
+  /* ---------- 🏆 올해의 그룹 순위 ----------
+   * 음방 1위 횟수와 팬덤을 한 표에 모아, 라이벌들 사이에서 우리가 어디쯤인지 보여줘요.
+   * 한 해 단위로 쌓고 새 연차가 시작되면 리셋해요 (연차 활동 → 연말 결산 흐름 그대로).
+   * 컴백마다 라이벌을 새로 뽑아도 그룹 이름으로 이어 붙여서 기록은 안 끊겨요.
+   *
+   * ⚠️ 라이벌 팬덤은 '표시 전용'이에요. 절대 pop이나 주간 점수로 되돌아가면 안 돼요.
+   * 주간 점수의 팬덤 항에는 상한(FANDOM_CAP)이 걸려 있고, 라이벌 성장은 오직
+   * rollRivals()의 3%만으로 굴러가요. 여기서 되먹임이 하나라도 생기면 오래 걸린
+   * 주간 밸런스가 통째로 무너져요. 읽는 방향은 pop → 시작 팬덤 한 번뿐이에요. */
+  const RIVAL_FAN_SEED = 3.6;
+  function seedFandom(pop) {
+    // 그 정도 인기로 데뷔부터 지금까지 쌓았을 법한 팬덤을 어림잡아요.
+    // 안 그러면 10년차 플레이어(팬덤 수천) 옆에 0부터 시작한 라이벌이 서서
+    // 표가 아무 의미도 없어져요.
+    return Math.max(0, Math.round(pop * RIVAL_FAN_SEED * (S.proYear || 1)));
+  }
+
+  // 진행 중인 캐릭터는 S.standings가 없어요 — 없으면 지금 연차로 새로 열어줘요.
+  function ensureStandings() {
+    const yr = S.proYear || 1;
+    if (!S.standings || S.standings.year !== yr) S.standings = { year: yr, groups: {} };
+    const gs = S.standings.groups;
+    for (const r of (S.activity && S.activity.rivals) || []) {
+      if (!gs[r.name]) gs[r.name] = { wins: 0, fandom: seedFandom(r.pop) };
+    }
+    return gs;
+  }
+
+  /* 주간 차트 결과를 그해 기록에 반영해요.
+   * 라이벌 팬덤은 '차트에서 거둔 성적'으로만 자라요 — 증감 폭은 플레이어와 같은 표예요.
+   * 내 기록은 여기 담지 않아요. 표를 그릴 때 S.fandom과 S.activity.wins를 그대로
+   * 읽어 쓰니까, 따로 복사해두고 어긋날 일이 없어요. */
+  function recordWeek(rows) {
+    const gs = ensureStandings();
+    rows.forEach((r, i) => {
+      if (r.me) return;
+      const g = gs[r.name];
+      if (!g) return;
+      const rk = i + 1;
+      if (rk === 1) g.wins += 1;
+      g.fandom = Math.max(0, g.fandom + (rk === 1 ? randInt(10, 18) : rk <= 3 ? randInt(4, 9) : randInt(-3, 3)));
+    });
+  }
+
+  // 내 줄의 1위 횟수는 부르는 쪽이 넘겨줘요 (활동 중이면 act.wins, 결산이면 그해 기록).
+  function standingsRows(myWins) {
+    const gs = (S.standings && S.standings.groups) || {};
+    return [
+      { name: S.group, wins: myWins || 0, fandom: Math.round(S.fandom || 0), me: true },
+      ...Object.entries(gs).map(([name, g]) => ({ name, wins: g.wins || 0, fandom: Math.round(g.fandom || 0) })),
+    ].sort((a, b) => b.wins - a.wins || b.fandom - a.fandom);
+  }
+
+  function standingsHTML(myWins) {
+    const rows = standingsRows(myWins);
+    return `<table class="rank-table season-standings"><thead><tr><th>#</th><th>그룹</th><th>🏆 음방 1위</th><th>💖 팬덤</th></tr></thead>
+      <tbody>${rows.map((r, i) => `<tr class="${r.me ? "me" : ""}"><td>${i + 1}</td><td>${r.name}${r.me ? " (우리)" : ""}</td><td>${r.wins}회</td><td>${r.fandom}</td></tr>`).join("")}</tbody></table>`;
+  }
+
+  // 📊 커리어 화면의 접이식 순위표. 활동 중이 아니면 숨겨요.
+  function renderStandings() {
+    const box = $("pro-standings");
+    if (!box) return;
+    if (!S.activity) { box.hidden = true; return; }
+    ensureStandings();
+    const myWins = S.activity.wins || 0;
+    const rank = standingsRows(myWins).findIndex((r) => r.me) + 1;
+    box.hidden = false;
+    $("pro-standings-sum").textContent =
+      `🏆 올해 그룹 순위 ${rank}위 · 음방 1위 ${myWins}회 · 💖 팬덤 ${Math.round(S.fandom || 0)}`;
+    $("pro-standings-body").innerHTML = standingsHTML(myWins);
+  }
+
   function playShow() {
     const act = S.activity;
     const firstWeek = act.week === 0;
@@ -330,6 +404,7 @@ window.IdolCareer = (() => {
       ].sort((a, b) => b.score - a.score);
       const rank = rows.findIndex((r) => r.me) + 1;
       const won = rank === 1;
+      recordWeek(rows);   // 🏆 올해 그룹 순위에 이번 주 결과를 남겨요 (표시 전용)
 
       act.week += 1;
       act.hypeSum += (5 - rank) * 0.35 + miniHype;
@@ -601,6 +676,11 @@ window.IdolCareer = (() => {
       `<tr><td>${x.y}년차</td><td>1위 ${x.wins}회</td><td>초동 ${x.sales}만</td><td>${x.awards.length ? "🏆" + x.awards.join(",") : "-"}</td></tr>`
     ).join("");
     const forcedRetire = S.proYear >= 10;
+    /* 🏆 그해 그룹 최종 순위. 결산이 끝나도 S.standings는 남아 있고, 다음 연차
+     * 활동이 시작될 때 비로소 새로 열려요. 다른 해의 기록이면 아예 안 보여줘요. */
+    const standings = (S.standings && S.standings.year === y.y)
+      ? `<details class="standings-box"><summary>🏆 ${y.y}년차 그룹 최종 순위</summary>${standingsHTML(y.wins)}</details>`
+      : "";
     $("career-title").textContent = `📊 ${y.y}년차 활동 결산`;
     $("career-card").innerHTML = `
       <div class="draft-emoji">🎤</div>
@@ -611,6 +691,7 @@ window.IdolCareer = (() => {
       }</div>
       <div class="draft-team">${S.group} · 음방 1위 ${y.wins}회 · 초동 ${y.sales}만 장</div>
       <table class="season-table"><thead><tr><th>연차</th><th>음방</th><th>판매량</th><th>수상</th></tr></thead><tbody>${rows}</tbody></table>
+      ${standings}
       <div class="draft-summary">
         통산 ${S.career.years.length}년 활동 · 1위 ${S.career.wins}회 · 🏆 대상 ${S.career.daesang} · 본상 ${S.career.bonsang}${S.career.rookie ? " · 신인상" : ""}${(S.career.tours || 0) ? ` · 🌏 월드투어 ${S.career.tours}회${S.tourBest ? `(최고 ${S.tourBest})` : ""}` : ""}<br/>
         💖 팬덤 ${Math.round(S.fandom)} · ${forcedRetire ? "소속사와의 계약이 끝나가요. 아름다운 마무리를 준비할 때…" : "다음 컴백도 달릴 수 있어요!"}

@@ -33,6 +33,15 @@ body {
 
 .card-grid.three { grid-template-columns: 1fr 1fr 1fr; }
 
+/* 🏆 접이식 그룹 순위표 — 커리어 화면과 연말 결산에서 같이 써요.
+ * 기본은 접혀 있어서 화면을 안 잡아먹어요. */
+.standings-box { margin: 0 0 10px; border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; }
+.standings-box > summary { cursor: pointer; font-size: .85rem; color: var(--cream); list-style: none; }
+.standings-box > summary::-webkit-details-marker { display: none; }
+.standings-box > summary::before { content: "▸ "; color: var(--dim); }
+.standings-box[open] > summary::before { content: "▾ "; }
+.draft-card .standings-box { margin: 10px 0 0; text-align: left; }
+
 .series-link {
   display: block;
   margin-top: 18px;
