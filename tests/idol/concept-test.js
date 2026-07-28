@@ -249,7 +249,10 @@ const pickedId2 = picked2.dataset.cid;
 picked2.click();
 check(T2.state().activity.concept === pickedId2,
   `카드를 클릭하면 act.concept이 그 카드의 data-cid가 된다 (${pickedId2} → ${T2.state().activity.concept})`);
-check(activeScreen2() === "screen-stage", `고르고 나면 무대로 넘어간다 (${activeScreen2()})`);
+// 고르고 나면 유행 공개 화면을 한 번 지나요 (Task 4) — 우회하지 않고 버튼을 눌러 통과해요
+check(activeScreen2() === "screen-reveal", `고르고 나면 유행 공개 화면으로 넘어간다 (${activeScreen2()})`);
+$2("btn-reveal-go").click();
+check(activeScreen2() === "screen-stage", `공개 화면에서 시즌을 시작하면 무대로 넘어간다 (${activeScreen2()})`);
 
 // 같은 컴백 안에서 다시 진입하면 선택 화면을 건너뛰어요
 finishStage2();
@@ -282,6 +285,8 @@ check(cards2().length === 4 && cards2().every((c) => !c.classList.contains("conc
 check($2("concept-rumor-line").textContent.includes("잠잠"),
   `소문이 없으면 안내 문구로 대신한다 (${$2("concept-rumor-line").textContent.trim()})`);
 cards2()[0].click();
+check(activeScreen2() === "screen-reveal", `소문이 없어도 공개 화면은 지나간다 (${activeScreen2()})`);
+$2("btn-reveal-go").click();
 check(activeScreen2() === "screen-stage" && oldAct2.concept === "cool",
   `소문이 없어도 카드를 골라 무대로 넘어갈 수 있다 (${activeScreen2()} · ${oldAct2.concept})`);
 finishStage2();
@@ -302,6 +307,8 @@ function playWeek2() {
     const card = w2.document.querySelector("#concept-list .concept-card");
     if (card) card.click();
   }
+  // 컨셉을 고르면 유행 공개 화면이 한 번 끼어들어요 — 여기도 버튼을 눌러 지나가요
+  if (activeScreen2() === "screen-reveal") $2("btn-reveal-go").click();
   if (activeScreen2() !== "screen-stage") return false;
   $2("btn-stage-next").click();        // ⏩ 빨리 감기 → 미니게임 자동 → 주간 차트
   $2("btn-stage-next").click();        // 다음 무대 준비 / 다음 컴백
@@ -327,6 +334,101 @@ check(!!act2 && validIds.has(act2.hot) && validIds.has(act2.cold),
   `2차 컴백도 hot·cold가 새로 굴려져 CONCEPTS의 id다 (hot=${act2 && act2.hot}, cold=${act2 && act2.cold})`);
 check(!!act2 && Array.isArray(act2.rumor) && act2.rumor.length === 2 && act2.rumor.includes(act2.hot),
   `2차 컴백의 rumor에도 새 hot이 들어 있다 (${act2 && JSON.stringify(act2.rumor)})`);
+
+// ---------- 28~33) 유행 공개 화면 — 상태만 정해두고 도달은 전부 버튼 클릭으로 ----------
+/* 유행은 컴백마다 랜덤이라 "고른 컨셉이 hot과 같은" 판을 기다리면 테스트가 흔들려요.
+ * 그래서 act.hot/act.cold를 먼저 정해두고, 준비 화면의 무대 버튼(.go-game)을 실제로
+ * 눌러 선택 화면에 들어간 뒤 원하는 카드를 실제로 클릭해요.
+ * renderReveal()은 절대 직접 부르지 않아요 — "함수는 있는데 브라우저에선 못 가는"
+ * 기능을 다섯 번 겪은 저장소라서, 화면에 닿는 길은 언제나 버튼이어야 해요. */
+const otherThan2 = (id) => T2.CONCEPTS.map((c) => c.id).find((x) => x !== id);
+const conceptById2 = (id) => T2.CONCEPTS.find((c) => c.id === id);
+const effect2 = () => $2("reveal-effect");
+const effectText2 = () => effect2().textContent.replace(/\s+/g, " ").trim();
+
+function enterConcept2(hot, cold) {
+  const act = T2.state().activity;
+  // 주차를 되돌려 이 컴백이 끝나지 않게 해요 (연말 결산으로 새면 화면이 달라져요)
+  act.week = 0;
+  act.concept = null;
+  act.hot = hot;
+  act.cold = cold;
+  act.rumor = [hot, otherThan2(hot)];
+  if (!untilGo2()) return false;
+  goBtn2().click();
+  return activeScreen2() === "screen-concept";
+}
+function pickCard2(id) {
+  const el = cards2().find((c) => c.dataset.cid === id);
+  if (el) el.click();
+  return !!el;
+}
+// 공개 화면을 지나 무대를 소화하고 준비 화면으로 돌아와요
+function leaveReveal2() {
+  $2("btn-reveal-go").click();
+  const atStage = activeScreen2() === "screen-stage";
+  if (atStage) finishStage2();
+  return atStage;
+}
+
+// 28) 카드를 고르면 공개 화면이 먼저 뜨고, 무대는 아직 안 열려요
+check(enterConcept2("emo", "teen"), `유행 감성·식상 하이틴으로 선택 화면에 다시 들어간다 (${activeScreen2()})`);
+check(pickCard2("emo"), "감성 카드를 실제로 클릭한다");
+check(activeScreen2() === "screen-reveal", `카드를 클릭하면 유행 공개 화면이 뜬다 (${activeScreen2()})`);
+check(!$2("screen-stage").classList.contains("active"), "공개 화면일 때 무대 화면(screen-stage)은 아직 안 보인다");
+/* hidden 속성이 남아 있으면 .active가 붙어도 브라우저에선 안 보여요.
+ * 다른 .screen과 똑같이 .active로만 제어되는지 확인해요. */
+check(!$2("screen-reveal").hasAttribute("hidden")
+  && w2.document.querySelectorAll(".screen.active").length === 1,
+  `공개 화면은 hidden 없이 .active로만 제어된다 (활성 화면 ${w2.document.querySelectorAll(".screen.active").length}개)`);
+
+// 29) 유행 적중 — 배수 표기는 trendMul에서 뽑아 비교해요 (숫자를 옮겨 적지 않아요)
+const actHit2 = T2.state().activity;
+const hitPct2 = Math.round((T2.trendMul(conceptById2("emo"), actHit2) - 1) * 100);
+check(effect2().classList.contains("reveal-hit"),
+  `고른 컨셉이 유행이면 #reveal-effect에 .reveal-hit이 붙는다 (${effect2().className})`);
+check(hitPct2 === 18, `trendMul 기준 적중 보정이 +18%다 (${hitPct2}%)`);
+check(effectText2().includes(`+${hitPct2}%`), `적중 문구에 +${hitPct2}%가 있다 (${effectText2()})`);
+check($2("reveal-trend").textContent.includes(conceptById2("emo").name)
+  && $2("reveal-trend").textContent.includes(conceptById2("teen").name),
+  `공개 화면에서는 확정 유행·식상을 둘 다 보여준다 (${$2("reveal-trend").textContent.replace(/\s+/g, " ").trim()})`);
+
+// 33) 공개 화면의 시즌 시작 버튼으로 무대에 들어가요
+$2("btn-reveal-go").click();
+check(activeScreen2() === "screen-stage", `공개 화면의 "🎤 시즌 시작"을 누르면 무대로 넘어간다 (${activeScreen2()})`);
+check(!!$2("btn-stage-next") && !$2("screen-reveal").classList.contains("active"),
+  "무대로 넘어가면 공개 화면은 닫힌다");
+finishStage2();
+
+// 30) 식상 적중 — 같은 유행 판에서 하이틴을 고르면 너프예요
+check(enterConcept2("emo", "teen"), `식상 검사를 위해 선택 화면에 다시 들어간다 (${activeScreen2()})`);
+check(pickCard2("teen"), "하이틴 카드를 실제로 클릭한다");
+check(activeScreen2() === "screen-reveal", `식상을 골라도 공개 화면이 뜬다 (${activeScreen2()})`);
+const missPct2 = Math.round((T2.trendMul(conceptById2("teen"), T2.state().activity) - 1) * 100);
+check(effect2().classList.contains("reveal-miss"),
+  `고른 컨셉이 식상이면 .reveal-miss가 붙는다 (${effect2().className})`);
+check(missPct2 === -15, `trendMul 기준 식상 보정이 -15%다 (${missPct2}%)`);
+check(effectText2().includes(`${missPct2}%`), `식상 문구에 ${missPct2}%가 있다 (${effectText2()})`);
+check(leaveReveal2(), "식상 판도 시즌 시작으로 무대에 들어간다");
+
+// 31) 유행도 식상도 아니면 무난 — 퍼센트 표기가 아예 없어요
+check(enterConcept2("emo", "teen"), `무난 검사를 위해 선택 화면에 다시 들어간다 (${activeScreen2()})`);
+check(pickCard2("cool"), "청량 카드를 실제로 클릭한다");
+check(effect2().classList.contains("reveal-flat"),
+  `유행도 식상도 아니면 .reveal-flat이 붙는다 (${effect2().className})`);
+check(!effectText2().includes("%"), `무난한 시즌에는 % 표기가 없다 (${effectText2()})`);
+check(leaveReveal2(), "무난 판도 시즌 시작으로 무대에 들어간다");
+
+// 32) hot과 cold가 같으면 상쇄 — 그 컨셉을 골라도 무난이에요
+check(enterConcept2("fierce", "fierce"), `상쇄 검사를 위해 선택 화면에 다시 들어간다 (${activeScreen2()})`);
+check(pickCard2("fierce"), "강렬 카드를 실제로 클릭한다");
+const sameAct2 = T2.state().activity;
+check(sameAct2.hot === sameAct2.cold && T2.trendMul(conceptById2("fierce"), sameAct2) === 1,
+  `유행과 식상이 같은 판이고 trendMul이 1배다 (hot=${sameAct2.hot}, cold=${sameAct2.cold})`);
+check(effect2().classList.contains("reveal-flat"),
+  `유행이자 식상인 컨셉을 골랐으면 상쇄돼 .reveal-flat이다 (${effect2().className})`);
+check(!effectText2().includes("%"), `상쇄된 판에도 % 표기가 없다 (${effectText2()})`);
+check(leaveReveal2(), "상쇄 판도 시즌 시작으로 무대에 들어간다");
 
 console.log(fail ? "\n❌ 실패" : "\n✅ 통과");
 process.exit(fail ? 1 : 0);

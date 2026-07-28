@@ -79,6 +79,37 @@ body {
   color: #59103a;
 }
 
+/* 🎬 시즌 시작 — 고른 뒤에 확정 유행을 공개하고 버프/너프를 보여줘요.
+ * 적중은 따뜻한 색(--accent2), 식상은 차가운 색(--sky)으로 갈라요. 절대색은 안 써요 —
+ * 아이돌은 base.css의 금색 accent를 핑크로 덮어쓰기 때문에, 절대색을 쓰면
+ * 이 화면만 다른 게임 색으로 튀어요 (CSS는 테스트가 못 잡아서 배포 뒤에야 드러나요). */
+.reveal-trend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  justify-content: center;
+  margin: 10px 0 16px;
+  font-size: .88rem;
+  color: var(--dim);
+}
+.reveal-trend b { color: var(--cream); }
+#reveal-effect {
+  background: linear-gradient(180deg, var(--field), var(--bg2));
+  border: 2px solid var(--line);
+  border-radius: 12px;
+  padding: 16px;
+  text-align: center;
+  margin-bottom: 16px;
+}
+#reveal-effect .r-head { font-size: 1.05rem; font-weight: 700; margin-bottom: 6px; color: var(--cream); }
+#reveal-effect .r-sub { font-size: .85rem; color: var(--dim); }
+#reveal-effect .r-sub b { color: var(--cream); }
+.reveal-hit { border-color: var(--accent2); }
+.reveal-hit .r-head, .reveal-hit .r-sub b { color: var(--accent2); }
+.reveal-miss { border-color: var(--sky); }
+.reveal-miss .r-head, .reveal-miss .r-sub b { color: var(--sky); }
+.reveal-flat { border-color: var(--line); }
+
 .series-link {
   display: block;
   margin-top: 18px;

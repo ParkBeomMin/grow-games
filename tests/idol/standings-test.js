@@ -284,6 +284,9 @@ function playWeek() {
     const card = w.document.querySelector("#concept-list .concept-card");
     if (card) card.click();
   }
+  /* 컨셉을 고르면 확정 유행을 공개하는 화면(screen-reveal)이 한 번 끼어들어요.
+   * 여기도 "🎤 시즌 시작" 버튼을 실제로 눌러서 지나가요. */
+  if (activeScreen() === "screen-reveal") $("btn-reveal-go").click();
   if (activeScreen() !== "screen-stage") return false;
   $("btn-stage-next").click();        // ⏩ 빨리 감기 → 미니게임 자동 → 주간 차트
   $("btn-stage-next").click();        // 다음 무대 준비 / 다음 컴백 / 연말 결산

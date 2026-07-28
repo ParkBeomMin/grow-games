@@ -419,11 +419,46 @@ window.IdolCareer = (() => {
       el.onclick = () => {
         S.activity.concept = el.dataset.cid;
         save();
-        // Task 4에서 여기가 renderReveal() + show("screen-reveal")로 바뀌어요.
-        // 지금은 무대를 바로 열어요 (playShow가 안에서 show("screen-stage")까지 해요).
-        playShow();
+        // 고른 뒤에야 확정 유행을 공개해요. 무대는 공개 화면의 시즌 시작 버튼에서 열려요.
+        renderReveal();
+        show("screen-reveal");
       };
     });
+  }
+
+  /* 컨셉을 고른 뒤 확정 유행을 공개해요. 여기서 처음으로 act.hot/act.cold를 보여줍니다.
+   * 배수는 trendMul이 정본이에요 — 화면에서 다시 계산하지 않아요.
+   * 표기 퍼센트도 trendMul이 준 배수에서 뽑아요. 값을 손으로 적어두면
+   * TREND_HOT/TREND_COLD를 바꿨을 때 화면만 옛 숫자로 남아요. */
+  function renderReveal() {
+    const act = S.activity;
+    const c = conceptOf(act);
+    const hot = CONCEPTS.find((x) => x.id === act.hot);
+    const cold = CONCEPTS.find((x) => x.id === act.cold);
+    const same = act.hot === act.cold;
+    const mul = trendMul(c, act);
+    const pct = Math.round((mul - 1) * 100);
+
+    $("reveal-title").textContent = `${c.emoji} ${c.name} 컨셉으로 컴백!`;
+    $("reveal-trend").innerHTML = same || !hot || !cold
+      ? `<span>이번 시즌은 뚜렷한 유행이 없었어요</span>`
+      : `<span>🔥 유행 <b>${hot.emoji} ${hot.name}</b></span>
+         <span>❄️ 식상 <b>${cold.emoji} ${cold.name}</b></span>`;
+
+    const box = $("reveal-effect");
+    if (mul > 1) {
+      box.className = "reveal-hit";
+      box.innerHTML = `<div class="r-head">🔥 트렌드 적중!</div>
+        <div class="r-sub">이번 컴백 초동 판매량 <b>+${pct}%</b></div>`;
+    } else if (mul < 1) {
+      box.className = "reveal-miss";
+      box.innerHTML = `<div class="r-head">❄️ 한물간 컨셉…</div>
+        <div class="r-sub">이번 컴백 초동 판매량 <b>${pct}%</b></div>`;
+    } else {
+      box.className = "reveal-flat";
+      box.innerHTML = `<div class="r-head">🎬 무난한 시즌이에요</div>
+        <div class="r-sub">유행을 타지도, 밀리지도 않아요</div>`;
+    }
   }
 
   function playShow() {
@@ -1217,6 +1252,8 @@ window.IdolCareer = (() => {
   $("btn-battle")?.addEventListener("click", () => showBattle("screen-title"));
   $("btn-battle-main")?.addEventListener("click", () => showBattle("screen-main"));
   $("btn-battle-pro")?.addEventListener("click", () => showBattle("screen-pro"));
+  // 🎤 시즌 시작 — playShow가 안에서 show("screen-stage")까지 해요 (중복 전환 금지)
+  $("btn-reveal-go")?.addEventListener("click", () => { if (S.activity) playShow(); });
   $("btn-hof-back")?.addEventListener("click", () => show("screen-title"));
   $("btn-battle-back")?.addEventListener("click", () => show(battleReturn));
 
