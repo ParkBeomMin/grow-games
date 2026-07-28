@@ -395,7 +395,12 @@ window.IdolCareer = (() => {
   function finishYear() {
     const act = S.activity;
     const agePen = S.proYear >= 8 ? (S.proYear - 7) * 0.8 : 0;
-    const hype = clamp(act.hypeSum / 2.2 - agePen, -1.5, 12);
+    /* 연말 평가는 그해 초동 판매량이 정해요.
+     * 순위(hypeSum)는 회차 화면의 긴장감으로 남기고 여기서는 안 써요 —
+     * 순위는 1위 위가 없어서 본질적으로 천장이 있거든요.
+     * 판매량은 상한이 없지만 후반에 기하급수로 커지니 로그로 눌러요.
+     * 선형으로 재면 10년차에 hype가 수백이 돼요. */
+    const hype = clamp(Math.log(Math.max(1, act.sales)) * 2.4 - 8 - agePen, -1.5, 12);
     const wins = act.wins;
     const sales = act.sales;
     const dFan = Math.round(hype * 10 + wins * 3 - (hype < 0 ? 15 : 0));
