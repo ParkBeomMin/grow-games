@@ -140,6 +140,12 @@ EOF
 
 - [ ] **Step 1: 곡선 검증 스크립트 작성**
 
+
+> ⚠️ **산식을 떼어내 실행하는 방법에 주의.** 직접 `eval("const x = …")`은
+> `const`/`let`이 eval 자신의 스코프에 갇혀 바깥 변수로 안 나온다. Task 1에서
+> 실제로 걸렸다. `new Function(...)`으로 감싸 값을 `return` 받아야 한다.
+> `tests/idol/axis-test.js`가 그렇게 되어 있으니 **그 파일을 먼저 읽고 같은 방식을 쓸 것.**
+
 `tests/idol/curve-test.js`:
 
 ```js
@@ -342,6 +348,12 @@ EOF
 새 필드를 만들지 않았으므로 마이그레이션 코드는 없다. **정말 없어도 되는지 확인하는 태스크다.**
 
 - [ ] **Step 1: 검증 스크립트 작성**
+
+
+> ⚠️ **산식을 떼어내 실행하는 방법에 주의.** 직접 `eval("const x = …")`은
+> `const`/`let`이 eval 자신의 스코프에 갇혀 바깥 변수로 안 나온다. Task 1에서
+> 실제로 걸렸다. `new Function(...)`으로 감싸 값을 `return` 받아야 한다.
+> `tests/idol/axis-test.js`가 그렇게 되어 있으니 **그 파일을 먼저 읽고 같은 방식을 쓸 것.**
 
 `tests/idol/legacy-test.js`:
 
@@ -650,6 +662,12 @@ EOF
 - Test: `tests/idol/pacing-test.js` (신규)
 
 - [ ] **Step 1: 페이싱 검증 스크립트**
+
+
+> ⚠️ **산식을 떼어내 실행하는 방법에 주의.** 직접 `eval("const x = …")`은
+> `const`/`let`이 eval 자신의 스코프에 갇혀 바깥 변수로 안 나온다. Task 1에서
+> 실제로 걸렸다. `new Function(...)`으로 감싸 값을 `return` 받아야 한다.
+> `tests/idol/axis-test.js`가 그렇게 되어 있으니 **그 파일을 먼저 읽고 같은 방식을 쓸 것.**
 
 `tests/idol/pacing-test.js`:
 
