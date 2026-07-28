@@ -453,9 +453,9 @@ window.IdolCareer = (() => {
     $("career-card").innerHTML = `
       <div class="draft-emoji">🎤</div>
       <div class="draft-title">${
-        y.hype >= 6 ? "차트를 지배한 해!" :
-        y.hype >= 3.5 ? "탄탄한 활동을 이어간 해" :
-        y.hype >= 1 ? "아쉬움이 남는 컴백" : "혹독한 한 해…"
+        y.awards.includes("대상") ? "차트를 지배한 해!" :
+        y.awards.length ? "탄탄한 활동을 이어간 해" :
+        y.wins > 0 ? "아쉬움이 남는 컴백" : "혹독한 한 해…"
       }</div>
       <div class="draft-team">${S.group} · 음방 1위 ${y.wins}회 · 초동 ${y.sales}만 장</div>
       <table class="season-table"><thead><tr><th>연차</th><th>음방</th><th>판매량</th><th>수상</th></tr></thead><tbody>${rows}</tbody></table>
