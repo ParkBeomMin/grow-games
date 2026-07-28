@@ -420,6 +420,123 @@ window.IdolCareer = (() => {
     return clamp(4 + Math.floor((S.fandom || 0) / 4000), 4, 8);
   }
 
+  /* 투어 등급 — 전체 도시의 평균 객석 점유율로 매겨요.
+   * 실패해도 커리어가 끝나지 않아요. 다음 해에 다시 도전할 수 있어요. */
+  function tourGrade(fillRate) {
+    if (fillRate >= 0.95) return "S";
+    if (fillRate >= 0.80) return "A";
+    if (fillRate >= 0.60) return "B";
+    return "C";
+  }
+
+  const TOUR_PLACES = [
+    "도쿄", "오사카", "타이베이", "방콕", "싱가포르", "자카르타", "마닐라",
+    "시드니", "로스앤젤레스", "뉴욕", "멕시코시티", "상파울루", "런던", "파리", "베를린",
+  ];
+  const TOUR_MUL = { S: 1.6, A: 1.25, B: 1.0, C: 0.7 };   // 등급별 보상 배수
+  const TOUR_RANK = { C: 0, B: 1, A: 2, S: 3 };
+
+  /* 진행 중인 투어. 한 해 안에 시작해서 끝나는 이벤트라 저장하지 않아요 —
+   * 중간에 나가면 그냥 없던 일이 되고, S.career.tours도 안 올라가요. */
+  let tour = null;
+
+  function startTour() {
+    if (!tourReady()) return;
+    tour = { cities: shuffle([...TOUR_PLACES]).slice(0, tourCities()), i: 0, fills: [] };
+    $("tour-log").innerHTML = "";
+    $("tour-moment").innerHTML = "";
+    $("tour-result").innerHTML = "";
+    proLog(`🌏 ${tour.cities.length}개 도시 월드투어를 떠나요!`);
+    renderTourCity();
+    show("screen-tour");
+  }
+
+  function tourFeed(text, cls) {
+    const div = document.createElement("div");
+    if (cls) div.className = cls;
+    div.textContent = text;
+    $("tour-log").appendChild(div);
+    $("tour-log").scrollTop = $("tour-log").scrollHeight;
+  }
+
+  function tourFillHTML() {
+    return tour.fills.map((f, i) => `
+      <div class="tour-fill"><span>${tour.cities[i]}</span>
+        <div class="bar"><div class="bar-fill scout" style="width:${Math.round(f * 100)}%"></div></div>
+        <span>${Math.round(f * 100)}%</span></div>`).join("");
+  }
+
+  function renderTourCity() {
+    const city = tour.cities[tour.i];
+    $("tour-city").textContent = `${tour.i + 1}/${tour.cities.length}번째 도시 — ${city} 🎫`;
+    $("tour-moment").innerHTML = "";
+    const btn = $("btn-tour-go");
+    btn.disabled = false;
+    btn.textContent = `${city} 공연하기 🎤`;
+    btn.onclick = playTourCity;
+  }
+
+  // 도시 한 곳 — 미니게임 한 번이 그 도시의 객석 점유율을 정해요
+  function playTourCity() {
+    const btn = $("btn-tour-go");
+    btn.disabled = true;
+    const city = tour.cities[tour.i];
+    tourFeed(`✈️ ${city} 도착! 공연장 앞에 팬들이 줄을 섰어요`);
+    playRandomMini($("tour-moment"), (res, type) => {
+      const base = res === "perfect" ? rand(0.95, 1.0)
+        : res === "miss" ? rand(0.42, 0.62)
+        : rand(0.72, 0.90);
+      // 매력이 높으면 현지 화제성이 붙어 객석이 조금 더 차요
+      const fill = clamp(base + (S.stats.charm - 100) / 600, 0, 1);
+      tour.fills.push(fill);
+      tourFeed(res === "perfect" ? type.great : res === "miss" ? type.bad : type.ok,
+        res === "perfect" ? "good" : res === "miss" ? "bad" : "");
+      tourFeed(`🎫 ${city} 객석 ${Math.round(fill * 100)}%`, fill >= 0.8 ? "good" : "");
+      $("tour-result").innerHTML = tourFillHTML();
+      tour.i += 1;
+      btn.disabled = false;
+      if (tour.i < tour.cities.length) {
+        btn.textContent = `다음 도시로 ✈️ (${tour.i + 1}/${tour.cities.length})`;
+        btn.onclick = renderTourCity;
+      } else {
+        btn.textContent = "🏁 투어 마무리";
+        btn.onclick = finishTour;
+      }
+    });
+  }
+
+  /* 완주했을 때만 등급이 나오고 tours가 올라가요.
+   * 보상은 언제나 0 이상이에요 — 투어가 망해도 팬덤·자금·기록이 줄지 않아요. */
+  function finishTour() {
+    const n = tour.fills.length;
+    const avg = n ? tour.fills.reduce((a, b) => a + b, 0) / n : 0;
+    const grade = tourGrade(avg);
+    const mul = TOUR_MUL[grade];
+    const dFan = Math.max(0, Math.round(n * avg * 45 * mul));
+    const income = Math.max(0, Math.round(n * avg * 900 * mul));
+    S.career.tours = (S.career.tours || 0) + 1;
+    S.tourYear = S.proYear;   // 한 해에 한 번만 떠날 수 있어요
+    if (!S.tourBest || TOUR_RANK[grade] > TOUR_RANK[S.tourBest]) S.tourBest = grade;
+    S.fandom = (S.fandom || 0) + dFan;
+    S.money = (S.money || 0) + income;
+    proLog(`🌏 월드투어 완주! ${n}개 도시 평균 객석 ${Math.round(avg * 100)}% · ${grade}등급`);
+    if (window.Stats) Stats.log("tour", { cities: n, grade, fill: Math.round(avg * 100) });
+    if (grade === "S" && window.Fx) Fx.celebrate("award", "🌏 전 도시 전석 매진!");
+    save();
+
+    $("tour-city").textContent = `🏁 ${n}개 도시 완주 — 평균 객석 ${Math.round(avg * 100)}%`;
+    $("tour-moment").innerHTML = "";
+    $("tour-result").innerHTML = `
+      <div class="tour-grade">${grade} 등급</div>
+      ${tourFillHTML()}
+      <div class="tour-pts">💖 팬덤 +${dFan} · 💰 투어 수익 +${fmtMoney(income)}${
+        grade === "C" ? "<br/>아쉬웠지만 잃은 건 하나도 없어요. 내년에 다시 도전해요!" : ""}</div>`;
+    const btn = $("btn-tour-go");
+    btn.disabled = false;
+    btn.textContent = "← 결산으로 돌아가기";
+    btn.onclick = () => { tour = null; yearReport(); };
+  }
+
   // ---------- 연말 결산 ----------
   function finishYear() {
     const act = S.activity;
@@ -489,7 +606,7 @@ window.IdolCareer = (() => {
       <div class="draft-team">${S.group} · 음방 1위 ${y.wins}회 · 초동 ${y.sales}만 장</div>
       <table class="season-table"><thead><tr><th>연차</th><th>음방</th><th>판매량</th><th>수상</th></tr></thead><tbody>${rows}</tbody></table>
       <div class="draft-summary">
-        통산 ${S.career.years.length}년 활동 · 1위 ${S.career.wins}회 · 🏆 대상 ${S.career.daesang} · 본상 ${S.career.bonsang}${S.career.rookie ? " · 신인상" : ""}<br/>
+        통산 ${S.career.years.length}년 활동 · 1위 ${S.career.wins}회 · 🏆 대상 ${S.career.daesang} · 본상 ${S.career.bonsang}${S.career.rookie ? " · 신인상" : ""}${(S.career.tours || 0) ? ` · 🌏 월드투어 ${S.career.tours}회${S.tourBest ? `(최고 ${S.tourBest})` : ""}` : ""}<br/>
         💖 팬덤 ${Math.round(S.fandom)} · ${forcedRetire ? "소속사와의 계약이 끝나가요. 아름다운 마무리를 준비할 때…" : "다음 컴백도 달릴 수 있어요!"}
       </div>`;
     const act = $("career-actions");
@@ -500,6 +617,15 @@ window.IdolCareer = (() => {
       next.textContent = `💿 ${S.proYear + 1}년차 컴백 준비`;
       next.onclick = startPrep;
       act.appendChild(next);
+    }
+    /* 🌏 월드투어 — 조건을 채운 뒤에만, 한 해에 한 번 떠날 수 있어요.
+     * 은퇴가 강제되는 10년차에도 남겨둬요. 마지막 해에 여는 사람도 있으니까요. */
+    if (tourReady() && S.tourYear !== S.proYear) {
+      const tb = document.createElement("button");
+      tb.className = "btn btn-primary";
+      tb.textContent = `🌏 월드투어 떠나기 (${tourCities()}개 도시)`;
+      tb.onclick = startTour;
+      act.appendChild(tb);
     }
     const ret = document.createElement("button");
     ret.className = "btn btn-ghost";
@@ -532,6 +658,7 @@ window.IdolCareer = (() => {
     const c = S.career || { seasons: [], mvp: 0, gg: 0, roy: 0, rings: 0, warSum: 0 };
     return Math.round(
       S.fandom * 0.5 + c.wins * 6 + c.daesang * 50 + c.bonsang * 15 + c.rookie * 20 +
+      (c.tours || 0) * 40 +   // 🌏 완주한 월드투어
       (c.years ? c.years.length : 0) * 5 + (S.trophies ? S.trophies.length : 0) * 8 + (S.center ? 30 : 0) +
       transTotal() * 25   // ✨ 초월 단계 보너스
     );
@@ -613,6 +740,7 @@ window.IdolCareer = (() => {
       team: S.group || agencyOf().name,
       seasons: c.years ? c.years.length : 0,
       wins: c.wins, daesang: c.daesang, bonsang: c.bonsang, rookie: c.rookie,
+      tours: c.tours || 0, tourBest: S.tourBest || "",
       finalOvr: Math.round(overall()),
       trans: transTotal(),
       gen: loadLegacy().gen + 1,
@@ -634,7 +762,7 @@ window.IdolCareer = (() => {
       <div class="draft-team">${entry.grade}</div>
       <div>${entry.seasons ? `${entry.team}(으)로 ${entry.seasons}년을 활동했어요.` : "데뷔 무대 대신 다른 길을 택했어요."}</div>
       <div class="draft-summary">
-        음방 1위 ${entry.wins}회 · 🏆 대상 ${entry.daesang} · 본상 ${entry.bonsang}${entry.rookie ? " · 신인상" : ""}<br/>
+        음방 1위 ${entry.wins}회 · 🏆 대상 ${entry.daesang} · 본상 ${entry.bonsang}${entry.rookie ? " · 신인상" : ""}${entry.tours ? ` · 🌏 월드투어 ${entry.tours}회${entry.tourBest ? `(최고 ${entry.tourBest})` : ""}` : ""}<br/>
         커리어 점수 <b>${entry.score}</b> — 명예의 전당에 영구 기록됐어요
       </div>`;
     const act = $("career-actions");
@@ -693,7 +821,7 @@ window.IdolCareer = (() => {
         <div class="hof-face-emoji">🎤</div>
         <div class="hof-info">
           <div class="hof-name">${i + 1}. ${e.gen > 1 ? `<span class="hof-gen">${e.gen}세</span> ` : ""}${e.name} <span class="hof-grade">${e.grade}</span></div>
-          ${e.team} · ${e.seasons}년 활동 · 1위 ${e.wins}회 · 🏆${e.daesang + e.bonsang} · 점수 ${e.score}
+          ${e.team} · ${e.seasons}년 활동 · 1위 ${e.wins}회 · 🏆${e.daesang + e.bonsang}${e.tours ? ` · 🌏${e.tours}` : ""} · 점수 ${e.score}
         </div>`;
       box.appendChild(div);
     });
@@ -910,6 +1038,8 @@ window.IdolCareer = (() => {
   $("btn-battle-back")?.addEventListener("click", () => show(battleReturn));
 
   return {
+    // 검증용 창구예요 — 산식만 열어둡니다. 게임 코드에서는 쓰지 마세요.
+    _t: { tourGrade, tourReady, tourCities },
     onEnding,
     refreshPro: renderPrep,
     showHof,

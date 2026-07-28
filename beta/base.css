@@ -252,6 +252,11 @@ h2 { font-size: 1.6rem; margin: 8px 0 6px; color: var(--accent); }
 .tour-highlight { color: var(--accent); }
 .tour-pts { margin-top: 12px; color: var(--sky); font-size: .88rem; }
 
+/* 🌏 월드투어 — 도시별 객석 게이지 */
+.tour-fill { display: flex; align-items: center; gap: 8px; margin: 8px 0; font-size: .85rem; }
+.tour-fill .bar { flex: 1; }
+.tour-grade { font-family: "Jua", sans-serif; font-size: 2.4rem; color: var(--accent); text-align: center; margin: 10px 0; }
+
 /* ---------- 드래프트 ---------- */
 .draft-card {
   background: linear-gradient(180deg, #1a2f3f, #10202c);
