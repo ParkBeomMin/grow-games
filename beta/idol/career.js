@@ -88,7 +88,10 @@ window.IdolCareer = (() => {
   const RIVAL_GROUPS = ["네온시티", "스텔라즈", "허니문", "그라비티", "민트초코", "새벽달", "아이리스", "폭스클럽"];
 
   function rollRivals() {
-    return RIVAL_GROUPS.map((name) => ({ name, pop: rand(52, 88) }));
+    // 해마다 3%씩 강해져요. 멈춰 있으면 밀리지만, 성실히 키우면 계속 앞서요.
+    // 5%로 하면 9년차에 중위권이 무너져요 (시뮬레이션으로 확인했어요).
+    const grow = 1 + Math.max(0, (S.proYear || 1) - 1) * 0.03;
+    return RIVAL_GROUPS.map((name) => ({ name, pop: rand(52, 88) * grow }));
   }
 
   function initActivity() {
