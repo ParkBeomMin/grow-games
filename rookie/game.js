@@ -518,14 +518,13 @@ function renderRecord() {
       const moved = i > 0 && team !== teamOfSeason(S.career.seasons[i - 1]);
       return `<tr>
         <td class="sn-y">${x.y}년차${x.age ? `<span class="sn-age">${x.age}세</span>` : ""}</td>
-        <td class="sn-team${moved ? " moved" : ""}" title="${team}">${shortTeam(team)}</td>
-        <td class="sn-role">${x.role ? x.role.replace(" 투수", "").replace(" 타자", "") : "-"}</td>
+        <td class="sn-team${moved ? " moved" : ""}" title="${team}">${shortTeam(team)}<span class="sn-role">${x.role ? x.role.replace(" 투수", "").replace(" 타자", "") : "-"}</span></td>
         <td class="sn-line">${x.line}${badges ? `<span class="sn-tags">${badges}</span>` : ""}</td>
         <td class="sn-war">${x.war.toFixed(1)}</td>
       </tr>`;
     }).join("");
     proHtml = `
-      <table class="season-table season-career"><thead><tr><th>시즌</th><th>팀</th><th>보직</th><th>성적</th><th>WAR</th></tr></thead><tbody>${rows}</tbody></table>
+      <table class="season-table season-career"><thead><tr><th>시즌</th><th>소속</th><th>성적</th><th>WAR</th></tr></thead><tbody>${rows}</tbody></table>
       <div>통산 ${S.career.seasons.length}시즌 · WAR ${S.career.warSum.toFixed(1)} · 🏆 ${S.career.rings} · MVP ${S.career.mvp} · GG ${S.career.gg}${S.career.roy ? " · 신인왕" : ""}</div>`;
   }
   const defs = STAT_DEFS[S.pos];
