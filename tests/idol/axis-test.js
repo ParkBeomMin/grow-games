@@ -10,10 +10,10 @@ const m = SRC.match(/(?:const stage = [^;]+;\s*)?const cbSales = [^;]+;/);
 if (!m) { console.log("❌ cbSales 산식을 못 찾았어요"); process.exit(1); }
 
 const rand = (a, b) => a + Math.random() * (b - a);
-// `let cbSales; eval(m[0])` don't work — 직접 eval은 const/let 선언에 자기만의
-// 렉시컬 스코프를 주기 때문에, eval 안에서 만든 cbSales가 바깥 let으로 새지 않아요.
-// (실제로 해보면 산식 내용과 무관하게 항상 undefined가 나와요.) 그래서 real
-// function으로 감싸서 리턴해요 — 이래도 산식은 여전히 정규식으로 추출한 원본 그대로예요.
+// `let cbSales; eval(m[0]);`로는 안 돼요 — 직접 eval은 const/let 선언에 자기만의
+// 렉시컬 스코프를 주기 때문에, eval 안에서 만든 cbSales가 바깥 let으로 새지 않아요
+// (실제로 해보면 산식 내용과 무관하게 항상 undefined가 나와요). 그래서 진짜 함수로
+// 감싸서 리턴해요 — 이래도 산식은 여전히 정규식으로 추출한 원본 그대로예요.
 const calc = (S, act) => {
   const fn = new Function("S", "act", "rand", `${m[0]} return cbSales;`);
   return fn(S, act, rand);
