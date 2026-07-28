@@ -35,8 +35,11 @@ check(/S\.career\.sales \+= sales;/.test(SRC), "S.career.sales 누적이 그대�
 check(/years\.push\(\{ y: S\.proYear[^}]*sales/.test(SRC), "연차 기록에 sales가 그대로 남는다");
 
 /* 옛 initActivity가 만들던 필드 (279be1c). 새 코드가 이 목록에 없는 act.* 를 읽으면
- * 업데이트 직후 활동 중이던 세이브에서 undefined가 나온다 — 마이그레이션이 필요해진다. */
-const OLD_ACT_FIELDS = ["cb", "cbTotal", "week", "weekTotal", "wins", "sales", "hypeSum", "cbHype", "cbWins", "rivals"];
+ * 업데이트 직후 활동 중이던 세이브에서 undefined가 나온다 — 마이그레이션이 필요해진다.
+ * concept·hot·cold는 컴백 컨셉(Task 1)이 추가한 새 필드지만, conceptOf·trendMul이
+ * 없는 값을 각각 청량(cool)·배수 1로 방어하도록 짜여 있어 마이그레이션이 필요
+ * 없다 — 그래서 화이트리스트에 같이 넣는다. */
+const OLD_ACT_FIELDS = ["cb", "cbTotal", "week", "weekTotal", "wins", "sales", "hypeSum", "cbHype", "cbWins", "rivals", "concept", "hot", "cold"];
 const DOM = ["innerHTML", "appendChild", "textContent", "className", "style"];  // yearReport의 동명 지역변수는 DOM 엘리먼트다
 const readFields = [...new Set((SRC.match(/\bact\.[a-zA-Z]+/g) || []).map((s) => s.slice(4)))].filter((f) => !DOM.includes(f));
 const unknown = readFields.filter((f) => !OLD_ACT_FIELDS.includes(f));
@@ -46,7 +49,16 @@ check(unknown.length === 0,
 // ---------- 새 산식 추출 ----------
 const grab = (re, label) => { const m = SRC.match(re); if (!m) { console.log(`❌ ${label} 산식을 못 찾았어요`); process.exit(1); } return m[0]; };
 const nHypeS = grab(/const hype = clamp\([^;]+;/, "hype");
-const nSalesS = grab(/const stage = [^;]+;\s*const cbSales = [^;]+;/, "cbSales");
+// 컴백 컨셉(Task 1) 이후 cbSales는 CONCEPTS/conceptOf/trendMul/expectedSales를 함께 쓴다.
+// act에 concept이 없으면 conceptOf가 청량(cool) 기본값을 준다 — 옛 세이브와 같은 조건.
+const nConceptsS = grab(/const CONCEPTS = \[[\s\S]*?\n  \];/, "CONCEPTS");
+const nSalesKS = grab(/const SALES_K = [^;]+;/, "SALES_K");
+const nTrendHotS = grab(/const TREND_HOT = [^;]+;/, "TREND_HOT");
+const nTrendColdS = grab(/const TREND_COLD = [^;]+;/, "TREND_COLD");
+const nConceptOfS = grab(/function conceptOf\(act\) \{[\s\S]*?\n  \}/, "conceptOf");
+const nTrendMulS = grab(/function trendMul\(concept, act\) \{[\s\S]*?\n  \}/, "trendMul");
+const nExpectedSalesS = grab(/function expectedSales\(stats, concept, fandom, cbWins\) \{[\s\S]*?\n  \}/, "expectedSales");
+const nSalesS = grab(/const concept = conceptOf\(act\);\s*const cbSales = [^;]+;/, "cbSales");
 const nScoreS = grab(/const myScore =[\s\S]*?;\n/, "myScore");
 const nCapS = grab(/const FANDOM_CAP = [^;]+;/, "FANDOM_CAP");
 const nRivalS = grab(/function rollRivals\(\)[\s\S]*?\n  \}/, "rollRivals");
@@ -57,7 +69,9 @@ const WK = Number(grab(/const WEEKS_PER_CB = (\d+);/, "WEEKS_PER_CB").match(/\d+
 if (!nWeekFanS || nWeekFanS.length !== 3) { console.log("❌ 주간 팬덤 증감이 3갈래가 아니에요"); process.exit(1); }
 
 const newHype = new Function("act", "agePen", "clamp", `${nHypeS} return hype;`);
-const newSales = new Function("S", "act", "rand", `${nSalesS} return cbSales;`);
+const newSales = new Function("S", "act", "rand",
+  `${nConceptsS} ${nSalesKS} ${nTrendHotS} ${nTrendColdS}
+   ${nConceptOfS} ${nTrendMulS} ${nExpectedSalesS} ${nSalesS} return cbSales;`);
 const newScore = new Function("S", "POS_INFO", "clutch", "miniBonus", "rand", `${nCapS} ${nScoreS} return myScore;`);
 const yearFan = new Function("hype", "wins", `${nYearFanS} return dFan;`);   // 옛/새가 같은 식이다
 const weekFan = nWeekFanS.map((s) => new Function("randInt", `let dFan; ${s}; return dFan;`));

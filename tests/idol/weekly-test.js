@@ -22,12 +22,23 @@ const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 const capM = SRC.match(/const FANDOM_CAP = [^;]+;/);
 const scoreM = SRC.match(/const myScore =[\s\S]*?;\n/);
 const rivalM = SRC.match(/function rollRivals\(\)[\s\S]*?\n  \}/);
-const salesM = SRC.match(/const stage = [^;]+;\s*const cbSales = [^;]+;/);
+// 컴백 컨셉(Task 1) 이후 cbSales는 CONCEPTS/conceptOf/trendMul/expectedSales를 함께 쓴다.
+// act에 concept이 없으면 conceptOf가 청량(cool) 기본값을 준다.
+const conceptsM = SRC.match(/const CONCEPTS = \[[\s\S]*?\n  \];/);
+const salesKM = SRC.match(/const SALES_K = [^;]+;/);
+const trendHotM = SRC.match(/const TREND_HOT = [^;]+;/);
+const trendColdM = SRC.match(/const TREND_COLD = [^;]+;/);
+const conceptOfM = SRC.match(/function conceptOf\(act\) \{[\s\S]*?\n  \}/);
+const trendMulM = SRC.match(/function trendMul\(concept, act\) \{[\s\S]*?\n  \}/);
+const expectedSalesM = SRC.match(/function expectedSales\(stats, concept, fandom, cbWins\) \{[\s\S]*?\n  \}/);
+const salesM = SRC.match(/const concept = conceptOf\(act\);\s*const cbSales = [^;]+;/);
 const hypeM = SRC.match(/const hype = clamp\([^;]+;/);
 const weekFanM = SRC.match(/dFan = randInt\([^)]*\)/g);
 const yearFanM = SRC.match(/const dFan = Math\.round\([^;]+;/);
-const missing = Object.entries({ capM, scoreM, rivalM, salesM, hypeM, weekFanM, yearFanM })
-  .filter(([, v]) => !v).map(([k]) => k);
+const missing = Object.entries({
+  capM, scoreM, rivalM, conceptsM, salesKM, trendHotM, trendColdM,
+  conceptOfM, trendMulM, expectedSalesM, salesM, hypeM, weekFanM, yearFanM,
+}).filter(([, v]) => !v).map(([k]) => k);
 if (missing.length) { console.log(`❌ 산식을 못 찾았어요: ${missing.join(", ")}`); process.exit(1); }
 if (weekFanM.length !== 3) { console.log(`❌ 주간 팬덤 증감이 3갈래가 아니에요 (${weekFanM.length}개)`); process.exit(1); }
 
@@ -40,7 +51,9 @@ const scoreFn = new Function("S", "POS_INFO", "clutch", "miniBonus", "rand",
   `${capM[0]} ${scoreM[0]} return myScore;`);
 const rollRivals = new Function("rand", "RIVAL_GROUPS",
   `let S; ${rivalM[0]}; return (s) => { S = s; return rollRivals(); };`)(rand, RIVAL_GROUPS);
-const salesFn = new Function("S", "act", "rand", `${salesM[0]} return cbSales;`);
+const salesFn = new Function("S", "act", "rand",
+  `${conceptsM[0]} ${salesKM[0]} ${trendHotM[0]} ${trendColdM[0]}
+   ${conceptOfM[0]} ${trendMulM[0]} ${expectedSalesM[0]} ${salesM[0]} return cbSales;`);
 const hypeFn = new Function("act", "agePen", "clamp", `${hypeM[0]} return hype;`);
 const yearFanFn = new Function("hype", "wins", `${yearFanM[0]} return dFan;`);
 const weekFanFn = weekFanM.map((s) => new Function("randInt", `let dFan; ${s}; return dFan;`));

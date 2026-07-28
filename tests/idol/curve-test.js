@@ -7,16 +7,30 @@ const SRC = fs.readFileSync("/workspace/grow-games/beta/idol/career.js", "utf8")
 const rand = (a, b) => a + Math.random() * (b - a);
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 
-const salesM = SRC.match(/const stage = [^;]+;\s*const cbSales = [^;]+;/);
+// 컴백 컨셉(Task 1) 이후 cbSales는 CONCEPTS/conceptOf/trendMul/expectedSales를 함께 쓴다.
+// act에 concept이 없으면 conceptOf가 청량(cool)으로 기본값을 준다 — 옛 세이브와 같은 조건.
+const grab = (re) => { const mm = SRC.match(re); return mm ? mm[0] : null; };
+const conceptsM = grab(/const CONCEPTS = \[[\s\S]*?\n  \];/);
+const salesKM = grab(/const SALES_K = [^;]+;/);
+const trendHotM = grab(/const TREND_HOT = [^;]+;/);
+const trendColdM = grab(/const TREND_COLD = [^;]+;/);
+const conceptOfM = grab(/function conceptOf\(act\) \{[\s\S]*?\n  \}/);
+const trendMulM = grab(/function trendMul\(concept, act\) \{[\s\S]*?\n  \}/);
+const expectedSalesM = grab(/function expectedSales\(stats, concept, fandom, cbWins\) \{[\s\S]*?\n  \}/);
+const salesM = grab(/const concept = conceptOf\(act\);\s*const cbSales = [^;]+;/);
 const hypeM = SRC.match(/const hype = clamp\([^;]+;/);
-if (!salesM || !hypeM) { console.log("❌ 산식을 못 찾았어요"); process.exit(1); }
+if (!salesM || !hypeM || !conceptsM || !conceptOfM || !trendMulM || !expectedSalesM) {
+  console.log("❌ 산식을 못 찾았어요"); process.exit(1);
+}
 
 function year(stat, fandom) {
   const S = { fandom, stats: { vocal: stat, dance: stat, rap: stat, charm: stat, stamina: stat }, proYear: 5 };
   let total = 0;
   for (let cb = 0; cb < 2; cb++) {
     const act = { cbWins: Math.round(rand(2, 6)) };
-    const fn = new Function("S", "act", "rand", `${salesM[0]} return cbSales;`);
+    const fn = new Function("S", "act", "rand",
+      `${conceptsM} ${salesKM} ${trendHotM} ${trendColdM}
+       ${conceptOfM} ${trendMulM} ${expectedSalesM} ${salesM} return cbSales;`);
     total += fn(S, act, rand);
   }
   const act = { sales: total };

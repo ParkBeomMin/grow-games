@@ -327,6 +327,43 @@ window.IdolCareer = (() => {
     $("pro-standings-body").innerHTML = standingsHTML(myWins);
   }
 
+  /* 컴백 컨셉 — 같은 능력치라도 어느 컨셉으로 나가느냐가 초동을 가릅니다.
+   * 가중치는 스펙(docs/superpowers/specs/2026-07-28-comeback-concept-design.md)이 정본이에요.
+   * v는 편차예요. 강렬이 가장 크고(±28%) 청량이 가장 작아요(±10%). */
+  const CONCEPTS = [
+    { id: "cool",   emoji: "💧", name: "청량",   desc: "댄스 중심 · 안정적",
+      w: { dance: 1.0, charm: 0.5, vocal: 0.2, rap: 0.1 }, v: 0.10 },
+    { id: "fierce", emoji: "🔥", name: "강렬",   desc: "랩·댄스 중심 · 편차가 커요",
+      w: { rap: 0.8, dance: 0.7, charm: 0.4, vocal: 0.1 }, v: 0.28 },
+    { id: "emo",    emoji: "🌙", name: "감성",   desc: "보컬 중심",
+      w: { vocal: 1.1, charm: 0.5, dance: 0.2, rap: 0.0 }, v: 0.12 },
+    { id: "teen",   emoji: "✨", name: "하이틴", desc: "매력 중심",
+      w: { charm: 1.1, dance: 0.5, vocal: 0.3, rap: 0.1 }, v: 0.18 },
+  ];
+  const SALES_K = 0.72;    // 시뮬레이션으로 잡은 값 — 곡선이 여기 걸려 있어요
+  const TREND_HOT = 1.18;
+  const TREND_COLD = 0.85;
+
+  // 옛 세이브에는 concept이 없어요. 편차가 가장 작은 청량을 기본으로 둡니다.
+  function conceptOf(act) {
+    return CONCEPTS.find((c) => c.id === (act && act.concept)) || CONCEPTS[0];
+  }
+
+  // 같은 컨셉이 유행이자 식상으로 뽑히면 상쇄돼요 (배수 없음)
+  function trendMul(concept, act) {
+    if (!act || !act.hot || act.hot === act.cold) return 1;
+    if (concept.id === act.hot) return TREND_HOT;
+    if (concept.id === act.cold) return TREND_COLD;
+    return 1;
+  }
+
+  // 편차와 유행 배수를 뺀 기댓값 — 컨셉 선택 화면에 보여줄 숫자예요
+  function expectedSales(stats, concept, fandom, cbWins) {
+    let base = 0;
+    for (const k in concept.w) base += (stats[k] || 0) * concept.w[k];
+    return Math.max(1, Math.round(base * SALES_K + (fandom || 0) * 0.05 + (cbWins || 0) * 4));
+  }
+
   function playShow() {
     const act = S.activity;
     const firstWeek = act.week === 0;
@@ -433,18 +470,15 @@ window.IdolCareer = (() => {
       const cbDone = act.week >= act.weekTotal;
       let extraLine = "";
       if (cbDone) {
-        /* 초동 판매량 — 이 게임의 고유 축이에요.
-         * 예전에는 hype에서 파생됐는데, hype가 순위 기반이라 천장에 붙으면
-         * 판매량도 같이 멈췄어요. 이제 능력치에서 직접 자라요.
-         *   매력 → 화제성, 무대 완성도(보컬·댄스·랩) → 음악적 완성도,
-         *   팬덤 → 초동을 받쳐주는 고정층
-         * 상한이 없어서 능력치를 올린 만큼 계속 커져요. */
-        const stage = (S.stats.vocal + S.stats.dance + S.stats.rap) / 3;
+        /* 초동 판매량 — 이 게임의 고유 축이에요. 능력치에서 직접 자라고 상한이 없어요.
+         * 컨셉이 어느 능력치를 볼지 정하고, 시즌 유행이 배수를 얹어요. 편차는 컨셉마다 달라요. */
+        const concept = conceptOf(act);
         const cbSales = Math.max(1, Math.round(
-          S.stats.charm * 0.55 + stage * 0.75 + S.fandom * 0.05 + act.cbWins * 4 + rand(-4, 4)
+          expectedSales(S.stats, concept, S.fandom, act.cbWins) *
+          trendMul(concept, act) * (1 + rand(-concept.v, concept.v))
         ));
         act.sales += cbSales;
-        extraLine = `<div class="tour-pts">💿 ${act.cb}차 컴백 종료 — 1위 ${act.cbWins}회 · 초동 ${cbSales}만 장</div>`;
+        extraLine = `<div class="tour-pts">💿 ${act.cb}차 컴백 종료 · ${concept.emoji} ${concept.name} — 1위 ${act.cbWins}회 · 초동 ${cbSales}만 장</div>`;
       }
       save();
 
@@ -1126,7 +1160,7 @@ window.IdolCareer = (() => {
 
   return {
     // 검증용 창구예요 — 산식만 열어둡니다. 게임 코드에서는 쓰지 마세요.
-    _t: { tourGrade, tourReady, tourCities },
+    _t: { tourGrade, tourReady, tourCities, CONCEPTS, conceptOf, trendMul, expectedSales },
     onEnding,
     refreshPro: renderPrep,
     showHof,

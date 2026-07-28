@@ -32,7 +32,16 @@ const M = {
   cap:      SRC.match(/const FANDOM_CAP = [^;]+;/),
   score:    SRC.match(/const myScore =[\s\S]*?;\n/),
   rival:    SRC.match(/function rollRivals\(\)[\s\S]*?\n  \}/),
-  sales:    SRC.match(/const stage = [^;]+;\s*const cbSales = [^;]+;/),
+  // 컴백 컨셉(Task 1) 이후 cbSales는 CONCEPTS/conceptOf/trendMul/expectedSales를 함께 쓴다.
+  // act에 concept이 없으면 conceptOf가 청량(cool) 기본값을 준다.
+  concepts:   SRC.match(/const CONCEPTS = \[[\s\S]*?\n  \];/),
+  salesK:     SRC.match(/const SALES_K = [^;]+;/),
+  trendHot:   SRC.match(/const TREND_HOT = [^;]+;/),
+  trendCold:  SRC.match(/const TREND_COLD = [^;]+;/),
+  conceptOf:  SRC.match(/function conceptOf\(act\) \{[\s\S]*?\n  \}/),
+  trendMul:   SRC.match(/function trendMul\(concept, act\) \{[\s\S]*?\n  \}/),
+  expectedSales: SRC.match(/function expectedSales\(stats, concept, fandom, cbWins\) \{[\s\S]*?\n  \}/),
+  sales:    SRC.match(/const concept = conceptOf\(act\);\s*const cbSales = [^;]+;/),
   hype:     SRC.match(/const hype = clamp\([^;]+;/),
   agePen:   SRC.match(/const agePen = S\.proYear >= 8[^;]+;/),
   yearFan:  SRC.match(/const dFan = Math\.round\([^;]+;/),
@@ -80,7 +89,9 @@ const scoreFn = new Function("S", "POS_INFO", "clutch", "miniBonus", "rand",
   `${M.cap[0]} ${M.score[0]} return myScore;`);
 const rollRivalsFn = new Function("rand", "RIVAL_GROUPS",
   `let S; ${M.rival[0]}; return (s) => { S = s; return rollRivals(); };`)(rand, RIVAL_GROUPS);
-const salesFn = new Function("S", "act", "rand", `${M.sales[0]} return cbSales;`);
+const salesFn = new Function("S", "act", "rand",
+  `${M.concepts[0]} ${M.salesK[0]} ${M.trendHot[0]} ${M.trendCold[0]}
+   ${M.conceptOf[0]} ${M.trendMul[0]} ${M.expectedSales[0]} ${M.sales[0]} return cbSales;`);
 const agePenFn = new Function("S", `${M.agePen[0]} return agePen;`);
 const hypeFn = new Function("act", "agePen", "clamp", `${M.hype[0]} return hype;`);
 const yearFanFn = new Function("hype", "wins", `${M.yearFan[0]} return dFan;`);
