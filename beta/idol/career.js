@@ -406,18 +406,24 @@ window.IdolCareer = (() => {
   /* 🌏 월드투어 — 정상에 오른 뒤에만 열리는 후반 목표예요.
    * 상을 노린 육성과 팬덤을 노린 육성 둘 다 길이 되게 '또는'으로 뒀어요.
    *
-   * ⚠️ 이 수치는 임시예요. 너무 쉽게 열리면 후반 목표가 아니라 그냥 다음
-   * 단계가 되고, 다 본 뒤에 할 게 없어져요. 강하게 키운 플레이어 기준
-   * 6~8년차에 열리도록 Task 7에서 다시 잽니다. */
+   * 이 수치는 tests/idol/pacing-test.js로 실제 산식을 굴려서 잰 값이에요
+   * (데뷔부터 은퇴까지 연습 턴·주간 차트·판매량·수상을 전부 돌립니다).
+   *   강하게 키우면 평균 6.8년차에 열려요 (거의 모든 판이 열림)
+   *   보통으로 키우면 평균 9.5년차 — 은퇴 직전에 겨우 닿거나 못 닿아요
+   * 팬덤은 10년을 꽉 채워도 3천 언저리라, 예전의 8000은 아무도 못 넘었어요.
+   * 값을 바꿀 땐 반드시 pacing-test.js를 다시 돌리세요. */
   const TOUR_DAESANG = 3;
-  const TOUR_FANDOM = 8000;
+  const TOUR_FANDOM = 2000;
   function tourReady() {
     return (S.career.daesang || 0) >= TOUR_DAESANG || (S.fandom || 0) >= TOUR_FANDOM;
   }
 
-  // 도시 수는 팬덤이 정해요 — 4곳에서 시작해 8곳까지 늘어나요
+  /* 도시 수는 팬덤이 정해요 — 4곳에서 시작해 8곳까지 늘어나요.
+   * 열림 기준(TOUR_FANDOM)에서 세기 시작해요. 절대값으로 재던 시절엔
+   * 4000당 한 곳이라, 실제로 도달 가능한 팬덤 범위에서는 영원히 4곳이었어요. */
+  const TOUR_CITY_STEP = 400;
   function tourCities() {
-    return clamp(4 + Math.floor((S.fandom || 0) / 4000), 4, 8);
+    return clamp(4 + Math.floor(((S.fandom || 0) - TOUR_FANDOM) / TOUR_CITY_STEP), 4, 8);
   }
 
   /* 투어 등급 — 전체 도시의 평균 객석 점유율로 매겨요.
