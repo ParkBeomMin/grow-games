@@ -70,7 +70,12 @@ window.WingerCareer = (() => {
   const bpOf = (score, ovr) => Math.round(score * 0.4 + ovr * 3);
 
   // ---------- 엔딩 훅 ----------
-  function onEnding(canGoPro, captain) {
+  /* opts.keepSave — 🌱 유스 재계약처럼 엔딩 뒤에도 이어갈 길이 남은 경우예요.
+   * 여기서 clearSave()를 부르면 '한 시즌 더 뛰기'를 누르기도 전에 기록이 사라져요.
+   * 그래도 '기록 남기고 마무리'는 그대로 둬요 — 연장을 안 쓰고 끝낼 수 있어야 해요.
+   * (enshrine()이 자기 안에서 clearSave()를 부르니 마무리 경로는 그대로 정리돼요.) */
+  function onEnding(canGoPro, captain, opts) {
+    const keepSave = !!(opts && opts.keepSave);
     const actions = document.querySelector("#screen-ending .draft-actions");
     document.getElementById("btn-go-debut")?.remove();
     document.getElementById("btn-idol-retire")?.remove();
@@ -86,7 +91,8 @@ window.WingerCareer = (() => {
       btn.className = "btn btn-ghost";
       btn.textContent = "🏛️ 기록 남기고 마무리";
       btn.onclick = () => enshrine();
-      clearSave();
+      if (keepSave) save();
+      else clearSave();
     }
     actions.prepend(btn);
   }

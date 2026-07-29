@@ -1465,7 +1465,9 @@ function showEnding(survivedFinal, lastRound) {
   const m = marketOf();
   const score = S.fandom + overall() * 2;
 
-  let emoji, title, teamLine, msg;
+  /* 🌱 유스 재계약은 "연장 계약"이라는 말 그대로 한 시즌을 더 줘요.
+   * 커리어당 한 번뿐이라 이미 쓴 뒤에는 버튼 없이 끝맺음으로 읽히게 문구도 바꿔요. */
+  let emoji, title, teamLine, msg, canExtend = false;
   if (survivedFinal && score >= 520) {
     emoji = "👑"; title = "유럽 빅클럽 입단!";
     teamLine = `${m.name} 출신 — 빅리그 직행`;
@@ -1481,15 +1483,18 @@ function showEnding(survivedFinal, lastRound) {
   } else if (lastRound === 2 && score >= 420) {
     emoji = "📞"; title = "타 구단 스카우트!";
     teamLine = "하위 리그 구단 이적 제안";
-    msg = "테스트를 지켜본 다른 구단에서 러브콜이! 새 팀에서 프로를 노려요.";
+    msg = "테스트를 지켜본 다른 구단에서 러브콜이 왔어요. 유스 시절은 여기서 좋은 마침표를 찍었어요.";
   } else if (lastRound >= 1) {
     emoji = "🌱"; title = "유스 재계약";
     teamLine = "유스팀 연장 계약";
-    msg = "이번엔 여기까지. 하지만 구단은 아직 당신을 믿고 있어요.";
+    canExtend = !S.youthExt;
+    msg = canExtend
+      ? "이번엔 여기까지. 하지만 구단은 아직 당신을 믿고 있어요 — 한 시즌을 더 뛸 수 있어요."
+      : "이번엔 여기까지. 연장 계약으로 얻은 한 시즌까지, 구단과의 이야기가 모두 끝났어요.";
   } else if (score >= 330) {
     emoji = "📹"; title = "세미프로 입단";
     teamLine = "실업·세미프로 리그에서 재도전";
-    msg = "프로는 못 갔지만 쌓인 경험이 있어요. 밑바닥부터 다시 올라가봐요!";
+    msg = "프로 계약에는 닿지 못했지만 세미프로 무대에 자리를 얻었어요. 3년의 땀이 헛되지 않았어요.";
   } else {
     emoji = "🎒"; title = "축구화를 잠시 벗다";
     teamLine = "평범한 일상으로 복귀";
@@ -1530,9 +1535,49 @@ function showEnding(survivedFinal, lastRound) {
 
   if (window.Stats) Stats.log("ending", { title, score: Math.round(score) });
 
-  if (window.WingerCareer) window.WingerCareer.onEnding(survivedFinal || lastRound === 3, survivedFinal && score >= 520);
-  else clearSave();
+  /* keepSave를 넘기면 career.js가 clearSave()를 건너뛰어요.
+   * 안 넘기면 "한 시즌 더 뛰기"를 누르기도 전에 세이브가 날아가요. */
+  if (window.WingerCareer) {
+    window.WingerCareer.onEnding(
+      survivedFinal || lastRound === 3,
+      survivedFinal && score >= 520,
+      { keepSave: canExtend }
+    );
+  } else if (!canExtend) {
+    clearSave();
+  }
+  renderYouthExtButton(canExtend);
   show("screen-ending");
+}
+
+/* 🌱 한 시즌 더 뛰기 — 엔딩 화면 맨 앞에 붙여요.
+ * 연장을 안 쓰고 "🏛️ 기록 남기고 마무리"로 끝낼 수도 있어야 해서 다른 버튼은 그대로 둬요. */
+function renderYouthExtButton(canExtend) {
+  document.getElementById("btn-youth-ext")?.remove();
+  if (!canExtend) return;
+  const actions = document.querySelector("#screen-ending .draft-actions");
+  if (!actions) return;
+  const btn = document.createElement("button");
+  btn.id = "btn-youth-ext";
+  btn.className = "btn btn-primary";
+  btn.textContent = "🌱 한 시즌 더 뛰기";
+  btn.onclick = extendYouth;
+  actions.prepend(btn);
+}
+
+/* 능력치·명성·유스 기록은 그대로 두고 3년차 1월로만 되돌려요.
+ * S.youthExt를 세워서 커리어당 한 번만 쓸 수 있게 막아요. */
+function extendYouth() {
+  if (S.youthExt) return;
+  S.youthExt = true;
+  S.year = 3;
+  S.month = 1;
+  S.pendingStage = null;
+  ev = null;
+  addLog("🌱 유스팀과 연장 계약! 3년차를 한 번 더 뛰어요.");
+  save();
+  renderMain();
+  show("screen-main");
 }
 
 // ---------- ❓ 도움말 ----------
@@ -1552,7 +1597,8 @@ const HELP_SECTIONS = [
   { emoji: "⚽", title: "경기와 프로 계약", body:
     "유스 3년 동안 경기에 나서며 실력과 주목도를 쌓아요.\n" +
     "3년이 끝나면 그동안의 성과로 프로 계약이 갈려요.\n" +
-    "계약하면 리그 커리어를 이어가고, 아니면 유스에서 커리어가 끝나요." },
+    "계약하면 리그 커리어를 이어가고, 아니면 유스에서 커리어가 끝나요.\n" +
+    "🌱유스 재계약으로 끝났다면 딱 한 번, 능력치를 그대로 안고 3년차를 다시 뛸 수 있어요." },
   { emoji: "🎓", title: "은퇴", body:
     "커리어를 마치면 🏛️명예의 전당에 기록이 남아요.\n" +
     "은퇴 시점의 성적으로 등급이 매겨지고, 전 세계 플레이어와 순위를 겨뤄요.\n" +
