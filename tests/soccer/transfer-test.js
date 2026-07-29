@@ -75,7 +75,8 @@ const OFFERS_PER_LEAGUE = consts.perLeague ? new Function(`${consts.perLeague} r
 const LEAGUES = T.LEAGUES;
 const CLUBS = T.CLUBS;
 const leagueById = (id) => LEAGUES.find((l) => l.id === id);
-const clubByName = (n) => [1, 2, 3].flatMap((id) => CLUBS[id]).find((c) => c.name === n);
+// 리그 목록에서 훑는다 — 하부 리그가 늘어도 여기를 다시 안 고치게.
+const clubByName = (n) => LEAGUES.flatMap((l) => CLUBS[l.id] || []).find((c) => c.name === n);
 
 // ---------- ① 데뷔 클럽은 1부 하위 3개에서만 뽑힌다 ----------
 /* 지금까지는 1부 6개 중 무작위라 전력 52~78로 갈렸다. 첫 시즌 팀 성적이 운이고
@@ -231,7 +232,11 @@ guard("아래로 내려오는 이적", () => {
  * 숫자는 LEAGUES에서 그대로 뽑아 비교한다 — 테스트에 옮겨 적지 않는다. */
 guard("페널티·수상 가치 표시", () => {
   const list = openTransfer({ league: 1, group: CLUBS[1][5].name, hype: PROMOTE_HYPE[3], moves: [] });
-  check(!!list && list.length === OFFERS_PER_LEAGUE * 3, `세 리그 제안이 모두 있다 (${list ? list.length : 0}장)`);
+  /* hype가 꼭대기면 위로는 전부 열리고, 아래로 내려가는 이적은 원래 문턱이 없다.
+   * 그래서 클럽 표가 있는 리그 전부에서 제안이 온다 — 숫자를 옮겨 적지 않고 표에서 센다. */
+  const offering = LEAGUES.filter((l) => (CLUBS[l.id] || []).length);
+  check(!!list && list.length === OFFERS_PER_LEAGUE * offering.length,
+    `${offering.length}개 리그 제안이 모두 있다 (${list ? list.length : 0}장 / 기대 ${OFFERS_PER_LEAGUE * offering.length}장)`);
   let badPen = 0, badPre = 0;
   for (const el of list || []) {
     const lg = leagueById(Number(el.dataset.league));

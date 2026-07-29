@@ -97,6 +97,12 @@ function barOf(st) {
   return typeof b === "number" && isFinite(b) ? b : 1;
 }
 
+/* 사다리의 맨 아래 리그예요. 📹 세미프로 입단이 여기서 프로를 시작해요.
+ * id로 찾지 않아요 — id는 옛 세이브가 가리키는 값이라 순서와 무관해요. 순서는 tier예요. */
+function bottomLeague() {
+  return LEAGUES.reduce((lo, l) => (l.tier < lo.tier ? l : lo), LEAGUES[0]);
+}
+
 /* 클럽 — 전력(str)은 팀 성적에만 작용해요. 개인 수상에는 안 닿습니다.
  * 같은 리그 안에서 전력 좋은 팀으로 가면 팀은 더 이기지만 내 수상 확률은 그대로예요.
  * 이게 리그 이적(개인 커리어)과 명확히 구분되는 지점이에요.
@@ -104,8 +110,23 @@ function barOf(st) {
  * 리그 티어는 "내가 어디까지 통하나"를 묻고, 클럽 전력은 "우리 팀이 이기나"를 물어요.
  * 두 축이 겹치면 같은 리그 이적과 상위 리그 이적이 같은 질문이 돼서 선택이 사라져요.
  *
- * 실제 구단명은 쓰지 않아요 — 이 저장소는 상표를 전부 가상 명칭으로 바꿨어요. */
+ * 실제 구단명은 쓰지 않아요 — 이 저장소는 상표를 전부 가상 명칭으로 바꿨어요.
+ *
+ * 표는 사다리 아래(K리그3)부터 적어요. 키는 리그 id고, id는 옛 세이브가 가리키는 값이라
+ * 순서와 무관해요 — 순서는 LEAGUES의 tier예요.
+ * 전력은 clubStrOf가 40~95로 막으니 하부 클럽도 40 아래로는 안 내려가요.
+ * 그 아래를 적으면 화면에 보이는 전력과 실제로 쓰이는 전력이 어긋나요. */
 const CLUBS = {
+  5: [
+    { name: "스톤워커스", str: 45 }, { name: "레드브릭 FC", str: 44 },
+    { name: "파인힐스", str: 43 }, { name: "하버라이트", str: 42 },
+    { name: "머드독스", str: 41 }, { name: "올드타운 FC", str: 40 },
+  ],
+  4: [
+    { name: "하이랜더스", str: 51 }, { name: "리버사이드", str: 49 },
+    { name: "코스모스 FC", str: 47 }, { name: "그린웨이브", str: 45 },
+    { name: "아이언벨", str: 43 }, { name: "노스브리지", str: 41 },
+  ],
   1: [
     { name: "FC 노바", str: 78 }, { name: "레인저스", str: 71 },
     { name: "선더볼트", str: 66 }, { name: "블랙이글스", str: 62 },
@@ -1497,8 +1518,10 @@ function showEnding(survivedFinal, lastRound) {
   /* 🌱 유스 재계약은 "연장 계약"이라는 말 그대로 한 시즌을 더 줘요.
    * 커리어당 한 번뿐이라 이미 쓴 뒤에는 버튼 없이 끝맺음으로 읽히게 문구도 바꿔요. */
   /* 📞 타 구단 스카우트는 프로로 이어져요. 조건(lastRound === 2 && score >= 420)을
-   * 호출부에서 다시 계산하면 엔딩 분기와 어긋날 수 있으니 여기서 플래그만 세워 넘겨요. */
-  let emoji, title, teamLine, msg, canExtend = false, scoutPro = false;
+   * 호출부에서 다시 계산하면 엔딩 분기와 어긋날 수 있으니 여기서 플래그만 세워 넘겨요.
+   * 📹 세미프로 입단(semiPro)도 같은 방식이에요 — 사다리 맨 아래에서 프로가 시작돼요. */
+  let emoji, title, teamLine, msg, canExtend = false, scoutPro = false, semiPro = false;
+  const bottom = bottomLeague();
   if (survivedFinal && score >= 520) {
     emoji = "👑"; title = "유럽 빅클럽 입단!";
     teamLine = `${m.name} 출신 — 빅리그 직행`;
@@ -1525,8 +1548,10 @@ function showEnding(survivedFinal, lastRound) {
       : "이번엔 여기까지. 연장 계약으로 얻은 한 시즌까지, 구단과의 이야기가 모두 끝났어요.";
   } else if (score >= 330) {
     emoji = "📹"; title = "세미프로 입단";
-    teamLine = "실업·세미프로 리그에서 재도전";
-    msg = "프로 계약에는 닿지 못했지만 세미프로 무대에 자리를 얻었어요. 3년의 땀이 헛되지 않았어요.";
+    teamLine = `${bottom.name} 입단 — 사다리 맨 아래`;
+    semiPro = true;
+    msg = `프로 1군 계약에는 닿지 못했지만 ${bottom.name} 구단이 자리를 내줬어요. `
+      + "사다리의 가장 아래, 제일 낮은 자리에서 프로 커리어가 시작돼요 — 여기서부터 올라가면 돼요.";
   } else {
     emoji = "🎒"; title = "축구화를 잠시 벗다";
     teamLine = "평범한 일상으로 복귀";
@@ -1569,12 +1594,14 @@ function showEnding(survivedFinal, lastRound) {
 
   /* keepSave를 넘기면 career.js가 clearSave()를 건너뛰어요.
    * 안 넘기면 "한 시즌 더 뛰기"를 누르기도 전에 세이브가 날아가요.
-   * weakestClub은 📞 스카우트 경로 표시예요 — 프로는 프로인데 1부 최약체에서 출발해요. */
+   * weakestClub은 📞 스카우트 경로 표시예요 — 프로는 프로인데 1부 최약체에서 출발해요.
+   * startLeague는 📹 세미프로 경로 표시예요 — 사다리 맨 아래 리그에서 출발해요.
+   * 둘 다 엔딩 분기가 세운 플래그를 그대로 넘겨요. 조건을 여기서 다시 계산하지 않아요. */
   if (window.WingerCareer) {
     window.WingerCareer.onEnding(
-      survivedFinal || lastRound === 3 || scoutPro,
+      survivedFinal || lastRound === 3 || scoutPro || semiPro,
       survivedFinal && score >= 520,
-      { keepSave: canExtend, weakestClub: scoutPro }
+      { keepSave: canExtend, weakestClub: scoutPro, startLeague: semiPro ? bottom.id : null }
     );
   } else if (!canExtend) {
     clearSave();

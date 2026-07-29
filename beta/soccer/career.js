@@ -79,6 +79,9 @@ window.WingerCareer = (() => {
     /* opts.weakestClub — 📞 타 구단 스카우트로 올라온 경우예요.
      * 데뷔 클럽을 뽑지 않고 그 리그 최약체 하나로 고정해요. */
     const weakest = !!(opts && opts.weakestClub);
+    /* opts.startLeague — 📹 세미프로 입단으로 올라온 경우예요. 사다리 맨 아래에서 시작해요.
+     * 어느 엔딩인지는 game.js의 엔딩 분기가 정해서 넘겨줘요. 여기서 다시 판정하지 않아요. */
+    const startLeague = opts && opts.startLeague != null ? opts.startLeague : null;
     const actions = document.querySelector("#screen-ending .draft-actions");
     document.getElementById("btn-go-debut")?.remove();
     document.getElementById("btn-idol-retire")?.remove();
@@ -88,7 +91,7 @@ window.WingerCareer = (() => {
       btn.id = "btn-go-debut";
       btn.className = "btn btn-primary";
       btn.textContent = "⚽ 프로 커리어 시작!";
-      btn.onclick = () => enterCareer(captain, weakest);
+      btn.onclick = () => enterCareer(captain, weakest, startLeague);
     } else {
       btn.id = "btn-idol-retire";
       btn.className = "btn btn-ghost";
@@ -117,11 +120,14 @@ window.WingerCareer = (() => {
     return debutClubs(id)[0];
   }
 
-  function enterCareer(captain, weakest) {
+  function enterCareer(captain, weakest, startLeague) {
     S.phase = "soccer-pro";
     /* 데뷔 클럽은 소속 리그(기본 1부)에서 뽑아요. 이름과 전력을 함께 받아 둡니다 —
-     * 전력은 동료 득점·실점에만 쓰이고 개인 수상에는 안 닿아요. */
-    S.league = leagueOf(S).id;
+     * 전력은 동료 득점·실점에만 쓰이고 개인 수상에는 안 닿아요.
+     *
+     * startLeague를 받으면 거기서 출발해요 — 📹 세미프로 입단이 K리그3을 넘겨줘요.
+     * 값은 leagueOf에 태워서 걸러요. 모르는 id가 들어와도 K리그1로 막혀요. */
+    S.league = leagueOf(startLeague != null ? { league: startLeague } : S).id;
     const debutClub = weakest ? weakestClub(S.league) : pick(debutClubs(S.league));
     S.group = debutClub.name;
     S.clubStr = debutClub.str;
@@ -633,8 +639,11 @@ window.WingerCareer = (() => {
     const hype = lastHype(state);
     const list = [];
     for (const lg of LEAGUES) {
+      /* 위·아래는 tier로 봐요. id는 옛 세이브가 가리키는 값이라 순서와 무관해요 —
+       * id로 비교하면 하부 리그(id 4·5)가 맨 위로 읽혀서 K리그3에서 챔피언스리그 제안이
+       * 문턱 없이 쏟아져요. 문턱이 아직 없는 리그(need == null)는 위로 못 올라가요. */
       const need = PROMOTE_HYPE[lg.id];
-      if (lg.id > cur.id && hype < (need == null ? Infinity : need)) continue;
+      if (lg.tier > cur.tier && hype < (need == null ? Infinity : need)) continue;
       const pool = (CLUBS[lg.id] || []).filter((c) => c.name !== state.group);
       for (const club of shuffle(pool.slice()).slice(0, OFFERS_PER_LEAGUE)) {
         list.push({ club, league: lg, fee: transferFee(club, lg, state), back: leftBefore(state, club.name) });
@@ -667,7 +676,8 @@ window.WingerCareer = (() => {
       const mine = offers.filter((o) => o.league.id === lg.id);
       if (!mine.length) continue;
       const group = document.createElement("div");
-      group.className = "tf-group" + (lg.id > cur.id ? " up" : lg.id < cur.id ? " down" : " same");
+      // 위·아래 표시도 tier로 봐요 — transferOffers와 같은 기준이어야 해요.
+      group.className = "tf-group" + (lg.tier > cur.tier ? " up" : lg.tier < cur.tier ? " down" : " same");
       group.dataset.league = String(lg.id);
       const head = document.createElement("div");
       head.className = "tf-head";

@@ -289,15 +289,17 @@ guard("연장 회귀", () => {
   Q.dom.window.close();
 });
 
-// ---------- ⑥ 📹 세미프로 입단은 여전히 프로로 안 간다 ----------
-console.log("=== ⑥ 📹 세미프로 입단 ===");
-guard("세미프로", () => {
+/* ---------- ⑥ 🎒 축구화를 잠시 벗다는 진짜 엔딩이다 ----------
+ * 📹 세미프로 입단은 하부 리그가 생기면서 K리그3으로 이어졌다(semipro-test.js).
+ * 프로로 안 가는 진짜 엔딩은 이제 🎒 하나다. 여기서는 그 하나가 남아 있는지만 본다. */
+console.log("=== ⑥ 🎒 축구화를 잠시 벗다 ===");
+guard("진짜 엔딩", () => {
   const Q = makePage(0x9e3779b9);
-  // 첫 라운드에서 탈락(lastRound 0) + score ≥ 330 → 📹
-  const r = runTo(Q, [false], 400);
+  // 첫 라운드에서 탈락(lastRound 0) + score < 330 → 🎒
+  const r = runTo(Q, [false], 0);
   console.log(`  엔딩 카드: ${r.title} / ${r.team} (score ${Math.round(r.score)})`);
-  check(r.title === "세미프로 입단", `📹 세미프로 입단에 닿는다 (${r.title})`);
-  check(!Q.$("btn-go-debut"), "📹 세미프로 입단에는 프로 버튼이 없다");
+  check(r.title === "축구화를 잠시 벗다", `🎒 축구화를 잠시 벗다에 닿는다 (${r.title})`);
+  check(!Q.$("btn-go-debut"), "🎒에는 프로 버튼이 없다");
   check(!!Q.$("btn-idol-retire"), "'🏛️ 기록 남기고 마무리'로만 끝난다");
   Q.dom.window.close();
 });
@@ -312,7 +314,8 @@ console.log("=== ⑦ 배선 ===");
   check(!!hook && /keepSave/.test(hook), "keepSave 경로가 그대로 살아 있다");
   check(/weakestClub/.test(SRC_GAME) && /weakestClub/.test(SRC_CAREER),
     "game.js가 넘긴 최약체 표시를 career.js가 읽는다");
-  check(/function enterCareer\(captain, weakest\)/.test(SRC_CAREER),
+  // 인자가 뒤에 늘어날 수 있다(startLeague) — 앞의 둘만 자리를 지키면 된다
+  check(/function enterCareer\(captain, weakest\b/.test(SRC_CAREER),
     "enterCareer가 최약체 여부를 인자로 받는다");
   // 상수는 손대지 않았다
   check(/const DEBUT_POOL = 3;/.test(SRC_CAREER), "DEBUT_POOL은 3 그대로다");
