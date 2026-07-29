@@ -56,6 +56,13 @@ const mateSrc = [
   grab(GAME, /const TEAMMATE_GOALS = \{[^}]*\};/),
   grab(GAME, /function teammateGoals\(rating\) \{[\s\S]*?\n\}/),
 ].filter(Boolean).join("\n");
+/* 리그 티어도 같은 규칙으로 '있으면 넣는다'. ratingOf가 리그 페널티를 빼기 때문에
+ * 없으면 ReferenceError가 난다. 아래 stateOf는 league를 안 넣으니 1부(penalty 0)라
+ * 이 파일의 기대값은 그대로다 — 그게 league-test ⑥의 약속이다. */
+const leagueSrc = [
+  grab(GAME, /const LEAGUES = \[[\s\S]*?\n\];/),
+  grab(GAME, /function leagueOf\(st\) \{[\s\S]*?\n\}/),
+].filter(Boolean).join("\n");
 
 // 동료 득점 표 자체 — 없으면 ReferenceError: TEAMMATE_GOALS is not defined
 const tableFn = new Function(`${mateSrc}\n  return TEAMMATE_GOALS;`);
@@ -72,6 +79,7 @@ const mateFn = new Function("S", "rating", "clamp", `
  * MatchSim.moment의 h += 1 / a += 1과 같게 맞춰뒀다. */
 const simFn = new Function("S", "clamp", "rand", "randInt", "pick", `
   ${parts.posInfo} ${parts.clutchScale} ${parts.transLv} ${parts.clutch}
+  ${leagueSrc}
   ${consts}
   ${parts.ratingOf}
   ${parts.poissonish}

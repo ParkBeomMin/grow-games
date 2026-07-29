@@ -47,6 +47,27 @@ const POS_INFO = {
   wg: { name: "윙어", stat: "dribble" },
 };
 
+/* 리그 티어 — 축구 커리어의 핵심 서사는 리그를 옮기는 거예요.
+ * penalty는 경기 평점에서 빼고, prestige는 축에 곱해요.
+ *
+ * 난이도를 곱셈이 아니라 평점에서 빼는 게 핵심이에요.
+ * perf = clamp((rating - 5) / 4 + 0.6, 0.15, 1.6)이 평점의 비선형 함수라,
+ * 평점을 깎으면 약한 선수가 훨씬 크게 무너져요. 강한 선수는 상한 근처라 덜 다칩니다.
+ * 곱셈으로 해봤더니 순효과가 균일해서 능력치와 무관하게 올라갈수록 유리했어요.
+ *
+ * career.js가 아니라 여기 두는 건 career.js가 IIFE라 그 안의 선언이 밖으로 안 새기
+ * 때문이에요. 클럽 전력·동료 득점처럼 game.js 쪽에서도 리그를 읽어야 해요. */
+const LEAGUES = [
+  { id: 1, name: "K리그",       short: "국내",   flag: "🇰🇷", penalty: 0,   prestige: 1.00 },
+  { id: 2, name: "유로파리그",   short: "유럽",   flag: "🇪🇺", penalty: 1.6, prestige: 1.35 },
+  { id: 3, name: "챔피언스리그", short: "빅클럽", flag: "🏆", penalty: 2.8, prestige: 1.80 },
+];
+
+// 옛 세이브에는 S.league가 없어요. 마이그레이션하지 않고 없으면 1부로 봐요.
+function leagueOf(st) {
+  return LEAGUES.find((l) => l.id === ((st && st.league) || 1)) || LEAGUES[0];
+}
+
 const PLAYER_NAMES = ["도현", "시우", "주원", "하준", "은우", "서준", "이안", "리오", "카이", "마테오", "루카", "지안"];
 
 // 평가 경기 종목: 주 스탯 / 보조 스탯 가중치

@@ -60,6 +60,14 @@ const axisParts = {
 const axisSrc = Object.values(axisParts).filter(Boolean).join("\n");
 const axisMissing = Object.entries(axisParts).filter(([, v]) => !v).map(([k]) => k);
 
+/* 리그 티어(game.js)도 같은 규칙으로 '있으면 넣는다'. 평점과 hype 둘 다 리그를 읽어서
+ * 없으면 ReferenceError가 난다. 아래 S에는 league를 안 넣으니 1부가 되고,
+ * 1부는 penalty 0 · prestige 1이라 이 파일의 기대값이 그대로다 — league-test ⑥의 약속이다. */
+const leagueSrc = [
+  grab(GAME, /const LEAGUES = \[[\s\S]*?\n\];/),
+  grab(GAME, /function leagueOf\(st\) \{[\s\S]*?\n\}/),
+].filter(Boolean).join("\n");
+
 // ① 축 상수·함수가 존재한다
 check(axisMissing.length === 0,
   axisMissing.length ? `${axisMissing.join(", ")} is not defined — career.js에 축이 없어요` : "POS_AXIS · AXIS_K · AXIS_OFF · posAxis가 career.js에 있다");
@@ -136,6 +144,7 @@ if (!posAxisFn) {
 /* hype 산식 — S(pos·proYear)와 act를 받아 실행한다.
  * 축이 아직 없으면 axisSrc가 비고, 옛 산식(hypeSum 기반)이 그대로 돌아간다. */
 const hypeFn = new Function("S", "act", "clamp", `
+  ${leagueSrc}
   ${axisSrc}
   ${parts.agePen}
   ${parts.hype}
@@ -177,6 +186,7 @@ check(/act\.hypeSum \+=/.test(SRC) && /act\.cbHype \+=/.test(SRC),
 const seasonFn = new Function("S", "clamp", "rand", "condition", "fandom", `
   ${parts.posInfo} ${parts.clutchScale} ${parts.transLv} ${parts.clutch}
   ${parts.poissonish} ${parts.matchContribution} ${parts.autoRes}
+  ${leagueSrc}
   ${parts.fanCap} ${parts.ratingDiv} ${parts.cbPerYear} ${parts.weeksPerCb}
   const stats = S.stats, pos = S.pos;
   const posStat = POS_INFO[pos].stat;

@@ -42,8 +42,17 @@ const consts = [
   grab(SRC, /const RATING_DIV = [^;]+;/),
 ].filter(Boolean).join(" ");
 
+/* 리그 티어(game.js)도 같은 규칙으로 '있으면 넣는다'. 평점 산식이 리그 페널티를
+ * 빼기 때문에 없으면 ReferenceError가 난다. 아래 S에는 league를 안 넣으니 1부가 되고,
+ * 1부는 penalty 0이라 이 파일의 모든 기대값이 그대로다 — 그게 league-test ⑥의 약속이다. */
+const leagueSrc = [
+  grab(GAME, /const LEAGUES = \[[\s\S]*?\n\];/),
+  grab(GAME, /function leagueOf\(st\) \{[\s\S]*?\n\}/),
+].filter(Boolean).join("\n");
+
 const ratingFn = new Function("S", "stats", "pos", "condition", "fandom", "clamp", "rand", `
   ${parts.posInfo} ${parts.clutchScale} ${parts.transLv} ${parts.clutch}
+  ${leagueSrc}
   ${consts}
   ${parts.myScore}
   ${parts.rating}

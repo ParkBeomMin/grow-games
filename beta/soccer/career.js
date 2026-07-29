@@ -14,14 +14,15 @@ window.WingerCareer = (() => {
   const FAN_CAP = 12;
   const RATING_DIV = 14;
 
-  // 경기 평점(1~10). clutch()는 전역 S의 재능·초월을 읽어요.
+  /* 경기 평점(1~10). clutch()는 전역 S의 재능·초월을 읽어요.
+   * 리그 페널티는 clamp **안쪽**에서 빼요 — 밖에서 빼면 하한 1이 안 지켜져요. */
   function ratingOf(stats, pos, condition, fandom) {
     const myScore =
       (stats[POS_INFO[pos].stat] * 0.32 +
       stats.stamina * 0.22 +
       ((stats.shoot + stats.pass + stats.dribble) / 3) * 0.2) * clutch(POS_INFO[pos].stat) +
       condition / 8 + Math.min((fandom || 0) / 45, FAN_CAP) + rand(-5, 5) + 20;
-    const rating = clamp(myScore / RATING_DIV, 1, 10);
+    const rating = clamp(myScore / RATING_DIV - leagueOf(S).penalty, 1, 10);
     return rating;
   }
 
@@ -382,8 +383,12 @@ window.WingerCareer = (() => {
      * 1위를 하는 순간 천장에 붙어서 능력치를 더 올려도 결과가 같았어요.
      * 축은 골·도움·수비 성공 개수라 상한이 없어요. 후반에 기하급수로 커지니
      * 로그로 잽니다 — 선형이면 10년차에 hype가 수백이 돼요.
-     * hypeSum은 경기 화면 순위 연출에 그대로 남아 있어요. */
-    const hype = clamp(Math.log(Math.max(1, posAxis(act, S.pos))) * AXIS_K - AXIS_OFF - agePen, -1.5, 12);
+     * hypeSum은 경기 화면 순위 연출에 그대로 남아 있어요.
+     *
+     * 리그격(prestige)을 축에 곱해요 — 같은 성적이라도 위 리그에서 낸 게 값어치가 커요.
+     * 평점 페널티가 성적 자체를 깎으니, 이 둘이 맞물려 "실력이 되면 통하고
+     * 아니면 못 버틴다"는 도박이 돼요. */
+    const hype = clamp(Math.log(Math.max(1, posAxis(act, S.pos) * leagueOf(S).prestige)) * AXIS_K - AXIS_OFF - agePen, -1.5, 12);
     const wins = act.wins;
     const sales = act.sales;
     const dFan = Math.round(hype * 10 + wins * 3 - (hype < 0 ? 15 : 0));
@@ -891,6 +896,6 @@ window.WingerCareer = (() => {
       else if (S.career && S.career.years.length) yearReport();
       else { renderPrep(); show("screen-pro"); }
     },
-    _t: { ratingOf, FAN_CAP, RATING_DIV, POS_AXIS, posAxis, AXIS_K, AXIS_OFF, state: () => S },
+    _t: { ratingOf, FAN_CAP, RATING_DIV, POS_AXIS, posAxis, AXIS_K, AXIS_OFF, LEAGUES, leagueOf, state: () => S },
   };
 })();

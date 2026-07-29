@@ -61,6 +61,13 @@ const missing = Object.entries(parts).filter(([, v]) => !v).map(([k]) => k);
 if (missing.length) { console.log(`❌ 산식을 못 찾았어요: ${missing.join(", ")}`); process.exit(1); }
 
 const axisSrc = [parts.posAxisTable, parts.axisK, parts.axisOff, parts.posAxis].join("\n");
+/* 리그 티어(game.js)는 '있으면 넣는다'. 평점과 hype 둘 다 리그를 읽어서 없으면
+ * ReferenceError가 나요. 아래 S에는 league를 안 넣으니 1부가 되고, 1부는 penalty 0 ·
+ * prestige 1이라 이 파일의 곡선 밴드가 그대로예요 — league-test ⑥의 약속이에요. */
+const leagueSrc = [
+  grab(GAME, /const LEAGUES = \[[\s\S]*?\n\];/),
+  grab(GAME, /function leagueOf\(st\) \{[\s\S]*?\n\}/),
+].filter(Boolean).join("\n");
 const POS_INFO = new Function(`${parts.posInfo} return POS_INFO;`)();
 
 /* 한 시즌(12경기)을 굴려 시즌 집계(act)를 내요. 실제 playShow와 같은 순서로
@@ -71,6 +78,7 @@ const POS_INFO = new Function(`${parts.posInfo} return POS_INFO;`)();
 const seasonFn = new Function("S", "clamp", "rand", `
   ${parts.posInfo} ${parts.clutchScale} ${parts.transLv} ${parts.clutch}
   ${parts.poissonish} ${parts.matchContribution} ${parts.autoRes}
+  ${leagueSrc}
   ${parts.fanCap} ${parts.ratingDiv} ${parts.ratingOf}
   ${parts.cbPerYear} ${parts.weeksPerCb}
   const home = "우리", away = "상대", h = 0, a = 0, res = "D";
@@ -93,6 +101,7 @@ const seasonFn = new Function("S", "clamp", "rand", `
 
 // 시즌 결산 — 축 → hype → 수상 판정. 전부 소스에서 뽑은 그대로예요.
 const yearFn = new Function("S", "act", "clamp", "rand", `
+  ${leagueSrc}
   ${axisSrc}
   ${parts.agePen}
   ${parts.hype}
