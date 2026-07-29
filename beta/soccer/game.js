@@ -1162,7 +1162,7 @@ const MatchSim = (() => {
     /* 동료 골이에요. 평점을 안 넘겨준 호출부(유스 등)에서는 0이 되도록 막아뒀어요. */
     const mates = cfg.rating != null ? teammateGoals(cfg.rating) : 0;
     for (let i = 0; i < mates; i++)
-      evs.push({ min: rmin(), side: "atk", h: 1, cls: "good", text: `⚽ 동료의 골! ${home}이 앞서갑니다` });
+      evs.push({ min: rmin(), side: "atk", h: 1, cls: "good", text: `⚽ 동료의 골! 팀이 추가점을 뽑아냅니다` });
     for (let i = 0; i < oppGoals; i++) evs.push({ min: rmin(), side: "def", a: 1, cls: "bad", text: `😣 ${away}에 실점…` });
     if (defense >= 2) evs.push({ min: rmin(), side: "def", text: `🛡️ ${myName}, 결정적 태클로 위기를 끊어요!` });
     evs.push({ min: rmin(), side: "mid", text: pick(["중원 싸움이 뜨거워요", "빠른 템포로 오가는 공방", "관중석이 들썩입니다", "양 팀 압박이 매섭습니다"]) });
