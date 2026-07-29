@@ -63,12 +63,22 @@ const leagueSrc = [
   grab(GAME, /const LEAGUES = \[[\s\S]*?\n\];/),
   grab(GAME, /function leagueOf\(st\) \{[\s\S]*?\n\}/),
 ].filter(Boolean).join("\n");
+/* 클럽 전력도 같은 규칙으로 '있으면 넣는다'. teammateGoals·deriveOppGoals가
+ * clubStrOf(S)를 읽기 때문에 없으면 ReferenceError가 난다. 아래 stateOf는
+ * clubStr을 안 넣으니 기본 전력 70이라 이 파일의 기대값은 그대로다 —
+ * 전력 70이 기준점이라는 게 club-test의 약속이다. */
+const clubSrc = [
+  grab(GAME, /const CLUBS = \{[\s\S]*?\n\};/),
+  grab(GAME, /function clubStrOf\(st\) \{[\s\S]*?\n\}/),
+].filter(Boolean).join("\n");
 
 // 동료 득점 표 자체 — 없으면 ReferenceError: TEAMMATE_GOALS is not defined
 const tableFn = new Function(`${mateSrc}\n  return TEAMMATE_GOALS;`);
 // 동료 골 수 한 판 — 없으면 ReferenceError: teammateGoals is not defined
 const mateFn = new Function("S", "rating", "clamp", `
   ${parts.poissonish}
+  ${leagueSrc}
+  ${clubSrc}
   ${mateSrc}
   return teammateGoals(rating);
 `);
@@ -80,6 +90,7 @@ const mateFn = new Function("S", "rating", "clamp", `
 const simFn = new Function("S", "clamp", "rand", "randInt", "pick", `
   ${parts.posInfo} ${parts.clutchScale} ${parts.transLv} ${parts.clutch}
   ${leagueSrc}
+  ${clubSrc}
   ${consts}
   ${parts.ratingOf}
   ${parts.poissonish}

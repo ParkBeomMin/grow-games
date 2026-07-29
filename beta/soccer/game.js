@@ -68,6 +68,45 @@ function leagueOf(st) {
   return LEAGUES.find((l) => l.id === ((st && st.league) || 1)) || LEAGUES[0];
 }
 
+/* 클럽 — 전력(str)은 팀 성적에만 작용해요. 개인 수상에는 안 닿습니다.
+ * 같은 리그 안에서 전력 좋은 팀으로 가면 팀은 더 이기지만 내 수상 확률은 그대로예요.
+ * 이게 리그 이적(개인 커리어)과 명확히 구분되는 지점이에요.
+ *
+ * 리그 티어는 "내가 어디까지 통하나"를 묻고, 클럽 전력은 "우리 팀이 이기나"를 물어요.
+ * 두 축이 겹치면 같은 리그 이적과 상위 리그 이적이 같은 질문이 돼서 선택이 사라져요.
+ *
+ * 실제 구단명은 쓰지 않아요 — 이 저장소는 상표를 전부 가상 명칭으로 바꿨어요. */
+const CLUBS = {
+  1: [
+    { name: "FC 노바", str: 78 }, { name: "레인저스", str: 71 },
+    { name: "선더볼트", str: 66 }, { name: "블랙이글스", str: 62 },
+    { name: "시티즌", str: 57 }, { name: "포레스트 FC", str: 52 },
+  ],
+  2: [
+    { name: "레알 몬테", str: 84 }, { name: "아틀레티코 델", str: 79 },
+    { name: "노르드 위니온", str: 74 }, { name: "올림피코 베라", str: 70 },
+    { name: "스타디온 루체", str: 65 }, { name: "AC 리베라", str: 61 },
+  ],
+  3: [
+    { name: "인터 아우로라", str: 93 }, { name: "바이언 슈타트", str: 90 },
+    { name: "로열 알비온", str: 87 }, { name: "파리 셀레스트", str: 84 },
+    { name: "밀란 코로나", str: 81 }, { name: "이베리아 솔", str: 78 },
+  ],
+};
+
+// 옛 세이브에는 S.clubStr이 없어요. 마이그레이션하지 않고 없으면 70으로 봐요.
+function clubStrOf(st) {
+  const v = st && st.clubStr;
+  return typeof v === "number" && isFinite(v) ? clamp(v, 40, 95) : 70;
+}
+
+// 상대 팀은 같은 리그에서 뽑아요. 내 클럽은 빼고요.
+function oppClubs(st) {
+  const list = CLUBS[leagueOf(st).id] || CLUBS[1];
+  const names = list.map((c) => c.name).filter((n) => n !== (st && st.group));
+  return names.length ? names : list.map((c) => c.name);
+}
+
 const PLAYER_NAMES = ["도현", "시우", "주원", "하준", "은우", "서준", "이안", "리오", "카이", "마테오", "루카", "지안"];
 
 // 평가 경기 종목: 주 스탯 / 보조 스탯 가중치
@@ -146,6 +185,10 @@ function newState(market, pos, name, roll) {
     market: market.id, pos, name,
     year: 1, month: 1,
     stats, talents,
+    /* 새 선수는 1부에서 시작해요. 소속 클럽은 프로 데뷔(enterCareer) 때 정해지고,
+     * 그때까지는 기본 전력 70으로 유스 경기를 치러요. */
+    league: 1,
+    clubStr: 70,
     // 🧬 환생 유산으로 받은 시작 자금이에요. 유산이 없으면 0이에요.
     money: legacyMoneyBonus(loadLegacy().pts),
     gear: {},
@@ -949,7 +992,6 @@ function gradeOf(score) {
 }
 
 // ---------- 경기 스탯(골·도움·수비) & 스코어 산출 ----------
-const OPP_CLUBS = ["FC 노바", "레인저스", "선더볼트", "블랙이글스", "시티즌", "레알 몬테", "아틀레티코 델", "포레스트 FC"];
 // 간이 포아송 샘플러 — 골/도움 수 같은 이산 이벤트에 자연스러운 분포를 줘요
 function poissonish(lam) {
   let n = 0, L = Math.exp(-Math.max(0, lam)), p = 1;
@@ -984,7 +1026,9 @@ function matchContribution(rating) {
 const TEAMMATE_GOALS = { fw: 0.35, wg: 0.5, mf: 0.8, df: 2.2 };
 
 function teammateGoals(rating) {
-  const base = (TEAMMATE_GOALS[S.pos] ?? 0.6) * (0.6 + (rating - 5) * 0.14);
+  // 전력 70이 기준이에요. 좋은 팀은 동료가 더 넣습니다.
+  const strF = clubStrOf(S) / 70;
+  const base = (TEAMMATE_GOALS[S.pos] ?? 0.6) * (0.6 + (rating - 5) * 0.14) * strF;
   return poissonish(Math.max(0, base));
 }
 // 내 골 수 & 평점에 어울리는 팀 스코어(우리:상대)와 승부 결과
@@ -1126,7 +1170,9 @@ function playRandomMini(container, cb) {
 
 // 평점·수비력으로 상대 실점 수를 산출
 function deriveOppGoals(rating, defStat) {
-  const base = 2.4 - (rating - 5) * 0.28 - (defStat / 100) * 1.4 + rand(-0.3, 0.9);
+  // 전력 70이 기준이에요. 좋은 팀은 덜 먹습니다.
+  const strAdj = (clubStrOf(S) - 70) / 100;
+  const base = 2.4 - (rating - 5) * 0.28 - (defStat / 100) * 1.4 - strAdj + rand(-0.3, 0.9);
   return Math.max(0, Math.min(4, Math.round(base)));
 }
 
@@ -1271,7 +1317,7 @@ function renderStageSim(type, grade, onFinal) {
   const oppGoals = deriveOppGoals(rating, S.stats.defense);
   MatchSim.run({
     home: "우리 유스",
-    away: pick(OPP_CLUBS),
+    away: pick(oppClubs(S)),
     myName: S.name,
     goals: c.g, assists: c.a, defense: c.def, oppGoals, rating,
     finalize: (info) => {

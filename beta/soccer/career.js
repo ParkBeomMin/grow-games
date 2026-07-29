@@ -57,7 +57,6 @@ window.WingerCareer = (() => {
     { id: "wg7", name: "괴물 신인 라이징", bp: 260 },
     { id: "wg8", name: "무명 유망주 벤치", bp: 180 },
   ];
-  const CLUB_NAMES = ["FC 스카이", "레드불스", "블루윙즈", "유나이티드", "갤럭시 SC", "다이너마이트"];
 
   const loadHof = () => JSON.parse(localStorage.getItem(HOF_KEY) || "[]");
   const saveHof = (list) => localStorage.setItem(HOF_KEY, JSON.stringify(list));
@@ -95,7 +94,12 @@ window.WingerCareer = (() => {
   // ---------- 프로 활동 ----------
   function enterCareer(captain) {
     S.phase = "soccer-pro";
-    S.group = pick(CLUB_NAMES);
+    /* 데뷔 클럽은 소속 리그(기본 1부)에서 뽑아요. 이름과 전력을 함께 받아 둡니다 —
+     * 전력은 동료 득점·실점에만 쓰이고 개인 수상에는 안 닿아요. */
+    S.league = leagueOf(S).id;
+    const debutClub = pick(CLUBS[S.league] || CLUBS[1]);
+    S.group = debutClub.name;
+    S.clubStr = debutClub.str;
     S.center = !!captain;
     S.proYear = 0;
     S.career = { years: [], wins: 0, daesang: 0, bonsang: 0, rookie: 0, sales: 0, goals: 0, assists: 0, defense: 0, apps: 0, teamW: 0, teamD: 0, teamL: 0 };
@@ -138,7 +142,7 @@ window.WingerCareer = (() => {
       week: 0, weekTotal: WEEKS_PER_CB,
       wins: 0, sales: 0, hypeSum: 0, cbHype: 0, cbWins: 0,
       goals: 0, assists: 0, defense: 0, apps: 0, teamW: 0, teamD: 0, teamL: 0,
-      opp: pick(OPP_CLUBS),
+      opp: pick(oppClubs(S)),
       rivals: rollRivals(),
     };
   }
@@ -292,7 +296,7 @@ window.WingerCareer = (() => {
 
   function playShow() {
     const act = S.activity;
-    act.opp = pick(OPP_CLUBS.filter((n) => n !== S.group)); // 이번 상대
+    act.opp = pick(oppClubs(S)); // 이번 상대 — 같은 리그에서 내 클럽을 빼고 뽑아요
     $("stage-title").textContent = `⚽ ${S.proYear}시즌 ${cbLabel(act.cb)} — ${S.group}`;
     $("stage-round").textContent = `R${act.week + 1}/${act.weekTotal} 리그 · vs ${act.opp}`;
     show("screen-stage");
@@ -896,6 +900,6 @@ window.WingerCareer = (() => {
       else if (S.career && S.career.years.length) yearReport();
       else { renderPrep(); show("screen-pro"); }
     },
-    _t: { ratingOf, FAN_CAP, RATING_DIV, POS_AXIS, posAxis, AXIS_K, AXIS_OFF, LEAGUES, leagueOf, state: () => S },
+    _t: { ratingOf, FAN_CAP, RATING_DIV, POS_AXIS, posAxis, AXIS_K, AXIS_OFF, LEAGUES, leagueOf, CLUBS, clubStrOf, state: () => S },
   };
 })();
