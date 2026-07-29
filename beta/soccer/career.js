@@ -445,9 +445,13 @@ window.WingerCareer = (() => {
     $("career-card").innerHTML = `
       <div class="draft-emoji">⚽</div>
       <div class="draft-title">${
-        y.hype >= 6 ? "리그를 지배한 시즌!" :
-        y.hype >= 3.5 ? "제 몫을 해낸 시즌" :
-        y.hype >= 1 ? "아쉬움이 남는 시즌" : "혹독한 시즌…"
+        /* 문턱은 새 hype 눈금(축 기반)에 맞춘 값이에요.
+         * 5년차 실측: 능력치 50→3.8 · 70→5.3 · 90→6.4 · 110→7.4 · 130→7.9.
+         * 옛 눈금(순위 기반) 문턱 6/3.5/1을 그대로 두면 능력치 90부터
+         * 매 시즌 "리그를 지배한 시즌!"이 떴어요. */
+        y.hype >= 7.6 ? "리그를 지배한 시즌!" :
+        y.hype >= 6.0 ? "제 몫을 해낸 시즌" :
+        y.hype >= 3.5 ? "아쉬움이 남는 시즌" : "혹독한 시즌…"
       }</div>
       <div class="draft-team">${S.group} · ${y.apps || 0}경기 ⚽${y.goals || 0}골 🅰️${y.assists || 0}도움 🛡️${y.defense || 0} · MOM ${y.wins}회</div>
       <table class="season-table"><thead><tr><th>시즌</th><th>출전</th><th>⚽골</th><th>🅰️도움</th><th>🛡️수비</th><th>수상</th></tr></thead><tbody>${rows}</tbody></table>
