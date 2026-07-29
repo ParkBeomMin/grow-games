@@ -33,6 +33,9 @@ const parts = {
   clutch: grab(GAME, /function clutch\(key\) \{[\s\S]*?\n\}/),
   poissonish: grab(GAME, /function poissonish\(lam\) \{[\s\S]*?\n\}/),
   matchContribution: grab(GAME, /function matchContribution\(rating\) \{[\s\S]*?\n\}/),
+  autoRes: grab(GAME, /function autoRes\(stat\) \{[\s\S]*?\n\}/),
+  // MatchSim.finish의 info 블록 — 승부처 극장골이 내 골에 얹히는 규칙이 여기 있어요
+  infoBlock: grab(GAME, /const info = \{[\s\S]*?\n {6}\};/),
   fanCap: grab(SRC, /const FAN_CAP = [^;]+;/),
   ratingDiv: grab(SRC, /const RATING_DIV = [^;]+;/),
   myScore: grab(SRC, /const myScore =[\s\S]*?;\n/),
@@ -61,11 +64,20 @@ const axisMissing = Object.entries(axisParts).filter(([, v]) => !v).map(([k]) =>
 check(axisMissing.length === 0,
   axisMissing.length ? `${axisMissing.join(", ")} is not defined — career.js에 축이 없어요` : "POS_AXIS · AXIS_K · AXIS_OFF · posAxis가 career.js에 있다");
 
+/* 설계 문서(docs/superpowers/specs/2026-07-29-soccer-growth-curve.md)의 포지션 축 표예요.
+ * 여기만 소스에서 뽑지 않고 손으로 적어요 — "소스가 문서와 같은가"를 보는 검사라
+ * 소스에서 뽑아 오면 자기 자신과 비교하는 꼴이 돼요. 소스를 고쳤으면 문서와 이 표를
+ * 같이 고쳐야 해요.
+ *
+ * 정규화 계수 n은 2026-07-29에 재보정했어요. 첫 캘리브레이션이 승부처 극장골
+ * (MatchSim.finish가 myGoals에 얹는 perfect 한 골)을 시뮬레이션에서 빠뜨렸는데,
+ * 그 골도 POS_AXIS의 골 가중치를 그대로 먹어요. 수비수는 골 가중치가 2.0이라
+ * 시즌 5~6개의 극장골이 그대로 이득이 됐어요. */
 const SPEC = {
   fw: { g: 1.0, a: 0.5, d: 0.15, n: 1.00 },
-  wg: { g: 0.8, a: 0.8, d: 0.15, n: 1.02 },
-  mf: { g: 0.5, a: 1.0, d: 0.30, n: 0.88 },
-  df: { g: 2.0, a: 1.0, d: 0.55, n: 0.76 },
+  wg: { g: 0.8, a: 0.8, d: 0.15, n: 1.05 },
+  mf: { g: 0.5, a: 1.0, d: 0.30, n: 0.96 },
+  df: { g: 2.0, a: 1.0, d: 0.55, n: 0.72 },
 };
 
 const table = axisParts.POS_AXIS ? new Function(`${axisParts.POS_AXIS} return POS_AXIS;`)() : null;
@@ -149,21 +161,40 @@ check(/act\.hypeSum \+=/.test(SRC) && /act\.cbHype \+=/.test(SRC),
   "act.hypeSum · act.cbHype 누적이 남아 있다 (경기 화면 순위 연출)");
 
 /* ⑧⑨ 시즌 시뮬레이션 — 능력치만 주면 12경기를 굴려 시즌 집계를 낸다.
- * 평점·경기 기여·시즌 길이 전부 소스에서 뽑은 그대로 쓴다. */
+ * 평점·경기 기여·승부처·시즌 길이 전부 소스에서 뽑은 그대로 쓴다.
+ *
+ * 승부처(극장골)를 빼먹으면 안 된다. proMatchFinalize가 act.goals에 더하는 건
+ * MatchSim.finish의 info.myGoals이고, 거기에는 승부처가 perfect일 때 한 골이 이미
+ * 얹혀 있다. 그 골도 POS_AXIS의 골 가중치를 그대로 먹기 때문에, 골 가중치가 2.0인
+ * 수비수에게 특히 크게 작용한다. 처음에는 이 한 줄이 빠져 있어서 이 테스트와
+ * curve-test.js가 서로 모순되는 정규화 계수를 요구했다.
+ *
+ * 그래서 curve-test.js의 시즌 시뮬레이션과 같은 방식으로 굴린다 — 승부처 판정은
+ * 게임 자체의 자동 판정(autoRes)을 쓰고, 극장골이 내 골에 얹히는 규칙은 info 블록을
+ * 그대로 실행해서 가져온다. 두 파일이 같은 세계를 재야 하니 이 순서가 같아야 한다
+ * (이 저장소에는 테스트 헬퍼 모듈 관례가 없어서 두 벌로 둔다).
+ * 팀 스코어(h·a·res)는 이 테스트가 안 보는 값이라 자리만 채운다. */
 const seasonFn = new Function("S", "clamp", "rand", "condition", "fandom", `
   ${parts.posInfo} ${parts.clutchScale} ${parts.transLv} ${parts.clutch}
-  ${parts.poissonish} ${parts.matchContribution}
+  ${parts.poissonish} ${parts.matchContribution} ${parts.autoRes}
   ${parts.fanCap} ${parts.ratingDiv} ${parts.cbPerYear} ${parts.weeksPerCb}
   const stats = S.stats, pos = S.pos;
-  let goals = 0, assists = 0, defense = 0;
+  const posStat = POS_INFO[pos].stat;
+  const home = "우리", away = "상대", h = 0, a = 0, res = "D";
+  const act = { goals: 0, assists: 0, defense: 0 };
   const games = CB_PER_YEAR * WEEKS_PER_CB;
   for (let i = 0; i < games; i++) {
     ${parts.myScore}
     ${parts.rating}
     const c = matchContribution(rating);
-    goals += c.g; assists += c.a; defense += c.def;
+    const goals = c.g, assists = c.a, defense = c.def;
+    const momentRes = autoRes(stats[posStat]);
+    ${parts.infoBlock}
+    act.goals += info.myGoals;
+    act.assists += info.assists;
+    act.defense += info.defense;
   }
-  return { goals, assists, defense, apps: games };
+  return { goals: act.goals, assists: act.assists, defense: act.defense, apps: games };
 `);
 
 function meanHype(pos, stat, n = 800) {
