@@ -249,20 +249,11 @@ guard("⑦ 이적 이력 표시", () => {
 
   const st = stateWith({}, Object.assign({ moves }, { league: 2, group: C.name, clubStr: C.str }));
   openReport(st);
-  /* 이력 줄만 따로 읽는다. 화면 전체 텍스트로 보면 소속 줄의 리그 이름이 섞여
-   * "리그를 같이 보여준다"가 거저 초록이 된다. */
-  const repEl = w.document.querySelector("#career-card .move-log");
-  const rep = repEl ? repEl.textContent.replace(/\s+/g, " ") : "";
-  check(!!repEl, `이적한 적이 있으면 결산에 이적 이력 줄(.move-log)이 나온다 (${rep.slice(0, 60)}…)`);
-  check(rep.includes("이적"), "그 줄이 이적 이력임을 밝힌다");
-  check(moves.every((m) => rep.includes(`${m.from}→${m.to}`)),
-    `결산의 이력에 전소속→새소속이 모두 있다 (${moves.map((m) => `${m.from}→${m.to}`).join(" · ")})`);
-  check(moves.every((m) => rep.includes(String(m.y))),
-    "결산의 이력에 몇 시즌에 옮겼는지가 있다");
-  check(rep.includes(leagueById(2).name),
-    `리그가 바뀐 이적은 이력 줄에 리그도 같이 보여준다 (${leagueById(2).name})`);
-  check(!rep.includes(leagueById(1).name),
-    `같은 리그 안의 이적에는 리그를 안 붙인다 (${leagueById(1).name}이 이력 줄에 없다)`);
+  /* task-1(팀 칼럼): 결산 화면의 '🔁 이적 이력' 한 줄은 표의 소속 칸으로 옮겨갔다.
+   * 이 텍스트 줄은 이적 여부와 무관하게 결산에서 완전히 사라져야 한다 — 중복이라서다.
+   * (소속 칸 자체의 검사는 tests/soccer/career-column-test.js가 맡는다.) */
+  check(!w.document.querySelector("#career-card .move-log"),
+    "이적한 적이 있어도 결산에는 이적 이력 줄이 없다 — 표의 소속 칸으로 옮겨갔다");
 
   // 은퇴 확인창(되돌릴 수 없는 선택)에도 남는다
   lastConfirm = "";

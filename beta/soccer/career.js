@@ -475,7 +475,10 @@ window.WingerCareer = (() => {
     S.career.teamD = (S.career.teamD || 0) + (act.teamD || 0);
     S.career.teamL = (S.career.teamL || 0) + (act.teamL || 0);
     if (awards.length && window.Fx) Fx.celebrate("award", `🎖️ ${awards.join(" · ")}!`);
-    S.career.years.push({ y: S.proYear, hype: Math.round(hype * 10) / 10, wins, sales, dFan, awards, goals: gg, assists: ga, defense: gd, apps });
+    /* club·league — 그 시즌에 뛴 소속을 결산 시점에 그냥 적어요. S.moves에서 역산하지
+     * 않아요 — 오프시즌 이적·시즌 중 이적·리그 이동이 섞이면 복잡하고 틀리기 쉬워요.
+     * 새 필드라 옛 세이브의 항목에는 없어요 — 읽는 쪽(yearReport)이 '-'로 방어해요. */
+    S.career.years.push({ y: S.proYear, hype: Math.round(hype * 10) / 10, wins, sales, dFan, awards, goals: gg, assists: ga, defense: gd, apps, club: S.group, league: S.league });
     if (window.Stats) Stats.log("year_end", { y: S.proYear, wins, sales, goals: gg, assists: ga });
     for (const d of STAT_DEFS) {
       if (S.proYear <= 3) S.stats[d.key] = clamp(S.stats[d.key] + rand(0, 1) * S.talents[d.key], 0, statCap(d.key));
@@ -507,11 +510,36 @@ window.WingerCareer = (() => {
     }).join(" · ");
   }
 
+  /* 연도별 표의 소속 칸 — ⚾ 더 드래프트(beta/rookie/game.js의 shortTeam)와 같은 방식으로
+   * 칸이 좁으니 이름을 줄여요. 다만 이 게임 클럽명은 "FC 노바"·"AC 리베라"처럼 약칭이
+   * 앞에 붙기도 해서, 첫 낱말만 자르는 rookie 방식 그대로 쓰면 "FC"만 남아 못 알아봐요.
+   * 그래서 FC·AC 토큰은 건너뛰고 의미 있는 낱말을 4자로 잘라요. CLUBS 전체를 확인해서
+   * 이 자르기로 같은 리그 안 클럽끼리 겹치지 않는 걸 미리 확인했어요. */
+  function shortClub(name) {
+    if (!name) return "-";
+    const parts = String(name).split(" ").filter((p) => p !== "FC" && p !== "AC");
+    return (parts[0] || name).slice(0, 4);
+  }
+
+  /* 시즌 표의 소속 칸 하나. x.club은 2.22.0부터 결산 시점에 그냥 적은 값이라
+   * 그 전 세이브의 항목에는 없어요 — 마이그레이션하지 않고 '-'로 그려요(던지지 않아요).
+   * 리그가 바뀐 시즌은 리그도 짧게 붙여요(LEAGUES[].short) — 같은 리그 안 이적과
+   * 리그를 옮긴 이적은 전혀 다른 사건이라서요. */
+  function clubCell(x, prev) {
+    if (x.club == null) return `<td>-</td>`;
+    const hasPrev = !!prev && prev.club != null;
+    const movedClub = hasPrev && prev.club !== x.club;
+    const movedLeague = hasPrev && prev.league !== x.league;
+    const lg = LEAGUES.find((l) => l.id === x.league);
+    const lgTag = movedLeague && lg ? `<span class="yr-lg">${lg.short}</span>` : "";
+    return `<td class="yr-club${movedClub ? " moved" : ""}" title="${x.club}">${shortClub(x.club)}${lgTag}</td>`;
+  }
+
   function yearReport() {
     const y = S.career.years[S.career.years.length - 1];
-    const moves = moveLog(S);
-    const rows = S.career.years.slice(-8).map((x) =>
-      `<tr><td>${x.y}시즌</td><td>${x.apps != null ? x.apps : "-"}</td><td>${x.goals != null ? x.goals : "-"}</td><td>${x.assists != null ? x.assists : "-"}</td><td>${x.defense != null ? x.defense : "-"}</td><td>${x.awards.length ? "🏆" + x.awards.join(",") : "-"}</td></tr>`
+    const slice = S.career.years.slice(-8);
+    const rows = slice.map((x, i) =>
+      `<tr><td>${x.y}시즌</td>${clubCell(x, slice[i - 1])}<td>${x.apps != null ? x.apps : "-"}</td><td>${x.goals != null ? x.goals : "-"}</td><td>${x.assists != null ? x.assists : "-"}</td><td>${x.defense != null ? x.defense : "-"}</td><td>${x.awards.length ? "🏆" + x.awards.join(",") : "-"}</td></tr>`
     ).join("");
     const forcedRetire = S.proYear >= 10;
     const cr = S.career;
@@ -528,8 +556,7 @@ window.WingerCareer = (() => {
         y.hype >= 3.5 ? "아쉬움이 남는 시즌" : "혹독한 시즌…"
       }</div>
       <div class="draft-team">${leagueOf(S).flag} ${S.group} · ${leagueOf(S).name} · 전력 ${clubStrOf(S)} · ${y.apps || 0}경기 ⚽${y.goals || 0}골 🅰️${y.assists || 0}도움 🛡️${y.defense || 0} · MOM ${y.wins}회</div>
-      ${moves ? `<div class="hint move-log">🔁 이적 이력 — ${moves}</div>` : ""}
-      <table class="season-table"><thead><tr><th>시즌</th><th>출전</th><th>⚽골</th><th>🅰️도움</th><th>🛡️수비</th><th>수상</th></tr></thead><tbody>${rows}</tbody></table>
+      <table class="season-table season-soccer"><thead><tr><th>시즌</th><th>소속</th><th>출전</th><th>⚽골</th><th>🅰️도움</th><th>🛡️수비</th><th>수상</th></tr></thead><tbody>${rows}</tbody></table>
       <div class="draft-summary">
         통산 ${cr.years.length}시즌 · 출전 ${cr.apps || 0} · ⚽ ${cr.goals || 0}골 · 🅰️ ${cr.assists || 0}도움 · 🛡️ ${cr.defense || 0} · 🏅 MOM ${cr.wins}회<br/>
         🏆 MVP ${cr.daesang} · 베스트11 ${cr.bonsang}${cr.rookie ? " · 신인왕" : ""} · ⭐ 명성 ${Math.round(S.fandom)}<br/>
@@ -1215,7 +1242,7 @@ window.WingerCareer = (() => {
       ratingOf, FAN_CAP, RATING_DIV, POS_AXIS, posAxis, AXIS_K, AXIS_OFF,
       LEAGUES, leagueOf, barOf, CLUBS, clubStrOf, debutClubs, DEBUT_POOL, weakestClub,
       TRANSFER_MIN_YEAR, PROMOTE_HYPE, OFFERS_PER_LEAGUE, transferFee, transferOffers, canTransfer,
-      DOWNGRADE_FEE, LOYALTY_FEE, leftBefore, moveLog, careerScore,
+      DOWNGRADE_FEE, LOYALTY_FEE, leftBefore, moveLog, careerScore, shortClub, clubCell,
       state: () => S,
     },
   };

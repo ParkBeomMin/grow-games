@@ -51,6 +51,24 @@ body {
 
 .season-standings .me td { color: var(--accent); font-weight: 700; }
 
+/* 연도별 기록표 — 소속 칸을 더하면서(시즌·소속·출전·⚽·🅰️·🛡️·수상 7칸) 좁은 칸이
+ * 세로로 접히지 않게 폭을 고정해요. ⚾ 더 드래프트(beta/base.css의 .season-career)와
+ * 같은 이유예요 — table-layout:fixed는 칼럼 수가 바뀌면 폭이 통째로 밀리니
+ * 이 게임 전용 클래스(.season-soccer)로 따로 잡아요. 나머지 폭은 '수상' 칸이 가져가요 —
+ * 수상 배지는 길이가 들쭉날쭉해서 유일하게 유동 폭이어야 해요. */
+.season-soccer { table-layout: fixed; }
+.season-soccer th:nth-child(1), .season-soccer td:nth-child(1) { width: 38px; }
+.season-soccer th:nth-child(2), .season-soccer td:nth-child(2) { width: 44px; }
+.season-soccer th:nth-child(3), .season-soccer td:nth-child(3) { width: 30px; }
+.season-soccer th:nth-child(4), .season-soccer td:nth-child(4) { width: 28px; }
+.season-soccer th:nth-child(5), .season-soccer td:nth-child(5) { width: 34px; }
+.season-soccer th:nth-child(6), .season-soccer td:nth-child(6) { width: 28px; }
+.season-soccer td { word-break: keep-all; }
+.season-soccer .yr-club { vertical-align: top; white-space: nowrap; }
+/* 이적한 시즌은 눈에 띄게 — 표를 훑으며 언제 소속이 바뀌었는지 바로 보이게 */
+.season-soccer .yr-club.moved { color: var(--accent); }
+.season-soccer .yr-lg { display: block; font-size: 0.62rem; opacity: .65; }
+
 /* FM식 경기 스코어보드 */
 .matchscore {
   display: flex;
