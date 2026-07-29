@@ -14,11 +14,20 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 [ -d beta ] || { echo "❌ beta/ 폴더가 없어요. 먼저 scripts/sync-beta.sh 를 실행하세요."; exit 1; }
 
+# ---- 베타 전용 파일 — 절대 상용으로 안 나가요 ----------------------------
+# beta/_check.html 은 시나리오를 누르면 localStorage 세이브를 통째로 덮어써요.
+# 이게 상용에 나가면 진짜 플레이어의 캐릭터가 날아갑니다. _fixtures.js 도 한 짝이에요.
+# 규칙은 "밑줄(_)로 시작하는 beta/ 최상위 파일"이에요 — 새 확인용 도구를 _로 시작하는
+# 이름으로 두면 여기를 다시 안 고쳐도 자동으로 막혀요.
+BETA_ONLY_GLOB='_*'
+is_beta_only() { case "$(basename "$1")" in _*) return 0 ;; *) return 1 ;; esac; }
+
 # beta/와 상용이 다른 파일 목록 (상용에만 있는 것은 무시해요 — README·VERSION 등)
+# 베타 전용 파일은 목록에서도 빼요. 보이면 언젠가 누가 넘깁니다.
 changed() {
-  diff -rq beta . -x beta -x .git -x scripts -x docs -x .superpowers -x CHANGELOG.md 2>/dev/null \
+  diff -rq beta . -x beta -x .git -x scripts -x docs -x .superpowers -x CHANGELOG.md -x "$BETA_ONLY_GLOB" 2>/dev/null \
     | sed -n 's|^Files beta/\(.*\) and \./.* differ$|\1|p'
-  diff -rq beta . -x beta -x .git -x scripts -x docs -x .superpowers -x CHANGELOG.md 2>/dev/null \
+  diff -rq beta . -x beta -x .git -x scripts -x docs -x .superpowers -x CHANGELOG.md -x "$BETA_ONLY_GLOB" 2>/dev/null \
     | sed -n 's|^Only in beta\(.*\): \(.*\)$|\1/\2|p' | sed 's|^/||'
 }
 
@@ -42,9 +51,19 @@ if [ "$1" = "--all" ]; then
   echo "⚠️  beta/ 전체를 반영해요. 아래가 전부 상용으로 나갑니다:"
   changed | sed 's/^/   · /'
   echo
-  cp -a beta/. ./
+  # 통째 복사에서도 베타 전용 파일은 빼요 — cp -a beta/. ./ 는 _check.html까지 들고 갔어요.
+  ( cd beta && find . -mindepth 1 -maxdepth 1 ! -name '_*' -exec cp -a {} "$ROOT/" \; )
+  for f in beta/_*; do
+    [ -e "$f" ] || continue
+    echo "   🚫 제외(베타 전용): ${f#beta/}"
+  done
 else
   for t in "$@"; do
+    if is_beta_only "$t"; then
+      echo "🚫 $t 는 베타 전용이라 상용으로 못 넘겨요."
+      echo "   확인용 도구예요 — 누르면 세이브를 덮어씁니다. 상용에 나가면 플레이어 기록이 날아가요."
+      exit 1
+    fi
     [ -e "beta/$t" ] || { echo "❌ beta/$t 가 없어요."; exit 1; }
     mkdir -p "$(dirname "$t")"
     cp -a "beta/$t" "$(dirname "$t")/"
