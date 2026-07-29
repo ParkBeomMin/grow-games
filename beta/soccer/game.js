@@ -47,25 +47,54 @@ const POS_INFO = {
   wg: { name: "윙어", stat: "dribble" },
 };
 
-/* 리그 티어 — 축구 커리어의 핵심 서사는 리그를 옮기는 거예요.
- * penalty는 경기 평점에서 빼고, prestige는 축에 곱해요.
+/* 리그 사다리 — 축구 커리어의 핵심 서사는 리그를 옮기는 거예요.
+ * 축이 셋이고 서로 하는 일이 달라요.
+ *
+ *  · penalty  — 경기 평점에서 빼요. 위쪽 리그에만 걸어요.
+ *  · bar      — 수상 문턱과 라이벌 분포에 곱해요. 경쟁 강도예요.
+ *  · prestige — 축(hype)과 명예의 전당 점수에 곱해요. 같은 상의 값어치예요.
  *
  * 난이도를 곱셈이 아니라 평점에서 빼는 게 핵심이에요.
  * perf = clamp((rating - 5) / 4 + 0.6, 0.15, 1.6)이 평점의 비선형 함수라,
  * 평점을 깎으면 약한 선수가 훨씬 크게 무너져요. 강한 선수는 상한 근처라 덜 다칩니다.
  * 곱셈으로 해봤더니 순효과가 균일해서 능력치와 무관하게 올라갈수록 유리했어요.
  *
+ * tier가 리그의 순서예요. id는 옛 세이브의 S.league가 가리키는 값이라 절대 안 바꿔요 —
+ * 번호를 다시 매기면 진행 중인 캐릭터가 엉뚱한 리그로 갑니다. 새 하부 리그는 새 id를 받아요.
+ *
+ * 처음엔 prestige만으로 하부 리그를 표현하려 했는데, 그러면 축이 같이 줄어서
+ * 하부가 오히려 더 어려워졌어요 (능력치 90에서 K리그3 1% 대 K리그1 14%).
+ * 평점 보너스로 메우려 해도 perf의 상한(1.6)에 막혀요.
+ * 하부 리그가 쉬운 건 내가 잘해서가 아니라 경쟁자가 약하기 때문이에요 — 그게 bar예요.
+ * 그래서 penalty는 위쪽에만 쓰고 하부는 0이에요.
+ *
+ * 값은 감이 아니라 시뮬레이션으로 잡았어요. 판단 기준은 수상 확률이 아니라
+ * '리그MVP 확률 × prestige'(명예의 전당 가치)고, 능력치 70/90/110/130/150에서
+ * 최적 리그가 K리그3 → K리그2 → 유로파 → 유로파 → 챔피언스리그로 올라가게 맞췄어요.
+ * tests/soccer/ladder-test.js가 그 사다리를 지킵니다.
+ *
  * career.js가 아니라 여기 두는 건 career.js가 IIFE라 그 안의 선언이 밖으로 안 새기
  * 때문이에요. 클럽 전력·동료 득점처럼 game.js 쪽에서도 리그를 읽어야 해요. */
 const LEAGUES = [
-  { id: 1, name: "K리그",       short: "국내",   flag: "🇰🇷", penalty: 0,   prestige: 1.00 },
-  { id: 2, name: "유로파리그",   short: "유럽",   flag: "🇪🇺", penalty: 1.6, prestige: 1.35 },
-  { id: 3, name: "챔피언스리그", short: "빅클럽", flag: "🏆", penalty: 2.8, prestige: 1.80 },
+  { id: 5, tier: 1, name: "K리그3",      short: "3부",    flag: "🇰🇷", penalty: 0,   prestige: 0.55, bar: 0.50 },
+  { id: 4, tier: 2, name: "K리그2",      short: "2부",    flag: "🇰🇷", penalty: 0,   prestige: 0.85, bar: 0.75 },
+  { id: 1, tier: 3, name: "K리그1",      short: "1부",    flag: "🇰🇷", penalty: 0,   prestige: 1.00, bar: 1.00 },
+  { id: 2, tier: 4, name: "유로파리그",   short: "유럽",   flag: "🇪🇺", penalty: 1.6, prestige: 1.75, bar: 1.12 },
+  { id: 3, tier: 5, name: "챔피언스리그", short: "빅클럽", flag: "🏆", penalty: 2.8, prestige: 2.40, bar: 1.30 },
 ];
 
-// 옛 세이브에는 S.league가 없어요. 마이그레이션하지 않고 없으면 1부로 봐요.
+/* 옛 세이브에는 S.league가 없어요. 마이그레이션하지 않고 없으면 K리그1로 봐요.
+ * 깨진 값도 K리그1로 막아요 — 표의 첫 줄이 이제 K리그3라 LEAGUES[0]으로 막으면
+ * 손상된 세이브가 하부 리그로 떨어집니다. */
 function leagueOf(st) {
-  return LEAGUES.find((l) => l.id === ((st && st.league) || 1)) || LEAGUES[0];
+  const id = (st && st.league) || 1;
+  return LEAGUES.find((l) => l.id === id) || LEAGUES.find((l) => l.id === 1) || LEAGUES[0];
+}
+
+// 경쟁 강도. 옛 세이브·깨진 값에서도 1(= K리그1과 같음)로 막아요.
+function barOf(st) {
+  const b = leagueOf(st).bar;
+  return typeof b === "number" && isFinite(b) ? b : 1;
 }
 
 /* 클럽 — 전력(str)은 팀 성적에만 작용해요. 개인 수상에는 안 닿습니다.

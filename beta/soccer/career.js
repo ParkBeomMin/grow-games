@@ -431,12 +431,16 @@ window.WingerCareer = (() => {
     // 수상은 '리그 내 상대 비교' — 가상 경쟁자들의 활약과 겨뤄 최고면 수상해요.
     // (압도적인 시즌은 랜덤에 밀려 상을 놓치지 않아요)
     const awards = [];
-    if (S.proYear === 1 && hype >= 3) {
-      const bestRookie = Math.max(...Array.from({ length: 4 }, () => rand(1.5, 4.2)));
+    /* 경쟁 강도 — 수상 문턱과 라이벌 분포에 함께 곱해요. K리그1은 1이라 항등이에요.
+     * 셋(신인왕·리그MVP·베스트11)이 같은 bar를 써야 상끼리 앞뒤가 맞아요.
+     * 하나만 고치면 "베스트11은 못 받는데 MVP는 받는" 역전이 납니다. */
+    const bar = barOf(S);
+    if (S.proYear === 1 && hype >= 3 * bar) {
+      const bestRookie = Math.max(...Array.from({ length: 4 }, () => rand(1.5 * bar, 4.2 * bar)));
       if (hype >= bestRookie) { awards.push("신인왕"); S.career.rookie += 1; }
     }
-    const leagueBest = Math.max(...Array.from({ length: 6 }, () => rand(3.5, 7.8)));
-    if (hype >= 5.5 && hype >= leagueBest) {
+    const leagueBest = Math.max(...Array.from({ length: 6 }, () => rand(3.5 * bar, 7.8 * bar)));
+    if (hype >= 5.5 * bar && hype >= leagueBest) {
       awards.push("리그MVP");
       /* 리그격만큼 가중해서 따로 쌓아요. 빅클럽에서 받은 상이 더 값어치를 갖습니다.
        * 안 그러면 안전하게 1부에 머문 커리어가 명예의 전당에서 앞서요.
@@ -450,8 +454,8 @@ window.WingerCareer = (() => {
     /* 베스트11은(는) 리그MVP과(와) 별개로 판정해요.
      * 예전에는 else if라서 리그MVP을(를) 받으면 베스트11을(를) 아예 못 받았어요.
      * 가장 잘한 시즌이 오히려 상을 덜 받는 역전이 났습니다. */
-    if (hype >= 4.5) {
-      const posBar = rand(4.2, 6.2);
+    if (hype >= 4.5 * bar) {
+      const posBar = rand(4.2 * bar, 6.2 * bar);
       // 베스트11도 같은 방식으로 리그격만큼 가중해요 (바로 위 리그MVP 주석 참고).
       if (hype >= posBar) { awards.push("베스트11"); S.career.bonsangW = (S.career.bonsangW != null ? S.career.bonsangW : S.career.bonsang) + leagueOf(S).prestige; S.career.bonsang += 1; }
     }
@@ -1130,7 +1134,7 @@ window.WingerCareer = (() => {
     moveToClub,
     _t: {
       ratingOf, FAN_CAP, RATING_DIV, POS_AXIS, posAxis, AXIS_K, AXIS_OFF,
-      LEAGUES, leagueOf, CLUBS, clubStrOf, debutClubs, DEBUT_POOL, weakestClub,
+      LEAGUES, leagueOf, barOf, CLUBS, clubStrOf, debutClubs, DEBUT_POOL, weakestClub,
       TRANSFER_MIN_YEAR, PROMOTE_HYPE, OFFERS_PER_LEAGUE, transferFee, transferOffers, canTransfer,
       DOWNGRADE_FEE, LOYALTY_FEE, leftBefore, moveLog, careerScore,
       state: () => S,

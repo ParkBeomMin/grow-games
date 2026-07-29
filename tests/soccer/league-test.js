@@ -65,6 +65,8 @@ if (missing.length) { console.log(`❌ 산식을 못 찾았어요: ${missing.joi
 const leagueParts = {
   LEAGUES: grab(GAME, /const LEAGUES = \[[\s\S]*?\n\];/),
   leagueOf: grab(GAME, /function leagueOf\(st\) \{[\s\S]*?\n\}/),
+  // barOf — 수상 판정이 리그의 경쟁 강도(bar)를 이걸로 읽어요
+  barOf: grab(GAME, /function barOf\(st\) \{[\s\S]*?\n\}/),
 };
 const leagueSrc = Object.values(leagueParts).filter(Boolean).join("\n");
 const leagueMissing = Object.entries(leagueParts).filter(([, v]) => !v).map(([k]) => k);
@@ -74,19 +76,30 @@ const axisSrc = [parts.posAxisTable, parts.axisK, parts.axisOff, parts.posAxis].
 check(leagueMissing.length === 0,
   leagueMissing.length
     ? `${leagueMissing.join(" · ")} is not defined — game.js에 리그가 없어요`
-    : "LEAGUES · leagueOf가 game.js에 있다");
+    : "LEAGUES · leagueOf · barOf가 game.js에 있다");
 
-/* 설계 문서(docs/superpowers/specs/2026-07-29-soccer-transfer.md)의 리그 표예요.
+/* 설계 문서(docs/superpowers/specs/2026-07-29-soccer-lower-leagues.md)의 리그 표예요.
  * 여기만 소스에서 뽑지 않고 손으로 적어요 — "소스가 문서와 같은가"를 보는 검사라
- * 소스에서 뽑아 오면 자기 자신과 비교하는 꼴이 돼요. 두 값 다 시뮬레이션으로 잡은
- * 측정값이라, 소스를 고쳤으면 문서와 이 표를 같이 고쳐야 해요. */
+ * 소스에서 뽑아 오면 자기 자신과 비교하는 꼴이 돼요. 세 값 다 시뮬레이션으로 잡은
+ * 측정값이라, 소스를 고쳤으면 문서와 이 표를 같이 고쳐야 해요.
+ *
+ * tier가 순서고 id는 옛 세이브가 가리키는 값이에요. 하부 리그(tier 1·2)가 나중에
+ * 붙으면서 id 4·5를 새로 받았어요 — 사다리는 tests/soccer/ladder-test.js가 봐요. */
 const SPEC = [
-  { id: 1, penalty: 0, prestige: 1.00 },
-  { id: 2, penalty: 1.6, prestige: 1.35 },
-  { id: 3, penalty: 2.8, prestige: 1.80 },
+  { id: 5, tier: 1, penalty: 0, prestige: 0.55, bar: 0.50 },
+  { id: 4, tier: 2, penalty: 0, prestige: 0.85, bar: 0.75 },
+  { id: 1, tier: 3, penalty: 0, prestige: 1.00, bar: 1.00 },
+  { id: 2, tier: 4, penalty: 1.6, prestige: 1.75, bar: 1.12 },
+  { id: 3, tier: 5, penalty: 2.8, prestige: 2.40, bar: 1.30 },
 ];
+/* ④⑤⑦은 원래 리그 셋(K리그1 · 유로파 · 챔피언스)을 봐요. 이 파일이 지키는 건
+ * '위로 갈수록 평점이 깎이고 수상 가치가 커지는가'라, 하부 리그가 붙어도 그대로예요. */
+const UP = SPEC.filter((s) => s.id <= 3).sort((a, b) => a.tier - b.tier);
 
 const table = leagueParts.LEAGUES ? new Function(`${leagueParts.LEAGUES} return LEAGUES;`)() : null;
+// 화면 문구는 소스의 리그 이름을 그대로 써요 — 여기 옮겨 적으면 이름이 바뀌어도 안 들켜요
+const NAME = (id) => { const l = (table || []).find((x) => x && x.id === id); return l ? l.name : `id ${id}`; };
+const PRESTIGE = (id) => { const l = (table || []).find((x) => x && x.id === id); return l ? l.prestige : 1; };
 const leagueOfFn = leagueSrc && leagueParts.leagueOf
   ? new Function("st", `${leagueSrc} return leagueOf(st);`)
   : null;
@@ -98,10 +111,11 @@ if (!table) {
   let valOk = true;
   const shown = SPEC.map((want) => {
     const got = table.find((l) => l && l.id === want.id);
-    if (!got || Math.abs(got.penalty - want.penalty) > 1e-9 || Math.abs(got.prestige - want.prestige) > 1e-9) valOk = false;
-    return got ? `${want.id}부 -${got.penalty}·×${got.prestige}` : `${want.id}부 없음`;
+    if (!got || got.tier !== want.tier || Math.abs(got.penalty - want.penalty) > 1e-9
+      || Math.abs(got.prestige - want.prestige) > 1e-9 || Math.abs(got.bar - want.bar) > 1e-9) valOk = false;
+    return got ? `${got.name} -${got.penalty}·×${got.prestige}·bar ${got.bar}` : `id ${want.id} 없음`;
   }).join(" · ");
-  check(valOk, `penalty가 0 / 1.6 / 2.8이고 prestige가 1.00 / 1.35 / 1.80이다 (${shown})`);
+  check(valOk, `리그마다 tier · penalty · prestige · bar가 설계 문서와 같다 (${shown})`);
   // 이름·약칭·깃발은 화면에 그대로 찍혀요. 하나라도 비면 이적 목록이 깨져요.
   check(table.every((l) => l && l.name && l.short && l.flag),
     "리그마다 name · short · flag가 있다 (이적 화면에 그대로 찍혀요)");
@@ -116,7 +130,7 @@ guard("기본 리그", () => {
 // ③ 지정한 리그를 주고, 깨진 값은 1부로 막는다
 guard("리그 조회", () => {
   const got = SPEC.map((s) => leagueOfFn({ league: s.id }).id);
-  check(got.every((id, i) => id === SPEC[i].id), `leagueOf({league:1|2|3})가 각각 1·2·3부다 (${got.join("·")})`);
+  check(got.every((id, i) => id === SPEC[i].id), `leagueOf가 id를 그대로 돌려준다 (${got.join("·")})`);
   const broken = [99, 0, -1, "3", null].map((v) => leagueOfFn({ league: v }).id);
   check(broken.every((id) => id === 1 || id === 3),
     `깨진 league 값이 던지지 않는다 (${broken.join("·")})`);
@@ -145,11 +159,11 @@ const meanRating = (stat, league, n = 4000) => {
 
 // ④ 평점 페널티가 실제로 작용한다 — 상위 리그에서는 같은 능력치로 같은 평점이 안 나와요
 guard("평점 페널티", () => {
-  const m = SPEC.map((s) => meanRating(110, s.id));
+  const m = UP.map((s) => meanRating(110, s.id));
   console.log(`=== ④ 능력치 110 공격수의 평균 평점 (리그별 4000경기) ===`);
-  console.log(`  ${m.map((v, i) => `${i + 1}부 ${v.toFixed(2)}`).join(" · ")}`);
-  check(m[0] - m[2] >= 2.5, `3부 평균 평점이 1부보다 2.5 이상 낮다 (${m[0].toFixed(2)} → ${m[2].toFixed(2)}, 차이 ${(m[0] - m[2]).toFixed(2)})`);
-  check(m[0] > m[1] && m[1] > m[2], `평점이 1부 > 2부 > 3부다 (${m.map((v) => v.toFixed(2)).join(" > ")})`);
+  console.log(`  ${m.map((v, i) => `${NAME(UP[i].id)} ${v.toFixed(2)}`).join(" · ")}`);
+  check(m[0] - m[2] >= 2.5, `${NAME(3)} 평균 평점이 ${NAME(1)}보다 2.5 이상 낮다 (${m[0].toFixed(2)} → ${m[2].toFixed(2)}, 차이 ${(m[0] - m[2]).toFixed(2)})`);
+  check(m[0] > m[1] && m[1] > m[2], `평점이 ${NAME(1)} > ${NAME(2)} > ${NAME(3)}다 (${m.map((v) => v.toFixed(2)).join(" > ")})`);
 });
 
 // 연말 평가(hype) — 축 → 리그격 → 로그. act와 S를 받아 그대로 돌려요.
@@ -164,11 +178,11 @@ const hypeFn = new Function("S", "act", "clamp", `
 // ⑤ 리그격이 hype에 작용한다 — 같은 성적이라도 위 리그에서 낸 게 더 값어치가 있어요
 guard("리그격", () => {
   const act = { goals: 18, assists: 10, defense: 12 };
-  const h = SPEC.map((s) => hypeFn(stateOf("fw", 110, s.id), act, clamp));
+  const h = UP.map((s) => hypeFn(stateOf("fw", 110, s.id), act, clamp));
   console.log(`=== ⑤ 같은 시즌 기록(⚽18 · 🅰️10 · 🛡️12)의 리그별 hype ===`);
-  console.log(`  ${h.map((v, i) => `${i + 1}부 ${v.toFixed(2)}`).join(" · ")}`);
-  check(h[2] > h[0] + 0.2, `3부 hype가 1부보다 높다 (${h[0].toFixed(2)} → ${h[2].toFixed(2)})`);
-  check(h[0] < h[1] && h[1] < h[2], `hype가 1부 < 2부 < 3부다 (${h.map((v) => v.toFixed(2)).join(" < ")})`);
+  console.log(`  ${h.map((v, i) => `${NAME(UP[i].id)} ${v.toFixed(2)}`).join(" · ")}`);
+  check(h[2] > h[0] + 0.2, `${NAME(3)} hype가 ${NAME(1)}보다 높다 (${h[0].toFixed(2)} → ${h[2].toFixed(2)})`);
+  check(h[0] < h[1] && h[1] < h[2], `hype가 ${NAME(1)} < ${NAME(2)} < ${NAME(3)}다 (${h.map((v) => v.toFixed(2)).join(" < ")})`);
 });
 
 /* ⑥ 1부에서는 아무것도 안 바뀐다 — penalty 0 · prestige 1이라 항등이어야 해요.
@@ -278,27 +292,35 @@ guard("도박 구조", () => {
   const STATS = [70, 90, 110, 130, 150];
   const t0 = Date.now();
   const grid = {};
-  for (const stat of STATS) grid[stat] = SPEC.map((s) => mvpRate(stat, s.id));
-  console.log(`=== ⑦ 5년차 공격수 리그MVP 확률 (칸당 ${N}시즌) ===`);
-  console.log("  능력치 |    1부 |    2부 |    3부 | 최선");
+  for (const stat of STATS) grid[stat] = UP.map((s) => mvpRate(stat, s.id));
+  console.log(`=== ⑦ 5년차 공격수 리그MVP 확률과 가치 (칸당 ${N}시즌) ===`);
+  console.log(`  능력치 | ${UP.map((s) => NAME(s.id).padStart(12)).join(" | ")} | 가치가 최선인 곳`);
   for (const stat of STATS) {
     const row = grid[stat];
-    const best = row.indexOf(Math.max(...row)) + 1;
-    console.log(`  ${String(stat).padStart(6)} | ${row.map((v) => pct(v).padStart(6)).join(" | ")} | ${best}부`);
+    const val = row.map((v, i) => v * PRESTIGE(UP[i].id));
+    const best = val.indexOf(Math.max(...val));
+    console.log(`  ${String(stat).padStart(6)} | ${row.map((v, i) => `${pct(v)} ×${val[i].toFixed(2)}`.padStart(12)).join(" | ")} | ${NAME(UP[best].id)}`);
   }
   console.log(`  ⏱ ${((Date.now() - t0) / 1000).toFixed(1)}초`);
 
-  /* 약할 때 올라가면 손해다 — 능력치 70·90에서는 1부가 3부 이상이어야 해요.
-   * 설계 문서의 측정값은 70에서 1%/0%, 90에서 14%/11%예요. */
+  /* 약할 때 올라가면 손해다 — 능력치 70·90에서는 K리그1이 챔피언스리그 이상이어야 해요. */
   check(grid[90][0] >= grid[90][2],
-    `능력치 90: 1부 리그MVP 확률이 3부 이상이다 (1부 ${pct(grid[90][0])} ≥ 3부 ${pct(grid[90][2])})`);
+    `능력치 90: ${NAME(1)} 리그MVP 확률이 ${NAME(3)} 이상이다 (${pct(grid[90][0])} ≥ ${pct(grid[90][2])})`);
   check(grid[70][0] >= grid[70][2],
-    `능력치 70: 1부 리그MVP 확률이 3부 이상이다 (1부 ${pct(grid[70][0])} ≥ 3부 ${pct(grid[70][2])})`);
-  /* 강해지면 올라가는 게 이득이다 — 능력치 130에서는 3부가 1부를 확실히 넘어야 해요.
-   * 여유(5%p)를 두는 건 리그가 아예 없어도 난수로 한쪽이 이겨서 초록이 뜰 수 있기
-   * 때문이에요. 설계 문서의 측정값은 86% → 99%로 13%p 차이예요. */
-  check(grid[130][2] > grid[130][0] + 0.05,
-    `능력치 130: 3부 리그MVP 확률이 1부보다 5%p 넘게 높다 (3부 ${pct(grid[130][2])} > 1부 ${pct(grid[130][0])})`);
+    `능력치 70: ${NAME(1)} 리그MVP 확률이 ${NAME(3)} 이상이다 (${pct(grid[70][0])} ≥ ${pct(grid[70][2])})`);
+  /* 강해지면 올라가는 게 이득이다 — 능력치 150에서는 챔피언스리그가 확실히 나아야 해요.
+   *
+   * 여기는 '확률'이 아니라 '확률 × prestige'로 본다. 경쟁 강도(bar)가 들어오면서
+   * 상위 리그는 확률로는 절대 K리그1을 못 이기게 됐다 — K리그1은 능력치 150이면
+   * 이미 96%라 천장이고, 위 리그는 문턱과 라이벌이 bar만큼 세다. 확률로 재면
+   * "위로 갈수록 손해"라는 잘못된 결론이 나온다. 플레이어가 실제로 저울질하는 값은
+   * 명예의 전당에 쌓이는 가치이고, 사다리 전체는 tests/soccer/ladder-test.js가 본다. */
+  const v150 = grid[150].map((v, i) => v * PRESTIGE(UP[i].id));
+  check(v150[2] > v150[0] * 1.1,
+    `능력치 150: ${NAME(3)}의 수상 가치가 ${NAME(1)}보다 10% 넘게 높다 (${v150[2].toFixed(2)} > ${v150[0].toFixed(2)})`);
+  const v70 = grid[70].map((v, i) => v * PRESTIGE(UP[i].id));
+  check(v70[0] > v70[2],
+    `능력치 70: 반대로 ${NAME(1)}의 수상 가치가 ${NAME(3)}보다 높다 (${v70[0].toFixed(2)} > ${v70[2].toFixed(2)})`);
 });
 
 console.log(fail ? `\n❌ ${fail}건 실패` : "\n✅ 통과");

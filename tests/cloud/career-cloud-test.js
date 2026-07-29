@@ -53,6 +53,7 @@ function scopeOf(store) {
 const GAME_GLOBALS = [
   /const LEAGUES = \[[\s\S]*?\n\];/,
   /function leagueOf\([\s\S]*?\n\}/,
+  /function barOf\([\s\S]*?\n\}/,
   /const CLUBS = \{[\s\S]*?\n\};/,
   /function clubStrOf\([\s\S]*?\n\}/,
 ];

@@ -67,6 +67,8 @@ const axisSrc = [parts.posAxisTable, parts.axisK, parts.axisOff, parts.posAxis].
 const leagueSrc = [
   grab(GAME, /const LEAGUES = \[[\s\S]*?\n\];/),
   grab(GAME, /function leagueOf\(st\) \{[\s\S]*?\n\}/),
+  // barOf — 수상 판정이 리그의 경쟁 강도(bar)를 이걸로 읽어요
+  grab(GAME, /function barOf\(st\) \{[\s\S]*?\n\}/),
 ].filter(Boolean).join("\n");
 const POS_INFO = new Function(`${parts.posInfo} return POS_INFO;`)();
 
