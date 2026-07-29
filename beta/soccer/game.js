@@ -938,8 +938,14 @@ function poissonish(lam) {
 // rating(평점 0~10대) → 이번 경기 골·도움·수비 (포지션별 가중)
 function matchContribution(rating) {
   const perf = clamp((rating - 5) / 4 + 0.6, 0.15, 1.6);
-  const shootF = (S.stats.shoot || 40) / 100;
-  const passF = (S.stats.pass || 40) / 100;
+  /* 윙어는 돌파로 기회를 만들어요. 골·도움 판정에 드리블이 함께 작용합니다.
+   * 예전에는 드리블이 어디에도 안 들어가서, 윙어만 자기 주 스탯에 투자할수록
+   * 성적이 나빠졌어요 (도달 가능 범위에서 재보니 85% → 32%). */
+  const isWg = S.pos === "wg";
+  const gStat = isWg ? (S.stats.shoot || 40) * 0.6 + (S.stats.dribble || 40) * 0.4 : (S.stats.shoot || 40);
+  const aStat = isWg ? (S.stats.pass || 40) * 0.6 + (S.stats.dribble || 40) * 0.4 : (S.stats.pass || 40);
+  const shootF = gStat / 100;
+  const passF = aStat / 100;
   const defF = (S.stats.defense || 40) / 100;
   const G = { fw: 1.05, wg: 0.75, mf: 0.5, df: 0.14 };
   const A = { mf: 0.95, wg: 0.85, fw: 0.55, df: 0.28 };
