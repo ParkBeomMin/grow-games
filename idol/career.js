@@ -59,7 +59,7 @@ window.IdolCareer = (() => {
     S.group = pick(GROUP_NAMES);
     S.center = !!center;
     S.proYear = 0;
-    S.career = { years: [], wins: 0, daesang: 0, bonsang: 0, rookie: 0, sales: 0 };
+    S.career = { years: [], wins: 0, daesang: 0, bonsang: 0, rookie: 0, sales: 0, tours: 0 };
     S.proLog = [];
     if (window.Stats) Stats.log("debut", { group: S.group, center: !!center });
     startPrep();
@@ -76,6 +76,7 @@ window.IdolCareer = (() => {
     S.condition = 80;
     S.activity = null;
     S.pendingShow = false;
+    S.yearConcepts = [];   // 올해 고른 컨셉 기록 — 연말 결산에서 비워요
     proLog(`💿 ${S.proYear}년차 활동 시작! 첫 컴백을 준비해요.`);
     save();
     renderPrep();
@@ -88,14 +89,24 @@ window.IdolCareer = (() => {
   const RIVAL_GROUPS = ["네온시티", "스텔라즈", "허니문", "그라비티", "민트초코", "새벽달", "아이리스", "폭스클럽"];
 
   function rollRivals() {
-    return RIVAL_GROUPS.map((name) => ({ name, pop: rand(52, 88) }));
+    // 해마다 3%씩 강해져요. 멈춰 있으면 밀리지만, 성실히 키우면 계속 앞서요.
+    // 이 성장률이 실제로 먹히는 건 주간 점수의 팬덤 항에 상한이 걸려 있기 때문이에요.
+    // 상한이 없던 시절엔 팬덤이 혼자 불어나서, 훈련을 아예 멈춘 플레이어조차
+    // 해마다 라이벌을 더 크게 따돌렸어요 (성장의 부호가 뒤집혀 있었어요).
+    // 값을 바꿀 땐 tests/idol/weekly-test.js의 승률 표로 확인하세요.
+    // 지금 3%는 그 표(중위권은 후반에 좁혀지고, 잘 키운 아이돌은 계속 강함)에
+    // 맞춘 값이에요 — 올릴수록 중위권이 더 빨리 무너집니다.
+    const grow = 1 + Math.max(0, (S.proYear || 1) - 1) * 0.03;
+    return RIVAL_GROUPS.map((name) => ({ name, pop: rand(52, 88) * grow }));
   }
 
   function initActivity() {
+    const tr = rollTrend();
     S.activity = {
       cb: 1, cbTotal: CB_PER_YEAR,
       week: 0, weekTotal: WEEKS_PER_CB,
       wins: 0, sales: 0, hypeSum: 0, cbHype: 0, cbWins: 0,
+      concept: null, hot: tr.hot, cold: tr.cold, rumor: tr.rumor,
       rivals: rollRivals(),
     };
   }
@@ -105,11 +116,16 @@ window.IdolCareer = (() => {
     if (S.camp > 0) { renderPrep(); return; }
     if (!S.activity) initActivity();
     else if (S.activity.week >= S.activity.weekTotal) {
-      // 다음 컴백 시작
+      // 다음 컴백 시작 — 컨셉을 다시 고르고 유행도 새로 굴려요
+      const tr = rollTrend();
       S.activity.cb += 1;
       S.activity.week = 0;
       S.activity.cbHype = 0;
       S.activity.cbWins = 0;
+      S.activity.concept = null;
+      S.activity.hot = tr.hot;
+      S.activity.cold = tr.cold;
+      S.activity.rumor = tr.rumor;
       S.activity.rivals = rollRivals();
     }
     S.pendingShow = true;
@@ -127,6 +143,7 @@ window.IdolCareer = (() => {
     $("pro-money").textContent = `💰 ${fmtMoney(S.money || 0)}`;
   $("pro-cond-num").textContent = Math.round(S.condition);
     $("pro-cond-bar").style.width = `${S.condition}%`;
+    renderStandings();
 
     const stats = $("pro-stats");
     stats.innerHTML = "";
@@ -196,7 +213,11 @@ window.IdolCareer = (() => {
       go.innerHTML = S.activity.week === 0
         ? `<span class="a-emoji">💿</span>${S.activity.cb}차 컴백 시작<span class="a-sub">티저 · 뮤비 공개 → 첫 무대</span>`
         : `<span class="a-emoji">🎤</span>음방 무대<span class="a-sub">W${S.activity.week + 1}/${S.activity.weekTotal} 주간 차트 경쟁</span>`;
-      go.onclick = playShow;
+      // 컨셉을 아직 안 골랐으면 무대 대신 컨셉 선택 화면으로 보내요. 이 한 줄이 게이트 전부예요.
+      go.onclick = () => {
+        if (!S.activity.concept) { renderConcept(); show("screen-concept"); return; }
+        playShow();
+      };
       box.appendChild(go);
     }
 
@@ -245,11 +266,219 @@ window.IdolCareer = (() => {
       <tbody>${rows.map((r, i) => `<tr class="${r.me ? "me" : ""}"><td>${i + 1}</td><td>${r.name}</td><td>${Math.round(r.score)}</td></tr>`).join("")}</tbody></table>`;
   }
 
+  /* ---------- 🏆 올해의 그룹 순위 ----------
+   * 음방 1위 횟수와 팬덤을 한 표에 모아, 라이벌들 사이에서 우리가 어디쯤인지 보여줘요.
+   * 한 해 단위로 쌓고 새 연차가 시작되면 리셋해요 (연차 활동 → 연말 결산 흐름 그대로).
+   * 컴백마다 라이벌을 새로 뽑아도 그룹 이름으로 이어 붙여서 기록은 안 끊겨요.
+   *
+   * ⚠️ 라이벌 팬덤은 '표시 전용'이에요. 절대 pop이나 주간 점수로 되돌아가면 안 돼요.
+   * 주간 점수의 팬덤 항에는 상한(FANDOM_CAP)이 걸려 있고, 라이벌 성장은 오직
+   * rollRivals()의 3%만으로 굴러가요. 여기서 되먹임이 하나라도 생기면 오래 걸린
+   * 주간 밸런스가 통째로 무너져요. 읽는 방향은 pop → 시작 팬덤 한 번뿐이에요. */
+  const RIVAL_FAN_SEED = 3.6;
+  function seedFandom(pop) {
+    // 그 정도 인기로 데뷔부터 지금까지 쌓았을 법한 팬덤을 어림잡아요.
+    // 안 그러면 10년차 플레이어(팬덤 수천) 옆에 0부터 시작한 라이벌이 서서
+    // 표가 아무 의미도 없어져요.
+    return Math.max(0, Math.round(pop * RIVAL_FAN_SEED * (S.proYear || 1)));
+  }
+
+  // 진행 중인 캐릭터는 S.standings가 없어요 — 없으면 지금 연차로 새로 열어줘요.
+  function ensureStandings() {
+    const yr = S.proYear || 1;
+    if (!S.standings || S.standings.year !== yr) S.standings = { year: yr, groups: {} };
+    const gs = S.standings.groups;
+    for (const r of (S.activity && S.activity.rivals) || []) {
+      if (!gs[r.name]) gs[r.name] = { wins: 0, fandom: seedFandom(r.pop) };
+    }
+    return gs;
+  }
+
+  /* 주간 차트 결과를 그해 기록에 반영해요.
+   * 라이벌 팬덤은 '차트에서 거둔 성적'으로만 자라요 — 증감 폭은 플레이어와 같은 표예요.
+   * 내 기록은 여기 담지 않아요. 표를 그릴 때 S.fandom과 S.activity.wins를 그대로
+   * 읽어 쓰니까, 따로 복사해두고 어긋날 일이 없어요. */
+  function recordWeek(rows) {
+    const gs = ensureStandings();
+    rows.forEach((r, i) => {
+      if (r.me) return;
+      const g = gs[r.name];
+      if (!g) return;
+      const rk = i + 1;
+      if (rk === 1) g.wins += 1;
+      g.fandom = Math.max(0, g.fandom + (rk === 1 ? randInt(10, 18) : rk <= 3 ? randInt(4, 9) : randInt(-3, 3)));
+    });
+  }
+
+  // 내 줄의 1위 횟수는 부르는 쪽이 넘겨줘요 (활동 중이면 act.wins, 결산이면 그해 기록).
+  function standingsRows(myWins) {
+    const gs = (S.standings && S.standings.groups) || {};
+    return [
+      { name: S.group, wins: myWins || 0, fandom: Math.round(S.fandom || 0), me: true },
+      ...Object.entries(gs).map(([name, g]) => ({ name, wins: g.wins || 0, fandom: Math.round(g.fandom || 0) })),
+    ].sort((a, b) => b.wins - a.wins || b.fandom - a.fandom);
+  }
+
+  function standingsHTML(myWins) {
+    const rows = standingsRows(myWins);
+    return `<table class="rank-table season-standings"><thead><tr><th>#</th><th>그룹</th><th>🏆 음방 1위</th><th>💖 팬덤</th></tr></thead>
+      <tbody>${rows.map((r, i) => `<tr class="${r.me ? "me" : ""}"><td>${i + 1}</td><td>${r.name}${r.me ? " (우리)" : ""}</td><td>${r.wins}회</td><td>${r.fandom}</td></tr>`).join("")}</tbody></table>`;
+  }
+
+  // 📊 커리어 화면의 접이식 순위표. 활동 중이 아니면 숨겨요.
+  function renderStandings() {
+    const box = $("pro-standings");
+    if (!box) return;
+    if (!S.activity) { box.hidden = true; return; }
+    ensureStandings();
+    const myWins = S.activity.wins || 0;
+    const rank = standingsRows(myWins).findIndex((r) => r.me) + 1;
+    box.hidden = false;
+    $("pro-standings-sum").textContent =
+      `🏆 올해 그룹 순위 ${rank}위 · 음방 1위 ${myWins}회 · 💖 팬덤 ${Math.round(S.fandom || 0)}`;
+    $("pro-standings-body").innerHTML = standingsHTML(myWins);
+  }
+
+  /* 컴백 컨셉 — 같은 능력치라도 어느 컨셉으로 나가느냐가 초동을 가릅니다.
+   * 가중치는 스펙(docs/superpowers/specs/2026-07-28-comeback-concept-design.md)이 정본이에요.
+   * v는 편차예요. 강렬이 가장 크고(±28%) 청량이 가장 작아요(±10%). */
+  const CONCEPTS = [
+    { id: "cool",   emoji: "💧", name: "청량",   desc: "댄스 중심 · 안정적",
+      w: { dance: 1.0, charm: 0.5, vocal: 0.2, rap: 0.1 }, v: 0.10 },
+    { id: "fierce", emoji: "🔥", name: "강렬",   desc: "랩·댄스 중심 · 편차가 커요",
+      w: { rap: 0.8, dance: 0.7, charm: 0.4, vocal: 0.1 }, v: 0.28 },
+    { id: "emo",    emoji: "🌙", name: "감성",   desc: "보컬 중심",
+      w: { vocal: 1.1, charm: 0.5, dance: 0.2, rap: 0.0 }, v: 0.12 },
+    { id: "teen",   emoji: "✨", name: "하이틴", desc: "매력 중심",
+      w: { charm: 1.1, dance: 0.5, vocal: 0.3, rap: 0.1 }, v: 0.18 },
+  ];
+  const SALES_K = 0.72;    // 시뮬레이션으로 잡은 값 — 곡선이 여기 걸려 있어요
+  const TREND_HOT = 1.18;
+  const TREND_COLD = 0.85;
+
+  // 옛 세이브에는 concept이 없어요. 편차가 가장 작은 청량을 기본으로 둡니다.
+  function conceptOf(act) {
+    return CONCEPTS.find((c) => c.id === (act && act.concept)) || CONCEPTS[0];
+  }
+
+  // 같은 컨셉이 유행이자 식상으로 뽑히면 상쇄돼요 (배수 없음)
+  function trendMul(concept, act) {
+    if (!act || !act.hot || act.hot === act.cold) return 1;
+    if (concept.id === act.hot) return TREND_HOT;
+    if (concept.id === act.cold) return TREND_COLD;
+    return 1;
+  }
+
+  // 편차와 유행 배수를 뺀 기댓값 — 컨셉 선택 화면에 보여줄 숫자예요
+  function expectedSales(stats, concept, fandom, cbWins) {
+    let base = 0;
+    for (const k in concept.w) base += (stats[k] || 0) * concept.w[k];
+    return Math.max(1, Math.round(base * SALES_K + (fandom || 0) * 0.05 + (cbWins || 0) * 4));
+  }
+
+  /* 컴백마다 유행 하나, 식상 하나를 굴려요. 같은 게 뽑히면 상쇄돼서 배수가 안 붙어요.
+   * rumor는 고르기 전에 보여줄 후보 2종이에요. 진짜 유행이 반드시 들어 있어서
+   * 플레이어는 반반 확률에 걸지 말지를 판단하게 돼요.
+   * 전부 공개하면 정답이 확정돼 고민이 사라지고, 전부 감추면 유행이 순수 운이 됩니다. */
+  function rollTrend() {
+    const hot = CONCEPTS[randInt(0, CONCEPTS.length - 1)].id;
+    const cold = CONCEPTS[randInt(0, CONCEPTS.length - 1)].id;
+    let other;
+    do { other = CONCEPTS[randInt(0, CONCEPTS.length - 1)].id; } while (other === hot);
+    // 진짜 유행이 항상 앞에 오면 첫 칸만 보고 답을 알아요. 순서를 섞습니다.
+    const rumor = Math.random() < 0.5 ? [hot, other] : [other, hot];
+    return { hot, cold, rumor };
+  }
+
+  /* 컴백 시작 전 컨셉 고르기 — 소문 2종만 보여줘요.
+   * 확정 유행(act.hot)은 여기서 절대 읽지 않아요. 고른 뒤에 공개됩니다.
+   * 예상 판매량에도 유행 배수를 얹지 않아요. 아직 확정이 아니니까요.
+   * 여기서 확정 유행이 새어 나가면 정답이 확정돼서 고민이 사라져요 — 이 설계의 전부예요. */
+  function renderConcept() {
+    const act = S.activity;
+    const rumor = act.rumor || [];
+    const names = rumor
+      .map((id) => CONCEPTS.find((c) => c.id === id))
+      .filter(Boolean)
+      .map((c) => `${c.emoji} ${c.name}`);
+    $("concept-title").textContent = `🎬 ${S.proYear}년차 ${act.cb}차 컴백 — 컨셉 정하기`;
+    $("concept-rumor-line").innerHTML = names.length === 2
+      ? `🗣 업계 소문: 이번 시즌은 <b>${names[0]}</b> 아니면 <b>${names[1]}</b> 이 온대요`
+      : `🗣 이번 시즌은 소문이 잠잠해요`;
+
+    $("concept-list").innerHTML = CONCEPTS.map((c) => {
+      const est = expectedSales(S.stats, c, S.fandom, act.cbWins);
+      const isRumor = rumor.includes(c.id);
+      return `<button class="concept-card ${isRumor ? "concept-rumor" : ""}" data-cid="${c.id}">
+        <span class="c-emoji">${c.emoji}</span>
+        <span><span class="c-name">${c.name}${isRumor ? `<span class="concept-badge">🗣 소문</span>` : ""}</span><br><span class="c-desc">${c.desc}</span></span>
+        <span class="c-sales">~ ${est}만 장</span>
+      </button>`;
+    }).join("");
+
+    $("concept-list").querySelectorAll(".concept-card").forEach((el) => {
+      el.onclick = () => {
+        S.activity.concept = el.dataset.cid;
+        save();
+        // 고른 뒤에야 확정 유행을 공개해요. 무대는 공개 화면의 시즌 시작 버튼에서 열려요.
+        renderReveal();
+        show("screen-reveal");
+      };
+    });
+  }
+
+  /* 컨셉을 고른 뒤 확정 유행을 공개해요. 여기서 처음으로 유행·식상을 보여줍니다.
+   * 배수는 trendMul이 정본이에요 — 화면에서 다시 계산하지 않아요.
+   * 표기 퍼센트도 trendMul이 준 배수에서 뽑아요. 값을 손으로 적어두면
+   * TREND_HOT/TREND_COLD를 바꿨을 때 화면만 옛 숫자로 남아요.
+   *
+   * "유행이 없었어요" 판정도 trendMul에서 뽑아요. act.hot/act.cold를 직접 읽어
+   * 따로 판정하던 시절엔 두 식이 갈라졌어요 — CONCEPTS에 없는 id를 든 세이브
+   * (hot: "retro", cold: "cool")로 청량을 고르면 "유행이 없었어요"라고 써놓고
+   * 바로 아래에서 -15%를 띄웠거든요. 배수를 받는 컨셉이 있으면 유행이 있는 거예요. */
+  function renderReveal() {
+    const act = S.activity;
+    const c = conceptOf(act);
+    const hot = CONCEPTS.find((x) => trendMul(x, act) > 1);
+    const cold = CONCEPTS.find((x) => trendMul(x, act) < 1);
+    const mul = trendMul(c, act);
+    const pct = Math.round((mul - 1) * 100);
+
+    $("reveal-title").textContent = `${c.emoji} ${c.name} 컨셉으로 컴백!`;
+    const lines = [];
+    if (hot) lines.push(`<span>🔥 유행 <b>${hot.emoji} ${hot.name}</b></span>`);
+    if (cold) lines.push(`<span>❄️ 식상 <b>${cold.emoji} ${cold.name}</b></span>`);
+    $("reveal-trend").innerHTML = lines.length
+      ? lines.join("\n         ")
+      : `<span>이번 시즌은 뚜렷한 유행이 없었어요</span>`;
+
+    const box = $("reveal-effect");
+    if (mul > 1) {
+      box.className = "reveal-hit";
+      box.innerHTML = `<div class="r-head">🔥 트렌드 적중!</div>
+        <div class="r-sub">이번 컴백 초동 판매량 <b>+${pct}%</b></div>`;
+    } else if (mul < 1) {
+      box.className = "reveal-miss";
+      box.innerHTML = `<div class="r-head">❄️ 한물간 컨셉…</div>
+        <div class="r-sub">이번 컴백 초동 판매량 <b>${pct}%</b></div>`;
+    } else {
+      box.className = "reveal-flat";
+      box.innerHTML = `<div class="r-head">🎬 무난한 시즌이에요</div>
+        <div class="r-sub">유행을 타지도, 밀리지도 않아요</div>`;
+    }
+  }
+
   function playShow() {
     const act = S.activity;
     const firstWeek = act.week === 0;
     $("stage-title").textContent = `💿 ${S.proYear}년차 ${act.cb}차 컴백 — ${S.group}`;
-    $("stage-round").textContent = `W${act.week + 1}/${act.weekTotal} 음악방송`;
+    /* 컴백 내내 무대 상단에 고른 컨셉과 유행 버프를 남겨요. 배수는 trendMul이 정본이라
+     * 화면에서 다시 계산하지 않고, 퍼센트도 trendMul이 준 배수에서 뽑아요 (renderReveal과 동일한 방식). */
+    const c = conceptOf(act);
+    const mul = trendMul(c, act);
+    const pct = Math.round((mul - 1) * 100);
+    const buff = mul > 1 ? ` · 🔥 +${pct}%` : mul < 1 ? ` · ❄️ ${pct}%` : "";
+    $("stage-round").textContent = `W${act.week + 1}/${act.weekTotal} 음악방송 · ${c.emoji} ${c.name}${buff}`;
     $("stage-card").innerHTML = `<div class="pbp" id="pbp-cb"></div><div id="cb-moment"></div><div id="cb-result"></div>`;
     show("screen-stage");
 
@@ -306,18 +535,23 @@ window.IdolCareer = (() => {
     }
 
     // 주간 차트 발표
+    /* 주간 점수의 축은 능력치예요. 팬덤 항에는 상한(FANDOM_CAP)이 있어요 —
+     * 팬덤은 활동만 해도 저절로 쌓이는 값이라, 상한이 없으면 훈련을 멈춰도
+     * 점수가 해마다 올라가서 라이벌 성장(rollRivals의 3%)을 통째로 덮어버려요. */
+    const FANDOM_CAP = 16;
     function weeklyChart() {
       const myScore =
         (S.stats[POS_INFO[S.pos].stat] * 0.32 +
         S.stats.charm * 0.22 +
         ((S.stats.vocal + S.stats.dance + S.stats.rap) / 3) * 0.2) * clutch(POS_INFO[S.pos].stat) +
-        S.condition / 8 + (S.fandom || 0) / 45 + miniBonus + rand(-5, 5);
+        S.condition / 8 + Math.min((S.fandom || 0) / 45, FANDOM_CAP) + miniBonus + rand(-5, 5);
       const rows = [
         { name: S.group, score: myScore, me: true },
         ...act.rivals.map((r) => ({ name: r.name, score: r.pop + rand(-8, 8) })),
       ].sort((a, b) => b.score - a.score);
       const rank = rows.findIndex((r) => r.me) + 1;
       const won = rank === 1;
+      recordWeek(rows);   // 🏆 올해 그룹 순위에 이번 주 결과를 남겨요 (표시 전용)
 
       act.week += 1;
       act.hypeSum += (5 - rank) * 0.35 + miniHype;
@@ -346,9 +580,21 @@ window.IdolCareer = (() => {
       const cbDone = act.week >= act.weekTotal;
       let extraLine = "";
       if (cbDone) {
-        const cbSales = Math.max(1, Math.round(S.fandom * 0.05 + act.cbWins * 6 + act.cbHype * 4 + rand(-4, 4)));
+        /* 초동 판매량 — 이 게임의 고유 축이에요. 능력치에서 직접 자라고 상한이 없어요.
+         * 컨셉이 어느 능력치를 볼지 정하고, 시즌 유행이 배수를 얹어요. 편차는 컨셉마다 달라요. */
+        const concept = conceptOf(act);
+        const cbSales = Math.max(1, Math.round(
+          expectedSales(S.stats, concept, S.fandom, act.cbWins) *
+          trendMul(concept, act) * (1 + rand(-concept.v, concept.v))
+        ));
         act.sales += cbSales;
-        extraLine = `<div class="tour-pts">💿 ${act.cb}차 컴백 종료 — 1위 ${act.cbWins}회 · 초동 ${cbSales}만 장</div>`;
+        /* 연말 결산에 남길 기록이에요 — 고른 컨셉과 적중 여부. 한 해에 컴백이 2번이라
+         * 둘 다 쌓아요. 적중 판정도 trendMul이 정본이에요 (화면과 같은 근거). */
+        const cbMul = trendMul(concept, act);
+        S.yearConcepts = (S.yearConcepts || []).concat({
+          id: concept.id, t: cbMul > 1 ? "hot" : cbMul < 1 ? "cold" : "",
+        });
+        extraLine = `<div class="tour-pts">💿 ${act.cb}차 컴백 종료 · ${concept.emoji} ${concept.name} — 1위 ${act.cbWins}회 · 초동 ${cbSales}만 장</div>`;
       }
       save();
 
@@ -382,11 +628,156 @@ window.IdolCareer = (() => {
     }
   }
 
+  /* 🌏 월드투어 — 정상에 오른 뒤에만 열리는 후반 목표예요.
+   * 상을 노린 육성과 팬덤을 노린 육성 둘 다 길이 되게 '또는'으로 뒀어요.
+   *
+   * 이 수치는 tests/idol/pacing-test.js로 실제 산식을 굴려서 잰 값이에요
+   * (데뷔부터 은퇴까지 연습 턴·주간 차트·판매량·수상을 전부 돌립니다).
+   *   강하게 키우면 평균 6.8년차에 열려요 (거의 모든 판이 열림)
+   *   보통으로 키우면 평균 9.5년차 — 은퇴 직전에 겨우 닿거나 못 닿아요
+   * 팬덤은 10년을 꽉 채워도 3천 언저리라, 예전의 8000은 아무도 못 넘었어요.
+   * 값을 바꿀 땐 반드시 pacing-test.js를 다시 돌리세요. */
+  const TOUR_DAESANG = 3;
+  const TOUR_FANDOM = 2000;
+  function tourReady() {
+    return (S.career.daesang || 0) >= TOUR_DAESANG || (S.fandom || 0) >= TOUR_FANDOM;
+  }
+
+  /* 도시 수는 팬덤이 정해요 — 4곳에서 시작해 8곳까지 늘어나요.
+   * 열림 기준(TOUR_FANDOM)에서 세기 시작해요. 절대값으로 재던 시절엔
+   * 4000당 한 곳이라, 실제로 도달 가능한 팬덤 범위에서는 영원히 4곳이었어요. */
+  const TOUR_CITY_STEP = 400;
+  function tourCities() {
+    return clamp(4 + Math.floor(((S.fandom || 0) - TOUR_FANDOM) / TOUR_CITY_STEP), 4, 8);
+  }
+
+  /* 투어 등급 — 전체 도시의 평균 객석 점유율로 매겨요.
+   * 실패해도 커리어가 끝나지 않아요. 다음 해에 다시 도전할 수 있어요. */
+  function tourGrade(fillRate) {
+    if (fillRate >= 0.95) return "S";
+    if (fillRate >= 0.80) return "A";
+    if (fillRate >= 0.60) return "B";
+    return "C";
+  }
+
+  const TOUR_PLACES = [
+    "도쿄", "오사카", "타이베이", "방콕", "싱가포르", "자카르타", "마닐라",
+    "시드니", "로스앤젤레스", "뉴욕", "멕시코시티", "상파울루", "런던", "파리", "베를린",
+  ];
+  const TOUR_MUL = { S: 1.6, A: 1.25, B: 1.0, C: 0.7 };   // 등급별 보상 배수
+  const TOUR_RANK = { C: 0, B: 1, A: 2, S: 3 };
+
+  /* 진행 중인 투어. 한 해 안에 시작해서 끝나는 이벤트라 저장하지 않아요 —
+   * 중간에 나가면 그냥 없던 일이 되고, S.career.tours도 안 올라가요. */
+  let tour = null;
+
+  function startTour() {
+    if (!tourReady()) return;
+    tour = { cities: shuffle([...TOUR_PLACES]).slice(0, tourCities()), i: 0, fills: [] };
+    $("tour-log").innerHTML = "";
+    $("tour-moment").innerHTML = "";
+    $("tour-result").innerHTML = "";
+    proLog(`🌏 ${tour.cities.length}개 도시 월드투어를 떠나요!`);
+    renderTourCity();
+    show("screen-tour");
+  }
+
+  function tourFeed(text, cls) {
+    const div = document.createElement("div");
+    if (cls) div.className = cls;
+    div.textContent = text;
+    $("tour-log").appendChild(div);
+    $("tour-log").scrollTop = $("tour-log").scrollHeight;
+  }
+
+  function tourFillHTML() {
+    return tour.fills.map((f, i) => `
+      <div class="tour-fill"><span>${tour.cities[i]}</span>
+        <div class="bar"><div class="bar-fill scout" style="width:${Math.round(f * 100)}%"></div></div>
+        <span>${Math.round(f * 100)}%</span></div>`).join("");
+  }
+
+  function renderTourCity() {
+    const city = tour.cities[tour.i];
+    $("tour-city").textContent = `${tour.i + 1}/${tour.cities.length}번째 도시 — ${city} 🎫`;
+    $("tour-moment").innerHTML = "";
+    const btn = $("btn-tour-go");
+    btn.disabled = false;
+    btn.textContent = `${city} 공연하기 🎤`;
+    btn.onclick = playTourCity;
+  }
+
+  // 도시 한 곳 — 미니게임 한 번이 그 도시의 객석 점유율을 정해요
+  function playTourCity() {
+    const btn = $("btn-tour-go");
+    btn.disabled = true;
+    const city = tour.cities[tour.i];
+    tourFeed(`✈️ ${city} 도착! 공연장 앞에 팬들이 줄을 섰어요`);
+    playRandomMini($("tour-moment"), (res, type) => {
+      const base = res === "perfect" ? rand(0.95, 1.0)
+        : res === "miss" ? rand(0.42, 0.62)
+        : rand(0.72, 0.90);
+      // 매력이 높으면 현지 화제성이 붙어 객석이 조금 더 차요
+      const fill = clamp(base + (S.stats.charm - 100) / 600, 0, 1);
+      tour.fills.push(fill);
+      tourFeed(res === "perfect" ? type.great : res === "miss" ? type.bad : type.ok,
+        res === "perfect" ? "good" : res === "miss" ? "bad" : "");
+      tourFeed(`🎫 ${city} 객석 ${Math.round(fill * 100)}%`, fill >= 0.8 ? "good" : "");
+      $("tour-result").innerHTML = tourFillHTML();
+      tour.i += 1;
+      btn.disabled = false;
+      if (tour.i < tour.cities.length) {
+        btn.textContent = `다음 도시로 ✈️ (${tour.i + 1}/${tour.cities.length})`;
+        btn.onclick = renderTourCity;
+      } else {
+        btn.textContent = "🏁 투어 마무리";
+        btn.onclick = finishTour;
+      }
+    });
+  }
+
+  /* 완주했을 때만 등급이 나오고 tours가 올라가요.
+   * 보상은 언제나 0 이상이에요 — 투어가 망해도 팬덤·자금·기록이 줄지 않아요. */
+  function finishTour() {
+    const n = tour.fills.length;
+    const avg = n ? tour.fills.reduce((a, b) => a + b, 0) / n : 0;
+    const grade = tourGrade(avg);
+    const mul = TOUR_MUL[grade];
+    const dFan = Math.max(0, Math.round(n * avg * 45 * mul));
+    const income = Math.max(0, Math.round(n * avg * 900 * mul));
+    S.career.tours = (S.career.tours || 0) + 1;
+    S.tourYear = S.proYear;   // 한 해에 한 번만 떠날 수 있어요
+    if (!S.tourBest || TOUR_RANK[grade] > TOUR_RANK[S.tourBest]) S.tourBest = grade;
+    S.fandom = (S.fandom || 0) + dFan;
+    S.money = (S.money || 0) + income;
+    proLog(`🌏 월드투어 완주! ${n}개 도시 평균 객석 ${Math.round(avg * 100)}% · ${grade}등급`);
+    if (window.Stats) Stats.log("tour", { cities: n, grade, fill: Math.round(avg * 100) });
+    if (grade === "S" && window.Fx) Fx.celebrate("award", "🌏 전 도시 전석 매진!");
+    save();
+
+    $("tour-city").textContent = `🏁 ${n}개 도시 완주 — 평균 객석 ${Math.round(avg * 100)}%`;
+    $("tour-moment").innerHTML = "";
+    $("tour-result").innerHTML = `
+      <div class="tour-grade">${grade} 등급</div>
+      ${tourFillHTML()}
+      <div class="tour-pts">💖 팬덤 +${dFan} · 💰 투어 수익 +${fmtMoney(income)}${
+        grade === "C" ? "<br/>아쉬웠지만 잃은 건 하나도 없어요. 내년에 다시 도전해요!" : ""}</div>`;
+    const btn = $("btn-tour-go");
+    btn.disabled = false;
+    btn.textContent = "← 결산으로 돌아가기";
+    btn.onclick = () => { tour = null; yearReport(); };
+  }
+
   // ---------- 연말 결산 ----------
   function finishYear() {
     const act = S.activity;
     const agePen = S.proYear >= 8 ? (S.proYear - 7) * 0.8 : 0;
-    const hype = clamp(act.hypeSum / 2.2 - agePen, -1.5, 12);
+    /* 연말 평가는 그해 초동 판매량이 정해요.
+     * 순위(hypeSum)는 회차 화면의 긴장감으로 남기고 여기서는 안 써요 —
+     * 순위는 1위 위가 없어서 본질적으로 천장이 있거든요.
+     * 판매량은 상한이 없지만 후반에 기하급수로 커지니 로그로 눌러요.
+     * 선형으로 재면 10년차에 hype가 수백이 돼요. */
+    const hype = clamp(Math.log(Math.max(1, act.sales)) * 2.4 - 8 - agePen, -1.5, 12);
     const wins = act.wins;
     const sales = act.sales;
     const dFan = Math.round(hype * 10 + wins * 3 - (hype < 0 ? 15 : 0));
@@ -410,7 +801,8 @@ window.IdolCareer = (() => {
     }
     S.career.sales += sales;
     if (awards.length && window.Fx) Fx.celebrate("award", `🎖️ ${awards.join(" · ")}!`);
-    S.career.years.push({ y: S.proYear, hype: Math.round(hype * 10) / 10, wins, sales, dFan, awards });
+    S.career.years.push({ y: S.proYear, hype: Math.round(hype * 10) / 10, wins, sales, dFan, awards, concepts: S.yearConcepts || [] });
+    S.yearConcepts = [];
     if (window.Stats) Stats.log("year_end", { y: S.proYear, wins, sales });
     // 초반엔 성장, 8년차부터는 서서히 하락
     for (const d of STAT_DEFS) {
@@ -429,24 +821,43 @@ window.IdolCareer = (() => {
     yearReport();
   }
 
+  /* 그해 고른 컨셉과 적중 여부를 한 줄로 만들어요. 한 해에 컴백이 2번이라 둘 다 나와요.
+   * 옛 연차 기록에는 concepts가 아예 없어요 — 마이그레이션하지 않고 여기서 빈 배열로 받아요.
+   * withName이면 이름까지("💧 청량 적중"), 아니면 표에 들어갈 짧은 꼴("💧🔥")이에요. */
+  function conceptLine(list, withName) {
+    return (list || []).map((c) => {
+      const def = CONCEPTS.find((x) => x.id === (c && c.id));
+      if (!def) return "";
+      if (withName) return `${def.emoji} ${def.name}${c.t === "hot" ? " 적중" : c.t === "cold" ? " 식상" : ""}`;
+      return `${def.emoji}${c.t === "hot" ? "🔥" : c.t === "cold" ? "❄️" : ""}`;
+    }).filter(Boolean).join(withName ? " · " : " ");
+  }
+
   function yearReport() {
     const y = S.career.years[S.career.years.length - 1];
     const rows = S.career.years.slice(-8).map((x) =>
-      `<tr><td>${x.y}년차</td><td>1위 ${x.wins}회</td><td>초동 ${x.sales}만</td><td>${x.awards.length ? "🏆" + x.awards.join(",") : "-"}</td></tr>`
+      `<tr><td>${x.y}년차</td><td>1위 ${x.wins}회</td><td>초동 ${x.sales}만</td><td class="sn-concept" title="${conceptLine(x.concepts, true)}">${conceptLine(x.concepts) || "-"}</td><td>${x.awards.length ? "🏆" + x.awards.join(",") : "-"}</td></tr>`
     ).join("");
     const forcedRetire = S.proYear >= 10;
+    /* 🏆 그해 그룹 최종 순위. 결산이 끝나도 S.standings는 남아 있고, 다음 연차
+     * 활동이 시작될 때 비로소 새로 열려요. 다른 해의 기록이면 아예 안 보여줘요. */
+    const standings = (S.standings && S.standings.year === y.y)
+      ? `<details class="standings-box"><summary>🏆 ${y.y}년차 그룹 최종 순위</summary>${standingsHTML(y.wins)}</details>`
+      : "";
     $("career-title").textContent = `📊 ${y.y}년차 활동 결산`;
     $("career-card").innerHTML = `
       <div class="draft-emoji">🎤</div>
       <div class="draft-title">${
-        y.hype >= 6 ? "차트를 지배한 해!" :
-        y.hype >= 3.5 ? "탄탄한 활동을 이어간 해" :
-        y.hype >= 1 ? "아쉬움이 남는 컴백" : "혹독한 한 해…"
+        y.awards.includes("대상") ? "차트를 지배한 해!" :
+        y.awards.length ? "탄탄한 활동을 이어간 해" :
+        y.wins > 0 ? "아쉬움이 남는 컴백" : "혹독한 한 해…"
       }</div>
-      <div class="draft-team">${S.group} · 음방 1위 ${y.wins}회 · 초동 ${y.sales}만 장</div>
-      <table class="season-table"><thead><tr><th>연차</th><th>음방</th><th>판매량</th><th>수상</th></tr></thead><tbody>${rows}</tbody></table>
+      <div class="draft-team">${S.group} · 음방 1위 ${y.wins}회 · 초동 ${y.sales}만 장${
+        conceptLine(y.concepts, true) ? `<br/>🎬 컨셉 ${conceptLine(y.concepts, true)}` : ""}</div>
+      <table class="season-table"><thead><tr><th>연차</th><th>음방</th><th>판매량</th><th>컨셉</th><th>수상</th></tr></thead><tbody>${rows}</tbody></table>
+      ${standings}
       <div class="draft-summary">
-        통산 ${S.career.years.length}년 활동 · 1위 ${S.career.wins}회 · 🏆 대상 ${S.career.daesang} · 본상 ${S.career.bonsang}${S.career.rookie ? " · 신인상" : ""}<br/>
+        통산 ${S.career.years.length}년 활동 · 1위 ${S.career.wins}회 · 🏆 대상 ${S.career.daesang} · 본상 ${S.career.bonsang}${S.career.rookie ? " · 신인상" : ""}${(S.career.tours || 0) ? ` · 🌏 월드투어 ${S.career.tours}회${S.tourBest ? `(최고 ${S.tourBest})` : ""}` : ""}<br/>
         💖 팬덤 ${Math.round(S.fandom)} · ${forcedRetire ? "소속사와의 계약이 끝나가요. 아름다운 마무리를 준비할 때…" : "다음 컴백도 달릴 수 있어요!"}
       </div>`;
     const act = $("career-actions");
@@ -457,6 +868,15 @@ window.IdolCareer = (() => {
       next.textContent = `💿 ${S.proYear + 1}년차 컴백 준비`;
       next.onclick = startPrep;
       act.appendChild(next);
+    }
+    /* 🌏 월드투어 — 조건을 채운 뒤에만, 한 해에 한 번 떠날 수 있어요.
+     * 은퇴가 강제되는 10년차에도 남겨둬요. 마지막 해에 여는 사람도 있으니까요. */
+    if (tourReady() && S.tourYear !== S.proYear) {
+      const tb = document.createElement("button");
+      tb.className = "btn btn-primary";
+      tb.textContent = `🌏 월드투어 떠나기 (${tourCities()}개 도시)`;
+      tb.onclick = startTour;
+      act.appendChild(tb);
     }
     const ret = document.createElement("button");
     ret.className = "btn btn-ghost";
@@ -489,6 +909,7 @@ window.IdolCareer = (() => {
     const c = S.career || { seasons: [], mvp: 0, gg: 0, roy: 0, rings: 0, warSum: 0 };
     return Math.round(
       S.fandom * 0.5 + c.wins * 6 + c.daesang * 50 + c.bonsang * 15 + c.rookie * 20 +
+      (c.tours || 0) * 40 +   // 🌏 완주한 월드투어
       (c.years ? c.years.length : 0) * 5 + (S.trophies ? S.trophies.length : 0) * 8 + (S.center ? 30 : 0) +
       transTotal() * 25   // ✨ 초월 단계 보너스
     );
@@ -570,6 +991,7 @@ window.IdolCareer = (() => {
       team: S.group || agencyOf().name,
       seasons: c.years ? c.years.length : 0,
       wins: c.wins, daesang: c.daesang, bonsang: c.bonsang, rookie: c.rookie,
+      tours: c.tours || 0, tourBest: S.tourBest || "",
       finalOvr: Math.round(overall()),
       trans: transTotal(),
       gen: loadLegacy().gen + 1,
@@ -591,7 +1013,7 @@ window.IdolCareer = (() => {
       <div class="draft-team">${entry.grade}</div>
       <div>${entry.seasons ? `${entry.team}(으)로 ${entry.seasons}년을 활동했어요.` : "데뷔 무대 대신 다른 길을 택했어요."}</div>
       <div class="draft-summary">
-        음방 1위 ${entry.wins}회 · 🏆 대상 ${entry.daesang} · 본상 ${entry.bonsang}${entry.rookie ? " · 신인상" : ""}<br/>
+        음방 1위 ${entry.wins}회 · 🏆 대상 ${entry.daesang} · 본상 ${entry.bonsang}${entry.rookie ? " · 신인상" : ""}${entry.tours ? ` · 🌏 월드투어 ${entry.tours}회${entry.tourBest ? `(최고 ${entry.tourBest})` : ""}` : ""}<br/>
         커리어 점수 <b>${entry.score}</b> — 명예의 전당에 영구 기록됐어요
       </div>`;
     const act = $("career-actions");
@@ -650,7 +1072,7 @@ window.IdolCareer = (() => {
         <div class="hof-face-emoji">🎤</div>
         <div class="hof-info">
           <div class="hof-name">${i + 1}. ${e.gen > 1 ? `<span class="hof-gen">${e.gen}세</span> ` : ""}${e.name} <span class="hof-grade">${e.grade}</span></div>
-          ${e.team} · ${e.seasons}년 활동 · 1위 ${e.wins}회 · 🏆${e.daesang + e.bonsang} · 점수 ${e.score}
+          ${e.team} · ${e.seasons}년 활동 · 1위 ${e.wins}회 · 🏆${e.daesang + e.bonsang}${e.tours ? ` · 🌏${e.tours}` : ""} · 점수 ${e.score}
         </div>`;
       box.appendChild(div);
     });
@@ -863,10 +1285,14 @@ window.IdolCareer = (() => {
   $("btn-battle")?.addEventListener("click", () => showBattle("screen-title"));
   $("btn-battle-main")?.addEventListener("click", () => showBattle("screen-main"));
   $("btn-battle-pro")?.addEventListener("click", () => showBattle("screen-pro"));
+  // 🎤 시즌 시작 — playShow가 안에서 show("screen-stage")까지 해요 (중복 전환 금지)
+  $("btn-reveal-go")?.addEventListener("click", () => { if (S.activity) playShow(); });
   $("btn-hof-back")?.addEventListener("click", () => show("screen-title"));
   $("btn-battle-back")?.addEventListener("click", () => show(battleReturn));
 
   return {
+    // 검증용 창구예요 — 산식만 열어둡니다. 게임 코드에서는 쓰지 마세요.
+    _t: { tourGrade, tourReady, tourCities, CONCEPTS, conceptOf, trendMul, expectedSales, rollTrend, state: () => S },
     onEnding,
     refreshPro: renderPrep,
     showHof,

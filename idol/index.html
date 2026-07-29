@@ -136,6 +136,21 @@
       <div class="log" id="log-box"></div>
     </section>
 
+    <!-- 🎬 컴백 컨셉 고르기 — 업계 소문 2종만 보고 고르는 화면이에요 -->
+    <section class="screen" id="screen-concept">
+      <h2 id="concept-title">🎬 컴백 컨셉 정하기</h2>
+      <div class="concept-rumor-line" id="concept-rumor-line"></div>
+      <div class="concept-list" id="concept-list"></div>
+    </section>
+
+    <!-- 🎬 시즌 시작 — 컨셉을 고른 뒤에야 확정 유행을 공개해요 -->
+    <section class="screen" id="screen-reveal">
+      <h2 id="reveal-title">🎬 컴백 시작!</h2>
+      <div class="reveal-trend" id="reveal-trend"></div>
+      <div id="reveal-effect"></div>
+      <button class="btn btn-primary" id="btn-reveal-go">🎤 시즌 시작</button>
+    </section>
+
     <!-- 쇼케이스 / 평가 / 서바이벌 -->
     <section class="screen" id="screen-stage">
       <h2 id="stage-title"></h2>
@@ -183,6 +198,11 @@
           <div class="bar"><div class="bar-fill cond" id="pro-cond-bar"></div></div>
         </div>
       </div>
+      <!-- 🏆 올해의 그룹 순위 (접이식) — 활동 중에만 보여요 -->
+      <details class="standings-box" id="pro-standings" hidden>
+        <summary id="pro-standings-sum"></summary>
+        <div id="pro-standings-body"></div>
+      </details>
       <div class="stats" id="pro-stats"></div>
       <div class="actions">
         <p class="actions-title" id="pro-camp-title"></p>
@@ -197,6 +217,18 @@
       <div class="draft-card" id="career-card"></div>
       <div class="draft-actions" id="career-actions"></div>
       <div class="ad-box" id="ad-career"></div>
+    </section>
+
+    <!-- 🌏 월드투어 -->
+    <section class="screen" id="screen-tour">
+      <h2>🌏 월드투어</h2>
+      <p class="tour-round" id="tour-city"></p>
+      <div class="tour-card">
+        <div class="pbp" id="tour-log"></div>
+        <div id="tour-moment"></div>
+        <div id="tour-result"></div>
+      </div>
+      <button class="btn btn-primary" id="btn-tour-go">공연하기 🎤</button>
     </section>
 
     <!-- 명예의 전당 -->
