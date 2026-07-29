@@ -92,12 +92,21 @@ window.WingerCareer = (() => {
   }
 
   // ---------- 프로 활동 ----------
+  /* 데뷔 클럽은 그 리그의 하위 DEBUT_POOL개에서만 뽑아요.
+   * 6개 전부에서 뽑던 시절에는 전력 52~78로 갈려서 첫 시즌 팀 성적이 운이었고,
+   * 신인이 우승 후보 클럽에서 시작하는 것도 어색했어요. 올라가는 건 이적으로 해요. */
+  const DEBUT_POOL = 3;
+  function debutClubs(id) {
+    const list = (CLUBS[id] || CLUBS[1]).slice().sort((a, b) => a.str - b.str);
+    return list.slice(0, DEBUT_POOL);
+  }
+
   function enterCareer(captain) {
     S.phase = "soccer-pro";
     /* 데뷔 클럽은 소속 리그(기본 1부)에서 뽑아요. 이름과 전력을 함께 받아 둡니다 —
      * 전력은 동료 득점·실점에만 쓰이고 개인 수상에는 안 닿아요. */
     S.league = leagueOf(S).id;
-    const debutClub = pick(CLUBS[S.league] || CLUBS[1]);
+    const debutClub = pick(debutClubs(S.league));
     S.group = debutClub.name;
     S.clubStr = debutClub.str;
     S.center = !!captain;
@@ -462,7 +471,7 @@ window.WingerCareer = (() => {
         y.hype >= 6.0 ? "제 몫을 해낸 시즌" :
         y.hype >= 3.5 ? "아쉬움이 남는 시즌" : "혹독한 시즌…"
       }</div>
-      <div class="draft-team">${S.group} · ${y.apps || 0}경기 ⚽${y.goals || 0}골 🅰️${y.assists || 0}도움 🛡️${y.defense || 0} · MOM ${y.wins}회</div>
+      <div class="draft-team">${leagueOf(S).flag} ${S.group} · ${leagueOf(S).name} · ${y.apps || 0}경기 ⚽${y.goals || 0}골 🅰️${y.assists || 0}도움 🛡️${y.defense || 0} · MOM ${y.wins}회</div>
       <table class="season-table"><thead><tr><th>시즌</th><th>출전</th><th>⚽골</th><th>🅰️도움</th><th>🛡️수비</th><th>수상</th></tr></thead><tbody>${rows}</tbody></table>
       <div class="draft-summary">
         통산 ${cr.years.length}시즌 · 출전 ${cr.apps || 0} · ⚽ ${cr.goals || 0}골 · 🅰️ ${cr.assists || 0}도움 · 🛡️ ${cr.defense || 0} · 🏅 MOM ${cr.wins}회<br/>
@@ -477,6 +486,16 @@ window.WingerCareer = (() => {
       next.textContent = `⚽ ${S.proYear + 1}시즌 시작`;
       next.onclick = startPrep;
       act.appendChild(next);
+      /* 💼 이적은 오프시즌에만 열려요. 마지막 시즌(강제 은퇴)에는 갈 다음 시즌이
+       * 없으니 안 띄우고, 한 오프시즌에 두 번 옮기지도 못하게 막아요. */
+      if (canTransfer(S)) {
+        const tf = document.createElement("button");
+        tf.id = "btn-transfer";
+        tf.className = "btn btn-ghost";
+        tf.textContent = "💼 이적 제안 보기";
+        tf.onclick = renderTransfer;
+        act.appendChild(tf);
+      }
     }
     const ret = document.createElement("button");
     ret.className = "btn btn-ghost";
@@ -493,6 +512,125 @@ window.WingerCareer = (() => {
     act.appendChild(ret);
     if (window.Ads) window.Ads.display($("ad-career"));
     show("screen-career");
+  }
+
+  // ---------- 💼 이적 ----------
+  /* 오프시즌(시즌 결산)에서만 열려요. 축이 둘인데 서로 겹치지 않아요.
+   *
+   *  · 같은 리그 이적 — 클럽 전력이 동료 득점·실점에 작용해요. 우승과 팀 성적의 축이에요.
+   *  · 상위 리그 이적 — 평점 페널티와 수상 가치가 움직여요. 개인 커리어의 축이에요.
+   *
+   * 실측으로 갈라진 값이에요. 전력을 50에서 90으로 올리면 팀 승률이 12~29%p 오르는데
+   * 리그MVP 확률은 1.3%p 안에서만 움직여요. 리그를 올리면 정반대예요.
+   * 그래서 카드에 평점 페널티와 수상 가치를 숫자로 적어요 — 이게 도박의 크기라
+   * 감추면 "왜 갑자기 무너졌는지" 모르는 채로 올라가게 돼요. */
+  const TRANSFER_MIN_YEAR = 2;               // 같은 리그 이적도 2년차부터 열려요
+  const PROMOTE_HYPE = { 2: 5.5, 3: 6.5 };   // 이 리그의 제안이 오는 직전 시즌 hype
+  const OFFERS_PER_LEAGUE = 2;               // 리그마다 제안 수
+
+  /* 계약금 — 리그 격과 클럽 전력에서 뽑아요. 격은 세제곱으로 실어요.
+   * 리그를 올리는 이적이 눈에 띄게 큰 돈이어야 "지금 갈까"가 고민이 돼요.
+   * 10만 단위로 끊어 읽기 좋게 합니다. */
+  const transferFee = (club, league) =>
+    Math.round((club.str * club.str * 0.22 * Math.pow(league.prestige, 3)) / 10) * 10;
+
+  // 직전 시즌 hype. 이번 결산에서 방금 쌓은 값이에요.
+  function lastHype(st) {
+    const ys = (st && st.career && st.career.years) || [];
+    return ys.length ? (ys[ys.length - 1].hype || 0) : 0;
+  }
+  // 한 오프시즌에 두 번 옮기지는 못해요. 이적 기록의 연차로 봐요.
+  const movedThisYear = (st) => ((st && st.moves) || []).some((m) => m.y === st.proYear);
+  const canTransfer = (st) => !!st && (st.proYear || 0) >= TRANSFER_MIN_YEAR && !movedThisYear(st);
+
+  /* 갈 수 있는 리그마다 클럽을 OFFERS_PER_LEAGUE개씩 뽑아요.
+   * 아래로 내려오는 이적은 언제든 가능해요 — 못 버티고 돌아오는 길을 막으면
+   * 도전 자체를 안 하게 돼요. 위로 갈 때만 직전 시즌 hype 문턱을 봐요. */
+  function transferOffers(st) {
+    const state = st || S;
+    if (!canTransfer(state)) return [];
+    const cur = leagueOf(state);
+    const hype = lastHype(state);
+    const list = [];
+    for (const lg of LEAGUES) {
+      const need = PROMOTE_HYPE[lg.id];
+      if (lg.id > cur.id && hype < (need == null ? Infinity : need)) continue;
+      const pool = (CLUBS[lg.id] || []).filter((c) => c.name !== state.group);
+      for (const club of shuffle(pool.slice()).slice(0, OFFERS_PER_LEAGUE)) {
+        list.push({ club, league: lg, fee: transferFee(club, lg) });
+      }
+    }
+    return list;
+  }
+
+  // 도박의 크기 — 평점에서 빼는 값과 수상 가치에 곱하는 값이에요.
+  const riskText = (lg) =>
+    `평점 ${lg.penalty > 0 ? `-${lg.penalty.toFixed(1)}` : "그대로"} · 수상 가치 ×${lg.prestige.toFixed(2)}`;
+
+  function renderTransfer() {
+    const cur = leagueOf(S);
+    $("transfer-title").textContent = `💼 이적 제안 — ${S.proYear}시즌 오프시즌`;
+    const gate = LEAGUES.filter((l) => PROMOTE_HYPE[l.id] != null)
+      .map((l) => `${l.name} ${PROMOTE_HYPE[l.id]}`).join(" · ");
+    $("transfer-now").innerHTML =
+      `지금은 <b>${cur.flag} ${S.group}</b> (${cur.name} · 전력 ${clubStrOf(S)}) 소속이에요.<br/>`
+      + `직전 시즌 평가 <b>${lastHype(S).toFixed(1)}</b> — 위 리그 제안은 평가가 이만큼 돼야 와요 (${gate}).<br/>`
+      + `아래 리그로 내려가는 이적은 언제든 할 수 있어요.`;
+    const box = $("transfer-list");
+    box.innerHTML = "";
+    const offers = transferOffers(S);
+    if (!offers.length) {
+      box.innerHTML = `<p class="hint">올해는 들어온 제안이 없어요.</p>`;
+    }
+    for (const lg of LEAGUES) {
+      const mine = offers.filter((o) => o.league.id === lg.id);
+      if (!mine.length) continue;
+      const group = document.createElement("div");
+      group.className = "tf-group" + (lg.id > cur.id ? " up" : lg.id < cur.id ? " down" : " same");
+      group.dataset.league = String(lg.id);
+      const head = document.createElement("div");
+      head.className = "tf-head";
+      head.innerHTML = `<span class="tf-lg">${lg.flag} ${lg.name}</span><span class="tf-risk">${riskText(lg)}</span>`;
+      group.appendChild(head);
+      for (const o of mine) {
+        const card = document.createElement("button");
+        card.className = "tf-card";
+        card.dataset.club = o.club.name;
+        card.dataset.league = String(lg.id);
+        card.dataset.fee = String(o.fee);
+        /* 카드마다 페널티와 수상 가치를 다시 적어요. 헤더에만 있으면
+         * 스크롤하다 카드만 보고 누르는 사람에게는 안 보여요. */
+        card.innerHTML = `
+          <span class="tf-top"><span class="tf-name">${o.club.name}</span><span class="tf-str">전력 ${o.club.str}</span></span>
+          <span class="tf-sub"><span class="tf-fee">계약금 ${fmtMoney(o.fee)}</span><span class="tf-risk">${riskText(lg)}</span></span>`;
+        card.onclick = () => acceptOffer(o);
+        group.appendChild(card);
+      }
+      box.appendChild(group);
+    }
+    show("screen-transfer");
+  }
+
+  /* 소속을 바꾸고 이적 기록을 남겨요. 리그·전력이 함께 바뀌어야
+   * 다음 시즌 상대(oppClubs)와 동료 득점·실점이 새 클럽 기준으로 굴러가요. */
+  function moveToClub(club, league, bonus) {
+    const from = S.group;
+    const prevLeague = S.league || 1;
+    S.group = club.name;
+    S.clubStr = club.str;
+    S.league = league.id;
+    S.money = (S.money || 0) + (bonus || 0);
+    if (!Array.isArray(S.moves)) S.moves = [];
+    S.moves.push({ y: S.proYear, from, to: club.name, fromLg: prevLeague, toLg: league.id });
+    proLog(`💼 ${from} → ${club.name} 이적! (${league.name} · 계약금 ${fmtMoney(bonus || 0)})`);
+    if (window.Stats) Stats.log("transfer", { y: S.proYear, from, to: club.name, fromLg: prevLeague, toLg: league.id });
+    save();
+  }
+
+  function acceptOffer(o) {
+    moveToClub(o.club, o.league, o.fee);
+    if (window.Fx) Fx.celebrate("award", `💼 ${o.club.name} 이적!`);
+    yearReport();   // 결산으로 돌아가요 — 새 소속으로 다시 그려져요
   }
 
   // ---------- 명예의 전당 ----------
@@ -887,6 +1025,8 @@ window.WingerCareer = (() => {
   $("btn-battle")?.addEventListener("click", () => showBattle("screen-title"));
   $("btn-battle-main")?.addEventListener("click", () => showBattle("screen-main"));
   $("btn-battle-pro")?.addEventListener("click", () => showBattle("screen-pro"));
+  // 💼 남는다 — 아무것도 바꾸지 않고 결산으로 돌아가요
+  $("btn-transfer-stay")?.addEventListener("click", () => yearReport());
   $("btn-hof-back")?.addEventListener("click", () => show("screen-title"));
   $("btn-battle-back")?.addEventListener("click", () => show(battleReturn));
 
@@ -900,6 +1040,13 @@ window.WingerCareer = (() => {
       else if (S.career && S.career.years.length) yearReport();
       else { renderPrep(); show("screen-pro"); }
     },
-    _t: { ratingOf, FAN_CAP, RATING_DIV, POS_AXIS, posAxis, AXIS_K, AXIS_OFF, LEAGUES, leagueOf, CLUBS, clubStrOf, state: () => S },
+    transferOffers,
+    moveToClub,
+    _t: {
+      ratingOf, FAN_CAP, RATING_DIV, POS_AXIS, posAxis, AXIS_K, AXIS_OFF,
+      LEAGUES, leagueOf, CLUBS, clubStrOf, debutClubs, DEBUT_POOL,
+      TRANSFER_MIN_YEAR, PROMOTE_HYPE, OFFERS_PER_LEAGUE, transferFee, transferOffers, canTransfer,
+      state: () => S,
+    },
   };
 })();

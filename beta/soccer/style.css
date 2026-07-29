@@ -142,6 +142,55 @@ body {
 .ms-final.win { color: #85e3ac; }
 .ms-final.lose { color: #ff8a80; }
 
+/* 💼 이적 제안 — 리그별로 묶고, 카드마다 도박의 크기(평점 페널티·수상 가치)를 적어요 */
+.tf-group {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 10px;
+  margin-bottom: 12px;
+  background: linear-gradient(180deg, var(--field), var(--bg2));
+}
+.tf-group.up { border-color: var(--accent); }
+.tf-group.down { border-color: var(--dim); }
+.tf-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 2px 4px 8px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 8px;
+}
+.tf-head .tf-lg { font-family: "Jua", sans-serif; font-size: 1.05rem; color: var(--accent); }
+.tf-risk { font-size: 0.76rem; color: var(--sky); }
+.tf-group.up .tf-head .tf-risk { color: var(--accent2); }
+.tf-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  margin-bottom: 6px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--bg2);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.92rem;
+  cursor: pointer;
+}
+.tf-card:last-child { margin-bottom: 0; }
+.tf-card:hover, .tf-card:focus-visible { border-color: var(--accent); transform: translateY(-1px); }
+.tf-card:active { transform: scale(0.98); }
+.tf-card .tf-top,
+.tf-card .tf-sub { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.tf-card .tf-name { font-family: "Jua", sans-serif; color: var(--text); }
+.tf-card .tf-str { font-size: 0.8rem; color: var(--dim); }
+.tf-card .tf-fee { font-size: 0.82rem; color: var(--accent); }
+
 @media (max-width: 380px) {
   .card-grid.three { grid-template-columns: 1fr; }
+  .tf-card .tf-sub { flex-direction: column; gap: 2px; }
 }
