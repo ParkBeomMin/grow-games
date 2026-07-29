@@ -342,3 +342,107 @@ git commit -m "test(축구): 성장 곡선과 포지션 균형 회귀 테스트"
 - **CSS는 러너 사각지대다.** 이번 작업은 화면을 안 건드리지만 평점 표시 숫자가 바뀐다.
 - **축구는 기존 테스트가 하나도 없다.** `tests/soccer/`를 처음 만드는 것이라
   부트스트랩이 틀리면 전부 무의미해진다. `tests/idol/`의 관례를 반드시 따를 것.
+
+---
+
+### Task 5: 동료 득점 — 수비수가 이길 수 있게
+
+**Files:**
+- Modify: `beta/soccer/game.js` (`MatchSim.run`의 이벤트 생성부, `evs` 배열을 만드는 곳)
+- Create: `tests/soccer/team-test.js`
+
+**Interfaces:**
+- Consumes: Task 1의 평점
+- Produces: `TEAMMATE_GOALS` 표. `MatchSim.run(cfg)`가 `cfg.rating`을 추가로 받는다.
+
+Task 1에서 평점 천장을 걷어내자 드러난 구조 결함이다.
+
+**팀 득점이 내 골 + 내 도움뿐이다.** 동료가 넣는 골이 아예 없다. 수비수는
+골·도움 기댓값이 낮으니 팀이 득점을 못 하고, 능력치 70에서 팀 승률이 **7%** 다.
+(같은 조건에서 공격수는 51%.) 수비수를 못 쓰는 포지션으로 둘 수 없다.
+
+측정값 (동료 득점 도입 후, `df: 2.2` 기준):
+
+| 능력치 | 공격수 | 윙어 | 미드필더 | 수비수 | 격차 |
+|---|---|---|---|---|---|
+| 70 | 59% | 61% | 63% | 59% | 4%p |
+| 90 | 88% | 89% | 89% | 84% | 5%p |
+| 110 | 98% | 98% | 98% | 95% | 3%p |
+| 130 | 99% | 100% | 100% | 98% | 2%p |
+
+**동료 득점은 `act.goals`에 안 들어간다.** 내 골이 아니니까. 수상 축(Task 3)에는
+영향이 없고 팀 승패(`act.teamW`/`teamD`/`teamL`)만 바뀐다.
+
+- [ ] **Step 1: 실패하는 테스트 작성** — `tests/soccer/team-test.js`
+
+`beta/soccer/game.js`에서 `poissonish`·`TEAMMATE_GOALS`·동료 득점 산식을 추출한다.
+
+검사 항목:
+1. `TEAMMATE_GOALS`에 네 포지션이 있고 값이 `fw: 0.35`, `wg: 0.5`, `mf: 0.8`, `df: 2.2`다.
+2. 동료 득점 기댓값이 **수비수 > 미드필더 > 윙어 > 공격수** 순이다.
+3. 평점이 오르면 동료 득점도 는다 (평점 5와 9를 각 5000회 비교).
+4. **포지션 균형** — 네 포지션의 시즌 팀 승률 차이가 능력치 70·90·110에서 각각 **15%p 이내**다.
+   (측정값은 3~5%p지만 난수 여유를 둔다.) 시즌은 12경기, 각 2000시즌.
+5. **수비수가 능력치 70에서 팀 승률 40% 이상이다.** (지금은 7%다.)
+6. 동료 득점이 `info.myGoals`·`info.assists`에 **섞이지 않는다** — 내 기록은 그대로다.
+
+- [ ] **Step 2: 빨간불 확인**
+
+```bash
+node tests/soccer/team-test.js
+```
+Expected: FAIL — `TEAMMATE_GOALS is not defined`
+
+- [ ] **Step 3: 구현**
+
+`beta/soccer/game.js`의 `matchContribution` 근처에 넣는다.
+
+```js
+/* 동료 득점 — 예전에는 팀 득점이 내 골 + 내 도움뿐이라 동료가 넣는 골이 없었어요.
+ * 수비수는 골·도움 기댓값이 낮아서 팀이 득점을 못 했고, 능력치 70에서
+ * 팀 승률이 7%였습니다 (같은 조건 공격수 51%).
+ * 내 포지션이 공격에서 멀수록 동료가 더 넣어요. 값은 시뮬레이션으로 잡았어요.
+ * 이 골은 act.goals에 안 들어가요 — 내 골이 아니니까요. 수상 축은 그대로입니다. */
+const TEAMMATE_GOALS = { fw: 0.35, wg: 0.5, mf: 0.8, df: 2.2 };
+
+function teammateGoals(rating) {
+  const base = (TEAMMATE_GOALS[S.pos] ?? 0.6) * (0.6 + (rating - 5) * 0.14);
+  return poissonish(Math.max(0, base));
+}
+```
+
+`MatchSim.run`의 `cfg` 구조 분해에 `rating`을 더하고, `evs`를 만드는 곳에
+동료 골 이벤트를 넣는다. **내 골·도움 이벤트와 문구가 구분돼야 한다.**
+
+```js
+    const mates = cfg.rating != null ? teammateGoals(cfg.rating) : 0;
+    for (let i = 0; i < mates; i++)
+      evs.push({ min: rmin(), side: "atk", h: 1, cls: "good", text: `⚽ 동료의 골! ${home}이 앞서갑니다` });
+```
+
+호출부 두 곳(`beta/soccer/career.js`의 프로 경기, `beta/soccer/game.js`의 유스 경기)에
+`rating`을 넘긴다. **유스 경기는 `rating` 변수명이 다를 수 있으니 소스를 확인한다.**
+
+- [ ] **Step 4: 초록불 + 회귀**
+
+```bash
+for t in tests/soccer/*.js; do node "$t" >/dev/null && echo "ok $t" || echo "FAIL $t"; done
+node --check beta/soccer/game.js && node --check beta/soccer/career.js
+```
+
+- [ ] **Step 5: 변이 검증**
+
+| 변조 | 실패해야 하는 검사 |
+|---|---|
+| `TEAMMATE_GOALS.df` 2.2 → 0.35 | 4·5 |
+| 동료 골을 `info.myGoals`에 더하기 | 6 |
+| `teammateGoals`가 평점을 무시 (`base` 고정) | 3 |
+
+하나라도 통과하면 그 검사는 아무것도 안 지킨다. 검사를 고쳐라.
+
+- [ ] **Step 6: 커밋**
+
+```bash
+git add beta/soccer/game.js beta/soccer/career.js tests/soccer/team-test.js
+git commit -m "fix(베타/축구): 동료 득점 추가 — 수비수 팀 승률 7%였던 문제"
+```
