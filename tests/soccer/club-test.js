@@ -84,7 +84,14 @@ const clubMissing = Object.entries(clubParts).filter(([, v]) => !v).map(([k]) =>
 const axisSrc = [parts.posAxisTable, parts.axisK, parts.axisOff, parts.posAxis].join("\n");
 const mateSrc = [parts.teammateGoalsTable, parts.teammateGoals].join("\n");
 
-const LEAGUE_IDS = [1, 2, 3];
+/* 리그는 소스에서 뽑아 tier 순으로 훑어요. [1, 2, 3]처럼 id를 박아 두면 하부 리그가
+ * 생겨도 검사가 그걸 못 봐요 — 실제로 K리그3·K리그2가 들어온 뒤에도 이 파일은
+ * 위쪽 세 리그만 재고 있었어요. id는 옛 세이브가 가리키는 값이라 순서와 무관해요. */
+const rawLeagues = grab(GAME, /const LEAGUES = \[[\s\S]*?\n\];/);
+const ALL_LEAGUES = rawLeagues ? new Function(`${rawLeagues} return LEAGUES;`)() : [];
+const BY_TIER = ALL_LEAGUES.slice().sort((a, b) => a.tier - b.tier);
+const LEAGUE_IDS = BY_TIER.map((l) => l.id);
+const nameOf = (id) => (ALL_LEAGUES.find((l) => l.id === id) || {}).name || `id ${id}`;
 const POS = ["fw", "wg", "mf", "df"];
 const POS_NAME = { fw: "공격수", wg: "윙어", mf: "미드필더", df: "수비수" };
 
@@ -100,8 +107,9 @@ const clubStrFn = clubSrc && clubParts.clubStrOf
   : null;
 
 guard("클럽 표", () => {
+  check(BY_TIER.length === 5, `리그가 5단이다 (${BY_TIER.map((l) => l.name).join(" < ")})`);
   check(LEAGUE_IDS.every((id) => Array.isArray(table[id]) && table[id].length >= 6),
-    `CLUBS에 리그 1·2·3이 있고 각각 6개 이상이다 (${LEAGUE_IDS.map((id) => `${id}부 ${(table[id] || []).length}개`).join(" · ")})`);
+    `CLUBS에 5단 전부가 있고 각각 6개 이상이다 (${LEAGUE_IDS.map((id) => `${nameOf(id)} ${(table[id] || []).length}개`).join(" · ")})`);
   const all = LEAGUE_IDS.flatMap((id) => table[id] || []);
   check(all.every((c) => c && typeof c.name === "string" && c.name.length > 0),
     `모든 클럽에 name이 있다 (${all.length}개)`);
@@ -110,14 +118,15 @@ guard("클럽 표", () => {
     `모든 클럽의 str이 40~95다 (벗어난 클럽 ${bad.length}개${bad.length ? `: ${bad.map((c) => `${c.name} ${c.str}`).join(", ")}` : ""})`);
 });
 
-// ② 리그가 높을수록 평균 전력이 높다 — 위로 갈수록 강팀이어야 이적이 사다리가 돼요
+// ② tier가 높을수록 평균 전력이 높다 — 위로 갈수록 강팀이어야 이적이 사다리가 돼요
 guard("리그별 평균 전력", () => {
   const avg = LEAGUE_IDS.map((id) => {
     const l = table[id] || [];
     return l.reduce((a, c) => a + c.str, 0) / l.length;
   });
-  check(avg[0] < avg[1] && avg[1] < avg[2],
-    `평균 전력이 1부 < 2부 < 3부다 (${avg.map((v, i) => `${i + 1}부 ${v.toFixed(1)}`).join(" < ")})`);
+  const rising = avg.every((v, i) => i === 0 || avg[i - 1] < v);
+  check(rising,
+    `평균 전력이 tier 순으로 올라간다 (${avg.map((v, i) => `${nameOf(LEAGUE_IDS[i])} ${v.toFixed(1)}`).join(" < ")})`);
 });
 
 // ③ 옛 세이브 방어 — S.clubStr이 없으면 70이다 (마이그레이션을 하지 않아요)
@@ -300,7 +309,7 @@ function seasonRates(pos, stat, league, str) {
 guard("전력이 수상에 안 닿는다", () => {
   const pct = (v) => `${(v * 100).toFixed(1)}%`;
   const t0 = Date.now();
-  console.log(`=== ⑦ 같은 리그(1부) 안에서 전력만 바꿨을 때 (칸당 ${N_SEASON}시즌) ===`);
+  console.log(`=== ⑦ 같은 리그(${nameOf(1)}) 안에서 전력만 바꿨을 때 (칸당 ${N_SEASON}시즌) ===`);
   console.log("  포지션 | 전력 | 리그MVP(능력치 90) | 팀 승률(능력치 70)");
   let bad = 0;
   for (const pos of POS) {
@@ -336,40 +345,51 @@ guard("깨진 값 방어", () => {
  * 팀 승률이 무너질 수 있어요. 상위 리그 클럽의 전력이 높은 게 그걸 되받아 줘요.
  * 각 리그에서 그 리그 평균 전력의 팀을 잡고 승률이 30~85%인지 봐요.
  *
- * 재보니 리그마다 '팀이 굴러가기 시작하는 능력치'가 달라요. 1부·2부는 능력치 70이면
- * 되는데 3부는 90은 돼야 해요 — 능력치 70으로 3부에 가면 팀 승률이 15~25%로 주저앉아요.
- * 그건 고장이 아니라 Task 1이 설계한 도박의 대가예요(같은 칸에서 리그MVP 확률도 0%예요).
+ * 재보니 리그마다 '팀이 굴러가기 시작하는 능력치'가 달라요. K리그3부터 유로파까지는
+ * 능력치 70이면 되는데 챔피언스리그는 90은 돼야 해요 — 능력치 70으로 챔피언스리그에
+ * 가면 팀 승률이 15~25%로 주저앉아요. 그건 고장이 아니라 리그 페널티가 설계한
+ * 도박의 대가예요(같은 칸에서 리그MVP 확률도 0%예요).
  * 그래서 범위 검사는 리그별 권장 능력치 칸에만 걸고, 나머지는 표로 남겨요.
- * 전체 격자를 눈으로 볼 수 있어야 다음에 밸런스를 만질 때 근거가 돼요. */
+ * 전체 격자를 눈으로 볼 수 있어야 다음에 밸런스를 만질 때 근거가 돼요.
+ *
+ * 하부 리그(K리그3·K리그2)는 클럽 전력이 40~51로 낮아서 승률이 무너질 위험이 컸어요.
+ * 실측해 보니 리그 평균 전력(43·46)에 능력치 70이면 50%·53%로 한가운데예요 —
+ * 상대도 같은 리그의 약팀이라 전력이 낮은 게 곧 패배가 되지는 않아요. */
 const WIN_SEASONS = Number(process.env.CLUB_WIN_N || 400);
 guard("리그별 팀 승률", () => {
-  const avgStr = LEAGUE_IDS.map((id) => {
+  const avgStr = {};
+  for (const id of LEAGUE_IDS) {
     const l = table[id] || [];
-    return Math.round(l.reduce((a, c) => a + c.str, 0) / l.length);
-  });
+    avgStr[id] = Math.round(l.reduce((a, c) => a + c.str, 0) / l.length);
+  }
   const winRate = (pos, id, stat) => {
     let w = 0, g = 0;
     for (let i = 0; i < WIN_SEASONS; i++) {
-      const act = seasonFn(stateOf(pos, stat, { league: id, clubStr: avgStr[id - 1] }), clamp, rand, randInt, pick);
+      const act = seasonFn(stateOf(pos, stat, { league: id, clubStr: avgStr[id] }), clamp, rand, randInt, pick);
       w += act.teamW; g += act.apps;
     }
     return w / g;
   };
-  // 리그별 권장 능력치 — 그 리그에서 팀이 굴러가기 시작하는 선이에요
-  const FIT = { 1: 70, 2: 70, 3: 90 };
+  /* 리그별 권장 능력치 — 그 리그에서 팀이 굴러가기 시작하는 선이에요.
+   * tier로 적어요. id를 키로 쓰면 순서가 안 보여서 다음 사람이 또 헷갈려요. */
+  const FIT_BY_TIER = { 1: 70, 2: 70, 3: 70, 4: 70, 5: 90 };
+  const fitLine = BY_TIER.map((l) => `${l.name} ${FIT_BY_TIER[l.tier]}`).join(" · ");
   console.log(`=== ⑨ 리그 × 포지션 팀 승률 (리그 평균 전력 · 시즌 ${WIN_SEASONS}회) ===`);
-  console.log(`  능력치 | 리그(전력) | ${POS.map((p) => POS_NAME[p].padStart(6)).join(" | ")} | 권장`);
+  console.log(`  능력치 | 리그(전력)      | ${POS.map((p) => POS_NAME[p].padStart(6)).join(" | ")} | 권장`);
   let out = 0;
+  const bad = [];
   for (const stat of [70, 90, 110]) {
-    for (const id of LEAGUE_IDS) {
-      const row = POS.map((pos) => winRate(pos, id, stat));
-      const fit = FIT[id] === stat;
-      if (fit) for (const v of row) if (v < 0.30 || v > 0.85) out++;
-      console.log(`  ${String(stat).padStart(6)} | ${`${id}부(${avgStr[id - 1]})`.padStart(9)} | ${row.map((v) => `${(v * 100).toFixed(0)}%`.padStart(6)).join(" | ")} | ${fit ? "◀" : ""}`);
+    for (const lg of BY_TIER) {
+      const row = POS.map((pos) => winRate(pos, lg.id, stat));
+      const fit = FIT_BY_TIER[lg.tier] === stat;
+      if (fit) row.forEach((v, i) => {
+        if (v < 0.30 || v > 0.85) { out++; bad.push(`${lg.name} ${POS_NAME[POS[i]]} ${(v * 100).toFixed(0)}%`); }
+      });
+      console.log(`  ${String(stat).padStart(6)} | ${`${lg.name}(${avgStr[lg.id]})`.padStart(15)} | ${row.map((v) => `${(v * 100).toFixed(0)}%`.padStart(6)).join(" | ")} | ${fit ? "◀" : ""}`);
     }
   }
   check(out === 0,
-    `리그별 권장 능력치(1부·2부 70 · 3부 90) 칸의 팀 승률이 30~85%다 (벗어난 칸 ${out}개)`);
+    `리그별 권장 능력치(${fitLine}) 칸의 팀 승률이 30~85%다 (벗어난 칸 ${out}개${bad.length ? `: ${bad.join(", ")}` : ""})`);
 });
 
 console.log(fail ? `\n❌ ${fail}건 실패` : "\n✅ 통과");

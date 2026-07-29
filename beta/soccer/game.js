@@ -1520,12 +1520,22 @@ function showEnding(survivedFinal, lastRound) {
   /* 📞 타 구단 스카우트는 프로로 이어져요. 조건(lastRound === 2 && score >= 420)을
    * 호출부에서 다시 계산하면 엔딩 분기와 어긋날 수 있으니 여기서 플래그만 세워 넘겨요.
    * 📹 세미프로 입단(semiPro)도 같은 방식이에요 — 사다리 맨 아래에서 프로가 시작돼요. */
-  let emoji, title, teamLine, msg, canExtend = false, scoutPro = false, semiPro = false;
+  let emoji, title, teamLine, msg, canExtend = false, scoutPro = false, semiPro = false, bigClub = false;
   const bottom = bottomLeague();
+  /* 👑는 이름 그대로 유럽에서 시작해요. 유스 최상위 엔딩인데 K리그1에서 출발하면
+   * 🌟 프로 계약 성공과 첫 시즌이 똑같아서 "빅클럽"이 말뿐이었어요.
+   * 실측(유스 직후 능력치 85 · 이적 없음 · 첫 시즌): 유로파 팀 승률 50% · hype 6.63으로
+   * K리그1(78% · 6.17)보다 팀은 덜 이기지만 개인 평가는 오히려 높아요.
+   * 평점 -1.6을 감당할 수 있는 능력치라서, 도전이 되되 무너지지는 않아요. */
+  // 이름이 아니라 tier로 찾아요 — 기본 리그(K리그1) 바로 한 칸 위가 유로파리그예요.
+  const base = leagueOf({});
+  const europa = LEAGUES.find((l) => l.tier === base.tier + 1) || base;
   if (survivedFinal && score >= 520) {
     emoji = "👑"; title = "유럽 빅클럽 입단!";
-    teamLine = `${m.name} 출신 — 빅리그 직행`;
-    msg = "역대급 유망주! 세계적인 명문 구단이 러브콜을 보냈어요.";
+    teamLine = `${m.name} 출신 — ${europa.name} 직행`;
+    bigClub = true;
+    msg = `역대급 유망주! 세계적인 명문 구단이 러브콜을 보냈어요. `
+      + `${europa.name}에서 곧바로 프로가 시작돼요 — 평점 -${europa.penalty.toFixed(1)}을 안고 뛰는 무대예요.`;
   } else if (survivedFinal) {
     emoji = "🌟"; title = "프로 계약 성공!";
     teamLine = `프로 1군 계약 확정`;
@@ -1595,13 +1605,14 @@ function showEnding(survivedFinal, lastRound) {
   /* keepSave를 넘기면 career.js가 clearSave()를 건너뛰어요.
    * 안 넘기면 "한 시즌 더 뛰기"를 누르기도 전에 세이브가 날아가요.
    * weakestClub은 📞 스카우트 경로 표시예요 — 프로는 프로인데 1부 최약체에서 출발해요.
-   * startLeague는 📹 세미프로 경로 표시예요 — 사다리 맨 아래 리그에서 출발해요.
-   * 둘 다 엔딩 분기가 세운 플래그를 그대로 넘겨요. 조건을 여기서 다시 계산하지 않아요. */
+   * startLeague는 시작 리그예요 — 📹 세미프로는 사다리 맨 아래(K리그3),
+   * 👑 유럽 빅클럽 입단은 유로파리그에서 출발해요. 나머지는 기본(K리그1)이에요.
+   * 전부 엔딩 분기가 세운 플래그를 그대로 넘겨요. 조건을 여기서 다시 계산하지 않아요. */
   if (window.WingerCareer) {
     window.WingerCareer.onEnding(
       survivedFinal || lastRound === 3 || scoutPro || semiPro,
-      survivedFinal && score >= 520,
-      { keepSave: canExtend, weakestClub: scoutPro, startLeague: semiPro ? bottom.id : null }
+      bigClub,
+      { keepSave: canExtend, weakestClub: scoutPro, startLeague: semiPro ? bottom.id : bigClub ? europa.id : null }
     );
   } else if (!canExtend) {
     clearSave();

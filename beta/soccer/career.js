@@ -582,10 +582,32 @@ window.WingerCareer = (() => {
    * 그래서 카드에 평점 페널티와 수상 가치를 숫자로 적어요 — 이게 도박의 크기라
    * 감추면 "왜 갑자기 무너졌는지" 모르는 채로 올라가게 돼요. */
   const TRANSFER_MIN_YEAR = 2;               // 같은 리그 이적도 2년차부터 열려요
-  const PROMOTE_HYPE = { 2: 5.5, 3: 6.5 };   // 이 리그의 제안이 오는 직전 시즌 hype
+
+  /* 승격 문턱 — "그 리그의 제안이 오는 직전 시즌 hype"예요. 키는 리그 id고,
+   * 순서는 id가 아니라 tier예요 (id는 옛 세이브가 가리키는 값이라 순서와 무관해요).
+   *
+   * 5단 전부를 덮어요. 하부 리그에 문턱이 없으면 need가 Infinity가 돼서
+   * 📹 세미프로로 시작한 선수가 영원히 K리그3에 갇혀요 — 사다리가 통째로 죽습니다.
+   * 맨 아래(K리그3)는 위에서 내려오는 길뿐이라 문턱이 쓰일 자리가 없지만,
+   * 표에 빠져 있으면 "빠뜨린 건지 없는 건지"가 안 보여서 0으로 적어 둡니다.
+   *
+   * 값은 감이 아니라 실측이에요. hype는 리그마다 눈금이 달라요 — 축에 prestige를
+   * 곱하니 같은 성적이라도 K리그3(0.55)에서는 K리그1보다 1.8쯤 낮게 나옵니다.
+   * 그래서 문턱을 '그 리그에서 그 hype를 중앙값으로 내는 능력치'로 환산해서 잡았어요.
+   * (5년차·컨디션 80·명성 900 · 포지션 4종 × 400시즌)
+   *
+   *   K리그3 → K리그2   2.5 — 능력치 51
+   *   K리그2 → K리그1   4.5 — 능력치 61
+   *   K리그1 → 유로파    5.5 — 능력치 69
+   *   유로파 → 챔피언스  6.5 — 능력치 88 (K리그1 눈금 기준)
+   *
+   * 능력치로 환산하면 51 → 61 → 69 → 88로 단조 증가해요. 하부에서 위로 가는 게
+   * K리그1에서 유로파로 가는 것보다 확실히 쉽다는 뜻이고, tests/soccer/promote-test.js가
+   * 이 순서를 지킵니다. 위쪽 둘(5.5·6.5)은 이적 작업에서 잡은 값 그대로예요. */
+  const PROMOTE_HYPE = { 5: 0, 4: 2.5, 1: 4.5, 2: 5.5, 3: 6.5 };
   const OFFERS_PER_LEAGUE = 2;               // 리그마다 제안 수
 
-  /* 계약금 — 리그 격과 클럽 전력에서 뽑아요. 격은 세제곱으로 실어요.
+  /* 계약금 — 리그 격과 클럽 전력에서 뽑아요. 격은 거듭제곱(FEE_PRESTIGE_POW)으로 실어요.
    * 리그를 올리는 이적이 눈에 띄게 큰 돈이어야 "지금 갈까"가 고민이 돼요.
    * 10만 단위로 끊어 읽기 좋게 합니다.
    *
@@ -601,6 +623,24 @@ window.WingerCareer = (() => {
   const DOWNGRADE_FEE = 0.3;   // 리그를 한 단계 내려갈 때마다 곱해요
   const LOYALTY_FEE = 0.75;    // 지금까지 한 이적 횟수만큼 거듭제곱으로 곱해요
 
+  /* 리그격을 몇 제곱으로 실을지예요. 원래 세제곱이었는데 제곱으로 낮췄어요.
+   *
+   * 5단 사다리를 만들며 챔피언스리그의 prestige가 1.80 → 2.40으로 올랐어요.
+   * 계약금이 prestige의 세제곱이라 그것만으로 최상위 계약금이 2.37배가 됐습니다.
+   * 실측(K리그3 시작 · 사다리 끝까지 오르는 정책 · 12시즌 8판):
+   *   · 뛰어서 버는 돈은 12시즌에 1.5억쯤이에요 (K리그1 붙박이 기준).
+   *   · 그런데 챔피언스리그 계약금 한 장이 1.4억이 나왔어요 — 버튼 한 번이
+   *     커리어 전체를 뛴 것과 맞먹고, 커리어 총수입의 73%가 이적에서 나왔어요.
+   *     계약금에 브레이크 셋을 건 이유(이적이 그냥 돈줄이 되면 안 된다)가 무너집니다.
+   *
+   * 2.40의 제곱(5.76)이 1.80의 세제곱(5.83)과 거의 같아요. 그래서 제곱으로 낮추면
+   * K리그1(격 1.00이라 원래 안 변함)과 챔피언스리그가 **둘 다** 예전 크기로 돌아와요.
+   * 계수(0.22)를 대신 깎으면 K리그1 이적까지 41%로 쪼그라들어서, 사다리 아래쪽
+   * 계약금이 경기 수당 한 판(30만) 수준으로 내려앉습니다.
+   * 실측 후: 커리어 총수입 1.22억 · 최대 계약금 7560만. tests/soccer/fee-test.js가 못 박아요. */
+  const FEE_BASE = 0.22;         // 클럽 전력의 제곱에 곱해요
+  const FEE_PRESTIGE_POW = 2;    // 리그격을 이만큼 거듭제곱해서 실어요
+
   // 예전에 떠나온 클럽인가요. 이적 기록의 '떠난 곳'으로 봐요.
   const leftBefore = (st, name) => ((st && st.moves) || []).some((m) => m.from === name);
 
@@ -609,8 +649,11 @@ window.WingerCareer = (() => {
     const moves = (state && state.moves) || [];
     // 한 번 떠난 클럽은 다시 계약금을 주지 않아요. 돌아오는 건 자유지만 공짜예요.
     if (leftBefore(state, club.name)) return 0;
-    const drop = Math.max(0, leagueOf(state).id - league.id);
-    const base = club.str * club.str * 0.22 * Math.pow(league.prestige, 3);
+    /* 낙폭은 tier로 봐요. id는 옛 세이브가 가리키는 값이라 순서와 무관해요 —
+     * id로 빼면 K리그1(id 1)에서 K리그3(id 5)으로 내려가는 게 drop 0이 돼서
+     * 하향 이적인데도 계약금이 한 푼도 안 깎여요. */
+    const drop = Math.max(0, leagueOf(state).tier - league.tier);
+    const base = club.str * club.str * FEE_BASE * Math.pow(league.prestige, FEE_PRESTIGE_POW);
     return Math.round(
       (base * Math.pow(DOWNGRADE_FEE, drop) * Math.pow(LOYALTY_FEE, moves.length)) / 10
     ) * 10;
@@ -641,7 +684,9 @@ window.WingerCareer = (() => {
     for (const lg of LEAGUES) {
       /* 위·아래는 tier로 봐요. id는 옛 세이브가 가리키는 값이라 순서와 무관해요 —
        * id로 비교하면 하부 리그(id 4·5)가 맨 위로 읽혀서 K리그3에서 챔피언스리그 제안이
-       * 문턱 없이 쏟아져요. 문턱이 아직 없는 리그(need == null)는 위로 못 올라가요. */
+       * 문턱 없이 쏟아져요. 문턱이 빠진 리그(need == null)는 위로 못 올라가요 —
+       * PROMOTE_HYPE는 5단 전부를 덮으니 지금은 걸릴 일이 없지만, 표에서 한 줄이
+       * 사라지면 그 리그가 막다른 길이 되는 걸 이 방어선이 조용히 대신 막아 줍니다. */
       const need = PROMOTE_HYPE[lg.id];
       if (lg.tier > cur.tier && hype < (need == null ? Infinity : need)) continue;
       const pool = (CLUBS[lg.id] || []).filter((c) => c.name !== state.group);
@@ -652,18 +697,34 @@ window.WingerCareer = (() => {
     return list;
   }
 
-  // 도박의 크기 — 평점에서 빼는 값과 수상 가치에 곱하는 값이에요.
-  const riskText = (lg) =>
-    `평점 ${lg.penalty > 0 ? `-${lg.penalty.toFixed(1)}` : "그대로"} · 수상 가치 ×${lg.prestige.toFixed(2)}`;
+  /* 도박의 크기 — 평점에서 빼는 값과 수상 가치에 곱하는 값이에요.
+   *
+   * 하부 리그는 페널티가 0이라 숫자만 적으면 "공짜로 갈 수 있는 곳"으로 읽혀요.
+   * 실제 대가는 수상 가치(prestige < 1)예요 — 상은 쉽게 받지만 명예의 전당 점수가
+   * 작아요. 그래서 위로 가는 카드와 아래로 가는 카드에 각각 한 마디를 붙여 둡니다. */
+  const riskText = (lg) => {
+    const pen = lg.penalty > 0 ? `평점 -${lg.penalty.toFixed(1)}` : "평점 그대로";
+    const note = lg.penalty > 0 ? " · 버티면 값어치가 커요"
+      : lg.prestige < 1 ? " · 상은 쉬워도 값어치가 작아요" : "";
+    return `${pen} · 수상 가치 ×${lg.prestige.toFixed(2)}${note}`;
+  };
+
+  // 리그는 언제나 tier 순으로 늘어놔요 — 화면이 곧 사다리라야 위아래가 읽혀요.
+  const byTier = () => LEAGUES.slice().sort((a, b) => a.tier - b.tier);
 
   function renderTransfer() {
     const cur = leagueOf(S);
     $("transfer-title").textContent = `💼 이적 제안 — ${S.proYear}시즌 오프시즌`;
-    const gate = LEAGUES.filter((l) => PROMOTE_HYPE[l.id] != null)
-      .map((l) => `${l.name} ${PROMOTE_HYPE[l.id]}`).join(" · ");
+    /* 문턱은 '지금보다 위'만 적어요. 5단 전부를 적으면 이미 지나온 리그의 문턱까지
+     * 줄줄이 붙어서 정작 다음 칸이 어디인지가 안 보여요. */
+    const upper = byTier().filter((l) => l.tier > cur.tier && PROMOTE_HYPE[l.id] != null);
+    const gate = upper.map((l) => `${l.name} ${PROMOTE_HYPE[l.id]}`).join(" · ");
+    const gateLine = upper.length
+      ? `직전 시즌 평가 <b>${lastHype(S).toFixed(1)}</b> — 위 리그 제안은 평가가 이만큼 돼야 와요 (${gate}).`
+      : `직전 시즌 평가 <b>${lastHype(S).toFixed(1)}</b> — 여기가 사다리의 꼭대기예요. 더 올라갈 리그는 없어요.`;
     $("transfer-now").innerHTML =
       `지금은 <b>${cur.flag} ${S.group}</b> (${cur.name} · 전력 ${clubStrOf(S)}) 소속이에요.<br/>`
-      + `직전 시즌 평가 <b>${lastHype(S).toFixed(1)}</b> — 위 리그 제안은 평가가 이만큼 돼야 와요 (${gate}).<br/>`
+      + `${gateLine}<br/>`
       + `아래 리그로 내려가는 이적은 언제든 할 수 있어요 — 대신 계약금이 크게 줄어요.<br/>`
       + `한 번 떠난 클럽으로 돌아갈 땐 계약금이 없고, 이적을 거듭할수록 계약금이 깎여요.`;
     const box = $("transfer-list");
@@ -672,28 +733,36 @@ window.WingerCareer = (() => {
     if (!offers.length) {
       box.innerHTML = `<p class="hint">올해는 들어온 제안이 없어요.</p>`;
     }
-    for (const lg of LEAGUES) {
+    /* 리그 묶음은 tier 순으로 그려요 — 아래 리그도 위 리그와 똑같은 형식이라
+     * 사다리 한 칸씩 오르내리는 게 화면에서 그대로 보여야 해요. */
+    for (const lg of byTier()) {
       const mine = offers.filter((o) => o.league.id === lg.id);
       if (!mine.length) continue;
       const group = document.createElement("div");
       // 위·아래 표시도 tier로 봐요 — transferOffers와 같은 기준이어야 해요.
-      group.className = "tf-group" + (lg.tier > cur.tier ? " up" : lg.tier < cur.tier ? " down" : " same");
+      const dir = lg.tier > cur.tier ? "up" : lg.tier < cur.tier ? "down" : "same";
+      group.className = `tf-group ${dir}`;
       group.dataset.league = String(lg.id);
+      group.dataset.tier = String(lg.tier);
       const head = document.createElement("div");
       head.className = "tf-head";
-      head.innerHTML = `<span class="tf-lg">${lg.flag} ${lg.name}</span><span class="tf-risk">${riskText(lg)}</span>`;
+      const arrow = dir === "up" ? "▲ 위 리그" : dir === "down" ? "▼ 아래 리그" : "지금 리그";
+      head.innerHTML = `<span class="tf-lg">${lg.flag} ${lg.name} <small>${arrow}</small></span><span class="tf-risk">${riskText(lg)}</span>`;
       group.appendChild(head);
       for (const o of mine) {
         const card = document.createElement("button");
-        card.className = "tf-card";
+        card.className = `tf-card ${dir}`;
         card.dataset.club = o.club.name;
         card.dataset.league = String(lg.id);
+        card.dataset.tier = String(lg.tier);
         card.dataset.fee = String(o.fee);
-        /* 카드마다 페널티와 수상 가치를 다시 적어요. 헤더에만 있으면
-         * 스크롤하다 카드만 보고 누르는 사람에게는 안 보여요. */
+        /* 카드마다 리그 이름·페널티·수상 가치를 다시 적어요. 헤더에만 있으면
+         * 스크롤하다 카드만 보고 누르는 사람에게는 안 보여요. 리그가 5개로 늘어난 뒤로는
+         * "이 카드가 어느 리그 것인지"부터 안 보이는 게 제일 위험해요. */
         card.innerHTML = `
           <span class="tf-top"><span class="tf-name">${o.club.name}</span><span class="tf-str">전력 ${o.club.str}</span></span>
-          <span class="tf-sub"><span class="tf-fee">${feeText(o.fee, o.back)}</span><span class="tf-risk">${riskText(lg)}</span></span>`;
+          <span class="tf-sub"><span class="tf-lg">${lg.flag} ${lg.name}</span><span class="tf-fee">${feeText(o.fee, o.back)}</span></span>
+          <span class="tf-sub"><span class="tf-risk">${riskText(lg)}</span></span>`;
         card.onclick = () => acceptOffer(o);
         group.appendChild(card);
       }

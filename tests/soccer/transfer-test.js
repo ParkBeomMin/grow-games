@@ -75,11 +75,16 @@ const OFFERS_PER_LEAGUE = consts.perLeague ? new Function(`${consts.perLeague} r
 const LEAGUES = T.LEAGUES;
 const CLUBS = T.CLUBS;
 const leagueById = (id) => LEAGUES.find((l) => l.id === id);
+/* 리그 이름은 LEAGUES에서 읽는다. 예전에는 검사 문구가 "1부·2부·3부"였는데,
+ * 5단 사다리가 들어온 뒤로 그 말이 K리그1·유로파리그·챔피언스리그를 가리키게 됐다.
+ * 하부 리그(K리그3·K리그2)가 생겨서 "2부"라고 읽으면 정반대 리그를 떠올리게 된다.
+ * 이 파일이 재는 대상은 그대로고, 부르는 이름만 실제 이름으로 바꾼다. */
+const NM = (id) => (leagueById(id) || {}).name || `id ${id}`;
 // 리그 목록에서 훑는다 — 하부 리그가 늘어도 여기를 다시 안 고치게.
 const clubByName = (n) => LEAGUES.flatMap((l) => CLUBS[l.id] || []).find((c) => c.name === n);
 
-// ---------- ① 데뷔 클럽은 1부 하위 3개에서만 뽑힌다 ----------
-/* 지금까지는 1부 6개 중 무작위라 전력 52~78로 갈렸다. 첫 시즌 팀 성적이 운이고
+// ---------- ① 데뷔 클럽은 기본 리그(K리그1) 하위 3개에서만 뽑힌다 ----------
+/* 지금까지는 K리그1 6개 중 무작위라 전력 52~78로 갈렸다. 첫 시즌 팀 성적이 운이고
  * 신인이 우승 후보에 가는 것도 어색하다. 엔딩 화면의 "프로 커리어 시작" 버튼을
  * 실제로 200번 눌러서 확인한다 — enterCareer를 직접 부르지 않는다. */
 const DEBUT_N = 200;
@@ -100,12 +105,12 @@ guard("데뷔 클럽", () => {
   const over = debut.filter((d) => !(d.str <= median));
   const outside = debut.filter((d) => !bottom3.has(d.name));
   const names = [...new Set(debut.map((d) => d.name))];
-  console.log(`=== ① 데뷔 클럽 ${DEBUT_N}회 (1부 전력 ${strs.join("·")} · 중앙값 ${median}) ===`);
+  console.log(`=== ① 데뷔 클럽 ${DEBUT_N}회 (${NM(1)} 전력 ${strs.join("·")} · 중앙값 ${median}) ===`);
   console.log(`  뽑힌 클럽: ${names.map((n) => `${n}(${clubByName(n) ? clubByName(n).str : "?"})`).join(" · ")}`);
-  check(over.length === 0, `${DEBUT_N}회 모두 데뷔 클럽 전력이 1부 중앙값(${median}) 이하다 (넘은 판 ${over.length}건)`);
-  check(outside.length === 0, `${DEBUT_N}회 모두 1부 하위 3개 클럽(${[...bottom3].join("·")})에서 뽑힌다 (벗어난 판 ${outside.length}건)`);
+  check(over.length === 0, `${DEBUT_N}회 모두 데뷔 클럽 전력이 ${NM(1)} 중앙값(${median}) 이하다 (넘은 판 ${over.length}건)`);
+  check(outside.length === 0, `${DEBUT_N}회 모두 ${NM(1)} 하위 3개 클럽(${[...bottom3].join("·")})에서 뽑힌다 (벗어난 판 ${outside.length}건)`);
   check(names.length >= 2, `한 클럽으로 고정되지 않는다 (${names.length}종)`);
-  check(debut.every((d) => d.league === 1), "데뷔는 언제나 1부다");
+  check(debut.every((d) => d.league === 1), `데뷔는 언제나 기본 리그(${NM(1)})다`);
 });
 
 // ---------- 시즌을 실제로 굴린다 (버튼 클릭만으로) ----------
@@ -195,36 +200,36 @@ guard("현재 클럽 제외", () => {
   check(bad === 0, `60번 다시 열어도 현재 소속 클럽이 제안에 없다 (어긋난 판 ${bad}건 · 카드 ${seen}장)`);
 });
 
-// ---------- ⑤ hype 문턱 — 2부·3부 제안 ----------
+// ---------- ⑤ hype 문턱 — 유로파리그·챔피언스리그 제안 ----------
 guard("리그 문턱", () => {
   const below = openTransfer({ league: 1, group: CLUBS[1][5].name, hype: PROMOTE_HYPE[2] - 0.1, moves: [] });
   check(!!below, "문턱 아래에서도 이적 화면 자체는 열린다 (같은 리그 이적은 되니까)");
   check(!!below && cardsOf(1).length === OFFERS_PER_LEAGUE,
-    `1부 제안이 ${OFFERS_PER_LEAGUE}개 온다 (${below ? cardsOf(1).length : 0}개)`);
+    `${NM(1)} 제안이 ${OFFERS_PER_LEAGUE}개 온다 (${below ? cardsOf(1).length : 0}개)`);
   check(!!below && cardsOf(2).length === 0,
-    `직전 시즌 hype가 ${PROMOTE_HYPE[2]} 미만이면 2부 제안이 안 온다 (${below ? cardsOf(2).length : 0}개)`);
+    `직전 시즌 hype가 ${PROMOTE_HYPE[2]} 미만이면 ${NM(2)} 제안이 안 온다 (${below ? cardsOf(2).length : 0}개)`);
   check(!!below && cardsOf(3).length === 0,
-    `그때 3부 제안도 당연히 없다 (${below ? cardsOf(3).length : 0}개)`);
+    `그때 ${NM(3)} 제안도 당연히 없다 (${below ? cardsOf(3).length : 0}개)`);
 
   const at2 = openTransfer({ hype: PROMOTE_HYPE[2], moves: [] });
   check(!!at2 && cardsOf(2).length === OFFERS_PER_LEAGUE,
-    `hype가 ${PROMOTE_HYPE[2]} 이상이면 2부 제안이 ${OFFERS_PER_LEAGUE}개 온다 (${at2 ? cardsOf(2).length : 0}개)`);
+    `hype가 ${PROMOTE_HYPE[2]} 이상이면 ${NM(2)} 제안이 ${OFFERS_PER_LEAGUE}개 온다 (${at2 ? cardsOf(2).length : 0}개)`);
   check(!!at2 && cardsOf(3).length === 0,
-    `${PROMOTE_HYPE[2]}으로는 3부 제안이 아직 안 온다 (${at2 ? cardsOf(3).length : 0}개)`);
+    `${PROMOTE_HYPE[2]}으로는 ${NM(3)} 제안이 아직 안 온다 (${at2 ? cardsOf(3).length : 0}개)`);
 
   const at3 = openTransfer({ hype: PROMOTE_HYPE[3], moves: [] });
   check(!!at3 && cardsOf(2).length === OFFERS_PER_LEAGUE && cardsOf(3).length === OFFERS_PER_LEAGUE,
-    `hype가 ${PROMOTE_HYPE[3]} 이상이면 2부·3부 제안이 함께 온다 (2부 ${at3 ? cardsOf(2).length : 0} · 3부 ${at3 ? cardsOf(3).length : 0})`);
+    `hype가 ${PROMOTE_HYPE[3]} 이상이면 ${NM(2)}·${NM(3)} 제안이 함께 온다 (${NM(2)} ${at3 ? cardsOf(2).length : 0} · ${NM(3)} ${at3 ? cardsOf(3).length : 0})`);
 });
 
-// ---------- ⑥ 3부에 있으면 1·2부 제안도 온다 (내려오는 이적은 언제든) ----------
+// ---------- ⑥ 챔피언스리그에 있으면 아래 리그 제안도 온다 (내려오는 이적은 언제든) ----------
 guard("아래로 내려오는 이적", () => {
   const down = openTransfer({ league: 3, group: CLUBS[3][0].name, clubStr: CLUBS[3][0].str, hype: -1, moves: [] });
-  check(!!down, "3부 소속에서도 이적 화면이 열린다");
+  check(!!down, `${NM(3)} 소속에서도 이적 화면이 열린다`);
   check(!!down && cardsOf(1).length === OFFERS_PER_LEAGUE && cardsOf(2).length === OFFERS_PER_LEAGUE,
-    `hype가 바닥이어도 1·2부 제안은 온다 (1부 ${down ? cardsOf(1).length : 0} · 2부 ${down ? cardsOf(2).length : 0})`);
+    `hype가 바닥이어도 ${NM(1)}·${NM(2)} 제안은 온다 (${NM(1)} ${down ? cardsOf(1).length : 0} · ${NM(2)} ${down ? cardsOf(2).length : 0})`);
   check(!!down && cardsOf(3).length === OFFERS_PER_LEAGUE,
-    `같은 리그(3부) 이적도 가능하다 (${down ? cardsOf(3).length : 0}개)`);
+    `같은 리그(${NM(3)}) 이적도 가능하다 (${down ? cardsOf(3).length : 0}개)`);
 });
 
 // ---------- ⑦ 카드에 평점 페널티와 수상 가치가 숫자로 있다 ----------
@@ -274,7 +279,7 @@ guard("이적 실행", () => {
   const list = openTransfer({ league: 1, group: from.name, clubStr: from.str, hype: PROMOTE_HYPE[3], moves: [] });
   check(!!list, "이적 실행 검사를 위해 이적 화면에 들어간다");
   const target = (list || []).find((el) => Number(el.dataset.league) === 2);
-  check(!!target, "2부 제안 카드가 있다");
+  check(!!target, `${NM(2)} 제안 카드가 있다`);
   if (!target) return;
   const wantClub = target.dataset.club;
   const wantStr = clubByName(wantClub).str;
@@ -284,7 +289,7 @@ guard("이적 실행", () => {
 
   const St = T.state();
   check(St.group === wantClub, `S.group이 카드의 클럽으로 바뀐다 (${from.name} → ${St.group})`);
-  check(St.league === 2, `S.league가 2부로 바뀐다 (${St.league})`);
+  check(St.league === 2, `S.league가 ${NM(2)}로 바뀐다 (${St.league})`);
   check(St.clubStr === wantStr, `S.clubStr이 그 클럽의 전력이 된다 (${St.clubStr} vs ${wantStr})`);
   check(Array.isArray(St.moves) && St.moves.length === 1, `S.moves에 한 줄이 쌓인다 (${(St.moves || []).length}줄)`);
   const mv = (St.moves || [])[0] || {};
@@ -307,16 +312,16 @@ guard("이적 실행", () => {
 });
 
 
-// ---------- ⑪ 능력치 70은 3부 제안을 사실상 못 받는다 ----------
+// ---------- ⑪ 능력치 70은 챔피언스리그 제안을 사실상 못 받는다 ----------
 /* 약한 선수가 빅클럽에 가서 팀 승률 13%로 무너지는 상황을 막는 방어선이다.
- * 3부 문턱(PROMOTE_HYPE[3])이 능력치 70의 시즌 hype보다 확실히 위인지 실측한다.
+ * 챔피언스리그 문턱(PROMOTE_HYPE[3])이 능력치 70의 시즌 hype보다 확실히 위인지 실측한다.
  *
- * 실측 결과를 그대로 적는다. "능력치 70은 절대 3부 제안을 못 받는다"는 성립하지 않는다.
+ * 실측 결과를 그대로 적는다. "능력치 70은 절대 챔피언스리그 제안을 못 받는다"는 성립하지 않는다.
  * 평균은 문턱보다 1점 넘게 아래지만 분포에 꼬리가 있어서, 커리어 하이 시즌 1~2%는
  * 문턱을 넘는다. 그건 고장이 아니라 설계다 — 문턱은 "제안이 오는 조건"이지
  * 성공 보장이 아니고, 그렇게 열린 카드에도 평점 -2.8이 그대로 적혀 있다(⑦).
  * 그래서 여기서는 (a) 넘는 시즌이 드문 꼬리인지, (b) 평범한 시즌(중앙값·상위 5%)으로는
- * 화면에 3부 카드가 한 장도 안 뜨는지를 못 박는다.
+ * 화면에 챔피언스리그 카드가 한 장도 안 뜨는지를 못 박는다.
  *
  * 시즌은 페이지에 실제로 로드된 함수로 굴린다 (ratingOf·matchContribution·autoRes).
  * hype 산식만 career.js 소스에서 떼어 new Function으로 감싼다 — 옮겨 적으면
@@ -330,7 +335,7 @@ const seasonSrc = {
 const seasonMissing = Object.entries(seasonSrc).filter(([, v]) => !v).map(([k]) => k);
 check(seasonMissing.length === 0, seasonMissing.length ? `산식을 못 찾았어요: ${seasonMissing.join(", ")}` : "시즌·hype 산식을 소스에서 뽑았다");
 
-guard("능력치 70의 3부 차단", () => {
+guard("능력치 70의 챔피언스리그 차단", () => {
   if (seasonMissing.length) return;
   const careerState = T.state();   // 시뮬레이션이 전역 S를 갈아끼우니 원래 세이브를 붙잡아 둔다
   const GAMES = new Function(`${seasonSrc.cbPerYear} ${seasonSrc.weeksPerCb} return CB_PER_YEAR * WEEKS_PER_CB;`)();
@@ -366,7 +371,7 @@ guard("능력치 70의 3부 차단", () => {
   const POS_NAME = { fw: "공격수", wg: "윙어", mf: "미드필더", df: "수비수" };
   const pctl = (sorted, p) => sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * p))];
   console.log(`=== ⑪ 능력치 70의 5년차 시즌 hype (포지션당 ${N}시즌) ===`);
-  console.log(`  포지션 |   평균 | 중앙값 | 상위5% |   최대 | 2부 문턱 ${PROMOTE_HYPE[2]} 이상 | 3부 문턱 ${PROMOTE_HYPE[3]} 이상`);
+  console.log(`  포지션 |   평균 | 중앙값 | 상위5% |   최대 | ${NM(2)} 문턱 ${PROMOTE_HYPE[2]} 이상 | ${NM(3)} 문턱 ${PROMOTE_HYPE[3]} 이상`);
   const all = [];
   for (const pos of POS) {
     const hs = [];
@@ -385,30 +390,30 @@ guard("능력치 70의 3부 차단", () => {
   const p50 = pctl(all, 0.5), p95 = pctl(all, 0.95), max = all[all.length - 1];
 
   check(p95 < PROMOTE_HYPE[3],
-    `능력치 70은 상위 5% 시즌으로도 3부 문턱을 못 넘는다 (상위 5% ${p95.toFixed(2)} vs 문턱 ${PROMOTE_HYPE[3]})`);
+    `능력치 70은 상위 5% 시즌으로도 ${NM(3)} 문턱을 못 넘는다 (상위 5% ${p95.toFixed(2)} vs 문턱 ${PROMOTE_HYPE[3]})`);
   check(PROMOTE_HYPE[3] - mean > Math.abs(mean - PROMOTE_HYPE[2]),
-    `평균 시즌은 2부 문턱 근처지 3부 문턱 근처가 아니다 (평균 ${mean.toFixed(2)} — 2부까지 ${(mean - PROMOTE_HYPE[2]).toFixed(2)} · 3부까지 ${(PROMOTE_HYPE[3] - mean).toFixed(2)})`);
+    `평균 시즌은 ${NM(2)} 문턱 근처지 ${NM(3)} 문턱 근처가 아니다 (평균 ${mean.toFixed(2)} — ${NM(2)}까지 ${(mean - PROMOTE_HYPE[2]).toFixed(2)} · ${NM(3)}까지 ${(PROMOTE_HYPE[3] - mean).toFixed(2)})`);
   check(rate3 < 0.05,
-    `3부 문턱을 넘는 건 커리어 하이 시즌 5% 미만이다 (${POS.length}포지션 × ${N}시즌 중 ${(rate3 * 100).toFixed(2)}%)`);
+    `${NM(3)} 문턱을 넘는 건 커리어 하이 시즌 5% 미만이다 (${POS.length}포지션 × ${N}시즌 중 ${(rate3 * 100).toFixed(2)}%)`);
   check(rate2 > 0.2 && rate2 < 0.8,
-    `2부는 그와 달리 실제로 열리는 사다리다 (${(rate2 * 100).toFixed(1)}%가 2부 문턱을 넘는다)`);
+    `${NM(2)}는 그와 달리 실제로 열리는 사다리다 (${(rate2 * 100).toFixed(1)}%가 ${NM(2)} 문턱을 넘는다)`);
 
   /* 화면에서도 막히는지 — 중앙값 시즌과 상위 5% 시즌을 hype로 박고 실제로 버튼을 눌러
-   * 3부 카드 수를 센다. 여기서 0장이어야 "평범한 능력치 70은 빅클럽 문을 못 연다"가 된다. */
+   * 챔피언스리그 카드 수를 센다. 0장이어야 "평범한 능력치 70은 빅클럽 문을 못 연다"가 된다. */
   set("S", careerState);
   for (const [label, h] of [["중앙값", p50], ["상위 5%", p95]]) {
     const list = openTransfer({ league: 1, group: CLUBS[1][5].name, clubStr: CLUBS[1][5].str, hype: h, moves: [] });
     check(!!list, `능력치 70의 ${label} 시즌(hype ${h.toFixed(2)})으로 이적 화면에 들어간다`);
     check(!!list && cardsOf(3).length === 0,
-      `능력치 70의 ${label} 시즌으로는 3부 카드가 한 장도 없다 (${list ? cardsOf(3).length : 0}장)`);
+      `능력치 70의 ${label} 시즌으로는 ${NM(3)} 카드가 한 장도 없다 (${list ? cardsOf(3).length : 0}장)`);
     check(!!list && cardsOf(1).length === OFFERS_PER_LEAGUE,
-      `대신 같은 리그 이적은 그대로 열려 있다 (1부 ${list ? cardsOf(1).length : 0}장)`);
+      `대신 같은 리그 이적은 그대로 열려 있다 (${NM(1)} ${list ? cardsOf(1).length : 0}장)`);
   }
   /* 꼬리가 실재한다는 것도 같이 못 박는다. 이 검사가 없으면 위 두 줄은
-   * "3부 카드를 아예 안 그린다"는 버그로도 초록이 뜬다. */
+   * "챔피언스리그 카드를 아예 안 그린다"는 버그로도 초록이 뜬다. */
   const top = openTransfer({ league: 1, group: CLUBS[1][5].name, clubStr: CLUBS[1][5].str, hype: max, moves: [] });
   check(!!top && cardsOf(3).length === OFFERS_PER_LEAGUE,
-    `능력치 70의 커리어 하이(hype ${max.toFixed(2)})는 3부 문을 연다 — 문턱이 실제로 hype를 보고 있다는 뜻이다 (${top ? cardsOf(3).length : 0}장)`);
+    `능력치 70의 커리어 하이(hype ${max.toFixed(2)})는 ${NM(3)} 문을 연다 — 문턱이 실제로 hype를 보고 있다는 뜻이다 (${top ? cardsOf(3).length : 0}장)`);
   check(!!top && (top || []).filter((el) => Number(el.dataset.league) === 3)
     .every((el) => el.textContent.includes(`-${leagueById(3).penalty.toFixed(1)}`)),
     `그 카드에도 평점 -${leagueById(3).penalty.toFixed(1)}이 그대로 적혀 있다 (도박의 크기를 감추지 않는다)`);

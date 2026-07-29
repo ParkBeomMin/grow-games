@@ -163,6 +163,10 @@ body {
   margin-bottom: 8px;
 }
 .tf-head .tf-lg { font-family: "Jua", sans-serif; font-size: 1.05rem; color: var(--accent); }
+/* 리그가 5개로 늘어서 묶음마다 위/아래를 한 마디로 적어요 */
+.tf-head .tf-lg small { font-family: inherit; font-size: 0.72rem; color: var(--dim); }
+.tf-group.same .tf-head .tf-lg { color: var(--text); }
+.tf-group.down .tf-head .tf-lg { color: var(--dim); }
 .tf-risk { font-size: 0.76rem; color: var(--sky); }
 .tf-group.up .tf-head .tf-risk { color: var(--accent2); }
 .tf-card {
@@ -185,10 +189,13 @@ body {
 .tf-card:hover, .tf-card:focus-visible { border-color: var(--accent); transform: translateY(-1px); }
 .tf-card:active { transform: scale(0.98); }
 .tf-card .tf-top,
-.tf-card .tf-sub { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.tf-card .tf-sub { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
 .tf-card .tf-name { font-family: "Jua", sans-serif; color: var(--text); }
 .tf-card .tf-str { font-size: 0.8rem; color: var(--dim); }
 .tf-card .tf-fee { font-size: 0.82rem; color: var(--accent); }
+/* 카드만 보고 눌러도 어느 리그인지 알 수 있어야 해요 */
+.tf-card .tf-lg { font-size: 0.8rem; color: var(--sky); }
+.tf-card.down .tf-lg, .tf-card.down .tf-risk { color: var(--dim); }
 
 @media (max-width: 380px) {
   .card-grid.three { grid-template-columns: 1fr; }

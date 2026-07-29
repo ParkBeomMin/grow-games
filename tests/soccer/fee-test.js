@@ -59,6 +59,7 @@ const src = {
   down: grab(SRC, /const DOWNGRADE_FEE = [^;]+;/),
   loyal: grab(SRC, /const LOYALTY_FEE = [^;]+;/),
   promote: grab(SRC, /const PROMOTE_HYPE = \{[^}]*\};/),
+  pow: grab(SRC, /const FEE_PRESTIGE_POW = [^;]+;/),
 };
 const missing = Object.entries(src).filter(([, v]) => !v).map(([k]) => k);
 check(missing.length === 0,
@@ -67,6 +68,7 @@ check(missing.length === 0,
 const DOWNGRADE_FEE = src.down ? new Function(`${src.down} return DOWNGRADE_FEE;`)() : null;
 const LOYALTY_FEE = src.loyal ? new Function(`${src.loyal} return LOYALTY_FEE;`)() : null;
 const PROMOTE_HYPE = src.promote ? new Function(`${src.promote} return PROMOTE_HYPE;`)() : { 2: 5.5, 3: 6.5 };
+const FEE_PRESTIGE_POW = src.pow ? new Function(`${src.pow} return FEE_PRESTIGE_POW;`)() : 3;
 check(DOWNGRADE_FEE != null && DOWNGRADE_FEE > 0 && DOWNGRADE_FEE < 1,
   `DOWNGRADE_FEE가 0과 1 사이다 — 리그를 내려가면 계약금이 줄어든다 (${DOWNGRADE_FEE})`);
 check(LOYALTY_FEE != null && LOYALTY_FEE > 0 && LOYALTY_FEE < 1,
@@ -223,6 +225,41 @@ guard("⑥ 계약금 표시", () => {
   const txt = el.textContent.replace(/\s+/g, " ");
   check(!/계약금 0[만억]/.test(txt), `카드가 "계약금 0만"이라고 적지 않는다 (${txt})`);
   check(txt.includes("계약금 없음"), `카드에 계약금이 없다고 적혀 있다 (${txt})`);
+});
+
+/* ---------- ⑦ 리그격이 계약금에 얼마나 실리는가 ----------
+ *
+ * 여기가 조용히 새는 자리다. 계약금은 리그격(prestige)의 거듭제곱이라,
+ * 리그 계수를 수상 가치 때문에 손대면 계약금이 따라 부푼다.
+ * 실제로 5단 사다리 작업에서 챔피언스리그 prestige가 1.80 → 2.40이 되자
+ * 세제곱이 그대로 실려 최상위 계약금이 2.37배가 됐다 —
+ * 실측으로 계약금 한 장(1.4억)이 12시즌을 뛰어서 버는 돈(1.5억)과 맞먹었다.
+ * 그래서 거듭제곱을 제곱으로 낮췄다.
+ *
+ * 검사는 화면에서 읽은 계약금으로 지수를 되짚는다. 전력이 다른 두 클럽을 비교하니
+ * 전력의 제곱으로 나눠서 리그격 몫만 남긴다. 값을 옮겨 적지 않는다. */
+guard("⑦ 리그격의 거듭제곱", () => {
+  const byTier = LEAGUES.slice().sort((a, b) => a.tier - b.tier);
+  const top = byTier[byTier.length - 1];
+  const base = leagueById(1);                       // 기본 리그 — prestige 1.00이라 기준점이다
+  const start = { league: base.id, group: A.name, clubStr: A.str, proYear: 3, moves: [], hype: PROMOTE_HYPE[top.id] };
+  const topClub = CLUBS[top.id].slice().sort((a, b) => b.str - a.str)[0];
+  const baseClub = CLUBS[base.id].slice().sort((a, b) => b.str - a.str)[0];
+  const feeTop = feeOf(findCard(topClub.name, start));
+  const feeBase = feeOf(findCard(baseClub.name, start));
+  // 전력 몫을 걷어내고 리그격 몫만 남긴다
+  const perStrTop = feeTop / (topClub.str * topClub.str);
+  const perStrBase = feeBase / (baseClub.str * baseClub.str);
+  const ratio = perStrTop / perStrBase;
+  const powSeen = Math.log(ratio) / Math.log(top.prestige / base.prestige);
+  console.log(`=== ⑦ ${topClub.name}(${top.name} 전력 ${topClub.str}) ${feeTop} vs ${baseClub.name}(${base.name} 전력 ${baseClub.str}) ${feeBase} ===`);
+  console.log(`  전력 몫을 걷어낸 리그격 배수 ${ratio.toFixed(2)} — prestige ${top.prestige}의 ${powSeen.toFixed(2)}제곱`);
+  check(Math.abs(powSeen - FEE_PRESTIGE_POW) < 0.05,
+    `계약금이 리그격을 FEE_PRESTIGE_POW(${FEE_PRESTIGE_POW})제곱으로 싣는다 (실측 ${powSeen.toFixed(2)}제곱)`);
+  check(FEE_PRESTIGE_POW < 3,
+    `리그격을 세제곱으로 싣지 않는다 — 리그 계수를 올릴 때마다 계약금이 따라 폭주하던 자리다 (${FEE_PRESTIGE_POW}제곱)`);
+  check(ratio < 10,
+    `최상위 리그 계약금이 같은 전력이라면 기본 리그의 10배를 넘지 않는다 (${ratio.toFixed(2)}배)`);
 });
 
 console.log(fail ? `\n❌ ${fail}건 실패` : "\n✅ 통과");
