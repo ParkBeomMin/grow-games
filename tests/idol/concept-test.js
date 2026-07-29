@@ -188,6 +188,13 @@ check(activeScreen2() === "screen-concept",
 check(!$2("screen-stage").classList.contains("active"), "이때 무대 화면(screen-stage)은 안 보인다");
 
 check(cards2().length === 4, `.concept-card가 4개다 (${cards2().length})`);
+/* 카드 "순서"도 누설 통로예요. 진짜 유행을 늘 첫 칸으로 올리면 카드 하나하나는
+ * 서로 구분되지 않는데도 첫 칸만 보고 답을 알 수 있어요. 순서는 CONCEPTS 정의
+ * 그대로여야 해요 — 유행과 무관한 고정 순서라는 뜻이니까요. */
+const cardOrder2 = cards2().map((c) => c.dataset.cid).join(",");
+const conceptOrder2 = T2.CONCEPTS.map((c) => c.id).join(",");
+check(cardOrder2 === conceptOrder2,
+  `카드 순서가 CONCEPTS 정의 순서와 같다 — 유행에 따라 재정렬되지 않는다 (카드 ${cardOrder2} vs 정의 ${conceptOrder2})`);
 const rumorCards2 = cards2().filter((c) => c.classList.contains("concept-rumor"));
 const plainCards2 = cards2().filter((c) => !c.classList.contains("concept-rumor"));
 check(rumorCards2.length === 2, `.concept-rumor가 붙은 카드가 정확히 2개다 (${rumorCards2.length})`);
@@ -209,7 +216,10 @@ const leakWords2 = ["확정", "식상", "유행", "진짜", "정답", "배수"];
 const leaked2 = leakWords2.filter((wd) => conceptText2.includes(wd));
 check(leaked2.length === 0, `화면 어디에도 확정을 가리키는 낱말이 없다 (${leaked2.join(",") || "없음"})`);
 
-// 카드에서 컨셉 고유 내용(이모지·이름·설명·숫자)을 지운 뒤 남는 껍데기를 비교해요
+/* 카드에서 컨셉 고유 내용(이모지·이름·설명·예상 판매량)을 지운 뒤 남는 껍데기를 비교해요.
+ * 숫자를 뭉개는 건 **태그 바깥 텍스트뿐**이에요. 예상 판매량은 카드마다 다른 게 정상이라
+ * 뭉개야 하지만, 속성값까지 같이 뭉개면 data-h="1" / data-h="0" 처럼 숫자로 진짜 유행을
+ * 심는 누설이 둘 다 N이 돼서 안 잡혀요. 속성값은 그대로 두고 비교해요. */
 const norm2 = (el) => {
   const c = T2.CONCEPTS.find((x) => x.id === el.dataset.cid) || { emoji: "", name: "", desc: "" };
   // data-cid는 속성 값만 지워요 — 통째로 치환하면 클래스명(c-emoji)의 "emo"까지 먹혀요
@@ -218,7 +228,7 @@ const norm2 = (el) => {
     .split(c.emoji).join("·")
     .split(c.name).join("·")
     .split(c.desc).join("·")
-    .replace(/\d+/g, "N");
+    .replace(/>([^<]*)</g, (m0, text) => `>${text.replace(/\d+/g, "N")}<`);
 };
 check(norm2(rumorCards2[0]) === norm2(rumorCards2[1]),
   "소문 카드 2장은 서로 구분되지 않는다 (둘 중 어느 쪽이 진짜 유행인지 표시가 없다)");
@@ -375,6 +385,16 @@ function leaveReveal2(afterEnter) {
   return atStage;
 }
 
+/* 카드 순서 — 확정 유행을 첫 칸으로 끌어올리는 재정렬이 없는지 확정 상태에서 봐요.
+ * 위(190행 근처)의 같은 검사는 그 판의 유행이 랜덤이라, 유행이 마침 첫 컨셉이면
+ * 재정렬해도 순서가 안 바뀌어요. 여기서는 정의상 **마지막** 카드인 하이틴을
+ * 유행으로 못 박아서, 재정렬이 있으면 반드시 걸리게 해요. */
+check(enterConcept2("teen", "cool"), `카드 순서 검사를 위해 유행 하이틴으로 선택 화면에 들어간다 (${activeScreen2()})`);
+check(cards2().map((c) => c.dataset.cid).join(",") === conceptOrder2,
+  `확정 유행이 마지막 컨셉(하이틴)이어도 카드 순서가 정의 그대로다 (${cards2().map((c) => c.dataset.cid).join(",")} vs ${conceptOrder2})`);
+check(pickCard2("cool"), "순서 검사 뒤 청량 카드를 골라 빠져나온다");
+check(leaveReveal2(), "순서 검사 판도 시즌 시작으로 무대에 들어간다");
+
 // 28) 카드를 고르면 공개 화면이 먼저 뜨고, 무대는 아직 안 열려요
 check(enterConcept2("emo", "teen"), `유행 감성·식상 하이틴으로 선택 화면에 다시 들어간다 (${activeScreen2()})`);
 check(pickCard2("emo"), "감성 카드를 실제로 클릭한다");
@@ -455,18 +475,141 @@ check(effect2().classList.contains("reveal-flat"),
 check(!effectText2().includes("%"), `상쇄된 판에도 % 표기가 없다 (${effectText2()})`);
 check(leaveReveal2(), "상쇄 판도 시즌 시작으로 무대에 들어간다");
 
-// 37) 컴백이 끝나면 결과 줄(#cb-result)에 컨셉 이름이 있다 (Task 1에서 이미 넣었다 — 확인만)
-check(untilGo2(), "37번 검사 전 무대 버튼이 다시 뜬다");
-goBtn2().click();
-if (activeScreen2() === "screen-concept") pickCard2(cards2()[0].dataset.cid);
-if (activeScreen2() === "screen-reveal") $2("btn-reveal-go").click();
-check(activeScreen2() === "screen-stage", `37번 검사를 위해 무대에 들어간다 (${activeScreen2()})`);
-const act37 = T2.state().activity;
-act37.week = act37.weekTotal - 1; // 이번 무대가 이 컴백의 마지막 주가 되게 해요
-const concept37 = conceptById2(act37.concept);
-$2("btn-stage-next").click(); // 미니게임 자동 진행 → 주간 차트 (마지막 주라 컴백 종료 처리도 함께 일어나요)
-check($2("cb-result").textContent.includes(concept37.name),
-  `컴백이 끝나면 #cb-result에 컨셉 이름이 있다 (${$2("cb-result").textContent.replace(/\s+/g, " ").trim()})`);
+/* 38) CONCEPTS에 없는 id를 든 세이브 — 공개 화면의 유행 판정과 배수가 어긋나지 않아요.
+ * trendMul은 act.hot이 유효한 id인지 안 봐요. hot이 "retro"(없는 id)이고 cold가 청량이면
+ * 청량을 고른 사람은 실제로 ×0.85를 맞아요. 그런데 화면이 act.hot/act.cold를 따로 읽어
+ * 판정하던 시절엔 "이번 시즌은 뚜렷한 유행이 없었어요"라고 써놓고 바로 아래에서 -15%를
+ * 띄웠어요 — 한 화면이 자기모순이었어요. 지금은 rollTrend가 유효한 id만 만들어서 안 터지지만,
+ * 컨셉을 추가하거나 개명하면 바로 나와요. 판정을 trendMul로 일원화한 뒤의 회귀 검사예요. */
+check(enterConcept2("retro", "cool"), `없는 컨셉 id가 유행인 세이브로 선택 화면에 들어간다 (${activeScreen2()})`);
+check(pickCard2("cool"), "그 판에서 청량 카드를 고른다");
+const ghostAct2 = T2.state().activity;
+const ghostMul2 = T2.trendMul(conceptById2("cool"), ghostAct2);
+const ghostPct2 = Math.round((ghostMul2 - 1) * 100);
+check(ghostMul2 < 1, `trendMul은 이 판을 식상(×${ghostMul2})으로 본다 — 자기모순이 성립할 조건이다`);
+const ghostTrend2 = $2("reveal-trend").textContent.replace(/\s+/g, " ").trim();
+check(!ghostTrend2.includes("없었어요"),
+  `배수가 붙는 판을 "유행이 없었어요"라고 쓰지 않는다 (${ghostTrend2})`);
+check(ghostTrend2.includes("식상") && ghostTrend2.includes(conceptById2("cool").name),
+  `식상 컨셉(청량)을 화면에 그대로 밝힌다 (${ghostTrend2})`);
+check(effect2().classList.contains("reveal-miss") && effectText2().includes(`${ghostPct2}%`),
+  `효과 박스는 trendMul 그대로 ${ghostPct2}%다 (${effectText2()})`);
+check(leaveReveal2(), "없는 id 판도 시즌 시작으로 무대에 들어간다");
+
+// ---------- 39~) 컴백 결과의 초동 "숫자" — 컨셉과 유행이 실제 판매량에 닿는지 ----------
+/* #cb-result에 컨셉 "이름"이 있는지만 보면, cbSales에서 trendMul(concept, act)를 통째로
+ * 1로 바꾸거나 expectedSales의 concept 자리에 CONCEPTS[0]을 박아도 전부 초록이에요.
+ * 그래서 화면에 찍힌 초동 숫자를 직접 뽑아, 소스에서 꺼낸
+ * expectedSales × trendMul × (1 ± v) 범위와 대조해요.
+ * 편차 v가 있어서 한 판으로는 못 갈라요 — 같은 조건을 여러 판 돌려 **전부** 범위 안인지,
+ * 그리고 평균 배율이 trendMul 근처인지 함께 봐요.
+ *
+ * 능력치는 일부러 보컬 쪽으로 몰아둬요. 전부 100이면 청량과 감성의 기댓값이 우연히
+ * 같아져서(가중치 합이 둘 다 1.8) 컨셉을 바꿔치기해도 숫자가 안 변하거든요. */
+const skew2 = T2.state().stats;
+skew2.vocal = 150; skew2.dance = 50; skew2.rap = 50; skew2.charm = 50;
+
+// 컴백의 마지막 주를 실제로 소화해서 #cb-result의 초동 숫자를 받아와요
+function finalWeek2(hot, cold, cid, lastCb) {
+  if (!enterConcept2(hot, cold)) return null;
+  if (!pickCard2(cid)) return null;
+  $2("btn-reveal-go").click();
+  if (activeScreen2() !== "screen-stage") return null;
+  const a = T2.state().activity;
+  a.cb = lastCb ? a.cbTotal : 1;   // 연말 결산으로 새지 않게 차수를 못 박아요
+  a.week = a.weekTotal - 1;        // 이번 무대가 이 컴백의 마지막 주가 되게 해요
+  $2("btn-stage-next").click();    // 미니게임 자동 → 주간 차트 → 컴백 종료 처리
+  const text = $2("cb-result").textContent.replace(/\s+/g, " ").trim();
+  const St = T2.state();
+  const c = conceptById2(a.concept);
+  /* 판매량은 주간 차트가 팬덤·1위 횟수를 갱신한 **뒤에** 계산돼요.
+   * 그래서 갱신된 지금 값으로 다시 계산해야 산식과 같은 입력이 돼요. */
+  return {
+    shown: Number((text.match(/초동 (\d+)만/) || [0, NaN])[1]),
+    pure: T2.expectedSales(St.stats, c, St.fandom, a.cbWins),
+    mul: T2.trendMul(c, a), v: c.v, name: c.name, text,
+  };
+}
+
+const N2 = 12;   // 편차 v 안에서 흔들리니 한 판으론 못 갈라요
+function salesCase2(label, hot, cold, cid) {
+  const rows = [];
+  for (let i = 0; i < N2; i++) {
+    const r = finalWeek2(hot, cold, cid, false);
+    if (!r || !Number.isFinite(r.shown)) {
+      check(false, `${label}: ${i + 1}번째 판에서 초동 숫자를 못 읽었어요 (${r ? r.text : activeScreen2()})`);
+      return;
+    }
+    rows.push(r);
+    $2("btn-stage-next").click();   // 다음 컴백 준비 → 준비 화면
+  }
+  const mul = rows[0].mul, v = rows[0].v;
+  check(rows.every((r) => r.mul === mul && r.v === v),
+    `${label}: ${N2}판 모두 같은 배수·편차 조건이다 (×${mul} · ±${v})`);
+  check(rows.every((r) => r.text.includes(r.name)), `${label}: #cb-result에 고른 컨셉 이름이 남는다 (${rows[0].name})`);
+  // 산식은 Math.round(expected × mul × (1 ± v))예요 — 반올림 여유 1을 얹어 범위를 잡아요
+  const bad = rows.filter((r) => r.shown < Math.floor(r.pure * mul * (1 - v)) - 1
+                              || r.shown > Math.ceil(r.pure * mul * (1 + v)) + 1);
+  check(bad.length === 0,
+    `${label}: ${N2}판 전부 초동이 expectedSales × ${mul} × (1 ± ${v}) 안이다 (벗어난 판 ${
+      bad.length ? bad.map((r) => `${r.shown}/${r.pure}`).join(" ") : "없음"})`);
+  const ratio = rows.reduce((a, r) => a + r.shown / r.pure, 0) / N2;
+  check(Math.abs(ratio - mul) <= v,
+    `${label}: ${N2}판 평균 배율이 trendMul(${mul})에 붙는다 (실측 ×${ratio.toFixed(3)})`);
+  return ratio;
+}
+
+const hotRatio2 = salesCase2("유행 적중(감성)", "emo", "cool", "emo");
+const coldRatio2 = salesCase2("식상(감성)", "cool", "emo", "emo");
+const flatRatio2 = salesCase2("무난(감성)", "cool", "teen", "emo");
+check(hotRatio2 > flatRatio2 && flatRatio2 > coldRatio2,
+  `같은 컨셉·같은 능력치인데 유행 > 무난 > 식상 순으로 실제 초동이 갈린다 (${
+    [hotRatio2, flatRatio2, coldRatio2].map((x) => (x || 0).toFixed(3)).join(" > ")})`);
+
+// ---------- 연말 결산에 고른 컨셉과 적중 여부가 남는지 ----------
+/* 스펙: "이 배수는 컴백 진행 내내 무대 화면 상단에 배지로 남는다.
+ *        연말 결산에도 고른 컨셉과 적중 여부를 남긴다."
+ * 한 해에 컴백이 2번이라 둘 다 남아야 해요. 앞선 검사들이 컴백을 여러 번 강제로
+ * 끝냈으니 올해 기록을 비우고, 유행 적중 한 번 · 식상 한 번을 실제로 굴려 확인해요. */
+T2.state().yearConcepts = [];
+/* 옛 연차 기록에는 concepts가 아예 없어요. 마이그레이션하지 않는 게 방침이라
+ * 읽는 쪽이 방어해야 해요 — 그 방어를 실제 표에서 확인하려고 옛 모양을 하나 끼워둬요. */
+T2.state().career.years.push({ y: 0, hype: 5, wins: 3, sales: 100, dFan: 10, awards: [] });
+
+const yr1 = finalWeek2("emo", "cool", "emo", false);
+check(!!yr1 && yr1.mul > 1, `결산 검사 1차 컴백 — 감성으로 유행에 적중한다 (×${yr1 && yr1.mul})`);
+$2("btn-stage-next").click();   // 2차 컴백 준비 → 준비 화면
+const yr2 = finalWeek2("cool", "emo", "emo", true);
+check(!!yr2 && yr2.mul < 1, `결산 검사 2차 컴백 — 감성이 식상에 걸린다 (×${yr2 && yr2.mul})`);
+check($2("btn-stage-next").textContent.includes("연말 결산"),
+  `2차 컴백이 끝나면 연말 결산 버튼이 나온다 (${$2("btn-stage-next").textContent})`);
+$2("btn-stage-next").click();   // 🏁 연말 결산
+check(activeScreen2() === "screen-career", `연말 결산 화면으로 넘어간다 (${activeScreen2()})`);
+
+const years2 = T2.state().career.years;
+const yEntry2 = years2[years2.length - 1];
+check(Array.isArray(yEntry2.concepts) && yEntry2.concepts.length === 2,
+  `연차 기록에 그해 컨셉이 2개 남는다 (${JSON.stringify(yEntry2.concepts)})`);
+check(!!yEntry2.concepts && yEntry2.concepts.every((c) => c.id === "emo"),
+  "두 컴백 다 감성으로 골랐다는 사실이 그대로 남는다");
+check(!!yEntry2.concepts && yEntry2.concepts[0].t === "hot" && yEntry2.concepts[1].t === "cold",
+  `적중 여부가 컴백 순서대로 남는다 (${JSON.stringify((yEntry2.concepts || []).map((c) => c.t))})`);
+
+const cardText2 = $2("career-card").textContent.replace(/\s+/g, " ").trim();
+check(cardText2.includes(conceptById2("emo").name), `결산 화면에 고른 컨셉 이름이 있다 (${cardText2.slice(0, 160)})`);
+check(cardText2.includes("적중") && cardText2.includes("식상"),
+  "결산 화면에 적중 여부가 둘 다 적힌다 (적중 · 식상)");
+
+// .season-table로 좁혀요 — 결산 카드 안에는 그룹 순위표(.standings-box)도 같이 들어 있어요
+const yrRows2 = Array.from($2("career-card").querySelectorAll(".season-table tbody tr"));
+const lastRow2 = yrRows2[yrRows2.length - 1];
+const oldRow2 = yrRows2[yrRows2.length - 2];
+check(!!lastRow2 && lastRow2.children.length === 5,
+  `결산 표에 컨셉 칸이 생겼다 (칸 ${lastRow2 ? lastRow2.children.length : 0}개)`);
+check(!!lastRow2 && lastRow2.children[3].textContent.includes(conceptById2("emo").emoji),
+  `표의 컨셉 칸에 고른 컨셉이 들어간다 (${lastRow2 ? lastRow2.children[3].textContent : ""})`);
+check(!!oldRow2 && oldRow2.children[3].textContent.trim() === "-",
+  `concepts가 없는 옛 연차 기록은 마이그레이션 없이 "-"로 그려진다 (${oldRow2 ? oldRow2.children[3].textContent.trim() : ""})`);
 
 console.log(fail ? "\n❌ 실패" : "\n✅ 통과");
 process.exit(fail ? 1 : 0);

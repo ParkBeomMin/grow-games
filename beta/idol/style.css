@@ -125,6 +125,10 @@ body {
 }
 .draft-summary { border-color: #5c3b8a; }
 
+/* 연말 결산표의 컨셉 칸 — 한 해에 컴백이 2번이라 "💧🔥 🌙❄️"처럼 두 덩이가 들어가요.
+   좁은 화면에서 이모지와 적중 표시가 따로 떨어지지 않게 한 덩이로 묶어요. */
+.sn-concept { white-space: nowrap; }
+
 @media (max-width: 380px) {
   .card-grid.three { grid-template-columns: 1fr; }
 }

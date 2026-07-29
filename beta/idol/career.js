@@ -76,6 +76,7 @@ window.IdolCareer = (() => {
     S.condition = 80;
     S.activity = null;
     S.pendingShow = false;
+    S.yearConcepts = [];   // 올해 고른 컨셉 기록 — 연말 결산에서 비워요
     proLog(`💿 ${S.proYear}년차 활동 시작! 첫 컴백을 준비해요.`);
     save();
     renderPrep();
@@ -426,24 +427,30 @@ window.IdolCareer = (() => {
     });
   }
 
-  /* 컨셉을 고른 뒤 확정 유행을 공개해요. 여기서 처음으로 act.hot/act.cold를 보여줍니다.
+  /* 컨셉을 고른 뒤 확정 유행을 공개해요. 여기서 처음으로 유행·식상을 보여줍니다.
    * 배수는 trendMul이 정본이에요 — 화면에서 다시 계산하지 않아요.
    * 표기 퍼센트도 trendMul이 준 배수에서 뽑아요. 값을 손으로 적어두면
-   * TREND_HOT/TREND_COLD를 바꿨을 때 화면만 옛 숫자로 남아요. */
+   * TREND_HOT/TREND_COLD를 바꿨을 때 화면만 옛 숫자로 남아요.
+   *
+   * "유행이 없었어요" 판정도 trendMul에서 뽑아요. act.hot/act.cold를 직접 읽어
+   * 따로 판정하던 시절엔 두 식이 갈라졌어요 — CONCEPTS에 없는 id를 든 세이브
+   * (hot: "retro", cold: "cool")로 청량을 고르면 "유행이 없었어요"라고 써놓고
+   * 바로 아래에서 -15%를 띄웠거든요. 배수를 받는 컨셉이 있으면 유행이 있는 거예요. */
   function renderReveal() {
     const act = S.activity;
     const c = conceptOf(act);
-    const hot = CONCEPTS.find((x) => x.id === act.hot);
-    const cold = CONCEPTS.find((x) => x.id === act.cold);
-    const same = act.hot === act.cold;
+    const hot = CONCEPTS.find((x) => trendMul(x, act) > 1);
+    const cold = CONCEPTS.find((x) => trendMul(x, act) < 1);
     const mul = trendMul(c, act);
     const pct = Math.round((mul - 1) * 100);
 
     $("reveal-title").textContent = `${c.emoji} ${c.name} 컨셉으로 컴백!`;
-    $("reveal-trend").innerHTML = same || !hot || !cold
-      ? `<span>이번 시즌은 뚜렷한 유행이 없었어요</span>`
-      : `<span>🔥 유행 <b>${hot.emoji} ${hot.name}</b></span>
-         <span>❄️ 식상 <b>${cold.emoji} ${cold.name}</b></span>`;
+    const lines = [];
+    if (hot) lines.push(`<span>🔥 유행 <b>${hot.emoji} ${hot.name}</b></span>`);
+    if (cold) lines.push(`<span>❄️ 식상 <b>${cold.emoji} ${cold.name}</b></span>`);
+    $("reveal-trend").innerHTML = lines.length
+      ? lines.join("\n         ")
+      : `<span>이번 시즌은 뚜렷한 유행이 없었어요</span>`;
 
     const box = $("reveal-effect");
     if (mul > 1) {
@@ -581,6 +588,12 @@ window.IdolCareer = (() => {
           trendMul(concept, act) * (1 + rand(-concept.v, concept.v))
         ));
         act.sales += cbSales;
+        /* 연말 결산에 남길 기록이에요 — 고른 컨셉과 적중 여부. 한 해에 컴백이 2번이라
+         * 둘 다 쌓아요. 적중 판정도 trendMul이 정본이에요 (화면과 같은 근거). */
+        const cbMul = trendMul(concept, act);
+        S.yearConcepts = (S.yearConcepts || []).concat({
+          id: concept.id, t: cbMul > 1 ? "hot" : cbMul < 1 ? "cold" : "",
+        });
         extraLine = `<div class="tour-pts">💿 ${act.cb}차 컴백 종료 · ${concept.emoji} ${concept.name} — 1위 ${act.cbWins}회 · 초동 ${cbSales}만 장</div>`;
       }
       save();
@@ -788,7 +801,8 @@ window.IdolCareer = (() => {
     }
     S.career.sales += sales;
     if (awards.length && window.Fx) Fx.celebrate("award", `🎖️ ${awards.join(" · ")}!`);
-    S.career.years.push({ y: S.proYear, hype: Math.round(hype * 10) / 10, wins, sales, dFan, awards });
+    S.career.years.push({ y: S.proYear, hype: Math.round(hype * 10) / 10, wins, sales, dFan, awards, concepts: S.yearConcepts || [] });
+    S.yearConcepts = [];
     if (window.Stats) Stats.log("year_end", { y: S.proYear, wins, sales });
     // 초반엔 성장, 8년차부터는 서서히 하락
     for (const d of STAT_DEFS) {
@@ -807,10 +821,22 @@ window.IdolCareer = (() => {
     yearReport();
   }
 
+  /* 그해 고른 컨셉과 적중 여부를 한 줄로 만들어요. 한 해에 컴백이 2번이라 둘 다 나와요.
+   * 옛 연차 기록에는 concepts가 아예 없어요 — 마이그레이션하지 않고 여기서 빈 배열로 받아요.
+   * withName이면 이름까지("💧 청량 적중"), 아니면 표에 들어갈 짧은 꼴("💧🔥")이에요. */
+  function conceptLine(list, withName) {
+    return (list || []).map((c) => {
+      const def = CONCEPTS.find((x) => x.id === (c && c.id));
+      if (!def) return "";
+      if (withName) return `${def.emoji} ${def.name}${c.t === "hot" ? " 적중" : c.t === "cold" ? " 식상" : ""}`;
+      return `${def.emoji}${c.t === "hot" ? "🔥" : c.t === "cold" ? "❄️" : ""}`;
+    }).filter(Boolean).join(withName ? " · " : " ");
+  }
+
   function yearReport() {
     const y = S.career.years[S.career.years.length - 1];
     const rows = S.career.years.slice(-8).map((x) =>
-      `<tr><td>${x.y}년차</td><td>1위 ${x.wins}회</td><td>초동 ${x.sales}만</td><td>${x.awards.length ? "🏆" + x.awards.join(",") : "-"}</td></tr>`
+      `<tr><td>${x.y}년차</td><td>1위 ${x.wins}회</td><td>초동 ${x.sales}만</td><td class="sn-concept" title="${conceptLine(x.concepts, true)}">${conceptLine(x.concepts) || "-"}</td><td>${x.awards.length ? "🏆" + x.awards.join(",") : "-"}</td></tr>`
     ).join("");
     const forcedRetire = S.proYear >= 10;
     /* 🏆 그해 그룹 최종 순위. 결산이 끝나도 S.standings는 남아 있고, 다음 연차
@@ -826,8 +852,9 @@ window.IdolCareer = (() => {
         y.awards.length ? "탄탄한 활동을 이어간 해" :
         y.wins > 0 ? "아쉬움이 남는 컴백" : "혹독한 한 해…"
       }</div>
-      <div class="draft-team">${S.group} · 음방 1위 ${y.wins}회 · 초동 ${y.sales}만 장</div>
-      <table class="season-table"><thead><tr><th>연차</th><th>음방</th><th>판매량</th><th>수상</th></tr></thead><tbody>${rows}</tbody></table>
+      <div class="draft-team">${S.group} · 음방 1위 ${y.wins}회 · 초동 ${y.sales}만 장${
+        conceptLine(y.concepts, true) ? `<br/>🎬 컨셉 ${conceptLine(y.concepts, true)}` : ""}</div>
+      <table class="season-table"><thead><tr><th>연차</th><th>음방</th><th>판매량</th><th>컨셉</th><th>수상</th></tr></thead><tbody>${rows}</tbody></table>
       ${standings}
       <div class="draft-summary">
         통산 ${S.career.years.length}년 활동 · 1위 ${S.career.wins}회 · 🏆 대상 ${S.career.daesang} · 본상 ${S.career.bonsang}${S.career.rookie ? " · 신인상" : ""}${(S.career.tours || 0) ? ` · 🌏 월드투어 ${S.career.tours}회${S.tourBest ? `(최고 ${S.tourBest})` : ""}` : ""}<br/>
