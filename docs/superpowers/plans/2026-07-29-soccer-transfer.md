@@ -26,7 +26,8 @@
 ### Task 1: 리그 티어 — 평점 페널티와 수상 가치
 
 **Files:**
-- Modify: `beta/soccer/career.js` (상수부, `ratingOf(...)`, `hype` 산식)
+- Modify: `beta/soccer/game.js` (`LEAGUES`·`leagueOf` — **`career.js`가 IIFE라 여기 둬야 한다**)
+- Modify: `beta/soccer/career.js` (`ratingOf(...)`, `hype` 산식)
 - Create: `tests/soccer/league-test.js`
 
 **Interfaces:**
@@ -201,9 +202,14 @@ function deriveOppGoals(rating, defStat) {
 }
 ```
 
-**`clubStrOf`가 `career.js`에 있고 `game.js`가 부른다.** 로드 순서를 확인하라 —
-`career.js`가 `game.js` 뒤에 로드된다면 함수 선언 위치를 옮기거나 `game.js`로 내려야 한다.
-**소스에서 로드 순서를 반드시 확인하고 결정하라.**
+**`CLUBS`와 `clubStrOf`는 `game.js`에 둔다.** 확인해봤다 —
+`index.html`이 `game.js` → `career.js` 순으로 싣고 **`career.js`는 IIFE**라
+그 안의 선언은 `game.js`에서 안 보인다. `teammateGoals`·`deriveOppGoals`가
+`game.js`에 있으므로 `clubStrOf`도 거기 있어야 한다.
+
+`game.js`의 전역은 `career.js`에서 보이므로, `transferOffers`(Task 3)도
+`CLUBS`를 문제없이 읽는다. **Task 1의 `LEAGUES`·`leagueOf`도 같은 이유로
+`game.js`에 두는 게 맞다 — Task 1이 `career.js`에 뒀다면 여기서 옮겨라.**
 
 - [ ] **Step 4: 초록불 + 회귀**
 
