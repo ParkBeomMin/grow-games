@@ -7,6 +7,24 @@ window.WingerCareer = (() => {
   const HOF_KEY = "grow-hof-v1";
   const BATTLE_KEY = "grow-battle-soccer-v1";
 
+  /* 경기 평점 — 예전에는 myScore를 10으로 나눠서 능력치 60이면 이미 10.0 만점이었어요.
+   * 그 위로는 아무리 키워도 평점도 MOM도 성적도 같아서, 이 게임의 천장이 여기였습니다.
+   * 나누는 값을 키우고 팬덤 기여에 상한을 걸어 5.0~10.0으로 펼쳤어요.
+   * matchContribution의 perf도 전원 최대치(1.6)로 죽어 있었는데 같이 살아납니다. */
+  const FAN_CAP = 12;
+  const RATING_DIV = 14;
+
+  // 경기 평점(1~10). clutch()는 전역 S의 재능·초월을 읽어요.
+  function ratingOf(stats, pos, condition, fandom) {
+    const myScore =
+      (stats[POS_INFO[pos].stat] * 0.32 +
+      stats.stamina * 0.22 +
+      ((stats.shoot + stats.pass + stats.dribble) / 3) * 0.2) * clutch(POS_INFO[pos].stat) +
+      condition / 8 + Math.min((fandom || 0) / 45, FAN_CAP) + rand(-5, 5) + 20;
+    const rating = clamp(myScore / RATING_DIV, 1, 10);
+    return rating;
+  }
+
   // 내장 봇 상대 (전부 가상의 선수)
   const GHOSTS = [
     { id: "wg1", name: "레전드 스트라이커 골머신", bp: 690 },
@@ -258,12 +276,7 @@ window.WingerCareer = (() => {
     $("stage-round").textContent = `R${act.week + 1}/${act.weekTotal} 리그 · vs ${act.opp}`;
     show("screen-stage");
 
-    const myScore =
-      (S.stats[POS_INFO[S.pos].stat] * 0.32 +
-      S.stats.stamina * 0.22 +
-      ((S.stats.shoot + S.stats.pass + S.stats.dribble) / 3) * 0.2) * clutch(POS_INFO[S.pos].stat) +
-      S.condition / 8 + (S.fandom || 0) / 45 + rand(-5, 5) + 20;
-    const rating = clamp(myScore / 10, 1, 10);
+    const rating = ratingOf(S.stats, S.pos, S.condition, S.fandom);
     const c = matchContribution(rating);
     const oppGoals = deriveOppGoals(rating, S.stats.defense);
     MatchSim.run({
@@ -849,5 +862,6 @@ window.WingerCareer = (() => {
       else if (S.career && S.career.years.length) yearReport();
       else { renderPrep(); show("screen-pro"); }
     },
+    _t: { ratingOf, FAN_CAP, RATING_DIV, state: () => S },
   };
 })();
