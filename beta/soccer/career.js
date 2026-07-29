@@ -76,6 +76,9 @@ window.WingerCareer = (() => {
    * (enshrine()이 자기 안에서 clearSave()를 부르니 마무리 경로는 그대로 정리돼요.) */
   function onEnding(canGoPro, captain, opts) {
     const keepSave = !!(opts && opts.keepSave);
+    /* opts.weakestClub — 📞 타 구단 스카우트로 올라온 경우예요.
+     * 데뷔 클럽을 뽑지 않고 그 리그 최약체 하나로 고정해요. */
+    const weakest = !!(opts && opts.weakestClub);
     const actions = document.querySelector("#screen-ending .draft-actions");
     document.getElementById("btn-go-debut")?.remove();
     document.getElementById("btn-idol-retire")?.remove();
@@ -85,7 +88,7 @@ window.WingerCareer = (() => {
       btn.id = "btn-go-debut";
       btn.className = "btn btn-primary";
       btn.textContent = "⚽ 프로 커리어 시작!";
-      btn.onclick = () => enterCareer(captain);
+      btn.onclick = () => enterCareer(captain, weakest);
     } else {
       btn.id = "btn-idol-retire";
       btn.className = "btn btn-ghost";
@@ -107,12 +110,19 @@ window.WingerCareer = (() => {
     return list.slice(0, DEBUT_POOL);
   }
 
-  function enterCareer(captain) {
+  /* 📞 타 구단 스카우트 경로만 쓰는 데뷔 클럽이에요.
+   * debutClubs는 전력 오름차순이라 맨 앞이 그 리그 최약체예요. 뽑지 않고 하나로 고정해요 —
+   * 프로 무대에 서긴 했지만 출발이 제일 나쁜 자리라는 걸 클럽으로 말해줍니다. */
+  function weakestClub(id) {
+    return debutClubs(id)[0];
+  }
+
+  function enterCareer(captain, weakest) {
     S.phase = "soccer-pro";
     /* 데뷔 클럽은 소속 리그(기본 1부)에서 뽑아요. 이름과 전력을 함께 받아 둡니다 —
      * 전력은 동료 득점·실점에만 쓰이고 개인 수상에는 안 닿아요. */
     S.league = leagueOf(S).id;
-    const debutClub = pick(debutClubs(S.league));
+    const debutClub = weakest ? weakestClub(S.league) : pick(debutClubs(S.league));
     S.group = debutClub.name;
     S.clubStr = debutClub.str;
     S.center = !!captain;
@@ -1120,7 +1130,7 @@ window.WingerCareer = (() => {
     moveToClub,
     _t: {
       ratingOf, FAN_CAP, RATING_DIV, POS_AXIS, posAxis, AXIS_K, AXIS_OFF,
-      LEAGUES, leagueOf, CLUBS, clubStrOf, debutClubs, DEBUT_POOL,
+      LEAGUES, leagueOf, CLUBS, clubStrOf, debutClubs, DEBUT_POOL, weakestClub,
       TRANSFER_MIN_YEAR, PROMOTE_HYPE, OFFERS_PER_LEAGUE, transferFee, transferOffers, canTransfer,
       DOWNGRADE_FEE, LOYALTY_FEE, leftBefore, moveLog, careerScore,
       state: () => S,

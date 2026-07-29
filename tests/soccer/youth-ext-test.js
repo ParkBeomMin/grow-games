@@ -1,8 +1,9 @@
 /* 🌱 유스 재계약 연장 — 엔딩 문구가 약속한 "한 시즌 더"를 실제로 주는지 본다.
  *
- * 엔딩 7종 중 프로로 이어지는 건 세 개(👑·🌟·💜)뿐인데, 나머지 셋이 다음 장을
+ * 엔딩 7종 중 프로로 이어지는 건 셋(👑·🌟·💜)뿐이었는데, 나머지가 다음 장을
  * 약속하는 문구를 달고 그냥 끝났다. 사용자가 "유스 재계약인데 게임 끝난거야?"라고
  * 물어온 게 이 검증의 출발점이다.
+ * (그 뒤 📞 타 구단 스카우트도 프로로 열렸다 — scout-path-test.js가 맡는다.)
  *
  * showEnding을 직접 부르지 않는다. jsdom에 beta/soccer/index.html을 통째로 띄우고
  * 타이틀 → 유스 선택 → 포지션 → 이름 → 훈련 36개월 → 프로 도전까지 **실제 버튼을
@@ -286,8 +287,11 @@ function endingMsg(emoji) {
   return m ? m[1] : null;
 }
 
+/* 여기서 보는 건 📹 세미프로 입단 하나뿐이다.
+ * 📞 타 구단 스카우트는 이제 실제로 프로로 이어지므로 앞을 보는 문구가 **맞다**.
+ * 그쪽 검증은 tests/soccer/scout-path-test.js가 맡는다. */
 console.log("=== ⑤ 끝맺음 엔딩의 문구 ===");
-for (const [emoji, name] of [["📞", "타 구단 스카우트"], ["📹", "세미프로 입단"]]) {
+for (const [emoji, name] of [["📹", "세미프로 입단"]]) {
   const msg = endingMsg(emoji);
   check(!!msg, `${emoji} ${name}의 msg를 소스에서 뽑았다`);
   if (!msg) continue;

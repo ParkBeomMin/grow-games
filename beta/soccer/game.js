@@ -1467,7 +1467,9 @@ function showEnding(survivedFinal, lastRound) {
 
   /* 🌱 유스 재계약은 "연장 계약"이라는 말 그대로 한 시즌을 더 줘요.
    * 커리어당 한 번뿐이라 이미 쓴 뒤에는 버튼 없이 끝맺음으로 읽히게 문구도 바꿔요. */
-  let emoji, title, teamLine, msg, canExtend = false;
+  /* 📞 타 구단 스카우트는 프로로 이어져요. 조건(lastRound === 2 && score >= 420)을
+   * 호출부에서 다시 계산하면 엔딩 분기와 어긋날 수 있으니 여기서 플래그만 세워 넘겨요. */
+  let emoji, title, teamLine, msg, canExtend = false, scoutPro = false;
   if (survivedFinal && score >= 520) {
     emoji = "👑"; title = "유럽 빅클럽 입단!";
     teamLine = `${m.name} 출신 — 빅리그 직행`;
@@ -1482,8 +1484,9 @@ function showEnding(survivedFinal, lastRound) {
     msg = "아쉽게 1군 계약은 놓쳤지만, 구단이 곧 콜업을 약속했어요.";
   } else if (lastRound === 2 && score >= 420) {
     emoji = "📞"; title = "타 구단 스카우트!";
-    teamLine = "하위 리그 구단 이적 제안";
-    msg = "테스트를 지켜본 다른 구단에서 러브콜이 왔어요. 유스 시절은 여기서 좋은 마침표를 찍었어요.";
+    teamLine = "K리그 최하위권 클럽 입단";
+    scoutPro = true;
+    msg = "테스트를 지켜본 다른 구단에서 러브콜이 왔어요. K리그 최하위권 팀이라 출발은 불리하지만, 여기서 프로 커리어가 시작돼요.";
   } else if (lastRound >= 1) {
     emoji = "🌱"; title = "유스 재계약";
     teamLine = "유스팀 연장 계약";
@@ -1536,12 +1539,13 @@ function showEnding(survivedFinal, lastRound) {
   if (window.Stats) Stats.log("ending", { title, score: Math.round(score) });
 
   /* keepSave를 넘기면 career.js가 clearSave()를 건너뛰어요.
-   * 안 넘기면 "한 시즌 더 뛰기"를 누르기도 전에 세이브가 날아가요. */
+   * 안 넘기면 "한 시즌 더 뛰기"를 누르기도 전에 세이브가 날아가요.
+   * weakestClub은 📞 스카우트 경로 표시예요 — 프로는 프로인데 1부 최약체에서 출발해요. */
   if (window.WingerCareer) {
     window.WingerCareer.onEnding(
-      survivedFinal || lastRound === 3,
+      survivedFinal || lastRound === 3 || scoutPro,
       survivedFinal && score >= 520,
-      { keepSave: canExtend }
+      { keepSave: canExtend, weakestClub: scoutPro }
     );
   } else if (!canExtend) {
     clearSave();
