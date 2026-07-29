@@ -165,10 +165,15 @@ function runTo(P, passes, fandom) {
   if (fandom != null) P.state().fandom = fandom;
   for (const p of passes) playSurvivalRound(P, p);
   if (toEnding(P) !== "screen-ending") throw new Error(`엔딩 화면이 안 떠요 (${P.active()})`);
+  /* msg는 클래스 없는 div 하나로 그려져요 — 화면에 실제로 뜬 문장을 그대로 읽어요.
+   * (소스에서 정규식으로 뽑으면 화면에 안 붙어도 초록이 떠요.) */
+  const card = P.$("ending-card");
+  const msgEl = Array.from(card.children).find((el) => !el.className);
   return {
-    title: P.$("ending-card").querySelector(".draft-title").textContent,
-    team: P.$("ending-card").querySelector(".draft-team").textContent,
-    text: P.$("ending-card").textContent,
+    title: card.querySelector(".draft-title").textContent,
+    team: card.querySelector(".draft-team").textContent,
+    msg: msgEl ? msgEl.textContent : "",
+    text: card.textContent,
     score: P.score(),
   };
 }
@@ -194,6 +199,15 @@ guard("📞 엔딩 도달", () => {
   check(!Scout.$("btn-youth-ext"), "프로로 가니 '한 시즌 더 뛰기'는 없다");
   // teamLine이 실제 목적지(1부 최하위권 클럽)를 말한다
   check(!/하위 리그/.test(r.team), `teamLine이 '하위 리그 이적 제안'이 아니다 (${r.team})`);
+  check(/최하위|최약체|꼴찌/.test(r.team), `teamLine이 최하위권 클럽 입단을 말한다 (${r.team})`);
+
+  /* 문구 — 실제로 프로로 이어지니 앞을 봐야 하고, 출발이 불리하다는 것도 같이 말해야 한다.
+   * 문장을 통째로 비교하면 다듬을 때마다 빨개지니 "무엇을 말하는가"만 본다. */
+  console.log(`  📞 msg: ${r.msg}`);
+  check(/시작|이어|서게|올라|밟/.test(r.msg), `앞으로 이어진다는 걸 말한다 ("${r.msg}")`);
+  check(/불리|최하위|최약체|바닥|험|어렵|힘든/.test(r.msg), `출발이 불리하다는 것도 말한다 ("${r.msg}")`);
+  check(!/마침표|여기까지|끝났어요/.test(r.msg), `끝맺음 문구가 아니다 ("${r.msg}")`);
+  check(/(요|다)[.!…]?$/.test(r.msg.trim()), `존댓말 어투를 지킨다 ("${r.msg}")`);
   scoutOK = true;
 });
 
