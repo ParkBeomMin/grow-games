@@ -955,6 +955,17 @@ function matchContribution(rating) {
   const dLam = (D[S.pos] ?? 0.6) * perf * (0.55 + defF);
   return { g: poissonish(gLam), a: poissonish(aLam), def: poissonish(dLam) };
 }
+/* 동료 득점 — 예전에는 팀 득점이 내 골 + 내 도움뿐이라 동료가 넣는 골이 없었어요.
+ * 수비수는 골·도움 기댓값이 낮아서 팀이 득점을 못 했고, 능력치 70에서
+ * 팀 승률이 7%였습니다 (같은 조건 공격수 51%).
+ * 내 포지션이 공격에서 멀수록 동료가 더 넣어요. 값은 시뮬레이션으로 잡았어요.
+ * 이 골은 act.goals에 안 들어가요 — 내 골이 아니니까요. 수상 축은 그대로입니다. */
+const TEAMMATE_GOALS = { fw: 0.35, wg: 0.5, mf: 0.8, df: 2.2 };
+
+function teammateGoals(rating) {
+  const base = (TEAMMATE_GOALS[S.pos] ?? 0.6) * (0.6 + (rating - 5) * 0.14);
+  return poissonish(Math.max(0, base));
+}
 // 내 골 수 & 평점에 어울리는 팀 스코어(우리:상대)와 승부 결과
 function matchScoreline(myGoals, rating) {
   let tf = myGoals + randInt(0, 2);
@@ -1148,6 +1159,10 @@ const MatchSim = (() => {
     const rmin = () => randInt(6, 82);
     for (let i = 0; i < goals; i++) evs.push({ min: rmin(), side: "atk", h: 1, cls: "good", text: `⚽ 골!! ${myName} 득점!` });
     for (let i = 0; i < assists; i++) evs.push({ min: rmin(), side: "atk", h: 1, cls: "good", text: `🅰️ ${myName}의 도움! 팀 추가골` });
+    /* 동료 골이에요. 평점을 안 넘겨준 호출부(유스 등)에서는 0이 되도록 막아뒀어요. */
+    const mates = cfg.rating != null ? teammateGoals(cfg.rating) : 0;
+    for (let i = 0; i < mates; i++)
+      evs.push({ min: rmin(), side: "atk", h: 1, cls: "good", text: `⚽ 동료의 골! ${home}이 앞서갑니다` });
     for (let i = 0; i < oppGoals; i++) evs.push({ min: rmin(), side: "def", a: 1, cls: "bad", text: `😣 ${away}에 실점…` });
     if (defense >= 2) evs.push({ min: rmin(), side: "def", text: `🛡️ ${myName}, 결정적 태클로 위기를 끊어요!` });
     evs.push({ min: rmin(), side: "mid", text: pick(["중원 싸움이 뜨거워요", "빠른 템포로 오가는 공방", "관중석이 들썩입니다", "양 팀 압박이 매섭습니다"]) });
@@ -1237,7 +1252,7 @@ function renderStageSim(type, grade, onFinal) {
     home: "우리 유스",
     away: pick(OPP_CLUBS),
     myName: S.name,
-    goals: c.g, assists: c.a, defense: c.def, oppGoals,
+    goals: c.g, assists: c.a, defense: c.def, oppGoals, rating,
     finalize: (info) => {
       let gi = GRADE_ORDER.indexOf(grade.g);
       if (info.momentRes === "perfect") gi = Math.min(4, gi + 1);

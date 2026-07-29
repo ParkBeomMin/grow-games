@@ -281,7 +281,7 @@ window.WingerCareer = (() => {
     const oppGoals = deriveOppGoals(rating, S.stats.defense);
     MatchSim.run({
       home: S.group, away: act.opp, myName: S.name,
-      goals: c.g, assists: c.a, defense: c.def, oppGoals,
+      goals: c.g, assists: c.a, defense: c.def, oppGoals, rating,
       finalize: (info) => proMatchFinalize(act, info, rating),
     });
   }
