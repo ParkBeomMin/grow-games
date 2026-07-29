@@ -465,7 +465,13 @@ window.IdolCareer = (() => {
     const act = S.activity;
     const firstWeek = act.week === 0;
     $("stage-title").textContent = `💿 ${S.proYear}년차 ${act.cb}차 컴백 — ${S.group}`;
-    $("stage-round").textContent = `W${act.week + 1}/${act.weekTotal} 음악방송`;
+    /* 컴백 내내 무대 상단에 고른 컨셉과 유행 버프를 남겨요. 배수는 trendMul이 정본이라
+     * 화면에서 다시 계산하지 않고, 퍼센트도 trendMul이 준 배수에서 뽑아요 (renderReveal과 동일한 방식). */
+    const c = conceptOf(act);
+    const mul = trendMul(c, act);
+    const pct = Math.round((mul - 1) * 100);
+    const buff = mul > 1 ? ` · 🔥 +${pct}%` : mul < 1 ? ` · ❄️ ${pct}%` : "";
+    $("stage-round").textContent = `W${act.week + 1}/${act.weekTotal} 음악방송 · ${c.emoji} ${c.name}${buff}`;
     $("stage-card").innerHTML = `<div class="pbp" id="pbp-cb"></div><div id="cb-moment"></div><div id="cb-result"></div>`;
     show("screen-stage");
 

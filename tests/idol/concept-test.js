@@ -364,10 +364,14 @@ function pickCard2(id) {
   return !!el;
 }
 // 공개 화면을 지나 무대를 소화하고 준비 화면으로 돌아와요
-function leaveReveal2() {
+// afterEnter를 주면 무대 화면에 막 도착한 시점(finishStage2 이전)에 한 번 불러줘요.
+function leaveReveal2(afterEnter) {
   $2("btn-reveal-go").click();
   const atStage = activeScreen2() === "screen-stage";
-  if (atStage) finishStage2();
+  if (atStage) {
+    if (afterEnter) afterEnter();
+    finishStage2();
+  }
   return atStage;
 }
 
@@ -398,6 +402,16 @@ $2("btn-reveal-go").click();
 check(activeScreen2() === "screen-stage", `공개 화면의 "🎤 시즌 시작"을 누르면 무대로 넘어간다 (${activeScreen2()})`);
 check(!!$2("btn-stage-next") && !$2("screen-reveal").classList.contains("active"),
   "무대로 넘어가면 공개 화면은 닫힌다");
+
+// 34~35) 무대 화면 상단(#stage-round)에도 고른 컨셉과 적중 버프가 남아있어요
+const stageActHit2 = T2.state().activity;
+const stageConceptHit2 = conceptById2(stageActHit2.concept);
+check($2("stage-round").textContent.includes(stageConceptHit2.name),
+  `무대 화면(#stage-round)에 고른 컨셉 이름이 있다 (${$2("stage-round").textContent})`);
+const stagePctHit2 = Math.round((T2.trendMul(stageConceptHit2, stageActHit2) - 1) * 100);
+check(stagePctHit2 === 18 && $2("stage-round").textContent.includes(`+${stagePctHit2}%`),
+  `유행 적중이면 #stage-round에 +18%가 있다 (${$2("stage-round").textContent})`);
+
 finishStage2();
 
 // 30) 식상 적중 — 같은 유행 판에서 하이틴을 고르면 너프예요
@@ -409,7 +423,14 @@ check(effect2().classList.contains("reveal-miss"),
   `고른 컨셉이 식상이면 .reveal-miss가 붙는다 (${effect2().className})`);
 check(missPct2 === -15, `trendMul 기준 식상 보정이 -15%다 (${missPct2}%)`);
 check(effectText2().includes(`${missPct2}%`), `식상 문구에 ${missPct2}%가 있다 (${effectText2()})`);
-check(leaveReveal2(), "식상 판도 시즌 시작으로 무대에 들어간다");
+// 36) 식상이면 무대 화면(#stage-round)에도 -15%가 남아있어요
+check(leaveReveal2(() => {
+  const a = T2.state().activity;
+  const c = conceptById2(a.concept);
+  const pct = Math.round((T2.trendMul(c, a) - 1) * 100);
+  check(pct === -15 && $2("stage-round").textContent.includes(`${pct}%`),
+    `식상이면 #stage-round에 -15%가 있다 (${$2("stage-round").textContent})`);
+}), "식상 판도 시즌 시작으로 무대에 들어간다");
 
 // 31) 유행도 식상도 아니면 무난 — 퍼센트 표기가 아예 없어요
 check(enterConcept2("emo", "teen"), `무난 검사를 위해 선택 화면에 다시 들어간다 (${activeScreen2()})`);
@@ -417,7 +438,11 @@ check(pickCard2("cool"), "청량 카드를 실제로 클릭한다");
 check(effect2().classList.contains("reveal-flat"),
   `유행도 식상도 아니면 .reveal-flat이 붙는다 (${effect2().className})`);
 check(!effectText2().includes("%"), `무난한 시즌에는 % 표기가 없다 (${effectText2()})`);
-check(leaveReveal2(), "무난 판도 시즌 시작으로 무대에 들어간다");
+// 36) 무난하면 무대 화면(#stage-round)에도 % 표기가 없어요
+check(leaveReveal2(() => {
+  check(!$2("stage-round").textContent.includes("%"),
+    `무난하면 #stage-round에 % 표기가 없다 (${$2("stage-round").textContent})`);
+}), "무난 판도 시즌 시작으로 무대에 들어간다");
 
 // 32) hot과 cold가 같으면 상쇄 — 그 컨셉을 골라도 무난이에요
 check(enterConcept2("fierce", "fierce"), `상쇄 검사를 위해 선택 화면에 다시 들어간다 (${activeScreen2()})`);
@@ -429,6 +454,19 @@ check(effect2().classList.contains("reveal-flat"),
   `유행이자 식상인 컨셉을 골랐으면 상쇄돼 .reveal-flat이다 (${effect2().className})`);
 check(!effectText2().includes("%"), `상쇄된 판에도 % 표기가 없다 (${effectText2()})`);
 check(leaveReveal2(), "상쇄 판도 시즌 시작으로 무대에 들어간다");
+
+// 37) 컴백이 끝나면 결과 줄(#cb-result)에 컨셉 이름이 있다 (Task 1에서 이미 넣었다 — 확인만)
+check(untilGo2(), "37번 검사 전 무대 버튼이 다시 뜬다");
+goBtn2().click();
+if (activeScreen2() === "screen-concept") pickCard2(cards2()[0].dataset.cid);
+if (activeScreen2() === "screen-reveal") $2("btn-reveal-go").click();
+check(activeScreen2() === "screen-stage", `37번 검사를 위해 무대에 들어간다 (${activeScreen2()})`);
+const act37 = T2.state().activity;
+act37.week = act37.weekTotal - 1; // 이번 무대가 이 컴백의 마지막 주가 되게 해요
+const concept37 = conceptById2(act37.concept);
+$2("btn-stage-next").click(); // 미니게임 자동 진행 → 주간 차트 (마지막 주라 컴백 종료 처리도 함께 일어나요)
+check($2("cb-result").textContent.includes(concept37.name),
+  `컴백이 끝나면 #cb-result에 컨셉 이름이 있다 (${$2("cb-result").textContent.replace(/\s+/g, " ").trim()})`);
 
 console.log(fail ? "\n❌ 실패" : "\n✅ 통과");
 process.exit(fail ? 1 : 0);
