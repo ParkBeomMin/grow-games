@@ -46,11 +46,37 @@ function scopeOf(store) {
   });
 }
 
-function run(srcFn, store) {
+/* career.js가 game.js의 전역에 기대는 경우가 있어요. 스코프의 stub은 undefined를
+ * 돌려주는데, `leagueOf(S).prestige`처럼 결과를 바로 파고들면 거기서 터집니다.
+ * 그래서 career.js가 실제로 쓰는 game.js 전역을 **소스에서 뽑아** 스코프에 넣어요.
+ * 값을 여기 적어두면 산식이 바뀌어도 테스트가 눈치를 못 챕니다. */
+const GAME_GLOBALS = [
+  /const LEAGUES = \[[\s\S]*?\n\];/,
+  /function leagueOf\([\s\S]*?\n\}/,
+  /const CLUBS = \{[\s\S]*?\n\};/,
+  /function clubStrOf\([\s\S]*?\n\}/,
+];
+
+function gameGlobals(g) {
+  const path = `${B}/${g}/game.js`;
+  if (!fs.existsSync(path)) return {};
+  const src = fs.readFileSync(path, "utf8");
+  const parts = GAME_GLOBALS.map((re) => (src.match(re) || [])[0]).filter(Boolean);
+  if (!parts.length) return {};
+  const names = parts
+    .map((p) => (/(?:const|function)\s+(\w+)/.exec(p) || [])[1])
+    .filter(Boolean);
+  // eslint-disable-next-line no-new-func
+  return new Function("clamp", `${parts.join("\n")}\nreturn { ${names.join(", ")} };`)(
+    (v, a, b) => Math.min(b, Math.max(a, v))
+  );
+}
+
+function run(srcFn, store, g) {
   const name = /^  (?:async )?function (\w+)/.exec(srcFn)[1];
   // eslint-disable-next-line no-new-func
   const make = new Function("scope", `with (scope) { ${srcFn}\n return ${name}; }`);
-  return make(scopeOf(store));
+  return make(scopeOf(Object.assign(gameGlobals(g), store)));
 }
 
 // ---------- 게임별 설정 ----------
@@ -128,7 +154,7 @@ for (const { g, fn, key } of GAMES) {
   const before = LS[key];
 
   let err = null;
-  try { run(cut(src, fn), store)(); } catch (e) { err = e; }
+  try { run(cut(src, fn), store, g)(); } catch (e) { err = e; }
   check(!err, `${g}: 결산 함수가 끝까지 돈다${err ? ` (${err.message})` : ""}`);
   if (err) continue;
 
@@ -218,7 +244,7 @@ for (const { g } of GAMES) {
   store.Stats = store.window.Stats;
 
   let err = null;
-  try { run(cut(src, "  function rebirth(team) {"), store)("팀"); } catch (e) { err = e; }
+  try { run(cut(src, "  function rebirth(team) {"), store, g)("팀"); } catch (e) { err = e; }
   check(!err, `${g}: 환생 함수가 돈다${err ? ` (${err.message})` : ""}`);
   if (err) continue;
 
