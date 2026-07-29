@@ -25,6 +25,26 @@ window.WingerCareer = (() => {
     return rating;
   }
 
+  /* 포지션별 축 — 골·도움·수비 성공을 포지션에 맞게 묶어요.
+   * 수비수의 골 가중치가 높은 건 세트피스 득점이 실제로 희소하고 가치가 크기 때문이에요.
+   * n은 정규화 계수예요. 수비수는 시즌 수비 성공이 68회인데 공격수는 골이 31개라,
+   * 그대로 더하면 포지션이 곧 유불리가 됩니다. 시뮬레이션으로 잡은 값이에요. */
+  const POS_AXIS = {
+    fw: { g: 1.0, a: 0.5, d: 0.15, n: 1.00 },
+    wg: { g: 0.8, a: 0.8, d: 0.15, n: 1.02 },
+    mf: { g: 0.5, a: 1.0, d: 0.30, n: 0.88 },
+    df: { g: 2.0, a: 1.0, d: 0.55, n: 0.76 },
+  };
+  const AXIS_K = 3.00;
+  const AXIS_OFF = 3.80;
+
+  // 시즌 축 점수. 옛 세이브에는 집계 필드가 없을 수 있어서 전부 || 0으로 받아요.
+  function posAxis(act, pos) {
+    const x = POS_AXIS[pos] || POS_AXIS.fw;
+    const a = act || {};
+    return ((a.goals || 0) * x.g + (a.assists || 0) * x.a + (a.defense || 0) * x.d) * x.n;
+  }
+
   // 내장 봇 상대 (전부 가상의 선수)
   const GHOSTS = [
     { id: "wg1", name: "레전드 스트라이커 골머신", bp: 690 },
@@ -358,7 +378,12 @@ window.WingerCareer = (() => {
   function finishYear() {
     const act = S.activity;
     const agePen = S.proYear >= 8 ? (S.proYear - 7) * 0.8 : 0;
-    const hype = clamp(act.hypeSum / 2.2 - agePen, -1.5, 12);
+    /* 연말 평가는 이제 축이 해요. 예전에는 hypeSum(순위 기반)이라
+     * 1위를 하는 순간 천장에 붙어서 능력치를 더 올려도 결과가 같았어요.
+     * 축은 골·도움·수비 성공 개수라 상한이 없어요. 후반에 기하급수로 커지니
+     * 로그로 잽니다 — 선형이면 10년차에 hype가 수백이 돼요.
+     * hypeSum은 경기 화면 순위 연출에 그대로 남아 있어요. */
+    const hype = clamp(Math.log(Math.max(1, posAxis(act, S.pos))) * AXIS_K - AXIS_OFF - agePen, -1.5, 12);
     const wins = act.wins;
     const sales = act.sales;
     const dFan = Math.round(hype * 10 + wins * 3 - (hype < 0 ? 15 : 0));
@@ -862,6 +887,6 @@ window.WingerCareer = (() => {
       else if (S.career && S.career.years.length) yearReport();
       else { renderPrep(); show("screen-pro"); }
     },
-    _t: { ratingOf, FAN_CAP, RATING_DIV, state: () => S },
+    _t: { ratingOf, FAN_CAP, RATING_DIV, POS_AXIS, posAxis, AXIS_K, AXIS_OFF, state: () => S },
   };
 })();
