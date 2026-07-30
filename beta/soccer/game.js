@@ -595,11 +595,18 @@ function renderRecord() {
   let proHtml = "";
   if (S.career && S.career.years && S.career.years.length) {
     const rows = S.career.years.map((x) =>
-      `<tr><td>${x.y}시즌</td><td>${x.apps != null ? x.apps : "-"}</td><td>${x.goals != null ? x.goals : "-"}</td><td>${x.assists != null ? x.assists : "-"}</td><td>${x.defense != null ? x.defense : "-"}</td><td>${x.awards && x.awards.length ? "🏆" + x.awards.join(",") : "-"}</td></tr>`
+      /* 골·도움·수비를 한 칸에 합쳐요. 칸마다 나누면 폰 폭에서 헤더가
+       * 세로로 쪼개져요 (⚽골 · 🅰️도움 · 🛡️수비가 28~34px 칸에 안 들어가요).
+       * 결산 화면(career.js)이 같은 이유로 이미 합쳤어요. */
+      `<tr><td>${x.y}시즌</td><td class="yr-stat">${[
+        x.goals != null ? `${x.goals}골` : null,
+        x.assists != null ? `${x.assists}도움` : null,
+        x.defense != null ? `${x.defense}수비` : null,
+      ].filter(Boolean).join(" ") || "-"}</td><td>${x.awards && x.awards.length ? "🏆" + x.awards.join(",") : "-"}</td></tr>`
     ).join("");
     const cr = S.career;
     proHtml = `
-      <table class="season-table"><thead><tr><th>시즌</th><th>출전</th><th>⚽골</th><th>🅰️도움</th><th>🛡️수비</th><th>수상</th></tr></thead><tbody>${rows}</tbody></table>
+      <table class="season-table season-record"><thead><tr><th>시즌</th><th>성적</th><th>수상</th></tr></thead><tbody>${rows}</tbody></table>
       <div>통산 ${cr.years.length}시즌 · 출전 ${cr.apps || 0}경기 · ⚽ ${cr.goals || 0}골 · 🅰️ ${cr.assists || 0}도움 · 🛡️ 수비 ${cr.defense || 0} · 🏅 MOM ${cr.wins}회<br/>🏆 MVP ${cr.daesang} · 베스트11 ${cr.bonsang}${cr.rookie ? " · 신인왕" : ""}</div>`;
   }
   const gearList = STAT_DEFS

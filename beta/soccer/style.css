@@ -219,3 +219,11 @@ body {
   .card-grid.three { grid-template-columns: 1fr; }
   .tf-card .tf-sub { flex-direction: column; gap: 2px; }
 }
+
+/* 📊 기록 화면 표 — 결산 표와 같은 이유로 3칸이에요.
+ * 칸을 나누면 폰 폭에서 헤더가 세로로 쪼개져요. 수상 칸만 유동 폭입니다. */
+.season-record { table-layout: fixed; }
+.season-record th, .season-record td { word-break: keep-all; }
+.season-record th:nth-child(1), .season-record td:nth-child(1) { width: 46px; }
+.season-record th:nth-child(2), .season-record td:nth-child(2) { width: 104px; }
+.season-record .yr-stat { white-space: nowrap; }
