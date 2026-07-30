@@ -266,13 +266,27 @@ reach("soccer-promote", (P, first) => {
   check(downs.length === 0, `사다리 맨 아래라 아래 리그 묶음은 없다 (${downs.length}개)`);
 });
 
-// ⚽ 연말 결산 — 이적 이력
+/* ⚽ 연말 결산 — 소속 칼럼
+ * 예전에는 이적 이력을 텍스트로 나열해서 네 번 이적하면 세 줄로 접혔어요.
+ * 시즌 표의 소속 칸으로 옮겼습니다. 그래서 여기서는 옛 줄이 없어야 하고
+ * 표에 소속 칼럼이 있어야 해요.
+ *
+ * 이 시나리오의 세이브는 소속 칼럼이 생기기 전에 뜬 옛 형식이에요.
+ * years[]에 클럽 정보가 없으니 소속 칸은 "-"로 그려집니다 —
+ * 그게 정상이고, 마이그레이션을 안 한다는 방침이 지켜지는지 보는 자리예요. */
 reach("soccer-report", (P, first) => {
   check(first === "screen-career", `결산 화면이 뜬다 (${first})`);
-  const log = P.w.document.querySelector("#career-card .move-log");
-  check(!!log, "🔁 이적 이력 줄이 있다");
-  check(!!log && (log.textContent.match(/시즌/g) || []).length >= 3,
-    `이적 이력이 여러 건 쌓여 있다 (${log ? (log.textContent.match(/시즌/g) || []).length : 0}건)`);
+  const card = P.w.document.querySelector("#career-card");
+  check(!card.querySelector(".move-log") && !/이적 이력/.test(card.textContent),
+    "옛 '🔁 이적 이력' 텍스트 줄이 없다");
+  const heads = [...card.querySelectorAll("table thead th")].map((th) => th.textContent.trim());
+  check(heads.includes("소속"), `시즌 표에 소속 칼럼이 있다 (${heads.join("·")})`);
+  const rows = card.querySelectorAll("table tbody tr");
+  check(rows.length >= 3, `시즌 행이 여러 개다 (${rows.length}행)`);
+  const col = heads.indexOf("소속");
+  const cells = [...rows].map((r) => (r.children[col] || {}).textContent || "");
+  check(cells.every((c) => c.trim().length > 0),
+    "모든 행의 소속 칸이 비어 있지 않다 (옛 세이브는 '-')");
 });
 
 // ⚽ 유스 엔딩 두 종 — 도전 버튼까지만 확인해요 (엔딩은 판정 결과라 세이브에 안 남아요)
