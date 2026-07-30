@@ -199,6 +199,41 @@ guard("⑤ 이적 반영", () => {
     "이적 이력이 쌓인 뒤에도 결산 텍스트에 '이적 이력' 문구가 없다");
 });
 
+// ---------- ⑦ 결산 표 칼럼 압축 — 폭이 좁아 헤더가 세로로 쪼개지는 원인을 없앤다 (task-2) ----------
+// 실기기 스크린샷에서 '도움'이 '도'/'움'으로, '수비'가 '수'/'비'로 갈라졌다. jsdom은 CSS
+// 줄바꿈을 못 보므로, 줄바꿈의 '원인'인 칼럼 수·헤더 이모지·헤더 길이를 잰다.
+console.log("=== ⑦ 결산 표 칼럼이 5개 이하 · 헤더에 이모지 없음 · 헤더 3자 이하 · 숫자 보존 ===");
+guard("⑦ 칼럼 압축", () => {
+  const { heads, rows } = reportTable();
+  check(heads.length <= 5, `결산 표 칼럼이 5개 이하다 (${heads.length}개: ${heads.join(" · ")})`);
+  for (const h of heads) {
+    check(!/\p{Extended_Pictographic}/u.test(h), `헤더 '${h}'에 이모지가 없다`);
+    check(h.length <= 3, `헤더 '${h}'가 3자 이하다 (${h.length}자)`);
+  }
+
+  // 골·도움·수비를 한 칸에 합쳐도 숫자가 전부 남아 있는지, 실제로 쌓인 S.career.years와
+  // 대조한다. 지금까지(①④⑤)로 3시즌치 실제 기록이 쌓여 있다.
+  const St = T.state();
+  const years = St.career.years.slice(-8); // reportTable()도 최근 8개만 그리니 슬라이스를 맞춘다
+  check(rows.length === years.length, `표 행 수(${rows.length})가 최근 기록 수(${years.length})와 같다`);
+  rows.forEach((row, i) => {
+    const y = years[i];
+    const text = row.textContent;
+    const m = text.match(/(-|\d+)골\s*(-|\d+)도움\s*(-|\d+)수비/);
+    check(!!m, `${i}번째 행에서 골·도움·수비 숫자를 표에서 읽을 수 있다 (${text.trim()})`);
+    if (m) {
+      const [, g, a, d] = m;
+      const exp = (v) => (v != null ? String(v) : "-");
+      check(g === exp(y.goals), `${i}번째 행 골 값이 그대로 보인다 (${g} vs ${y.goals})`);
+      check(a === exp(y.assists), `${i}번째 행 도움 값이 그대로 보인다 (${a} vs ${y.assists})`);
+      check(d === exp(y.defense), `${i}번째 행 수비 값이 그대로 보인다 (${d} vs ${y.defense})`);
+    }
+  });
+
+  const idx = heads.indexOf("소속");
+  check(idx !== -1, "소속 칼럼이 압축 뒤에도 남아 있다");
+});
+
 // ---------- ⑥ 옛 세이브 방어 — club/league가 없는 항목도 던지지 않는다 ----------
 console.log("=== ⑥ 옛 세이브(소속 없음) 방어 ===");
 guard("⑥ 옛 세이브 방어", () => {

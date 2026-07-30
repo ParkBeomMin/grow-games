@@ -535,11 +535,23 @@ window.WingerCareer = (() => {
     return `<td class="yr-club${movedClub ? " moved" : ""}" title="${x.club}">${shortClub(x.club)}${lgTag}</td>`;
   }
 
+  /* 시즌 표의 성적 칸 하나 — ⚾ 더 드래프트(beta/rookie/career.js:1023, 시즌·나이·성적·WAR)와
+   * 같은 방식으로 여러 지표를 한 칸에 합쳐요. 폭 28~34px에 이모지 헤더(🅰️도움·🛡️수비)를
+   * 얹었더니 실기기에서 헤더가 세로로 쪼개졌어요(도/움, 수/비) — 칼럼을 7개에서 4개로
+   * 줄이고 골·도움·수비를 이 칸 하나로 합쳐서 없애요. 출전은 항상 12라 표에서 뺐어요 —
+   * 결산 카드 상단 줄(draft-team)과 통산 요약(draft-summary)에 이미 나와 있어서 안 사라져요. */
+  function statCell(x) {
+    const g = x.goals != null ? x.goals : "-";
+    const a = x.assists != null ? x.assists : "-";
+    const d = x.defense != null ? x.defense : "-";
+    return `<td class="yr-stat">${g}골 ${a}도움 ${d}수비</td>`;
+  }
+
   function yearReport() {
     const y = S.career.years[S.career.years.length - 1];
     const slice = S.career.years.slice(-8);
     const rows = slice.map((x, i) =>
-      `<tr><td>${x.y}시즌</td>${clubCell(x, slice[i - 1])}<td>${x.apps != null ? x.apps : "-"}</td><td>${x.goals != null ? x.goals : "-"}</td><td>${x.assists != null ? x.assists : "-"}</td><td>${x.defense != null ? x.defense : "-"}</td><td>${x.awards.length ? "🏆" + x.awards.join(",") : "-"}</td></tr>`
+      `<tr><td>${x.y}시즌</td>${clubCell(x, slice[i - 1])}${statCell(x)}<td>${x.awards.length ? "🏆" + x.awards.join(",") : "-"}</td></tr>`
     ).join("");
     const forcedRetire = S.proYear >= 10;
     const cr = S.career;
@@ -556,7 +568,7 @@ window.WingerCareer = (() => {
         y.hype >= 3.5 ? "아쉬움이 남는 시즌" : "혹독한 시즌…"
       }</div>
       <div class="draft-team">${leagueOf(S).flag} ${S.group} · ${leagueOf(S).name} · 전력 ${clubStrOf(S)} · ${y.apps || 0}경기 ⚽${y.goals || 0}골 🅰️${y.assists || 0}도움 🛡️${y.defense || 0} · MOM ${y.wins}회</div>
-      <table class="season-table season-soccer"><thead><tr><th>시즌</th><th>소속</th><th>출전</th><th>⚽골</th><th>🅰️도움</th><th>🛡️수비</th><th>수상</th></tr></thead><tbody>${rows}</tbody></table>
+      <table class="season-table season-soccer"><thead><tr><th>시즌</th><th>소속</th><th>성적</th><th>수상</th></tr></thead><tbody>${rows}</tbody></table>
       <div class="draft-summary">
         통산 ${cr.years.length}시즌 · 출전 ${cr.apps || 0} · ⚽ ${cr.goals || 0}골 · 🅰️ ${cr.assists || 0}도움 · 🛡️ ${cr.defense || 0} · 🏅 MOM ${cr.wins}회<br/>
         🏆 MVP ${cr.daesang} · 베스트11 ${cr.bonsang}${cr.rookie ? " · 신인왕" : ""} · ⭐ 명성 ${Math.round(S.fandom)}<br/>
