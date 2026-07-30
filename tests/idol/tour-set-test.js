@@ -128,7 +128,7 @@ const CB_TEXT = [
   "0.1초 만에 찾은 렌즈", "동선이 꼬여 화면 밖으로",
 ];
 manual();
-const S4 = enterTour({ condition: 95 });
+enterTour({ condition: 95 });
 const city4 = H.tourState().cities[0];
 nextRes = () => "perfect";
 playCity();
@@ -248,13 +248,12 @@ async function realEngineCity() {
     `화면에 뜬 무대 문구에 도시 이름이 있다 (${box() ? box().querySelector(".tm-label").textContent.slice(0, 28) : ""}…)`);
   check($("btn-tour-go").disabled, "세 무대가 끝날 때까지 공연 버튼이 잠겨 있다");
 
-  const labels = new Set();
   const seen = [];
   for (let step = 0; step < 400 && H.tourState().fills.length === 0; step++) {
     const b = box();
     if (b) {
       const lab = b.querySelector(".tm-label");
-      if (lab) { labels.add(lab.textContent); if (!seen.includes(lab.textContent)) seen.push(lab.textContent); }
+      if (lab && !seen.includes(lab.textContent)) seen.push(lab.textContent);
       // 사람이 누르는 자리를 순서대로 찾아 눌러요 (홀드는 꾹 눌렀다 떼요)
       const holdBtn = b.querySelector(".tm-hold-btn");
       const hit = b.querySelector(".tm-duel-btn:not([disabled]), .tm-seq-btn:not([disabled]), .tm-target, .tm-odd-cell, .tm-btn:not([disabled])");
