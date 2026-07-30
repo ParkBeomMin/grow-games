@@ -1074,9 +1074,11 @@ function playRandomMini(container, cb) {
  * playRandomMini는 손대지 않았어요 — 컴백 무대는 예전 그대로 한 번이에요.
  * (회귀는 tests/idol/tour-set-test.js가 봐요.)
  *
- * 메커닉 후보(pool)를 무대별로 겹치지 않게 갈라놨어요. 그래서 한 도시 안에서
- * 같은 메커닉이 두 번 나오는 일이 구조적으로 없어요 — 뽑고 나서 다시 뽑는
- * 재시도 루프가 필요 없고, "운 나쁘면 두 번 같다"는 사각지대도 안 생겨요.
+ * 🎪 무대마다 전용 메커닉이 하나씩 붙어 있어요(mech). 예전에는 기존 8종에서
+ * 무대별로 골라 썼는데, 그러면 종류가 컴백 무대와 똑같아서 투어라는 느낌이
+ * 안 났어요. 지금은 셋 다 tour-stage.js의 투어 전용 메커닉이에요 —
+ * 함성 웨이브 · 싱크로 · 함성 유지. 컴백 무대는 여전히 기존 8종을 써요.
+ * 무대와 메커닉이 1:1이라 한 도시에서 같은 메커닉이 두 번 나오지 않아요.
  *
  * weight — 세 무대를 합칠 때의 가중치예요. 합이 1이고 앵콜이 압도적으로 무거워요.
  * 마지막에 무너지면 아파야 하니까요.
@@ -1093,9 +1095,9 @@ function playRandomMini(container, cb) {
  * 값을 만질 땐 반드시 tour-depth-test.js의 분포표를 다시 재세요. 컨디션 소모·
  * 기세·취소 상수는 이 표를 맞추는 데 쓰지 않아요 — 가중치로만 맞춰요. */
 const TOUR_STAGES = [
-  { key: "open", emoji: "🎬", name: "오프닝", weight: 0.10, pool: ["react", "target", "odd"] },
-  { key: "kill", emoji: "✨", name: "킬링파트", weight: 0.15, pool: ["bar", "seq"] },
-  { key: "encore", emoji: "🔥", name: "앵콜", weight: 0.75, pool: ["hold", "drop", "duel"] },
+  { key: "open", emoji: "🎬", name: "오프닝", weight: 0.10, mech: "wave" },
+  { key: "kill", emoji: "✨", name: "킬링파트", weight: 0.15, mech: "sync" },
+  { key: "encore", emoji: "🔥", name: "앵콜", weight: 0.75, mech: "roar" },
 ];
 
 /* 무대별 결과 문구 — 도시 이름과 현지 함성이 들어가요.
@@ -1122,73 +1124,43 @@ const tourStageMsg = (stage, res, city, cheer) => {
   return (res === "perfect" ? m.great : res === "miss" ? m.bad : m.ok)(city, cheer);
 };
 
-/* 메커닉 하나하나의 투어 문구와 실행이에요. label은 (도시, 함성)을 받아요.
- * pool이 겹치지 않으니 메커닉 하나는 무대 하나에만 속해요 — 그래서 문구를
- * 메커닉에 붙여 둘 수 있어요. */
+/* 🎪 투어 전용 메커닉 셋 — 실행은 tour-stage.js(window.TourStage)에 있어요.
+ * label은 (도시, 함성)을 받아요. 무대와 메커닉이 1:1이라 문구를 메커닉에 붙여 둬요.
+ *
+ * stat()이 자동 플레이(autoRes)가 볼 능력치이고, zonePct(miniZone)가 사람이
+ * 직접 할 때 판정 창을 넓히는 값이에요. 둘이 같은 능력치를 봐야 "자동으로 돌린
+ * 분포"와 "손으로 한 체감"이 어긋나지 않아요.
+ *
+ * 무대별로 보는 능력치 (설계 문서의 표):
+ *   🎬 오프닝   → 댄스        무대 장악·동선
+ *   ✨ 킬링파트 → 포지션 주 스탯  하이라이트는 자기 파트
+ *   🔥 앵콜     → 체력        끝까지 버티는 것
+ *
+ * window.TourStage를 부를 때마다 찾아가요(변수에 캐시하지 않아요) — 테스트가
+ * 기록용으로 갈아끼울 수 있어야 하니까요. window.Timing을 쓰던 방식과 같아요. */
 const TOUR_MECH = {
-  // 🎬 오프닝 — 첫 곡. 관객을 잡아요 (순발력·집중)
-  react: {
-    stat: () => S.stats.charm,
-    label: (c, y) => `🎬 ${c} 오프닝! "${y}" 함성 속에 암전이 걷히면 바로 첫 소절!`,
-    run: (box, label, cb) => window.Timing.reaction(box, {
-      label, button: "첫 소절!! 🎬",
-      perfectMs: 300 + S.stats.charm * 1.5,
-      goodMs: 700 + S.stats.charm * 2.5,
-    }, cb),
-  },
-  target: {
-    stat: () => S.stats[POS_INFO[S.pos].stat],
-    label: (c) => `🎬 ${c} 오프닝! 객석에서 흔들리는 응원봉을 하나씩 눈에 담아요!`,
-    run: (box, label, cb) => window.Timing.target(box, {
-      label, icon: "💡", count: 3,
-      lifeMs: 800 + Math.min(S.stats[POS_INFO[S.pos].stat], 130) * 3,
-    }, cb),
-  },
-  odd: {
-    stat: () => S.stats.charm,
-    label: (c) => `🎬 ${c} 오프닝! 객석에 딱 하나 다른 슬로건이 보여요 — 찾아서 손 인사!`,
-    run: (box, label, cb) => window.Timing.odd(box, {
-      label, rounds: 2, sets: [["💙", "🩵"], ["💜", "🟣"], ["🔆", "💡"]],
-    }, cb),
-  },
-  // ✨ 킬링파트 — 하이라이트 (정확도)
-  bar: {
-    stat: () => S.stats[POS_INFO[S.pos].stat],
-    label: (c, y) => `✨ ${c} 하이라이트! "${y}" 함성이 최고조인 순간을 노려요!`,
-    run: (box, label, cb) => window.Timing.play(box, {
-      label, button: "터뜨리기! ✨",
-      zonePct: miniZone(S.stats[POS_INFO[S.pos].stat]),
-    }, cb),
-  },
-  seq: {
+  // 🎬 오프닝 — 관객석을 흐르는 함성 웨이브를 3번 연속 잡아요 (댄스: 무대 장악)
+  wave: {
     stat: () => S.stats.dance,
-    label: (c) => `✨ ${c} 하이라이트! 이 도시만을 위해 바꾼 안무 순서를 그대로!`,
-    run: (box, label, cb) => window.Timing.sequence(box, {
-      label, icons: ["🎤", "🕺", "🎙️", "✨"],
-      showMs: 900 + S.stats.dance * 6 + (S.condition - 50) * 3,
+    label: (c, y) => `🎬 ${c} 오프닝! "${y}" 함성이 객석을 타고 흘러요 — 최고조인 구역을 잡아요!`,
+    run: (box, label, cb) => window.TourStage.wave(box, {
+      label, button: "함성! 🙌", zonePct: miniZone(S.stats.dance),
     }, cb),
   },
-  // 🔥 앵콜 — 마지막. 가장 무거워요 (호흡·판단)
-  hold: {
-    stat: () => S.stats.stamina,
-    label: (c, y) => `🔥 ${c} 앵콜! "${y}"에 답하며 마지막 호흡을 끝까지 끌어올려요!`,
-    run: (box, label, cb) => window.Timing.hold(box, {
-      label, button: "숨 모으기 🔥", zonePct: miniZone(S.stats.stamina),
-    }, cb),
-  },
-  drop: {
+  // ✨ 킬링파트 — 서로 다른 속도로 왕복하는 두 파트가 겹치는 순간 (포지션 주 스탯)
+  sync: {
     stat: () => S.stats[POS_INFO[S.pos].stat],
-    label: (c) => `🔥 ${c} 앵콜! 객석에서 날아온 꽃다발을 놓치지 말고 받아요!`,
-    run: (box, label, cb) => window.Timing.drop(box, {
-      label, icon: "💐", zonePct: miniZone(S.stats[POS_INFO[S.pos].stat]),
+    label: (c, y) => `✨ ${c} 하이라이트! "${y}" 속에서 두 파트가 겹치는 순간을 노려요!`,
+    run: (box, label, cb) => window.TourStage.sync(box, {
+      label, button: "싱크! ✨", zonePct: miniZone(S.stats[POS_INFO[S.pos].stat]),
     }, cb),
   },
-  duel: {
-    stat: () => S.stats.charm,
-    label: (c) => `🔥 ${c} 앵콜! 마지막 인사는 어디로? 함성이 가장 큰 쪽으로!`,
-    run: (box, label, cb) => window.Timing.duel(box, {
-      label, choices: ["왼쪽 스탠드", "중앙", "오른쪽 스탠드"],
-      hintChance: clamp((S.stats.charm - 40) / 80 + (S.condition - 50) / 400, 0, 0.9),
+  // 🔥 앵콜 — 식어가는 함성을 연타로 목표선 위에 붙잡아 둬요 (체력: 끝까지 버티기)
+  roar: {
+    stat: () => S.stats.stamina,
+    label: (c, y) => `🔥 ${c} 앵콜! "${y}"가 식지 않게 마지막까지 함성을 끌어올려요!`,
+    run: (box, label, cb) => window.TourStage.roar(box, {
+      label, button: "연타! 🔥", zonePct: miniZone(S.stats.stamina),
     }, cb),
   },
 };
@@ -1196,12 +1168,12 @@ const TOUR_MECH = {
 /* 세 무대를 연달아 돌려요. 끝나면 cb([{ key, mech, res }, …])로 세 결과를 넘겨요.
  * opts.onStage(stage, i, label)  — 무대에 오를 때 (진행 표시·로그용)
  * opts.onResult(stage, res, msg) — 한 무대가 끝났을 때
- * 자동 플레이(autoMiniOn)면 Timing을 거치지 않고 즉시 판정해요 — 다른 미니게임들과
+ * 자동 플레이(autoMiniOn)면 미니게임을 띄우지 않고 즉시 판정해요 — 다른 미니게임들과
  * 같은 경로예요. 없으면 테스트도 확인 페이지도 투어에서 막혀요. */
 function playTourSet(container, opts, cb) {
   const city = (opts && opts.city) || "이 도시";
   const cheer = (opts && opts.cheer) || "앵콜!";
-  const mechs = TOUR_STAGES.map((st) => pick(st.pool));
+  const mechs = TOUR_STAGES.map((st) => st.mech);
   const out = [];
   const step = (i) => {
     if (i >= TOUR_STAGES.length) { cb(out); return; }

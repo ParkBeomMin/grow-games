@@ -182,6 +182,103 @@ body {
    좁은 화면에서 이모지와 적중 표시가 따로 떨어지지 않게 한 덩이로 묶어요. */
 .sn-concept { white-space: nowrap; }
 
+/* 🌏 월드투어 전용 무대 미니게임 3종 (../tour-stage.js) — 아이돌만 쓰는 화면이라
+ * base.css가 아니라 여기 둬요. base.css는 8개 게임이 공유해요.
+ *
+ * 절대색은 안 써요. 아이돌은 base.css의 금색 accent를 핑크로 덮어쓰기 때문에,
+ * 절대색을 쓰면 이 화면만 다른 게임 색으로 튀어요 (CSS는 러너 사각지대예요).
+ * 성공은 --accent, 실패·경고는 --accent2, 보조는 --sky로만 갈라요.
+ * 흰색/검은색 alpha는 base.css의 .tm-* 관례를 그대로 따라요 (색이 아니라 명암이에요). */
+
+/* 눌러서 노는 칸은 텍스트 선택·더블탭 확대를 막아요 — 연타와 이동 타이밍이
+ * 브라우저 제스처에 먹히면 그 자체로 미스가 돼요. */
+.ts-tap, .ts-wave, .ts-seat {
+  user-select: none; -webkit-user-select: none; touch-action: manipulation;
+}
+
+/* 🎬 오프닝 — 함성 웨이브. 구역이 가로로 늘어서고 빛이 왼→오로 흘러요. */
+.ts-wave {
+  position: relative; height: 54px; margin: 2px 0 0;
+  border: 1px solid var(--line); border-radius: 12px; overflow: hidden;
+  background: linear-gradient(180deg, rgba(255, 255, 255, .04), rgba(0, 0, 0, .22));
+  cursor: pointer;
+}
+.ts-wave.ts-wave-cut { border-color: var(--accent2); }
+.ts-wave-light {
+  position: absolute; top: 0; bottom: 0; left: 0; width: 12%; margin-left: -6%;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  opacity: .5; pointer-events: none;
+}
+.ts-seats { position: relative; display: flex; height: 100%; align-items: center; }
+.ts-seat {
+  flex: 1; text-align: center; font-size: 1.25rem; line-height: 1;
+  opacity: .4; transition: opacity .12s ease, transform .12s ease;
+}
+.ts-seat.ts-cue { opacity: .78; }
+.ts-seat.ts-on { opacity: 1; transform: scale(1.2); }
+.ts-seat.ts-hit { box-shadow: inset 0 0 14px var(--accent); border-radius: 8px; opacity: 1; }
+.ts-seat.ts-break { box-shadow: inset 0 0 14px var(--accent2); border-radius: 8px; opacity: .55; }
+/* 3번 중 몇 번 잡았는지 — 🙌 잡음 / 💧 놓침 / ◦ 아직 */
+.ts-dots {
+  text-align: center; font-size: 1.05rem; letter-spacing: 5px;
+  margin: 8px 0 0; min-height: 1.4rem;
+}
+
+/* ✨ 킬링파트 — 싱크로. 두 바가 서로 다른 속도로 왕복해요. */
+.ts-sync { display: flex; flex-direction: column; gap: 5px; margin: 2px 0 0; }
+.ts-sync-row {
+  position: relative; height: 26px; border-radius: 99px; overflow: hidden;
+  background: rgba(0, 0, 0, .34); border: 1px solid var(--line);
+}
+.ts-sync-bar {
+  position: absolute; top: 0; bottom: 0; width: 16%;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 99px; font-size: .95rem; line-height: 1;
+  background: rgba(255, 255, 255, .1); border: 1px solid var(--line);
+}
+/* 두 바가 서로 다른 파트로 보여야 해요 — 같은 색이면 어느 쪽이 빠른지 못 따라가요 */
+.ts-bar-a { border-color: var(--accent); }
+.ts-bar-b { border-color: var(--sky); }
+/* 겹침이 가까워지면 알려줘요 — 안 알려주면 무엇을 기다리는지 알 수가 없어요 */
+.ts-sync-near .ts-sync-bar { border-color: var(--sky); background: rgba(255, 255, 255, .16); }
+.ts-sync-hot .ts-sync-bar { border-color: var(--accent); box-shadow: 0 0 12px var(--accent); }
+
+/* 🔥 앵콜 — 함성 유지. 게이지가 계속 떨어지고, 위쪽은 삑사리 구간이에요. */
+.ts-roar {
+  position: relative; height: 26px; margin: 2px 0 0;
+  border-radius: 99px; overflow: hidden;
+  background: rgba(0, 0, 0, .38); border: 1px solid var(--line);
+}
+.ts-roar-fill {
+  position: absolute; left: 0; top: 0; height: 100%; width: 0; border-radius: 99px;
+  background: linear-gradient(90deg, var(--sky), var(--accent));
+}
+/* 삑사리 구간 — 여기까지 올리면 목이 갈라져요.
+ * 게이지(.ts-roar-fill) '위에' 반투명으로 덮어요. 아래에 두면 게이지가 구간에
+ * 들어간 순간 빨간 띠가 게이지에 가려져서, 정작 위험할 때 경계가 안 보여요. */
+.ts-roar-crackzone {
+  position: absolute; top: 0; bottom: 0; background: var(--accent2); opacity: .34;
+  border-left: 1px dashed var(--accent2);
+}
+/* 목표선 — 이 위에서 버틴 시간이 판정이에요 */
+.ts-roar-line {
+  position: absolute; top: -2px; bottom: -2px; width: 3px; margin-left: -1.5px;
+  background: var(--cream); box-shadow: 0 0 6px rgba(255, 255, 255, .6); z-index: 2;
+}
+.ts-roar-on .ts-roar { box-shadow: 0 0 12px var(--accent); }
+.ts-roar-crackhit .ts-roar { border-color: var(--accent2); }
+/* 목표선 위에서 버틴 시간 — 얼마나 채웠는지가 곧 판정이에요 */
+.ts-hold {
+  position: relative; height: 9px; margin: 6px 0 0; border-radius: 99px; overflow: hidden;
+  background: rgba(255, 255, 255, .08);
+}
+.ts-hold-fill { height: 100%; width: 0; background: var(--accent); border-radius: 99px; }
+/* 완벽 문턱 눈금 — 여기까지 채우면 perfect예요 */
+.ts-hold-goal {
+  position: absolute; top: -1px; bottom: -1px; width: 2px; margin-left: -1px;
+  background: var(--cream); opacity: .8;
+}
+
 @media (max-width: 380px) {
   .card-grid.three { grid-template-columns: 1fr; }
 }

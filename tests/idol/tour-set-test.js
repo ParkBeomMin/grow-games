@@ -3,11 +3,15 @@
  * 전부 게임 입구를 통해 봐요. tour-harness.js가 실제 페이지(jsdom)를 띄우고
  * 연말 결산 화면의 버튼을 눌러 투어를 도는 부트스트랩이에요.
  *
- * 여기서는 자동 판정을 끄고 window.Timing을 기록용으로 갈아끼워요. 그러면
- * "사람이 실제로 미니게임을 하는 경로"가 그대로 돌면서, 어떤 메커닉이 몇 번
- * 불렸고 문구가 무엇이었는지까지 볼 수 있어요. 자동 플레이 경로는 8번에서
- * 따로 봐요 — 확인 페이지와 다른 테스트가 그 경로로 도니까요.
+ * 여기서는 자동 판정을 끄고 window.TourStage(투어 전용 3종)와 window.Timing
+ * (컴백용 8종)을 둘 다 기록용으로 갈아끼워요. 그러면 "사람이 실제로 미니게임을
+ * 하는 경로"가 그대로 돌면서, 어떤 메커닉이 몇 번 불렸고 문구가 무엇이었는지까지
+ * 볼 수 있어요. 자동 플레이 경로는 8번에서 따로 봐요 — 확인 페이지와 다른
+ * 테스트가 그 경로로 도니까요.
  *
+ * 🎪 투어 3무대는 이제 기존 8종을 고르지 않아요. 무대마다 투어 전용 메커닉이
+ * 하나씩 붙어 있어요 (오프닝=wave · 킬링파트=sync · 앵콜=roar).
+ * 메커닉 자체의 난이도와 실제 클릭 도달성은 tour-mech-test.js가 봐요.
  * 등급 분포(무작위 500회)와 보상 안전장치는 tour-depth-test.js가 봐요.
  */
 "use strict";
@@ -20,22 +24,30 @@ let fail = 0;
 const check = (ok, msg) => { console.log(`${ok ? "✅" : "❌"} ${msg}`); if (!ok) fail++; };
 const mean = (xs) => xs.reduce((a, b) => a + b, 0) / xs.length;
 
-/* ---------- Timing을 기록용으로 갈아끼워요 ----------
- * 게임은 window.Timing을 호출할 때마다 찾아가니(캐시하지 않아요) 이렇게 덮으면
- * 실제 사람 경로가 그대로 돌아요. cb를 바로 부르니 한 클릭에 세 무대가 끝나요. */
-const MECHS = ["play", "hold", "sequence", "reaction", "duel", "target", "drop", "odd"];
-const realTiming = w.Timing;
+/* ---------- 미니게임 엔진을 기록용으로 갈아끼워요 ----------
+ * 게임은 window.Timing · window.TourStage를 호출할 때마다 찾아가니(캐시하지
+ * 않아요) 이렇게 덮으면 실제 사람 경로가 그대로 돌아요.
+ * cb를 바로 부르니 한 클릭에 세 무대가 끝나요. */
+const CB_MECHS = ["play", "hold", "sequence", "reaction", "duel", "target", "drop", "odd"];
+const TOUR_MECHS = ["wave", "sync", "roar"];
+const realTiming = w.Timing, realStage = w.TourStage;
 let calls = [];
 let nextRes = () => "good";
-const spy = {};
-for (const k of MECHS) {
-  spy[k] = (box, opts, cb) => {
-    calls.push({ mech: k, label: String(opts.label || "") });
-    cb(nextRes(calls.length - 1));
-  };
-}
-const manual = () => { w.localStorage.setItem("grow-auto-mini", "0"); w.Timing = spy; };
-const auto = () => { w.localStorage.setItem("grow-auto-mini", "1"); w.Timing = realTiming; };
+const record = (k) => (box, opts, cb) => {
+  calls.push({ mech: k, label: String(opts.label || "") });
+  cb(nextRes(calls.length - 1));
+};
+const spyT = {}, spyS = {};
+for (const k of CB_MECHS) spyT[k] = record(k);
+for (const k of TOUR_MECHS) spyS[k] = record(k);
+const manual = () => {
+  w.localStorage.setItem("grow-auto-mini", "0");
+  w.Timing = spyT; w.TourStage = spyS;
+};
+const auto = () => {
+  w.localStorage.setItem("grow-auto-mini", "1");
+  w.Timing = realTiming; w.TourStage = realStage;
+};
 
 // 투어 화면에 들어가 첫 도시 앞에 서요 (게임 입구를 통해서만)
 function enterTour(opts) {
@@ -72,24 +84,26 @@ check(!!strip, "세트리스트 칸이 화면에 있다");
 check(!!strip && strip.querySelectorAll(".tour-stage").length === 3,
   `세트리스트에 세 무대가 다 서 있다 (${strip ? strip.querySelectorAll(".tour-stage").length : 0}칸)`);
 
-// ---------- 2. 세 무대의 메커닉이 서로 다르다 (200회) ----------
-let sameCombo = 0;
+/* ---------- 2. 무대마다 투어 전용 메커닉이 하나씩 붙어 있다 (200회) ----------
+ * 예전에는 무대별 후보(pool)에서 골라 썼어요. 그러니 종류가 컴백 무대와 똑같아서
+ * "투어인데 왜 미니게임이 일반하고 같냐"는 소리를 들었죠. 지금은 무대와 메커닉이
+ * 1:1이고, 셋 다 투어에서만 쓰는 것이에요. 같은 메커닉이 두 번 나올 수도 없어요. */
 const seenMech = new Set();
 const combos = new Set();
+let leakedCb = 0;
 for (let i = 0; i < 200; i++) {
   if (i % 4 === 0) enterTour({ condition: 95 });
   else nextCity();
   playCity();
   const ms = calls.map((c) => c.mech);
-  ms.forEach((m) => seenMech.add(m));
+  ms.forEach((m) => { seenMech.add(m); if (CB_MECHS.includes(m)) leakedCb++; });
   combos.add(ms.join(">"));
-  if (new Set(ms).size !== 3) sameCombo++;
 }
-check(sameCombo === 0, `200회 내내 세 메커닉이 서로 다르다 (같은 게 두 번 나온 도시 ${sameCombo}곳)`);
-check(seenMech.size >= 6, `여러 메커닉이 실제로 쓰인다 (${seenMech.size}종: ${[...seenMech].join(" ")})`);
-check(combos.size >= 8, `세트 조합이 매번 달라진다 (${combos.size}가지)`);
-// 새 엔진을 만들지 않았어요 — 전부 window.Timing의 기존 8종이에요
-check([...seenMech].every((m) => MECHS.includes(m)), "전부 기존 window.Timing 메커닉이다");
+check(combos.size === 1 && [...combos][0] === "wave>sync>roar",
+  `200회 내내 오프닝=wave · 킬링파트=sync · 앵콜=roar다 (${[...combos].join(" / ")})`);
+check(leakedCb === 0, `컴백용 8종이 투어에 한 번도 안 불린다 (${leakedCb}번)`);
+check([...seenMech].every((m) => TOUR_MECHS.includes(m)) && seenMech.size === 3,
+  `투어는 전용 메커닉 3종만 쓴다 (${[...seenMech].join(" ")})`);
 
 // ---------- 3. 앵콜 가중치가 가장 크다 ----------
 /* 앵콜만 perfect(나머지 miss) vs 앵콜만 miss(나머지 perfect)를 같은 조건에서 비교해요.
@@ -126,6 +140,7 @@ const CB_TEXT = [
   "개인 직캠 타임", "포토타임", "마이크 캐치", "안무 디테일", "엔딩 요정 자리 싸움",
   "킬링파트를 완벽하게! 객석이 터져나가요", "무대를 찢었다", "직캠 화력 폭발",
   "0.1초 만에 찾은 렌즈", "동선이 꼬여 화면 밖으로",
+  "초록 존", "순서를 기억", "떨어지는", "다른 하나",   // 기존 8종의 안내 문구 조각
 ];
 manual();
 enterTour({ condition: 95 });
@@ -183,6 +198,10 @@ manual();
   calls = [];
   $("btn-stage-next").click();                                  // ⏩ 빨리 감기 → 하이라이트
   check(calls.length === 1, `컴백 무대는 여전히 미니게임 한 번이다 (${calls.length}번)`);
+  check(calls[0] && CB_MECHS.includes(calls[0].mech),
+    `컴백 무대는 여전히 기존 8종을 쓴다 (${calls[0] ? calls[0].mech : "안 불렸어요"})`);
+  check(calls.every((c) => !TOUR_MECHS.includes(c.mech)),
+    "컴백 무대에 투어 전용 메커닉이 새어 들어가지 않는다");
   const cbLog = $("pbp-cb") ? $("pbp-cb").textContent : "";
   check(!/1\/3/.test(cbLog) && !/오프닝/.test(cbLog),
     "컴백 무대에는 투어 세트(오프닝·앵콜)가 안 나온다");
@@ -227,14 +246,21 @@ auto();
   check($("tour-log").textContent.includes("앵콜"), "자동 플레이 로그에도 앵콜 무대가 남는다");
 }
 
-/* ---------- 9. 진짜 Timing 엔진으로도 세 무대가 이어진다 ----------
- * 위에서는 window.Timing을 기록용으로 갈아끼웠어요. 그건 "부르긴 부른다"까지만
- * 보여줘요. 여기서는 진짜 엔진을 그대로 두고, 화면에 뜬 미니게임을 사람처럼
- * 눌러가며 한 도시를 끝까지 해요. 세 무대가 실제로 이어지지 않으면
- * (예: 두 번째 무대가 첫 박스 안에 겹쳐 뜨거나, 콜백이 안 물리면) 여기서 막혀요. */
+/* ---------- 9. 진짜 TourStage 엔진으로도 세 무대가 이어진다 ----------
+ * 위에서는 엔진을 기록용으로 갈아끼웠어요. 그건 "부르긴 부른다"까지만 보여줘요.
+ * 여기서는 진짜 엔진을 그대로 두고, 화면에 뜬 미니게임을 사람처럼 눌러가며
+ * 한 도시를 끝까지 해요. 세 무대가 실제로 이어지지 않으면 (예: 두 번째 무대가
+ * 첫 박스 안에 겹쳐 뜨거나, 콜백이 안 물리면) 여기서 막혀요.
+ *
+ * ⚠️ 되돌릴 엔진이 둘이에요. 예전에는 window.Timing만 되돌렸는데, 투어가
+ * window.TourStage를 쓰게 된 뒤에는 그러면 여전히 기록용 스파이가 물려 있어요 —
+ * "진짜 엔진 검사"가 통째로 거짓말이 되죠. 그래서 아래에서 화면에 실제로 새 메커닉의
+ * 요소(.ts-wave 등)가 떴는지까지 확인해요. 잘 눌러서 perfect까지 닿는지는
+ * tour-mech-test.js가 봐요 (거기는 진짜 시간으로 정확히 눌러요). */
 async function realEngineCity() {
   w.localStorage.setItem("grow-auto-mini", "0");
   w.Timing = realTiming;
+  w.TourStage = realStage;
   enterTour({ condition: 95 });
   const t0 = H.tourState();
   const city = t0.cities[t0.i];
@@ -247,29 +273,29 @@ async function realEngineCity() {
   check(!!box() && box().querySelector(".tm-label").textContent.includes(city),
     `화면에 뜬 무대 문구에 도시 이름이 있다 (${box() ? box().querySelector(".tm-label").textContent.slice(0, 28) : ""}…)`);
   check($("btn-tour-go").disabled, "세 무대가 끝날 때까지 공연 버튼이 잠겨 있다");
+  check(!!box() && !!box().querySelector(".ts-wave"),
+    "첫 무대에 진짜 함성 웨이브(관객석 구역)가 그려진다 — 스파이가 아니다");
 
-  const seen = [];
+  const seen = [], parts = [];
   for (let step = 0; step < 400 && H.tourState().fills.length === 0; step++) {
     const b = box();
     if (b) {
       const lab = b.querySelector(".tm-label");
       if (lab && !seen.includes(lab.textContent)) seen.push(lab.textContent);
-      // 사람이 누르는 자리를 순서대로 찾아 눌러요 (홀드는 꾹 눌렀다 떼요)
-      const holdBtn = b.querySelector(".tm-hold-btn");
-      const hit = b.querySelector(".tm-duel-btn:not([disabled]), .tm-seq-btn:not([disabled]), .tm-target, .tm-odd-cell, .tm-btn:not([disabled])");
-      if (holdBtn && !holdBtn.disabled) {
-        holdBtn.dispatchEvent(new w.Event("pointerdown", { bubbles: true, cancelable: true }));
-        await sleep(700);
-        holdBtn.dispatchEvent(new w.Event("pointerup", { bubbles: true, cancelable: true }));
-      } else if (hit) {
-        hit.click();
+      // 무대마다 화면 구성이 달라요 — 무엇이 떴는지 화면으로 알아내요
+      for (const sel of [".ts-wave", ".ts-sync", ".ts-roar"]) {
+        if (b.querySelector(sel) && !parts.includes(sel)) parts.push(sel);
       }
+      const hit = b.querySelector(".tm-btn:not([disabled])");
+      if (hit) hit.click();
     }
     await sleep(60);
   }
   check(H.tourState().fills.length === 1,
     `진짜 엔진으로 한 도시를 끝냈다 (객석 ${Math.round((H.tourState().fills[0] || 0) * 100)}%)`);
   check(seen.length === 3, `세 무대가 차례로 화면을 갈아가며 떴다 (서로 다른 문구 ${seen.length}개)`);
+  check(parts.join(",") === ".ts-wave,.ts-sync,.ts-roar",
+    `세 무대의 화면이 각각 웨이브 → 싱크로 → 함성 게이지다 (${parts.join(" → ")})`);
   check(seen.every((l) => l.includes(city)), "세 문구 모두에 도시 이름이 들어 있다");
   check($("tour-moment").querySelectorAll(".tm-box").length === 0,
     "세 무대가 끝나면 미니게임 박스가 화면에 남지 않는다");
