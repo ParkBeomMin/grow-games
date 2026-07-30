@@ -662,10 +662,17 @@ window.IdolCareer = (() => {
   }
 
   /* 투어 등급 — 전체 도시의 평균 객석 점유율로 매겨요.
-   * 실패해도 커리어가 끝나지 않아요. 다음 해에 다시 도전할 수 있어요. */
+   * 실패해도 커리어가 끝나지 않아요. 다음 해에 다시 도전할 수 있어요.
+   *
+   * 컷은 강행군·기세·쉬어가기를 넣은 뒤 tests/idol/tour-depth-test.js로 실측해
+   * 다시 잡은 값이에요. 예전 컷(0.95 / 0.80 / 0.60)은 컨디션 소모가 없던 시절
+   * 기준이라, 무작위 플레이 500회에서 A가 72%·C가 0%였어요 — 사실상 전원 A였죠.
+   * 지금은 S 13% · A 32% · B 39% · C 16%로 갈리고, 미니게임을 전부 완벽하게
+   * 소화하면 S가 78%예요. 컷을 만질 땐 반드시 tour-depth-test.js의 분포표를
+   * 다시 재세요. */
   function tourGrade(fillRate) {
-    if (fillRate >= 0.95) return "S";
-    if (fillRate >= 0.80) return "A";
+    if (fillRate >= 0.86) return "S";
+    if (fillRate >= 0.72) return "A";
     if (fillRate >= 0.60) return "B";
     return "C";
   }
@@ -677,13 +684,57 @@ window.IdolCareer = (() => {
   const TOUR_MUL = { S: 1.6, A: 1.25, B: 1.0, C: 0.7 };   // 등급별 보상 배수
   const TOUR_RANK = { C: 0, B: 1, A: 2, S: 3 };
 
+  /* 🔥 강행군 — 투어는 체력전이에요. 도시마다 컨디션이 깎이고, 컨디션이 낮으면
+   * 같은 무대를 해도 객석이 덜 차요. 아주 낮으면 공연이 취소되기까지 해요.
+   *
+   * 소모 총량은 도시 수와 무관하게 맞춰요(TOUR_DRAIN을 도시 수로 나눠요).
+   * 도시 수는 팬덤이 정하는데, 도시가 많을수록 더 지치게 만들면 잘 키운 사람이
+   * 오히려 불리해져요 — 성장의 부호가 뒤집히는 거죠. 라이벌 성장률에서 같은
+   * 실수를 한 적이 있어요(rollRivals 주석 참고).
+   * 대신 뒤로 갈수록 한 도시가 더 깎이게 램프를 걸어서, 후반이 고비가 돼요. */
+  const TOUR_DRAIN = 52;        // 투어 한 번에 쓰는 컨디션 총량(평균)
+  const TOUR_RAMP = 0.9;        // 마지막 도시는 첫 도시의 1.9배로 깎여요
+  const TOUR_START_MIN = 50;    // 한 해를 마치고 떠나니 이만큼은 회복한 상태예요
+  const TOUR_REST_SHOW = 55;    // 이 아래면 🛌 쉬어가기 선택지가 떠요
+  const TOUR_DANGER = 18;       // 이 아래로 강행하면 공연 취소 위험이 있어요
+  const TOUR_HYPE_STEP = 0.06; // 연속 만석 1회당 다음 도시 객석 보너스
+  const TOUR_HYPE_MAX = 4;      // 기세는 4연속까지 쌓여요 (최대 +0.24)
+  const TOUR_FULL = 0.85;       // 이 이상 차면 '만석' — 기세가 이어져요
+
+  /* 컨디션 → 객석 배수. 80 이상이면 온전하고, 바닥이면 0.6까지 떨어져요.
+   * 계단이 아니라 직선이라 "조금 더 지쳤다"가 그대로 객석에 비쳐요. */
+  function tourCondMul(cond) {
+    return clamp(0.6 + cond * 0.005, 0.6, 1);
+  }
+
+  // i번째 도시(0부터)를 도는 데 드는 컨디션. n개 도시 전체 합이 대략 TOUR_DRAIN이에요.
+  function tourDrain(i, n) {
+    const at = n > 1 ? i / (n - 1) : 0.5;
+    const ramp = (1 + TOUR_RAMP * at) / (1 + TOUR_RAMP / 2);
+    return Math.max(1, Math.round((TOUR_DRAIN / n) * ramp * rand(0.85, 1.15)));
+  }
+
+  // 컨디션이 바닥이면 공연이 취소돼요. 최대 45%까지만 — 전멸은 안 만들어요.
+  function tourCancelChance(cond) {
+    return cond >= TOUR_DANGER ? 0 : clamp((TOUR_DANGER - cond) / 40, 0, 0.45);
+  }
+
   /* 진행 중인 투어. 한 해 안에 시작해서 끝나는 이벤트라 저장하지 않아요 —
    * 중간에 나가면 그냥 없던 일이 되고, S.career.tours도 안 올라가요. */
   let tour = null;
 
   function startTour() {
     if (!tourReady()) return;
-    tour = { cities: shuffle([...TOUR_PLACES]).slice(0, tourCities()), i: 0, fills: [] };
+    /* cond는 투어 안에서만 쓰는 값이에요 — S.condition을 직접 깎지 않아요.
+     * 투어는 저장하지 않는 이벤트라, 중간에 나갔다 들어오면 깎인 컨디션만 남아
+     * 다음 시도가 불가능해지거든요. 옛 세이브엔 condition이 없을 수도 있어서
+     * TOUR_START_MIN으로 받쳐요. */
+    tour = {
+      cities: shuffle([...TOUR_PLACES]).slice(0, tourCities()),
+      i: 0, fills: [], notes: [],
+      cond: clamp(Math.max(S.condition || 0, TOUR_START_MIN), 0, 100),
+      streak: 0,
+    };
     $("tour-log").innerHTML = "";
     $("tour-moment").innerHTML = "";
     $("tour-result").innerHTML = "";
@@ -701,49 +752,129 @@ window.IdolCareer = (() => {
   }
 
   function tourFillHTML() {
+    const mark = { rest: " 🛌", cancel: " ⚠️" };
     return tour.fills.map((f, i) => `
-      <div class="tour-fill"><span>${tour.cities[i]}</span>
+      <div class="tour-fill"><span>${tour.cities[i]}${mark[tour.notes[i]] || ""}</span>
         <div class="bar"><div class="bar-fill scout" style="width:${Math.round(f * 100)}%"></div></div>
         <span>${Math.round(f * 100)}%</span></div>`).join("");
   }
 
-  function renderTourCity() {
-    const city = tour.cities[tour.i];
-    $("tour-city").textContent = `${tour.i + 1}/${tour.cities.length}번째 도시 — ${city} 🎫`;
-    $("tour-moment").innerHTML = "";
-    const btn = $("btn-tour-go");
-    btn.disabled = false;
-    btn.textContent = `${city} 공연하기 🎤`;
-    btn.onclick = playTourCity;
+  /* 🔥 남은 컨디션과 기세를 한 줄로 보여줘요. 강행할지 쉴지 고르는 근거예요. */
+  function tourMetaHTML() {
+    const cls = tour.cond < TOUR_DANGER ? "danger" : tour.cond < TOUR_REST_SHOW ? "warn" : "";
+    const hype = Math.min(tour.streak, TOUR_HYPE_MAX);
+    return `<span class="tour-cond ${cls}">🔥 컨디션 ${Math.round(tour.cond)}</span>` +
+      `<span class="tour-hype">${hype ? `🎆 기세 ${tour.streak}연속 만석 (객석 +${Math.round(hype * TOUR_HYPE_STEP * 100)}%)` : "🎆 기세 없음"}</span>`;
   }
 
-  // 도시 한 곳 — 미니게임 한 번이 그 도시의 객석 점유율을 정해요
+  function renderTourCity() {
+    const city = tour.cities[tour.i];
+    const n = tour.cities.length;
+    $("tour-city").textContent = `${tour.i + 1}/${n}번째 도시 — ${city} 🎫`;
+    $("tour-meta").innerHTML = tourMetaHTML();
+    $("tour-moment").innerHTML = "";
+    /* 🐛 도시가 바뀔 때 로그도 비워요. 예전에는 tour-moment만 비워서 타이베이
+     * 화면에 자카르타 이야기가 그대로 남아 있었어요(실기기 스크린샷). 도시별
+     * 객석은 아래 tour-result에 계속 쌓이니, 로그는 지금 도시 것만 보여줘요. */
+    $("tour-log").innerHTML = "";
+    tourFeed(`✈️ ${city} 도착 — ${tour.i + 1}/${n}번째 도시`);
+    if (tour.cond < TOUR_DANGER) {
+      tourFeed(`🥵 몸이 무너지기 직전이에요. 강행하면 공연이 취소될 수도 있어요…`, "bad");
+    } else if (tour.cond < TOUR_REST_SHOW) {
+      tourFeed(`😮‍💨 누적된 피로가 느껴져요. 하루 쉬어갈까요?`);
+    }
+    const btn = $("btn-tour-go");
+    btn.disabled = false;
+    btn.textContent = tour.cond < TOUR_DANGER ? `${city} 강행하기 ⚠️` : `${city} 공연하기 🎤`;
+    btn.onclick = playTourCity;
+    // 🛌 쉬어가기는 컨디션이 낮을 때만 나타나요
+    const rb = $("btn-tour-rest");
+    rb.classList.toggle("hidden", tour.cond >= TOUR_REST_SHOW);
+    rb.disabled = false;
+    rb.textContent = "🛌 하루 쉬어가기";
+    rb.onclick = restTourCity;
+  }
+
+  // 도시 한 곳을 끝내고 다음으로 넘어가는 버튼을 세워요
+  function afterTourCity() {
+    const btn = $("btn-tour-go");
+    $("btn-tour-rest").classList.add("hidden");
+    $("tour-result").innerHTML = tourFillHTML();
+    $("tour-meta").innerHTML = tourMetaHTML();
+    tour.i += 1;
+    btn.disabled = false;
+    if (tour.i < tour.cities.length) {
+      btn.textContent = `다음 도시로 ✈️ (${tour.i + 1}/${tour.cities.length})`;
+      btn.onclick = renderTourCity;
+    } else {
+      btn.textContent = "🏁 투어 마무리";
+      btn.onclick = finishTour;
+    }
+  }
+
+  /* 도시 한 곳을 강행해요 — 이동과 공연으로 컨디션이 깎이고, 깎인 컨디션이
+   * 그 무대의 객석에 그대로 반영돼요. 미니게임 판정이 뼈대, 컨디션·기세가 살이에요. */
   function playTourCity() {
     const btn = $("btn-tour-go");
     btn.disabled = true;
+    $("btn-tour-rest").disabled = true;
     const city = tour.cities[tour.i];
-    tourFeed(`✈️ ${city} 도착! 공연장 앞에 팬들이 줄을 섰어요`);
+    const n = tour.cities.length;
+    const drain = tourDrain(tour.i, n);
+    tour.cond = clamp(tour.cond - drain, 0, 100);
+    tourFeed(`🚚 이동과 리허설로 컨디션 -${drain} (남은 컨디션 ${Math.round(tour.cond)})`);
+    $("tour-meta").innerHTML = tourMetaHTML();
+
+    // 몸이 버티지 못하면 공연이 취소돼요. 객석 0으로 남지만 커리어는 안 끝나요.
+    if (Math.random() < tourCancelChance(tour.cond)) {
+      tour.fills.push(0);
+      tour.notes.push("cancel");
+      tour.streak = 0;
+      $("tour-moment").innerHTML = "";
+      tourFeed(`🚑 ${city} 공연 취소… 몸이 버티지 못했어요`, "bad");
+      tourFeed(`🎫 ${city} 객석 0%`, "bad");
+      afterTourCity();
+      return;
+    }
+
     playRandomMini($("tour-moment"), (res, type) => {
-      const base = res === "perfect" ? rand(0.95, 1.0)
-        : res === "miss" ? rand(0.42, 0.62)
-        : rand(0.72, 0.90);
+      const base = res === "perfect" ? rand(0.93, 1.0)
+        : res === "miss" ? rand(0.34, 0.56)
+        : rand(0.68, 0.86);
+      const condMul = tourCondMul(tour.cond);
+      const hype = Math.min(tour.streak, TOUR_HYPE_MAX) * TOUR_HYPE_STEP;
       // 매력이 높으면 현지 화제성이 붙어 객석이 조금 더 차요
-      const fill = clamp(base + (S.stats.charm - 100) / 600, 0, 1);
+      const fill = clamp(base * condMul + hype + (S.stats.charm - 100) / 600, 0, 1);
       tour.fills.push(fill);
+      tour.notes.push("");
       tourFeed(res === "perfect" ? type.great : res === "miss" ? type.bad : type.ok,
         res === "perfect" ? "good" : res === "miss" ? "bad" : "");
-      tourFeed(`🎫 ${city} 객석 ${Math.round(fill * 100)}%`, fill >= 0.8 ? "good" : "");
-      $("tour-result").innerHTML = tourFillHTML();
-      tour.i += 1;
-      btn.disabled = false;
-      if (tour.i < tour.cities.length) {
-        btn.textContent = `다음 도시로 ✈️ (${tour.i + 1}/${tour.cities.length})`;
-        btn.onclick = renderTourCity;
-      } else {
-        btn.textContent = "🏁 투어 마무리";
-        btn.onclick = finishTour;
-      }
+      if (condMul < 1) tourFeed(`😩 지친 몸이 무대를 갉아먹어요 (객석 ×${condMul.toFixed(2)})`, "bad");
+      if (hype > 0) tourFeed(`🎆 ${tour.streak}연속 만석의 화제성! (객석 +${Math.round(hype * 100)}%)`, "good");
+      tourFeed(`🎫 ${city} 객석 ${Math.round(fill * 100)}%`, fill >= TOUR_FULL ? "good" : "");
+      // 🎆 기세 — 만석을 이어가면 눈덩이가 되고, 한 번 못 채우면 리셋돼요
+      tour.streak = fill >= TOUR_FULL ? tour.streak + 1 : 0;
+      afterTourCity();
     });
+  }
+
+  /* 🛌 하루 쉬어가기 — 컨디션을 회복하지만 그 도시 객석은 낮게 확정되고
+   * 기세도 끊겨요. 취소를 피하는 안전판이지, 이득을 보는 선택은 아니에요. */
+  function restTourCity() {
+    const btn = $("btn-tour-go");
+    btn.disabled = true;
+    $("btn-tour-rest").disabled = true;
+    const city = tour.cities[tour.i];
+    const before = tour.cond;
+    tour.cond = clamp(tour.cond + randInt(26, 38), 0, 100);
+    const fill = rand(0.26, 0.42);
+    tour.fills.push(fill);
+    tour.notes.push("rest");
+    tour.streak = 0;
+    $("tour-moment").innerHTML = "";
+    tourFeed(`🛌 ${city} 공연을 축소하고 하루 쉬었어요. 컨디션 ${Math.round(before)} → ${Math.round(tour.cond)}`, "good");
+    tourFeed(`🎫 ${city} 객석 ${Math.round(fill * 100)}% — 무대를 줄인 만큼 객석도 줄었어요`);
+    afterTourCity();
   }
 
   /* 완주했을 때만 등급이 나오고 tours가 올라가요.
@@ -753,8 +884,13 @@ window.IdolCareer = (() => {
     const avg = n ? tour.fills.reduce((a, b) => a + b, 0) / n : 0;
     const grade = tourGrade(avg);
     const mul = TOUR_MUL[grade];
-    const dFan = Math.max(0, Math.round(n * avg * 45 * mul));
-    const income = Math.max(0, Math.round(n * avg * 900 * mul));
+    /* 계수를 45·900에서 60·1200으로 올렸어요. 강행군이 들어와 평균 객석이
+     * 0.85에서 0.70으로 내려갔는데, 계수를 그대로 두면 완주 보상이 25%쯤
+     * 줄어들어요. 투어는 후반 목표라 벌이가 얇아지면 아무도 안 떠나요.
+     * 실측(tour-depth-test.js)으로 평균 보상이 개편 전과 비슷해지는 값을 잡았어요.
+     * 등급 배수는 그대로라, 폭은 넓어졌지만 기대값은 유지돼요. */
+    const dFan = Math.max(0, Math.round(n * avg * 60 * mul));
+    const income = Math.max(0, Math.round(n * avg * 1200 * mul));
     S.career.tours = (S.career.tours || 0) + 1;
     S.tourYear = S.proYear;   // 한 해에 한 번만 떠날 수 있어요
     if (!S.tourBest || TOUR_RANK[grade] > TOUR_RANK[S.tourBest]) S.tourBest = grade;
@@ -762,11 +898,16 @@ window.IdolCareer = (() => {
     S.money = (S.money || 0) + income;
     proLog(`🌏 월드투어 완주! ${n}개 도시 평균 객석 ${Math.round(avg * 100)}% · ${grade}등급`);
     if (window.Stats) Stats.log("tour", { cities: n, grade, fill: Math.round(avg * 100) });
-    if (grade === "S" && window.Fx) Fx.celebrate("award", "🌏 전 도시 전석 매진!");
+    if (grade === "S" && window.Fx) Fx.celebrate("award", "🌏 월드투어 대성공!");
     save();
 
+    const cancels = tour.notes.filter((x) => x === "cancel").length;
+    const rests = tour.notes.filter((x) => x === "rest").length;
     $("tour-city").textContent = `🏁 ${n}개 도시 완주 — 평균 객석 ${Math.round(avg * 100)}%`;
+    $("tour-meta").innerHTML = `<span class="tour-cond">🔥 남은 컨디션 ${Math.round(tour.cond)}</span>` +
+      `<span class="tour-hype">${cancels ? `🚑 취소 ${cancels}회 · ` : ""}${rests ? `🛌 쉬어간 도시 ${rests}곳` : "🛌 한 번도 쉬지 않았어요"}</span>`;
     $("tour-moment").innerHTML = "";
+    $("btn-tour-rest").classList.add("hidden");
     $("tour-result").innerHTML = `
       <div class="tour-grade">${grade} 등급</div>
       ${tourFillHTML()}
@@ -884,7 +1025,10 @@ window.IdolCareer = (() => {
     if (tourReady() && S.tourYear !== S.proYear) {
       const tb = document.createElement("button");
       tb.className = "btn btn-primary";
-      tb.textContent = `🌏 월드투어 떠나기 (${tourCities()}개 도시)`;
+      /* 🐛 도시 수는 여기에 안 써요. 옆의 "💿 N년차 컴백 준비"와 나란히 서서
+       * 폭이 절반이라, 괄호까지 붙이면 "🌏 월드투어 떠나기 (4개…"로 잘렸어요
+       * (실기기 스크린샷). 도시 수는 투어 화면의 "1/4번째 도시"에서 보여줘요. */
+      tb.textContent = "🌏 월드투어 떠나기";
       tb.onclick = startTour;
       act.appendChild(tb);
     }
@@ -1302,7 +1446,10 @@ window.IdolCareer = (() => {
 
   return {
     // 검증용 창구예요 — 산식만 열어둡니다. 게임 코드에서는 쓰지 마세요.
-    _t: { tourGrade, tourReady, tourCities, CONCEPTS, conceptOf, trendMul, expectedSales, rollTrend, state: () => S },
+    /* tourState는 테스트용 창구예요. tour는 이 IIFE 안의 지역 변수라
+     * 페이지에서 eval해도 안 보여서, 강행군·기세를 검사할 방법이 없어요. */
+    _t: { tourGrade, tourReady, tourCities, tourCondMul, tourDrain, tourCancelChance,
+      CONCEPTS, conceptOf, trendMul, expectedSales, rollTrend, state: () => S, tourState: () => tour },
     onEnding,
     refreshPro: renderPrep,
     showHof,

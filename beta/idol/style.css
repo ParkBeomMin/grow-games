@@ -125,6 +125,27 @@ body {
 }
 .draft-summary { border-color: #5c3b8a; }
 
+/* 🌏 월드투어 강행군 표시 — 남은 컨디션과 연속 만석 기세를 도시마다 보여줘요.
+ * 절대색은 안 써요. 아이돌은 base.css의 금색 accent를 핑크로 덮어쓰기 때문에,
+ * 절대색을 쓰면 이 화면만 다른 게임 색으로 튀어요 (CSS는 테스트가 못 잡아요).
+ * 경고는 따뜻한 색(--accent2), 평소는 흐린 색(--dim)으로 갈라요. */
+.tour-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 6px 14px;
+  margin: 0 0 10px;
+  font-size: .82rem;
+  color: var(--dim);
+}
+.tour-meta .tour-cond { font-weight: 700; color: var(--cream); }
+.tour-meta .tour-cond.warn { color: var(--accent); }
+.tour-meta .tour-cond.danger { color: var(--accent2); }
+.tour-meta .tour-hype { color: var(--sky); }
+
+/* 🛌 쉬어가기 버튼은 강행 버튼 바로 아래에 붙어요 (기본은 .hidden으로 숨어 있어요) */
+#btn-tour-rest { margin-top: 8px; }
+
 /* 연말 결산표의 컨셉 칸 — 한 해에 컴백이 2번이라 "💧🔥 🌙❄️"처럼 두 덩이가 들어가요.
    좁은 화면에서 이모지와 적중 표시가 따로 떨어지지 않게 한 덩이로 묶어요. */
 .sn-concept { white-space: nowrap; }

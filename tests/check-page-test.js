@@ -340,9 +340,14 @@ reach("idol-tour", (P, first) => {
     .find((b) => /월드투어/.test(b.textContent));
   check(!!tb, "'🌏 월드투어 떠나기' 버튼이 있다");
   if (!tb) return;
+  // 🐛 옆의 "💿 N년차 컴백 준비"(12자)와 나란히 서서 폭이 절반이에요
+  check(tb.textContent.length <= 14, `버튼 문구가 짧아 안 잘린다 (${tb.textContent.length}자)`);
   tb.click();
   check(P.active() === "screen-tour", `누르면 월드투어 화면이 뜬다 (${P.active()})`);
   check(!!P.$("tour-log"), "투어 진행 칸이 있다");
+  // 🔥 강행군 — 남은 컨디션이 화면에 있어야 강행할지 쉴지 고를 수 있어요
+  check(/컨디션/.test(P.$("tour-meta").textContent), `남은 컨디션이 보인다 (${P.$("tour-meta").textContent})`);
+  check(/\d+\/\d+번째 도시/.test(P.$("tour-city").textContent), `도시 수가 보인다 (${P.$("tour-city").textContent})`);
 });
 
 reach("idol-standings", (P, first) => {

@@ -64,8 +64,13 @@ const M = {
   cities:   SRC.match(/const TOUR_CITY_STEP[\s\S]*?function tourCities\(\)[\s\S]*?\n  \}/),
   grade:    SRC.match(/function tourGrade\(fillRate\)[\s\S]*?\n  \}/),
   tourMul:  SRC.match(/const TOUR_MUL = \{[^}]+\};/),
+  // 🔥 강행군 — 컨디션 소모·기세·취소가 객석에 얹혀서, 투어 보상이 팬덤 곡선에 되먹임된다
+  tourNums: SRC.match(/const TOUR_DRAIN = [\s\S]*?const TOUR_FULL = [^;]+;/),
+  condMul:  SRC.match(/function tourCondMul\(cond\)[\s\S]*?\n  \}/),
+  drain:    SRC.match(/function tourDrain\(i, n\)[\s\S]*?\n  \}/),
+  cancel:   SRC.match(/function tourCancelChance\(cond\)[\s\S]*?\n  \}/),
   fill:     SRC.match(/const base = res === "perfect"[\s\S]*?const fill = clamp\([^;]+;/),
-  tourRew:  SRC.match(/const dFan = Math\.max\(0, Math\.round\(n \* avg \* 45 \* mul\)\);\s*const income = Math\.max\(0, Math\.round\(n \* avg \* 900 \* mul\)\);/),
+  tourRew:  SRC.match(/const dFan = Math\.max\(0, Math\.round\(n \* avg \* 60 \* mul\)\);\s*const income = Math\.max\(0, Math\.round\(n \* avg \* 1200 \* mul\)\);/),
   statCap:  GAME.match(/const STAT_CAP = (\d+);/),
   clutch:   GAME.match(/function clutch\(key\) \{[\s\S]*?\n\}/),
   gear:     GAME.match(/const GEAR_TIERS = \[[\s\S]*?\];/),
@@ -123,8 +128,43 @@ const tourCities = new Function("getS", "clamp", "TOUR_FANDOM",
   `${M.cities[0].replace(/\bS\./g, "getS().")}; return tourCities;`)(() => READY_S, clamp, NEED_F);
 const tourGrade = new Function(`${M.grade[0]} return tourGrade;`)();
 const TOUR_MUL = new Function(`${M.tourMul[0]} return TOUR_MUL;`)();
-const fillFn = new Function("res", "S", "rand", "clamp", `${M.fill[0]} return fill;`);
+const TOURN = new Function(`${M.tourNums[0]}
+  return { TOUR_DRAIN, TOUR_RAMP, TOUR_START_MIN, TOUR_REST_SHOW, TOUR_DANGER, TOUR_HYPE_STEP, TOUR_HYPE_MAX, TOUR_FULL };`)();
+const tourCondMul = new Function("clamp", `${M.condMul[0]} return tourCondMul;`)(clamp);
+const tourDrain = new Function("rand", "TOUR_DRAIN", "TOUR_RAMP",
+  `${M.drain[0]} return tourDrain;`)(rand, TOURN.TOUR_DRAIN, TOURN.TOUR_RAMP);
+const tourCancel = new Function("clamp", "TOUR_DANGER",
+  `${M.cancel[0]} return tourCancelChance;`)(clamp, TOURN.TOUR_DANGER);
+/* 객석 산식은 tour(컨디션·기세)를 클로저로 본다 — 그 객체를 넣어줘야 한다.
+ * 소스에서 통째로 떼어 오니 base·condMul·hype의 조합이 원본과 어긋날 수 없다. */
+const fillFn = new Function("res", "S", "rand", "clamp", "tour", "tourCondMul", "TOUR_HYPE_MAX", "TOUR_HYPE_STEP",
+  `${M.fill[0]} return fill;`);
 const tourRewFn = new Function("n", "avg", "mul", `${M.tourRew[0]} return { dFan, income };`);
+
+/* 투어 한 번을 도시 단위로 굴린다. 예전에는 도시별 객석을 독립적으로 뽑아
+ * 평균만 냈는데, 지금은 컨디션이 도시를 거치며 깎이고 기세가 이어지니
+ * 순서대로 굴려야 값이 맞다. 취소(객석 0)도 여기서 나온다.
+ * 쉬어가기 정책은 "취소만 피할 만큼 쉰다" — 화면에서 선택지가 뜨는 조건보다
+ * 보수적이라, 성실한 플레이어의 하한을 잡는다. */
+function simTour(S, n) {
+  const tour = { cond: clamp(Math.max(S.condition || 0, TOURN.TOUR_START_MIN), 0, 100), streak: 0, fills: [] };
+  for (let i = 0; i < n; i++) {
+    if (tour.cond < TOURN.TOUR_DANGER + 6) {          // 🛌 하루 쉬어가기
+      tour.cond = clamp(tour.cond + randInt(26, 38), 0, 100);
+      tour.fills.push(rand(0.26, 0.42));
+      tour.streak = 0;
+      continue;
+    }
+    tour.cond = clamp(tour.cond - tourDrain(i, n), 0, 100);
+    if (Math.random() < tourCancel(tour.cond)) { tour.fills.push(0); tour.streak = 0; continue; }
+    const r = Math.random();
+    const res = r < 0.25 ? "perfect" : r < 0.85 ? "ok" : "miss";
+    const fill = fillFn(res, S, rand, clamp, tour, tourCondMul, TOURN.TOUR_HYPE_MAX, TOURN.TOUR_HYPE_STEP);
+    tour.fills.push(fill);
+    tour.streak = fill >= TOURN.TOUR_FULL ? tour.streak + 1 : 0;
+  }
+  return tour.fills.reduce((a, b) => a + b, 0) / n;
+}
 
 // 초월(transcend)은 이 시뮬에서 다루지 않는다 — 스탯을 45~60으로 되돌리는
 // 엔드게임 도박이라, 투어를 여는 최단 경로에는 아무도 안 쓴다.
@@ -245,11 +285,7 @@ function runCareer(A) {
       if (!out.year) { out.year = y; out.path = S.career.daesang >= NEED_D ? "대상" : "팬덤"; out.daeAt = S.career.daesang; }
       // 열린 해부터는 해마다 한 번씩 투어를 돈다 (도시 수·보상이 팬덤에 다시 얹힌다)
       const n = tourCities();
-      const fills = Array.from({ length: n }, () => {
-        const r = Math.random();
-        return fillFn(r < 0.25 ? "perfect" : r < 0.85 ? "ok" : "miss", S, rand, clamp);
-      });
-      const avg = fills.reduce((a, b) => a + b, 0) / n;
+      const avg = simTour(S, n);
       const rew = tourRewFn(n, avg, TOUR_MUL[tourGrade(avg)]);
       S.fandom += rew.dFan;
       S.money += rew.income;
