@@ -444,7 +444,7 @@ function makeSoccerReport() {
           game: "soccer", url: "soccer/", emoji: "📊",
           title: "연말 결산 — 이적 이력 여러 줄",
           state: `${st.group} · ${P.get("leagueOf")(st).name} · ${st.proYear}시즌 · 이적 ${st.moves.length}번`,
-          check: "🔁 이적 이력 줄이 좁은 화면에서 잘리지 않고 줄바꿈되는지, 8시즌 표가 가로로 안 넘치는지",
+          check: "소속 칸에 클럽 이름이 나오는지, 리그 태그가 붙은 칸이 세로로 쪼개지지 않는지 봐주세요",
           steps: ["게임이 열리면 <b>이어하기</b> → 선수 카드", "바로 결산 화면이 떠요"],
           keys: snapshot(P),
         });
