@@ -47,6 +47,116 @@ const POS_INFO = {
   wg: { name: "윙어", stat: "dribble" },
 };
 
+/* 리그 사다리 — 축구 커리어의 핵심 서사는 리그를 옮기는 거예요.
+ * 축이 셋이고 서로 하는 일이 달라요.
+ *
+ *  · penalty  — 경기 평점에서 빼요. 위쪽 리그에만 걸어요.
+ *  · bar      — 수상 문턱과 라이벌 분포에 곱해요. 경쟁 강도예요.
+ *  · prestige — 축(hype)과 명예의 전당 점수에 곱해요. 같은 상의 값어치예요.
+ *
+ * 난이도를 곱셈이 아니라 평점에서 빼는 게 핵심이에요.
+ * perf = clamp((rating - 5) / 4 + 0.6, 0.15, 1.6)이 평점의 비선형 함수라,
+ * 평점을 깎으면 약한 선수가 훨씬 크게 무너져요. 강한 선수는 상한 근처라 덜 다칩니다.
+ * 곱셈으로 해봤더니 순효과가 균일해서 능력치와 무관하게 올라갈수록 유리했어요.
+ *
+ * tier가 리그의 순서예요. id는 옛 세이브의 S.league가 가리키는 값이라 절대 안 바꿔요 —
+ * 번호를 다시 매기면 진행 중인 캐릭터가 엉뚱한 리그로 갑니다. 새 하부 리그는 새 id를 받아요.
+ *
+ * 처음엔 prestige만으로 하부 리그를 표현하려 했는데, 그러면 축이 같이 줄어서
+ * 하부가 오히려 더 어려워졌어요 (능력치 90에서 K리그3 1% 대 K리그1 14%).
+ * 평점 보너스로 메우려 해도 perf의 상한(1.6)에 막혀요.
+ * 하부 리그가 쉬운 건 내가 잘해서가 아니라 경쟁자가 약하기 때문이에요 — 그게 bar예요.
+ * 그래서 penalty는 위쪽에만 쓰고 하부는 0이에요.
+ *
+ * 값은 감이 아니라 시뮬레이션으로 잡았어요. 판단 기준은 수상 확률이 아니라
+ * '리그MVP 확률 × prestige'(명예의 전당 가치)고, 능력치 70/90/110/130/150에서
+ * 최적 리그가 K리그3 → K리그2 → 유로파 → 유로파 → 챔피언스리그로 올라가게 맞췄어요.
+ * tests/soccer/ladder-test.js가 그 사다리를 지킵니다.
+ *
+ * career.js가 아니라 여기 두는 건 career.js가 IIFE라 그 안의 선언이 밖으로 안 새기
+ * 때문이에요. 클럽 전력·동료 득점처럼 game.js 쪽에서도 리그를 읽어야 해요. */
+const LEAGUES = [
+  { id: 5, tier: 1, name: "K리그3",      short: "3부",    flag: "🇰🇷", penalty: 0,   prestige: 0.55, bar: 0.50 },
+  { id: 4, tier: 2, name: "K리그2",      short: "2부",    flag: "🇰🇷", penalty: 0,   prestige: 0.85, bar: 0.75 },
+  { id: 1, tier: 3, name: "K리그1",      short: "1부",    flag: "🇰🇷", penalty: 0,   prestige: 1.00, bar: 1.00 },
+  { id: 2, tier: 4, name: "유로파리그",   short: "유럽",   flag: "🇪🇺", penalty: 1.6, prestige: 1.75, bar: 1.12 },
+  { id: 3, tier: 5, name: "챔피언스리그", short: "빅클럽", flag: "🏆", penalty: 2.8, prestige: 2.40, bar: 1.30 },
+];
+
+/* 옛 세이브에는 S.league가 없어요. 마이그레이션하지 않고 없으면 K리그1로 봐요.
+ * 깨진 값도 K리그1로 막아요 — 표의 첫 줄이 이제 K리그3라 LEAGUES[0]으로 막으면
+ * 손상된 세이브가 하부 리그로 떨어집니다. */
+function leagueOf(st) {
+  const id = (st && st.league) || 1;
+  return LEAGUES.find((l) => l.id === id) || LEAGUES.find((l) => l.id === 1) || LEAGUES[0];
+}
+
+// 경쟁 강도. 옛 세이브·깨진 값에서도 1(= K리그1과 같음)로 막아요.
+function barOf(st) {
+  const b = leagueOf(st).bar;
+  return typeof b === "number" && isFinite(b) ? b : 1;
+}
+
+/* 사다리의 맨 아래 리그예요. 📹 세미프로 입단이 여기서 프로를 시작해요.
+ * id로 찾지 않아요 — id는 옛 세이브가 가리키는 값이라 순서와 무관해요. 순서는 tier예요. */
+function bottomLeague() {
+  return LEAGUES.reduce((lo, l) => (l.tier < lo.tier ? l : lo), LEAGUES[0]);
+}
+
+/* 클럽 — 전력(str)은 팀 성적에만 작용해요. 개인 수상에는 안 닿습니다.
+ * 같은 리그 안에서 전력 좋은 팀으로 가면 팀은 더 이기지만 내 수상 확률은 그대로예요.
+ * 이게 리그 이적(개인 커리어)과 명확히 구분되는 지점이에요.
+ *
+ * 리그 티어는 "내가 어디까지 통하나"를 묻고, 클럽 전력은 "우리 팀이 이기나"를 물어요.
+ * 두 축이 겹치면 같은 리그 이적과 상위 리그 이적이 같은 질문이 돼서 선택이 사라져요.
+ *
+ * 실제 구단명은 쓰지 않아요 — 이 저장소는 상표를 전부 가상 명칭으로 바꿨어요.
+ *
+ * 표는 사다리 아래(K리그3)부터 적어요. 키는 리그 id고, id는 옛 세이브가 가리키는 값이라
+ * 순서와 무관해요 — 순서는 LEAGUES의 tier예요.
+ * 전력은 clubStrOf가 40~95로 막으니 하부 클럽도 40 아래로는 안 내려가요.
+ * 그 아래를 적으면 화면에 보이는 전력과 실제로 쓰이는 전력이 어긋나요. */
+const CLUBS = {
+  5: [
+    { name: "스톤워커스", str: 45 }, { name: "레드브릭 FC", str: 44 },
+    { name: "파인힐스", str: 43 }, { name: "하버라이트", str: 42 },
+    { name: "머드독스", str: 41 }, { name: "올드타운 FC", str: 40 },
+  ],
+  4: [
+    { name: "하이랜더스", str: 51 }, { name: "리버사이드", str: 49 },
+    { name: "코스모스 FC", str: 47 }, { name: "그린웨이브", str: 45 },
+    { name: "아이언벨", str: 43 }, { name: "노스브리지", str: 41 },
+  ],
+  1: [
+    { name: "FC 노바", str: 78 }, { name: "레인저스", str: 71 },
+    { name: "선더볼트", str: 66 }, { name: "블랙이글스", str: 62 },
+    { name: "시티즌", str: 57 }, { name: "포레스트 FC", str: 52 },
+  ],
+  2: [
+    { name: "레알 몬테", str: 84 }, { name: "아틀레티코 델", str: 79 },
+    { name: "노르드 위니온", str: 74 }, { name: "올림피코 베라", str: 70 },
+    { name: "스타디온 루체", str: 65 }, { name: "AC 리베라", str: 61 },
+  ],
+  3: [
+    { name: "인터 아우로라", str: 93 }, { name: "바이언 슈타트", str: 90 },
+    { name: "로열 알비온", str: 87 }, { name: "파리 셀레스트", str: 84 },
+    { name: "밀란 코로나", str: 81 }, { name: "이베리아 솔", str: 78 },
+  ],
+};
+
+// 옛 세이브에는 S.clubStr이 없어요. 마이그레이션하지 않고 없으면 70으로 봐요.
+function clubStrOf(st) {
+  const v = st && st.clubStr;
+  return typeof v === "number" && isFinite(v) ? clamp(v, 40, 95) : 70;
+}
+
+// 상대 팀은 같은 리그에서 뽑아요. 내 클럽은 빼고요.
+function oppClubs(st) {
+  const list = CLUBS[leagueOf(st).id] || CLUBS[1];
+  const names = list.map((c) => c.name).filter((n) => n !== (st && st.group));
+  return names.length ? names : list.map((c) => c.name);
+}
+
 const PLAYER_NAMES = ["도현", "시우", "주원", "하준", "은우", "서준", "이안", "리오", "카이", "마테오", "루카", "지안"];
 
 // 평가 경기 종목: 주 스탯 / 보조 스탯 가중치
@@ -125,6 +235,10 @@ function newState(market, pos, name, roll) {
     market: market.id, pos, name,
     year: 1, month: 1,
     stats, talents,
+    /* 새 선수는 1부에서 시작해요. 소속 클럽은 프로 데뷔(enterCareer) 때 정해지고,
+     * 그때까지는 기본 전력 70으로 유스 경기를 치러요. */
+    league: 1,
+    clubStr: 70,
     // 🧬 환생 유산으로 받은 시작 자금이에요. 유산이 없으면 0이에요.
     money: legacyMoneyBonus(loadLegacy().pts),
     gear: {},
@@ -481,11 +595,18 @@ function renderRecord() {
   let proHtml = "";
   if (S.career && S.career.years && S.career.years.length) {
     const rows = S.career.years.map((x) =>
-      `<tr><td>${x.y}시즌</td><td>${x.apps != null ? x.apps : "-"}</td><td>${x.goals != null ? x.goals : "-"}</td><td>${x.assists != null ? x.assists : "-"}</td><td>${x.defense != null ? x.defense : "-"}</td><td>${x.awards && x.awards.length ? "🏆" + x.awards.join(",") : "-"}</td></tr>`
+      /* 골·도움·수비를 한 칸에 합쳐요. 칸마다 나누면 폰 폭에서 헤더가
+       * 세로로 쪼개져요 (⚽골 · 🅰️도움 · 🛡️수비가 28~34px 칸에 안 들어가요).
+       * 결산 화면(career.js)이 같은 이유로 이미 합쳤어요. */
+      `<tr><td>${x.y}시즌</td><td class="yr-stat">${[
+        x.goals != null ? `${x.goals}골` : null,
+        x.assists != null ? `${x.assists}도움` : null,
+        x.defense != null ? `${x.defense}수비` : null,
+      ].filter(Boolean).join(" ") || "-"}</td><td>${x.awards && x.awards.length ? "🏆" + x.awards.join(",") : "-"}</td></tr>`
     ).join("");
     const cr = S.career;
     proHtml = `
-      <table class="season-table"><thead><tr><th>시즌</th><th>출전</th><th>⚽골</th><th>🅰️도움</th><th>🛡️수비</th><th>수상</th></tr></thead><tbody>${rows}</tbody></table>
+      <table class="season-table season-record"><thead><tr><th>시즌</th><th>성적</th><th>수상</th></tr></thead><tbody>${rows}</tbody></table>
       <div>통산 ${cr.years.length}시즌 · 출전 ${cr.apps || 0}경기 · ⚽ ${cr.goals || 0}골 · 🅰️ ${cr.assists || 0}도움 · 🛡️ 수비 ${cr.defense || 0} · 🏅 MOM ${cr.wins}회<br/>🏆 MVP ${cr.daesang} · 베스트11 ${cr.bonsang}${cr.rookie ? " · 신인왕" : ""}</div>`;
   }
   const gearList = STAT_DEFS
@@ -928,7 +1049,6 @@ function gradeOf(score) {
 }
 
 // ---------- 경기 스탯(골·도움·수비) & 스코어 산출 ----------
-const OPP_CLUBS = ["FC 노바", "레인저스", "선더볼트", "블랙이글스", "시티즌", "레알 몬테", "아틀레티코 델", "포레스트 FC"];
 // 간이 포아송 샘플러 — 골/도움 수 같은 이산 이벤트에 자연스러운 분포를 줘요
 function poissonish(lam) {
   let n = 0, L = Math.exp(-Math.max(0, lam)), p = 1;
@@ -938,8 +1058,14 @@ function poissonish(lam) {
 // rating(평점 0~10대) → 이번 경기 골·도움·수비 (포지션별 가중)
 function matchContribution(rating) {
   const perf = clamp((rating - 5) / 4 + 0.6, 0.15, 1.6);
-  const shootF = (S.stats.shoot || 40) / 100;
-  const passF = (S.stats.pass || 40) / 100;
+  /* 윙어는 돌파로 기회를 만들어요. 골·도움 판정에 드리블이 함께 작용합니다.
+   * 예전에는 드리블이 어디에도 안 들어가서, 윙어만 자기 주 스탯에 투자할수록
+   * 성적이 나빠졌어요 (도달 가능 범위에서 재보니 85% → 32%). */
+  const isWg = S.pos === "wg";
+  const gStat = isWg ? (S.stats.shoot || 40) * 0.6 + (S.stats.dribble || 40) * 0.4 : (S.stats.shoot || 40);
+  const aStat = isWg ? (S.stats.pass || 40) * 0.6 + (S.stats.dribble || 40) * 0.4 : (S.stats.pass || 40);
+  const shootF = gStat / 100;
+  const passF = aStat / 100;
   const defF = (S.stats.defense || 40) / 100;
   const G = { fw: 1.05, wg: 0.75, mf: 0.5, df: 0.14 };
   const A = { mf: 0.95, wg: 0.85, fw: 0.55, df: 0.28 };
@@ -948,6 +1074,19 @@ function matchContribution(rating) {
   const aLam = (A[S.pos] ?? 0.4) * perf * (0.55 + passF);
   const dLam = (D[S.pos] ?? 0.6) * perf * (0.55 + defF);
   return { g: poissonish(gLam), a: poissonish(aLam), def: poissonish(dLam) };
+}
+/* 동료 득점 — 예전에는 팀 득점이 내 골 + 내 도움뿐이라 동료가 넣는 골이 없었어요.
+ * 수비수는 골·도움 기댓값이 낮아서 팀이 득점을 못 했고, 능력치 70에서
+ * 팀 승률이 7%였습니다 (같은 조건 공격수 51%).
+ * 내 포지션이 공격에서 멀수록 동료가 더 넣어요. 값은 시뮬레이션으로 잡았어요.
+ * 이 골은 act.goals에 안 들어가요 — 내 골이 아니니까요. 수상 축은 그대로입니다. */
+const TEAMMATE_GOALS = { fw: 0.35, wg: 0.5, mf: 0.8, df: 2.2 };
+
+function teammateGoals(rating) {
+  // 전력 70이 기준이에요. 좋은 팀은 동료가 더 넣습니다.
+  const strF = clubStrOf(S) / 70;
+  const base = (TEAMMATE_GOALS[S.pos] ?? 0.6) * (0.6 + (rating - 5) * 0.14) * strF;
+  return poissonish(Math.max(0, base));
 }
 // 내 골 수 & 평점에 어울리는 팀 스코어(우리:상대)와 승부 결과
 function matchScoreline(myGoals, rating) {
@@ -1088,7 +1227,9 @@ function playRandomMini(container, cb) {
 
 // 평점·수비력으로 상대 실점 수를 산출
 function deriveOppGoals(rating, defStat) {
-  const base = 2.4 - (rating - 5) * 0.28 - (defStat / 100) * 1.4 + rand(-0.3, 0.9);
+  // 전력 70이 기준이에요. 좋은 팀은 덜 먹습니다.
+  const strAdj = (clubStrOf(S) - 70) / 100;
+  const base = 2.4 - (rating - 5) * 0.28 - (defStat / 100) * 1.4 - strAdj + rand(-0.3, 0.9);
   return Math.max(0, Math.min(4, Math.round(base)));
 }
 
@@ -1142,6 +1283,10 @@ const MatchSim = (() => {
     const rmin = () => randInt(6, 82);
     for (let i = 0; i < goals; i++) evs.push({ min: rmin(), side: "atk", h: 1, cls: "good", text: `⚽ 골!! ${myName} 득점!` });
     for (let i = 0; i < assists; i++) evs.push({ min: rmin(), side: "atk", h: 1, cls: "good", text: `🅰️ ${myName}의 도움! 팀 추가골` });
+    /* 동료 골이에요. 평점을 안 넘겨준 호출부(유스 등)에서는 0이 되도록 막아뒀어요. */
+    const mates = cfg.rating != null ? teammateGoals(cfg.rating) : 0;
+    for (let i = 0; i < mates; i++)
+      evs.push({ min: rmin(), side: "atk", h: 1, cls: "good", text: `⚽ 동료의 골! 팀이 추가점을 뽑아냅니다` });
     for (let i = 0; i < oppGoals; i++) evs.push({ min: rmin(), side: "def", a: 1, cls: "bad", text: `😣 ${away}에 실점…` });
     if (defense >= 2) evs.push({ min: rmin(), side: "def", text: `🛡️ ${myName}, 결정적 태클로 위기를 끊어요!` });
     evs.push({ min: rmin(), side: "mid", text: pick(["중원 싸움이 뜨거워요", "빠른 템포로 오가는 공방", "관중석이 들썩입니다", "양 팀 압박이 매섭습니다"]) });
@@ -1229,9 +1374,9 @@ function renderStageSim(type, grade, onFinal) {
   const oppGoals = deriveOppGoals(rating, S.stats.defense);
   MatchSim.run({
     home: "우리 유스",
-    away: pick(OPP_CLUBS),
+    away: pick(oppClubs(S)),
     myName: S.name,
-    goals: c.g, assists: c.a, defense: c.def, oppGoals,
+    goals: c.g, assists: c.a, defense: c.def, oppGoals, rating,
     finalize: (info) => {
       let gi = GRADE_ORDER.indexOf(grade.g);
       if (info.momentRes === "perfect") gi = Math.min(4, gi + 1);
@@ -1377,11 +1522,27 @@ function showEnding(survivedFinal, lastRound) {
   const m = marketOf();
   const score = S.fandom + overall() * 2;
 
-  let emoji, title, teamLine, msg;
+  /* 🌱 유스 재계약은 "연장 계약"이라는 말 그대로 한 시즌을 더 줘요.
+   * 커리어당 한 번뿐이라 이미 쓴 뒤에는 버튼 없이 끝맺음으로 읽히게 문구도 바꿔요. */
+  /* 📞 타 구단 스카우트는 프로로 이어져요. 조건(lastRound === 2 && score >= 420)을
+   * 호출부에서 다시 계산하면 엔딩 분기와 어긋날 수 있으니 여기서 플래그만 세워 넘겨요.
+   * 📹 세미프로 입단(semiPro)도 같은 방식이에요 — 사다리 맨 아래에서 프로가 시작돼요. */
+  let emoji, title, teamLine, msg, canExtend = false, scoutPro = false, semiPro = false, bigClub = false;
+  const bottom = bottomLeague();
+  /* 👑는 이름 그대로 유럽에서 시작해요. 유스 최상위 엔딩인데 K리그1에서 출발하면
+   * 🌟 프로 계약 성공과 첫 시즌이 똑같아서 "빅클럽"이 말뿐이었어요.
+   * 실측(유스 직후 능력치 85 · 이적 없음 · 첫 시즌): 유로파 팀 승률 50% · hype 6.63으로
+   * K리그1(78% · 6.17)보다 팀은 덜 이기지만 개인 평가는 오히려 높아요.
+   * 평점 -1.6을 감당할 수 있는 능력치라서, 도전이 되되 무너지지는 않아요. */
+  // 이름이 아니라 tier로 찾아요 — 기본 리그(K리그1) 바로 한 칸 위가 유로파리그예요.
+  const base = leagueOf({});
+  const europa = LEAGUES.find((l) => l.tier === base.tier + 1) || base;
   if (survivedFinal && score >= 520) {
     emoji = "👑"; title = "유럽 빅클럽 입단!";
-    teamLine = `${m.name} 출신 — 빅리그 직행`;
-    msg = "역대급 유망주! 세계적인 명문 구단이 러브콜을 보냈어요.";
+    teamLine = `${m.name} 출신 — ${europa.name} 직행`;
+    bigClub = true;
+    msg = `역대급 유망주! 세계적인 명문 구단이 러브콜을 보냈어요. `
+      + `${europa.name}에서 곧바로 프로가 시작돼요 — 평점 -${europa.penalty.toFixed(1)}을 안고 뛰는 무대예요.`;
   } else if (survivedFinal) {
     emoji = "🌟"; title = "프로 계약 성공!";
     teamLine = `프로 1군 계약 확정`;
@@ -1392,16 +1553,22 @@ function showEnding(survivedFinal, lastRound) {
     msg = "아쉽게 1군 계약은 놓쳤지만, 구단이 곧 콜업을 약속했어요.";
   } else if (lastRound === 2 && score >= 420) {
     emoji = "📞"; title = "타 구단 스카우트!";
-    teamLine = "하위 리그 구단 이적 제안";
-    msg = "테스트를 지켜본 다른 구단에서 러브콜이! 새 팀에서 프로를 노려요.";
+    teamLine = "K리그 최하위권 클럽 입단";
+    scoutPro = true;
+    msg = "테스트를 지켜본 다른 구단에서 러브콜이 왔어요. K리그 최하위권 팀이라 출발은 불리하지만, 여기서 프로 커리어가 시작돼요.";
   } else if (lastRound >= 1) {
     emoji = "🌱"; title = "유스 재계약";
     teamLine = "유스팀 연장 계약";
-    msg = "이번엔 여기까지. 하지만 구단은 아직 당신을 믿고 있어요.";
+    canExtend = !S.youthExt;
+    msg = canExtend
+      ? "이번엔 여기까지. 하지만 구단은 아직 당신을 믿고 있어요 — 한 시즌을 더 뛸 수 있어요."
+      : "이번엔 여기까지. 연장 계약으로 얻은 한 시즌까지, 구단과의 이야기가 모두 끝났어요.";
   } else if (score >= 330) {
     emoji = "📹"; title = "세미프로 입단";
-    teamLine = "실업·세미프로 리그에서 재도전";
-    msg = "프로는 못 갔지만 쌓인 경험이 있어요. 밑바닥부터 다시 올라가봐요!";
+    teamLine = `${bottom.name} 입단 — 사다리 맨 아래`;
+    semiPro = true;
+    msg = `프로 1군 계약에는 닿지 못했지만 ${bottom.name} 구단이 자리를 내줬어요. `
+      + "사다리의 가장 아래, 제일 낮은 자리에서 프로 커리어가 시작돼요 — 여기서부터 올라가면 돼요.";
   } else {
     emoji = "🎒"; title = "축구화를 잠시 벗다";
     teamLine = "평범한 일상으로 복귀";
@@ -1442,9 +1609,53 @@ function showEnding(survivedFinal, lastRound) {
 
   if (window.Stats) Stats.log("ending", { title, score: Math.round(score) });
 
-  if (window.WingerCareer) window.WingerCareer.onEnding(survivedFinal || lastRound === 3, survivedFinal && score >= 520);
-  else clearSave();
+  /* keepSave를 넘기면 career.js가 clearSave()를 건너뛰어요.
+   * 안 넘기면 "한 시즌 더 뛰기"를 누르기도 전에 세이브가 날아가요.
+   * weakestClub은 📞 스카우트 경로 표시예요 — 프로는 프로인데 1부 최약체에서 출발해요.
+   * startLeague는 시작 리그예요 — 📹 세미프로는 사다리 맨 아래(K리그3),
+   * 👑 유럽 빅클럽 입단은 유로파리그에서 출발해요. 나머지는 기본(K리그1)이에요.
+   * 전부 엔딩 분기가 세운 플래그를 그대로 넘겨요. 조건을 여기서 다시 계산하지 않아요. */
+  if (window.WingerCareer) {
+    window.WingerCareer.onEnding(
+      survivedFinal || lastRound === 3 || scoutPro || semiPro,
+      bigClub,
+      { keepSave: canExtend, weakestClub: scoutPro, startLeague: semiPro ? bottom.id : bigClub ? europa.id : null }
+    );
+  } else if (!canExtend) {
+    clearSave();
+  }
+  renderYouthExtButton(canExtend);
   show("screen-ending");
+}
+
+/* 🌱 한 시즌 더 뛰기 — 엔딩 화면 맨 앞에 붙여요.
+ * 연장을 안 쓰고 "🏛️ 기록 남기고 마무리"로 끝낼 수도 있어야 해서 다른 버튼은 그대로 둬요. */
+function renderYouthExtButton(canExtend) {
+  document.getElementById("btn-youth-ext")?.remove();
+  if (!canExtend) return;
+  const actions = document.querySelector("#screen-ending .draft-actions");
+  if (!actions) return;
+  const btn = document.createElement("button");
+  btn.id = "btn-youth-ext";
+  btn.className = "btn btn-primary";
+  btn.textContent = "🌱 한 시즌 더 뛰기";
+  btn.onclick = extendYouth;
+  actions.prepend(btn);
+}
+
+/* 능력치·명성·유스 기록은 그대로 두고 3년차 1월로만 되돌려요.
+ * S.youthExt를 세워서 커리어당 한 번만 쓸 수 있게 막아요. */
+function extendYouth() {
+  if (S.youthExt) return;
+  S.youthExt = true;
+  S.year = 3;
+  S.month = 1;
+  S.pendingStage = null;
+  ev = null;
+  addLog("🌱 유스팀과 연장 계약! 3년차를 한 번 더 뛰어요.");
+  save();
+  renderMain();
+  show("screen-main");
 }
 
 // ---------- ❓ 도움말 ----------
@@ -1464,7 +1675,8 @@ const HELP_SECTIONS = [
   { emoji: "⚽", title: "경기와 프로 계약", body:
     "유스 3년 동안 경기에 나서며 실력과 주목도를 쌓아요.\n" +
     "3년이 끝나면 그동안의 성과로 프로 계약이 갈려요.\n" +
-    "계약하면 리그 커리어를 이어가고, 아니면 유스에서 커리어가 끝나요." },
+    "계약하면 리그 커리어를 이어가고, 아니면 유스에서 커리어가 끝나요.\n" +
+    "🌱유스 재계약으로 끝났다면 딱 한 번, 능력치를 그대로 안고 3년차를 다시 뛸 수 있어요." },
   { emoji: "🎓", title: "은퇴", body:
     "커리어를 마치면 🏛️명예의 전당에 기록이 남아요.\n" +
     "은퇴 시점의 성적으로 등급이 매겨지고, 전 세계 플레이어와 순위를 겨뤄요.\n" +

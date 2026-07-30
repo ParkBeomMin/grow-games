@@ -57,6 +57,23 @@ const STAGE_TYPES = [
 const EVALS = { 6: "상반기 쇼케이스", 12: "연말 평가" };
 const SURVIVAL_ROUNDS = ["예선", "본선", "세미파이널", "파이널"];
 
+/* 🌱 연습생 연장 — 나이 패널티
+ * 연습생은 실제로 오래 해요. 그래서 연장 횟수에 제한을 두지 않는 대신,
+ * 데뷔 서바이벌의 라운드 통과 확률에서 `연장 횟수 × 이 값`을 빼요.
+ * 여기가 스스로 거는 제동입니다.
+ *
+ * 값의 근거는 실측이에요. 연장한 한 해를 제대로 굴리면(컨디션 60 아래에서 쉬고
+ * 재능이 높은 능력치부터 연습) 종합이 +7~8, 팬덤이 +54~63 올라요.
+ * p로 환산하면 종합에서 +0.077~0.089, 팬덤에서 +0.036~0.042 — 합쳐서 +0.12쯤이에요.
+ * 그래서 0.12는 "한 해를 제대로 굴리면 본전, 대충 굴리면 손해"인 지점이에요.
+ * (기획사별 첫 연장 실측: SW엔터 +0.116 · 루나엔터 +0.122 · 개러지뮤직 +0.134) */
+const TRAINEE_EXT_PENALTY = 0.12;
+// 옛 세이브엔 이 필드가 없어요. 없으면 0 — 마이그레이션은 하지 않아요.
+const traineeExt = () => (S && S.traineeExt) || 0;
+const extPenalty = (n) => (n == null ? traineeExt() : n) * TRAINEE_EXT_PENALTY;
+// %p로 보여줄 때 쓰는 표기예요. 감추지 않고 항상 숫자로 알려줍니다.
+const extPenaltyPct = (n) => Math.round(extPenalty(n) * 100);
+
 // ---------- 상태 ----------
 const SAVE_KEY = "trainee-save-v1";
 
@@ -136,6 +153,10 @@ function newState(agency, pos, name, roll) {
 }
 
 const agencyOf = () => AGENCIES.find((a) => a.id === S.agency);
+/* 📞 타사 캐스팅이 데려가는 기획사예요. 데뷔 파워가 제일 낮은 곳 하나로 고정해요 —
+ * 데뷔는 데뷔지만 출발이 제일 불리한 자리라는 걸 기획사로 말해줍니다.
+ * (축구의 '1부 최약체 클럽'과 같은 자리예요.) */
+const castingAgency = () => AGENCIES.reduce((lo, a) => (a.debut < lo.debut ? a : lo), AGENCIES[0]);
 const overall = () => {
   const vals = Object.values(S.stats);
   return vals.reduce((a, b) => a + b, 0) / vals.length;
@@ -675,7 +696,9 @@ function renderMain() {
   const a = agencyOf();
   $("hud-name").textContent = `${S.name} (${POS_INFO[S.pos].name})`;
   $("hud-school").textContent = `${a.emoji} ${a.name} · 종합 ${Math.round(overall())}`;
-  $("hud-turn").textContent = `${S.year}년차 ${S.month}월`;
+  // 연장 중이면 몇 번째인지·문턱이 얼마나 올라갔는지 육성 화면에서도 계속 보여줘요
+  $("hud-turn").textContent = `${S.year}년차 ${S.month}월` +
+    (traineeExt() ? ` · 🌱연장 ${traineeExt()}회 (-${extPenaltyPct()}%p)` : "");
 
   $("hud-money").textContent = `💰 ${fmtMoney(S.money || 0)}`;
   $("cond-num").textContent = Math.round(S.condition);
@@ -1042,6 +1065,147 @@ function playRandomMini(container, cb) {
   }
 }
 
+/* ---------- 🌏 월드투어 전용 무대 — 한 도시가 콘서트 한 편이에요 ----------
+ *
+ * 컴백 무대(playRandomMini)는 미니게임 한 번이에요. 투어는 다릅니다:
+ * 🎬 오프닝 → ✨ 킬링파트 → 🔥 앵콜을 연달아 하고, 세 결과를 가중합해
+ * 그 도시 객석이 정해져요. 문구도 도시 이름과 현지 함성이 들어간 투어 전용이에요.
+ *
+ * playRandomMini는 손대지 않았어요 — 컴백 무대는 예전 그대로 한 번이에요.
+ * (회귀는 tests/idol/tour-set-test.js가 봐요.)
+ *
+ * 🎪 무대마다 전용 메커닉이 하나씩 붙어 있어요(mech). 예전에는 기존 8종에서
+ * 무대별로 골라 썼는데, 그러면 종류가 컴백 무대와 똑같아서 투어라는 느낌이
+ * 안 났어요. 지금은 셋 다 tour-stage.js의 투어 전용 메커닉이에요 —
+ * 함성 웨이브 · 싱크로 · 함성 유지. 컴백 무대는 여전히 기존 8종을 써요.
+ * 무대와 메커닉이 1:1이라 한 도시에서 같은 메커닉이 두 번 나오지 않아요.
+ *
+ * weight — 세 무대를 합칠 때의 가중치예요. 합이 1이고 앵콜이 압도적으로 무거워요.
+ * 마지막에 무너지면 아파야 하니까요.
+ *
+ * 이 세 숫자는 등급 분포를 보고 잡은 값이에요. 세 번의 평균은 한 번보다 분산이
+ * 작아요(평균으로 수렴). 그런데 투어 등급은 도시 4~8곳의 평균으로 매기니까,
+ * 도시 안에서 또 평균을 내면 분포가 가운데로 뭉쳐서 전부 B가 돼요.
+ * 앵콜을 무겁게 둘수록 "사실상 한 판"에 가까워져서 분포가 다시 갈라져요.
+ * 무작위 플레이에서 B가 차지하는 비율(같은 산식으로 4만 판을 돌려 재고,
+ * 채택값은 tests/idol/tour-depth-test.js의 500회로 세 번 확인했어요):
+ *   0.33 / 0.33 / 0.33 → B 48%  (절반 문턱에 닿아요)
+ *   0.12 / 0.22 / 0.66 → B 46%
+ *   0.10 / 0.15 / 0.75 → B 44%  ← 지금 값 (실측 42.6 / 43.6 / 44.8%)
+ * 값을 만질 땐 반드시 tour-depth-test.js의 분포표를 다시 재세요. 컨디션 소모·
+ * 기세·취소 상수는 이 표를 맞추는 데 쓰지 않아요 — 가중치로만 맞춰요. */
+const TOUR_STAGES = [
+  { key: "open", emoji: "🎬", name: "오프닝", weight: 0.10, mech: "wave" },
+  { key: "kill", emoji: "✨", name: "킬링파트", weight: 0.15, mech: "sync" },
+  { key: "encore", emoji: "🔥", name: "앵콜", weight: 0.75, mech: "roar" },
+];
+
+/* 무대별 결과 문구 — 도시 이름과 현지 함성이 들어가요.
+ * 컴백 무대의 IDOL_* 문구와는 한 줄도 겹치지 않아요. */
+const TOUR_MSG = {
+  open: {
+    great: (c, y) => `🎬 첫 곡부터 ${c} 객석이 전부 일어섰어요! "${y}" 함성이 터져요`,
+    ok: (c) => `🎬 첫 곡을 깔끔하게 넘겼어요. ${c} 객석이 슬슬 달아올라요`,
+    bad: (c) => `🎬 첫 곡이 겉돌았어요… ${c} 객석이 아직 앉아 있어요`,
+  },
+  kill: {
+    great: (c, y) => `✨ 하이라이트를 완벽하게!! ${c}의 "${y}"가 아레나를 흔들어요`,
+    ok: (c) => `✨ 하이라이트를 무난히 소화했어요. ${c} 객석이 따라 불러요`,
+    bad: (c) => `✨ 하이라이트에서 삐끗… ${c} 객석의 함성이 잦아들어요`,
+  },
+  encore: {
+    great: (c, y) => `🔥 앵콜에 모든 걸 쏟았어요!! ${c} 전석이 "${y}"를 외쳐요`,
+    ok: (c) => `🔥 앵콜로 무대를 잘 닫았어요. ${c} 객석이 손을 흔들어요`,
+    bad: (c) => `🔥 마지막 앵콜에서 무너졌어요… ${c} 객석이 조용히 빠져나가요`,
+  },
+};
+const tourStageMsg = (stage, res, city, cheer) => {
+  const m = TOUR_MSG[stage.key] || TOUR_MSG.open;
+  return (res === "perfect" ? m.great : res === "miss" ? m.bad : m.ok)(city, cheer);
+};
+
+/* 🎪 투어 전용 메커닉 셋 — 실행은 tour-stage.js(window.TourStage)에 있어요.
+ * label은 (도시, 함성)을 받아요. 무대와 메커닉이 1:1이라 문구를 메커닉에 붙여 둬요.
+ *
+ * stat()이 자동 플레이(autoRes)가 볼 능력치이고, zonePct(miniZone)가 사람이
+ * 직접 할 때 판정 창을 넓히는 값이에요. 둘이 같은 능력치를 봐야 "자동으로 돌린
+ * 분포"와 "손으로 한 체감"이 어긋나지 않아요.
+ *
+ * 무대별로 보는 능력치 (설계 문서의 표):
+ *   🎬 오프닝   → 댄스        무대 장악·동선
+ *   ✨ 킬링파트 → 포지션 주 스탯  하이라이트는 자기 파트
+ *   🔥 앵콜     → 체력        끝까지 버티는 것
+ *
+ * window.TourStage를 부를 때마다 찾아가요(변수에 캐시하지 않아요) — 테스트가
+ * 기록용으로 갈아끼울 수 있어야 하니까요. window.Timing을 쓰던 방식과 같아요. */
+const TOUR_MECH = {
+  // 🎬 오프닝 — 관객석을 흐르는 함성 웨이브를 3번 연속 잡아요 (댄스: 무대 장악)
+  wave: {
+    stat: () => S.stats.dance,
+    label: (c, y) => `🎬 ${c} 오프닝! "${y}" 함성이 객석을 타고 흘러요 — 최고조인 구역을 잡아요!`,
+    run: (box, label, cb) => window.TourStage.wave(box, {
+      label, button: "함성! 🙌", zonePct: miniZone(S.stats.dance),
+    }, cb),
+  },
+  // ✨ 킬링파트 — 서로 다른 속도로 왕복하는 두 파트가 겹치는 순간 (포지션 주 스탯)
+  sync: {
+    stat: () => S.stats[POS_INFO[S.pos].stat],
+    label: (c, y) => `✨ ${c} 하이라이트! "${y}" 속에서 두 파트가 겹치는 순간을 노려요!`,
+    run: (box, label, cb) => window.TourStage.sync(box, {
+      label, button: "싱크! ✨", zonePct: miniZone(S.stats[POS_INFO[S.pos].stat]),
+    }, cb),
+  },
+  // 🔥 앵콜 — 식어가는 함성을 연타로 목표선 위에 붙잡아 둬요 (체력: 끝까지 버티기)
+  roar: {
+    stat: () => S.stats.stamina,
+    label: (c, y) => `🔥 ${c} 앵콜! "${y}"가 식지 않게 마지막까지 함성을 끌어올려요!`,
+    run: (box, label, cb) => window.TourStage.roar(box, {
+      label, button: "연타! 🔥", zonePct: miniZone(S.stats.stamina),
+    }, cb),
+  },
+};
+
+/* 세 무대를 연달아 돌려요. 끝나면 cb([{ key, mech, res }, …])로 세 결과를 넘겨요.
+ * opts.onStage(stage, i, label)  — 무대에 오를 때 (진행 표시·로그용)
+ * opts.onResult(stage, res, msg) — 한 무대가 끝났을 때
+ * 자동 플레이(autoMiniOn)면 미니게임을 띄우지 않고 즉시 판정해요 — 다른 미니게임들과
+ * 같은 경로예요. 없으면 테스트도 확인 페이지도 투어에서 막혀요. */
+function playTourSet(container, opts, cb) {
+  const city = (opts && opts.city) || "이 도시";
+  const cheer = (opts && opts.cheer) || "앵콜!";
+  const mechs = TOUR_STAGES.map((st) => st.mech);
+  const out = [];
+  const step = (i) => {
+    if (i >= TOUR_STAGES.length) { cb(out); return; }
+    const stage = TOUR_STAGES[i];
+    const mech = TOUR_MECH[mechs[i]];
+    const label = mech.label(city, cheer);
+    if (opts.onStage) opts.onStage(stage, i, label);
+    const land = (res) => {
+      out.push({ key: stage.key, mech: mechs[i], res });
+      if (opts.onResult) opts.onResult(stage, res, tourStageMsg(stage, res, city, cheer));
+      step(i + 1);
+    };
+    if (autoMiniOn()) { land(autoRes(mech.stat())); return; }
+    mech.run(container, label, land);
+  };
+  step(0);
+}
+
+/* 세 무대를 하나의 객석 기반 점수로 합쳐요 — 무대마다 따로 굴리고 가중합해요.
+ * 판정별 폭은 컴백 무대에서 쓰던 폭과 같아요. */
+const TOUR_RES_VAL = { perfect: [0.93, 1.0], good: [0.68, 0.86], miss: [0.34, 0.56] };
+function tourSetBase(results) {
+  let sum = 0, wsum = 0;
+  for (const r of results || []) {
+    const stage = TOUR_STAGES.find((s) => s.key === r.key) || TOUR_STAGES[0];
+    const span = TOUR_RES_VAL[r.res] || TOUR_RES_VAL.good;
+    sum += stage.weight * rand(span[0], span[1]);
+    wsum += stage.weight;
+  }
+  return wsum ? sum / wsum : 0;
+}
+
 let stageTimer = null;
 // 무대를 문자중계처럼 연출 + 하이라이트 타이밍 미니게임 → 결과는 onFinal(최종등급)로
 function renderStageSim(type, grade, onFinal) {
@@ -1192,9 +1356,12 @@ function startSurvival() {
   ev = { kind: "survival", round: 0, eliminated: false };
   $("stage-title").textContent = `📺 데뷔 서바이벌 <더 파이널>`;
   $("stage-round").textContent = "";
+  // 연장으로 올라간 문턱은 무대에 오르기 전에 숫자로 알려줘요.
+  const ext = traineeExt();
   $("stage-card").innerHTML = `
     <div class="tour-vs">🔥 전국 연습생 100명, 데뷔조는 단 7명</div>
-    <div class="tour-line">3년의 연습이 오늘을 위해 있었어요.<br/>예선부터 파이널까지, 살아남으면 데뷔합니다.</div>`;
+    <div class="tour-line">3년의 연습이 오늘을 위해 있었어요.<br/>예선부터 파이널까지, 살아남으면 데뷔합니다.</div>
+    ${ext ? `<div class="tour-pts">🌱 연습생 연장 ${ext}회 · 나이 패널티로 라운드 통과 확률 -${extPenaltyPct(ext)}%p</div>` : ""}`;
   $("btn-stage-next").textContent = "예선 무대 오르기";
   $("btn-stage-next").onclick = playSurvivalRound;
   show("screen-stage");
@@ -1215,9 +1382,10 @@ function playSurvivalRound() {
     S.stages += 1;
     // 하이라이트 성공/실패가 생존 확률에도 영향
     const momentBonus = fg.pts > grade.pts ? 0.06 : fg.pts < grade.pts ? -0.06 : 0;
+    // 🌱 연장한 횟수만큼 문턱이 올라가요 — 나이 패널티예요.
     const p = clamp(
       0.40 + a.debut * 0.35 + (overall() - 50) / 90 + S.fandom / 1500 +
-      (S.condition - 50) / 900 - ev.round * 0.05 + momentBonus,
+      (S.condition - 50) / 900 - ev.round * 0.05 + momentBonus - extPenalty(),
       0.12, 0.93
     );
     const pass = Math.random() < p;
@@ -1245,7 +1413,12 @@ function showEnding(survivedFinal, lastRound) {
   const a = agencyOf();
   const score = S.fandom + overall() * 2;
 
-  let emoji, title, teamLine, msg;
+  /* 🌱 연습생 재계약은 "연장"이라는 말 그대로 한 해를 더 줘요. 횟수 제한은 없어요 —
+   * 대신 연장할수록 데뷔 서바이벌 문턱이 올라가서(TRAINEE_EXT_PENALTY) 스스로 제동이 걸려요.
+   * 📞 타사 캐스팅은 실제로 다른 기획사에서 데뷔로 이어져요. 조건(lastRound === 2 &&
+   * score >= 420)을 호출부에서 다시 계산하면 분기와 어긋날 수 있으니 여기서 플래그만 세워요. */
+  let emoji, title, teamLine, msg, canExtend = false, castPro = null;
+  const extNext = traineeExt() + 1;   // 지금 버튼을 누르면 몇 번째 연장인지
   if (survivedFinal && score >= 520) {
     emoji = "👑"; title = "데뷔조 센터 데뷔!";
     teamLine = `${a.name} 신인 그룹 — 센터 확정`;
@@ -1259,17 +1432,24 @@ function showEnding(survivedFinal, lastRound) {
     teamLine = `${a.name} 차기 데뷔조 확정`;
     msg = "아쉽게 최종 데뷔조엔 들지 못했지만, 회사가 차기 그룹 데뷔를 약속했어요.";
   } else if (lastRound === 2 && score >= 420) {
-    emoji = "📞"; title = "타사 캐스팅!";
-    teamLine = "라이벌 기획사 이적 제안";
-    msg = "세미파이널 무대를 본 타사에서 러브콜이! 새 둥지에서 데뷔를 노려요.";
+    // 데뷔 파워가 제일 낮은 기획사로 옮겨서 데뷔해요. 이미 그곳 소속이면 그대로 남아요.
+    const cast = castingAgency();
+    castPro = cast.id;
+    emoji = "📞";
+    title = cast.id === a.id ? "신생 기획사 데뷔조!" : "타사 캐스팅!";
+    teamLine = `${cast.emoji} ${cast.name} 신인 그룹 데뷔조`;
+    msg = cast.id === a.id
+      ? `세미파이널 무대를 본 회사가 데뷔조를 짰어요. ${cast.name}는 데뷔 파워가 가장 약한 신생 기획사라 출발은 불리하지만, 여기서 데뷔 활동이 시작돼요.`
+      : `세미파이널 무대를 본 ${cast.name}에서 러브콜이 왔어요. ${a.name}보다 데뷔 파워가 약한 신생 기획사라 출발은 불리하지만, 여기서 데뷔 활동이 시작돼요.`;
   } else if (lastRound >= 1) {
     emoji = "🌱"; title = "연습생 재계약";
-    teamLine = `${a.name} 연습생 연장`;
-    msg = "이번엔 여기까지. 하지만 회사는 아직 당신을 믿고 있어요.";
+    teamLine = `${a.name} 연습생 연장 계약`;
+    canExtend = true;   // 연습생은 몇 번이든 더 할 수 있어요 — 횟수 제한은 두지 않아요
+    msg = "이번엔 여기까지. 하지만 회사는 아직 당신을 믿고 있어요 — 한 해를 더 연습할 수 있어요.";
   } else if (score >= 330) {
     emoji = "📹"; title = "홀로서기 선언";
-    teamLine = "영상 채널 개설 → 역주행 노리기";
-    msg = "예선 탈락… 하지만 쌓인 팬덤이 있어요. 커버 영상으로 역주행을 노려봐요!";
+    teamLine = "연습생 계약 종료 — 내 채널로 홀로서기";
+    msg = "예선에서 멈췄어요. 회사를 나와 직접 연 채널에는 3년의 무대가 그대로 남았어요.";
   } else {
     emoji = "🎒"; title = "연습실과 작별";
     teamLine = "평범한 일상으로 복귀";
@@ -1283,6 +1463,17 @@ function showEnding(survivedFinal, lastRound) {
     ? `🏆 ${S.trophies.join(", ")}`
     : "🏆 평가 1위 경력 없음";
 
+  /* 연장은 공짜가 아니에요. 몇 번째 연장인지, 문턱이 얼마나 올라가는지 숫자로 보여줘요.
+   * 감추면 눌러 놓고 나중에 이유를 모른 채 떨어지게 돼요. */
+  const extNote = canExtend
+    ? `<div class="draft-summary" id="ext-note">
+        🌱 한 해 더 연습하면 <b>${extNext}번째 연장</b>이에요<br/>
+        나이 패널티로 데뷔 서바이벌 라운드 통과 확률이
+        ${traineeExt() ? `지금 -${extPenaltyPct()}%p에서 ` : ""}<b>-${extPenaltyPct(extNext)}%p</b>가 돼요<br/>
+        한 해를 제대로 굴리면 (종합 +7~8) 딱 그만큼을 되찾을 수 있어요
+      </div>`
+    : "";
+
   $("ending-card").innerHTML = `
     <div class="draft-emoji">${emoji}</div>
     <div class="draft-title">${title}</div>
@@ -1292,8 +1483,10 @@ function showEnding(survivedFinal, lastRound) {
       ${a.emoji} ${a.name} · ${POS_INFO[S.pos].name} ${S.name}<br/>
       ${statLines}<br/>
       💖 최종 팬덤 ${Math.round(S.fandom)} · 무대 ${S.stages}회<br/>
+      ${traineeExt() ? `🌱 연습생 연장 ${traineeExt()}회 (통과 확률 -${extPenaltyPct()}%p)<br/>` : ""}
       ${trophyLine}
-    </div>`;
+    </div>
+    ${extNote}`;
 
   $("btn-share").onclick = () => {
     const text = `🎤 더 트레이니 결과\n${a.name} ${S.name} — ${title}\n${teamLine}\n팬덤 ${Math.round(S.fandom)} / ${trophyLine}`;
@@ -1309,10 +1502,51 @@ function showEnding(survivedFinal, lastRound) {
 
   if (window.Stats) Stats.log("ending", { title, score: Math.round(score) });
 
-  // 데뷔조 합류·차기 데뷔조면 데뷔 활동으로 이어갈 수 있어요
-  if (window.IdolCareer) window.IdolCareer.onEnding(survivedFinal || lastRound === 3, survivedFinal && score >= 520);
-  else clearSave();
+  /* 데뷔조 합류·차기 데뷔조·📞 타사 캐스팅이면 데뷔 활동으로 이어갈 수 있어요.
+   * keepSave를 넘기면 career.js가 clearSave()를 건너뛰어요 — 안 넘기면
+   * "한 해 더 연습하기"를 누르기도 전에 세이브가 날아가요.
+   * castAgency는 📞 경로 표시예요. 데뷔는 데뷔인데 제일 약한 기획사에서 출발해요. */
+  if (window.IdolCareer) {
+    window.IdolCareer.onEnding(
+      survivedFinal || lastRound === 3 || !!castPro,
+      survivedFinal && score >= 520,
+      { keepSave: canExtend, castAgency: castPro }
+    );
+  } else if (!canExtend) {
+    clearSave();
+  }
+  renderTraineeExtButton(canExtend);
   show("screen-ending");
+}
+
+/* 🌱 한 해 더 연습하기 — 엔딩 화면 맨 앞에 붙여요.
+ * 연장을 안 쓰고 "🏛️ 기록 남기고 마무리"로 끝낼 수도 있어야 해서 다른 버튼은 그대로 둬요. */
+function renderTraineeExtButton(canExtend) {
+  document.getElementById("btn-trainee-ext")?.remove();
+  if (!canExtend) return;
+  const actions = document.querySelector("#screen-ending .draft-actions");
+  if (!actions) return;
+  const btn = document.createElement("button");
+  btn.id = "btn-trainee-ext";
+  btn.className = "btn btn-primary";
+  btn.textContent = "🌱 한 해 더 연습하기";
+  btn.onclick = extendTrainee;
+  actions.prepend(btn);
+}
+
+/* 능력치·재능·팬덤·트로피는 그대로 두고 3년차 1월로만 되돌려요.
+ * 횟수 제한은 없어요 — 대신 S.traineeExt가 늘면서 데뷔 서바이벌 문턱이 올라가요. */
+function extendTrainee() {
+  S.traineeExt = traineeExt() + 1;
+  S.year = 3;
+  S.month = 1;
+  S.pendingStage = null;
+  ev = null;
+  addLog(`🌱 연습생 연장 계약 ${S.traineeExt}회! 3년차를 한 번 더 뛰어요. ` +
+    `(데뷔 서바이벌 라운드 통과 확률 -${extPenaltyPct()}%p)`);
+  save();
+  renderMain();
+  show("screen-main");
 }
 
 // ---------- ❓ 도움말 ----------
@@ -1332,7 +1566,10 @@ const HELP_SECTIONS = [
   { emoji: "🎤", title: "무대와 데뷔 서바이벌", body:
     "연습생 3년 동안 무대에 서며 실력과 인지도를 쌓아요.\n" +
     "3년이 끝나면 데뷔 서바이벌에서 그동안의 성과가 갈려요.\n" +
-    "통과하면 데뷔해서 컴백 활동을 이어가고, 아니면 연습생으로 커리어가 끝나요." },
+    "통과하면 데뷔해서 컴백 활동을 이어가고, 아니면 연습생으로 커리어가 끝나요.\n" +
+    "🌱연습생 재계약으로 끝났다면 능력치를 그대로 안고 3년차를 다시 뛸 수 있어요.\n" +
+    `횟수 제한은 없지만 연장 한 번마다 라운드 통과 확률이 ${Math.round(TRAINEE_EXT_PENALTY * 100)}%p씩 낮아져요 —\n` +
+    "한 해를 제대로 굴리면 그만큼을 되찾지만, 대충 보내면 문턱만 높아져요." },
   { emoji: "🎓", title: "은퇴", body:
     "커리어를 마치면 🏛️명예의 전당에 기록이 남아요.\n" +
     "은퇴 시점의 성적으로 등급이 매겨지고, 전 세계 플레이어와 순위를 겨뤄요.\n" +

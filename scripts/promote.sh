@@ -24,11 +24,14 @@ is_beta_only() { case "$(basename "$1")" in _*) return 0 ;; *) return 1 ;; esac;
 
 # beta/와 상용이 다른 파일 목록 (상용에만 있는 것은 무시해요 — README·VERSION 등)
 # 베타 전용 파일은 목록에서도 빼요. 보이면 언젠가 누가 넘깁니다.
+# ⚠️ diff는 차이를 찾으면 종료 코드 1을 돌려줍니다. set -e·pipefail 아래에서는
+# 그게 실패로 잡혀서 함수가 첫 파이프라인에서 죽어요 — 실제로 --all이 아무것도
+# 복사하지 않고 조용히 끝나는 사고가 났습니다. `|| true`로 종료 코드를 삼킵니다.
 changed() {
-  diff -rq beta . -x beta -x .git -x scripts -x docs -x .superpowers -x CHANGELOG.md -x "$BETA_ONLY_GLOB" 2>/dev/null \
-    | sed -n 's|^Files beta/\(.*\) and \./.* differ$|\1|p'
-  diff -rq beta . -x beta -x .git -x scripts -x docs -x .superpowers -x CHANGELOG.md -x "$BETA_ONLY_GLOB" 2>/dev/null \
-    | sed -n 's|^Only in beta\(.*\): \(.*\)$|\1/\2|p' | sed 's|^/||'
+  local raw
+  raw="$(diff -rq beta . -x beta -x .git -x scripts -x docs -x .superpowers -x CHANGELOG.md -x "$BETA_ONLY_GLOB" 2>/dev/null || true)"
+  printf '%s\n' "$raw" | sed -n 's|^Files beta/\(.*\) and \./.* differ$|\1|p'
+  printf '%s\n' "$raw" | sed -n 's|^Only in beta\(.*\): \(.*\)$|\1/\2|p' | sed 's|^/||'
 }
 
 if [ $# -eq 0 ]; then
@@ -52,7 +55,15 @@ if [ "$1" = "--all" ]; then
   changed | sed 's/^/   · /'
   echo
   # 통째 복사에서도 베타 전용 파일은 빼요 — cp -a beta/. ./ 는 _check.html까지 들고 갔어요.
-  ( cd beta && find . -mindepth 1 -maxdepth 1 ! -name '_*' -exec cp -a {} "$ROOT/" \; )
+  # cp -a ./idol "$ROOT/" 는 $ROOT/idol이 이미 있으면 $ROOT/idol/idol을 만들어요.
+  # 내용만 덮어써야 하니 디렉터리는 `src/.` 형태로 넘깁니다.
+  ( cd beta && for e in *; do
+      case "$e" in _*) continue ;; esac
+      [ -e "$e" ] || continue
+      if [ -d "$e" ]; then mkdir -p "$ROOT/$e" && cp -a "$e/." "$ROOT/$e/"
+      else cp -a "$e" "$ROOT/$e"; fi
+      echo "   · $e"
+    done )
   for f in beta/_*; do
     [ -e "$f" ] || continue
     echo "   🚫 제외(베타 전용): ${f#beta/}"

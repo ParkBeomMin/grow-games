@@ -51,6 +51,38 @@ body {
 
 .season-standings .me td { color: var(--accent); font-weight: 700; }
 
+/* 연도별 기록표 — 원래 7칸(시즌·소속·출전·⚽·🅰️·🛡️·수상)이었는데 폭 28~34px에
+ * 이모지 헤더(🅰️도움·🛡️수비)를 얹었더니 실기기에서 헤더가 세로로 쪼개졌어요(도/움, 수/비).
+ * ⚾ 더 드래프트(beta/rookie/career.js:1023)처럼 4칸(시즌·소속·성적·수상)으로 줄였어요 —
+ * 골·도움·수비를 '성적' 한 칸으로 합치고, 항상 12인 출전은 표에서 뺐어요.
+ * table-layout:fixed는 칼럼 수가 바뀌면 폭이 통째로 밀리니 이 게임 전용 클래스
+ * (.season-soccer)로 따로 잡아요. 나머지 폭은 '수상' 칸이 가져가요 — 수상 배지는
+ * 길이가 들쭉날쭉해서 유일하게 유동 폭이어야 해요(이 판단은 7칸 때와 동일하게 유지). */
+.season-soccer { table-layout: fixed; }
+.season-soccer th:nth-child(1), .season-soccer td:nth-child(1) { width: 38px; }
+/* 폭은 0.74rem(≈11.8px) 기준으로 계산했어요. 한글은 글자당 약 1em,
+ * 숫자는 약 0.5em이에요. 기본 셀 패딩이 좌우 4px씩(base.css) 붙습니다.
+ *   소속 4자(예: 머드독스) ≈ 47px + 패딩 8 + 여백 8 → 64px 필요 → 72px
+ *   성적 '45골 23도움 11수비' ≈ 102px + 패딩 8 → 110px 필요 → 112px
+ * 예전 44/100px은 둘 다 모자라서 소속이 성적에 달라붙었어요. */
+.season-soccer th:nth-child(2), .season-soccer td:nth-child(2) { width: 72px; }
+.season-soccer th:nth-child(3), .season-soccer td:nth-child(3) { width: 112px; }
+.season-soccer th, .season-soccer td { word-break: keep-all; }
+/* 소속 칸 — 44px일 때 '머드독스'(4자)가 칸보다 넓어서 옆 성적 칸에 붙었어요.
+ * 폭을 늘리는 것만으로는 이름이 더 길어지면 또 새니, overflow로 구조적으로 막아요.
+ * padding-right가 이름과 성적 사이 여백을 보장해요. */
+.season-soccer .yr-club {
+  vertical-align: top;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding-right: 6px;
+}
+/* 이적한 시즌은 눈에 띄게 — 표를 훑으며 언제 소속이 바뀌었는지 바로 보이게 */
+.season-soccer .yr-club.moved { color: var(--accent); }
+.season-soccer .yr-lg { display: block; font-size: 0.62rem; opacity: .65; }
+.season-soccer .yr-stat { white-space: nowrap; }
+
 /* FM식 경기 스코어보드 */
 .matchscore {
   display: flex;
@@ -142,6 +174,71 @@ body {
 .ms-final.win { color: #85e3ac; }
 .ms-final.lose { color: #ff8a80; }
 
+/* 💼 이적 제안 — 리그별로 묶고, 카드마다 도박의 크기(평점 페널티·수상 가치)를 적어요 */
+.tf-group {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 10px;
+  margin-bottom: 12px;
+  background: linear-gradient(180deg, var(--field), var(--bg2));
+}
+.tf-group.up { border-color: var(--accent); }
+.tf-group.down { border-color: var(--dim); }
+.tf-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 2px 4px 8px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 8px;
+}
+.tf-head .tf-lg { font-family: "Jua", sans-serif; font-size: 1.05rem; color: var(--accent); }
+/* 리그가 5개로 늘어서 묶음마다 위/아래를 한 마디로 적어요 */
+.tf-head .tf-lg small { font-family: inherit; font-size: 0.72rem; color: var(--dim); }
+.tf-group.same .tf-head .tf-lg { color: var(--text); }
+.tf-group.down .tf-head .tf-lg { color: var(--dim); }
+.tf-risk { font-size: 0.76rem; color: var(--sky); }
+.tf-group.up .tf-head .tf-risk { color: var(--accent2); }
+.tf-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  margin-bottom: 6px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--bg2);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.92rem;
+  cursor: pointer;
+}
+.tf-card:last-child { margin-bottom: 0; }
+.tf-card:hover, .tf-card:focus-visible { border-color: var(--accent); transform: translateY(-1px); }
+.tf-card:active { transform: scale(0.98); }
+.tf-card .tf-top,
+.tf-card .tf-sub { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.tf-card .tf-name { font-family: "Jua", sans-serif; color: var(--text); }
+.tf-card .tf-str { font-size: 0.8rem; color: var(--dim); }
+.tf-card .tf-fee { font-size: 0.82rem; color: var(--accent); }
+/* 카드만 보고 눌러도 어느 리그인지 알 수 있어야 해요 */
+.tf-card .tf-lg { font-size: 0.8rem; color: var(--sky); }
+.tf-card.down .tf-lg, .tf-card.down .tf-risk { color: var(--dim); }
+
 @media (max-width: 380px) {
   .card-grid.three { grid-template-columns: 1fr; }
+  .tf-card .tf-sub { flex-direction: column; gap: 2px; }
 }
+
+/* 📊 기록 화면 표 — 결산 표와 같은 이유로 3칸이에요.
+ * 칸을 나누면 폰 폭에서 헤더가 세로로 쪼개져요. 수상 칸만 유동 폭입니다. */
+.season-record { table-layout: fixed; }
+.season-record th, .season-record td { word-break: keep-all; }
+/* 폭 근거는 위 .season-soccer 주석과 같아요. 성적 칸은 112px 필요합니다. */
+.season-record th:nth-child(1), .season-record td:nth-child(1) { width: 44px; }
+.season-record th:nth-child(2), .season-record td:nth-child(2) { width: 112px; }
+.season-record .yr-stat { white-space: nowrap; }
