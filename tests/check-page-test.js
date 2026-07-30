@@ -271,9 +271,16 @@ reach("soccer-promote", (P, first) => {
  * 시즌 표의 소속 칸으로 옮겼습니다. 그래서 여기서는 옛 줄이 없어야 하고
  * 표에 소속 칼럼이 있어야 해요.
  *
- * 이 시나리오의 세이브는 소속 칼럼이 생기기 전에 뜬 옛 형식이에요.
- * years[]에 클럽 정보가 없으니 소속 칸은 "-"로 그려집니다 —
- * 그게 정상이고, 마이그레이션을 안 한다는 방침이 지켜지는지 보는 자리예요. */
+ * 이 시나리오의 세이브는 소속 칼럼이 생기기 전에 뜬 옛 형식이라 years[]에 club이
+ * 없어요. 그래서 한동안 여섯 줄이 전부 '-'였습니다 — 칼럼을 넣은 의미가 없었죠.
+ * 이제 그릴 때 S.moves에서 역산해 메웁니다(세이브는 안 고쳐요). 여기서는 그 역산이
+ * **실제로 채웠는지**를 이 세이브의 이적 이력과 맞춰 못 박아요. "비어 있지 않다"로
+ * 느슨하게 두면 '-'가 다시 돌아와도 통과해요.
+ *
+ * 이적 이력: 2시즌 블랙이글스→머드독스 · 3시즌 머드독스→파인힐스 ·
+ * 4시즌 파인힐스→머드독스 · 5시즌 머드독스→스톤워커스. 이적은 시즌이 끝난
+ * 오프시즌에 일어나니 시즌 y의 소속은 y보다 앞선 마지막 이적의 도착 클럽이에요.
+ * (칸이 좁아 이름을 4자로 줄이니 title 속성의 전체 이름으로 대조해요.) */
 reach("soccer-report", (P, first) => {
   check(first === "screen-career", `결산 화면이 뜬다 (${first})`);
   const card = P.w.document.querySelector("#career-card");
@@ -281,12 +288,23 @@ reach("soccer-report", (P, first) => {
     "옛 '🔁 이적 이력' 텍스트 줄이 없다");
   const heads = [...card.querySelectorAll("table thead th")].map((th) => th.textContent.trim());
   check(heads.includes("소속"), `시즌 표에 소속 칼럼이 있다 (${heads.join("·")})`);
-  const rows = card.querySelectorAll("table tbody tr");
-  check(rows.length >= 3, `시즌 행이 여러 개다 (${rows.length}행)`);
+  const rows = [...card.querySelectorAll("table tbody tr")];
+  check(rows.length === 6, `여섯 시즌 행이 그려진다 (${rows.length}행)`);
   const col = heads.indexOf("소속");
-  const cells = [...rows].map((r) => (r.children[col] || {}).textContent || "");
-  check(cells.every((c) => c.trim().length > 0),
-    "모든 행의 소속 칸이 비어 있지 않다 (옛 세이브는 '-')");
+  const cells = rows.map((r) => r.children[col] || {});
+  const names = cells.map((c) => (c.getAttribute ? c.getAttribute("title") : null));
+  check(cells.every((c) => (c.textContent || "").trim() !== "-"),
+    `소속 칸에 '-'가 한 줄도 없다 — 역산이 실제로 채웠다 (${names.join("·")})`);
+  const WANT = ["블랙이글스", "블랙이글스", "머드독스", "파인힐스", "머드독스", "스톤워커스"];
+  check(names.join("·") === WANT.join("·"),
+    `여섯 시즌 소속이 이적 이력과 정확히 맞는다 (${names.join("·")})`);
+  // 이적한 시즌(3·4·5·6)만 강조돼야 해요 — 역산 행에서도 이 표시가 살아야 합니다.
+  const moved = cells.map((c) => c.classList.contains("moved"));
+  check(moved.join(",") === "false,false,true,true,true,true",
+    `이적한 시즌만 강조된다 (${moved.map((m, i) => `${i + 1}:${m}`).join(" ")})`);
+  // 3시즌은 K리그1 → K리그3 이동이라 리그 태그가 붙어요. 나머지는 같은 리그예요.
+  const tags = cells.map((c) => { const t = c.querySelector(".yr-lg"); return t ? t.textContent.trim() : ""; });
+  check(tags.join("·") === "··3부···", `리그를 옮긴 3시즌에만 리그 태그가 붙는다 (${tags.join("·")})`);
 });
 
 // ⚽ 유스 엔딩 두 종 — 도전 버튼까지만 확인해요 (엔딩은 판정 결과라 세이브에 안 남아요)

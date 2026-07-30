@@ -475,9 +475,9 @@ window.WingerCareer = (() => {
     S.career.teamD = (S.career.teamD || 0) + (act.teamD || 0);
     S.career.teamL = (S.career.teamL || 0) + (act.teamL || 0);
     if (awards.length && window.Fx) Fx.celebrate("award", `🎖️ ${awards.join(" · ")}!`);
-    /* club·league — 그 시즌에 뛴 소속을 결산 시점에 그냥 적어요. S.moves에서 역산하지
-     * 않아요 — 오프시즌 이적·시즌 중 이적·리그 이동이 섞이면 복잡하고 틀리기 쉬워요.
-     * 새 필드라 옛 세이브의 항목에는 없어요 — 읽는 쪽(yearReport)이 '-'로 방어해요. */
+    /* club·league — 그 시즌에 뛴 소속을 결산 시점에 그냥 적어요. 여기 적힌 값이 정본이에요.
+     * 이 필드가 생기기 전에 쌓인 옛 항목에는 club이 없어요. 그건 읽는 쪽(fillClubs)이
+     * S.moves에서 역산해 메워요 — 세이브는 고치지 않아요(클라우드 동기화와 부딪혀요). */
     S.career.years.push({ y: S.proYear, hype: Math.round(hype * 10) / 10, wins, sales, dFan, awards, goals: gg, assists: ga, defense: gd, apps, club: S.group, league: S.league });
     if (window.Stats) Stats.log("year_end", { y: S.proYear, wins, sales, goals: gg, assists: ga });
     for (const d of STAT_DEFS) {
@@ -521,8 +521,43 @@ window.WingerCareer = (() => {
     return (parts[0] || name).slice(0, 4);
   }
 
-  /* 시즌 표의 소속 칸 하나. x.club은 2.22.0부터 결산 시점에 그냥 적은 값이라
-   * 그 전 세이브의 항목에는 없어요 — 마이그레이션하지 않고 '-'로 그려요(던지지 않아요).
+  /* 시즌 y에 뛴 소속을 S.moves에서 역산해요.
+   *
+   * moveToClub이 **시즌 S.proYear가 끝난 오프시즌**에 { y: S.proYear, from, to, … }를
+   * 쌓아요. 축구에는 시즌 중 이적이 없어요(설계에서 뺐어요). 그래서 시즌 y의 소속은
+   *   ① move.y < y인 **마지막** 이적의 to (리그는 toLg)
+   *   ② 그런 이적이 없으면 **첫 이적의 from** (리그는 fromLg) — y 이후에만 옮겼다는 뜻
+   *   ③ S.moves가 비어 있으면 지금 소속(st.group / st.league) — 한 번도 안 옮긴 커리어
+   * 예요. 근거가 아무것도 없으면(이적 이력도 없고 group도 없는 깨진 세이브) null을
+   * 돌려주고, 그 칸만 '-'로 남아요.
+   *
+   * 옛 세이브도 이 방식이면 표가 채워져요. club을 결산 때 적기 시작한 건 최근이라,
+   * 진행 중인 커리어는 그 전 시즌 기록에 club이 없어서 여섯 줄이 전부 '-'였어요. */
+  function clubOfYear(y, st) {
+    const mv = ((st && st.moves) || []).filter((m) => m && m.y != null && m.to != null);
+    let last = null;
+    for (const m of mv) if (m.y < y && (!last || m.y >= last.y)) last = m;
+    if (last) return { club: last.to, league: last.toLg };
+    let first = null;
+    for (const m of mv) if (m.from != null && (!first || m.y < first.y)) first = m;
+    if (first) return { club: first.from, league: first.fromLg };
+    const g = st && st.group;
+    return { club: g != null ? g : null, league: st && st.league };
+  }
+
+  /* 표를 그릴 때만 쓰는 사본이에요 — S.career.years를 다시 쓰지 않아요(마이그레이션 아님).
+   * club이 적혀 있으면 그게 정본이라 손대지 않고, 빈 항목만 역산으로 메워요. */
+  function fillClubs(years, st) {
+    return (years || []).map((x) => {
+      if (!x || x.club != null) return x;
+      const g = clubOfYear(x.y, st);
+      if (g.club == null) return x;   // 메울 근거가 없어요 — clubCell이 '-'로 그려요
+      return Object.assign({}, x, { club: g.club, league: x.league != null ? x.league : g.league });
+    });
+  }
+
+  /* 시즌 표의 소속 칸 하나. x.club은 결산 시점에 적힌 값이거나 fillClubs가 역산해 채운
+   * 값이에요 — 둘 다 없으면(근거 없는 깨진 세이브) '-'로 그려요(던지지 않아요).
    * 리그가 바뀐 시즌은 리그도 짧게 붙여요(LEAGUES[].short) — 같은 리그 안 이적과
    * 리그를 옮긴 이적은 전혀 다른 사건이라서요. */
   function clubCell(x, prev) {
@@ -549,7 +584,8 @@ window.WingerCareer = (() => {
 
   function yearReport() {
     const y = S.career.years[S.career.years.length - 1];
-    const slice = S.career.years.slice(-8);
+    // 그릴 때만 소속을 메운 사본을 써요 — 세이브(S.career.years)는 그대로 둬요.
+    const slice = fillClubs(S.career.years.slice(-8), S);
     const rows = slice.map((x, i) =>
       `<tr><td>${x.y}시즌</td>${clubCell(x, slice[i - 1])}${statCell(x)}<td>${x.awards.length ? "🏆" + x.awards.join(",") : "-"}</td></tr>`
     ).join("");
@@ -1255,6 +1291,7 @@ window.WingerCareer = (() => {
       LEAGUES, leagueOf, barOf, CLUBS, clubStrOf, debutClubs, DEBUT_POOL, weakestClub,
       TRANSFER_MIN_YEAR, PROMOTE_HYPE, OFFERS_PER_LEAGUE, transferFee, transferOffers, canTransfer,
       DOWNGRADE_FEE, LOYALTY_FEE, leftBefore, moveLog, careerScore, shortClub, clubCell,
+      clubOfYear, fillClubs,
       state: () => S,
     },
   };
