@@ -1065,6 +1065,174 @@ function playRandomMini(container, cb) {
   }
 }
 
+/* ---------- 🌏 월드투어 전용 무대 — 한 도시가 콘서트 한 편이에요 ----------
+ *
+ * 컴백 무대(playRandomMini)는 미니게임 한 번이에요. 투어는 다릅니다:
+ * 🎬 오프닝 → ✨ 킬링파트 → 🔥 앵콜을 연달아 하고, 세 결과를 가중합해
+ * 그 도시 객석이 정해져요. 문구도 도시 이름과 현지 함성이 들어간 투어 전용이에요.
+ *
+ * playRandomMini은 손대지 않았어요 — 컴백 무대는 예전 그대로 한 번이에요.
+ * (회귀는 tests/idol/tour-set-test.js가 봐요.)
+ *
+ * 메커닉 후보(pool)를 무대별로 겹치지 않게 갈라놨어요. 그래서 한 도시 안에서
+ * 같은 메커닉이 두 번 나오는 일이 구조적으로 없어요 — 뽑고 나서 다시 뽑는
+ * 재시도 루프가 필요 없고, "운 나쁘면 두 번 같다"는 사각지대도 안 생겨요.
+ *
+ * weight — 세 무대를 합칠 때의 가중치예요. 합이 1이고 앵콜이 압도적으로 무거워요.
+ * 마지막에 무너지면 아파야 하니까요.
+ *
+ * 이 세 숫자는 등급 분포를 보고 잡은 값이에요. 세 번의 평균은 한 번보다 분산이
+ * 작아요(평균으로 수렴). 그런데 투어 등급은 도시 4~8곳의 평균으로 매기니까,
+ * 도시 안에서 또 평균을 내면 분포가 가운데로 뭉쳐서 전부 B가 돼요.
+ * 앵콜을 무겁게 둘수록 "사실상 한 판"에 가까워져서 분포가 다시 갈라져요.
+ * 무작위 플레이 500회 실측(tests/idol/tour-depth-test.js):
+ *   0.33 / 0.33 / 0.33 → B 48%  (절반 문턱에 닿아요)
+ *   0.12 / 0.22 / 0.66 → B 46%
+ *   0.10 / 0.15 / 0.75 → B 44%  ← 지금 값
+ * 값을 만질 땐 반드시 tour-depth-test.js의 분포표를 다시 재세요. 컨디션 소모·
+ * 기세·취소 상수는 이 표를 맞추는 데 쓰지 않아요 — 가중치로만 맞춰요. */
+const TOUR_STAGES = [
+  { key: "open", emoji: "🎬", name: "오프닝", weight: 0.10, pool: ["react", "target", "odd"] },
+  { key: "kill", emoji: "✨", name: "킬링파트", weight: 0.15, pool: ["bar", "seq"] },
+  { key: "encore", emoji: "🔥", name: "앵콜", weight: 0.75, pool: ["hold", "drop", "duel"] },
+];
+
+/* 무대별 결과 문구 — 도시 이름과 현지 함성이 들어가요.
+ * 컴백 무대의 IDOL_* 문구와는 한 줄도 겹치지 않아요. */
+const TOUR_MSG = {
+  open: {
+    great: (c, y) => `🎬 첫 곡부터 ${c} 객석이 전부 일어섰어요! "${y}" 함성이 터져요`,
+    ok: (c) => `🎬 첫 곡을 깔끔하게 넘겼어요. ${c} 객석이 슬슬 달아올라요`,
+    bad: (c) => `🎬 첫 곡이 겉돌았어요… ${c} 객석이 아직 앉아 있어요`,
+  },
+  kill: {
+    great: (c, y) => `✨ 하이라이트를 완벽하게!! ${c}의 "${y}"가 아레나를 흔들어요`,
+    ok: (c) => `✨ 하이라이트를 무난히 소화했어요. ${c} 객석이 따라 불러요`,
+    bad: (c) => `✨ 하이라이트에서 삐끗… ${c} 객석의 함성이 잦아들어요`,
+  },
+  encore: {
+    great: (c, y) => `🔥 앵콜에 모든 걸 쏟았어요!! ${c} 전석이 "${y}"를 외쳐요`,
+    ok: (c) => `🔥 앵콜로 무대를 잘 닫았어요. ${c} 객석이 손을 흔들어요`,
+    bad: (c) => `🔥 마지막 앵콜에서 무너졌어요… ${c} 객석이 조용히 빠져나가요`,
+  },
+};
+const tourStageMsg = (stage, res, city, cheer) => {
+  const m = TOUR_MSG[stage.key] || TOUR_MSG.open;
+  return (res === "perfect" ? m.great : res === "miss" ? m.bad : m.ok)(city, cheer);
+};
+
+/* 메커닉 하나하나의 투어 문구와 실행이에요. label은 (도시, 함성)을 받아요.
+ * pool이 겹치지 않으니 메커닉 하나는 무대 하나에만 속해요 — 그래서 문구를
+ * 메커닉에 붙여 둘 수 있어요. */
+const TOUR_MECH = {
+  // 🎬 오프닝 — 첫 곡. 관객을 잡아요 (순발력·집중)
+  react: {
+    stat: () => S.stats.charm,
+    label: (c, y) => `🎬 ${c} 오프닝! "${y}" 함성 속에 암전이 걷히면 바로 첫 소절!`,
+    run: (box, label, cb) => window.Timing.reaction(box, {
+      label, button: "첫 소절!! 🎬",
+      perfectMs: 300 + S.stats.charm * 1.5,
+      goodMs: 700 + S.stats.charm * 2.5,
+    }, cb),
+  },
+  target: {
+    stat: () => S.stats[POS_INFO[S.pos].stat],
+    label: (c) => `🎬 ${c} 오프닝! 객석에서 흔들리는 응원봉을 하나씩 눈에 담아요!`,
+    run: (box, label, cb) => window.Timing.target(box, {
+      label, icon: "💡", count: 3,
+      lifeMs: 800 + Math.min(S.stats[POS_INFO[S.pos].stat], 130) * 3,
+    }, cb),
+  },
+  odd: {
+    stat: () => S.stats.charm,
+    label: (c) => `🎬 ${c} 오프닝! 객석에 딱 하나 다른 슬로건이 보여요 — 찾아서 손 인사!`,
+    run: (box, label, cb) => window.Timing.odd(box, {
+      label, rounds: 2, sets: [["💙", "🩵"], ["💜", "🟣"], ["🔆", "💡"]],
+    }, cb),
+  },
+  // ✨ 킬링파트 — 하이라이트 (정확도)
+  bar: {
+    stat: () => S.stats[POS_INFO[S.pos].stat],
+    label: (c, y) => `✨ ${c} 하이라이트! "${y}" 함성이 최고조인 순간을 노려요!`,
+    run: (box, label, cb) => window.Timing.play(box, {
+      label, button: "터뜨리기! ✨",
+      zonePct: miniZone(S.stats[POS_INFO[S.pos].stat]),
+    }, cb),
+  },
+  seq: {
+    stat: () => S.stats.dance,
+    label: (c) => `✨ ${c} 하이라이트! 이 도시만을 위해 바꾼 안무 순서를 그대로!`,
+    run: (box, label, cb) => window.Timing.sequence(box, {
+      label, icons: ["🎤", "🕺", "🎙️", "✨"],
+      showMs: 900 + S.stats.dance * 6 + (S.condition - 50) * 3,
+    }, cb),
+  },
+  // 🔥 앵콜 — 마지막. 가장 무거워요 (호흡·판단)
+  hold: {
+    stat: () => S.stats.stamina,
+    label: (c, y) => `🔥 ${c} 앵콜! "${y}"에 답하며 마지막 호흡을 끝까지 끌어올려요!`,
+    run: (box, label, cb) => window.Timing.hold(box, {
+      label, button: "숨 모으기 🔥", zonePct: miniZone(S.stats.stamina),
+    }, cb),
+  },
+  drop: {
+    stat: () => S.stats[POS_INFO[S.pos].stat],
+    label: (c) => `🔥 ${c} 앵콜! 객석에서 날아온 꽃다발을 놓치지 말고 받아요!`,
+    run: (box, label, cb) => window.Timing.drop(box, {
+      label, icon: "💐", zonePct: miniZone(S.stats[POS_INFO[S.pos].stat]),
+    }, cb),
+  },
+  duel: {
+    stat: () => S.stats.charm,
+    label: (c) => `🔥 ${c} 앵콜! 마지막 인사는 어디로? 함성이 가장 큰 쪽으로!`,
+    run: (box, label, cb) => window.Timing.duel(box, {
+      label, choices: ["왼쪽 스탠드", "중앙", "오른쪽 스탠드"],
+      hintChance: clamp((S.stats.charm - 40) / 80 + (S.condition - 50) / 400, 0, 0.9),
+    }, cb),
+  },
+};
+
+/* 세 무대를 연달아 돌려요. 끝나면 cb([{ key, mech, res }, …])로 세 결과를 넘겨요.
+ * opts.onStage(stage, i, label)  — 무대에 오를 때 (진행 표시·로그용)
+ * opts.onResult(stage, res, msg) — 한 무대가 끝났을 때
+ * 자동 플레이(autoMiniOn)면 Timing을 거치지 않고 즉시 판정해요 — 다른 미니게임들과
+ * 같은 경로예요. 없으면 테스트도 확인 페이지도 투어에서 막혀요. */
+function playTourSet(container, opts, cb) {
+  const city = (opts && opts.city) || "이 도시";
+  const cheer = (opts && opts.cheer) || "앵콜!";
+  const mechs = TOUR_STAGES.map((st) => pick(st.pool));
+  const out = [];
+  const step = (i) => {
+    if (i >= TOUR_STAGES.length) { cb(out); return; }
+    const stage = TOUR_STAGES[i];
+    const mech = TOUR_MECH[mechs[i]];
+    const label = mech.label(city, cheer);
+    if (opts.onStage) opts.onStage(stage, i, label);
+    const land = (res) => {
+      out.push({ key: stage.key, mech: mechs[i], res });
+      if (opts.onResult) opts.onResult(stage, res, tourStageMsg(stage, res, city, cheer));
+      step(i + 1);
+    };
+    if (autoMiniOn()) { land(autoRes(mech.stat())); return; }
+    mech.run(container, label, land);
+  };
+  step(0);
+}
+
+/* 세 무대를 하나의 객석 기반 점수로 합쳐요 — 무대마다 따로 굴리고 가중합해요.
+ * 판정별 폭은 컴백 무대에서 쓰던 폭과 같아요. */
+const TOUR_RES_VAL = { perfect: [0.93, 1.0], good: [0.68, 0.86], miss: [0.34, 0.56] };
+function tourSetBase(results) {
+  let sum = 0, wsum = 0;
+  for (const r of results || []) {
+    const stage = TOUR_STAGES.find((s) => s.key === r.key) || TOUR_STAGES[0];
+    const span = TOUR_RES_VAL[r.res] || TOUR_RES_VAL.good;
+    sum += stage.weight * rand(span[0], span[1]);
+    wsum += stage.weight;
+  }
+  return wsum ? sum / wsum : 0;
+}
+
 let stageTimer = null;
 // 무대를 문자중계처럼 연출 + 하이라이트 타이밍 미니게임 → 결과는 onFinal(최종등급)로
 function renderStageSim(type, grade, onFinal) {

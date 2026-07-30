@@ -667,9 +667,10 @@ window.IdolCareer = (() => {
    * 컷은 강행군·기세·쉬어가기를 넣은 뒤 tests/idol/tour-depth-test.js로 실측해
    * 다시 잡은 값이에요. 예전 컷(0.95 / 0.80 / 0.60)은 컨디션 소모가 없던 시절
    * 기준이라, 무작위 플레이 500회에서 A가 72%·C가 0%였어요 — 사실상 전원 A였죠.
-   * 지금은 S 13% · A 32% · B 39% · C 16%로 갈리고, 미니게임을 전부 완벽하게
-   * 소화하면 S가 78%예요. 컷을 만질 땐 반드시 tour-depth-test.js의 분포표를
-   * 다시 재세요. */
+   * 한 도시를 세 무대(오프닝·킬링파트·앵콜)로 늘린 뒤 다시 재서 컷은 그대로 두고
+   * 무대 가중치(game.js의 TOUR_STAGES)로 분포를 맞췄어요. 지금은
+   * S 11% · A 30% · B 44% · C 16%로 갈리고, 세 무대를 전부 완벽하게 소화하면
+   * S가 77%예요. 컷을 만질 땐 반드시 tour-depth-test.js의 분포표를 다시 재세요. */
   function tourGrade(fillRate) {
     if (fillRate >= 0.86) return "S";
     if (fillRate >= 0.72) return "A";
@@ -681,6 +682,16 @@ window.IdolCareer = (() => {
     "도쿄", "오사카", "타이베이", "방콕", "싱가포르", "자카르타", "마닐라",
     "시드니", "로스앤젤레스", "뉴욕", "멕시코시티", "상파울루", "런던", "파리", "베를린",
   ];
+  /* 🗣 현지 함성 — 투어 전용 무대 문구에 들어가요. 도시마다 객석 소리가 달라야
+   * "월드투어를 돌고 있다"는 느낌이 나요. TOUR_PLACES에 도시를 더하면 여기도
+   * 같이 채워요 (없으면 기본 함성으로 떨어져요). */
+  const TOUR_CHEERS = {
+    "도쿄": "サイコー!", "오사카": "だいすき!", "타이베이": "太棒了!", "방콕": "สู้ๆ!",
+    "싱가포르": "One more!", "자카르타": "Bagus!", "마닐라": "Ang galing!",
+    "시드니": "Legend!", "로스앤젤레스": "Encore!", "뉴욕": "Let's go!",
+    "멕시코시티": "¡Otra! ¡Otra!", "상파울루": "Mais uma!", "런던": "Brilliant!",
+    "파리": "Magnifique!", "베를린": "Zugabe!",
+  };
   const TOUR_MUL = { S: 1.6, A: 1.25, B: 1.0, C: 0.7 };   // 등급별 보상 배수
   const TOUR_RANK = { C: 0, B: 1, A: 2, S: 3 };
 
@@ -737,6 +748,7 @@ window.IdolCareer = (() => {
     };
     $("tour-log").innerHTML = "";
     $("tour-moment").innerHTML = "";
+    $("tour-set").innerHTML = "";
     $("tour-result").innerHTML = "";
     proLog(`🌏 ${tour.cities.length}개 도시 월드투어를 떠나요!`);
     renderTourCity();
@@ -767,12 +779,29 @@ window.IdolCareer = (() => {
       `<span class="tour-hype">${hype ? `🎆 기세 ${tour.streak}연속 만석 (객석 +${Math.round(hype * TOUR_HYPE_STEP * 100)}%)` : "🎆 기세 없음"}</span>`;
   }
 
+  /* 🎼 세트리스트 — 오프닝 · 킬링파트 · 앵콜 세 무대가 한 화면에서 이어져요.
+   * 지금 몇 번째 무대인지, 앞 무대를 어떻게 했는지를 한 줄로 보여줘요.
+   * 도시 4곳이면 무대가 12번이에요 — 어디까지 왔는지가 안 보이면 그냥 미니게임이
+   * 계속 나오는 것처럼 느껴져서 지루해져요. */
+  function tourSetHTML(cur, done) {
+    const mark = { perfect: "🌟", good: "👌", miss: "💧" };
+    return TOUR_STAGES.map((st, i) => {
+      const res = done[i];
+      const cls = res ? `done ${res}` : i === cur ? "now" : "wait";
+      return `<span class="tour-stage ${cls}">${st.emoji} ${st.name}${res ? ` ${mark[res]}` : ""}</span>`;
+    }).join("");
+  }
+  function renderTourSet(cur, done) {
+    $("tour-set").innerHTML = cur === null && !done.length ? "" : tourSetHTML(cur, done);
+  }
+
   function renderTourCity() {
     const city = tour.cities[tour.i];
     const n = tour.cities.length;
     $("tour-city").textContent = `${tour.i + 1}/${n}번째 도시 — ${city} 🎫`;
     $("tour-meta").innerHTML = tourMetaHTML();
     $("tour-moment").innerHTML = "";
+    renderTourSet(null, []);
     /* 🐛 도시가 바뀔 때 로그도 비워요. 예전에는 tour-moment만 비워서 타이베이
      * 화면에 자카르타 이야기가 그대로 남아 있었어요(실기기 스크린샷). 도시별
      * 객석은 아래 tour-result에 계속 쌓이니, 로그는 지금 도시 것만 보여줘요. */
@@ -813,7 +842,11 @@ window.IdolCareer = (() => {
   }
 
   /* 도시 한 곳을 강행해요 — 이동과 공연으로 컨디션이 깎이고, 깎인 컨디션이
-   * 그 무대의 객석에 그대로 반영돼요. 미니게임 판정이 뼈대, 컨디션·기세가 살이에요. */
+   * 그 무대의 객석에 그대로 반영돼요. 미니게임 판정이 뼈대, 컨디션·기세가 살이에요.
+   *
+   * 한 도시가 콘서트 한 편이에요 — 오프닝 · 킬링파트 · 앵콜 세 무대를 연달아
+   * 하고(playTourSet), 세 결과를 가중합(tourSetBase)해 그 도시 객석이 돼요.
+   * 컴백 무대는 여전히 미니게임 한 번이에요(playRandomMini) — 안 건드렸어요. */
   function playTourCity() {
     const btn = $("btn-tour-go");
     btn.disabled = true;
@@ -831,24 +864,34 @@ window.IdolCareer = (() => {
       tour.notes.push("cancel");
       tour.streak = 0;
       $("tour-moment").innerHTML = "";
+      renderTourSet(null, []);
       tourFeed(`🚑 ${city} 공연 취소… 몸이 버티지 못했어요`, "bad");
       tourFeed(`🎫 ${city} 객석 0%`, "bad");
       afterTourCity();
       return;
     }
 
-    playRandomMini($("tour-moment"), (res, type) => {
-      const base = res === "perfect" ? rand(0.93, 1.0)
-        : res === "miss" ? rand(0.34, 0.56)
-        : rand(0.68, 0.86);
+    const done = [];
+    playTourSet($("tour-moment"), {
+      city, cheer: TOUR_CHEERS[city] || "앵콜!",
+      onStage: (stage, i) => {
+        renderTourSet(i, done);
+        btn.textContent = `${stage.emoji} ${stage.name} (${i + 1}/${TOUR_STAGES.length})`;
+        tourFeed(`${stage.emoji} ${i + 1}/${TOUR_STAGES.length} ${stage.name} — ${city} 무대에 올라요`);
+      },
+      onResult: (stage, res, msg) => {
+        done.push(res);
+        renderTourSet(done.length, done);
+        tourFeed(msg, res === "perfect" ? "good" : res === "miss" ? "bad" : "");
+      },
+    }, (results) => {
+      const base = tourSetBase(results);
       const condMul = tourCondMul(tour.cond);
       const hype = Math.min(tour.streak, TOUR_HYPE_MAX) * TOUR_HYPE_STEP;
       // 매력이 높으면 현지 화제성이 붙어 객석이 조금 더 차요
       const fill = clamp(base * condMul + hype + (S.stats.charm - 100) / 600, 0, 1);
       tour.fills.push(fill);
       tour.notes.push("");
-      tourFeed(res === "perfect" ? type.great : res === "miss" ? type.bad : type.ok,
-        res === "perfect" ? "good" : res === "miss" ? "bad" : "");
       if (condMul < 1) tourFeed(`😩 지친 몸이 무대를 갉아먹어요 (객석 ×${condMul.toFixed(2)})`, "bad");
       if (hype > 0) tourFeed(`🎆 ${tour.streak}연속 만석의 화제성! (객석 +${Math.round(hype * 100)}%)`, "good");
       tourFeed(`🎫 ${city} 객석 ${Math.round(fill * 100)}%`, fill >= TOUR_FULL ? "good" : "");
@@ -872,6 +915,7 @@ window.IdolCareer = (() => {
     tour.notes.push("rest");
     tour.streak = 0;
     $("tour-moment").innerHTML = "";
+    renderTourSet(null, []);
     tourFeed(`🛌 ${city} 공연을 축소하고 하루 쉬었어요. 컨디션 ${Math.round(before)} → ${Math.round(tour.cond)}`, "good");
     tourFeed(`🎫 ${city} 객석 ${Math.round(fill * 100)}% — 무대를 줄인 만큼 객석도 줄었어요`);
     afterTourCity();
@@ -907,6 +951,7 @@ window.IdolCareer = (() => {
     $("tour-meta").innerHTML = `<span class="tour-cond">🔥 남은 컨디션 ${Math.round(tour.cond)}</span>` +
       `<span class="tour-hype">${cancels ? `🚑 취소 ${cancels}회 · ` : ""}${rests ? `🛌 쉬어간 도시 ${rests}곳` : "🛌 한 번도 쉬지 않았어요"}</span>`;
     $("tour-moment").innerHTML = "";
+    $("tour-set").innerHTML = "";
     $("btn-tour-rest").classList.add("hidden");
     $("tour-result").innerHTML = `
       <div class="tour-grade">${grade} 등급</div>

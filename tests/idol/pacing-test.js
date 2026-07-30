@@ -69,7 +69,12 @@ const M = {
   condMul:  SRC.match(/function tourCondMul\(cond\)[\s\S]*?\n  \}/),
   drain:    SRC.match(/function tourDrain\(i, n\)[\s\S]*?\n  \}/),
   cancel:   SRC.match(/function tourCancelChance\(cond\)[\s\S]*?\n  \}/),
-  fill:     SRC.match(/const base = res === "perfect"[\s\S]*?const fill = clamp\([^;]+;/),
+  /* 🌏 한 도시는 세 무대(오프닝·킬링파트·앵콜)예요 — 객석 산식이 세 판정을
+   * 가중합(game.js의 tourSetBase)한 값을 base로 받아요. 세 조각을 다 떼어 와요. */
+  fill:     SRC.match(/const base = tourSetBase\(results\);[\s\S]*?const fill = clamp\([^;]+;/),
+  stages:   GAME.match(/const TOUR_STAGES = \[[\s\S]*?\n\];/),
+  resVal:   GAME.match(/const TOUR_RES_VAL = \{[^}]+\};/),
+  setBase:  GAME.match(/function tourSetBase\(results\) \{[\s\S]*?\n\}/),
   tourRew:  SRC.match(/const dFan = Math\.max\(0, Math\.round\(n \* avg \* 60 \* mul\)\);\s*const income = Math\.max\(0, Math\.round\(n \* avg \* 1200 \* mul\)\);/),
   statCap:  GAME.match(/const STAT_CAP = (\d+);/),
   clutch:   GAME.match(/function clutch\(key\) \{[\s\S]*?\n\}/),
@@ -135,9 +140,16 @@ const tourDrain = new Function("rand", "TOUR_DRAIN", "TOUR_RAMP",
   `${M.drain[0]} return tourDrain;`)(rand, TOURN.TOUR_DRAIN, TOURN.TOUR_RAMP);
 const tourCancel = new Function("clamp", "TOUR_DANGER",
   `${M.cancel[0]} return tourCancelChance;`)(clamp, TOURN.TOUR_DANGER);
+/* 🌏 세 무대의 판정을 하나의 base로 합치는 산식 — game.js에서 통째로 떼어 온다.
+ * 가중치를 손으로 베껴 두면 game.js를 고칠 때 여기만 옛 숫자로 남는다. */
+const tourSetBase = new Function("rand", `${M.stages[0]}
+  ${M.resVal[0]}
+  ${M.setBase[0]} return tourSetBase;`)(rand);
+const TOUR_STAGES = new Function(`${M.stages[0]} return TOUR_STAGES;`)();
+
 /* 객석 산식은 tour(컨디션·기세)를 클로저로 본다 — 그 객체를 넣어줘야 한다.
  * 소스에서 통째로 떼어 오니 base·condMul·hype의 조합이 원본과 어긋날 수 없다. */
-const fillFn = new Function("res", "S", "rand", "clamp", "tour", "tourCondMul", "TOUR_HYPE_MAX", "TOUR_HYPE_STEP",
+const fillFn = new Function("results", "tourSetBase", "S", "rand", "clamp", "tour", "tourCondMul", "TOUR_HYPE_MAX", "TOUR_HYPE_STEP",
   `${M.fill[0]} return fill;`);
 const tourRewFn = new Function("n", "avg", "mul", `${M.tourRew[0]} return { dFan, income };`);
 
@@ -157,9 +169,13 @@ function simTour(S, n) {
     }
     tour.cond = clamp(tour.cond - tourDrain(i, n), 0, 100);
     if (Math.random() < tourCancel(tour.cond)) { tour.fills.push(0); tour.streak = 0; continue; }
-    const r = Math.random();
-    const res = r < 0.25 ? "perfect" : r < 0.85 ? "ok" : "miss";
-    const fill = fillFn(res, S, rand, clamp, tour, tourCondMul, TOURN.TOUR_HYPE_MAX, TOURN.TOUR_HYPE_STEP);
+    /* 한 도시에서 세 무대를 연달아 한다 — 무대마다 따로 판정을 굴린다.
+     * 판정 확률은 예전과 같게 두고, 합치는 일은 game.js의 가중치가 한다. */
+    const results = TOUR_STAGES.map((st) => {
+      const r = Math.random();
+      return { key: st.key, res: r < 0.25 ? "perfect" : r < 0.85 ? "good" : "miss" };
+    });
+    const fill = fillFn(results, tourSetBase, S, rand, clamp, tour, tourCondMul, TOURN.TOUR_HYPE_MAX, TOURN.TOUR_HYPE_STEP);
     tour.fills.push(fill);
     tour.streak = fill >= TOURN.TOUR_FULL ? tour.streak + 1 : 0;
   }

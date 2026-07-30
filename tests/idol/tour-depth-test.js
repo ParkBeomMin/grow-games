@@ -5,6 +5,12 @@
  * 산식만 떼어내 검사하면 "함수는 맞는데 화면에서는 못 고르는" 선택지가 통과해요.
  *
  * 개편 전 분포(무작위 500회): S 5.6% · A 71.8% · B 22.6% · C 0% — 사실상 전원 A였어요.
+ *
+ * 한 도시를 세 무대(🎬 오프닝 · ✨ 킬링파트 · 🔥 앵콜)로 늘린 뒤 다시 쟀어요.
+ * 세 번의 평균은 한 번보다 분산이 작아서 분포가 가운데(B)로 뭉치려고 해요.
+ * 등급 컷은 그대로 두고 game.js의 TOUR_STAGES 가중치로만 맞췄어요.
+ * 지금 분포(무작위 500회): S 11% · A 30% · B 44% · C 16%.
+ * 세 무대 구성은 tests/idol/tour-set-test.js가 봐요.
  */
 "use strict";
 const { boot } = require("/workspace/grow-games/tests/idol/tour-harness.js");
