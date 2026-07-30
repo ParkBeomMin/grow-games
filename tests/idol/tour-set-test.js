@@ -227,5 +227,57 @@ auto();
   check($("tour-log").textContent.includes("앵콜"), "자동 플레이 로그에도 앵콜 무대가 남는다");
 }
 
-console.log(fail ? "\n❌ 실패" : "\n✅ 통과");
-process.exit(fail ? 1 : 0);
+/* ---------- 9. 진짜 Timing 엔진으로도 세 무대가 이어진다 ----------
+ * 위에서는 window.Timing을 기록용으로 갈아끼웠어요. 그건 "부르긴 부른다"까지만
+ * 보여줘요. 여기서는 진짜 엔진을 그대로 두고, 화면에 뜬 미니게임을 사람처럼
+ * 눌러가며 한 도시를 끝까지 해요. 세 무대가 실제로 이어지지 않으면
+ * (예: 두 번째 무대가 첫 박스 안에 겹쳐 뜨거나, 콜백이 안 물리면) 여기서 막혀요. */
+async function realEngineCity() {
+  w.localStorage.setItem("grow-auto-mini", "0");
+  w.Timing = realTiming;
+  enterTour({ condition: 95 });
+  const t0 = H.tourState();
+  const city = t0.cities[t0.i];
+  $("btn-tour-go").click();
+
+  const box = () => $("tour-moment").querySelector(".tm-box");
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  await sleep(80);
+  check(!!box(), "진짜 엔진에서도 첫 무대 미니게임이 화면에 뜬다");
+  check(!!box() && box().querySelector(".tm-label").textContent.includes(city),
+    `화면에 뜬 무대 문구에 도시 이름이 있다 (${box() ? box().querySelector(".tm-label").textContent.slice(0, 28) : ""}…)`);
+  check($("btn-tour-go").disabled, "세 무대가 끝날 때까지 공연 버튼이 잠겨 있다");
+
+  const labels = new Set();
+  const seen = [];
+  for (let step = 0; step < 400 && H.tourState().fills.length === 0; step++) {
+    const b = box();
+    if (b) {
+      const lab = b.querySelector(".tm-label");
+      if (lab) { labels.add(lab.textContent); if (!seen.includes(lab.textContent)) seen.push(lab.textContent); }
+      // 사람이 누르는 자리를 순서대로 찾아 눌러요 (홀드는 꾹 눌렀다 떼요)
+      const holdBtn = b.querySelector(".tm-hold-btn");
+      const hit = b.querySelector(".tm-duel-btn:not([disabled]), .tm-seq-btn:not([disabled]), .tm-target, .tm-odd-cell, .tm-btn:not([disabled])");
+      if (holdBtn && !holdBtn.disabled) {
+        holdBtn.dispatchEvent(new w.Event("pointerdown", { bubbles: true, cancelable: true }));
+        await sleep(700);
+        holdBtn.dispatchEvent(new w.Event("pointerup", { bubbles: true, cancelable: true }));
+      } else if (hit) {
+        hit.click();
+      }
+    }
+    await sleep(60);
+  }
+  check(H.tourState().fills.length === 1,
+    `진짜 엔진으로 한 도시를 끝냈다 (객석 ${Math.round((H.tourState().fills[0] || 0) * 100)}%)`);
+  check(seen.length === 3, `세 무대가 차례로 화면을 갈아가며 떴다 (서로 다른 문구 ${seen.length}개)`);
+  check(seen.every((l) => l.includes(city)), "세 문구 모두에 도시 이름이 들어 있다");
+  check($("tour-moment").querySelectorAll(".tm-box").length === 0,
+    "세 무대가 끝나면 미니게임 박스가 화면에 남지 않는다");
+  check(!$("btn-tour-go").disabled, "세 무대가 끝나면 공연 버튼이 다시 살아난다");
+}
+
+realEngineCity().then(() => {
+  console.log(fail ? "\n❌ 실패" : "\n✅ 통과");
+  process.exit(fail ? 1 : 0);
+});
