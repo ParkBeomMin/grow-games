@@ -140,6 +140,77 @@ function leagueOf(st) {
   return LEAGUES.find((l) => l.id === id) || LEAGUES.find((l) => l.id === 1) || LEAGUES[0];
 }
 
+/* 🌏 리그별 구단 — 전력은 teamStrOf와 같은 눈금이에요(0.49가 한가운데).
+ *
+ * KBO 구단은 str이 null이에요. 예전처럼 teamStrOf가 0.38~0.60에서 뽑고, 저장본에
+ * 남습니다 — 진행 중인 캐릭터의 순위표가 안 튀어야 해서 그 경로를 한 톨도 안 건드려요.
+ * 해외 구단만 값을 못 박아요. 리그가 높을수록 평균이 높고, 그게 곧 '위로 갈수록
+ * 순위 싸움이 빡빡하다'는 뜻이에요 (다른 팀 승수는 finishProGame이 str로 굴려요).
+ *
+ * ⚠️ 이 값은 난이도(oppUp)와 다른 통로예요. oppUp은 '내가 상대하는 공'에만 걸리지만,
+ * 여기 적힌 전력은 teamWinP(내 팀 보너스)·순위표·가을야구 대진(S.post.str)까지 흘러가요.
+ * 그래서 위쪽 끝을 함부로 못 올려요 — gameWinP가 가을야구에서
+ * `base - (상대 전력 - 0.49) * 1.8`을 빼는데, 상대가 0.64를 넘으면 웬만한 팀 승률이
+ * 30% 밑으로 떨어집니다. ⚽ 축구에서 수비수 팀 승률이 7%가 된 게 정확히 이 자리예요.
+ * 상한을 대륙 0.62(드리프트 여유 0.64)로 묶어둔 이유고,
+ * tests/rookie/club-test.js ④가 그 자리를 지켜요.
+ *
+ * 실제 구단명은 쓰지 않아요. 이 저장소는 상표를 전부 가상 명칭으로 바꿨어요
+ * (KBO 구단명도 그래서 바꿨습니다). 지역·색·동물 같은 결로 지었어요. */
+const LEAGUE_CLUBS = {
+  1: REGIONS.flatMap((r) => r.teams).map((name) => ({ name, str: null })),
+  2: [
+    { name: "아오바 팬서스", str: 0.58 },
+    { name: "코가네 라이노스", str: 0.56 },
+    { name: "하야테 게일스", str: 0.54 },
+    { name: "미도리 오터스", str: 0.53 },
+    { name: "시라네 울브스", str: 0.52 },
+    { name: "소라이 헤론스", str: 0.51 },
+    { name: "아카네 폭스", str: 0.49 },
+    { name: "이와쿠라 아이벡스", str: 0.48 },
+    { name: "츠키미 루나스", str: 0.46 },
+    { name: "하마카제 스톰스", str: 0.44 },
+  ],
+  3: [
+    { name: "레이크사이드 엘크스", str: 0.62 },
+    { name: "아이언필드 벌컨스", str: 0.60 },
+    { name: "노스쇼어 미티어스", str: 0.59 },
+    { name: "하이랜드 볼케이노스", str: 0.57 },
+    { name: "웨스트게이트 콘도르스", str: 0.56 },
+    { name: "스톤크릭 그리핀스", str: 0.55 },
+    { name: "선셋베이 코브라스", str: 0.53 },
+    { name: "리버벤드 아이비스", str: 0.52 },
+    { name: "골드코스트 퀘이사스", str: 0.51 },
+    { name: "파인힐 세이블스", str: 0.48 },
+  ],
+};
+
+/* 시즌마다 전력이 흔들릴 때(driftTeamStr) 넘지 않는 울타리예요.
+ * KBO 값(0.36~0.63)은 예전 그대로고, 해외는 그 리그 목록의 위아래에 0.02씩 여유를 준 값이에요.
+ * 리그마다 따로 두지 않으면 드리프트가 전부 KBO 울타리로 끌려와 리그 차이가 녹아 없어져요. */
+const LEAGUE_DRIFT = { 1: [0.36, 0.63], 2: [0.42, 0.60], 3: [0.46, 0.64] };
+
+// league는 리그 객체(leagueOf가 준 것)나 id 숫자 둘 다 받아요. 모르는 값이면 KBO예요.
+const leagueIdOf = (league) => {
+  const id = league && typeof league === "object" ? league.id : league;
+  // 숫자만 받아요. "2" 같은 문자열을 통과시키면 leagueOf가 막아둔 깨진 값이 여기로 새요.
+  return typeof id === "number" && LEAGUE_CLUBS[id] ? id : 1;
+};
+// 그 리그의 구단 이름 목록이에요. 옛 세이브(S.league 없음)는 KBO 구단만 받아요.
+function teamsOf(league) {
+  return LEAGUE_CLUBS[leagueIdOf(league)].map((c) => c.name);
+}
+function driftBandOf(league) {
+  return LEAGUE_DRIFT[leagueIdOf(league)];
+}
+/* 구단 이름 → 못 박아둔 전력. KBO 구단과 모르는 이름은 undefined라
+ * teamStrOf가 예전처럼 직접 뽑아요. */
+const CLUB_STR = {};
+for (const id of Object.keys(LEAGUE_CLUBS)) {
+  for (const c of LEAGUE_CLUBS[id]) if (typeof c.str === "number") CLUB_STR[c.name] = c.str;
+}
+const clubStrOf = (name) => CLUB_STR[name];
+
 // 시작 능력치 뽑기 — 이름 화면에서 미리 보고 다시 뽑을 수 있어요
 function rollStats(pos) {
   const stats = {};

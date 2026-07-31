@@ -261,7 +261,10 @@ window.Career = (() => {
   ];
 
   // ---------- 시즌 (144경기를 한 경기씩) ----------
-  const KBO_TEAMS = REGIONS.flatMap((r) => r.teams);
+  /* 지금 뛰는 리그의 구단 목록이에요. 옛 세이브(S.league 없음)는 KBO 구단만 나와요 —
+   * leagueOf가 막아주니 여기서 따로 마이그레이션하지 않아요.
+   * 상수가 아니라 함수인 건 해외로 나가면 목록이 통째로 바뀌기 때문이에요. */
+  const leagueTeams = () => teamsOf(leagueOf(S));
   const SEASON_TOTAL = 144;
 
   function runSeason() {
@@ -291,7 +294,7 @@ window.Career = (() => {
       teamW: 0,
       teamL: 0,
       // 팀 전력은 저장본에 남아요 — 이적할 때 '어느 팀인지'가 의미를 가지려면 필요해요
-      others: KBO_TEAMS.filter((t) => t !== S.team).map((name) => ({ name, w: 0, l: 0, str: teamStrOf(name) })),
+      others: leagueTeams().filter((t) => t !== S.team).map((name) => ({ name, w: 0, l: 0, str: teamStrOf(name) })),
       stats: S.pos === "batter" ? { ab: 0, hits: 0, hr: 0, sb: 0 } : { ip: 0, k: 0, er: 0, wins: 0, saves: 0, g: 0 },
     };
     save();
@@ -1111,7 +1114,13 @@ window.Career = (() => {
   // '작년에 강했던 팀'이 올해도 대체로 강해요.
   function teamStrOf(name) {
     if (!S.teamStr) S.teamStr = {};
-    if (typeof S.teamStr[name] !== "number") S.teamStr[name] = Math.round(rand(0.38, 0.60) * 1000) / 1000;
+    if (typeof S.teamStr[name] !== "number") {
+      /* 해외 구단은 목록에 전력이 못 박혀 있어요 — 리그마다 평균이 달라야 하니까요.
+       * KBO 구단과 모르는 이름은 undefined라 예전 그대로 뽑아요. 난수를 뽑는 횟수까지
+       * 예전과 같아야 진행 중인 캐릭터의 순위표가 안 튑니다. */
+      const fixed = clubStrOf(name);
+      S.teamStr[name] = typeof fixed === "number" ? fixed : Math.round(rand(0.38, 0.60) * 1000) / 1000;
+    }
     return S.teamStr[name];
   }
   /* 타석·위기 판정에 넘기는 '상대 수준'이에요. 팀 전력 위에 리그 난이도를 얹어요.
@@ -1127,9 +1136,12 @@ window.Career = (() => {
   function oppFor(name) {
     return teamStrOf(name) + leagueOf(S).oppUp;
   }
+  /* 지금 뛰는 리그의 구단만 흔들려요. 울타리도 그 리그 것을 써요 —
+   * KBO 울타리(0.36~0.63)를 해외에 그대로 씌우면 몇 시즌 만에 리그 차이가 녹아 없어져요. */
   function driftTeamStr() {
-    for (const t of KBO_TEAMS) {
-      S.teamStr[t] = Math.round(clamp(teamStrOf(t) + rand(-0.03, 0.03), 0.36, 0.63) * 1000) / 1000;
+    const [lo, hi] = driftBandOf(leagueOf(S));
+    for (const t of leagueTeams()) {
+      S.teamStr[t] = Math.round(clamp(teamStrOf(t) + rand(-0.03, 0.03), lo, hi) * 1000) / 1000;
     }
   }
   const strLabel = (v) =>
@@ -1201,7 +1213,7 @@ window.Career = (() => {
   function faOffers() {
     const mv = marketValue();
     const n = mv >= 60 ? 4 : mv >= 40 ? 3 : mv >= 22 ? 2 : 1;
-    const others = shuffle(KBO_TEAMS.filter((t) => t !== S.team)).slice(0, n);
+    const others = shuffle(leagueTeams().filter((t) => t !== S.team)).slice(0, n);
     const offers = others.map((name) => {
       const str = teamStrOf(name);
       // 전력 계수를 크게 잡아야 '돈이냐 우승이냐'가 또렷해져요. 흔들림은 작게.
@@ -1428,7 +1440,7 @@ window.Career = (() => {
     // 기본은 3팀까지, 여론이 받쳐주면 한 팀 더. 안쪽 상한을 빼면 시장 가치가 높은
     // 선수는 기본이 이미 4가 돼서 여론 보너스가 아무 일도 안 해요.
     const slots = clamp(Math.min(3, 1 + Math.floor(mv / 30)) + (T.fans >= FANS_EXTRA ? 1 : 0), 2, 4);
-    const pool = shuffle(KBO_TEAMS.filter((t) => t !== S.team))
+    const pool = shuffle(leagueTeams().filter((t) => t !== S.team))
       .filter((t) => teamStrOf(t) < 0.52 || T.fans >= FANS_CONTENDER)
       .slice(0, slots);
     // 시즌 중엔 새 팀의 현재 성적도 보여줘요 — 가을야구 진출이 걸린 정보예요
@@ -1436,7 +1448,7 @@ window.Career = (() => {
       const o = S.season && S.season.others.find((x) => x.name === name);
       return o ? ` · ${o.w}승 ${o.l}패` : "";
     };
-    const suitors = (pool.length ? pool : shuffle(KBO_TEAMS.filter((t) => t !== S.team)).slice(0, 2))
+    const suitors = (pool.length ? pool : shuffle(leagueTeams().filter((t) => t !== S.team)).slice(0, 2))
       .map((name) => ({ name, str: teamStrOf(name), rec: rec(name) }));
     const sour = T.fans < 35;
     /* 환영 계약금 — 팬이 반기면 새 구단이 지갑을 열어요.
@@ -1884,6 +1896,7 @@ window.Career = (() => {
      * 전역이지만, 테스트가 한 곳만 보면 되게 여기서 같이 내보내요. */
     _t: {
       LEAGUES, leagueOf, oppFor, teamStrOf,
+      LEAGUE_CLUBS, teamsOf, clubStrOf, driftBandOf, leagueTeams, driftTeamStr, teamWinP, gameWinP,
       state: () => S,
     },
     enterPro,
