@@ -439,6 +439,9 @@ window.Career = (() => {
       title: `${gameLabel()} vs ${opp} (선발 등판)`,
       oppName: opp,
       oppStr: oppFor(opp),      // 상대가 강할수록 치기 어렵고 막기 어려워요 (리그 난이도 포함)
+      /* 위기 실점 '크기'에는 팀 전력이 아니라 리그 난이도만 걸려요. oppStr에 섞인 채로
+       * 키우면 KBO에서 강팀을 만날 때도 실점이 늘어 기존 밸런스가 흔들려요. */
+      lgUp: leagueOf(S).oppUp,
       homeName: S.team,
       perf, story,
       interactive: false,
@@ -545,8 +548,10 @@ window.Career = (() => {
     btn.textContent = "🔥 위기!";
 
     const resolve = (res) => {
-      // 선발 위기와 같은 식을 써요 (game.js의 crisisRuns)
-      const runs = crisisRuns(res, oppFor(opp));
+      /* 선발 위기와 같은 식을 써요 (game.js의 crisisRuns).
+       * 세 번째 인자가 리그 난이도예요 — 팀 전력(oppFor 안의 teamStrOf)과 갈라서 넘겨요.
+       * 여기를 빼먹으면 구원 투수만 리그를 안 느껴서 마무리가 해외에서 무조건 이득이 돼요. */
+      const runs = crisisRuns(res, oppFor(opp), leagueOf(S).oppUp);
       let txt, cls;
       if (runs === 0) {
         perf.k += res === "perfect" ? 2 : 1;

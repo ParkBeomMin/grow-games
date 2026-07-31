@@ -44,7 +44,7 @@ const parts = {
   transLv: grab(GAME, /const transLv = [^;]+;/),
   clutch: grab(GAME, /function clutch\(key\) \{[\s\S]*?\n\}/),
   autoRes: grab(GAME, /function autoRes\(stat\) \{[\s\S]*?\n\}/),
-  crisisRuns: grab(GAME, /function crisisRuns\(res, oppStr\) \{[\s\S]*?\n\}/),
+  crisisRuns: grab(GAME, /function crisisRuns\(res, oppStr, lgUp\) \{[\s\S]*?\n\}/),
   outTxt: grab(GAME, /const OUT_TXT = \[[\s\S]*?\n\];/),
   hitP: grab(GAME, /const hitP = clamp\([\s\S]*?;/),
   // 타석 판정 한 덩어리 — 안타·홈런·도루가 한 곳에 있어서 통째로 떼어 와 돌려요
@@ -55,6 +55,7 @@ const parts = {
   // 투수 등판 — 이닝과 탈삼진은 스탯이 정하고, 실점만 위기 판정이 정해요
   pitIp: grab(SRC, /const ip = clamp\(4 \+[^;]+;/),
   pitK: grab(SRC, /const kBase = clamp\([^;]+;/),
+  pitCrisisCnt: grab(SRC, /const crisisCnt = randInt\([^;]+;/),
 };
 const missing = Object.entries(parts).filter(([, v]) => !v).map(([k]) => k);
 if (missing.length) { console.log(`❌ 산식을 못 찾았어요: ${missing.join(", ")}`); process.exit(1); }
@@ -68,14 +69,21 @@ const leagueParts = {
   leagueOf: grab(GAME, /function leagueOf\(st\) \{[\s\S]*?\n\}/),
   // oppFor — 팀 전력에 리그 난이도를 얹어 타석·위기 판정에 넘기는 통로예요
   oppFor: grab(SRC, /function oppFor\(name\) \{[\s\S]*?\n {2}\}/),
+  /* 위기 실점 '크기'에 리그 난이도를 거는 계수예요. 이게 없으면 상위 리그에서
+   * 실투(miss) 분기가 KBO와 한 톨도 안 달라져서 투수가 리그를 못 느껴요. */
+  crisisK: grab(GAME, /const CRISIS_LEAGUE_K = [^;]+;/),
+  crisisCap: grab(GAME, /const CRISIS_LEAGUE_CAP = [^;]+;/),
 };
 const leagueMissing = Object.entries(leagueParts).filter(([, v]) => !v).map(([k]) => k);
 const leagueSrc = [leagueParts.LEAGUES, leagueParts.leagueOf].filter(Boolean).join("\n");
+// crisisRuns 본문이 읽는 상수예요. 없으면 그 이름을 쓰는 검사가 ReferenceError로 떨어지고,
+// 그게 우리가 보고 싶은 빨간불이에요 (값은 절대 여기 옮겨 적지 않아요).
+const crisisConsts = [leagueParts.crisisK, leagueParts.crisisCap].filter(Boolean).join("\n");
 
 check(leagueMissing.length === 0,
   leagueMissing.length
     ? `${leagueMissing.join(" · ")} is not defined — 리그가 아직 없어요`
-    : "LEAGUES · leagueOf가 game.js에, oppFor가 career.js에 있다");
+    : "LEAGUES · leagueOf · CRISIS_LEAGUE_K가 game.js에, oppFor가 career.js에 있다");
 
 const table = leagueParts.LEAGUES ? new Function(`${leagueParts.LEAGUES} return LEAGUES;`)() : null;
 const byTier = (table || []).slice().sort((a, b) => a.tier - b.tier);
@@ -153,10 +161,13 @@ const hitPFn = new Function("S", "oppStr", "clamp", `
   return hitP;
 `);
 const autoResFn = new Function("S", "stat", "clamp", `${parts.autoRes} return autoRes(stat);`);
-const crisisFn = new Function("S", "res", "oppStr", "clamp", "rand", "randInt", `
+/* 위기 판정 — 세 번째 인자가 리그 난이도예요(팀 전력과 갈라져 있어요).
+ * 안 넘기면 KBO(0)와 같아야 해서, 인자 개수까지 소스 그대로 흉내내요. */
+const crisisFn = new Function("S", "res", "oppStr", "lgUp", "clamp", "rand", "randInt", `
   ${parts.clutchScale} ${parts.transLv} ${parts.clutch}
+  ${crisisConsts}
   ${parts.crisisRuns}
-  return crisisRuns(res, oppStr);
+  return lgUp === undefined ? crisisRuns(res, oppStr) : crisisRuns(res, oppStr, lgUp);
 `);
 /* 타석 한 번 — 소스의 doRes를 그대로 돌려요. 화면·연출에 닿는 이름만 빈 껍데기로 채워요. */
 const abFn = new Function("S", "perf", "story", "res", "clamp", "rand", "randInt", "pick", `
@@ -212,25 +223,53 @@ guard("타격 난이도", () => {
     `능력치 110에서 ${NAME(3)} 안타 확률이 ${NAME(1)}보다 10% 넘게 낮다 (${kbo.toFixed(4)} → ${top.toFixed(4)})`);
 });
 
-// ⑥ 투구에도 작용한다 — 같은 위기인데 위 리그에서 더 실점해요
+/* ⑥ 투구에도 작용한다 — 같은 위기인데 위 리그에서 더 실점해요.
+ *
+ * 예전에는 리그 난이도가 hold(완전 봉쇄 확률)에만 걸려서 실점 '크기'가 리그와
+ * 무관했어요. 특히 실투(miss) 분기는 randInt(1,3) 고정이라 대륙 리그가 KBO와
+ * 한 톨도 안 달랐고, 위기 한 번당 실점이 2%밖에 안 늘었어요. 그게 투수의 WAR
+ * 하락폭을 타자의 1/12로 만든 원인이에요.
+ * 이제 lgUp이 실점 크기에도 걸리니, 옆칸끼리도 눈에 보이게 벌어져야 해요. */
 guard("투구 난이도", () => {
-  /* 위기 실점은 안타 확률보다 훨씬 둔해요. hold를 깎아도 '실투(miss)'와 '좋음(good)'의
-   * 실점이 판정 배수로 고정돼 있어서, oppUp이 실점에 닿는 폭이 2% 남짓이에요.
-   * 그래서 표본을 크게 잡고, 이웃한 두 리그가 아니라 사다리의 양 끝을 비교해요 —
-   * 옆칸끼리는 차이가 난수 아래로 내려갑니다. (이 둔감함은 보고서에 적어뒀어요.) */
-  const N = Number(process.env.CRISIS_N || 300000);
+  const N = Number(process.env.CRISIS_N || 200000);
   if (byTier.length !== 3) throw new Error("리그 표가 없어요");
   const mean = (stat, tier) => {
     const S = pitState(stat);
     let s = 0;
-    for (let i = 0; i < N; i++) s += crisisFn(S, autoResFn(S, stat, clamp), oppAt(tier), clamp, rand, randInt);
+    for (let i = 0; i < N; i++) {
+      s += crisisFn(S, autoResFn(S, stat, clamp), oppAt(tier), L(tier).oppUp, clamp, rand, randInt);
+    }
     return s / N;
   };
   console.log(`=== ⑥ 위기 한 번당 평균 실점 (리그별 ${N}회) ===`);
-  const row = byTier.map((l) => mean(110, l.tier));
-  console.log(`  능력치 110 | ${row.map((v, i) => `${NAME(byTier[i].tier)} ${v.toFixed(4)}`).join(" · ")}`);
-  check(row[2] > row[0],
-    `${NAME(3)}의 위기 실점이 ${NAME(1)}보다 많다 (${row[0].toFixed(4)} → ${row[2].toFixed(4)})`);
+  let upAll = true;
+  for (const st of [70, 110, 130]) {
+    const row = byTier.map((l) => mean(st, l.tier));
+    console.log(`  능력치 ${String(st).padStart(3)} | ${row.map((v, i) => `${NAME(byTier[i].tier)} ${v.toFixed(4)}`).join(" · ")}`);
+    for (let i = 1; i < row.length; i++) if (!(row[i] > row[i - 1])) upAll = false;
+    if (st === 110) {
+      check(row[2] > row[0] * 1.10,
+        `능력치 110의 ${NAME(3)} 위기 실점이 ${NAME(1)}보다 10% 넘게 많다 (${row[0].toFixed(4)} → ${row[2].toFixed(4)})`);
+    }
+  }
+  check(upAll, "tier가 올라갈수록 위기 실점이 많아진다 (능력치 70·110·130 전부, 옆칸끼리도)");
+
+  /* 실점 '크기'에 실제로 걸렸는지 직접 물어봐요. hold만 건드리는 구현이면
+   * 막아낸 위기(0실점)의 비율만 바뀌고, 무너진 위기의 평균 크기는 그대로예요.
+   * 그 상태가 정확히 이 태스크 전의 버그라, 여기가 되돌아가는 걸 막는 자리예요. */
+  const sizeOf = (tier) => {
+    const S = pitState(110);
+    let s = 0, n = 0;
+    for (let i = 0; i < N; i++) {
+      const r = crisisFn(S, autoResFn(S, 110, clamp), oppAt(tier), L(tier).oppUp, clamp, rand, randInt);
+      if (r > 0) { s += r; n++; }
+    }
+    return s / n;
+  };
+  const sz = byTier.map((l) => sizeOf(l.tier));
+  console.log(`  무너진 위기의 평균 실점 크기 | ${sz.map((v, i) => `${NAME(byTier[i].tier)} ${v.toFixed(4)}`).join(" · ")}`);
+  check(sz[2] > sz[0] * 1.10,
+    `${NAME(3)}는 무너진 위기의 실점 크기 자체가 ${NAME(1)}보다 10% 넘게 크다 (${sz[0].toFixed(4)} → ${sz[2].toFixed(4)})`);
 });
 
 /* ⑦ hitP 하한(0.10)에 붙지 않는다 — 이 태스크에서 가장 위험한 자리예요.
@@ -276,8 +315,21 @@ guard("KBO 항등", () => {
   // 그리고 그 통로를 타석·위기 판정이 실제로 써야 해요
   check((SRC.match(/oppStr: oppFor\(opp\)/g) || []).length === 2,
     `타자·투수 경기가 oppStr로 oppFor(opp)를 넘긴다 (${(SRC.match(/oppStr: oppFor\(opp\)/g) || []).length}곳)`);
-  check(/crisisRuns\(res, oppFor\(opp\)\)/.test(SRC), "구원 등판 위기도 oppFor(opp)를 쓴다");
   check(!/oppStr: teamStrOf\(/.test(SRC), "리그를 안 거치는 옛 통로(oppStr: teamStrOf)가 남아 있지 않다");
+  /* 🌏 실점 크기 쪽 통로(lgUp)는 팀 전력이 섞이지 않은 '리그 난이도만'이어야 해요.
+   * 여기에 oppFor(팀 전력 + 리그)를 넘기면 KBO에서 강팀을 만날 때도 실점이 커져서
+   * 이미 맞춰둔 팀 전력 밸런스가 흔들려요. 그래서 모양까지 못 박아요. */
+  check(/crisisRuns\(res, oppFor\(opp\), leagueOf\(S\)\.oppUp\)/.test(SRC),
+    "구원 등판 위기가 팀 전력(oppFor)과 리그 난이도(leagueOf(S).oppUp)를 갈라서 넘긴다");
+  check(/lgUp: leagueOf\(S\)\.oppUp/.test(SRC),
+    "선발 등판이 lgUp으로 leagueOf(S).oppUp을 넘긴다");
+  check(/crisisRuns\(res, oppStr\(\), lgUp\(\)\)/.test(GAME),
+    "선발 위기 판정이 crisisRuns(res, oppStr(), lgUp())을 부른다");
+  check(!/lgUp: oppFor\(|crisisRuns\([^)]*oppFor\(opp\)\s*\)/.test(SRC),
+    "lgUp 자리에 팀 전력이 섞인 값(oppFor)이 들어가 있지 않다");
+  // 그리고 crisisRuns가 그 인자를 실제로 실점 크기에 써야 해요
+  check(/CRISIS_LEAGUE_K/.test(parts.crisisRuns) && /runs \+= 1/.test(parts.crisisRuns),
+    "crisisRuns가 리그 난이도로 실점을 키우는 항을 갖고 있다");
   /* 순위표·팀 승률은 teamStrOf 그대로여야 해요. 거기까지 oppUp을 얹으면
    * 리그를 옮긴 순간 우리 팀 승률이 같이 무너져요 (축구에서 그 자리를 놓쳐
    * 수비수 팀 승률이 7%가 된 적이 있어요). */
@@ -311,14 +363,64 @@ guard("KBO 항등", () => {
       const withL = oppForFn(kboS, teamStrOf)(name), noL = teamStrOf(name);
       if (hitPFn(bS, () => withL, clamp) !== hitPFn(bS, () => noL, clamp)) hBad++;
       for (const res of ["perfect", "good", "miss"]) {
-        seed = i + 1; const a = crisisFn(pS, res, withL, clamp, fRand, fInt);
-        seed = i + 1; const b = crisisFn(pS, res, noL, clamp, fRand, fInt);
-        if (a !== b) cBad++;
+        // 리그를 거친 값 · 안 거친 값 · 리그 인자를 아예 안 넘긴 옛 호출부, 셋이 같아야 해요
+        seed = i + 1; const a = crisisFn(pS, res, withL, L(1).oppUp, clamp, fRand, fInt);
+        seed = i + 1; const b = crisisFn(pS, res, noL, undefined, clamp, fRand, fInt);
+        seed = i + 1; const c = crisisFn(pS, res, withL, undefined, clamp, fRand, fInt);
+        if (a !== b || a !== c) cBad++;
       }
     }
   } finally { Math.random = realRandom; }
   check(hBad === 0, `KBO 안타 확률이 리그 도입 전과 한 톨까지 같다 (3000회, 어긋난 값 ${hBad}건)`);
   check(cBad === 0, `KBO 위기 실점이 리그 도입 전과 한 톨까지 같다 (9000회, 어긋난 값 ${cBad}건)`);
+
+  /* 값이 같은 것만으로는 부족해요. KBO에서 난수를 '한 번 더' 뽑으면 그 뒤로 이어지는
+   * 경기의 모든 판정이 예전과 어긋납니다 — 값은 같은데 세계가 달라져요.
+   * 그래서 위기 한 번이 소비하는 난수 개수까지 못 박아요.
+   * 실투(miss)는 randInt 한 번, 퍼펙트는 봉쇄 판정 한 번, '좋음'은 봉쇄 판정 뒤
+   * 뚫렸을 때만 randInt가 붙어 한 번 또는 두 번이에요. */
+  let calls = 0;
+  const counted = () => { calls++; return seeded(); };
+  const cRand = (a, b) => a + counted() * (b - a);
+  const cInt = (a, b) => Math.floor(cRand(a, b + 1));
+  const WANT = { perfect: [1], good: [1, 2], miss: [1] };
+  const realRandom2 = Math.random;
+  Math.random = counted;
+  let nBad = 0, nUp = 0;
+  try {
+    for (let i = 0; i < 2000; i++) {
+      const pS = pitState(40 + (i % 100));
+      for (const res of ["perfect", "good", "miss"]) {
+        seed = i + 1; calls = 0;
+        const r0 = crisisFn(pS, res, AVG_OPP, L(1).oppUp, clamp, cRand, cInt);
+        const base = calls;
+        if (!WANT[res].includes(base)) nBad++;
+        /* 상대 수준은 그대로 두고 리그 난이도만 바꿔요 — 앞부분 판정이 똑같은 난수를
+         * 똑같이 먹으니, 늘어난 개수가 곧 '한 방 더' 판정 하나예요.
+         * 막아낸 위기(0실점)에는 안 붙어야 해요. */
+        seed = i + 1; calls = 0;
+        crisisFn(pS, res, AVG_OPP, L(3).oppUp, clamp, cRand, cInt);
+        if (calls !== base + (r0 > 0 ? 1 : 0)) nUp++;
+      }
+    }
+  } finally { Math.random = realRandom2; }
+  check(nBad === 0, `KBO 위기 한 번이 예전과 똑같은 개수의 난수만 쓴다 (6000회, 어긋난 경우 ${nBad}건)`);
+  check(nUp === 0, `상위 리그는 무너진 위기에서만 난수를 한 번 더 쓴다 (6000회, 어긋난 경우 ${nUp}건)`);
+
+  /* 팀 전력의 효과는 그대로여야 해요 — KBO 안에서 약팀·평균·강팀을 만날 때의 차이는
+   * 리그가 붙기 전과 같은 값이어야 합니다. 위의 항등 검사가 한 톨까지 같음을 보였으니,
+   * 여기서는 그 차이가 실제로 살아 있는지(0으로 뭉개지지 않았는지)를 봐요. */
+  const CN = Number(process.env.CRISIS_N || 200000) / 4;
+  const kboMean = (str) => {
+    const pS = pitState(110);
+    let s = 0;
+    for (let k = 0; k < CN; k++) s += crisisFn(pS, autoResFn(pS, 110, clamp), str, L(1).oppUp, clamp, rand, randInt);
+    return s / CN;
+  };
+  const weak = kboMean(0.38), mid = kboMean(0.49), strong = kboMean(0.63);
+  console.log(`  KBO 팀 전력별 위기 실점 | 약팀 ${weak.toFixed(4)} · 평균 ${mid.toFixed(4)} · 강팀 ${strong.toFixed(4)}`);
+  check(weak < mid && mid < strong,
+    `KBO 안에서 상대가 강할수록 위기 실점이 많다 (${weak.toFixed(4)} < ${mid.toFixed(4)} < ${strong.toFixed(4)})`);
 });
 
 /* ⑨ 목표 곡선 — 이 태스크의 핵심이에요.
@@ -347,55 +449,139 @@ function batterSeason(stat, tier) {
   return { ...seasonEndFn(S, t, clamp, rand), avg: t.hits / t.ab };
 }
 
-guard("목표 곡선", () => {
-  /* 칸당 시즌 수. 가장 빠듯한 칸(능력치 110의 KBO ↔ 열도)이 24% 대 13%라
-   * 그냥 굴리면 비율의 표준오차가 2000시즌에서 7%나 돼요 — 목표선(10%)에 1σ밖에
-   * 안 남아서 열 번에 한 번쯤 난수로 뒤집혔어요.
-   *
-   * 그래서 세 리그에 '같은 난수'를 먹여요(공통 난수). 시즌 번호마다 씨앗을 고정하면
-   * 상대 9팀도, 타석 판정의 앞부분도 리그끼리 같아져서, 남는 차이가 곧 oppUp의 효과예요.
-   * 우리가 재는 건 리그 사이의 '차이'라 이렇게 하면 훨씬 적은 표본으로 같은 정밀도를
-   * 얻고, 덤으로 실행할 때마다 값이 같아 재현이 됩니다. */
-  const N = Number(process.env.LEAGUE_N || 3000);
-  const SEED0 = Number(process.env.LEAGUE_SEED || 20260731);
+/* 투수 시즌도 통째로 굴려요. 선발은 로테이션 간격마다 등판하고, 등판마다 위기가
+ * 두세 번 옵니다. 시즌 실점은 전부 그 위기에서 나와요 — 다른 실점 경로가 없어요.
+ * 그래서 리그 난이도가 위기 판정에 안 닿으면 투수는 리그를 아예 못 느낍니다.
+ *
+ * 로테이션 간격·위기 횟수는 소스에서 뽑아 써요. 여기 옮겨 적으면 career.js가
+ * 바뀌어도 초록이 떠요. 승수만 상수로 둡니다 — 팀 승률은 리그와 무관해서
+ * 세 리그에 똑같이 얹히고, 리그 사이의 '차이'를 재는 데는 영향이 없어요. */
+const ROT = Number((SRC.match(/n % \(post \? \d+ : (\d+)\) === 0/) || [])[1] || 0);
+const WIN_IP = Number((SRC.match(/win && perf\.ip >= (\d+)/) || [])[1] || 0);
+check(ROT > 0 && WIN_IP > 0, `선발 로테이션 간격(${ROT || "못 찾음"})과 승리 요건 이닝(${WIN_IP || "못 찾음"})을 소스에서 읽었다`);
+const crisisCntFn = new Function("randInt", `${parts.pitCrisisCnt} return crisisCnt;`);
+const TEAM_WIN = 0.55;
+function pitcherSeason(stat, tier) {
+  const S = pitState(stat);
+  const pool = Array.from({ length: 9 }, () => Math.round(rand(0.38, 0.60) * 1000) / 1000);
+  const up = L(tier).oppUp;
+  const t = { ip: 0, k: 0, er: 0, wins: 0, saves: 0, g: 0 };
+  for (let g = 0; g < SEASON_TOTAL; g++) {
+    if (g % ROT !== 0) continue;                       // 로테이션이 도는 날만 등판해요
+    const oppTeam = pool[Math.floor(g / 3) % 9];       // 3연전 단위로 상대가 바뀌어요
+    const { ip, kBase } = pitStartFn(S, clamp, randInt);
+    let runs = 0;
+    const cnt = crisisCntFn(randInt);
+    // 상대 수준에는 리그가 섞여 있고(oppFor), 실점 크기에는 리그 몫만 따로 걸려요
+    for (let c = 0; c < cnt; c++) runs += crisisFn(S, autoResFn(S, stat, clamp), oppTeam + up, up, clamp, rand, randInt);
+    t.ip += ip; t.k += kBase; t.er += runs; t.g += 1;
+    if (Math.random() < TEAM_WIN && ip >= WIN_IP) t.wins += 1;
+  }
+  return { ...seasonEndFn(S, t, clamp, rand), era: (t.er * 9) / Math.max(t.ip, 1) };
+}
+const seasonOf = (kind, stat, tier) => (kind === "bat" ? batterSeason(stat, tier) : pitcherSeason(stat, tier));
+
+/* 능력치 구간과 그때 최적이어야 하는 리그예요. 상한(STAT_CAP)이 130이라
+ * 150은 초월로만 닿는 자리 — 대륙이 이득이 되는 지점이 후반 목표가 돼요.
+ * 타자와 투수가 '같은' 사다리를 가져야 해요. 한쪽만 맞으면 포지션이 정답을 갈라요. */
+const BANDS = [
+  { stat: 100, want: 1, label: "평범" },
+  { stat: 110, want: 1, label: "평범" },
+  { stat: 130, want: 2, label: "준정상급" },
+  { stat: 150, want: 3, label: "정상급" },
+];
+const LEAGUE_N = Number(process.env.LEAGUE_N || 3000);
+const LEAGUE_SEED = Number(process.env.LEAGUE_SEED || 20260731);
+
+/* 칸당 시즌 수. 가장 빠듯한 칸(능력치 110의 KBO ↔ 열도)이 24% 대 13%라
+ * 그냥 굴리면 비율의 표준오차가 2000시즌에서 7%나 돼요 — 목표선(10%)에 1σ밖에
+ * 안 남아서 열 번에 한 번쯤 난수로 뒤집혔어요.
+ *
+ * 그래서 세 리그에 '같은 난수'를 먹여요(공통 난수). 시즌 번호마다 씨앗을 고정하면
+ * 상대 9팀도, 판정의 앞부분도 리그끼리 같아져서, 남는 차이가 곧 리그 난이도의 효과예요.
+ * 우리가 재는 건 리그 사이의 '차이'라 이렇게 하면 훨씬 적은 표본으로 같은 정밀도를
+ * 얻고, 덤으로 실행할 때마다 값이 같아 재현이 됩니다. */
+function cellsFor(kind, stat) {
   let seed = 0;
   const seeded = () => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed / 4294967296; };
   const realRandom = Math.random;
-  const t0 = Date.now();
-  /* 능력치 구간과 그때 최적이어야 하는 리그예요. 상한(STAT_CAP)이 130이라
-   * 150은 초월로만 닿는 자리 — 메이저가 이득이 되는 지점이 후반 목표가 돼요. */
-  const BANDS = [
-    { stat: 100, want: 1, label: "평범" },
-    { stat: 110, want: 1, label: "평범" },
-    { stat: 130, want: 2, label: "준정상급" },
-    { stat: 150, want: 3, label: "정상급" },
-  ];
-  console.log(`=== ⑨ 수상 확률 × prestige = 명예의 전당 가치 (칸당 ${N}시즌) ===`);
-  console.log(`  능력치 | ${byTier.map((l) => `${l.name}(×${l.prestige})`.padStart(20)).join(" | ")} | 최적`);
+  return byTier.map((l) => {
+    let any = 0, war = 0, m = 0;
+    Math.random = seeded;
+    try {
+      for (let i = 0; i < LEAGUE_N; i++) {
+        seed = (LEAGUE_SEED + Math.imul(stat, 1000003) + Math.imul(i, 2654435761)) >>> 0;
+        const r = seasonOf(kind, stat, l.tier);
+        war += r.war;
+        m += kind === "bat" ? r.avg : r.era;
+        if (r.awards.length) any++;
+      }
+    } finally { Math.random = realRandom; }
+    return { p: any / LEAGUE_N, war: war / LEAGUE_N, m: m / LEAGUE_N, val: (any / LEAGUE_N) * l.prestige };
+  });
+}
+/* 사다리 한 판 — 능력치 구간마다 '수상 확률 × prestige'가 가장 큰 리그가
+ * 목표 리그여야 하고, 차선보다 10% 넘게 높아야 해요. */
+function checkLadder(kind, label) {
+  const rows = [];
+  console.log(`  능력치 | ${byTier.map((l) => `${l.name}(×${l.prestige})`.padStart(22)).join(" | ")} | 최적`);
   for (const b of BANDS) {
-    const cells = byTier.map((l) => {
-      let any = 0, avg = 0;
-      Math.random = seeded;
-      try {
-        for (let i = 0; i < N; i++) {
-          seed = (SEED0 + Math.imul(b.stat, 1000003) + Math.imul(i, 2654435761)) >>> 0;
-          const r = batterSeason(b.stat, l.tier);
-          avg += r.avg;
-          if (r.awards.length) any++;
-        }
-      } finally { Math.random = realRandom; }
-      return { p: any / N, avg: avg / N, val: (any / N) * l.prestige };
-    });
+    const cells = cellsFor(kind, b.stat);
+    rows.push({ band: b, cells });
     const best = cells.reduce((bi, c, i) => (c.val > cells[bi].val ? i : bi), 0);
     const second = cells.reduce((bi, c, i) => (i !== best && c.val > cells[bi].val ? i : bi), best === 0 ? 1 : 0);
     console.log(`  ${String(b.stat).padStart(6)} | ${cells.map((c) =>
-      `.${(c.avg * 1000).toFixed(0)} ${(c.p * 100).toFixed(1)}% →${c.val.toFixed(2)}`.padStart(20)).join(" | ")} | ${NAME(byTier[best].tier)}`);
+      `${kind === "bat" ? "." + (c.m * 1000).toFixed(0) : c.m.toFixed(2)} W${c.war.toFixed(2)} ${(c.p * 100).toFixed(1)}%→${c.val.toFixed(2)}`
+        .padStart(22)).join(" | ")} | ${NAME(byTier[best].tier)}`);
     check(byTier[best].tier === b.want,
-      `${b.label}(능력치 ${b.stat})은 ${NAME(b.want)}가 최적이다 (실제 ${NAME(byTier[best].tier)})`);
+      `${label} ${b.label}(능력치 ${b.stat})은 ${NAME(b.want)}가 최적이다 (실제 ${NAME(byTier[best].tier)})`);
     check(cells[best].val > cells[second].val * 1.1,
       `  └ 차선(${NAME(byTier[second].tier)})보다 10% 넘게 높다 (${cells[best].val.toFixed(2)} vs ${cells[second].val.toFixed(2)})`);
   }
+  return rows;
+}
+
+let batRows = null, pitRows = null;
+
+guard("목표 곡선", () => {
+  const t0 = Date.now();
+  console.log(`=== ⑨ 타자 — 수상 확률 × prestige = 명예의 전당 가치 (칸당 ${LEAGUE_N}시즌) ===`);
+  batRows = checkLadder("bat", "🧢 타자");
   console.log(`  ⏱ ${((Date.now() - t0) / 1000).toFixed(1)}초`);
+});
+
+/* ⑩ 투수도 같은 사다리를 가진다.
+ *
+ * 리그 난이도가 실점 크기에 안 걸렸을 때는 투수의 최적 리그가 전 구간에서
+ * 대륙이었어요 — 성적이 거의 안 떨어지는데 prestige만 커지니까요.
+ * 해외 진출이 도박이 아니라 그냥 정답이 되는 상태고, 사다리가 무너진 거예요. */
+guard("투수 목표 곡선", () => {
+  const t0 = Date.now();
+  console.log(`=== ⑩ 투수 — 수상 확률 × prestige = 명예의 전당 가치 (칸당 ${LEAGUE_N}시즌) ===`);
+  pitRows = checkLadder("pit", "⚾ 투수");
+  console.log(`  ⏱ ${((Date.now() - t0) / 1000).toFixed(1)}초`);
+});
+
+/* ⑪ 투수의 WAR 하락폭이 타자와 같은 크기다 — 이 태스크가 고친 바로 그 지점이에요.
+ *
+ * 고치기 전에는 능력치 100에서 타자가 -1.8, 투수가 -0.15였어요(12배 차이).
+ * 정확히 같을 필요는 없지만, 자릿수가 달라지면 포지션에 따라 해외 진출의 의미가
+ * 완전히 달라져 버려요. 그래서 '같은 크기'를 비율로 못 박아요. */
+guard("투수 WAR 하락폭", () => {
+  if (!batRows || !pitRows) throw new Error("앞의 곡선 검사가 값을 못 만들었어요");
+  console.log(`=== ⑪ ${NAME(1)} → ${NAME(3)} WAR 하락폭 ===`);
+  console.log(`  능력치 |    타자 |    투수 | 투수/타자`);
+  let ok = true, small = false;
+  for (let i = 0; i < BANDS.length; i++) {
+    const bd = batRows[i].cells[0].war - batRows[i].cells[2].war;
+    const pd = pitRows[i].cells[0].war - pitRows[i].cells[2].war;
+    const ratio = pd / bd;
+    console.log(`  ${String(BANDS[i].stat).padStart(6)} | ${bd.toFixed(2).padStart(7)} | ${pd.toFixed(2).padStart(7)} | ${ratio.toFixed(2).padStart(9)}`);
+    if (!(ratio >= 0.5 && ratio <= 2.0)) ok = false;
+    if (pd < 1.0) small = true;
+  }
+  check(ok, "능력치 구간마다 투수의 WAR 하락폭이 타자의 0.5~2.0배 안에 있다");
+  check(!small, `투수의 WAR 하락폭이 전 구간에서 1.0 이상이다 (${NAME(3)}행이 실제로 아프다)`);
 });
 
 console.log(fail ? `\n❌ ${fail}건 실패` : "\n✅ 통과");

@@ -108,11 +108,19 @@ const fmtMoney = (v) => (v >= 10000 ? `${(v / 10000).toFixed(1)}억` : `${Math.r
  * 메이저에서 타율이 떨어지는 건 투수가 좋기 때문이에요.
  * WAR이 내려가면 MVP·골든글러브가 자동으로 어려워지니 문턱(bar)을 따로 두지 않아요.
  *
- * 두 값은 감이 아니라 시뮬레이션으로 잡았어요. 판단 기준은 수상 확률이 아니라
+ * 다만 oppStr 하나로는 투수에게 안 닿아요. 투수의 시즌 실점은 전부 위기 판정에서
+ * 나오는데 거기서 oppStr은 '완전히 막을 확률'만 바꾸고 실점 크기는 안 건드리거든요.
+ * 그래서 투수 쪽 통로가 하나 더 있어요 — crisisRuns의 lgUp(CRISIS_LEAGUE_K)입니다.
+ *
+ * 세 값은 감이 아니라 시뮬레이션으로 잡았어요. 판단 기준은 수상 확률이 아니라
  * '수상 확률 × prestige'(명예의 전당 가치)고, 능력치 100·110에서는 KBO가,
  * 130에서는 열도가, 150(초월 구간)에서는 대륙이 최적이 되게 맞췄어요.
+ * 타자와 투수가 '같은' prestige를 쓰면서 둘 다 그 순서를 지켜야 해서 여유가 빠듯해요 —
+ * prestige를 1.5/2.2에서 1.4/2.3으로 옮긴 것도 그래서예요. 투수가 열도에서 너무
+ * 이득이고(능력치 110) 대륙에서 너무 손해라(150), 2층을 낮추고 3층을 올렸어요.
  * oppUp을 더 키우면 hitP의 하한(0.10)에 눌려서 난이도가 더 안 올라가요 —
  * 축구의 평점 천장과 같은 실패라, tests/rookie/league-test.js ⑦이 그 자리를 지킵니다.
+ * 투수를 맞추려고 oppUp을 키우지 않은 것도 그래서예요. 투수는 lgUp으로 따로 맞춰요.
  *
  * 실제 리그명은 쓰지 않아요. 이 저장소는 상표를 전부 가상 명칭으로 바꿨어요
  * (KBO만 이미 코드에 있던 이름이라 그대로 둡니다).
@@ -121,8 +129,8 @@ const fmtMoney = (v) => (v >= 10000 ? `${(v / 10000).toFixed(1)}억` : `${Math.r
  * 때문이에요. 구단 목록·화면처럼 game.js 쪽에서도 리그를 읽어야 해요. */
 const LEAGUES = [
   { id: 1, tier: 1, name: "KBO",     short: "국내", flag: "🇰🇷", oppUp: 0,    prestige: 1.00 },
-  { id: 2, tier: 2, name: "열도 리그", short: "열도", flag: "🇯🇵", oppUp: 0.02, prestige: 1.50 },
-  { id: 3, tier: 3, name: "대륙 리그", short: "대륙", flag: "🗽", oppUp: 0.06, prestige: 2.20 },
+  { id: 2, tier: 2, name: "열도 리그", short: "열도", flag: "🇯🇵", oppUp: 0.02, prestige: 1.40 },
+  { id: 3, tier: 3, name: "대륙 리그", short: "대륙", flag: "🗽", oppUp: 0.06, prestige: 2.30 },
 ];
 
 /* 옛 세이브에는 S.league가 없어요. 마이그레이션하지 않고 없으면 KBO로 봐요.
@@ -310,18 +318,45 @@ function clutch(key) {
   const t = (S && S.talents && S.talents[key]) || 1.3;
   return clamp(1 + (t - 1.3) * CLUTCH_SCALE + Math.min(transLv(key) * 0.004, 0.06), 0.9, 1.16);
 }
+/* 🌏 상위 리그의 '한 방' 계수예요.
+ *
+ * 리그 난이도를 억제 확률(hold)에만 얹었더니 실점 '크기'가 리그와 무관했어요.
+ * 특히 실투(miss) 분기는 randInt(1,3) 고정이라 KBO와 한 톨도 안 달랐고,
+ * 그래서 투수가 리그를 거의 못 느꼈어요 — 능력치 100에서 대륙 리그로 가도
+ * WAR이 6.4 → 6.2로 0.2밖에 안 내려갔어요(타자는 -1.8). 사다리가 무너지는 자리예요.
+ *
+ * 억제력(hold)의 여집합에 비례해요. 잘 막는 투수일수록 상위 리그에서도 덜 무너지고,
+ * 그 기울기가 곧 사다리예요 — 평평하게 걸면 정상급 투수까지 같이 무너져서
+ * '실력이 되면 올라가는 게 이득'이 성립하지 않아요.
+ * 9는 감이 아니라 시뮬레이션으로 잡았어요 (tests/rookie/league-test.js ⑩·⑪). */
+const CRISIS_LEAGUE_K = 9;
+const CRISIS_LEAGUE_CAP = 0.6;   // 리그가 아무리 세도 위기 하나가 한 방 이상 더 커지진 않아요
+
 /* 🔥 위기 실점 — 타자 타석 판정과 같은 뼈대예요.
  * 예전에는 퍼펙트가 실점 0을 확정해서, 위기를 다 막으면 시즌 ERA 0.45가 나왔어요.
  * 이제 제구가 억제 수준을 정하고 판정이 배수로 흔들어요.
- * 선발(game.js)과 구원 등판(career.js)이 같은 식을 씁니다. */
-function crisisRuns(res, oppStr) {
+ * 선발(game.js)과 구원 등판(career.js)이 같은 식을 씁니다.
+ *
+ * lgUp은 '리그 난이도만' 떼어낸 값이에요. oppStr에는 팀 전력과 리그 난이도가 섞여
+ * 있는데, 그걸로 실점 크기를 키우면 KBO에서 강팀을 만날 때도 실점이 늘어서
+ * 이미 맞춰둔 팀 전력 밸런스가 함께 흔들려요. 그래서 호출부가 리그 몫을 따로 넘겨요.
+ * 안 넘기면 0(KBO)이라, 리그를 모르는 옛 호출부도 예전 그대로 굴러가요. */
+function crisisRuns(res, oppStr, lgUp) {
   const hold = clamp(0.02 + S.stats.control / 300 - ((typeof oppStr === "number" ? oppStr : 0.49) - 0.49) * 0.6,
     0.10, 0.90) * clutch("control");
-  if (res === "perfect") return Math.random() < hold ? 0 : 1;
-  if (res === "good") return Math.random() < hold * 0.35 ? 0 : randInt(1, 2);
+  let runs;
+  if (res === "perfect") runs = Math.random() < hold ? 0 : 1;
+  else if (res === "good") runs = Math.random() < hold * 0.35 ? 0 : randInt(1, 2);
   // 실투해도 최소 실점으로 끊을 때가 있어요. 2~3 고정이면 저스탯 자동 진행에서
   // 이 항 하나가 실점을 지배해 첫 시즌 ERA가 7점대로 튑니다.
-  return randInt(1, 3);
+  else runs = randInt(1, 3);
+  /* 이미 무너진 위기가 상위 리그에서는 한 점 더 커져요. 막아낸 위기(0실점)는 그대로예요 —
+   * 리그가 세다고 '막았는데 점수가 난다'가 되면 판정이 거짓말이 됩니다.
+   * up이 0이면 난수를 아예 안 뽑아요. KBO가 리그 도입 전과 난수 한 톨까지 같아야 해서예요. */
+  const up = typeof lgUp === "number" ? lgUp : 0;
+  if (runs > 0 && up > 0
+    && Math.random() < clamp(up * CRISIS_LEAGUE_K * (1 - hold), 0, CRISIS_LEAGUE_CAP)) runs += 1;
+  return runs;
 }
 function clutchAvg() {
   const ks = Object.keys((S && S.talents) || {});
@@ -1419,6 +1454,10 @@ function renderGameSim(cfg) {
   // 상대 팀 전력. career.js가 teamStrOf(상대)를 넘겨줘요.
   // 고교 대회처럼 안 넘기는 경로는 리그 평균(0.49)으로 봅니다.
   const oppStr = () => (typeof cfg.oppStr === "number" ? cfg.oppStr : 0.49);
+  /* 🌏 oppStr에 섞여 있는 리그 난이도 몫만 따로 받아요. 실점 '크기'에는 팀 전력이
+   * 아니라 이것만 걸려야 하거든요 (crisisRuns의 lgUp 설명 참고).
+   * 고교 대회처럼 안 넘기는 경로는 0 — KBO와 같아요. */
+  const lgUp = () => (typeof cfg.lgUp === "number" ? cfg.lgUp : 0);
   $("tour-round").textContent = cfg.title;
   const heads = Array.from({ length: 9 }, (_, i) => `<th>${i + 1}</th>`).join("");
   const cells = (side) => Array.from({ length: 9 }, (_, i) => `<td id="sb-${side}-${i}"></td>`).join("");
@@ -1535,7 +1574,7 @@ function renderGameSim(cfg) {
     } else {
       applyStep({ feeds: [{ text: `🔥 ${i + 1}회초, 주자가 쌓이며 위기!`, cls: "bad" }] });
       const doRes = (res) => {
-        const runs = crisisRuns(res, oppStr());
+        const runs = crisisRuns(res, oppStr(), lgUp());
         let txt, cls;
         if (runs === 0) {
           if (res === "perfect") { perf.k += 2; txt = "연속 탈삼진으로 위기 탈출!! 🧊"; }
