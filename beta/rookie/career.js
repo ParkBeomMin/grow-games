@@ -953,6 +953,10 @@ window.Career = (() => {
     const rank = myRank();
     // 한국시리즈를 실제로 이겼을 때만 우승이에요 (예전엔 순위로 주사위를 굴렸어요)
     const champ = !!(S.post && S.post.wonKS);
+    /* 🌏 가중을 걸기 **전**의 수상 횟수예요. 아래 addAwardWeight가 이 값을 씁니다 —
+     * 여기서 안 떠 두면 상을 세고 난 뒤의 값(이번 상까지 포함된 값)을 이어붙이게 돼서
+     * 옛 세이브의 새 상이 두 번 세어져요. */
+    const preAward = { mvp: S.career.mvp || 0, gg: S.career.gg || 0, roy: S.career.roy || 0 };
     // 수상은 '리그 내 상대 비교' — 가상 경쟁자들의 WAR와 겨뤄 최고면 수상해요.
     // (압도적인 시즌은 랜덤에 밀려 MVP를 놓치지 않아요)
     const awards = [];
@@ -977,6 +981,7 @@ window.Career = (() => {
       const posBar = S.pos === "batter" ? rand(4.2, 6.2) : rand(5.2, 7.2);
       if (war >= posBar) { awards.push("골든글러브"); S.career.gg += 1; }
     }
+    addAwardWeight(awards, preAward);
     if (champ) S.career.rings += 1;
     S.career.warSum = Math.round((S.career.warSum + Math.max(war, 0)) * 10) / 10;
     S.career.seasons.push({ y: S.proYear, age: S.age, war, line, rank, champ, awards, role: S.role, team: S.team, raw });
@@ -1759,10 +1764,51 @@ window.Career = (() => {
     return "🌱 짧고 굵은 야구 인생";
   }
 
+  /* 🌏 리그 가중 — 같은 상이라도 위 리그에서 받은 게 명예의 전당에 크게 남아요.
+   * 이적 화면이 "리그 위세 ×2.30"이라고 적어두는 그 배수고, 여기가 그 약속을 지키는 자리예요.
+   *
+   * 세 상(MVP·골든글러브·신인왕)에 **같은** 배수를 걸어요. 한 상만 크게 얹으면
+   * league-test ⑨⑩이 '상 하나라도 × 위세'로 재둔 사다리가 흔들려요.
+   *
+   * ⚠️ 옛 세이브에는 가중 카운터(mvpW…)가 없어요. `(S.career.mvpW || 0) + prestige`로
+   * 쓰면 MVP 4회짜리 세이브가 5번째를 받는 순간 지난 4회가 통째로 사라집니다
+   * (점수 200 → 50). ⚽ 축구에서 실제로 낸 버그예요.
+   * 그래서 가중 카운터가 없으면 **옛 카운터를 1배로 세어 이어붙여요.**
+   *
+   * 로드 시점에 마이그레이션하지 않아요. 상을 받는 이 순간에만 만듭니다 —
+   * 그래야 상을 한 번도 안 받고 끝나는 옛 세이브가 한 톨도 안 바뀌어요. */
+  function addAwardWeight(awards, pre) {
+    // 이름표를 밖에 두지 않아요 — 밖에 두면 이 함수만 떼어다 돌리는 검사에서 조용히 비어요
+    const KEY = { MVP: "mvp", 골든글러브: "gg", 신인왕: "roy" };
+    const prestige = leagueOf(S).prestige;
+    for (const a of awards) {
+      const k = KEY[a];
+      if (!k) continue;
+      const base = S.career[k + "W"] != null ? S.career[k + "W"] : ((pre && pre[k]) || 0);
+      // 1.4 + 1.4가 2.8000000000000003이 되는 부동소수 찌꺼기를 여기서 끊어요
+      S.career[k + "W"] = Math.round((base + prestige) * 100) / 100;
+    }
+  }
+
+  /* 읽는 쪽도 같은 규칙이에요 — 가중 카운터가 없으면 옛 카운터로 떨어져요.
+   * KBO는 위세가 1이라 국내만 뛴 커리어의 점수는 예전과 완전히 같습니다. */
+  const awardW = (c, key) => (c[key + "W"] != null ? c[key + "W"] : (c[key] || 0));
+
+  /* warSum에는 가중을 걸지 않아요. 이유가 셋이에요.
+   *  ① WAR은 상위 리그에서 이미 내려가요(그게 난이도예요). 거기에 위세를 곱하면
+   *     난이도를 스스로 되돌리는 셈이에요.
+   *  ② 투수 WAR이 타자보다 훨씬 커요(능력치 100에서 6.4 vs 3.0). warSum에 위세를 걸면
+   *     같은 배수인데도 투수가 얻는 점수가 훨씬 커져서, 타자·투수가 같은 사다리를
+   *     가져야 한다는 요구가 깨져요.
+   *  ③ 실측이 사다리를 뒤집어요 — warSum까지 가중하면 능력치 100(평범) 구간의 최적이
+   *     KBO를 벗어납니다(타자 열도 · 투수 대륙). 아랫칸이 무너지면 "실력이 되면 올라가는
+   *     게 이득"이 아니라 "무조건 나가는 게 이득"이 돼요.
+   * 실측 표는 tests/rookie/league-test.js ⑫에 있고, '커리어 점수가 지금 리그를 아예
+   * 안 읽는다'는 구조는 tests/rookie/hof-test.js ⑧이 지켜요. */
   function careerScore() {
     const c = S.career || { seasons: [], mvp: 0, gg: 0, roy: 0, rings: 0, warSum: 0 };
     return Math.round(
-      c.warSum * 10 + c.rings * 25 + c.mvp * 40 + c.gg * 15 + c.roy * 20 +
+      c.warSum * 10 + c.rings * 25 + awardW(c, "mvp") * 40 + awardW(c, "gg") * 15 + awardW(c, "roy") * 20 +
       (S.trophies ? S.trophies.length : 0) * 8 + S.scout * 0.05 +
       transTotal() * 25   // ✨ 초월 단계 보너스
     );
@@ -1829,13 +1875,23 @@ window.Career = (() => {
       (c.roy || 0) ? "🌟신인왕" : "",
     ].filter(Boolean).join(" · ");
     const seasons = (c.seasons || []).length;
-    return `    ${S.name} · ${seasons}시즌 · WAR ${(c.warSum || 0).toFixed(1)}\n`
-      + (awards ? `    ${awards}\n` : "    수상 기록 없음\n");
+    return `    ${S.name} · ${seasons}시즌 · WAR ${(c.warSum || 0).toFixed(1)}${leagueTag()}\n`
+      + (awards ? `    ${awards}${weightNote(c)}\n` : "    수상 기록 없음\n");
+  }
+
+  /* 🌏 상 옆에 붙는 한 줄. 리그 가중이 실제로 얹혀 있을 때만 보여줘요 —
+   * "MVP 3"이라고만 적어두면 점수가 왜 그렇게 큰지 화면 어디서도 알 수가 없어요. */
+  function weightNote(c) {
+    const raw = (c.mvp || 0) * 40 + (c.gg || 0) * 15 + (c.roy || 0) * 20;
+    const w = awardW(c, "mvp") * 40 + awardW(c, "gg") * 15 + awardW(c, "roy") * 20;
+    return raw > 0 && Math.abs(w - raw) > 0.05 ? ` (🌏 리그 위세로 ×${(w / raw).toFixed(2)})` : "";
   }
 
   function enshrine(team) {
     const c = S.career || { seasons: [], mvp: 0, gg: 0, roy: 0, rings: 0, warSum: 0 };
     const score = careerScore();
+    // S를 지우기 전에 떠 둬요 — 아래 은퇴식 화면은 S가 null이 된 뒤에도 이 값을 씁니다
+    const lgTag = leagueTag(), wNote = weightNote(c);
     const entry = {
       id: "p" + Date.now(),
       game: "rookie",
@@ -1845,6 +1901,10 @@ window.Career = (() => {
       seasons: c.seasons.length,
       warSum: c.warSum,
       rings: c.rings, mvp: c.mvp, gg: c.gg, roy: c.roy,
+      /* 🌏 어느 리그에서 마쳤는지와, 상이 리그 위세로 얼마나 크게 남았는지예요.
+       * 옛 기록에는 없는 칸이라 화면은 없어도 되게 그려요 (마이그레이션하지 않아요). */
+      league: leagueOf(S).id,
+      mvpW: awardW(c, "mvp"), ggW: awardW(c, "gg"), royW: awardW(c, "roy"),
       finalOvr: Math.round(overall()),
       trans: transTotal(),
       gen: loadLegacy().gen + 1,
@@ -1864,9 +1924,9 @@ window.Career = (() => {
       <div class="draft-emoji">⚾</div>
       <div class="draft-title">${entry.name}, 그라운드와 작별</div>
       <div class="draft-team">${entry.grade}</div>
-      <div>${entry.seasons ? `${entry.team}에서 ${entry.seasons}시즌을 뛰었어요.` : "프로 무대 대신 다른 길을 택했어요."}</div>
+      <div>${entry.seasons ? `${entry.team}${lgTag}에서 ${entry.seasons}시즌을 뛰었어요.` : "프로 무대 대신 다른 길을 택했어요."}</div>
       <div class="draft-summary">
-        통산 WAR ${(+entry.warSum).toFixed(1)} · 🏆 ${entry.rings} · MVP ${entry.mvp} · GG ${entry.gg}${entry.roy ? " · 신인왕" : ""}<br/>
+        통산 WAR ${(+entry.warSum).toFixed(1)} · 🏆 ${entry.rings} · MVP ${entry.mvp} · GG ${entry.gg}${entry.roy ? " · 신인왕" : ""}${wNote}<br/>
         커리어 점수 <b>${entry.score}</b> — 명예의 전당에 영구 기록됐어요
       </div>`;
     const act = $("career-actions");

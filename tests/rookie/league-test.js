@@ -507,6 +507,8 @@ function cellsFor(kind, stat) {
   const realRandom = Math.random;
   return byTier.map((l) => {
     let any = 0, war = 0, m = 0;
+    // 🏛️ 상별로도 세어요 — 명예의 전당 점수는 상마다 배점이 달라서(⑫가 그걸 씁니다)
+    const byAward = {};
     Math.random = seeded;
     try {
       for (let i = 0; i < LEAGUE_N; i++) {
@@ -515,9 +517,12 @@ function cellsFor(kind, stat) {
         war += r.war;
         m += kind === "bat" ? r.avg : r.era;
         if (r.awards.length) any++;
+        for (const a of r.awards) byAward[a] = (byAward[a] || 0) + 1;
       }
     } finally { Math.random = realRandom; }
-    return { p: any / LEAGUE_N, war: war / LEAGUE_N, m: m / LEAGUE_N, val: (any / LEAGUE_N) * l.prestige };
+    const pOf = (a) => (byAward[a] || 0) / LEAGUE_N;
+    return { p: any / LEAGUE_N, war: war / LEAGUE_N, m: m / LEAGUE_N, val: (any / LEAGUE_N) * l.prestige,
+      league: l, pAward: { MVP: pOf("MVP"), 골든글러브: pOf("골든글러브"), 신인왕: pOf("신인왕") } };
   });
 }
 /* 사다리 한 판 — 능력치 구간마다 '수상 확률 × prestige'가 가장 큰 리그가
@@ -582,6 +587,105 @@ guard("투수 WAR 하락폭", () => {
   }
   check(ok, "능력치 구간마다 투수의 WAR 하락폭이 타자의 0.5~2.0배 안에 있다");
   check(!small, `투수의 WAR 하락폭이 전 구간에서 1.0 이상이다 (${NAME(3)}행이 실제로 아프다)`);
+});
+
+/* ⑫ 명예의 전당 **점수**로 다시 잰 사다리 — 가중을 걸고 나서 곡선이 유지되는지.
+ *
+ * ⑨⑩은 '상을 하나라도 받을 확률 × 위세'로 재요. 그건 설계가 정한 판단 기준이고
+ * 리그 계수(oppUp·prestige)를 그 자로 잡았어요. 그런데 실제 커리어 점수는
+ * 상마다 배점이 달라요(MVP가 골든글러브보다 훨씬 커요). 그래서 '상 하나라도'로는
+ * 초록인데 점수로는 다를 수 있고, 그 어긋남을 눈에 보이게 두는 게 이 칸이에요.
+ *
+ * 배점은 여기 옮겨 적지 않아요 — career.js의 careerScore를 그대로 돌려서
+ * '가중 카운터를 1 올리면 점수가 얼마 오르는지'를 물어봅니다.
+ * 시뮬레이션은 ⑨⑩이 이미 돌린 결과(batRows·pitRows)를 다시 써요. 공짜예요. */
+guard("점수로 다시 잰 사다리", () => {
+  if (!batRows || !pitRows) throw new Error("앞의 곡선 검사가 값을 못 만들었어요");
+  const awardWSrc = grab(SRC, /  const awardW = [^;]+;/);
+  const scoreSrc = grab(SRC, /  function careerScore\(\) \{[\s\S]*?\n {2}\}/);
+  if (!awardWSrc || !scoreSrc) throw new Error("careerScore·awardW를 소스에서 못 찾았어요");
+  const scoreOf = new Function("career", `
+    const S = { career, trophies: [], scout: 0 };
+    const transTotal = () => 0;
+    ${awardWSrc}
+    ${scoreSrc}
+    return careerScore();`);
+  const ZERO = { seasons: [], warSum: 0, rings: 0, mvp: 0, gg: 0, roy: 0 };
+  const base = scoreOf(ZERO);
+  // 상 한 번의 배점 — 가중 카운터를 1 올려서 점수가 얼마 오르는지 직접 물어봐요
+  const PT = { MVP: 0, 골든글러브: 0, 신인왕: 0 };
+  for (const [a, k] of [["MVP", "mvpW"], ["골든글러브", "ggW"], ["신인왕", "royW"]]) {
+    PT[a] = scoreOf({ ...ZERO, [k]: 1 }) - base;
+  }
+  check(Object.values(PT).every((v) => v > 0),
+    `careerScore가 세 상의 가중 카운터를 전부 읽는다 (MVP ${PT.MVP} · 골든글러브 ${PT.골든글러브} · 신인왕 ${PT.신인왕})`);
+  const PT_WAR = scoreOf({ ...ZERO, warSum: 1 }) - base;
+  check(PT_WAR > 0, `WAR 1이 남기는 점수도 소스에서 읽었다 (${PT_WAR}점)`);
+
+  // 한 시즌이 명예의 전당 점수에 남기는 기댓값이에요. 가중을 끄면(위세 1) 옛 계산이에요.
+  const seasonVal = (cell, on) =>
+    (cell.pAward.MVP * PT.MVP + cell.pAward.골든글러브 * PT.골든글러브 + cell.pAward.신인왕 * PT.신인왕)
+    * (on ? cell.league.prestige : 1);
+
+  for (const [rows, label] of [[batRows, "🧢 타자"], [pitRows, "⚾ 투수"]]) {
+    console.log(`=== ⑫ ${label} — 한 시즌이 남기는 커리어 점수 (상 몫) ===`);
+    console.log(`  능력치 | ${byTier.map((l) => `${l.name}(×${l.prestige})`.padStart(16)).join(" | ")} | 최적 | 가중 없을 때`);
+    for (const r of rows) {
+      const on = r.cells.map((c) => seasonVal(c, true));
+      const off = r.cells.map((c) => seasonVal(c, false));
+      const bi = on.reduce((b, v, i) => (v > on[b] ? i : b), 0);
+      const oi = off.reduce((b, v, i) => (v > off[b] ? i : b), 0);
+      console.log(`  ${String(r.band.stat).padStart(6)} | ${on.map((v) => v.toFixed(2).padStart(16)).join(" | ")} | ${NAME(byTier[bi].tier).padEnd(8)} | ${NAME(byTier[oi].tier)}`);
+
+      // ⓐ 가중이 없으면 어느 구간에서도 나갈 이유가 없어요 — 그게 이 태스크의 이유예요
+      check(byTier[oi].tier === 1,
+        `  ${label} 능력치 ${r.band.stat} — 가중이 없으면 ${NAME(1)}가 최적이다 (실제 ${NAME(byTier[oi].tier)})`);
+      // ⓑ 아랫칸(평범)이 무너지면 안 돼요 — "무조건 나가는 게 이득"이 되면 사다리가 아니에요
+      if (r.band.want === 1) {
+        check(byTier[bi].tier === 1,
+          `  ${label} ${r.band.label}(능력치 ${r.band.stat})은 점수로도 ${NAME(1)}가 최적이다 (실제 ${NAME(byTier[bi].tier)})`);
+      }
+      // ⓒ 초월 구간(150)은 점수로도 대륙이 KBO를 이겨야 해요 — 후반 목표가 그거예요
+      if (r.band.want === 3) {
+        check(on[2] > on[0],
+          `  ${label} ${r.band.label}(능력치 ${r.band.stat})은 점수로도 ${NAME(3)}가 ${NAME(1)}보다 크다 (${on[2].toFixed(2)} vs ${on[0].toFixed(2)})`);
+      }
+      // ⓓ 가중은 위 리그만 키워요 — KBO 값은 한 톨도 안 움직여야 해요 (위세 1)
+      check(Math.abs(on[0] - off[0]) < 1e-9,
+        `  ${label} 능력치 ${r.band.stat} — ${NAME(1)} 값은 가중 전후가 같다 (${on[0].toFixed(4)} vs ${off[0].toFixed(4)})`);
+    }
+  }
+
+  /* warSum까지 가중했다면 어떻게 됐을지 — **안 걸기로 한 근거**예요.
+   *
+   * warSum은 상과 달리 리그와 무관하게 매 시즌 쌓이는 큰 항이라, 거기에 위세를 곱하면
+   * 난이도로 깎아둔 WAR을 스스로 되돌려요. 아래 표를 보면 아랫칸(평범)의 최적이
+   * KBO를 벗어납니다 — "실력이 되면 올라가는 게 이득"이 "무조건 나가는 게 이득"이 돼요.
+   * 그래서 careerScore는 상에만 위세를 겁니다 (tests/rookie/hof-test.js ⑧이 구조를 지켜요). */
+  console.log(`=== ⑫ warSum까지 가중했다면 (안 하기로 한 근거 · WAR 1점 = ${PT_WAR}점) ===`);
+  for (const [rows, label] of [[batRows, "🧢 타자"], [pitRows, "⚾ 투수"]]) {
+    let broke = false;
+    for (const r of rows) {
+      const on = r.cells.map((c) => c.war * PT_WAR * c.league.prestige + seasonVal(c, true));
+      const bi = on.reduce((b, v, i) => (v > on[b] ? i : b), 0);
+      console.log(`  ${label} ${String(r.band.stat).padStart(4)} | ${on.map((v) => v.toFixed(1).padStart(8)).join(" | ")} | 최적 ${NAME(byTier[bi].tier)} (목표 ${NAME(r.band.want)})`);
+      if (r.band.want === 1 && byTier[bi].tier !== 1) broke = true;
+    }
+    check(broke, `  ${label} — warSum까지 가중하면 평범 구간의 최적이 ${NAME(1)}를 벗어난다 (그래서 안 걸어요)`);
+  }
+
+  /* ⚠️ 남는 어긋남 — 상 배점이 MVP에 몰려 있어서, '상 하나라도'로 잰 ⑨⑩과
+   * 점수로 잰 ⑫가 준정상급(130) 근처에서 갈려요. MVP 확률이 위 리그에서 가장 빨리
+   * 떨어지거든요. 리그 계수도 배점도 이 태스크의 범위 밖이라 값을 옮기지 않고,
+   * '얼마나 붙어 있는지'만 적어 둡니다 — 다음에 손댈 때 여기가 출발점이에요. */
+  console.log("=== ⑫ 준정상급(130) 어긋남 — 상 배점이 MVP에 몰려 있어서 생겨요 ===");
+  for (const [rows, label] of [[batRows, "🧢 타자"], [pitRows, "⚾ 투수"]]) {
+    const r = rows.find((x) => x.band.stat === 130);
+    const on = r.cells.map((c) => seasonVal(c, true));
+    console.log(`  ${label} | ${NAME(1)} ${on[0].toFixed(2)} · ${NAME(2)} ${on[1].toFixed(2)} (${(on[1] / on[0]).toFixed(2)}배)`);
+    check(on[1] > on[0] * 0.95,
+      `  ${label} 준정상급(130)에서 ${NAME(2)}가 점수로도 ${NAME(1)}에 붙어 있다 (${(on[1] / on[0]).toFixed(2)}배)`);
+  }
 });
 
 console.log(fail ? `\n❌ ${fail}건 실패` : "\n✅ 통과");

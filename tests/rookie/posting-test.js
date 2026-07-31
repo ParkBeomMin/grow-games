@@ -203,6 +203,9 @@ const CAREER_FNS = [
   "  function finishProGame(win, perf) {",
   "  function finishPostGame(win, perf) {",
   "  function postStatLine() {",
+  /* 🌏 finishSeason이 부르는 리그 가중이에요. 안 넣으면 스텁이 조용히 받아버려서
+   * 여기서 굴리는 12시즌이 가중 없이 지나가요 — 없는 걸 있다고 믿는 초록이 돼요. */
+  "  function addAwardWeight(awards, pre) {",
   "  function finishSeason() {",
   "  function seasonReport() {",
   "  function moveActions(list) {",
