@@ -26,6 +26,21 @@ const { JSDOM } = require(path.join(ROOT, "tests/cloud/jsdom.js"));
 
 let fail = 0;
 const check = (ok, msg) => { console.log(`${ok ? "✅" : "❌"} ${msg}`); if (!ok) fail++; };
+
+/* 닫은 jsdom 페이지에 아직 매달려 있던 cloud.js 콜백이 뒤늦게 깨어나면서
+ * 사라진 document를 만지면 여기까지 터져 나와요. 게임이 잘못된 게 아니라
+ * 페이지를 닫는 순서 문제라, **페이지 안에서 난 예외만** 삼키고 계속 갑니다.
+ * (⑤ 은퇴식 검사가 await로 한 박자 쉬면서부터 드러났어요 — 그전에는 검사가
+ *  process.exit로 먼저 끝나 그 콜백이 깨어날 틈이 없었을 뿐이에요.)
+ * 밖에서 난 예외는 그대로 죽어야 해요. 확인 도구가 조용히 초록을 띄우면 안 돼요. */
+const fromClosedPage = (e) => String((e && e.stack) || "").includes("x.test");
+for (const ev of ["uncaughtException", "unhandledRejection"]) {
+  process.on(ev, (e) => {
+    if (fromClosedPage(e)) return;
+    console.error(e);
+    process.exit(1);
+  });
+}
 const guard = (label, fn) => { try { fn(); } catch (e) { check(false, `${label} — ${e.message}`); } };
 
 // ---------- ① _fixtures.js 자체 ----------
@@ -38,14 +53,25 @@ const FIX_SRC = fs.readFileSync(FIX_PATH, "utf8");
 /* new Function으로 감싸 읽어요 — eval에 대입식을 넣으면 선언이 밖으로 안 새요. */
 const FIXTURES = new Function(`const window = {}; ${FIX_SRC} return window.CHECK_FIXTURES;`)();
 check(!!FIXTURES && Array.isArray(FIXTURES.items), "window.CHECK_FIXTURES.items가 배열이다");
-check(FIXTURES.items.length >= 8, `시나리오가 8개 이상이다 (${FIXTURES.items.length}개)`);
+check(FIXTURES.items.length >= 13, `시나리오가 13개 이상이다 (${FIXTURES.items.length}개)`);
+
+/* 확인 페이지가 카드를 그리는 게임 목록이에요. 여기 없는 게임의 시나리오는
+ * _fixtures.js에 있어도 화면에 한 장도 안 그려져서 조용히 사라져요 —
+ * 그래서 목록을 페이지 소스에서 직접 읽어 와 대조합니다. */
+const CHECK_SRC = fs.readFileSync(path.join(BETA, "_check.html"), "utf8");
+const GAMES = (() => {
+  const m = CHECK_SRC.match(/const GAME_ORDER = \[([^\]]*)\]/);
+  if (!m) throw new Error("_check.html에서 GAME_ORDER를 못 찾았어요");
+  return m[1].split(",").map((s) => s.trim().replace(/^["']|["']$/g, "")).filter(Boolean);
+})();
+check(GAMES.includes("rookie"), `확인 페이지가 야구(rookie) 묶음을 그린다 (${GAMES.join(" · ")})`);
 
 for (const it of FIXTURES.items) {
   const keys = Object.keys(it.keys || {});
   check(!!it.check && it.check.length > 4, `${it.id} — 확인할 것 한 줄이 있다`);
   check(Array.isArray(it.steps) && it.steps.length > 0, `${it.id} — 무엇을 눌러야 하는지 적혀 있다`);
   check(keys.length > 0, `${it.id} — 심을 세이브 키가 있다 (${keys.join(", ")})`);
-  check(["soccer", "idol"].includes(it.game), `${it.id} — 게임이 soccer/idol 중 하나다 (${it.game})`);
+  check(GAMES.includes(it.game), `${it.id} — 게임이 ${GAMES.join("/")} 중 하나다 (${it.game})`);
 }
 
 // ---------- 확인 페이지 부트스트랩 ----------
@@ -167,6 +193,14 @@ const gamePrelude = `
   window.scrollTo = () => {};
   window.matchMedia = window.matchMedia || (() => ({ matches: false, addEventListener() {}, removeEventListener() {} }));
   HTMLCanvasElement.prototype.getContext = () => new Proxy({}, { get: () => () => {}, set: () => true });
+  /* 페이지를 닫을 때 정리하려고 타이머를 모아 둬요. 안 그러면 setInterval이 남아서
+   * 닫힌 페이지를 뒤늦게 다시 만집니다. */
+  window.__timers = [];
+  (function () {
+    var st = window.setTimeout, si = window.setInterval;
+    window.setTimeout = function () { var id = st.apply(window, arguments); window.__timers.push(id); return id; };
+    window.setInterval = function () { var id = si.apply(window, arguments); window.__timers.push(id); return id; };
+  })();
 `;
 function openGame(game, keys) {
   const dir = path.join(BETA, game);
@@ -193,7 +227,13 @@ function openGame(game, keys) {
     dom: d, w: ww,
     $: (id) => ww.document.getElementById(id),
     active: () => (ww.document.querySelector(".screen.active") || {}).id,
-    close: () => d.window.close(),
+    close: () => {
+      try {
+        for (const id of (ww.__timers || [])) { ww.clearTimeout(id); ww.clearInterval(id); }
+        ww.__timers = [];
+      } catch { /* 이미 닫혔으면 넘어가요 */ }
+      try { d.window.close(); } catch { /* 같은 이유 */ }
+    },
   };
 }
 
@@ -216,7 +256,8 @@ const byId = (id) => FIXTURES.items.find((x) => x.id === id);
  * 도전 버튼이 실제로 뜨는 것까지만 봅니다. */
 /* 뽑히지 않은 시나리오는 건너뛰어요 — 다만 이번 작업의 핵심인 이적 화면만은
  * 없으면 실패로 봅니다. 못 만든 걸 조용히 넘기면 확인 페이지가 반쯤 빈 채로 나가요. */
-const REQUIRED = new Set(["soccer-transfer"]);
+const REQUIRED = new Set(["soccer-transfer", "rookie-posting", "rookie-posting-locked",
+  "rookie-abroad-report", "rookie-cont-series", "rookie-retire"]);
 function reach(id, fn) {
   const it = byId(id);
   if (!it) {
@@ -390,5 +431,176 @@ reach("idol-standings", (P, first) => {
   check(rows.length >= 5, `순위표에 그룹이 여러 줄 있다 (${rows.length}줄)`);
 });
 
-console.log(fail ? `\n❌ 실패 ${fail}건` : "\n✅ 전부 통과");
-process.exit(fail ? 1 : 0);
+/* ---------- ⚾ 야구 (더 드래프트) — 해외 진출 ----------
+ * 야구는 세이브 한 장이 곧 화면이에요. 오프시즌 세이브는 결산 화면으로,
+ * 가을야구 도중의 세이브는 그 시리즈 화면으로 이어집니다(Career.showPro가 갈라요).
+ * 그래서 여기서는 '심고 → 이어하기 → 정말 그 화면인가'를 끝까지 눌러 봅니다. */
+
+// 리그 상수는 game.js에서 읽어 와요 — 화면에 뜰 숫자를 여기 옮겨 적으면 원본이 바뀌어도 초록이 떠요.
+const ROOKIE_GAME_SRC = fs.readFileSync(path.join(BETA, "rookie/game.js"), "utf8");
+const LEAGUES = (() => {
+  const m = ROOKIE_GAME_SRC.match(/const LEAGUES = (\[[\s\S]*?\n\]);/);
+  if (!m) throw new Error("game.js에서 LEAGUES를 못 찾았어요");
+  // eslint-disable-next-line no-new-func
+  return new Function(`return ${m[1]};`)();
+})();
+const LG = (tier) => LEAGUES.find((l) => l.tier === tier);
+// 포스팅 화면을 여는 버튼. 해외로 나갈 때든 돌아올 때든 id는 같아요.
+const postingBtn = (P) => P.$("btn-posting");
+
+reach("rookie-posting", (P, first) => {
+  check(first === "screen-career", `심은 세이브로 들어가면 결산 화면이 뜬다 (${first})`);
+  const btn = postingBtn(P);
+  check(!!btn, "결산 화면에 '🌏 해외 진출 (포스팅)' 버튼이 있다");
+  if (!btn) return;
+  check(btn.textContent.includes("해외 진출"), `버튼 문구가 해외 진출이다 (${btn.textContent})`);
+  btn.click();
+  check(P.active() === "screen-move", `누르면 포스팅 화면이 뜬다 (${P.active()})`);
+  const rows = P.w.document.querySelectorAll("#move-card .offer");
+  check(rows.length === LEAGUES.length - 1, `갈 수 있는 리그 칸이 ${LEAGUES.length - 1}개다 (${rows.length}개)`);
+  const locked = Array.from(rows).filter((r) => r.classList.contains("locked"));
+  check(locked.length === 0, `열도·대륙이 **둘 다** 열려 있다 (잠긴 칸 ${locked.length}개)`);
+  const html = P.$("move-card").innerHTML;
+  // 상대 수준·리그 위세가 숫자로 보여야 해요 — 도박의 크기를 감추면 고를 수가 없어요
+  for (const tier of [2, 3]) {
+    const l = LG(tier);
+    check(html.includes(`+${l.oppUp.toFixed(2)}`), `${l.name}의 상대 수준 +${l.oppUp.toFixed(2)}가 숫자로 보인다`);
+    check(html.includes(`×${l.prestige.toFixed(2)}`), `${l.name}의 리그 위세 ×${l.prestige.toFixed(2)}가 숫자로 보인다`);
+  }
+  const nums = html.match(/(\d+\.\d)% → (\d+\.\d)%/g) || [];
+  check(nums.length === LEAGUES.length - 1, `리그마다 안타 확률이 '지금 → 거기'로 보인다 (${nums.join(" · ") || "없음"})`);
+  check(nums.every((s) => { const m = s.match(/([\d.]+)% → ([\d.]+)%/); return +m[2] < +m[1]; }),
+    `위 리그로 갈수록 안타 확률이 내려간다고 적혀 있다 (${nums.join(" · ")})`);
+});
+
+reach("rookie-posting-locked", (P, first) => {
+  check(first === "screen-career", `결산 화면이 뜬다 (${first})`);
+  const btn = postingBtn(P);
+  check(!!btn, "'🌏 해외 진출 (포스팅)' 버튼이 있다");
+  if (!btn) return;
+  btn.click();
+  check(P.active() === "screen-move", `포스팅 화면이 뜬다 (${P.active()})`);
+  const rows = Array.from(P.w.document.querySelectorAll("#move-card .offer"));
+  const locked = rows.filter((r) => r.classList.contains("locked"));
+  const open = rows.filter((r) => !r.classList.contains("locked"));
+  check(open.length === 1 && open[0].textContent.includes(LG(2).name),
+    `${LG(2).name}은 열려 있다 (${open.map((r) => r.textContent.trim().split("\n")[0]).join(" · ") || "없음"})`);
+  check(locked.length === 1 && locked[0].textContent.includes(LG(3).name),
+    `${LG(3).name}만 잠겨 있다 (잠긴 칸 ${locked.length}개)`);
+  if (!locked.length) return;
+  check(locked[0].disabled === true, "잠긴 칸은 눌리지 않는다");
+  /* 무엇이 모자란지 적어줘야 도전할 목표가 생겨요.
+   * 기대 문구를 여기 옮겨 적지 않아요 — 이 세이브가 실제로 무엇이 모자란지를
+   * 게임에게 물어보고(postingGates), 그게 화면에 그대로 적혔는지만 봅니다.
+   * 문턱 값을 여기 박아두면 자격 표가 바뀌는 순간 이 검사가 거짓말을 해요. */
+  const co = P.w.Career._t.postingGates().find((g) => g.league.tier === 3);
+  const want = [
+    co.okYear ? "" : `${co.gate.year}년차 이상`,
+    co.okWar ? "" : `직전 시즌 WAR ${co.gate.war.toFixed(1)} 이상`,
+  ].filter(Boolean);
+  const need = locked[0].querySelector(".lg-need");
+  const txt = need ? need.textContent : "";
+  check(want.length > 0 && !!need && want.every((s) => txt.includes(s)),
+    `잠긴 칸이 모자란 것을 빠짐없이 적어준다 (모자란 것 ${want.join(" · ")} / 화면 "${txt.trim()}")`);
+  // 이미 채운 조건까지 모자란 것처럼 적으면 안 돼요 (도전할 목표가 흐려져요)
+  if (co.okYear) check(!/년차 이상/.test(txt), `연차는 채웠으니 연차 문턱은 안 적힌다 ("${txt.trim()}")`);
+  if (co.okWar) check(!/WAR/.test(txt), `성적은 채웠으니 WAR 문턱은 안 적힌다 ("${txt.trim()}")`);
+});
+
+reach("rookie-abroad-report", (P, first) => {
+  check(first === "screen-career", `심은 세이브로 들어가면 결산 화면이 뜬다 (${first})`);
+  const card = P.$("career-card");
+  const txt = card.textContent;
+  check(txt.includes(LG(3).flag) && txt.includes(LG(3).short),
+    `소속 줄에 (${LG(3).flag} ${LG(3).short}) 꼬리표가 붙는다 (${(card.querySelector(".draft-team") || {}).textContent || "없음"})`);
+  check(/🔁 이적 이력/.test(txt) && txt.includes("🌏"),
+    "🔁 이적 이력에 🌏 리그 이적이 남아 있다");
+  const rows = card.querySelectorAll("table tbody tr");
+  check(rows.length > 0, `시즌 표가 그려진다 (${rows.length}행)`);
+  // 해외에서도 결산의 다음 걸음(캠프·은퇴)이 그대로 있어야 해요
+  const acts = Array.from(P.w.document.querySelectorAll("#career-actions .btn")).map((b) => b.textContent);
+  check(acts.some((t) => /캠프 시작/.test(t)), `다음 시즌 버튼이 있다 (${acts.join(" / ")})`);
+});
+
+reach("rookie-cont-series", (P, first) => {
+  check(first === "screen-pro", `심은 세이브로 들어가면 가을야구 화면이 뜬다 (${first})`);
+  const KS = LG(3) && P.w.Career._t.KS_LABEL[LG(3).id];
+  const KBO_KS = P.w.Career._t.KS_LABEL[LG(1).id];
+  check(!!KS && KS !== KBO_KS, `${LG(3).name}의 최종전 이름이 따로 있다 (${KS})`);
+  const turn = P.$("pro-turn").textContent;
+  check(turn.includes(KS), `화면 위 라벨이 ${KS}다 (${turn})`);
+  const sum = P.$("pro-standings-sum").textContent;
+  check(sum.includes(KS), `시리즈 현황 제목도 ${KS}다 (${sum})`);
+  const body = P.$("pro-standings-body").textContent;
+  check(!body.includes(KBO_KS), `대진표 어디에도 ${KBO_KS}가 안 남아 있다`);
+  const go = P.w.document.querySelector("#pro-actions .go-game");
+  check(!!go, "'⚾ 경기 시작' 버튼이 바로 보인다");
+  check(P.$("pro-camp-title").textContent.includes(KS),
+    `경기 안내 줄도 ${KS}다 (${P.$("pro-camp-title").textContent})`);
+});
+
+/* ---------- ⑤ 은퇴식 · 명예의 전당 (비동기) ----------
+ * 은퇴식은 세이브에 담기지 않아요 — 누르는 순간 만들어지고, 그 순간 세이브가 지워져요.
+ * 그래서 '누르기 직전'을 심고 여기서 실제로 눌러 봅니다.
+ * 명예의 전당은 showHof가 async라(원격 기록을 먼저 기다려요) 이 블록만 await를 써요. */
+async function finish() {
+  const it = byId("rookie-retire");
+  if (!it) {
+    check(false, "rookie-retire 시나리오가 _fixtures.js에 없다 (핵심 시나리오예요)");
+  } else {
+    let P = null;
+    try {
+      P = openGame(it.game, it.keys);
+      const first = resume(P);
+      check(first === "screen-career", `심은 세이브로 들어가면 결산 화면이 뜬다 (${first})`);
+      const ret = Array.from(P.w.document.querySelectorAll("#career-actions .btn"))
+        .find((b) => /은퇴하기/.test(b.textContent));
+      check(!!ret, "결산 화면에 '🎓 은퇴하기' 버튼이 있다");
+      if (ret) {
+        let asked = "";
+        P.w.confirm = (msg) => { asked = String(msg); return true; };
+        ret.click();
+        // 확인창에서부터 가중이 보여야 해요 — 되돌릴 수 없는 선택이니까요
+        check(/🌏 리그 위세로 ×\d+\.\d\d/.test(asked),
+          `은퇴 확인창의 수상 줄에 리그 가중이 적혀 있다 (${(asked.match(/.*위세로 ×[\d.]+\)/) || ["없음"])[0].trim()})`);
+        check(P.$("career-title").textContent.includes("은퇴식"),
+          `확인하면 은퇴식 화면이 뜬다 (${P.$("career-title").textContent})`);
+        const card = P.$("career-card").textContent;
+        const mul = (card.match(/리그 위세로 ×([\d.]+)/) || [])[1];
+        check(!!mul, `은퇴식 화면에도 (🌏 리그 위세로 ×N.NN)이 붙는다 (${mul || "없음"})`);
+        check(!!mul && +mul > 1, `가중 배수가 1보다 크다 — 대륙에서 받은 상이 크게 남았다 (×${mul})`);
+        const score = +((card.match(/커리어 점수 (\d+)/) || [])[1] || 0);
+        check(score > 0, `커리어 점수가 화면에 있다 (${score})`);
+        /* 가중이 점수에 **실제로** 얹혔는지 봐요. 문구만 맞고 점수가 그대로면
+         * 화면이 거짓말을 하는 거예요. 가중분(mvpW…)을 뺀 점수보다 커야 해요. */
+        const hof = JSON.parse(P.w.localStorage.getItem("grow-hof-v1") || "[]");
+        const e = hof[hof.length - 1];
+        check(!!e && e.league === LG(3).id, `명예의 전당 기록에 리그가 남는다 (${e ? e.league : "없음"})`);
+        const bonus = e ? (e.mvpW - e.mvp) * 40 + (e.ggW - e.gg) * 15 + (e.royW - e.roy) * 20 : 0;
+        check(bonus > 0 && e.score > 0,
+          `점수에 리그 가중분이 실제로 얹혀 있다 (가중 없으면 ${Math.round(e.score - bonus)} → 지금 ${e.score})`);
+
+        const hofBtn = Array.from(P.w.document.querySelectorAll("#career-actions .btn"))
+          .find((b) => /명예의 전당/.test(b.textContent));
+        check(!!hofBtn, "은퇴식에 '🏛️ 명예의 전당 보기' 버튼이 있다");
+        if (hofBtn) {
+          hofBtn.click();
+          await new Promise((r) => setTimeout(r, 50));   // showHof가 async예요
+          check(P.active() === "screen-hof", `누르면 명예의 전당이 뜬다 (${P.active()})`);
+          const cards2 = P.w.document.querySelectorAll("#hof-list .hof-card");
+          check(cards2.length > 0, `방금 은퇴한 선수가 목록에 있다 (${cards2.length}명)`);
+          check(Array.from(cards2).some((c) => c.textContent.includes(String(e.score))),
+            `그 점수(${e.score})가 목록에 그대로 보인다`);
+        }
+      }
+    } catch (err) {
+      check(false, `rookie-retire — ${err.message}`);
+    } finally {
+      if (P) P.close();
+    }
+  }
+
+  console.log(fail ? `\n❌ 실패 ${fail}건` : "\n✅ 전부 통과");
+  process.exit(fail ? 1 : 0);
+}
+finish();

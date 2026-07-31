@@ -64,7 +64,13 @@
   window.CheckPage = (() => {
     const BACKUP_KEY = "grow-check-backup";
     const F = (window.CHECK_FIXTURES || { items: [] });
-    const GAME_NAME = { soccer: "⚽ 더 윙어 (축구)", idol: "🎤 더 트레이니 (아이돌)" };
+    const GAME_NAME = {
+      soccer: "⚽ 더 윙어 (축구)",
+      idol: "🎤 더 트레이니 (아이돌)",
+      rookie: "⚾ 더 드래프트 (야구)",
+    };
+    // 화면에 그리는 순서예요. 여기 없는 게임은 카드가 아예 안 그려져요.
+    const GAME_ORDER = ["soccer", "idol", "rookie"];
     const $ = (id) => document.getElementById(id);
 
     // localStorage 열거는 key(i)로 해요 — env.js가 씌운 래퍼에는 Object.keys가 안 통해요.
@@ -147,7 +153,7 @@
         body.innerHTML = `<p class="hint">시나리오가 없어요. <code>node scripts/make-fixtures.js</code>로 먼저 뽑아 주세요.</p>`;
         return;
       }
-      for (const game of ["soccer", "idol"]) {
+      for (const game of GAME_ORDER) {
         const mine = F.items.filter((x) => x.game === game);
         if (!mine.length) continue;
         const h = document.createElement("h3");

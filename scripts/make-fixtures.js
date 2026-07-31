@@ -3,6 +3,7 @@
  *   node scripts/make-fixtures.js            # 전부 다시 뽑아요
  *   node scripts/make-fixtures.js soccer     # 축구 시나리오만
  *   node scripts/make-fixtures.js idol       # 아이돌 시나리오만
+ *   node scripts/make-fixtures.js rookie     # 야구 시나리오만
  *
  * ── 왜 이렇게 만드나요 ─────────────────────────────────────────────
  * 확인용 세이브를 손으로 지으면 안 돼요. 실제 게임이 만들지 않는 조합이 섞여서,
@@ -775,6 +776,328 @@ function makeIdolRest() {
   log("  ❌ 조건에 맞는 상태를 못 만들었어요 (아이돌)");
 }
 
+// ---------- ⚾ 야구 (더 드래프트) ----------
+/* 야구는 축구·아이돌과 화면 이름이 달라요 — 지역(#region-list) · 프로 화면(#pro-actions) ·
+ * 경기 연출(screen-tournament)이라 조작 함수를 따로 둡니다.
+ *
+ * 다섯 자리를 시나리오마다 새로 키우지 않아요. 포스팅 → 대륙 이적 → 대륙 결산 →
+ * 대륙시리즈 → 은퇴는 실제로 **한 선수에게 이어지는 한 줄**이라, 그 줄을 그대로
+ * 걸어가며 중간중간 뜹니다. 따로 키우면 같은 시즌을 다섯 번 굴리게 되고,
+ * 무엇보다 이어지지 않는 다섯 사람이 돼요. */
+const rookieAct = (P, sel) => {
+  const st = P.state();
+  /* 🔮 각성·🌠 초월은 confirm으로 묻는데 여기서는 늘 '아니오'라 눌러도 아무 일이 없어요.
+   * 🔁 트레이드(__trade)는 협상 화면으로 새서 시즌이 멎어요. 둘 다 빼요. */
+  const list = Array.from(P.w.document.querySelectorAll(sel))
+    .filter((b) => !b.disabled && b.dataset.key && b.dataset.key !== "__trade"
+      && !b.classList.contains("awaken-act"));
+  if (!list.length) return false;
+  const rest = list.find((b) => b.dataset.key === "__rest");
+  if (st.condition < 45 && rest) { rest.click(); return true; }
+  const trains = list.filter((b) => b.dataset.key !== "__rest");
+  if (!trains.length) { list[0].click(); return true; }
+  // 가장 낮은 능력치부터 올려요 — 한쪽만 키우면 보직 배정이 튀어서 시즌이 흔들려요.
+  let best = trains[0], bv = Infinity;
+  for (const b of trains) {
+    const v = st.stats[b.dataset.key];
+    if (typeof v === "number" && v < bv) { bv = v; best = b; }
+  }
+  best.click();
+  return true;
+};
+
+// 지역 → 포지션 → 이름 → 고교 3년 → 드래프트 → 프로 무대까지. 전부 실제 클릭이에요.
+function rookieDebut(P, regionIdx, pos, name) {
+  P.$("btn-new").click();
+  const cards = P.w.document.querySelectorAll("#region-list .card");
+  if (!cards[regionIdx]) throw new Error(`지역 카드 ${regionIdx}번이 없어요`);
+  cards[regionIdx].click();
+  const posCard = P.w.document.querySelector(`#position-list .card[data-pos="${pos}"]`);
+  if (!posCard) throw new Error(`포지션 카드 ${pos}가 없어요`);
+  posCard.click();
+  P.$("input-name").value = name;
+  P.$("btn-start").click();
+  if (P.active() !== "screen-main") throw new Error(`육성 화면에 못 갔어요 (${P.active()})`);
+
+  for (let g = 0; g < 8000; g++) {
+    const id = P.active();
+    if (id === "screen-draft") break;
+    if (id === "screen-tournament") { P.$("btn-tour-next").click(); continue; }
+    if (id === "screen-main") {
+      const go = P.w.document.querySelector("#action-list .go-game");
+      if (go) { go.click(); continue; }
+      if (!rookieAct(P, "#action-list .action-btn")) throw new Error("육성 화면에 누를 게 없어요");
+      continue;
+    }
+    throw new Error(`예상 못 한 화면이에요 (${id})`);
+  }
+  const pro = P.$("btn-go-pro");
+  if (!pro) throw new Error(`드래프트 화면에 '프로 무대로' 버튼이 없어요 (${P.active()})`);
+  pro.click();
+  if (P.active() !== "screen-pro") throw new Error(`프로 화면에 못 갔어요 (${P.active()})`);
+}
+
+/* 프로 한 시즌을 결산 화면까지 소화해요 (캠프 → 144경기 → 가을야구 → 결산).
+ * onScreen은 화면이 바뀔 때마다 불려요 — 가을야구처럼 시즌 **도중에만** 있는 자리를
+ * 뜨려면 여기서 잡아야 해요. 결산까지 가고 나면 S.post가 이미 지워져 있거든요. */
+function rookieSeason(P, onScreen) {
+  for (let g = 0; g < 40000; g++) {
+    const id = P.active();
+    if (onScreen) onScreen(P, id);
+    if (id === "screen-career") return true;
+    if (id === "screen-tournament") { P.$("btn-tour-next").click(); continue; }
+    if (id === "screen-pro") {
+      const go = P.w.document.querySelector("#pro-actions .go-game");
+      if (go) { go.click(); continue; }
+      if (!rookieAct(P, "#pro-actions .action-btn")) return false;
+      continue;
+    }
+    return false;
+  }
+  return false;
+}
+
+const campBtn = (P) => Array.from(P.w.document.querySelectorAll("#career-actions .btn"))
+  .find((b) => /캠프 시작/.test(b.textContent));
+const rookieGates = (P) => P.w.Career._t.postingGates();
+const lgOf = (P) => P.w.Career._t.leagueOf(P.state());
+const lastWar = (P) => {
+  const ss = P.state().career.seasons;
+  return ss.length ? ss[ss.length - 1].war : -Infinity;
+};
+/* 🌏 상에 걸린 리그 가중 배수예요. career.js의 weightNote가 화면에 적는 그 값이고,
+ * 여기서는 "가중이 실제로 붙었는가"를 가려 스냅샷 자리를 고르는 데만 씁니다. */
+function awardMul(c) {
+  const raw = (c.mvp || 0) * 40 + (c.gg || 0) * 15 + (c.roy || 0) * 20;
+  const w = (c.mvpW != null ? c.mvpW : c.mvp || 0) * 40
+    + (c.ggW != null ? c.ggW : c.gg || 0) * 15
+    + (c.royW != null ? c.royW : c.roy || 0) * 20;
+  return raw > 0 ? w / raw : 1;
+}
+
+const ROOKIE_STEP1 = ["게임이 열리면 <b>이어하기</b> → 선수 카드"];
+
+/* 야구 다섯 자리를 두 단계로 나눠 뽑아요.
+ *
+ *  1단계 KBO 7년 — 포스팅 화면 두 장을 뜨고, **실제로 대륙 리그로 이적**한 뒤
+ *                  그 순간의 세이브를 남겨요.
+ *  2단계 대륙 시즌 — 1단계가 남긴 세이브로 페이지를 새로 열어 이어서 굴려요.
+ *
+ * 왜 나눴냐면, 2단계는 원하는 자리가 뜰 때까지 여러 번 다시 굴려야 하는데
+ * 한 페이지에서 이어 붙이면 7시즌짜리 KBO를 매번 다시 굴리게 돼요.
+ * 실제로 한 페이지에서 20시즌 넘게 굴렸더니 jsdom 힙이 1.8GB에서 터졌습니다.
+ * 나누면 페이지 하나가 짊어지는 시즌 수가 절반으로 줄고, 다시 굴릴 때
+ * KBO 7년을 건너뛰어서 훨씬 빨라요. */
+function makeRookieAll() {
+  log("⚾ 포스팅 · 잠긴 제안 · 대륙 결산 · 대륙시리즈 · 은퇴식");
+  const KBO_YEARS = 7;      // KBO → 대륙 직행 문턱이 7년차예요
+  const ABROAD_YEARS = 10;  // 한 판에서 대륙 리그를 굴릴 최대 시즌 수
+  /* 은퇴식 스냅샷을 고를 때 노리는 가중 배수예요.
+   * 대륙은 상대가 세서 WAR이 내려가고, 상(골든글러브 4.5·MVP 5.5)이 쉽게 안 나와요.
+   * 그래서 배수가 크게 오르지 않아요 — 그게 이 게임이 실제로 만드는 숫자예요.
+   * WANT를 넘으면 거기서 멈추고, 못 넘어도 MIN 위라면 그중 가장 큰 것을 씁니다. */
+  const RETIRE_MUL_WANT = 1.25;
+  const RETIRE_MUL_MIN = 1.05;
+  const done = new Set();
+
+  // ── 1단계: KBO 7년 → 대륙 이적 ─────────────────────────────
+  let base = null, baseInfo = "", lockedCand = null;
+  for (const seed of seeds(8)) {
+    let P;
+    try {
+      P = makePage("rookie", seed);
+      rookieDebut(P, 0, "batter", "확인용");
+      lockedCand = null;
+      for (let y = 1; y <= KBO_YEARS; y++) {
+        if (!rookieSeason(P)) throw new Error(`${y}년차 시즌이 결산까지 안 갔어요`);
+        const st = P.state();
+        const gs = rookieGates(P);
+        const jp = gs.find((g) => g.league.tier === 2);
+        const co = gs.find((g) => g.league.tier === 3);
+
+        /* ② 잠긴 제안 — 열도는 열리고 대륙은 잠긴 자리예요.
+         * 대륙 직행은 7년차 문턱이라 4~6년차면 성적이 아무리 좋아도 잠겨 있어요.
+         *
+         * 모자란 게 연차뿐인 해와 연차·성적 둘 다인 해가 있어요. 화면이 무엇을 적어주는지
+         * 보는 게 이 시나리오의 목적이라 **둘 다 모자란 해**가 더 좋아요.
+         * 그래서 바로 뜨지 않고 후보를 갱신하다가 KBO 7년이 끝날 때 가장 좋은 것을 씁니다.
+         * 확인 문구도 여기서 적어 넣지 않고, 그 세이브가 실제로 무엇이 모자란지 물어서 씁니다. */
+        if (!done.has("rookie-posting-locked") && jp.ok && !co.ok && P.$("btn-posting")) {
+          const need = [co.okYear ? "" : `${co.gate.year}년차 이상`,
+            co.okWar ? "" : `직전 시즌 WAR ${co.gate.war.toFixed(1)} 이상`].filter(Boolean);
+          // 모자란 게 하나도 없는데 잠긴 건 '올해 이미 신청함'뿐이에요 — 그건 이 시나리오가 아니에요
+          if (need.length && (!lockedCand || need.length > lockedCand.need.length)) {
+            lockedCand = {
+              need,
+              keys: snapshot(P),
+              state: `${st.team} · 🇰🇷 KBO · ${st.proYear}년차 오프시즌 · 직전 WAR ${lastWar(P).toFixed(1)}`,
+            };
+          }
+        }
+
+        /* ① 포스팅 제안 — 열도와 대륙이 **둘 다** 열린 자리예요. */
+        if (!done.has("rookie-posting") && jp.ok && co.ok && P.$("btn-posting")) {
+          done.add("rookie-posting");
+          add({
+            id: "rookie-posting", game: "rookie", url: "rookie/", emoji: "🌏",
+            title: "포스팅 제안 — 열도·대륙이 함께 열린 상태",
+            state: `${st.team} · 🇰🇷 KBO · ${st.proYear}년차 오프시즌 · 직전 WAR ${lastWar(P).toFixed(1)}`,
+            check: "카드마다 상대 수준(+0.02 / +0.06)과 리그 위세(×1.40 / ×2.30), 안타 확률이 '지금 → 거기'로 다 보이는지, 좁은 화면에서 줄이 안 겹치는지",
+            steps: [...ROOKIE_STEP1, "결산 화면에서 <b>🌏 해외 진출 (포스팅)</b>"],
+            keys: snapshot(P),
+          });
+        }
+        if (y < KBO_YEARS) {
+          const b = campBtn(P);
+          if (!b) throw new Error(`${y}년차 결산에 캠프 버튼이 없어요`);
+          b.click();
+        }
+      }
+
+      // 🌏 실제로 화면을 눌러 대륙 리그로 옮겨요 (세이브를 손으로 고치지 않아요)
+      const po = P.$("btn-posting");
+      if (!po) throw new Error("7년차 결산에 포스팅 버튼이 없어요");
+      po.click();
+      const gates = rookieGates(P);
+      const iCont = gates.findIndex((g) => g.league.tier === 3);
+      const rows = P.w.document.querySelectorAll("#move-card .offer");
+      if (!rows[iCont] || rows[iCont].disabled) throw new Error("대륙 리그 칸이 잠겨 있어요");
+      rows[iCont].click();
+      // 행선지 확인창은 '예'로 답해야 옮겨져요 (여기서는 기본이 '아니오'예요)
+      const noConfirm = P.w.confirm;
+      P.w.confirm = () => true;
+      const clubs = P.w.document.querySelectorAll("#move-card .offer");
+      if (!clubs.length) throw new Error("대륙 리그 구단 목록이 안 떠요");
+      clubs[0].click();
+      P.w.confirm = noConfirm;
+      if (lgOf(P).tier !== 3) throw new Error(`대륙 리그로 안 옮겨졌어요 (${lgOf(P).name})`);
+      if (P.active() !== "screen-career") throw new Error(`이적 뒤 결산으로 안 돌아왔어요 (${P.active()})`);
+
+      base = snapshot(P);
+      baseInfo = `${P.state().team} · ${P.state().proYear}년차`;
+      P.close();
+      if (lockedCand) {
+        done.add("rookie-posting-locked");
+        add({
+          id: "rookie-posting-locked", game: "rookie", url: "rookie/", emoji: "🔒",
+          title: "잠긴 제안 — 대륙은 아직 못 가요",
+          state: lockedCand.state,
+          check: `🔒 대륙 리그 칸이 눌리지 않고 모자란 것(${lockedCand.need.join(" · ")})이 적혀 있는지, 열린 칸과 잠긴 칸이 한눈에 갈리는지`,
+          steps: [...ROOKIE_STEP1, "결산 화면에서 <b>🌏 해외 진출 (포스팅)</b>"],
+          keys: lockedCand.keys,
+        });
+      }
+      break;
+    } catch (e) {
+      if (P) P.close();
+      log(`  · 시드 ${seed}: ${e.message}`);
+    }
+  }
+  if (!base) { log("  ❌ 대륙 리그까지 못 갔어요 — 야구 시나리오를 하나도 못 만들었어요"); return; }
+  log(`  🌏 대륙 리그 이적 완료 — ${baseInfo}. 여기서부터 다시 굴려요`);
+
+  // ── 2단계: 대륙 시즌 ────────────────────────────────────────
+  /* 1단계가 남긴 세이브로 페이지를 새로 열어요. 심은 뒤 '이어하기 → 선수 카드'를
+   * 실제로 눌러 들어갑니다 — 사용자가 폰에서 하는 경로와 같아요. */
+  let retire = null;
+  for (const seed of [...seeds(14)].slice(8)) {
+    let P;
+    try {
+      P = makePage("rookie", seed, base);
+      if (!resumeSaved(P)) throw new Error("이어하기가 안 돼요");
+      if (P.active() !== "screen-career") throw new Error(`결산 화면이 아니에요 (${P.active()})`);
+
+      for (let y = 1; y <= ABROAD_YEARS; y++) {
+        const b = campBtn(P);
+        if (!b) break;             // 은퇴 권고(나이·기량)로 캠프 버튼이 사라진 자리예요
+        b.click();
+
+        /* ④ 대륙시리즈 — 가을야구 최종전이에요. 시즌 **도중**에만 있는 자리라
+         * 결산까지 가버리면 S.post가 지워져서 다시 못 만들어요. */
+        let seriesKeys = null, seriesInfo = "";
+        const watch = (Q, id) => {
+          if (seriesKeys || done.has("rookie-cont-series")) return;
+          if (id !== "screen-pro") return;
+          const st = Q.state();
+          if (!st.post || st.post.myRound !== "ks" || st.post.eliminated) return;
+          if (!Q.w.document.querySelector("#pro-actions .go-game")) return;
+          seriesKeys = snapshot(Q);
+          seriesInfo = `${st.team} · 🗽 대륙 리그 · ${st.proYear}년차 · 대륙시리즈 ${st.post.gameNo}차전`;
+        };
+        if (!rookieSeason(P, watch)) throw new Error(`대륙 ${y}시즌이 결산까지 안 갔어요`);
+        const st = P.state();
+
+        if (seriesKeys) {
+          done.add("rookie-cont-series");
+          add({
+            id: "rookie-cont-series", game: "rookie", url: "rookie/", emoji: "🍂",
+            title: "대륙시리즈 — 가을야구 최종전",
+            state: seriesInfo,
+            check: "가을야구 최종전 이름이 '한국시리즈'가 아니라 <b>대륙시리즈</b>로 뜨는지 (위 라벨·시리즈 현황 표 양쪽 다)",
+            steps: [...ROOKIE_STEP1, "바로 대륙시리즈 화면이 떠요"],
+            keys: seriesKeys,
+          });
+        }
+
+        /* ③ 대륙 리그 시즌 결산 — 해외에서 뛴 첫 시즌이에요. */
+        if (!done.has("rookie-abroad-report")) {
+          done.add("rookie-abroad-report");
+          add({
+            id: "rookie-abroad-report", game: "rookie", url: "rookie/", emoji: "🗽",
+            title: "대륙 리그 시즌 결산",
+            state: `${st.team} · 🗽 대륙 리그 · ${st.proYear}년차 결산 · WAR ${lastWar(P).toFixed(1)}`,
+            check: "소속 줄에 <b>(🗽 대륙)</b> 꼬리표가 붙고, 🔁 이적 이력의 🌏 표시와 최종 순위표가 좁은 화면에서 안 넘치는지",
+            steps: [...ROOKIE_STEP1, "바로 결산 화면이 떠요"],
+            keys: snapshot(P),
+          });
+        }
+
+        /* ⑤ 은퇴식 · 명예의 전당 — 대륙에서 받은 상이 몇 배로 남는지 보이는 자리예요.
+         * 은퇴식 화면 자체는 세이브에 안 담겨요(누르는 순간 만들어지고 세이브는 지워져요).
+         * 그래서 **누르기 직전**을 심고 무엇을 눌러야 하는지 적어 줍니다. */
+        const mul = awardMul(st.career);
+        if (!done.has("rookie-retire") && mul >= RETIRE_MUL_MIN && (!retire || mul > retire.mul)) {
+          const c = st.career;
+          retire = {
+            mul,
+            keys: snapshot(P),
+            state: `${st.team} · 🗽 대륙 리그 · ${st.proYear}년차 · 🎖️MVP ${c.mvp} · 🧤GG ${c.gg}${c.roy ? " · 🌟신인왕" : ""} → 리그 가중 ×${mul.toFixed(2)}`,
+          };
+        }
+        if (done.has("rookie-cont-series") && retire && retire.mul >= RETIRE_MUL_WANT) break;
+      }
+      P.close();
+      log(`  · 대륙 시드 ${seed}: 뜬 자리 ${done.size}/4 · 은퇴식 후보 ${retire ? `×${retire.mul.toFixed(2)}` : "없음"}`);
+    } catch (e) {
+      if (P) P.close();
+      log(`  · 대륙 시드 ${seed}: ${e.message}`);
+    }
+    if (done.has("rookie-cont-series") && done.has("rookie-abroad-report")
+      && retire && retire.mul >= RETIRE_MUL_WANT) break;
+  }
+
+  if (retire) {
+    add({
+      id: "rookie-retire", game: "rookie", url: "rookie/", emoji: "🏛️",
+      title: "은퇴식 · 명예의 전당 — 리그 가중이 얹힌 점수",
+      state: retire.state,
+      check: `은퇴 확인창과 은퇴식 화면의 수상 줄 옆에 <b>(🌏 리그 위세로 ×${retire.mul.toFixed(2)})</b>이 붙는지, 커리어 점수·등급이 그 가중을 반영하는지`,
+      steps: [
+        ...ROOKIE_STEP1,
+        "결산 화면에서 <b>🎓 은퇴하기</b> → 확인창의 수상 줄을 보고 <b>확인</b>",
+        "은퇴식이 뜨면 <b>🏛️ 명예의 전당 보기</b>",
+      ],
+      keys: retire.keys,
+    });
+    done.add("rookie-retire");
+  }
+
+  for (const id of ["rookie-posting", "rookie-posting-locked", "rookie-abroad-report",
+    "rookie-cont-series", "rookie-retire"]) {
+    if (!done.has(id)) log(`  ❌ ${id} — 조건에 맞는 상태를 못 만들었어요`);
+  }
+}
+
 // 시드 목록 — 조건에 맞는 상태가 나올 때까지 순서대로 굴려요.
 function* seeds(n) {
   let s = 0x9e3779b9;
@@ -789,7 +1112,8 @@ function* seeds(n) {
  * 그래야 `node scripts/make-fixtures.js soccer-transfer`처럼 하나만 다시 뽑아도
  * 나머지가 안 사라져요. 같은 id는 이번에 뽑은 게 이깁니다. */
 const ORDER = ["soccer-transfer", "soccer-promote", "soccer-youth-ext", "soccer-semipro", "soccer-report",
-  "idol-concept", "idol-reveal", "idol-report", "idol-tour", "idol-standings"];
+  "idol-concept", "idol-reveal", "idol-report", "idol-tour", "idol-standings",
+  "rookie-posting", "rookie-posting-locked", "rookie-abroad-report", "rookie-cont-series", "rookie-retire"];
 
 function readPrev() {
   if (!fs.existsSync(OUT)) return [];
@@ -836,5 +1160,8 @@ if (want("idol-reveal", "idol")) {
     "🔥 트렌드 적중 카드와 +18%가 한눈에 읽히는지", true, 3);
 }
 if (want("idol-report", "idol") || want("idol-tour", "idol") || want("idol-standings", "idol")) makeIdolRest();
+/* ⚾ 야구 다섯 자리는 한 선수의 커리어를 통째로 걸어가며 뜨는 거라 함께 뽑아요.
+ * (하나만 다시 뽑고 싶어도 그 앞의 7시즌을 어차피 다시 굴려야 해요) */
+if (only === "rookie" || !only) makeRookieAll();
 
 log(`\n📦 ${OUT} — 시나리오 ${writeOut()}개 (${((Date.now() - t0) / 1000).toFixed(0)}초)`);
