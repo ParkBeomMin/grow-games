@@ -1451,8 +1451,110 @@ const REACT_PIT = { ok: "강습 타구를 낚아챘어요! ⚡", great: "총알 
 const DUEL_BAT = { ok: "노림수 적중! 안타! 🧠", great: "완벽한 수읽기, 통타!! 💥", bad: "유인구에 속았다… 삼진" };
 const DUEL_PIT = { ok: "타자의 노림수를 피했어요! 🧠", great: "허를 찌른 결정구, 삼진!! 🎯", bad: "딱 노리던 코스였다… 통타" };
 
+/* ─────────────────────────────────────────────────────────────────────────
+ * 🍂 가을야구 전용 미니게임 — 실행은 ../post-stage.js(window.PostStage)에 있어요.
+ *
+ * 가을야구는 야구의 절정인데 예전에는 5월의 평범한 경기와 판정이 똑같았어요.
+ * 이제 **가을야구에서만** 아래 두 메커닉이 나와요. 정규시즌·고교 대회는
+ * 예전 8종(timing.js) 그대로예요 — playRandomMini의 첫 줄에서만 갈라져요.
+ *
+ *   🧊 count — 볼카운트 승부. 참는 것이 수(手)예요. 유리한 카운트에서 친 공만 완벽
+ *   🏃 dash  — 홈 승부. 정보가 늦게 오는데 기다리면 물러설 자리를 잃어요
+ *
+ * 왜 새로운지는 post-stage.js 머리말에 적어 뒀어요. 요약하면 기존 8종과 투어
+ * 3종은 열한 개 모두 '누르는 것'이 곧 행동인데, 이 둘은 아니에요.
+ *
+ * 시리즈가 깊을수록 어려워져요(tier) — 와일드카드·준PO 0 / PO 1 / 마지막 시리즈 2.
+ * 공이 늦게 휘고 어깨가 강해져요. 판정 규칙은 그대로예요.
+ *
+ * window.PostStage를 부를 때마다 찾아가요(변수에 캐시하지 않아요) — 테스트가
+ * 기록용으로 갈아끼울 수 있어야 하니까요. window.Timing을 쓰던 방식과 같아요. */
+const POST_TIER = { wc: 0, semi: 0, po: 1, ks: 2 };
+/* 지금 내가 가을야구 경기를 치르는 중인가. career.js의 inPost()와 같은 뜻이지만
+ * 여기서도 S만 보고 판단해요 — game.js는 career.js보다 먼저 실행돼요. */
+const inPostMini = () => !!(S.post && S.post.myRound && !S.post.eliminated);
+const postTier = () => (S.post && POST_TIER[S.post.myRound]) || 0;
+
+// 🧊 볼카운트 승부 결과 문구 · 🏃 홈 승부 결과 문구 (타자 / 투수)
+const COUNT_BAT = { ok: "끈질긴 승부 끝에 살아 나갔어요! 🧊", great: "유리한 카운트에서 노려친 통타!! 💥", bad: "유인구에 말려 삼진…" };
+const COUNT_PIT = { ok: "볼카운트 싸움에서 이겼어요! 🧊", great: "타자를 흔들어 놓고 꽂은 결정구!! ⚡", bad: "카운트에 몰려 한복판을 얻어맞았어요…" };
+const DASH_BAT = { ok: "무리하지 않고 3루에 남았어요 🛑", great: "과감한 홈 쇄도, 헤드퍼스트 세이프!! 🏃💨", bad: "홈에서 아웃… 통한의 주루사" };
+const DASH_PIT = { ok: "중계로 끊어 주자를 묶었어요 🛑", great: "완벽한 홈 백업, 홈에서 잡아냈어요!! 🎯", bad: "판단이 늦어 홈을 그대로 내줬어요…" };
+
+/* 같은 규칙을 타자와 투수가 다르게 읽어요. 코드는 하나예요 — 문구만 갈아끼워요.
+ *   타자: 존을 벗어나는 공을 '골라내면' 볼이 쌓여 유리해져요
+ *   투수: 존을 벗어나는 공은 '유인구'예요. 흘려보내면 타자가 흔들려 유리해져요.
+ *         반대로 존에 꽂히는 승부구를 그냥 보내면 카운트에 '몰려요'.
+ * 그래서 볼↔유인 · 스트라이크↔몰림으로 부르면 부호가 어긋나지 않아요. */
+const POST_MECH = {
+  count: {
+    stat: () => (S.pos === "batter" ? S.stats.contact : S.stats.control),
+    txt: () => (S.pos === "batter" ? COUNT_BAT : COUNT_PIT),
+    run: (box, tier, cb) => {
+      const bat = S.pos === "batter";
+      window.PostStage.count(box, {
+        label: bat
+          ? "🧊 가을야구의 한 타석! 벗어나는 공은 참고, 유리해진 뒤에 노려쳐요"
+          : "🧊 상대 4번과의 승부! 유인구는 흘려보내고, 존에 꽂히는 승부구로 끝내요",
+        button: bat ? "스윙! 🏏" : "승부! 🔥",
+        countLabels: bat ? ["볼", "스트라이크"] : ["유인", "몰림"],
+        zonePct: miniZone(bat ? S.stats.contact : S.stats.control),
+        tier,
+        msg: bat ? null : {
+          hitPerfect: "💥 흔들어 놓고 꽂았어요!",
+          hitGood: "🔥 승부구를 던졌어요!",
+          whiff: "🌀 던지려다 빠졌어요…",
+          looking: "😐 승부구를 그냥 보냈어요",
+          taken: "👀 유인구에 타자가 흔들려요",
+          out: "❌ 한복판을 얻어맞았어요…",
+          free: "🚶 타자가 완전히 무너졌어요",
+          timeup: "⏱️ 승부 종료",
+          tip: "벗어나는 공은 <b>유인구</b>예요 · 타자를 흔든 뒤 꽂은 승부구가 완벽해요",
+        },
+      }, cb);
+    },
+  },
+  dash: {
+    stat: () => (S.pos === "batter" ? S.stats.run : S.stats.defense),
+    txt: () => (S.pos === "batter" ? DASH_BAT : DASH_PIT),
+    run: (box, tier, cb) => {
+      const bat = S.pos === "batter";
+      window.PostStage.dash(box, {
+        label: bat
+          ? "🏃 2사 후 큰 타구! 3루를 돌까요, 멈출까요?"
+          : "🏃 외야로 빠진 타구! 홈에서 승부할까요, 끊을까요?",
+        goText: bat ? "홈으로!! 🏃" : "홈 승부! 🎯",
+        stopText: bat ? "멈춰! ✋" : "끊어! 🧤",
+        zonePct: miniZone(bat ? S.stats.run : S.stats.defense),
+        tier,
+        msg: bat ? null : {
+          safe: "❌ 홈을 내줬어요…",   // 투수는 주자를 막는 쪽이라 뜻이 뒤집혀요
+          tagged: "🎉 홈에서 잡았어요!",
+          rundown: "❌ 우물쭈물하다 홈을 내줬어요…",
+          back: "🛑 끊어서 추가 진루를 막았어요",
+          late: "❌ 어정쩡한 중계, 주자가 다 살았어요…",
+          going: "🎯 홈으로 뿌려요!!",
+          timeup: "⏱️ 판단이 늦었어요…",
+          tip: "송구는 🌫️ 뒤에 숨어 있어요 · ✋ 선을 넘으면 <b>끊을 수 없어요</b>",
+        },
+      }, cb);
+    },
+  },
+};
+
+/* 가을야구 미니게임 한 판. playRandomMini와 같은 계약이에요 — cb(res, txt).
+ * autoMiniOn() 경로가 없으면 테스트도 확인 페이지도 여기서 막혀요. */
+function playPostMini(container, cb) {
+  const mech = POST_MECH[pick(["count", "dash"])];
+  const txt = mech.txt();
+  if (autoMiniOn()) { cb(autoRes(mech.stat()), txt); return; }
+  mech.run(container, postTier(), (res) => cb(res, txt));
+}
+
 // 승부처 미니게임 — 타이밍/홀드/사인 암기/반응 속도/수싸움 5종 랜덤
 function playRandomMini(container, cb) {
+  // 🍂 가을야구에서는 전용 메커닉 2종만 나와요. 정규시즌은 아래 8종 그대로예요.
+  if (inPostMini()) { playPostMini(container, cb); return; }
   const isBat = S.pos === "batter";
   const mech = pick(["bar", "hold", "seq", "react", "duel", "target", "drop", "odd"]);
   if (mech === "bar") {

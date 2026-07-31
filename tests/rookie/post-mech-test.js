@@ -1,0 +1,825 @@
+/* 🍂 가을야구 전용 미니게임 2종(beta/post-stage.js) — 계약 · 배치 · 도달성 · 난이도 · 우승 확률.
+ *
+ * 다섯 갈래로 봐요.
+ *
+ *  ① 계약     timing.js와 인터페이스가 같은가. 판정이 세 가지뿐인가.
+ *              timing.js와 tour-stage.js를 안 건드렸는가. 야구만 내려받는가.
+ *  ② 배치     **가을야구에서만** 나오는가. 정규시즌은 예전 8종 그대로인가.
+ *              autoMiniOn() 경로가 살아 있는가.
+ *  ③ 도달성   진짜 화면·진짜 엔진으로 실제 눌러서 완주하는가. 잘하면 perfect에
+ *              닿는가. 아무것도 안 눌러도 안 막히는가. 한 판이 3~5초인가.
+ *  ④ 난이도   가상 시계로 '사람 모델'을 돌려 판정 분포를 재요. 능력치를 올리면
+ *              성적이 오르고, 시리즈가 깊어지면 어려워지는가.
+ *              **기존 8종도 같은 사람 모델로 같이 재요** — 도입 전과 나란히 놓아야
+ *              "쉬워졌다/어려워졌다"를 말할 수 있어요.
+ *  ⑤ 우승 확률 ④가 잰 분포를 그대로 게임에 꽂고, 정규시즌 마지막 경기부터 결산까지
+ *              **진짜 화면으로** 굴려서 우승 확률을 재요. 능력치에 따라 갈리되
+ *              극단으로 쏠리지 않아야 해요.
+ *
+ * ④의 사람 모델은 '오차를 가진 사람'이에요. 화면(공 위치·공 크기·주자와 송구
+ * 자리)만 읽고, lag만큼 늦은 화면으로 판단해 오차를 얹어 눌러요. 사람의 손을
+ * 정확히 맞힐 수는 없지만, "잘 보는 사람"과 "대충 하는 사람"이 갈리는지,
+ * 능력치를 올리면 나아지는지는 이렇게 재야 알 수 있어요.
+ *
+ * 난이도 숫자를 여기 옮겨 적지 않아요 — 전부 소스를 그대로 돌려서 냅니다.
+ * 옮겨 적으면 post-stage.js를 고쳐도 초록이 뜹니다.
+ */
+"use strict";
+const fs = require("fs");
+const path = require("path");
+const ROOT = "/workspace/grow-games";
+const BETA = process.env.BETA || path.join(ROOT, "beta");
+const { JSDOM } = require(ROOT + "/tests/cloud/jsdom.js");
+
+let fail = 0;
+const check = (ok, msg) => { console.log(`${ok ? "✅" : "❌"} ${msg}`); if (!ok) fail++; };
+const guard = (label, fn) => { try { fn(); } catch (e) { check(false, `${label} — ${e.message}\n${e.stack}`); } };
+const group = (t) => console.log(`\n— ${t}`);
+
+const PS_SRC = fs.readFileSync(path.join(BETA, "post-stage.js"), "utf8");
+const TM_SRC = fs.readFileSync(path.join(ROOT, "timing.js"), "utf8");
+const TS_SRC = fs.readFileSync(path.join(BETA, "tour-stage.js"), "utf8");
+const GAME_SRC = fs.readFileSync(path.join(BETA, "rookie/game.js"), "utf8");
+
+const mulberry32 = (a) => function () {
+  a |= 0; a = a + 0x6D2B79F5 | 0;
+  let t = Math.imul(a ^ a >>> 15, 1 | a);
+  t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+  return ((t ^ t >>> 14) >>> 0) / 4294967296;
+};
+let plyRnd = mulberry32(20260731);
+const gauss = (sd) => {
+  const u = Math.max(1e-9, plyRnd()), v = plyRnd();
+  return sd * Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+};
+const pctOf = (s) => parseFloat(String(s || "0").replace("%", "")) || 0;
+const remOf = (s) => parseFloat(String(s || "0").replace("rem", "")) || 0;
+
+/* ================================================================
+ * ① 계약
+ * ================================================================ */
+group("① 계약");
+
+check(/window\.PostStage = \(\(\) => \{/.test(PS_SRC), "post-stage.js가 window.PostStage 하나만 세운다");
+check(/return \{\s*count, dash,/.test(PS_SRC), "count · dash 두 메커닉을 내보낸다");
+// 판정은 세 가지뿐 — cb로 나가는 값이 전부 이 셋 안에 있어야 해요
+{
+  const grades = new Set((PS_SRC.match(/finish\(\s*"(\w+)"/g) || []).map((s) => s.match(/"(\w+)"/)[1]));
+  for (const g of ["perfect", "good", "miss"]) grades.delete(g);
+  check(grades.size === 0, `판정이 perfect · good · miss 셋뿐이다 (그 밖: ${[...grades].join(" · ") || "없음"})`);
+  check(/cb\(res\)/.test(PS_SRC), "cb(res) 한 곳으로만 결과가 나간다");
+}
+check(!/TourStage/.test(PS_SRC), "tour-stage.js의 함수를 하나도 재사용하지 않는다 (TourStage를 안 부른다)");
+check(!/window\.Timing/.test(PS_SRC), "timing.js의 함수도 재사용하지 않는다");
+{
+  const psFns = (PS_SRC.match(/^  function (\w+)\(/gm) || []).map((s) => s.match(/function (\w+)/)[1]);
+  const tsFns = (TS_SRC.match(/^  function (\w+)\(/gm) || []).map((s) => s.match(/function (\w+)/)[1]);
+  const tmFns = (TM_SRC.match(/^  function (\w+)\(/gm) || []).map((s) => s.match(/function (\w+)/)[1]);
+  const mech = ["count", "dash"];
+  const dup = mech.filter((m) => tsFns.includes(m) || tmFns.includes(m));
+  check(dup.length === 0, `메커닉 이름이 투어 3종·기존 8종과 겹치지 않는다 (겹친 이름 ${dup.join(" · ") || "없음"})`);
+  check(psFns.includes("count") && psFns.includes("dash"), `메커닉 두 개가 실제로 여기 있다 (${psFns.join(" · ")})`);
+}
+
+// timing.js는 한 줄도 안 건드렸어요 — 8종이 그대로 있고 새 파일을 모르는 채여야 해요
+{
+  const eight = ["play", "hold", "sequence", "reaction", "duel", "target", "drop", "odd"];
+  const m = TM_SRC.match(/return \{ ([^}]+) \};/);
+  const got = m ? m[1].split(",").map((s) => s.trim()) : [];
+  check(eight.every((k) => got.includes(k)) && got.length === eight.length,
+    `timing.js가 여전히 8종만 내보낸다 (${got.join(" · ")})`);
+  check(!/PostStage/.test(TM_SRC) && !/PostStage/.test(TS_SRC),
+    "timing.js · tour-stage.js가 PostStage를 모른다 (두 파일을 안 건드렸어요)");
+}
+
+// 야구만 내려받아요 — timing.js가 8개 게임 공용이라 여기 넣으면 안 되는 이유예요
+guard("내려받는 게임", () => {
+  const dirs = fs.readdirSync(BETA).filter((d) => fs.existsSync(path.join(BETA, d, "index.html")));
+  const loads = dirs.filter((d) => /post-stage\.js/.test(fs.readFileSync(path.join(BETA, d, "index.html"), "utf8")));
+  check(loads.length === 1 && loads[0] === "rookie",
+    `post-stage.js를 내려받는 게임이 야구 하나뿐이다 (${loads.join(" · ") || "없음"})`);
+  const rookieHtml = fs.readFileSync(path.join(BETA, "rookie/index.html"), "utf8");
+  check(!/tour-stage\.js/.test(rookieHtml), "야구는 반대로 tour-stage.js를 안 내려받는다");
+  const sw = fs.readFileSync(path.join(BETA, "rookie/sw.js"), "utf8");
+  check(/\.\.\/post-stage\.js/.test(sw), "서비스워커가 새 파일을 캐시 목록에 담는다 (오프라인 플레이)");
+});
+
+/* ================================================================
+ * 가상 시계 위의 post-stage.js · timing.js
+ * 실시간으로 재면 한 판이 3초라 표본을 못 모아요(1000판이면 50분).
+ * 시계를 우리가 돌리면 같은 코드를 그대로 돌리면서 수천 판을 몇 초에 봐요.
+ * ================================================================ */
+function vstage(src, api) {
+  const dom = new JSDOM(`<!doctype html><html><body><div id="box"></div></body></html>`,
+    { runScripts: "dangerously", pretendToBeVisual: true, url: "https://x.test/" });
+  const V = dom.window;
+  V.eval(src);
+  let VT = 0, vid = 1, vt = [];
+  V.performance.now = () => VT;
+  V.Date.now = () => VT;
+  V.requestAnimationFrame = (cb) => { const id = vid++; vt.push({ at: VT + 16.667, id, fn: () => cb(VT) }); return id; };
+  V.cancelAnimationFrame = (id) => { const i = vt.findIndex((t) => t.id === id); if (i >= 0) vt.splice(i, 1); };
+  V.setTimeout = (fn, ms) => { const id = vid++; vt.push({ at: VT + (ms || 0), id, fn }); return id; };
+  V.clearTimeout = (id) => { const i = vt.findIndex((t) => t.id === id); if (i >= 0) vt.splice(i, 1); };
+
+  /* 한 판을 돌려요. watch는 4ms마다 화면을 읽는 '눈'이에요 — fire(선택자, 이벤트)로 눌러요. */
+  function trial(mech, opts, seed, watch) {
+    vt = []; VT = 0;
+    V.Math.random = mulberry32(seed);
+    const box = V.document.getElementById("box");
+    box.innerHTML = "";
+    let res = null, endedAt = 0;
+    V[api][mech](box, opts, (r) => { res = r; endedAt = VT; });
+    const wrap = box.querySelector(".tm-box");
+    const fire = (sel, type) => {
+      const el = typeof sel === "string" ? wrap.querySelector(sel) : sel;
+      if (el) el.dispatchEvent(new V.Event(type || "pointerdown", { bubbles: true, cancelable: true }));
+    };
+    if (watch) for (let t = 4; t <= 9000; t += 4) vt.push({ at: t + 0.001, id: vid++, fn: () => { if (res === null) watch(wrap, VT, fire); } });
+    let steps = 0;
+    while (vt.length && res === null && VT < 14000 && steps++ < 300000) {
+      vt.sort((a, b) => a.at - b.at);
+      const ev = vt.shift();
+      VT = ev.at;
+      ev.fn();
+    }
+    return { res, endedAt, left: box.innerHTML };
+  }
+  return { V, trial };
+}
+
+const PS = vstage(PS_SRC, "PostStage");
+const T = PS.V.PostStage._t;
+
+/* 🧊 count 사람 모델 — lag만큼 늦은 화면 두 장으로 도착점을 외삽해요.
+ * 공 크기(font-size)가 얼마나 왔는지를 알려줘요 (사람도 크기로 거리를 봐요). */
+function countAs(zone, tier, seed, lag, sigma) {
+  let hist = [], lastT = 9, swung = false;
+  return PS.trial("count", { label: "t", zonePct: zone, tier }, seed, (wrap, now, fire) => {
+    const ball = wrap.querySelector(".ps-ball");
+    if (!ball) return;
+    const t = (remOf(ball.style.fontSize) - 0.7) / 1.15;
+    if (t < lastT - 0.02) { hist = []; swung = false; }        // 새 공이에요
+    lastT = t;
+    hist.push({ now, t, x: pctOf(ball.style.left), y: pctOf(ball.style.top) });
+    if (swung || t < 0.90) return;                              // 마지막까지 보고 정해요
+    let a = hist[0], b = hist[0];
+    for (const h of hist) { if (h.now <= now - lag) b = h; }
+    for (const h of hist) { if (h.now <= now - lag - 44) a = h; }
+    const dt = Math.max(1e-6, b.t - a.t);
+    const px = b.x + (b.x - a.x) / dt * (1 - b.t) + gauss(sigma);
+    const py = b.y + (b.y - a.y) / dt * (1 - b.t) + gauss(sigma * 1.5);
+    const Z = T.COUNT;
+    swung = true;
+    if (px > Z.zx[0] && px < Z.zx[1] && py > Z.zy[0] && py < Z.zy[1]) fire(".ps-tap");
+  });
+}
+
+/* 🏃 dash 사람 모델 — 송구가 드러나면 도착 시각을 견줘요. margin은 배짱이에요. */
+function dashAs(zone, tier, seed, lag, margin, sigma) {
+  let hist = [], picked = false;
+  return PS.trial("dash", { label: "t", zonePct: zone, tier }, seed, (wrap, now, fire) => {
+    if (picked) return;
+    const run = wrap.querySelector(".ps-runner"), thr = wrap.querySelector(".ps-throw");
+    if (!run || !thr) return;
+    const seen = thr.textContent === "⚾";
+    hist.push({ now, p: pctOf(run.style.left), q: seen ? pctOf(thr.style.left) : null });
+    const backAt = pctOf(wrap.querySelector(".ps-back").style.left);
+    let b = hist[0];
+    for (const h of hist) { if (h.now <= now - lag) b = h; }
+    if (b.q == null) {
+      // 아직 송구가 안 보여요. 한계선을 넘기 직전이면 도박을 해야 해요.
+      if (b.p > backAt - 1.5) { picked = true; fire(".ps-go"); }
+      return;
+    }
+    let a = null, ar = null;
+    for (const h of hist) { if (h.q != null && h.now <= b.now - 120) a = h; }
+    for (const h of hist) { if (h.now <= b.now - 160) ar = h; }
+    if (!a || !ar) return;                                      // 아직 속도를 못 재요
+    const vq = (b.q - a.q) / (b.now - a.now);
+    const vp = (b.p - ar.p) / (b.now - ar.now);
+    if (vq <= 0 || vp <= 0) return;
+    const tThrow = b.now + (100 - b.q) / vq;
+    const tHome = now + (100 - b.p) / (vp / T.DASH.hesit) + gauss(sigma);
+    picked = true;
+    if (tHome < tThrow - margin) fire(".ps-go");
+    else if (b.p <= backAt) fire(".ps-stop");
+    else fire(".ps-go");                                        // 물러설 수 없으면 갈 수밖에 없어요
+  });
+}
+
+const dist = (n, fn) => {
+  const d = { perfect: 0, good: 0, miss: 0 };
+  let dur = 0, worst = 0;
+  for (let i = 0; i < n; i++) {
+    const r = fn(i + 1);
+    d[r.res == null ? "miss" : r.res] += 1;
+    dur += r.endedAt;
+    worst = Math.max(worst, r.endedAt);
+  }
+  return { ...d, n, dur: dur / n, worst, p: d.perfect / n, g: d.good / n, m: d.miss / n };
+};
+/* 게임이 실제로 쓰는 배수예요 — game.js의 beginProMoment가 hitP에 곱하는 값.
+ * 판정 분포를 하나의 눈금으로 견주려고 여기서만 써요. */
+const MULT = (() => {
+  const m = GAME_SRC.match(/const mult = res === "perfect" \? ([\d.]+) : res === "good" \? ([\d.]+) : ([\d.]+);/);
+  if (!m) throw new Error("game.js에서 판정 배수를 못 찾았어요");
+  return { perfect: +m[1], good: +m[2], miss: +m[3] };
+})();
+const mult = (d) => d.p * MULT.perfect + d.g * MULT.good + d.m * MULT.miss;
+const pct = (v) => `${(v * 100).toFixed(0)}%`;
+
+/* ================================================================
+ * ③ 도달성 — 진짜 엔진·진짜 시간으로
+ * ================================================================ */
+group("③ 도달성 (메커닉 자체)");
+guard("도달성", () => {
+  const SK = { lag: 160, sigma: 2.0, margin: 60, dsigma: 90 };
+  for (const [name, fn] of [
+    ["🧊 볼카운트 승부", (s) => countAs(38, 0, s, SK.lag, SK.sigma)],
+    ["🏃 홈 승부", (s) => dashAs(38, 0, s, SK.lag, SK.margin, SK.dsigma)],
+  ]) {
+    const d = dist(200, fn);
+    check(d.perfect > 0, `${name} — 잘하면 perfect에 실제로 닿는다 (${pct(d.p)})`);
+    check(d.good > 0, `${name} — 성공(good)도 실제로 나온다 (${pct(d.g)})`);
+    console.log(`   ${name} 잘하는 사람 | P ${pct(d.p)} · G ${pct(d.g)} · M ${pct(d.m)} · 평균 ${(d.dur / 1000).toFixed(2)}초 · 최장 ${(d.worst / 1000).toFixed(2)}초`);
+    // 못하면 실제로 벌을 받아요 — miss가 안 나오면 판정이 장식이에요
+    const poor = dist(120, (s) => (name[0] === "🧊"
+      ? countAs(12, 2, s, 320, 9.0)
+      : dashAs(12, 2, s, 340, -140, 420)));
+    check(poor.miss > 0, `${name} — 못하면 miss가 실제로 난다 (${pct(poor.m)})`);
+  }
+  // 아무것도 안 눌러도 끝나요 (안 그러면 손을 놓은 순간 게임이 멎어요)
+  for (const [name, mech] of [["🧊 볼카운트 승부", "count"], ["🏃 홈 승부", "dash"]]) {
+    let stuck = 0, worst = 0, boxLeft = 0;
+    for (let i = 0; i < 60; i++) {
+      const r = PS.trial(mech, { label: "t", zonePct: 22, tier: 2 }, 5000 + i);
+      if (r.res == null) stuck++;
+      worst = Math.max(worst, r.endedAt);
+      if (r.left.trim() !== "") boxLeft++;
+    }
+    check(stuck === 0, `${name} — 아무것도 안 눌러도 끝난다 (막힌 판 ${stuck})`);
+    check(boxLeft === 0, `${name} — 끝나면 상자를 지우고 나간다 (남은 판 ${boxLeft})`);
+    console.log(`   ${name} 손 놓기 | 최장 ${(worst / 1000).toFixed(2)}초`);
+  }
+  // 한 판이 3~5초예요. 가을야구 한 시리즈에 미니게임이 여러 번이라 길면 그 자체가 버그예요.
+  const spans = [];
+  for (const mech of ["count", "dash"]) {
+    for (const tier of [0, 1, 2]) {
+      for (const zone of [12, 26, 40]) {
+        const d = dist(60, (s) => (mech === "count"
+          ? countAs(zone, tier, s, 200, 3.0)
+          : dashAs(zone, tier, s, 200, 50, 150)));
+        spans.push({ mech, tier, zone, dur: d.dur, worst: d.worst });
+      }
+    }
+  }
+  const slowMean = spans.filter((x) => x.dur > 5000);
+  const slowWorst = spans.filter((x) => x.worst > 6500);
+  check(slowMean.length === 0,
+    `한 판 평균이 5초를 안 넘는다 (가장 긴 칸 ${(Math.max(...spans.map((x) => x.dur)) / 1000).toFixed(2)}초)`);
+  check(slowWorst.length === 0,
+    `가장 오래 끈 판도 6.5초 안이다 (${(Math.max(...spans.map((x) => x.worst)) / 1000).toFixed(2)}초)`);
+});
+
+/* ================================================================
+ * ④ 난이도 — 능력치·시리즈 깊이가 실제로 들어가는가
+ *   그리고 기존 8종을 같은 사람 모델로 같이 재요 (도입 전 기준선)
+ * ================================================================ */
+group("④ 난이도");
+
+const ZONES = [26, 32, 38];
+const SKILL = { name: "능숙", lag: 160, sigma: 2.0, margin: 60, dsigma: 90, mem: 0.94, find: 900, tsig: 55 };
+const AVG = { name: "보통", lag: 240, sigma: 4.5, margin: 40, dsigma: 220, mem: 0.82, find: 1500, tsig: 110 };
+const DN = Number(process.env.POST_N || 90);
+
+// [skill][tier][zone] → 두 메커닉을 합친 판정 분포
+const NEWTAB = {};
+guard("새 2종 난이도", () => {
+  for (const sk of [SKILL, AVG]) {
+    NEWTAB[sk.name] = {};
+    for (const tier of [0, 1, 2]) {
+      NEWTAB[sk.name][tier] = {};
+      for (const zone of ZONES) {
+        const a = dist(DN, (s) => countAs(zone, tier, s, sk.lag, sk.sigma));
+        const b = dist(DN, (s) => dashAs(zone, tier, s, sk.lag, sk.margin, sk.dsigma));
+        NEWTAB[sk.name][tier][zone] = {
+          p: (a.p + b.p) / 2, g: (a.g + b.g) / 2, m: (a.m + b.m) / 2,
+          count: a, dash: b,
+        };
+      }
+    }
+  }
+  for (const sk of [SKILL, AVG]) {
+    for (const tier of [0, 1, 2]) {
+      console.log(`   ${sk.name} tier${tier} | ${ZONES.map((z) => {
+        const d = NEWTAB[sk.name][tier][z];
+        return `존${z} P${pct(d.p)} M${pct(d.m)} 배수 ${mult(d).toFixed(3)}`;
+      }).join(" · ")}`);
+    }
+  }
+  /* 능력치를 올리면 나아져요. 양 끝만 못 박아요 — 표본이 유한해서(칸마다
+   * POST_N판) 가운데 칸은 ±0.03쯤 흔들려요. 한 계단씩 못 박으면 난이도가
+   * 아니라 난수를 재게 돼요.
+   *
+   * 메커닉 하나씩은 **완벽(perfect)이 나오는 비율**로 봐요. 🏃 홈 승부는 잘하면
+   * 멈춰서 성공(good)을 챙길 수 있어서, 능력치가 낮아도 배수가 1.00 근처에
+   * 머물러요 — 능력치가 실제로 사는 자리는 "정말로 홈을 밟느냐"거든요.
+   * 둘을 합친 배수는 아래에서 따로 못 박아요. */
+  const bad = [];
+  const lowZ = ZONES[0], hiZ = ZONES[ZONES.length - 1];
+  for (const sk of [SKILL, AVG]) {
+    for (const tier of [0, 1, 2]) {
+      for (const key of ["count", "dash"]) {
+        const a = NEWTAB[sk.name][tier][lowZ][key].p, b = NEWTAB[sk.name][tier][hiZ][key].p;
+        if (!(b > a)) bad.push(`${sk.name}/tier${tier}/${key} ${pct(a)}→${pct(b)}`);
+      }
+      const a = mult(NEWTAB[sk.name][tier][lowZ]), b = mult(NEWTAB[sk.name][tier][hiZ]);
+      if (!(b > a)) bad.push(`${sk.name}/tier${tier}/합침 ${a.toFixed(3)}→${b.toFixed(3)}`);
+    }
+  }
+  check(bad.length === 0, `능력치를 올리면 두 메커닉 다 성적이 오른다 (거꾸로 간 칸 ${bad.join(" · ") || "없음"})`);
+  /* 능력치가 실제로 뜻 있게 갈라야 해요 (모든 칸이 똑같으면 육성이 안 닿아요).
+   * 칸 하나는 표본이 흔들리니 여섯 칸(손끝 2 × 시리즈 깊이 3)의 평균으로 봐요. */
+  const gaps = [];
+  for (const sk of [SKILL, AVG]) {
+    for (const tier of [0, 1, 2]) {
+      gaps.push(mult(NEWTAB[sk.name][tier][hiZ]) - mult(NEWTAB[sk.name][tier][lowZ]));
+    }
+  }
+  const gapMean = gaps.reduce((a, b) => a + b, 0) / gaps.length;
+  check(gapMean >= 0.03 && Math.min(...gaps) > 0,
+    `능력치 26→38이 배수를 평균 0.03 넘게 벌린다 (평균 ${gapMean.toFixed(3)} · 가장 좁은 칸 ${Math.min(...gaps).toFixed(3)})`);
+  NEWTAB.__gap = gapMean;
+  // 시리즈가 깊어질수록 어려워져요 (여기도 양 끝만 봐요)
+  const up = [];
+  for (const sk of [SKILL, AVG]) {
+    for (const zone of ZONES) {
+      const a = mult(NEWTAB[sk.name][0][zone]), b = mult(NEWTAB[sk.name][2][zone]);
+      if (!(b < a)) up.push(`${sk.name}/존${zone} ${a.toFixed(3)}→${b.toFixed(3)}`);
+    }
+  }
+  check(up.length === 0, `마지막 시리즈가 와일드카드보다 어렵다 (거꾸로 간 칸 ${up.join(" · ") || "없음"})`);
+  // 대충 하면 벌을 받아요 — 이게 없으면 메커닉이 장식이에요
+  const mash = dist(150, (s) => PS.trial("count", { label: "t", zonePct: 38, tier: 0 }, s, (w, n, fire) => fire(".ps-tap")));
+  const idle = dist(150, (s) => PS.trial("count", { label: "t", zonePct: 38, tier: 0 }, s));
+  const best = NEWTAB[SKILL.name][0][38].count;
+  check(mash.perfect === 0,
+    `🧊 초구부터 무작정 휘두르면 perfect가 아예 안 나온다 (${mash.perfect}판) — 볼을 골라야 완벽이에요`);
+  check(mult(mash) < mult(best) - 0.05 && mult(idle) < mult(best) - 0.05,
+    `🧊 무작정 스윙(${mult(mash).toFixed(3)})·전부 참기(${mult(idle).toFixed(3)})가 잘 보는 사람(${mult(best).toFixed(3)})보다 확실히 나쁘다`);
+  const rush = dist(150, (s) => PS.trial("dash", { label: "t", zonePct: 38, tier: 0 }, s, (w, n, fire) => fire(".ps-go")));
+  const froze = dist(150, (s) => PS.trial("dash", { label: "t", zonePct: 38, tier: 0 }, s));
+  check(mult(froze) < mult(rush),
+    `🏃 아무것도 안 고르는 게 무작정 돌진보다 나쁘다 (${mult(froze).toFixed(3)} < ${mult(rush).toFixed(3)}) — 고르지 않는 것이 최악이에요`);
+  console.log(`   🧊 무작정 스윙 배수 ${mult(mash).toFixed(3)} · 전부 참기 ${mult(idle).toFixed(3)} · 잘 보는 사람 ${mult(best).toFixed(3)}`);
+  console.log(`   🏃 무작정 돌진 배수 ${mult(rush).toFixed(3)} · 손 놓기 ${mult(froze).toFixed(3)}`);
+});
+
+/* ---------- 도입 전 기준선: timing.js 8종을 같은 사람 모델로 ---------- */
+const TM = vstage(TM_SRC, "Timing");
+function aimAs(mech, sel, prop, target, opts, seed, lag, sigma) {
+  let hist = [], fired = false, plan = null, started = false;
+  return TM.trial(mech, opts, seed, (wrap, now, fire) => {
+    const btn = wrap.querySelector(".tm-btn");
+    if (mech === "hold" && !started) { started = true; fire(btn, "pointerdown"); return; }
+    if (fired) return;
+    const el = wrap.querySelector(sel);
+    if (!el) return;
+    let goal = target;
+    if (mech === "hold") {
+      const pz = wrap.querySelector(".tm-zone-perfect");
+      goal = pctOf(pz.style.left) + pctOf(pz.style.width) / 2;
+    }
+    hist.push({ now, v: pctOf(el.style[prop]) });
+    let a = hist[0], b = hist[0];
+    for (const h of hist) { if (h.now <= now - lag) b = h; }
+    for (const h of hist) { if (h.now <= now - lag - 60) a = h; }
+    if (a === b) return;
+    const v = (b.v - a.v) / (b.now - a.now);
+    if (v === 0 || (mech === "hold" && v <= 0)) return;
+    const eta = b.now + (goal - b.v) / v;
+    if (eta < b.now) return;                                   // 지나갔어요 — 다음 왕복을 기다려요
+    if (plan == null || Math.abs(eta - plan) > 300) plan = eta + gauss(sigma);
+    if (now >= plan) { fired = true; fire(btn, mech === "hold" ? "pointerup" : "click"); }
+  });
+}
+function reactAs(opts, seed, lag, sigma) {
+  let fired = false, plan = null;
+  return TM.trial("reaction", opts, seed, (wrap, now, fire) => {
+    if (fired) return;
+    const btn = wrap.querySelector(".tm-btn");
+    if (!btn.classList.contains("tm-react-go")) return;
+    if (plan == null) plan = now + lag + Math.max(-lag * 0.5, gauss(sigma));
+    if (now >= plan) { fired = true; fire(btn, "click"); }
+  });
+}
+function seqAs(opts, seed, memP) {
+  let seq = null, i = 0, plan = 0;
+  return TM.trial("sequence", opts, seed, (wrap, now, fire) => {
+    const show = wrap.querySelector(".tm-seq-show");
+    if (!seq && show.textContent.indexOf("❓") < 0) seq = show.textContent.split(" ");
+    const btns = wrap.querySelectorAll(".tm-seq-btn");
+    if (!seq || !btns.length || btns[0].disabled || now < plan) return;
+    plan = now + 260;
+    const icons = Array.from(btns).map((b) => b.textContent);
+    let want = seq[i];
+    if (plyRnd() > memP) want = icons[Math.floor(plyRnd() * icons.length)];
+    i += 1;
+    fire(Array.from(btns).find((x) => x.textContent === want) || btns[0], "click");
+  });
+}
+function duelAs(opts, seed) {
+  let fired = false;
+  return TM.trial("duel", opts, seed, (wrap, now, fire) => {
+    if (fired || now < 700) return;
+    fired = true;
+    const btns = Array.from(wrap.querySelectorAll(".tm-duel-btn"));
+    const m = wrap.querySelector(".tm-hint").textContent.match(/([가-힣]+)은\(는\) 함정/);
+    const pool = m ? btns.filter((b) => b.textContent !== m[1]) : btns;
+    fire(pool[Math.floor(plyRnd() * pool.length)], "click");
+  });
+}
+function targetAs(opts, seed, lag, sigma) {
+  let forEl = null, plan = 0;
+  return TM.trial("target", opts, seed, (wrap, now, fire) => {
+    const t = wrap.querySelector(".tm-target:not([disabled])");
+    if (!t) { forEl = null; return; }
+    if (forEl !== t) { forEl = t; plan = now + lag + Math.max(-lag * 0.5, gauss(sigma)); }
+    if (now >= plan) fire(t, "click");
+  });
+}
+function oddAs(opts, seed, findMs, sigma) {
+  let forEl = null, plan = 0;
+  return TM.trial("odd", opts, seed, (wrap, now, fire) => {
+    const cells = Array.from(wrap.querySelectorAll(".tm-odd-cell"));
+    if (!cells.length) return;
+    const cnt = {};
+    for (const c of cells) cnt[c.textContent] = (cnt[c.textContent] || 0) + 1;
+    const odd = cells.find((c) => cnt[c.textContent] === 1);
+    if (!odd) return;
+    if (forEl !== odd) { forEl = odd; plan = now + Math.max(200, findMs + gauss(sigma)); }
+    if (now >= plan) fire(odd, "click");
+  });
+}
+/* game.js가 8종에 실제로 넘기는 옵션 그대로예요 (playRandomMini 참고) */
+function old8(stat, zone, sk, n) {
+  const all = { perfect: 0, good: 0, miss: 0 };
+  const add = (d) => { all.perfect += d.perfect; all.good += d.good; all.miss += d.miss; };
+  add(dist(n, (s) => aimAs("play", ".tm-marker", "left", 50, { zonePct: zone, label: "t" }, s, sk.lag, sk.tsig)));
+  add(dist(n, (s) => aimAs("hold", ".tm-fill", "width", 0, { zonePct: zone, label: "t" }, s, sk.lag, sk.tsig)));
+  add(dist(n, (s) => aimAs("drop", ".tm-drop-icon", "top", 66, { zonePct: zone, label: "t" }, s, sk.lag, sk.tsig)));
+  add(dist(n, (s) => seqAs({ icons: ["⚾", "🧢", "🧤", "🏏"], showMs: 900 + stat * 6 + 90 }, s, sk.mem)));
+  add(dist(n, (s) => reactAs({ perfectMs: 300 + stat * 1.5, goodMs: 700 + stat * 2.5 }, s, sk.lag, sk.tsig)));
+  add(dist(n, (s) => targetAs({ count: 3, lifeMs: 800 + Math.min(stat, 130) * 3 }, s, sk.lag + 120, sk.tsig)));
+  add(dist(n, (s) => oddAs({ rounds: 2, sets: [["⚾", "🥎"], ["🧢", "⛑️"], ["🧤", "🥊"]] }, s, sk.find, sk.tsig * 3)));
+  add(dist(n, (s) => duelAs({ choices: ["몸쪽", "가운데", "바깥쪽"], hintChance: Math.max(0, Math.min(0.9, (stat - 40) / 80 + 0.075)) }, s)));
+  const tot = all.perfect + all.good + all.miss;
+  return { p: all.perfect / tot, g: all.good / tot, m: all.miss / tot };
+}
+const OLDTAB = {};
+guard("기존 8종 기준선", () => {
+  for (const sk of [SKILL, AVG]) {
+    OLDTAB[sk.name] = {};
+    for (const stat of [70, 110, 150]) {
+      const zone = Math.min(40, Math.max(10, 13 + stat * 0.22 + 30 * 0.08));
+      /* 새 2종과 같은 표본을 써요. 예전에는 DN/3만 돌렸는데, 기존 8종은 배수가
+       * 1.05 언저리에 뭉쳐 있어서 능력치가 벌리는 폭(0.02 안팎)이 표본 잡음과
+       * 같은 크기가 돼요 — 아래 비교가 실행할 때마다 뒤집혔어요. */
+      OLDTAB[sk.name][stat] = old8(stat, zone, sk, Math.max(60, DN));
+    }
+    console.log(`   기존 8종 ${sk.name} | ${[70, 110, 150].map((st) =>
+      `능력치${st} P${pct(OLDTAB[sk.name][st].p)} M${pct(OLDTAB[sk.name][st].m)} 배수 ${mult(OLDTAB[sk.name][st]).toFixed(3)}`).join(" · ")}`);
+  }
+  /* 기존 8종은 프로 능력치에서 거의 다 perfect예요 — 그래서 가을야구가 5월과
+   * 손맛이 같았어요. 새 2종이 그보다 능력치에 더 민감해야 만든 뜻이 있어요.
+   * 양쪽 다 여러 칸의 평균으로 견줘요 (칸 하나는 표본이 흔들려요). */
+  const oldGaps = [SKILL.name, AVG.name].map((n) => mult(OLDTAB[n][150]) - mult(OLDTAB[n][70]));
+  const oldGap = oldGaps.reduce((a, b) => a + b, 0) / oldGaps.length;
+  const newGap = NEWTAB.__gap;
+  console.log(`   능력치가 벌리는 폭 | 기존 8종 ${oldGap.toFixed(3)} · 새 2종 ${newGap.toFixed(3)}`);
+  /* 앞서기만 하면 돼요(배수를 안 걸어요). 기존 8종의 폭은 참값이 0.02~0.04인데
+   * 표본 오차가 ±0.01이라, 여기에 1.5배 같은 문턱을 얹으면 실행할 때마다 뒤집혀요.
+   * 새 2종이 실제로 민감한지는 위의 "평균 0.03 넘게 벌린다"가 훨씬 세게 못 박아요
+   * (실측 0.063 대 문턱 0.03). 이 줄은 그 위에 얹는 방향 확인이에요. */
+  check(newGap > oldGap,
+    `새 2종이 기존 8종보다 능력치에 더 민감하다 (${newGap.toFixed(3)} > ${oldGap.toFixed(3)})`);
+  const oldMiss = [SKILL.name, AVG.name].map((n) => OLDTAB[n][150].m);
+  console.log(`   기존 8종은 프로 능력치에서 거의 다 완벽이에요 (능력치 150 · 완벽 ${
+    [SKILL.name, AVG.name].map((n) => pct(OLDTAB[n][150].p)).join(" / ")} · miss ${oldMiss.map(pct).join(" / ")})`);
+});
+
+/* ================================================================
+ * ②·⑤ 게임 입구를 통해 — 진짜 화면을 띄워요
+ * ================================================================ */
+const PRELUDE = `
+  window.fetch = () => Promise.reject(new Error("net off"));
+  window.scrollTo = () => {};
+  window.matchMedia = window.matchMedia || (() => ({ matches:false, addEventListener(){}, removeEventListener(){} }));
+`;
+function bootGame() {
+  const DIR = path.join(BETA, "rookie");
+  const html = fs.readFileSync(path.join(DIR, "index.html"), "utf8")
+    .replace(/<script[^>]*src="https?:[^"]*"[^>]*><\/script>/g, "")
+    .replace(/<script src="([^"]+)"><\/script>/g, (m0, src) => {
+      const p = path.resolve(DIR, src.split("?")[0]);
+      return fs.existsSync(p) ? `<script>\n${fs.readFileSync(p, "utf8")}\n</script>` : "";
+    })
+    .replace("</head>", `<script>${PRELUDE}</script></head>`)
+    /* 최상위 let/const는 브라우저에서도 window 속성이 안 돼요.
+     * 페이지 안에서 직접 eval하는 창구를 하나 열어 접근합니다 (tour-harness.js와 같아요). */
+    .replace("</body>", `<script>window.__get=(n)=>eval(n);window.__set=(n,v)=>{window.__v=v;eval(n+" = window.__v")};</script></body>`);
+  const dom = new JSDOM(html, { runScripts: "dangerously", pretendToBeVisual: true, url: "https://x.test/rookie/" });
+  const w = dom.window;
+  w.Ads = { display() {}, init() {} };
+  w.Stats = { log() {} };
+  // 가상 시계 — 한 시즌을 몇 초에 굴리려면 시계를 우리가 돌려야 해요
+  let VT = 0, vid = 1, vt = [];
+  w.performance.now = () => VT;
+  w.requestAnimationFrame = (cb) => { const i = vid++; vt.push({ at: VT + 16.667, id: i, fn: () => cb(VT), rep: 0 }); return i; };
+  w.setTimeout = (fn, ms) => { const i = vid++; vt.push({ at: VT + (ms || 0), id: i, fn, rep: 0 }); return i; };
+  w.setInterval = (fn, ms) => { const i = vid++; vt.push({ at: VT + (ms || 1), id: i, fn, rep: ms || 1 }); return i; };
+  const clr = (i) => { const k = vt.findIndex((t) => t.id === i); if (k >= 0) vt.splice(k, 1); };
+  w.clearTimeout = clr; w.clearInterval = clr; w.cancelAnimationFrame = clr;
+  const pump = (max) => {
+    let n = 0;
+    while (vt.length && n++ < (max || 60000)) {
+      vt.sort((a, b) => a.at - b.at);
+      const ev = vt[0];
+      VT = ev.at;
+      if (ev.rep) ev.at = VT + ev.rep; else vt.shift();
+      ev.fn();
+    }
+  };
+  return { dom, w, pump, $: (id) => w.document.getElementById(id), get: w.__get, set: w.__set };
+}
+
+const G = bootGame();
+const Career = G.w.Career;
+const active = () => (G.w.document.querySelector(".screen.active") || {}).id;
+
+/* 프로 선수 한 명을 세우고, 정규시즌을 마지막 한 경기만 남긴 자리에 놓아요.
+ * 승패는 실제 산식(teamWinP·팀 전력)으로 굴려서 순위(시드)가 저절로 나와요 —
+ * 1번 시드로 고정하면 한 시리즈만 이기면 돼서 미니게임이 우승에 거의 안 닿아요. */
+function setupPro(o) {
+  const S = G.get(`newState(REGIONS[0], "${o.pos}", "확인")`);
+  G.set("S", S);
+  for (const k of Object.keys(S.stats)) S.stats[k] = o.stat;
+  for (const k of Object.keys(S.talents)) S.talents[k] = 1.3;
+  S.phase = "pro";
+  S.league = o.league || 1;
+  S.age = 27; S.proYear = 6; S.condition = 80; S.money = 0;
+  S.career = { seasons: [], mvp: 0, gg: 0, roy: 0, rings: 0, warSum: 0 };
+  S.proLog = []; S.trophies = []; S.teamStr = {}; S.post = null; S.trans = {};
+  const teams = Career._t.leagueTeams();
+  S.team = teams[0];
+  S.role = o.pos === "batter" ? "4번 타자" : "선발 투수";
+  Career._t.driftTeamStr();
+  G.set("S", S);
+  const total = Career._t.seasonTotal();
+  const binom = (n, p) => { let k = 0; for (let i = 0; i < n; i++) if (G.w.Math.random() < p) k++; return k; };
+  const myW = binom(total - 1, Career._t.teamWinP());
+  S.season = {
+    game: o.lastGame === false ? 0 : total - 1, total,
+    teamW: myW, teamL: (total - 1) - myW,
+    others: teams.filter((t) => t !== S.team).map((name) => {
+      const str = Career._t.teamStrOf(name);
+      const ww = binom(total - 1, str);
+      return { name, w: ww, l: (total - 1) - ww, str };
+    }),
+    stats: o.pos === "batter" ? { ab: 0, hits: 0, hr: 0, sb: 0 } : { ip: 0, k: 0, er: 0, wins: 0, saves: 0, g: 0 },
+  };
+  S.pendingGame = true;
+  return S;
+}
+
+/* 정규시즌 마지막 경기부터 결산까지 실제 버튼을 눌러 굴려요. */
+function runToReport(onStep) {
+  Career.showPro();
+  G.pump();
+  let clicks = 0, entered = false;
+  while (clicks++ < 400) {
+    const st = G.get("S");
+    if (st.post) entered = true;
+    if (onStep) onStep(st);
+    const scr = active();
+    if (scr === "screen-pro") {
+      const go = G.w.document.querySelector("#pro-actions .go-game");
+      if (!go) break;
+      go.click();
+    } else if (scr === "screen-tournament") {
+      const b = G.$("btn-tour-next");
+      if (!b || b.disabled) break;
+      b.click();
+    } else break;
+    G.pump();
+  }
+  const fin = G.get("S");
+  const last = (fin.career.seasons || [])[fin.career.seasons.length - 1];
+  return { entered, champ: !!(last && last.champ), rank: last ? last.rank : null };
+}
+
+group("② 배치 — 가을야구에서만");
+guard("배치", () => {
+  const realPost = G.w.PostStage, realTiming = G.w.Timing;
+  const seen = { post: [], timing: [] };
+  // 상자가 실제로 화면에 그려졌는지도 같이 봐요. 가상 시계에서는 미니게임이
+  // 한 번의 pump 안에서 시작하고 끝나서, 밖에서 보면 이미 지워진 뒤예요.
+  const drawn = { plate: 0, field: 0, inMoment: 0, other: 0 };
+  const spy = (real, bag, watchDom) => new Proxy(real, {
+    get(t, k) {
+      const v = t[k];
+      if (typeof v !== "function" || k === "constructor") return v;
+      return (...a) => {
+        bag.push(k);
+        const out = v.apply(t, a);
+        if (watchDom && a[0] && a[0].querySelector) {
+          if (a[0].querySelector(".ps-plate")) drawn.plate++;
+          else if (a[0].querySelector(".ps-field")) drawn.field++;
+          else drawn.other++;
+          if (a[0].id === "game-moment") drawn.inMoment++;
+        }
+        return out;
+      };
+    },
+  });
+  G.w.PostStage = spy(realPost, seen.post, true);
+  G.w.Timing = spy(realTiming, seen.timing, false);
+  G.w.localStorage.setItem("grow-auto-mini", "0");   // 손으로 하는 경로예요
+
+  // 정규시즌 — 첫 경기부터 몇 경기 굴려서 어느 미니게임이 뜨는지 봐요
+  setupPro({ pos: "batter", stat: 120, lastGame: false });
+  Career.showPro();
+  G.pump();
+  for (let i = 0; i < 8 && active() === "screen-pro"; i++) {
+    const go = G.w.document.querySelector("#pro-actions .go-game");
+    if (!go) break;
+    go.click();
+    G.pump();
+    let hop = 0;
+    while (active() === "screen-tournament" && hop++ < 60) {
+      const b = G.$("btn-tour-next");
+      if (!b || b.disabled) break;
+      b.click();
+      G.pump();
+    }
+  }
+  const regTiming = seen.timing.length, regPost = seen.post.length;
+  check(regTiming > 0, `정규시즌에서 기존 8종(timing.js)이 그대로 뜬다 (${regTiming}판)`);
+  check(regPost === 0, `정규시즌에는 가을야구 메커닉이 안 뜬다 (${regPost}판)`);
+
+  /* 가을야구 — 같은 선수를 시즌 끝에 놓고 굴려요.
+   * 마지막 정규시즌 경기 한 판이 먼저 지나가니(타자는 그 안에서 3~5타석),
+   * 세는 건 S.post가 살아난 뒤부터예요. */
+  let inPost = false;
+  const postSeen = { post: 0, timing: 0, kinds: new Set() };
+  const hookLen = { post: 0, timing: 0 };
+  setupPro({ pos: "batter", stat: 140 });
+  seen.post.length = 0; seen.timing.length = 0;
+  const r = runToReport((st) => {
+    if (!inPost && st.post && st.post.myRound) {
+      inPost = true;
+      hookLen.post = seen.post.length; hookLen.timing = seen.timing.length;
+    }
+    if (inPost) {
+      postSeen.post = seen.post.length - hookLen.post;
+      postSeen.timing = seen.timing.length - hookLen.timing;
+      for (const k of seen.post.slice(hookLen.post)) postSeen.kinds.add(k);
+    }
+  });
+  postSeen.post = seen.post.length - hookLen.post;
+  postSeen.timing = seen.timing.length - hookLen.timing;
+  for (const k of seen.post.slice(hookLen.post)) postSeen.kinds.add(k);
+  check(r.entered, "가을야구까지 실제로 들어갔다");
+  check(postSeen.post > 0, `가을야구에서 새 메커닉이 뜬다 (${postSeen.post}판 · ${[...postSeen.kinds].join(" · ")})`);
+  check(postSeen.timing === 0, `가을야구에는 기존 8종이 안 뜬다 (${postSeen.timing}판)`);
+  check(postSeen.kinds.size === 2, `두 메커닉이 다 나온다 (${[...postSeen.kinds].join(" · ")})`);
+  check(drawn.plate > 0 && drawn.field > 0 && drawn.other === 0,
+    `두 메커닉 다 실제 DOM을 그린다 (🧊 존 ${drawn.plate}판 · 🏃 주루로 ${drawn.field}판 · 못 그린 판 ${drawn.other})`);
+  check(drawn.inMoment === drawn.plate + drawn.field,
+    `미니게임이 경기 화면의 #game-moment 안에 붙는다 (${drawn.inMoment}/${drawn.plate + drawn.field}판)`);
+
+  // autoMiniOn — 이 경로가 없으면 테스트도 확인 페이지도 여기서 막혀요
+  seen.post.length = 0; seen.timing.length = 0;
+  G.w.localStorage.setItem("grow-auto-mini", "1");
+  setupPro({ pos: "pitcher", stat: 140 });
+  const auto = runToReport();
+  check(auto.entered, "자동 판정으로도 가을야구를 완주한다");
+  check(seen.post.length === 0 && seen.timing.length === 0,
+    `자동 판정이면 미니게임 화면을 아예 안 띄운다 (post ${seen.post.length} · timing ${seen.timing.length})`);
+  check(/if \(autoMiniOn\(\)\) \{ cb\(autoRes\(mech\.stat\(\)\), txt\); return; \}/.test(GAME_SRC),
+    "playPostMini에 autoMiniOn 경로가 있다");
+  check(/if \(inPostMini\(\)\) \{ playPostMini\(container, cb\); return; \}/.test(GAME_SRC),
+    "playRandomMini의 첫 줄에서만 갈라진다 (정규시즌 8종은 손대지 않았어요)");
+
+  G.w.PostStage = realPost;
+  G.w.Timing = realTiming;
+});
+
+group("⑤ 가을야구 우승 확률");
+guard("우승 확률", () => {
+  const realAutoRes = G.get("autoRes");
+  const POST_TIER = G.get("POST_TIER");
+  const zoneOf = (stat) => Math.min(40, Math.max(10, 13 + stat * 0.22 + 30 * 0.08));
+  const lerp = (tab, keys, x) => {
+    let lo = keys[0], hi = keys[keys.length - 1];
+    for (const k of keys) if (k <= x) lo = k;
+    for (let i = keys.length - 1; i >= 0; i--) if (keys[i] >= x) hi = keys[i];
+    if (lo === hi) return tab[lo];
+    const f = (x - lo) / (hi - lo);
+    const a = tab[lo], b = tab[hi];
+    return { p: a.p + (b.p - a.p) * f, g: a.g + (b.g - a.g) * f, m: a.m + (b.m - a.m) * f };
+  };
+  // ④가 실제로 잰 분포를 그대로 꽂아요 — 여기 숫자를 옮겨 적지 않아요
+  const useNew = (stat, skName) => {
+    const z = zoneOf(stat);
+    G.set("autoRes", () => {
+      const st = G.get("S");
+      const tier = (st.post && POST_TIER[st.post.myRound]) || 0;
+      const d = lerp(NEWTAB[skName][tier], ZONES, z);
+      const r = G.w.Math.random();
+      return r < d.p ? "perfect" : r < d.p + d.g ? "good" : "miss";
+    });
+  };
+  const useOld = (stat, skName) => {
+    const d = lerp(OLDTAB[skName], [70, 110, 150], stat);
+    G.set("autoRes", () => {
+      const r = G.w.Math.random();
+      return r < d.p ? "perfect" : r < d.p + d.g ? "good" : "miss";
+    });
+  };
+
+  const CN = Number(process.env.POST_CHAMP_N || 45);
+  const STATS = [80, 115, 150];
+  const rows = [];
+  const table = {};
+  for (const pos of ["batter", "pitcher"]) {
+    table[pos] = {};
+    for (const stat of STATS) {
+      table[pos][stat] = {};
+      const cells = [];
+      for (const [nm, apply] of [
+        ["게임 기본", () => G.set("autoRes", realAutoRes)],
+        ["구8·능숙", () => useOld(stat, SKILL.name)],
+        ["구8·보통", () => useOld(stat, AVG.name)],
+        ["신2·능숙", () => useNew(stat, SKILL.name)],
+        ["신2·보통", () => useNew(stat, AVG.name)],
+      ]) {
+        apply();
+        G.w.Math.random = mulberry32(4242 + stat);
+        let champ = 0, ent = 0;
+        for (let i = 0; i < CN; i++) {
+          setupPro({ pos, stat });
+          const r = runToReport();
+          if (r.entered) ent++;
+          if (r.champ) champ++;
+        }
+        const v = ent ? champ / ent : 0;
+        table[pos][stat][nm] = v;
+        cells.push(`${nm} ${pct(v)}`);
+      }
+      rows.push(`   ${pos === "batter" ? "🧢 타자" : "⚾ 투수"} ${String(stat).padStart(3)} | ${cells.join(" · ")}`);
+    }
+  }
+  console.log(rows.join("\n"));
+  G.set("autoRes", realAutoRes);
+
+  const all = [];
+  for (const pos of ["batter", "pitcher"]) for (const st of STATS) for (const k of ["신2·능숙", "신2·보통"]) all.push(table[pos][st][k]);
+  const lo = Math.min(...all), hi = Math.max(...all);
+  /* 극단으로 쏠리면 안 돼요 — 아무도 우승 못 하거나 누구나 우승하면 가을야구가 사라져요.
+   * 이 범위를 넓히지 마세요. 넓히는 순간 이 검사는 아무것도 안 지킵니다. */
+  check(lo >= 0.03 && hi <= 0.92, `우승 확률이 3%~92% 안이다 (${pct(lo)}~${pct(hi)})`);
+  /* 능력치에 따라 갈려요. 칸 하나는 표본 오차가 ±6%p라, 손끝 두 갈래를 묶은
+   * 평균으로 봐요 (묶지 않으면 난이도가 아니라 난수를 재게 돼요). */
+  const flat = [];
+  for (const pos of ["batter", "pitcher"]) {
+    const at = (st) => (table[pos][st]["신2·능숙"] + table[pos][st]["신2·보통"]) / 2;
+    const a = at(STATS[0]), b = at(STATS[STATS.length - 1]);
+    console.log(`   ${pos === "batter" ? "🧢 타자" : "⚾ 투수"} 능력치 ${STATS[0]}→${STATS[STATS.length - 1]} | 우승 ${pct(a)} → ${pct(b)}`);
+    if (!(b > a + 0.08)) flat.push(`${pos} ${pct(a)}→${pct(b)}`);
+  }
+  check(flat.length === 0, `능력치를 올리면 우승 확률이 오른다 (안 오른 칸: ${flat.join(" · ") || "없음"})`);
+  /* 도입 전과 견줘요 — 어려워지는 건 좋지만 가을야구가 사라지면 안 돼요.
+   * 칸 하나(CN판)는 표본 오차가 ±6%p라 칸 단위로 못 박으면 난수를 재게 돼요.
+   * 포지션 × 손끝 묶음(능력치 세 칸의 평균)으로 봐요. */
+  const drops = [];
+  for (const pos of ["batter", "pitcher"]) {
+    for (const sk of [SKILL.name, AVG.name]) {
+      const d = STATS.map((st) => table[pos][st][`구8·${sk}`] - table[pos][st][`신2·${sk}`]);
+      drops.push({ key: `${pos}·${sk}`, v: d.reduce((a, b) => a + b, 0) / d.length });
+    }
+  }
+  const worst = drops.reduce((a, b) => (b.v > a.v ? b : a));
+  const mean = drops.reduce((a, b) => a + b.v, 0) / drops.length;
+  console.log(`   도입 전 대비 | ${drops.map((d) => `${d.key} ${(d.v * 100).toFixed(1)}%p`).join(" · ")} (평균 ${(mean * 100).toFixed(1)}%p 하락)`);
+  check(worst.v <= 0.25,
+    `어느 묶음도 도입 전보다 우승 확률이 25%p 넘게 떨어지지 않는다 (가장 큰 ${worst.key} ${(worst.v * 100).toFixed(1)}%p)`);
+  check(mean > -0.05, `가을야구가 쉬워지지는 않았다 (평균 ${(mean * 100).toFixed(1)}%p)`);
+});
+
+G.dom.window.close();
+PS.V.close();
+TM.V.close();
+console.log(fail ? `\n❌ ${fail}개 실패` : "\n✅ 통과");
+process.exit(fail ? 1 : 0);
