@@ -148,7 +148,10 @@ const CAREER_CONSTS = [
   ["inPost", /  const inPost = [^;]+;/],
   ["KS_LABEL", /  const KS_LABEL = \{[^\n]*\};/],
   ["postLabel", /  const postLabel = \(round\) =>[\s\S]*?;\n/],
+  ["leagueTagOf", /  const leagueTagOf = \(id\) => \{[\s\S]*?\n  \};/],
   ["leagueTag", /  const leagueTag = \(\) => \{[\s\S]*?\n  \};/],
+  // 📊 그 시즌에 뛴 소속을 역산하는 쪽이에요 — 스텁이 받으면 결산 헤더가 조용히 비어요
+  ["moveFrom", /  const moveFrom = [^;]+;/],
   ["mySeries", /  const mySeries = [^;]+;/],
   ["postOpp", /  const postOpp = \(\) => \{[^\n]*\};/],
   ["FA_YEAR", /  const FA_YEAR = [^;]+;/],
@@ -197,6 +200,9 @@ const CAREER_FNS = [
   // 🏛️ 이 태스크가 더한 것 — 쓰는 쪽이에요. 스텁이 받아버리면 12시즌이 가중 없이 지나가요
   "  function addAwardWeight(awards, pre) {",
   "  function finishSeason() {",
+  "  function teamOfYear(y, st) {",
+  "  function leagueOfYear(y, st) {",
+  "  function playedAt(s, st) {",
   "  function seasonReport() {",
   "  function moveActions(list) {",
   "  function gateFor(from, to) {",

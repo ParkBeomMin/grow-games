@@ -26,3 +26,15 @@
 /* 팀 성적이 아니라 개인 성적이 바뀐다는 걸 못 박는 줄이에요 */
 .lg-warn { border-top: 1px solid var(--line); margin-top: 12px; padding-top: 10px; }
 .lg-warn b { color: var(--cream); }
+
+/* 🌏 리그 배지 — 훈련·시즌 화면 HUD에서 지금 어느 리그에 있는지 한눈에 보여요.
+ * KBO에는 안 붙어요(국내 화면은 예전 그대로예요). 색은 테마 변수만 써요. */
+.lg-badge {
+  display: inline-block; padding: 0 6px; margin-right: 3px;
+  border: 1px solid var(--accent); border-radius: 999px;
+  color: var(--accent); font-size: .72rem; font-weight: 700;
+  white-space: nowrap; vertical-align: middle;
+}
+/* 결산에서 이적한 뒤 '다음 시즌 소속'을 알려주는 줄이에요 —
+ * 헤더(그 시즌에 뛴 팀)와 지금 팀이 다를 때만 떠요. */
+.next-club b { color: var(--cream); }

@@ -159,7 +159,12 @@ const CAREER_CONSTS = [
   ["inPost", /  const inPost = [^;]+;/],
   ["KS_LABEL", /  const KS_LABEL = \{[^\n]*\};/],
   ["postLabel", /  const postLabel = \(round\) =>[\s\S]*?;\n/],
+  ["leagueTagOf", /  const leagueTagOf = \(id\) => \{[\s\S]*?\n  \};/],
   ["leagueTag", /  const leagueTag = \(\) => \{[\s\S]*?\n  \};/],
+  // 📊 그 시즌에 뛴 소속을 역산하는 쪽이에요 — 스텁이 받으면 결산 헤더가 조용히 비어요
+  ["moveFrom", /  const moveFrom = [^;]+;/],
+  // 🌏 훈련 화면 HUD의 리그 배지 — 스텁이 받으면 리그가 안 보여도 초록이 떠요
+  ["leagueBadge", /  const leagueBadge = \(\) => \{[\s\S]*?\n  \};/],
   ["mySeries", /  const mySeries = [^;]+;/],
   ["postOpp", /  const postOpp = \(\) => \{[^\n]*\};/],
   ["FA_YEAR", /  const FA_YEAR = [^;]+;/],
@@ -197,6 +202,9 @@ const CAREER_FNS = [
   "  function gameWinP() {",
   "  function initSeason() {",
   "  function standingsHTML() {",
+  // 🌏 훈련 화면 그 자체예요 — 리그 표시를 화면에서 읽으려면 실제로 그려야 해요
+  "  function renderPro() {",
+  "  function renderStandings() {",
   "  function myRank() {",
   "  function enterPostseason() {",
   "  function advancePostseason(seed) {",
@@ -207,6 +215,9 @@ const CAREER_FNS = [
    * 여기서 굴리는 12시즌이 가중 없이 지나가요 — 없는 걸 있다고 믿는 초록이 돼요. */
   "  function addAwardWeight(awards, pre) {",
   "  function finishSeason() {",
+  "  function teamOfYear(y, st) {",
+  "  function leagueOfYear(y, st) {",
+  "  function playedAt(s, st) {",
   "  function seasonReport() {",
   "  function moveActions(list) {",
   "  function moveTo(team, type, bonus) {",
@@ -230,7 +241,7 @@ const EXPORTS = ["SEASON_TOTAL", "leagueTeams", "inPost", "mySeries", "postOpp",
   "proLog", "startCamp", "teamStrOf", "driftTeamStr", "marketValue", "teamWinP", "gameWinP",
   "initSeason", "myRank", "enterPostseason", "advancePostseason", "finishProGame", "finishSeason",
   "seasonReport", "faOffers", "showFa", "gateFor", "postingGates", "crisisPreview",
-  "showPosting", "showPostingClubs", "moveToLeague", "moveTo"];
+  "showPosting", "showPostingClubs", "moveToLeague", "moveTo", "renderPro", "leagueBadge"];
 
 function scopeOf(store) {
   const stub = function () { return undefined; };
@@ -766,6 +777,209 @@ guard("드리프트", () => {
     check(jp.every((t) => typeof S.teamStr[t] !== "number"),
       `가본 적 없는 ${NAME(2)} 구단은 만들지 않는다`);
   }
+});
+
+/* ---------- ⑬ 결산 헤더는 '그 시즌에 뛴 팀'이에요 ----------
+ *
+ * 🐛 결산 화면에서 그대로 포스팅을 하면 화면이 다시 그려져요. 예전에는 헤더가 S.team
+ * (=방금 옮긴 새 팀)을 써서, **지난 시즌 성적 옆에 새 팀 이름**이 붙었어요.
+ * 사용자 눈에는 그 시즌을 새 팀에서 뛴 것처럼 보입니다.
+ * 여기서는 세이브를 손으로 꾸미지 않고, 시즌을 실제로 굴린 뒤 화면 버튼을 눌러 옮기고
+ * 그 화면을 읽어서 확인해요. */
+group("⑬ 결산 헤더의 소속");
+
+/* 한 시즌을 실제로 굴린 뒤 결산 화면을 그려요 — 이 태스크의 입구예요. */
+function playedReport(tier) {
+  const { S, c } = playerAt(tier, 7, 3.0);
+  playYear(S, c);                       // 진짜 시즌 하나 (기록도 게임이 직접 씁니다)
+  c.seasonReport();
+  return { S, c };
+}
+const headLine = (c) => {
+  const m = /<div class="draft-team">([\s\S]*?)<\/div>/.exec(c._dom.$("career-card").innerHTML);
+  return m ? m[1].replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim() : "";
+};
+const nextLine = (c) => {
+  const m = /<div class="hint next-club">([\s\S]*?)<\/div>/.exec(c._dom.$("career-card").innerHTML);
+  return m ? m[1].replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim() : "";
+};
+
+guard("이적 직후 헤더", () => {
+  /* 열도 → KBO 복귀로 걸어가요. 내려가는 경로는 문턱이 없어서(③) 성적과 무관하게
+   * 언제나 열려 있고, 그래서 이 검사가 난수에 흔들리지 않아요. */
+  const { S, c } = playedReport(2);
+  const played = S.team, playedYear = S.proYear;
+  check(headLine(c).startsWith(played), `이적 전 헤더가 지금 팀이다 (${headLine(c)})`);
+
+  const btn = c._dom.$("career-actions").children.find((b) => b.id === "btn-posting");
+  check(!!btn, "결산 화면에 포스팅 버튼이 있다");
+  btn.onclick();
+  const gates = c.postingGates();
+  const iKbo = gates.findIndex((g) => g.league.tier === 1);
+  const rows = c._dom.$("move-card").querySelectorAll(".offer");
+  check(iKbo >= 0 && !rows[iKbo].disabled, `${NAME(1)} 복귀 칸이 열려 있다`);
+  rows[iKbo].onclick();
+  const clubs = c._dom.$("move-card").querySelectorAll(".offer");
+  clubs[0].onclick();                   // 👉 실제로 옮겨요 — 화면이 결산으로 돌아와요
+
+  check(S.team !== played && S.league === LG(1).id,
+    `이적이 실제로 일어났다 (${played} → ${S.team})`);
+  const head = headLine(c);
+  console.log(`  이적 뒤 헤더 | ${head}`);
+  console.log(`  이적 뒤 안내 | ${nextLine(c)}`);
+  check(head.startsWith(played),
+    `헤더가 **그 시즌에 뛴 팀**이다 (${playedYear}년차 ${played} · 화면 "${head}")`);
+  check(!head.includes(S.team),
+    `헤더에 방금 옮긴 팀(${S.team})이 안 섞인다`);
+  check(head.includes(LG(2).flag) && head.includes(LG(2).short),
+    `리그 꼬리표도 그 시즌의 리그다 (${LG(2).flag} ${LG(2).short})`);
+  check(!head.includes(LG(1).flag), `지금 리그(${NAME(1)})가 헤더에 안 붙는다`);
+  // 새 소속이 사라지면 안 돼요 — 자리만 옮긴 거예요
+  const nx = nextLine(c);
+  check(nx.includes(S.team) && nx.includes(LG(1).name),
+    `새 소속은 '다음 시즌 소속' 줄에 따로 뜬다 ("${nx}")`);
+});
+
+guard("회귀 — 이적 안 한 시즌", () => {
+  for (const tier of [1, 2]) {
+    const { S, c } = playedReport(tier);
+    const head = headLine(c);
+    check(head.startsWith(S.team), `${NAME(tier)} — 안 옮긴 시즌은 헤더가 지금 팀 그대로다 (${head})`);
+    check(head.includes(c.leagueTag().trim() || S.team),
+      `${NAME(tier)} — 리그 꼬리표가 예전과 같다 ("${c.leagueTag()}")`);
+    check(nextLine(c) === "", `${NAME(tier)} — 안 옮겼으면 '다음 시즌 소속' 줄이 안 뜬다`);
+  }
+});
+
+/* 옛 세이브에는 시즌 기록에 team·league가 없어요. 그건 S.moves에서 역산해요.
+ * 오프시즌 이적은 **다음** 시즌부터, 시즌 중 트레이드는 **그** 시즌부터 새 팀이에요 —
+ * 야구에는 시즌 중 트레이드가 있어서 이 구분이 없으면 한 해가 통째로 어긋나요. */
+guard("옛 세이브 역산", () => {
+  const mkOld = (moves, over = {}) => {
+    const S = stateOf({ proYear: 9, moves, ...over });
+    const c = open(S);
+    S.team = over.team != null ? over.team : c.leagueTeams()[0];
+    // 옛 형식 — team·league가 없는 시즌 기록이에요
+    S.career.seasons = [{ y: 9, age: 30, war: 3.0, line: "타율 0.300", rank: 4, champ: false, awards: [], role: S.role, raw: {} }];
+    c.seasonReport();
+    return { S, c };
+  };
+  const A = "옛소속", B = "새소속";
+
+  // ① 8년차 오프시즌 이적 → 9년차는 새 팀에서 뛰었어요
+  let r = mkOld([{ y: 8, from: A, to: B, type: "fa", inSeason: false }], { team: B });
+  check(headLine(r.c).startsWith(B), `8년차 오프시즌 이적 → 9년차 소속은 ${B} (${headLine(r.c)})`);
+
+  // ② 9년차 오프시즌 이적 → 9년차는 아직 옛 팀이에요 (이게 이 버그의 자리예요)
+  r = mkOld([{ y: 9, from: A, to: B, type: "fa", inSeason: false }], { team: B });
+  check(headLine(r.c).startsWith(A), `9년차 오프시즌 이적 → 9년차 소속은 아직 ${A} (${headLine(r.c)})`);
+
+  // ③ 9년차 시즌 중 트레이드 → 그 시즌부터 새 팀이에요
+  r = mkOld([{ y: 9, from: A, to: B, type: "trade", inSeason: true }], { team: B });
+  check(headLine(r.c).startsWith(B), `9년차 시즌 중 트레이드 → 9년차 소속은 ${B} (${headLine(r.c)})`);
+  check(/시즌 중/.test(r.c._dom.$("career-card").innerHTML),
+    "이적 이력이 시즌 중 트레이드라고 알려준다");
+
+  // ④ inSeason이 없는 더 옛 기록은 전부 오프시즌 이적이에요
+  r = mkOld([{ y: 9, from: A, to: B, type: "fa" }], { team: B });
+  check(headLine(r.c).startsWith(A), `inSeason이 없는 옛 이력은 오프시즌으로 본다 (${headLine(r.c)})`);
+
+  // ⑤ 리그도 역산해요 — 9년차 오프시즌에 KBO→대륙이면 9년차는 아직 KBO예요
+  r = mkOld([{ y: 9, from: A, to: B, type: "post", inSeason: false, fromLeague: LG(1).id, league: LG(3).id }],
+    { team: B, league: LG(3).id });
+  const h5 = headLine(r.c);
+  check(h5.startsWith(A) && !h5.includes(LG(3).flag),
+    `9년차 오프시즌 포스팅 → 9년차 헤더는 ${NAME(1)}의 ${A} (${h5})`);
+  check(nextLine(r.c).includes(LG(3).name), `'다음 시즌 소속'이 ${NAME(3)}이라고 알려준다 (${nextLine(r.c)})`);
+
+  /* ⑥ 두 번 옮긴 커리어 — 5년차에 국내→열도, 9년차 오프시즌에 열도→대륙.
+   *    9년차 시즌은 **열도**에서 뛴 거예요. 지금 리그(대륙)로 떨어지면 안 돼요. */
+  const MID = "열도팀";
+  r = mkOld([
+    { y: 5, from: A, to: MID, type: "post", inSeason: false, fromLeague: LG(1).id, league: LG(2).id },
+    { y: 9, from: MID, to: B, type: "post", inSeason: false, fromLeague: LG(2).id, league: LG(3).id },
+  ], { team: B, league: LG(3).id });
+  const h6 = headLine(r.c);
+  check(h6.startsWith(MID) && h6.includes(LG(2).flag) && !h6.includes(LG(3).flag),
+    `두 번 옮겨도 9년차 헤더는 ${NAME(2)}의 ${MID}다 (${h6})`);
+
+  // ⑦ 이적 이력이 아예 없는 옛 세이브 — 지금 팀으로 떨어지고 안 깨져요
+  r = mkOld([]);
+  check(headLine(r.c).startsWith(r.S.team), `이적 이력이 없으면 지금 팀으로 그린다 (${headLine(r.c)})`);
+  const noMoves = stateOf({ proYear: 9 });
+  delete noMoves.moves;
+  const nc = open(noMoves);
+  noMoves.team = nc.leagueTeams()[0];
+  noMoves.career.seasons = [{ y: 9, age: 30, war: 1.0, line: "타율 0.250", rank: 6, champ: false, awards: [], role: "3번 타자", raw: {} }];
+  nc.seasonReport();
+  check(headLine(nc).startsWith(noMoves.team), `S.moves가 아예 없어도 안 깨진다 (${headLine(nc)})`);
+});
+
+/* ---------- ⑭ 버튼 문구가 안 잘려요 ----------
+ * 결산 버튼은 3열로 서요(.draft-actions는 flex · flex-basis 140px). 문구가 길면
+ * 폰에서 잘려요 — 실제로 "FA 선언 (8년차 자"까지만 보였어요.
+ * 기준은 안 잘리는 버튼("🔁 트레이드 요청")이에요. */
+group("⑭ 버튼 문구 길이");
+guard("문구 길이", () => {
+  const len = (t) => Array.from(t || "").length;
+  const BAR = "🔁 트레이드 요청";
+  const seen = [];
+  // 국내(FA·트레이드·포스팅이 함께 서는 자리)와 해외(리그 복귀)를 둘 다 봐요
+  for (const [tier, y, war] of [[1, 9, 6.0], [3, 9, 1.0]]) {
+    const { c } = playerAt(tier, y, war);
+    c.seasonReport();
+    for (const b of c._dom.$("career-actions").children) {
+      if (!b || !b.textContent) continue;
+      seen.push(b.textContent);
+      /* 기준은 같은 줄에 서는 보조 버튼(btn-ghost)끼리 재요. 맨 앞의 캠프 버튼은
+       * btn-primary라 폭을 먼저 가져가고, 안 잘리는 게 이미 확인된 자리예요 —
+       * 이 태스크에서 한 글자도 안 건드렸습니다. */
+      if (!b.className.includes("btn-ghost")) { console.log(`  (기준 밖) ${b.textContent} — btn-primary`); continue; }
+      check(len(b.textContent) <= len(BAR),
+        `"${b.textContent}" ${len(b.textContent)}자 ≤ 기준 "${BAR}" ${len(BAR)}자`);
+    }
+  }
+  console.log(`  결산 버튼 | ${[...new Set(seen)].join(" / ")}`);
+  check(seen.some((t) => /해외 진출/.test(t)), `해외 진출 버튼이 그대로 있다 (회귀)`);
+  check(seen.some((t) => /리그 복귀/.test(t)), `리그 복귀 버튼이 그대로 있다 (회귀)`);
+  check(!seen.some((t) => /\(/.test(t)), `괄호로 늘어난 문구가 없다 (${seen.filter((t) => /\(/.test(t)).join(" / ") || "없음"})`);
+});
+
+/* ---------- ⑮ 훈련 화면이 어느 리그인지 알려줘요 ----------
+ * 해외에서 뛰는 동안 화면 어디에도 리그가 크게 안 보였어요 (팀 이름 뒤 꼬리표뿐).
+ * HUD에 배지를 달고 순위표 제목에도 리그를 적어요. KBO는 예전 화면 그대로예요. */
+group("⑮ 훈련 화면의 리그 표시");
+guard("훈련 화면", () => {
+  for (const l of TABLE) {
+    const { S, c } = playerAt(l.tier, 5, 3.0);
+    c.startCamp();
+    c.initSeason();
+    c.renderPro();                                  // 👉 훈련 화면 그 자체예요
+    const hud = c._dom.$("pro-team").innerHTML;
+    const sum = c._dom.$("pro-standings-sum").textContent;
+    console.log(`  ${l.flag} ${l.name} | HUD ${hud.replace(/<[^>]*>/g, "").trim()} | 순위표 ${sum}`);
+    if (l.id === 1) {
+      // KBO는 한 글자도 안 바뀌어요 (예전 형식 그대로)
+      check(!/lg-badge/.test(hud), "KBO — 훈련 화면에 리그 배지가 안 붙는다 (회귀)");
+      check(hud.startsWith(`⚾ ${S.team} · `), `KBO — HUD 문구가 예전 그대로다 (${hud})`);
+      check(sum === `📊 ${c.myRank()}위 · ${S.season.teamW}승 ${S.season.teamL}패`,
+        `KBO — 순위표 제목이 예전 그대로다 (${sum})`);
+    } else {
+      check(/class="lg-badge"/.test(hud), `${l.name} — 훈련 화면 HUD에 리그 배지가 붙는다`);
+      check(hud.includes(l.flag) && hud.includes(l.name),
+        `${l.name} — 배지에 리그 이름이 그대로 보인다 (${hud.replace(/<[^>]*>/g, "").trim()})`);
+      check(hud.includes(S.team), `${l.name} — 팀 이름도 그대로 있다 (${S.team})`);
+      check(sum.includes(l.flag) && sum.includes(l.name),
+        `${l.name} — 순위표 제목에도 리그가 적힌다 (${sum})`);
+    }
+  }
+  // 배지 스타일이 style.css에 있고 테마 변수만 써요
+  const badge = CSS.split("\n").filter((l) => /lg-badge|next-club/.test(l) || /^\s{2}[a-z-]+:/.test(l));
+  check(/\.lg-badge \{/.test(CSS), "리그 배지 스타일이 style.css에 있다");
+  const abs = CSS.split(/\}/).filter((b) => /lg-badge|next-club/.test(b))
+    .filter((b) => /#[0-9a-fA-F]{3,8}\b|rgba?\(/.test(b));
+  check(abs.length === 0, `배지·안내 줄이 절대색을 안 쓴다 (어긋난 규칙 ${abs.length}개)`);
+  void badge;
 });
 
 console.log(fail ? `\n❌ ${fail}건 실패` : "\n✅ 통과");

@@ -943,7 +943,7 @@ function makeRookieAll() {
             title: "포스팅 제안 — 열도·대륙이 함께 열린 상태",
             state: `${st.team} · 🇰🇷 KBO · ${st.proYear}년차 오프시즌 · 직전 WAR ${lastWar(P).toFixed(1)}`,
             check: "카드마다 상대 수준(+0.02 / +0.06)과 리그 위세(×1.40 / ×2.30), 안타 확률이 '지금 → 거기'로 다 보이는지, 좁은 화면에서 줄이 안 겹치는지",
-            steps: [...ROOKIE_STEP1, "결산 화면에서 <b>🌏 해외 진출 (포스팅)</b>"],
+            steps: [...ROOKIE_STEP1, "결산 화면에서 <b>🌏 해외 진출</b>"],
             keys: snapshot(P),
           });
         }
@@ -983,7 +983,7 @@ function makeRookieAll() {
           title: "잠긴 제안 — 대륙은 아직 못 가요",
           state: lockedCand.state,
           check: `🔒 대륙 리그 칸이 눌리지 않고 모자란 것(${lockedCand.need.join(" · ")})이 적혀 있는지, 열린 칸과 잠긴 칸이 한눈에 갈리는지`,
-          steps: [...ROOKIE_STEP1, "결산 화면에서 <b>🌏 해외 진출 (포스팅)</b>"],
+          steps: [...ROOKIE_STEP1, "결산 화면에서 <b>🌏 해외 진출</b>"],
           keys: lockedCand.keys,
         });
       }

@@ -511,8 +511,20 @@ reach("rookie-abroad-report", (P, first) => {
   check(first === "screen-career", `심은 세이브로 들어가면 결산 화면이 뜬다 (${first})`);
   const card = P.$("career-card");
   const txt = card.textContent;
-  check(txt.includes(LG(3).flag) && txt.includes(LG(3).short),
-    `소속 줄에 (${LG(3).flag} ${LG(3).short}) 꼬리표가 붙는다 (${(card.querySelector(".draft-team") || {}).textContent || "없음"})`);
+  /* 소속 줄 하나만 떼어서 봐요 — 카드 전체 텍스트로 보면 다른 줄(이적 이력·안내)에
+   * 깃발이 있어도 통과해서, 정작 헤더가 비어 있어도 안 들켜요. */
+  const teamLine = (card.querySelector(".draft-team") || {}).textContent || "";
+  check(teamLine.includes(LG(3).flag) && teamLine.includes(LG(3).short),
+    `소속 줄에 (${LG(3).flag} ${LG(3).short}) 꼬리표가 붙는다 (${teamLine || "없음"})`);
+  /* 🐛 헤더는 **그 시즌에 뛴 팀**이어야 해요. 이 세이브는 시즌 기록에 league가 없는
+   * 옛 형식이라, 이적 이력에서 역산해 채워지는지까지 여기서 확인돼요. */
+  const st = P.w.Career._t.state();
+  const last = st.career.seasons[st.career.seasons.length - 1];
+  const at = P.w.Career._t.playedAt(last, st);
+  check(teamLine.startsWith(at.team) && at.team === st.team,
+    `소속 줄이 그 시즌(${last.y}년차)에 뛴 팀이다 (${at.team})`);
+  check(P.w.Career._t.leagueOf({ league: at.league }).tier === 3,
+    `역산한 그 시즌의 리그가 ${LG(3).name}다 (league ${at.league})`);
   check(/🔁 이적 이력/.test(txt) && txt.includes("🌏"),
     "🔁 이적 이력에 🌏 리그 이적이 남아 있다");
   const rows = card.querySelectorAll("table tbody tr");
@@ -529,6 +541,11 @@ reach("rookie-cont-series", (P, first) => {
   check(!!KS && KS !== KBO_KS, `${LG(3).name}의 최종전 이름이 따로 있다 (${KS})`);
   const turn = P.$("pro-turn").textContent;
   check(turn.includes(KS), `화면 위 라벨이 ${KS}다 (${turn})`);
+  /* 🌏 어느 리그에서 뛰는지가 HUD에 배지로 붙어야 해요 — 실제 DOM에 요소로 서는지까지 봐요
+   * (문자열만 맞고 요소가 안 서면 폰에서는 아무 표시도 안 나요). */
+  const badge = P.w.document.querySelector("#pro-team .lg-badge");
+  check(!!badge && badge.textContent.includes(LG(3).name),
+    `HUD에 ${LG(3).name} 배지가 붙는다 (${badge ? badge.textContent.trim() : "없음"})`);
   const sum = P.$("pro-standings-sum").textContent;
   check(sum.includes(KS), `시리즈 현황 제목도 ${KS}다 (${sum})`);
   const body = P.$("pro-standings-body").textContent;

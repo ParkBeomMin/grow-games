@@ -115,7 +115,7 @@ window.Career = (() => {
 
   function renderPro() {
     $("pro-name").textContent = `${S.name} (${S.pos === "batter" ? "타자" : "투수"})`;
-    $("pro-team").textContent = `⚾ ${S.team}${leagueTag()} · ${S.role || ""} · ${S.age}세 · ${S.proYear}년차 · 종합 ${Math.round(overall())}`;
+    $("pro-team").innerHTML = `⚾ ${leagueBadge()}${S.team} · ${S.role || ""} · ${S.age}세 · ${S.proYear}년차 · 종합 ${Math.round(overall())}`;
     $("pro-turn").textContent = S.season ? `G ${S.season.game}/${S.season.total} · ${myRank()}위` : `캠프 훈련 ${3 - S.camp}/3`;
     $("pro-money").textContent = `💰 ${fmtMoney(S.money || 0)}`;
     renderStandings();
@@ -326,8 +326,11 @@ window.Career = (() => {
     if (!box) return;
     if (!S.season) { box.hidden = true; return; }
     box.hidden = false;
+    /* 🌏 해외에서는 순위표 제목에도 리그를 적어요 — 처음 보는 구단 이름만 늘어서면
+     * 여기가 어느 리그인지 알 길이 없어요. KBO는 예전 문구 그대로예요. */
+    const l = leagueOf(S);
     $("pro-standings-sum").textContent =
-      `📊 ${myRank()}위 · ${S.season.teamW}승 ${S.season.teamL}패`;
+      `📊 ${l.id === 1 ? "" : `${l.flag} ${l.name} · `}${myRank()}위 · ${S.season.teamW}승 ${S.season.teamL}패`;
     $("pro-standings-body").innerHTML = standingsHTML();
   }
 
@@ -774,10 +777,22 @@ window.Career = (() => {
   const postLabel = (round) =>
     (round === "ks" && KS_LABEL[leagueOf(S).id]) || Postseason.LABEL[round];
 
-  /* 화면에 붙는 리그 꼬리표. KBO는 빈 문자열이라 예전 화면이 한 글자도 안 바뀌어요. */
-  const leagueTag = () => {
-    const l = leagueOf(S);
+  /* 화면에 붙는 리그 꼬리표. KBO는 빈 문자열이라 예전 화면이 한 글자도 안 바뀌어요.
+   * id를 받는 쪽(leagueTagOf)이 본체예요 — 결산은 **그 시즌의 리그**를 붙여야 하니까요.
+   * 모르는 id·없는 id는 leagueOf가 KBO로 받아줘요 (옛 세이브 방어와 같은 결). */
+  const leagueTagOf = (id) => {
+    const l = leagueOf({ league: id });
     return l.id === 1 ? "" : ` (${l.flag} ${l.short})`;
+  };
+  const leagueTag = () => {
+    return leagueTagOf(S.league);
+  };
+
+  /* 🌏 HUD에 붙는 리그 배지. 꼬리표는 팀 이름 뒤에 묻혀서 훈련 화면에서 '내가 지금
+   * 해외에 있다'는 게 잘 안 보였어요. KBO는 빈 문자열이라 국내 화면은 그대로예요. */
+  const leagueBadge = () => {
+    const l = leagueOf(S);
+    return l.id === 1 ? "" : `<span class="lg-badge">${l.flag} ${l.name}</span> `;
   };
 
   /* 정규시즌이 끝나면 최종 순위로 가을야구 진출을 가려요. 6위 이하면 바로 결산이에요. */
@@ -829,7 +844,7 @@ window.Career = (() => {
     const label = postLabel(s.round);
 
     $("pro-name").textContent = `${S.name} (${S.pos === "batter" ? "타자" : "투수"})`;
-    $("pro-team").textContent = `⚾ ${S.team}${leagueTag()} · ${S.role || ""} · ${S.age}세 · ${S.proYear}년차 · 종합 ${Math.round(overall())}`;
+    $("pro-team").innerHTML = `⚾ ${leagueBadge()}${S.team} · ${S.role || ""} · ${S.age}세 · ${S.proYear}년차 · 종합 ${Math.round(overall())}`;
     $("pro-turn").textContent = `🍂 ${label} ${P.gameNo}차전`;
     $("pro-money").textContent = `💰 ${fmtMoney(S.money || 0)}`;
     $("pro-cond-num").textContent = Math.round(S.condition);
@@ -984,7 +999,10 @@ window.Career = (() => {
     addAwardWeight(awards, preAward);
     if (champ) S.career.rings += 1;
     S.career.warSum = Math.round((S.career.warSum + Math.max(war, 0)) * 10) / 10;
-    S.career.seasons.push({ y: S.proYear, age: S.age, war, line, rank, champ, awards, role: S.role, team: S.team, raw });
+    /* team·league — **그 시즌에 뛴 소속**을 결산 시점에 그냥 적어요. 여기 적힌 값이 정본이에요.
+     * league는 나중에 생긴 필드라 옛 기록에는 없어요. 그건 읽는 쪽(playedAt)이 S.moves에서
+     * 역산해 메워요 — 세이브는 고치지 않아요(클라우드 동기화와 부딪혀요). */
+    S.career.seasons.push({ y: S.proYear, age: S.age, war, line, rank, champ, awards, role: S.role, team: S.team, league: S.league, raw });
     if (window.Stats) Stats.log("season_end", { y: S.proYear, war, rank, champ });
 
     for (const d of STAT_DEFS[S.pos]) {
@@ -1028,8 +1046,64 @@ window.Career = (() => {
     playFeeds(`📺 ${S.proYear}년차 시즌 결산`, feeds, seasonReport);
   }
 
+  /* 🔁 이적 하나가 어느 시즌부터 반영되는지 돌려줘요.
+   * 오프시즌 이적(inSeason이 아님)은 **다음** 시즌부터고, 시즌 중 트레이드는 **그** 시즌부터예요.
+   * inSeason이 없는 옛 기록은 전부 오프시즌 이적이에요 (시즌 중 트레이드는 나중에 생겼어요). */
+  const moveFrom = (m) => (m.inSeason ? m.y : m.y + 1);
+
+  /* y년차에 뛴 팀을 S.moves에서 역산해요.
+   *   ① y년차에 이미 반영된 이적 중 **마지막** 것의 도착팀
+   *   ② 그런 이적이 없으면 **가장 이른 이적의 출발팀** (y 뒤에만 옮겼다는 뜻)
+   *   ③ 이적이 아예 없으면 지금 팀 — 한 번도 안 옮긴 커리어예요
+   * 근거가 하나도 없으면 null을 돌려주고, 부르는 쪽이 지금 팀으로 떨어져요. */
+  function teamOfYear(y, st) {
+    const mv = ((st && st.moves) || []).filter((m) => m && m.y != null && m.to != null);
+    let last = null, first = null;
+    for (const m of mv) {
+      if (moveFrom(m) <= y && (!last || moveFrom(m) >= moveFrom(last))) last = m;
+      if (!first || moveFrom(m) < moveFrom(first)) first = m;
+    }
+    if (last) return last.to;
+    if (first && first.from != null) return first.from;
+    return st ? st.team : null;
+  }
+
+  /* y년차에 뛴 리그를 역산해요. 리그를 옮긴 이적(moveToLeague)만 fromLeague·league를
+   * 남기니까 그것만 봐요 — 같은 리그 안 이적(FA·트레이드)은 리그를 안 바꿔요. */
+  function leagueOfYear(y, st) {
+    const mv = ((st && st.moves) || []).filter((m) => m && m.y != null && m.league != null);
+    let last = null, first = null;
+    for (const m of mv) {
+      if (moveFrom(m) <= y && (!last || moveFrom(m) >= moveFrom(last))) last = m;
+      if (!first || moveFrom(m) < moveFrom(first)) first = m;
+    }
+    if (last) return last.league;
+    if (first && first.fromLeague != null) return first.fromLeague;
+    return st ? st.league : null;
+  }
+
+  /* 📊 그 시즌에 뛴 소속이에요 — **지금 소속이 아니라요.**
+   *
+   * 결산 화면에서 그대로 포스팅을 하면 화면이 다시 그려지는데, 여기서 S.team을 쓰면
+   * 방금 끝난 시즌 성적 옆에 **새 팀 이름**이 붙어요. 그 시즌은 옛 팀에서 뛴 거예요.
+   * ⚽ 축구(beta/soccer/career.js의 clubOfYear·fillClubs)가 같은 문제를 이렇게 풀었어요.
+   *
+   * 정본은 결산 때 적어둔 s.team·s.league고, 없으면 S.moves에서 역산해요.
+   * 세이브는 고치지 않아요 — 그릴 때만 계산합니다(클라우드 동기화와 부딪혀요). */
+  function playedAt(s, st) {
+    const y = s ? s.y : null;
+    const team = s && s.team != null ? s.team : (y != null ? teamOfYear(y, st) : (st && st.team));
+    const league = s && s.league != null ? s.league : (y != null ? leagueOfYear(y, st) : (st && st.league));
+    return { team: team != null ? team : (st && st.team), league };
+  }
+
   function seasonReport() {
     const s = S.career.seasons[S.career.seasons.length - 1];
+    /* 헤더는 **그 시즌에 뛴 팀**이에요. 이적하고 돌아와도 성적과 팀이 안 어긋나요. */
+    const at = playedAt(s, S);
+    const cur = leagueOf(S);
+    // 결산 뒤에 팀이나 리그가 바뀌었으면 따로 알려줘요 — 헤더를 덮어쓰지 않아요
+    const movedAfter = S.team !== at.team || cur.id !== leagueOf({ league: at.league }).id;
     const AWARD_TAG = { MVP: "MVP", 골든글러브: "GG", 신인왕: "신인왕" };
     const rows = S.career.seasons.slice(-8).map((x) => {
       const badges =
@@ -1050,8 +1124,9 @@ window.Career = (() => {
         s.war >= 2.5 ? "제 몫을 해낸 시즌" :
         s.war >= 0.5 ? "아쉬움이 남는 시즌" : "혹독한 시즌…"
       }</div>
-      <div class="draft-team">${S.team}${leagueTag()} <span class="team-str">${strLabel(teamStrOf(S.team))}</span> · ${s.line} · WAR ${s.war.toFixed(1)}</div>
-      ${(S.moves || []).length ? `<div class="hint">🔁 이적 이력 — ${S.moves.map((m) => `${m.type === "post" ? "🌏 " : ""}${m.y}년차 ${m.from}→${m.to}`).join(" · ")}</div>` : ""}
+      <div class="draft-team">${at.team}${leagueTagOf(at.league)} <span class="team-str">${strLabel(teamStrOf(at.team))}</span> · ${s.line} · WAR ${s.war.toFixed(1)}</div>
+      ${movedAfter ? `<div class="hint next-club">➡️ 다음 시즌 소속 — ${cur.flag} ${cur.name} · <b>${S.team}</b></div>` : ""}
+      ${(S.moves || []).length ? `<div class="hint">🔁 이적 이력 — ${S.moves.map((m) => `${m.type === "post" ? "🌏 " : ""}${m.y}년차 ${m.from}→${m.to}${m.inSeason ? " (시즌 중)" : ""}`).join(" · ")}</div>` : ""}
       ${S.lastStandings ? `<div class="hint">📊 최종 순위</div>${S.lastStandings}` : ""}
       <table class="season-table season-career"><thead><tr><th>시즌</th><th>나이</th><th>성적</th><th>WAR</th></tr></thead><tbody>${rows}</tbody></table>
       ${moreHint}
@@ -1073,7 +1148,10 @@ window.Career = (() => {
       const fa = document.createElement("button");
       fa.className = "btn btn-ghost";
       fa.id = "btn-fa";
-      fa.textContent = `💼 FA 선언 (${S.proYear}년차 자격)`;
+      /* 문구를 짧게 둬요. 결산 버튼은 3열로 서서 폭이 좁아요 —
+       * "(N년차 자격)"까지 붙이면 폰에서 "FA 선언 (8년차 자"로 잘렸어요.
+       * 몇 년차인지는 FA 화면이 첫 줄에 적어줘요. */
+      fa.textContent = "💼 FA 선언";
       fa.onclick = showFa;
       act.appendChild(fa);
     }
@@ -1094,7 +1172,8 @@ window.Career = (() => {
         const btn = document.createElement("button");
         btn.className = "btn btn-ghost";
         btn.id = "btn-posting";
-        btn.textContent = up ? "🌏 해외 진출 (포스팅)" : "🌏 리그 복귀";
+        // "(포스팅)"은 뺐어요 — 좁은 3열에서 잘려요. 포스팅이라는 말은 이적 화면 제목에 있어요.
+        btn.textContent = up ? "🌏 해외 진출" : "🌏 리그 복귀";
         btn.onclick = showPosting;
         act.appendChild(btn);
       }
@@ -2217,6 +2296,8 @@ window.Career = (() => {
       LEAGUES, leagueOf, oppFor, teamStrOf,
       POST_GATE, postingGates, postingOffers, moveToLeague, postLabel, KS_LABEL,
       LEAGUE_CLUBS, teamsOf, clubStrOf, driftBandOf, leagueTeams, driftTeamStr, teamWinP, gameWinP,
+      // 📊 그 시즌에 뛴 소속 — 결산 헤더가 지금 팀을 쓰지 않는지 화면에서 대조할 때 써요
+      playedAt,
       state: () => S,
     },
     enterPro,
