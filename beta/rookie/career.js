@@ -405,7 +405,7 @@ window.Career = (() => {
     renderGameSim({
       title: `${gameLabel()} vs ${opp}`,
       oppName: opp,
-      oppStr: teamStrOf(opp),   // 상대가 강할수록 치기 어렵고 막기 어려워요
+      oppStr: oppFor(opp),      // 상대가 강할수록 치기 어렵고 막기 어려워요 (리그 난이도 포함)
       homeName: S.team,
       perf, story,
       interactive: false,
@@ -438,7 +438,7 @@ window.Career = (() => {
     renderGameSim({
       title: `${gameLabel()} vs ${opp} (선발 등판)`,
       oppName: opp,
-      oppStr: teamStrOf(opp),   // 상대가 강할수록 치기 어렵고 막기 어려워요
+      oppStr: oppFor(opp),      // 상대가 강할수록 치기 어렵고 막기 어려워요 (리그 난이도 포함)
       homeName: S.team,
       perf, story,
       interactive: false,
@@ -546,7 +546,7 @@ window.Career = (() => {
 
     const resolve = (res) => {
       // 선발 위기와 같은 식을 써요 (game.js의 crisisRuns)
-      const runs = crisisRuns(res, teamStrOf(opp));
+      const runs = crisisRuns(res, oppFor(opp));
       let txt, cls;
       if (runs === 0) {
         perf.k += res === "perfect" ? 2 : 1;
@@ -1108,6 +1108,19 @@ window.Career = (() => {
     if (!S.teamStr) S.teamStr = {};
     if (typeof S.teamStr[name] !== "number") S.teamStr[name] = Math.round(rand(0.38, 0.60) * 1000) / 1000;
     return S.teamStr[name];
+  }
+  /* 타석·위기 판정에 넘기는 '상대 수준'이에요. 팀 전력 위에 리그 난이도를 얹어요.
+   * 상위 리그에서는 모든 상대가 그만큼 셉니다.
+   *
+   * 순위표·팀 승률이 쓰는 teamStrOf와 일부러 갈라놨어요. 거기까지 oppUp을 얹으면
+   * 리그를 옮긴 순간 우리 팀 승률과 가을야구 대진까지 함께 무너져요
+   * (⚽ 축구에서 같은 자리를 놓쳐 수비수 팀 승률이 7%가 된 적이 있어요).
+   * 리그 난이도는 '내가 상대하는 공'에만 걸립니다. 해외 구단의 전력은 구단 목록이 정해요.
+   *
+   * KBO는 oppUp이 0이라 teamStrOf와 한 톨까지 같아요 — 그래서 진행 중인 캐릭터의
+   * 성적이 안 튀고, 기존 저장 데이터를 마이그레이션하지 않아도 됩니다. */
+  function oppFor(name) {
+    return teamStrOf(name) + leagueOf(S).oppUp;
   }
   function driftTeamStr() {
     for (const t of KBO_TEAMS) {
@@ -1861,6 +1874,13 @@ window.Career = (() => {
     showSeasonReport: seasonReport,
     // 테스트에서 내부 계산을 들여다보기 위한 창구예요 (게임 로직은 이걸 쓰지 않아요)
     _internals: { marketValue, teamWinP, teamStrOf, faOffers },
+    /* 리그 관련 창구예요. 시리즈의 다른 게임(⚽ 축구)이 `_t`로 통일돼 있어서
+     * 해외 진출로 새로 붙는 것들은 여기에 모아요. LEAGUES·leagueOf는 game.js의
+     * 전역이지만, 테스트가 한 곳만 보면 되게 여기서 같이 내보내요. */
+    _t: {
+      LEAGUES, leagueOf, oppFor, teamStrOf,
+      state: () => S,
+    },
     enterPro,
     showHof,
     showBattle,

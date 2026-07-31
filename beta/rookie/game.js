@@ -97,6 +97,41 @@ const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 const STAT_CAP = 130; // 100 이후는 '한계 돌파' 구간 (성장 효율 절반)
 const fmtMoney = (v) => (v >= 10000 ? `${(v / 10000).toFixed(1)}억` : `${Math.round(v)}만`);
 
+/* 🌏 리그 사다리 — KBO에서 시작해 해외로 올라가요. tier가 순서예요.
+ * id는 옛 세이브의 S.league가 가리키는 값이라 절대 안 바꿔요 — 번호를 다시 매기면
+ * 진행 중인 캐릭터가 엉뚱한 리그로 갑니다. (⚽ 축구에서 id로 순서를 판단해 사고가 났어요.)
+ * 축구와 달리 아래로 가는 층은 없어요. KBO가 바닥입니다.
+ *
+ * 난이도는 상대 수준(oppStr)에 얹어요. 축구는 평가가 순위 기반이라 경기 평점을
+ * 깎았지만, 야구는 평가가 타율·홈런·방어율에서 나오니 상대를 세게 하면
+ * 그 숫자가 자연히 내려가요. 실제로 벌어지는 일과도 같습니다 —
+ * 메이저에서 타율이 떨어지는 건 투수가 좋기 때문이에요.
+ * WAR이 내려가면 MVP·골든글러브가 자동으로 어려워지니 문턱(bar)을 따로 두지 않아요.
+ *
+ * 두 값은 감이 아니라 시뮬레이션으로 잡았어요. 판단 기준은 수상 확률이 아니라
+ * '수상 확률 × prestige'(명예의 전당 가치)고, 능력치 100·110에서는 KBO가,
+ * 130에서는 열도가, 150(초월 구간)에서는 대륙이 최적이 되게 맞췄어요.
+ * oppUp을 더 키우면 hitP의 하한(0.10)에 눌려서 난이도가 더 안 올라가요 —
+ * 축구의 평점 천장과 같은 실패라, tests/rookie/league-test.js ⑦이 그 자리를 지킵니다.
+ *
+ * 실제 리그명은 쓰지 않아요. 이 저장소는 상표를 전부 가상 명칭으로 바꿨어요
+ * (KBO만 이미 코드에 있던 이름이라 그대로 둡니다).
+ *
+ * career.js가 아니라 여기 두는 건 career.js가 IIFE라 그 안의 선언이 밖으로 안 새기
+ * 때문이에요. 구단 목록·화면처럼 game.js 쪽에서도 리그를 읽어야 해요. */
+const LEAGUES = [
+  { id: 1, tier: 1, name: "KBO",     short: "국내", flag: "🇰🇷", oppUp: 0,    prestige: 1.00 },
+  { id: 2, tier: 2, name: "열도 리그", short: "열도", flag: "🇯🇵", oppUp: 0.02, prestige: 1.50 },
+  { id: 3, tier: 3, name: "대륙 리그", short: "대륙", flag: "🗽", oppUp: 0.06, prestige: 2.20 },
+];
+
+/* 옛 세이브에는 S.league가 없어요. 마이그레이션하지 않고 없으면 KBO로 봐요.
+ * 깨진 값도 KBO로 막아요 — oppUp이 0이라 진행 중인 캐릭터의 성적이 안 튑니다. */
+function leagueOf(st) {
+  const id = (st && st.league) || 1;
+  return LEAGUES.find((l) => l.id === id) || LEAGUES.find((l) => l.id === 1) || LEAGUES[0];
+}
+
 // 시작 능력치 뽑기 — 이름 화면에서 미리 보고 다시 뽑을 수 있어요
 function rollStats(pos) {
   const stats = {};
