@@ -102,6 +102,14 @@ const CAREER_FNS = [
 ];
 const CAREER_CONSTS = [
   ["leagueTeams", /  const leagueTeams = [^;]+;/],
+  // ⚾ 리그별 경기 수 — 스텁이 받으면 S.season.total이 undefined가 돼서 시즌이 0경기로 끝나요
+  ["SEASON_TOTAL", /  const SEASON_TOTAL = [^;]+;/],
+  ["seasonTotal", /  const seasonTotal = [^;]+;/],
+  // 🏋️ 한 시즌이 주는 훈련 횟수 — ⑧이 리그와 무관한지 재요
+  ["CAMP_BASE_GAMES", /  const CAMP_BASE_GAMES = [^;]+;/],
+  ["CAMP_TURNS", /  const CAMP_TURNS = [^;]+;/],
+  ["campAt", /  const campAt = [^;]+;/],
+  ["campAfter", /  const campAfter = [^;]+;/],
   ["inPost", /  const inPost = [^;]+;/],
   ["mySeries", /  const mySeries = [^;]+;/],
   ["postOpp", /  const postOpp = \(\) => \{[^\n]*\};/],
@@ -111,7 +119,7 @@ const CAREER_SRC = [
   ...CAREER_CONSTS.map(([n, re]) => grab(SRC, re, n)),
   ...CAREER_FNS.map(cutFn),
 ].join("\n");
-const EXPORTS = ["leagueTeams", "inPost", "mySeries", "postOpp",
+const EXPORTS = ["leagueTeams", "seasonTotal", "CAMP_TURNS", "campAfter", "inPost", "mySeries", "postOpp",
   "teamStrOf", "driftTeamStr", "teamWinP", "gameWinP", "initSeason", "myRank",
   "enterPostseason", "advancePostseason", "finishProGame"];
 
@@ -263,8 +271,11 @@ check(/const win = Math\.random\(\) < gameWinP\(\);/.test(SRC),
 check(/if \(Math\.random\(\) < o\.str\) o\.w \+= 1; else o\.l \+= 1;/.test(SRC),
   "다른 팀 승수는 그 팀 전력(o.str)으로 굴러간다");
 
-const SEASON_TOTAL = Number((SRC.match(/const SEASON_TOTAL = (\d+);/) || [])[1] || 0);
-check(SEASON_TOTAL > 0, `시즌 경기 수를 소스에서 읽었다 (${SEASON_TOTAL}경기)`);
+/* 시즌 경기 수는 리그마다 달라요. 그래서 상수를 읽어 두는 게 아니라
+ * **initSeason이 저장본에 적어준 total만큼** 굴려요 — 여기 숫자를 옮겨 적으면
+ * 162경기 리그를 144경기만 굴리고 끝내서, 실제로 도는 시즌과 달라져요. */
+check(TABLE.every((l) => typeof l.games === "number" && l.games > 0),
+  `리그마다 경기 수가 있다 (${TABLE.map((l) => `${l.name} ${l.games}`).join(" · ")})`);
 
 const BANDS = [{ stat: 100, label: "평범" }, { stat: 130, label: "준정상급" }, { stat: 150, label: "정상급" }];
 const POSES = [{ key: "batter", label: "🧢 타자" }, { key: "pitcher", label: "⚾ 투수" }];
@@ -282,14 +293,14 @@ function playerOf(pos, stat, tier, over = {}) {
   return { S, c: open(S) };
 }
 
-/* 한 시즌을 통째로 굴려요 — 캠프(전력 드리프트) → 시즌 개막 → 144경기.
+/* 한 시즌을 통째로 굴려요 — 캠프(전력 드리프트) → 시즌 개막 → 그 리그의 경기 수만큼.
  * 승패는 실제 함수(gameWinP)가 정하고, 다른 팀 승수도 finishProGame이 굴려요. */
 function season(pos, stat, tier, over = {}) {
   const { S, c } = playerOf(pos, stat, tier, over);
   S.team = pick(c.leagueTeams());
   c.driftTeamStr();                    // 스프링캠프가 매년 하는 일이에요
   c.initSeason();
-  for (let g = 0; g < SEASON_TOTAL; g++) {
+  for (let g = 0; g < S.season.total; g++) {
     c.finishProGame(Math.random() < c.gameWinP(), null);
     S.condition = over.condition != null ? over.condition : 80;   // 캠프·휴식으로 되돌아오는 몫은 이 검사의 관심이 아니에요
   }
@@ -529,6 +540,127 @@ guard("옛 세이브", () => {
   console.log(`  300시즌 흔든 뒤 평균 전력 | ${drifted.map((d) => `${d.l.name} ${d.mean.toFixed(3)}`).join(" · ")}`);
   check(ordered,
     `300시즌을 흔들어도 tier 순서대로 평균 전력이 높다 (${drifted.map((d) => d.mean.toFixed(3)).join(" < ")})`);
+});
+
+/* ---------- ⑦ 시즌이 그 리그의 경기 수만큼 실제로 돈다 ---------- */
+group("⑦ 시즌 길이");
+/* 표에 적힌 숫자를 믿지 않고 **게임 입구로 걸어가서 세요.** initSeason → finishProGame을
+ * 실제로 돌리고, 끝나는 지점(sn.game >= sn.total)이 어디인지 봅니다.
+ * 여기가 어긋나면 162경기 리그가 144경기에서 멎거나, 반대로 145번째 경기가 생겨요. */
+guard("시즌 길이", () => {
+  const rows = [];
+  for (const l of TABLE) {
+    const { S, c } = playerOf("batter", 100, l.tier);
+    S.team = pick(c.leagueTeams());
+    c.initSeason();
+    check(S.season.total === l.games,
+      `${l.name} — initSeason이 적는 total이 ${l.games}다 (${S.season.total})`);
+    /* 마지막 한 경기 전까지는 '다음 경기 준비'가, 마지막 경기에서는 '정규시즌 종료'가
+     * 나와야 해요. finishProGame이 돌려주는 버튼 문구가 그 갈림길이에요. */
+    let ended = 0, played = 0;
+    for (let g = 0; g < l.games + 3; g++) {
+      if (S.season.game >= S.season.total) break;
+      const out = c.finishProGame(Math.random() < 0.5, null);
+      played++;
+      if (out && out.nextFn === c.enterPostseason) ended = played;
+    }
+    rows.push({ l, played, ended, w: S.season.teamW, lo: S.season.teamL });
+    check(played === l.games, `${l.name} — 정규시즌이 ${l.games}경기를 돈다 (${played}경기)`);
+    check(ended === l.games, `${l.name} — ${l.games}번째 경기에서 정규시즌이 끝난다 (${ended || "안 끝남"})`);
+    check(S.season.teamW + S.season.teamL === l.games,
+      `${l.name} — 우리 팀 승패 합이 경기 수와 같다 (${S.season.teamW}승 ${S.season.teamL}패)`);
+    // 다른 팀 승수도 같은 수만큼 굴어야 순위표·게임차가 말이 돼요
+    const others = S.season.others.filter((o) => o.w + o.l !== l.games);
+    check(others.length === 0, `${l.name} — 다른 구단 승패 합도 전부 ${l.games}다 (어긋난 팀 ${others.length}곳)`);
+    // 그 자리에서 가을야구가 정상으로 열려야 해요 (진출선은 경기 수가 아니라 순위예요)
+    c.enterPostseason();
+    const rank = c.myRank();
+    check(rank <= 5 ? !!S.post : !S.post,
+      `${l.name} — ${rank}위로 가을야구 진출 판정이 순위대로다 (${S.post ? "진출" : "탈락"})`);
+  }
+  console.log(`  실제로 돈 경기 | ${rows.map((r) => `${r.l.name} ${r.played}경기(${r.w}-${r.lo})`).join(" · ")}`);
+
+  /* 옛 세이브 — S.league가 없으면 144경기예요. 마이그레이션을 하지 않으니
+   * 여기가 진행 중인 캐릭터의 시즌 길이를 지키는 마지막 문이에요. */
+  const oldS = stateOf();
+  delete oldS.league;
+  const oldC = open(oldS);
+  oldS.team = pick(oldC.leagueTeams());
+  oldC.initSeason();
+  check(oldS.season.total === 144, `S.league가 없는 옛 세이브는 144경기다 (${oldS.season.total})`);
+
+  /* 진행 중인 세이브의 total은 손대지 않아요. 저장본에 적힌 값이 정본이라
+   * 리그 표를 나중에 고쳐도 이미 돌던 시즌의 길이는 안 바뀝니다. */
+  const midS = stateOf({ league: TABLE.find((l) => l.tier === 3).id });
+  const midC = open(midS);
+  midS.team = pick(midC.leagueTeams());
+  midC.initSeason();
+  midS.season.total = 100;                       // 옛 저장본이 적어둔 값이라고 쳐요
+  midS.season.game = 99;
+  const out = midC.finishProGame(true, null);
+  check(midS.season.game === 100 && out && out.nextFn === midC.enterPostseason,
+    `저장본에 적힌 total(100)이 정본이다 — 리그 표(${TABLE.find((l) => l.tier === 3).games})로 덮어쓰지 않는다`);
+});
+
+/* ---------- ⑧ 훈련 기회는 리그와 무관하다 ---------- */
+group("⑧ 훈련 기회");
+/* 경기 수가 리그마다 달라지면서 조용히 새던 구멍이에요.
+ * 훈련 횟수는 경기마다 붙어 있어서(`S.camp = …`), 그대로 두면 162경기 리그가
+ * 훈련 기회도 12.5% 많아져요. 그러면 난이도(oppUp·lgUp)로 깎아둔 몫을
+ * **성장 속도로 되돌려받게** 돼서, 해외 진출이 도박이 아니라 정답이 됩니다.
+ * 사다리 검사(league-test ⑨⑩)는 능력치를 고정해 두고 재기 때문에 이 구멍을 못 봐요 —
+ * 그래서 여기서 셉니다.
+ *
+ * 실측(3000시즌): 고치기 전에는 능력치 40이 상한(130)에 닿기까지
+ * KBO 1.64시즌 · 대륙 1.07시즌이었어요. 고친 뒤에는 1.66 / 1.71이에요. */
+guard("훈련 기회", () => {
+  const c0 = open(stateOf());          // 리그와 무관한 계산이라 아무 세이브로나 열어도 돼요
+  /* 산식을 직접 부르지 않고 **게임 입구로 걸어가서** 세요. finishProGame이 돌려주는
+   * '다음 경기 준비' 버튼을 실제로 눌러야 S.camp가 채워지거든요.
+   * 산식만 재면 호출부를 예전 식으로 되돌려도 초록이 떠요 (실제로 그랬어요). */
+  const rows = [];
+  for (const l of TABLE) {
+    const { S, c } = playerOf("batter", 100, l.tier);
+    S.team = pick(c.leagueTeams());
+    c.initSeason();
+    let turns = 0, three = 0, odd = 0;
+    for (let g = 1; g <= l.games; g++) {
+      const out = c.finishProGame(Math.random() < 0.5, null);
+      if (!out || out.nextFn === c.enterPostseason) break;   // 마지막 경기 뒤에는 훈련이 없어요
+      S.camp = 0;
+      out.nextFn();                                          // 버튼을 실제로 눌러요
+      if (S.camp !== 2 && S.camp !== 3) odd++;
+      turns += S.camp;
+      if (S.camp === 3) three++;
+    }
+    check(odd === 0, `${l.name} — 경기 사이 훈련 횟수가 늘 2~3회다 (벗어난 날 ${odd}일)`);
+    rows.push({ l, turns, three });
+  }
+  console.log(`  한 시즌 훈련 횟수 | ${rows.map((r) => `${r.l.name} ${r.turns}회(${r.l.games}경기 · 3회인 날 ${r.three}번)`).join(" · ")}`);
+  const turns = rows.map((r) => r.turns);
+  check(new Set(turns).size === 1,
+    `리그가 달라도 한 시즌 훈련 횟수가 같다 (${rows.map((r) => `${r.l.name} ${r.turns}`).join(" · ")})`);
+  /* 마지막 경기 뒤에는 훈련이 없어서 CAMP_TURNS보다 그 하루치가 적어요.
+   * 그 하루도 리그마다 같아야 합니다 — 안 그러면 총합이 어긋나요. */
+  const last = TABLE.map((l) => c0.campAfter(l.games, l.games));
+  check(new Set(last).size === 1 && turns[0] === c0.CAMP_TURNS - last[0],
+    `총합이 CAMP_TURNS(${c0.CAMP_TURNS})에서 마지막 경기 몫(${last[0]})만 빠진 값이다 (${turns[0]})`);
+
+  /* KBO 항등 — 예전 식(3연전 경계에서 3회, 아니면 2회)과 **한 경기도** 달라지면 안 돼요.
+   * 진행 중인 캐릭터의 훈련 횟수가 하루라도 바뀌면 그 시즌의 성장이 통째로 밀려요. */
+  const kbo = TABLE.find((l) => l.tier === 1);
+  let diff = 0;
+  for (let g = 1; g <= kbo.games; g++) if (c0.campAfter(g, kbo.games) !== (g % 3 === 0 ? 3 : 2)) diff++;
+  check(diff === 0, `${kbo.name}에서는 예전 식(3연전 경계 3회 · 나머지 2회)과 한 경기도 안 다르다 (다른 경기 ${diff}개)`);
+  // 옛 세이브 방어 — total이 없으면 144경기로 봐요
+  check(c0.campAfter(3, undefined) === 3 && c0.campAfter(4, undefined) === 2,
+    "total이 없으면 144경기 기준으로 떨어진다");
+  // 난수를 쓰지 않아요 — 쓰면 옛 세이브의 난수 호출 횟수가 밀려요
+  const real = Math.random;
+  let calls = 0;
+  Math.random = () => { calls++; return real(); };
+  try { for (let g = 1; g <= 162; g++) c0.campAfter(g, 162); } finally { Math.random = real; }
+  check(calls === 0, `훈련 횟수는 난수를 안 쓴다 (난수 호출 ${calls}회)`);
 });
 
 console.log(fail ? `\n❌ ${fail}건 실패` : "\n✅ 통과");

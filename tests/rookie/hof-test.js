@@ -143,6 +143,9 @@ function cutFn(header) {
 /* const 묶음을 먼저 깔고 함수 선언을 뒤에 붙여요 (const는 TDZ가 있고, 함수는 호이스팅돼요). */
 const CAREER_CONSTS = [
   ["SEASON_TOTAL", /  const SEASON_TOTAL = [^;]+;/],
+  // ⚾ 리그별 경기 수 — 스텁이 받으면 S.season.total이 undefined가 돼서 시즌이 0경기로 끝나요
+  ["seasonTotal", /  const seasonTotal = [^;]+;/],
+  ["curTotal", /  const curTotal = [^;]+;/],
   ["leagueTeams", /  const leagueTeams = [^;]+;/],
   ["ROUND_ORDER", /  const ROUND_ORDER = [^;]+;/],
   ["inPost", /  const inPost = [^;]+;/],
@@ -221,7 +224,7 @@ const CAREER_SRC = [
   ...CAREER_CONSTS.map(([n, re]) => grab(SRC, re, n)),
   ...CAREER_FNS.map(cutFn),
 ].join("\n");
-const EXPORTS = ["SEASON_TOTAL", "leagueTeams", "inPost", "mySeries", "leagueTag", "lastWar",
+const EXPORTS = ["SEASON_TOTAL", "seasonTotal", "curTotal", "leagueTeams", "inPost", "mySeries", "leagueTag", "lastWar",
   "postingGates", "postingOffers", "leagueMetric", "metricTxt",
   "startCamp", "initSeason", "gameWinP", "enterPostseason", "advancePostseason",
   "finishProGame", "finishSeason", "seasonReport", "showPosting", "moveToLeague",
@@ -285,7 +288,7 @@ const TABLE = G(stateOf(), clamp, randInt).LEAGUES.slice().sort((a, b) => a.tier
 const LG = (tier) => TABLE.find((l) => l.tier === tier);
 const NAME = (tier) => LG(tier).name;
 
-/* 🏏 시즌을 통째로 굴려요 — 캠프 → 144경기 → 가을야구 → 결산.
+/* 🏏 시즌을 통째로 굴려요 — 캠프 → 그 리그의 경기 수 → 가을야구 → 결산.
  * 타석 판정은 화면(game.js) 안에 있어서 여기서는 못 불러요. 그래서 경기마다 넘기는
  * 성적(perf)을 우리가 정합니다 — 이 파일이 재는 건 '무엇을 받았을 때 점수가 어떻게
  * 남는가'지, '얼마나 잘 치는가'가 아니에요. 그건 league-test가 재요.
@@ -296,7 +299,8 @@ const QUIET = { ab: 4, hits: 0, hr: 0, sb: 0 };
 function playYear(S, c, perf) {
   c.startCamp();
   c.initSeason();
-  for (let g = 0; g < c.SEASON_TOTAL; g++) {
+  // 경기 수는 리그마다 달라요 — initSeason이 적어준 total만큼 굴려요
+  for (let g = 0; g < S.season.total; g++) {
     c.finishProGame(Math.random() < c.gameWinP(), perf);
     S.condition = 80;
   }

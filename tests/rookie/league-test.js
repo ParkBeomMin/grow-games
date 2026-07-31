@@ -153,6 +153,29 @@ guard("사다리", () => {
   check(prOk, `tier 순서대로 prestige가 커진다 (${pres.join(" < ")})`);
 });
 
+/* ⑬ 리그마다 경기 수가 다르다 — 실제와 같은 숫자예요 (KBO 144 · 열도 143 · 대륙 162).
+ *
+ * 여기서 지키는 건 '숫자가 맞다'가 아니라 **KBO가 144다**예요. 옛 세이브는 S.league가
+ * 없어서 leagueOf가 KBO로 받아주는데, KBO가 144가 아니게 되는 순간 진행 중인 캐릭터의
+ * 시즌 길이가 통째로 바뀌어요. 나머지 둘은 '서로 다르고 KBO보다 위가 더 많다'만 봐요 —
+ * 그게 "위로 갈수록 누적이 쌓인다"는 설계고, 실제 숫자는 표에 적힌 그대로 씁니다. */
+guard("리그별 경기 수", () => {
+  if (byTier.length !== 3) throw new Error("리그 표가 없어요");
+  const games = byTier.map((l) => l.games);
+  console.log(`=== ⑬ 리그별 경기 수 | ${byTier.map((l) => `${l.name} ${l.games}`).join(" · ")} ===`);
+  check(games.every((g) => Number.isInteger(g) && g > 0), `리그마다 games가 양의 정수다 (${games.join("·")})`);
+  const kbo = table.find((l) => l.id === 1);
+  check(!!kbo && kbo.games === 144, `KBO가 144경기다 — 옛 세이브가 여기로 떨어져요 (${kbo ? kbo.games : "없음"})`);
+  check(new Set(games).size === games.length, `리그마다 경기 수가 다르다 (${games.join("·")})`);
+  check(L(3).games > L(1).games,
+    `${NAME(3)}가 ${NAME(1)}보다 경기가 많다 (${L(1).games} < ${L(3).games}) — 난이도를 누적으로 상쇄해요`);
+  /* 옛 세이브 방어. leagueOf가 KBO로 받아주니 마이그레이션 없이 144가 나와야 해요.
+   * ③이 id만 보는 것과 달리, 여기는 **경기 수까지** 144인지 봐요. */
+  const old = [{}, undefined, { league: 99 }, { league: "3" }, { league: null }];
+  const oldGames = old.map((st) => leagueOfFn(st).games);
+  check(oldGames.every((g) => g === 144), `S.league가 없거나 깨진 세이브는 144경기다 (${oldGames.join("·")})`);
+});
+
 /* ---------- 산식 실행기 ---------- */
 
 const hitPFn = new Function("S", "oppStr", "clamp", `
@@ -429,17 +452,25 @@ guard("KBO 항등", () => {
  * 판단 기준은 수상 확률이 아니라 수상 확률 × prestige(명예의 전당 가치)예요.
  * 상위 리그에서는 상을 덜 받지만 그 상이 크게 남아요.
  *
- * 한 시즌(144경기)을 통째로 굴려요 — 타석 판정(game.js) → 시즌 누적 → WAR →
+ * 한 시즌을 통째로 굴려요 — 타석 판정(game.js) → 시즌 누적 → WAR →
  * 수상 판정(career.js)까지가 한 사슬이라 중간을 흉내내면 의미가 없어요.
- * 수상 확률은 '한 시즌에 상을 하나라도 받을 확률'이에요(5년차라 신인왕은 안 나와요). */
-const SEASON_TOTAL = 144;
-function batterSeason(stat, tier) {
-  const S = batState(stat);
+ * 수상 확률은 '한 시즌에 상을 하나라도 받을 확률'이에요(5년차라 신인왕은 안 나와요).
+ *
+ * ⚾ 경기 수는 **리그 표에서 읽어요.** 여기 144를 옮겨 적으면 리그마다 경기 수가
+ * 달라진 뒤에도 전부 144경기로 재게 돼서, 누적이 더 쌓이는 리그를 그냥 못 보고 넘겨요. */
+const gamesOf = (tier) => L(tier).games;
+function batterSeason(stat, tier, games) {
+  /* games를 따로 받을 수 있게 열어뒀어요 — ⑭가 '난이도는 그대로 두고 경기 수만' 바꿔서
+   * 수상 판정이 시즌 길이에 중립인지 재는 데 씁니다. 안 넘기면 그 리그의 경기 수예요.
+   * 수상 판정이 S.season.total로 시즌 길이를 읽어요 — 결산은 시즌을 지우기 전에
+   * 돌거든요. 여기서 안 채워두면 경쟁자 분포가 144경기짜리로 굳어요. */
+  const n = games || gamesOf(tier);
+  const S = batState(stat, { season: { total: n } });
   // 상대 9팀 — teamStrOf가 뽑는 분포(0.38~0.60)를 그대로 흉내내요
   const pool = Array.from({ length: 9 }, () => Math.round(rand(0.38, 0.60) * 1000) / 1000);
   const t = { ab: 0, hits: 0, hr: 0, sb: 0 };
   const story = { ourInn: Array(9).fill(0) };
-  for (let g = 0; g < SEASON_TOTAL; g++) {
+  for (let g = 0; g < n; g++) {
     S.__opp = pool[Math.floor(g / 3) % 9] + L(tier).oppUp;   // 3연전 단위로 상대가 바뀌어요
     const abs = randInt(3, 5);
     const perf = { ab: abs, hits: 0, hr: 0, sb: 0 };
@@ -461,12 +492,13 @@ const WIN_IP = Number((SRC.match(/win && perf\.ip >= (\d+)/) || [])[1] || 0);
 check(ROT > 0 && WIN_IP > 0, `선발 로테이션 간격(${ROT || "못 찾음"})과 승리 요건 이닝(${WIN_IP || "못 찾음"})을 소스에서 읽었다`);
 const crisisCntFn = new Function("randInt", `${parts.pitCrisisCnt} return crisisCnt;`);
 const TEAM_WIN = 0.55;
-function pitcherSeason(stat, tier) {
-  const S = pitState(stat);
+function pitcherSeason(stat, tier, games) {
+  const n = games || gamesOf(tier);
+  const S = pitState(stat, { season: { total: n } });
   const pool = Array.from({ length: 9 }, () => Math.round(rand(0.38, 0.60) * 1000) / 1000);
   const up = L(tier).oppUp;
   const t = { ip: 0, k: 0, er: 0, wins: 0, saves: 0, g: 0 };
-  for (let g = 0; g < SEASON_TOTAL; g++) {
+  for (let g = 0; g < n; g++) {
     if (g % ROT !== 0) continue;                       // 로테이션이 도는 날만 등판해요
     const oppTeam = pool[Math.floor(g / 3) % 9];       // 3연전 단위로 상대가 바뀌어요
     const { ip, kBase } = pitStartFn(S, clamp, randInt);
@@ -479,7 +511,8 @@ function pitcherSeason(stat, tier) {
   }
   return { ...seasonEndFn(S, t, clamp, rand), era: (t.er * 9) / Math.max(t.ip, 1) };
 }
-const seasonOf = (kind, stat, tier) => (kind === "bat" ? batterSeason(stat, tier) : pitcherSeason(stat, tier));
+const seasonOf = (kind, stat, tier, games) =>
+  (kind === "bat" ? batterSeason(stat, tier, games) : pitcherSeason(stat, tier, games));
 
 /* 능력치 구간과 그때 최적이어야 하는 리그예요. 상한(STAT_CAP)이 130이라
  * 150은 초월로만 닿는 자리 — 대륙이 이득이 되는 지점이 후반 목표가 돼요.
@@ -490,8 +523,19 @@ const BANDS = [
   { stat: 130, want: 2, label: "준정상급" },
   { stat: 150, want: 3, label: "정상급" },
 ];
-const LEAGUE_N = Number(process.env.LEAGUE_N || 3000);
+/* 3000 → 8000으로 올렸어요. ⑫의 준정상급(130) 칸이 기준선(0.95배) 위에 걸터앉아
+ * 있었거든요 — 씨앗을 바꾸면 3000시즌에서는 0.96~1.02로 흔들려서, 나쁜 씨앗을
+ * 만나면 빨간불이 떴어요. **경기 수와 무관한, 원래 있던 흔들림이에요.**
+ * MVP 문턱(WAR 5.5)이 열도 130의 평균 WAR(5.92) 바로 옆이라 그래요 —
+ * 문턱 근처에서는 표본을 아무리 늘려도 계단이 매끄러워지지 않고, 폭만 줄어들어요.
+ * 8000시즌에서는 0.97~1.00으로 좁혀져요 (씨앗 4개 실측). 15000이면 0.98~1.01인데
+ * 이 파일 하나가 28초가 돼서 8000에서 멈췄어요 (14초).
+ * 기준선(0.95)은 내리지 않았어요 — 내리면 이 검사가 지키던 게 사라져요. */
+const LEAGUE_N = Number(process.env.LEAGUE_N || 8000);
 const LEAGUE_SEED = Number(process.env.LEAGUE_SEED || 20260731);
+/* ⑭(시즌 길이 중립성)가 쓰는 표본 수예요. 여기서 재는 건 리그 사이의 사다리가 아니라
+ * '같은 난이도에서 경기 수만 바꿨을 때'라, 목표선(1.10배)이 훨씬 널널해서 덜 뽑아도 돼요. */
+const NEUTRAL_N = Number(process.env.NEUTRAL_N || 3000);
 
 /* 칸당 시즌 수. 가장 빠듯한 칸(능력치 110의 KBO ↔ 열도)이 24% 대 13%라
  * 그냥 굴리면 비율의 표준오차가 2000시즌에서 7%나 돼요 — 목표선(10%)에 1σ밖에
@@ -567,19 +611,27 @@ guard("투수 목표 곡선", () => {
   console.log(`  ⏱ ${((Date.now() - t0) / 1000).toFixed(1)}초`);
 });
 
-/* ⑪ 투수의 WAR 하락폭이 타자와 같은 크기다 — 이 태스크가 고친 바로 그 지점이에요.
+/* ⑪ 투수의 WAR 하락폭이 타자와 같은 크기다 — 리그 난이도가 투수에게도 닿는지 봐요.
  *
  * 고치기 전에는 능력치 100에서 타자가 -1.8, 투수가 -0.15였어요(12배 차이).
  * 정확히 같을 필요는 없지만, 자릿수가 달라지면 포지션에 따라 해외 진출의 의미가
- * 완전히 달라져 버려요. 그래서 '같은 크기'를 비율로 못 박아요. */
+ * 완전히 달라져 버려요. 그래서 '같은 크기'를 비율로 못 박아요.
+ *
+ * ⚠️ **경기 수를 반드시 맞춰서 재요.** 리그마다 경기 수가 달라진 뒤로는 원본 WAR을
+ * 그냥 빼면 리그 난이도가 아니라 **시즌 길이**를 재게 돼요 — 162경기의 WAR은 같은
+ * 실력이어도 커지니까요. 실제로 그 상태에서는 대륙 리그가 '덜 아파' 보였어요
+ * (투수 하락폭 0.65). 그래서 KBO 경기 수 기준으로 환산한 뒤에 뺍니다.
+ * 여기서 재려는 건 '한 경기당 얼마나 깎이는가'지 '한 시즌에 몇 점 쌓이는가'가 아니에요. */
+const BASE_GAMES = () => byTier[0].games;                 // KBO 경기 수 (소스에서 읽어요)
+const warPerBase = (c) => (c.war * BASE_GAMES()) / c.league.games;
 guard("투수 WAR 하락폭", () => {
   if (!batRows || !pitRows) throw new Error("앞의 곡선 검사가 값을 못 만들었어요");
-  console.log(`=== ⑪ ${NAME(1)} → ${NAME(3)} WAR 하락폭 ===`);
+  console.log(`=== ⑪ ${NAME(1)} → ${NAME(3)} WAR 하락폭 (${BASE_GAMES()}경기 기준으로 환산) ===`);
   console.log(`  능력치 |    타자 |    투수 | 투수/타자`);
   let ok = true, small = false;
   for (let i = 0; i < BANDS.length; i++) {
-    const bd = batRows[i].cells[0].war - batRows[i].cells[2].war;
-    const pd = pitRows[i].cells[0].war - pitRows[i].cells[2].war;
+    const bd = warPerBase(batRows[i].cells[0]) - warPerBase(batRows[i].cells[2]);
+    const pd = warPerBase(pitRows[i].cells[0]) - warPerBase(pitRows[i].cells[2]);
     const ratio = pd / bd;
     console.log(`  ${String(BANDS[i].stat).padStart(6)} | ${bd.toFixed(2).padStart(7)} | ${pd.toFixed(2).padStart(7)} | ${ratio.toFixed(2).padStart(9)}`);
     if (!(ratio >= 0.5 && ratio <= 2.0)) ok = false;
@@ -587,6 +639,10 @@ guard("투수 WAR 하락폭", () => {
   }
   check(ok, "능력치 구간마다 투수의 WAR 하락폭이 타자의 0.5~2.0배 안에 있다");
   check(!small, `투수의 WAR 하락폭이 전 구간에서 1.0 이상이다 (${NAME(3)}행이 실제로 아프다)`);
+  /* 환산을 안 하면 무엇이 보이는지 나란히 찍어요. 이 줄이 초록·빨강을 가르지는 않지만,
+   * 다음에 누가 "원본 WAR로 빼면 안 되나?" 할 때 답이 여기 적혀 있어야 해요. */
+  const raw = BANDS.map((b, i) => (pitRows[i].cells[0].war - pitRows[i].cells[2].war).toFixed(2));
+  console.log(`  (환산 안 했다면 투수 하락폭이 ${raw.join(" · ")} — 시즌 길이가 섞여 들어가요)`);
 });
 
 /* ⑫ 명예의 전당 **점수**로 다시 잰 사다리 — 가중을 걸고 나서 곡선이 유지되는지.
@@ -686,6 +742,99 @@ guard("점수로 다시 잰 사다리", () => {
     check(on[1] > on[0] * 0.95,
       `  ${label} 준정상급(130)에서 ${NAME(2)}가 점수로도 ${NAME(1)}에 붙어 있다 (${(on[1] / on[0]).toFixed(2)}배)`);
   }
+});
+
+/* ⑭ 수상 판정이 시즌 길이를 따라간다 — 리그마다 경기 수가 달라지면서 푼 자리예요.
+ *
+ * 경쟁자 분포(0.5~2.5 · 3.5~7.8 · 4.2~6.2 · 5.2~7.2)는 **144경기짜리 리그 동료**를
+ * 그린 값이었어요. 162경기 리그에서는 그 동료들도 162경기를 뛰는데 고정해 두면
+ * 나만 누적이 늘고 문턱은 그대로라 상이 그냥 싸집니다. 실제로 그 상태에서는
+ * 준정상급(130)의 최적 리그가 열도에서 대륙으로 넘어갔어요 — 타자·투수 둘 다요.
+ *
+ * 여기서 세 가지를 봐요.
+ *   ⓐ WAR과 겨루는 값 **일곱 곳 전부**에 시즌 길이가 붙어 있다 (경쟁자 넷 · 진입 컷 셋).
+ *      하나만 빠져도 "겨루기는 그대로인데 입장은 쉬워지는" 반쪽이 돼요.
+ *   ⓑ KBO(144)는 항등이다 — 결과도, **난수를 뽑는 횟수도** 한 톨도 안 바뀌어요.
+ *   ⓒ 난이도를 고정하고 경기 수만 늘려도 수상 확률이 안 오른다. 이게 본체예요. */
+guard("수상 판정 스케일", () => {
+  const blk = parts.awards;
+  // ⓐ 구조 — 값은 안 옮겨 적고 '스케일이 붙어 있는지'만 봐요
+  const need = [
+    ["신인왕 컷", /war >= 1\.5 \* awardK/],
+    ["신인왕 경쟁자", /rand\(0\.5 \* awardK, 2\.5 \* awardK\)/],
+    ["MVP 컷", /war >= 5\.5 \* awardK/],
+    ["MVP 경쟁자", /rand\(3\.5 \* awardK, 7\.8 \* awardK\)/],
+    ["골든글러브 컷", /war >= 4\.5 \* awardK/],
+    ["골든글러브 경쟁자(타자)", /rand\(4\.2 \* awardK, 6\.2 \* awardK\)/],
+    ["골든글러브 경쟁자(투수)", /rand\(5\.2 \* awardK, 7\.2 \* awardK\)/],
+  ];
+  const missed = need.filter(([, re]) => !re.test(blk)).map(([n]) => n);
+  check(missed.length === 0,
+    `WAR과 겨루는 값 ${need.length}곳에 전부 시즌 길이가 붙어 있다 (빠진 곳: ${missed.join(" · ") || "없음"})`);
+  /* 기준은 **그 시즌의 total**이어야 해요. 리그 표를 다시 읽으면 이미 치른 시즌의
+   * 판정 기준이 나중에 표를 고칠 때 같이 흔들려요. */
+  check(/S\.season && S\.season\.total/.test(blk), "기준이 그 시즌의 total이다 (리그 표를 다시 읽지 않아요)");
+  check(/AWARD_BASE = 144/.test(blk), "기준 경기 수가 144다 (KBO — 옛 세이브가 여기로 떨어져요)");
+
+  /* ⓑ KBO 항등. `season.total: 144`인 세이브와 `season`이 아예 없는 옛 세이브를
+   * **같은 난수**로 돌려서, 결과도 난수 소비량도 같은지 봐요.
+   * 난수까지 세는 건 여기가 진행 중인 캐릭터의 저장본을 건드리는 자리라서예요 —
+   * 뽑는 횟수가 달라지면 그 뒤의 모든 판정이 밀립니다. */
+  const runAwards = (S, t, seed) => {
+    const real = Math.random;
+    let s = seed >>> 0, calls = 0;
+    Math.random = () => { calls++; s = (Math.imul(s, 1664525) + 1013904223) >>> 0; return s / 4294967296; };
+    try { return { ...seasonEndFn(S, t, clamp, rand), calls }; }
+    finally { Math.random = real; }
+  };
+  const T = { ab: 576, hits: 180, hr: 39, sb: 58 };
+  let sameVal = 0, sameCalls = 0, n = 0;
+  for (let i = 0; i < 400; i++) {
+    for (const yr of [1, 5]) {
+      const a = runAwards(batState(130, { proYear: yr, season: { total: 144 } }), { ...T }, 7000 + i);
+      const b = runAwards(batState(130, { proYear: yr }), { ...T }, 7000 + i);   // season이 아예 없는 옛 세이브
+      n++;
+      if (a.war === b.war && a.awards.join("|") === b.awards.join("|")) sameVal++;
+      if (a.calls === b.calls) sameCalls++;
+    }
+  }
+  check(sameVal === n, `KBO(144)와 옛 세이브(season 없음)의 수상 결과가 같다 (${sameVal}/${n})`);
+  check(sameCalls === n, `난수를 뽑는 횟수까지 같다 (${sameCalls}/${n})`);
+
+  /* ⓒ 시즌 길이 중립성 — **난이도는 KBO로 고정**하고 경기 수만 162로 늘려요.
+   * 스케일이 없으면 여기가 1.3~1.5배로 튑니다(실측). 붙어 있으면 1.0 언저리예요.
+   *
+   * '같다'가 아니라 '안 오른다'로 못 박아요. WAR 산식이 경기 수에 완전 비례하지는
+   * 않거든요 — 타자 WAR의 (타율−0.250)×50 항은 비율이라 경기가 늘어도 그대로예요.
+   * 그래서 타자는 조금 **덜** 받고(0.6~0.9배), 투수는 이닝이 거의 비례해서 1.0 언저리예요.
+   * 어느 쪽이든 "경기가 많은 리그가 상을 더 받는다"만 아니면 돼요. */
+  const LONG = L(3).games, BASE = L(1).games;
+  const rateAt = (kind, stat, games) => {
+    let any = 0;
+    let seed = 0;
+    const seeded = () => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed / 4294967296; };
+    const real = Math.random;
+    Math.random = seeded;
+    try {
+      for (let i = 0; i < NEUTRAL_N; i++) {
+        seed = (LEAGUE_SEED + Math.imul(stat, 1000003) + Math.imul(i, 2654435761)) >>> 0;
+        if (seasonOf(kind, stat, 1, games).awards.length) any++;   // tier 1 = KBO 난이도로 고정
+      }
+    } finally { Math.random = real; }
+    return any / NEUTRAL_N;
+  };
+  console.log(`=== ⑭ 난이도는 ${NAME(1)}로 고정하고 경기 수만 ${BASE} → ${LONG} (칸당 ${NEUTRAL_N}시즌) ===`);
+  let worst = 0, worstAt = "";
+  for (const [kind, label] of [["bat", "🧢 타자"], ["pit", "⚾ 투수"]]) {
+    for (const stat of [100, 110, 130]) {
+      const a = rateAt(kind, stat, BASE), b = rateAt(kind, stat, LONG);
+      const r = a > 0 ? b / a : 1;
+      console.log(`  ${label} ${String(stat).padStart(3)} | ${BASE}경기 ${(a * 100).toFixed(1)}% → ${LONG}경기 ${(b * 100).toFixed(1)}%  (${r.toFixed(2)}배)`);
+      if (r > worst) { worst = r; worstAt = `${label} ${stat}`; }
+    }
+  }
+  check(worst <= 1.10,
+    `경기 수만 늘려도 수상 확률이 10% 넘게 오르지 않는다 (가장 큰 칸 ${worstAt} ${worst.toFixed(2)}배)`);
 });
 
 console.log(fail ? `\n❌ ${fail}건 실패` : "\n✅ 통과");

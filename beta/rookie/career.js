@@ -196,7 +196,7 @@ window.Career = (() => {
       // 훈련 타일과 성격이 달라요. 휴식·경기 시작과 같이 3칸을 다 쓰는 가로 버튼으로 둡니다.
       tr.className = "action-btn rest";
       tr.dataset.key = "__trade";
-      const left = TRADE_CLOSE - S.season.game;
+      const left = tradeCloseAt() - S.season.game;
       // 가로 배치라 한 줄에 늘어서요. 서브 문구가 길면 넘쳐서 짧게 씁니다.
       const sub = S.trade ? "협상 이어하기"
         : left <= 0 ? "오늘이 마감 · 컨디션 소모"
@@ -260,12 +260,42 @@ window.Career = (() => {
     "포스트시즌이 걸린 경기에서 역투! 🎯",
   ];
 
-  // ---------- 시즌 (144경기를 한 경기씩) ----------
+  // ---------- 시즌 (리그별 경기 수만큼 한 경기씩) ----------
   /* 지금 뛰는 리그의 구단 목록이에요. 옛 세이브(S.league 없음)는 KBO 구단만 나와요 —
    * leagueOf가 막아주니 여기서 따로 마이그레이션하지 않아요.
    * 상수가 아니라 함수인 건 해외로 나가면 목록이 통째로 바뀌기 때문이에요. */
   const leagueTeams = () => teamsOf(leagueOf(S));
+  /* 리그 표에 games가 없던 시절의 값이에요. leagueOf가 옛 세이브를 KBO로 받아주니
+   * 실제로는 안 쓰이지만, 표가 깨져도 시즌이 0경기로 끝나지 않게 남겨둡니다. */
   const SEASON_TOTAL = 144;
+  const seasonTotal = () => leagueOf(S).games || SEASON_TOTAL;
+  /* 진행 중인 시즌의 경기 수예요. **저장본에 적힌 total이 정본**이고, 없을 때만
+   * 지금 리그로 떨어져요. 시즌 도중에 리그가 바뀌는 길은 없지만(포스팅은 오프시즌,
+   * 트레이드는 같은 리그 안), 여기를 매번 다시 계산하면 그런 길이 하나라도 생기는 순간
+   * 진행 중인 시즌의 길이가 바뀌어서 순위표와 트레이드 창구가 어긋나요. */
+  const curTotal = () => (S.season && S.season.total) || seasonTotal();
+
+  /* 🏋️ 한 시즌이 주는 훈련 횟수예요.
+   *
+   * 예전에는 경기마다 2회, 3연전이 끝나는 경기(이동일이 끼는 날)에는 3회를 줬어요.
+   * 144경기면 144×2 + 48 = 336회입니다.
+   *
+   * 🌏 경기 수가 리그마다 달라지면서 이 합까지 같이 늘면 안 돼요. 162경기 리그는
+   * 훈련 기회도 12.5% 많아져서 능력치가 더 빨리 커요. 그러면 난이도(oppUp·lgUp)로
+   * 깎아둔 몫을 성장 속도로 되돌려받게 돼서, **해외 진출이 도박이 아니라 정답**이 됩니다.
+   * 사다리 검사는 능력치를 고정해 두고 재기 때문에 이 새는 구멍을 못 봐요.
+   *
+   * 그래서 총 훈련 횟수를 336회로 못 박고 시즌 길이에 맞춰 나눠 줘요.
+   * 긴 시즌은 이동일이 덜 자주 오는 셈이에요 — 한 해에 쉬는 날 수는 같으니까요.
+   *
+   * ⚠️ 144경기에서는 예전 식과 **한 톨도 안 달라요.** floor(g×336/144) = floor(g×7/3)이라
+   * 칸 사이 차이가 2,2,3 …으로 돌아서 3연전 경계에서만 3회가 나오거든요.
+   * 난수를 안 쓰니 옛 세이브의 난수 호출 횟수도 그대로예요.
+   * tests/rookie/club-test.js ⑧이 두 성질을 다 지켜요. */
+  const CAMP_BASE_GAMES = 144;
+  const CAMP_TURNS = 336;                      // 144경기 × 2회 + 3연전 경계 48번
+  const campAt = (g, total) => Math.floor((g * CAMP_TURNS) / (total || CAMP_BASE_GAMES));
+  const campAfter = (g, total) => campAt(g, total) - campAt(g - 1, total);
 
   function runSeason() {
     if (!S.season) initSeason();
@@ -290,7 +320,7 @@ window.Career = (() => {
   function initSeason() {
     S.season = {
       game: 0,
-      total: SEASON_TOTAL,
+      total: seasonTotal(),
       teamW: 0,
       teamL: 0,
       // 팀 전력은 저장본에 남아요 — 이적할 때 '어느 팀인지'가 의미를 가지려면 필요해요
@@ -646,8 +676,9 @@ window.Career = (() => {
       extra,
       nextLabel: `🏋️ 다음 경기 준비 (G${sn.game + 1})`,
       nextFn: () => {
-        // 3연전 단위로 시리즈가 끝나면 이동일이 껴서 훈련 기회가 더 많아요
-        S.camp = sn.game % 3 === 0 ? 3 : 2;
+        // 시리즈가 끝나면 이동일이 껴서 훈련 기회가 더 많아요.
+        // 한 시즌의 총 훈련 횟수는 리그와 무관하게 336회예요 (campAfter 주석 참고).
+        S.camp = campAfter(sn.game, sn.total);
         save();
         renderPro();
         show("screen-pro");
@@ -975,15 +1006,40 @@ window.Career = (() => {
     // 수상은 '리그 내 상대 비교' — 가상 경쟁자들의 WAR와 겨뤄 최고면 수상해요.
     // (압도적인 시즌은 랜덤에 밀려 MVP를 놓치지 않아요)
     const awards = [];
+    /* 🌏 수상 판정 전체를 **시즌 길이에 맞춰 늘려요.**
+     *
+     * 경쟁자 분포(0.5~2.5 · 3.5~7.8 · 4.2~6.2)는 **144경기짜리 리그 동료**를 그린
+     * 값이에요. 162경기 리그에서는 그 동료들도 162경기를 뛰니까 WAR이 같이 올라가야
+     * 하는데, 고정해 두면 나만 누적이 늘고 문턱은 그대로라 상이 그냥 싸집니다.
+     * 실제로 그렇게 뒀더니 준정상급(능력치 130)의 최적 리그가 열도에서 대륙으로
+     * 넘어갔어요 — 타자·투수 둘 다요.
+     *
+     * 진입 컷(1.5 · 5.5 · 4.5)도 **같이** 늘려요. 경쟁자만 늘리고 컷을 두면
+     * "겨루기는 그대로인데 입장은 쉬워지는" 반쪽이 돼서, 상 하나라도 받을 확률이
+     * 긴 리그에서만 올라가요. 여기서 WAR과 겨루는 값은 **전부** k가 붙습니다.
+     *
+     * 그래서 이 판정은 **경기당 성적이 같으면 리그가 달라도 수상 확률이 같아요.**
+     * 리그가 남기는 차이는 수상 확률이 아니라 ①난이도(oppUp·lgUp)로 깎인 성적과
+     * ②명예의 전당에 쌓이는 누적(warSum·홈런·이닝)이에요. 후자가 "경기가 많아
+     * 누적이 쌓인다"는 설계고, 그건 이 스케일과 무관하게 그대로 남아요.
+     *
+     * ⚠️ KBO는 144라 k가 정확히 1이에요 — 곱해도 값이 한 톨도 안 바뀝니다.
+     * 난수를 뽑는 **횟수**도 그대로예요(rand의 인자만 바뀌어요). 옛 세이브는
+     * S.season.total이 144라 여기로 떨어져요. tests/rookie/league-test.js ⑭가 지켜요.
+     *
+     * 기준은 **그 시즌의 total**이에요. 리그 표를 나중에 고쳐도 이미 치른 시즌의
+     * 판정 기준은 안 흔들려요. */
+    const AWARD_BASE = 144;
+    const awardK = ((S.season && S.season.total) || AWARD_BASE) / AWARD_BASE;
     /* 컷을 3.5 → 1.5로 내렸어요. 타격·투구 판정을 다시 잡으면서 WAR 스케일이
      * 내려갔고, 새 모델의 1년차는 WAR 0 언저리예요. 예전 컷으로는 신인왕이
      * 아예 나오지 않습니다. 경쟁자 분포도 같은 비율로 낮췄어요. */
-    if (S.proYear === 1 && war >= 1.5) {
-      const bestRookie = Math.max(...Array.from({ length: 4 }, () => rand(0.5, 2.5)));
+    if (S.proYear === 1 && war >= 1.5 * awardK) {
+      const bestRookie = Math.max(...Array.from({ length: 4 }, () => rand(0.5 * awardK, 2.5 * awardK)));
       if (war >= bestRookie) { awards.push("신인왕"); S.career.roy += 1; }
     }
-    const leagueBest = Math.max(...Array.from({ length: 6 }, () => rand(3.5, 7.8)));
-    if (war >= 5.5 && war >= leagueBest) {
+    const leagueBest = Math.max(...Array.from({ length: 6 }, () => rand(3.5 * awardK, 7.8 * awardK)));
+    if (war >= 5.5 * awardK && war >= leagueBest) {
       awards.push("MVP"); S.career.mvp += 1;
     }
     /* 골든글러브는 MVP와 별개로 판정해요.
@@ -992,8 +1048,10 @@ window.Career = (() => {
      *
      * 컷은 투수가 더 높아요. 골든글러브는 리그에 10자리인데 투수는 그중 1자리라,
      * 모든 투수가 한 자리를 두고 겨루거든요. 야수는 포지션 안에서만 겨룹니다. */
-    if (war >= 4.5) {
-      const posBar = S.pos === "batter" ? rand(4.2, 6.2) : rand(5.2, 7.2);
+    if (war >= 4.5 * awardK) {
+      const posBar = S.pos === "batter"
+        ? rand(4.2 * awardK, 6.2 * awardK)
+        : rand(5.2 * awardK, 7.2 * awardK);
       if (war >= posBar) { awards.push("골든글러브"); S.career.gg += 1; }
     }
     addAwardWeight(awards, preAward);
@@ -1219,8 +1277,15 @@ window.Career = (() => {
   const TRADE_MIN_YEAR = 2;  // 트레이드 요청 가능 연차
   const TRADE_ROUNDS = 3;    // 협상 라운드 수
   /* 시즌 중 트레이드 창구. KBO 마감 시한(7월 31일)을 144경기의 약 70% 지점으로 옮겼어요.
-   * 시즌 초반에는 실제로도 트레이드가 거의 없어서 하한도 뒀어요. */
-  const TRADE_OPEN = 30, TRADE_CLOSE = 100;
+   * 시즌 초반에는 실제로도 트레이드가 거의 없어서 하한도 뒀어요.
+   *
+   * 🌏 리그마다 경기 수가 달라서 **비율로 씁니다.** 30·100을 그대로 쓰면 162경기
+   * 리그에서 마감이 62% 지점이 되고, 143경기 리그에서는 70%를 넘겨요 —
+   * "시즌의 어디쯤"이라는 뜻이 리그마다 달라져 버려요.
+   * 기준은 진행 중인 시즌의 total이라 옛 세이브(144)는 30·100 그대로예요. */
+  const TRADE_OPEN = 30, TRADE_CLOSE = 100, TRADE_BASE = 144;
+  const tradeOpenAt = () => Math.round((TRADE_OPEN * curTotal()) / TRADE_BASE);
+  const tradeCloseAt = () => Math.round((TRADE_CLOSE * curTotal()) / TRADE_BASE);
   const TRADE_COND_ROUND = 8;   // 협상 한 라운드당 컨디션
   const TRADE_COND_FAIL = 20;   // 시즌 중 무산되면 추가로 깎이는 컨디션
   const TRADE_FRONT_PENALTY = 12; // 시즌 중엔 전력 이탈이라 구단이 더 꺼려요
@@ -1410,7 +1475,7 @@ window.Career = (() => {
   const tradeReady = () => S.proYear >= TRADE_MIN_YEAR && S.tradeYear !== S.proYear;
   // 시즌 중 신청 자격 — 연 1회 제약은 오프시즌과 공유해요
   const inSeasonTrade = () =>
-    !!S.season && S.season.game >= TRADE_OPEN && S.season.game <= TRADE_CLOSE && tradeReady();
+    !!S.season && S.season.game >= tradeOpenAt() && S.season.game <= tradeCloseAt() && tradeReady();
 
   /* 협상 카드. front = 구단 프런트의 태도, fans = 팬 여론.
    * 어느 쪽도 공짜가 없어서 매 라운드 저울질을 하게 돼요. */
@@ -2296,6 +2361,8 @@ window.Career = (() => {
       LEAGUES, leagueOf, oppFor, teamStrOf,
       POST_GATE, postingGates, postingOffers, moveToLeague, postLabel, KS_LABEL,
       LEAGUE_CLUBS, teamsOf, clubStrOf, driftBandOf, leagueTeams, driftTeamStr, teamWinP, gameWinP,
+      // ⚾ 리그별 경기 수와, 거기에 비례해 움직이는 트레이드 창구
+      seasonTotal, curTotal, tradeOpenAt, tradeCloseAt, inSeasonTrade,
       // 📊 그 시즌에 뛴 소속 — 결산 헤더가 지금 팀을 쓰지 않는지 화면에서 대조할 때 써요
       playedAt,
       state: () => S,
@@ -2307,8 +2374,9 @@ window.Career = (() => {
       // 가을야구 도중에 나갔다 와도 그 자리에서 이어져요
       if (inPost()) { renderPost(); show("screen-pro"); }
       else if ((S.season && S.pendingGame) || S.camp > 0) { renderPro(); show("screen-pro"); }
-      // 정규시즌 144경기를 다 치른 뒤라면 결산으로 이어져야 해요. 여기서 runSeason으로
-      // 떨어지면 145번째 경기가 생기고, 방금 딴 우승이 새 대진에 덮여 사라져요.
+      // 정규시즌을 다 치른 뒤라면 결산으로 이어져야 해요. 여기서 runSeason으로
+      // 떨어지면 한 경기가 더 생기고, 방금 딴 우승이 새 대진에 덮여 사라져요.
+      // 기준은 저장본의 total이에요 — 리그마다 경기 수가 다르니 숫자를 못 박지 않아요.
       else if (S.season && S.season.game >= S.season.total) {
         if (S.post) advancePostseason(); else finishSeason();
       }

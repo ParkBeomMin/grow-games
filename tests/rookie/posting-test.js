@@ -154,6 +154,9 @@ function cutFn(header) {
  * 그래서 const 묶음을 먼저 깔고 함수 선언을 뒤에 붙여요 (함수는 호이스팅돼요). */
 const CAREER_CONSTS = [
   ["SEASON_TOTAL", /  const SEASON_TOTAL = [^;]+;/],
+  // ⚾ 리그별 경기 수 — 스텁이 받으면 S.season.total이 undefined가 돼서 시즌이 0경기로 끝나요
+  ["seasonTotal", /  const seasonTotal = [^;]+;/],
+  ["curTotal", /  const curTotal = [^;]+;/],
   ["leagueTeams", /  const leagueTeams = [^;]+;/],
   ["ROUND_ORDER", /  const ROUND_ORDER = [^;]+;/],
   ["inPost", /  const inPost = [^;]+;/],
@@ -175,6 +178,11 @@ const CAREER_CONSTS = [
   ["moveCard", /  const moveCard = [^\n]+;\n/],
   ["faReady", /  const faReady = [^;]+;/],
   ["tradeReady", /  const tradeReady = [^;]+;/],
+  // 🔁 시즌 중 트레이드 창구 — 경기 수에 비례해 움직여요
+  ["TRADE_OPEN", /  const TRADE_OPEN = [^;]+;/],
+  ["tradeOpenAt", /  const tradeOpenAt = [^;]+;/],
+  ["tradeCloseAt", /  const tradeCloseAt = [^;]+;/],
+  ["inSeasonTrade", /  const inSeasonTrade = \(\) =>[\s\S]*?;\n/],
   ["POST_GATE", /  const POST_GATE = \[[\s\S]*?\n  \];/],
   ["lastSeason", /  const lastSeason = \(\) => \{[\s\S]*?\n  \};/],
   ["lastWar", /  const lastWar = [^\n]+;/],
@@ -235,13 +243,14 @@ const CAREER_SRC = [
   ...CAREER_CONSTS.map(([n, re]) => grab(SRC, re, n)),
   ...CAREER_FNS.map(cutFn),
 ].join("\n");
-const EXPORTS = ["SEASON_TOTAL", "leagueTeams", "inPost", "mySeries", "postOpp", "KS_LABEL", "postLabel",
+const EXPORTS = ["SEASON_TOTAL", "seasonTotal", "curTotal", "leagueTeams", "inPost", "mySeries", "postOpp", "KS_LABEL", "postLabel",
   "leagueTag", "strLabel", "faReady", "tradeReady", "POST_GATE", "lastWar", "postingReady",
   "postingOffers", "HIT_OPP_K", "hitPreview", "leagueMetric", "metricTxt",
   "proLog", "startCamp", "teamStrOf", "driftTeamStr", "marketValue", "teamWinP", "gameWinP",
   "initSeason", "myRank", "enterPostseason", "advancePostseason", "finishProGame", "finishSeason",
   "seasonReport", "faOffers", "showFa", "gateFor", "postingGates", "crisisPreview",
-  "showPosting", "showPostingClubs", "moveToLeague", "moveTo", "renderPro", "leagueBadge"];
+  "showPosting", "showPostingClubs", "moveToLeague", "moveTo", "renderPro", "leagueBadge",
+  "TRADE_OPEN", "TRADE_CLOSE", "TRADE_BASE", "tradeOpenAt", "tradeCloseAt", "inSeasonTrade"];
 
 function scopeOf(store) {
   const stub = function () { return undefined; };
@@ -430,12 +439,13 @@ guard("이적", () => {
 /* ---------- ⑥ 강등이 없어요 — 여러 시즌 굴려 확인 ---------- */
 group("⑥ 강등 없음");
 
-/* 한 해를 통째로 굴려요 — 캠프 → 144경기 → 가을야구 → 결산(seasonReport)까지.
- * 이 흐름의 끝이 결산 화면이고, 거기가 포스팅 버튼이 서는 자리예요. */
+/* 한 해를 통째로 굴려요 — 캠프 → 그 리그의 경기 수 → 가을야구 → 결산(seasonReport)까지.
+ * 이 흐름의 끝이 결산 화면이고, 거기가 포스팅 버튼이 서는 자리예요.
+ * 경기 수는 initSeason이 저장본에 적어준 total을 따라요 — 리그마다 다르거든요. */
 function playYear(S, c) {
   c.startCamp();
   c.initSeason();
-  for (let g = 0; g < c.SEASON_TOTAL; g++) {
+  for (let g = 0; g < S.season.total; g++) {
     c.finishProGame(Math.random() < c.gameWinP(), null);
     S.condition = 80;
   }
@@ -980,6 +990,98 @@ guard("훈련 화면", () => {
     .filter((b) => /#[0-9a-fA-F]{3,8}\b|rgba?\(/.test(b));
   check(abs.length === 0, `배지·안내 줄이 절대색을 안 쓴다 (어긋난 규칙 ${abs.length}개)`);
   void badge;
+});
+
+/* ---------- ⑯ 시즌 중에는 리그가 안 바뀌어요 ----------
+ *
+ * 시즌 도중에 S.league가 바뀌면 leagueOf가 다른 경기 수를 돌려줘요. total은 저장본에
+ * 적힌 값이라 그대로지만, 상대 구단·난이도·트레이드 창구가 한꺼번에 어긋납니다.
+ * 그래서 '리그를 바꾸는 길이 오프시즌 하나뿐'이라는 걸 두 겹으로 못 박아요. */
+group("⑯ 시즌 중 리그 고정");
+guard("시즌 중 리그 고정", () => {
+  /* S.league에 쓰는 자리가 moveToLeague 한 곳뿐인 건 ⑥이 이미 세고 있어요.
+   * 여기서는 **그 한 곳으로 가는 문이 시즌 중에 닫혀 있는지**를 봐요.
+   *
+   * ⓐ 포스팅 창구(postingReady)가 시즌 중에는 닫혀요 — 화면까지 걸어가서 확인해요 */
+  const { S, c } = playerAt(1, 9, 6.0);
+  check(c.postingReady(), "오프시즌에는 포스팅 창구가 열려 있다");
+  S.team = c.leagueTeams()[0];
+  c.initSeason();
+  check(!c.postingReady(), "시즌이 열려 있으면 포스팅 창구가 닫힌다");
+  check(c.postingOffers().length === 0, "시즌 중에는 갈 수 있는 리그가 하나도 없다");
+  const before = S.league;
+  c.seasonReport();
+  const ids = c._dom.$("career-actions").children.map((b) => b.id).filter(Boolean);
+  check(!ids.includes("btn-posting"), `시즌 중 결산 화면에는 포스팅 버튼이 없다 (${ids.join(" / ") || "없음"})`);
+  check(S.league === before, "화면을 그려도 리그가 안 바뀐다");
+
+  /* ⓑ 시즌 중 트레이드는 같은 리그 안이에요 — 행선지가 전부 지금 리그 구단이어야 해요.
+   * moveTo는 S.league를 안 건드리니, 옮기고 나서도 리그가 그대로여야 합니다. */
+  for (const l of TABLE) {
+    const st = playerAt(l.tier, 9, 6.0);
+    st.S.team = st.c.leagueTeams()[0];
+    st.c.initSeason();
+    st.S.season.game = st.c.tradeOpenAt();
+    const names = new Set(G(st.S, clamp, randInt).teamsOf(l));
+    const dest = st.c.leagueTeams().filter((t) => t !== st.S.team)[0];
+    st.c.moveTo(dest, "trade", 0);
+    check(names.has(dest) && st.S.league === l.id && st.S.season.total === l.games,
+      `${l.name} — 시즌 중 트레이드는 같은 리그 안이고 경기 수도 그대로다 (${dest} · ${st.S.season.total}경기)`);
+  }
+});
+
+/* ---------- ⑰ 트레이드 창구가 경기 수에 비례해요 ----------
+ *
+ * 30·100은 144경기의 21%·69% 지점이에요. 그 숫자를 그대로 쓰면 162경기 리그에서
+ * 마감이 62%로 앞당겨지고 143경기 리그에서는 70%를 넘겨요 — "시즌의 어디쯤"이라는
+ * 뜻이 리그마다 달라져 버립니다. 그래서 비율로 두고, 여기서 그 비율을 지켜요. */
+group("⑰ 트레이드 창구");
+guard("트레이드 창구", () => {
+  const base = 144;
+  const rows = [];
+  for (const l of TABLE) {
+    const { S, c } = playerAt(l.tier, 9, 6.0);
+    S.team = c.leagueTeams()[0];
+    c.initSeason();
+    const open0 = c.tradeOpenAt(), close0 = c.tradeCloseAt();
+    rows.push({ l, open0, close0 });
+    check(open0 === Math.round((c.TRADE_OPEN * l.games) / base) && close0 === Math.round((c.TRADE_CLOSE * l.games) / base),
+      `${l.name} — 창구가 ${l.games}경기에 비례한다 (${open0}~${close0})`);
+    /* 시즌의 어느 지점인지가 리그마다 거의 같아야 해요. 반올림 오차만 허용합니다. */
+    const rOpen = open0 / l.games, rClose = close0 / l.games;
+    check(Math.abs(rOpen - c.TRADE_OPEN / base) < 0.005 && Math.abs(rClose - c.TRADE_CLOSE / base) < 0.005,
+      `  └ 시즌의 ${(rOpen * 100).toFixed(0)}%~${(rClose * 100).toFixed(0)}% 지점이다`);
+    // 창구가 실제로 그 구간에서만 열려요 (게임 입구인 inSeasonTrade로 확인해요)
+    const at = (g) => { S.season.game = g; return c.inSeasonTrade(); };
+    check(!at(open0 - 1) && at(open0) && at(close0) && !at(close0 + 1),
+      `  └ ${open0}경기부터 ${close0}경기까지만 열린다`);
+  }
+  console.log(`  트레이드 창구 | ${rows.map((r) => `${r.l.name} ${r.open0}~${r.close0}/${r.l.games}`).join(" · ")}`);
+
+  // 옛 세이브(총 144경기)는 30·100 그대로예요 — 진행 중인 캐릭터의 창구가 안 움직여요
+  const old = stateOf({ proYear: 9 });
+  delete old.league;
+  const oc = open(old);
+  old.team = oc.leagueTeams()[0];
+  oc.initSeason();
+  check(oc.tradeOpenAt() === 30 && oc.tradeCloseAt() === 100,
+    `옛 세이브의 창구는 30~100 그대로다 (${oc.tradeOpenAt()}~${oc.tradeCloseAt()})`);
+
+  /* 🌏 **이 변경 전에 해외에서 시즌을 시작한 세이브**가 가장 조심스러운 자리예요.
+   * S.league는 3인데 저장본의 total은 144예요 (beta/_fixtures.js에 그런 세이브가 있어요).
+   * 창구를 리그 표(162)로 다시 재면 마감이 113경기가 되는데, 그 시즌은 144경기에서
+   * 끝나요 — 마감이 시즌 끝보다 뒤에 놓여서 "마감까지 −31경기"가 떠요.
+   * 기준은 언제나 **저장본에 적힌 total**이어야 합니다. */
+  const mid = stateOf({ proYear: 9, league: TABLE.find((l) => l.tier === 3).id });
+  const mc = open(mid);
+  mid.team = mc.leagueTeams()[0];
+  mc.initSeason();
+  mid.season.total = 144;                       // 리그별 경기 수가 붙기 전에 시작한 시즌이에요
+  check(mc.tradeOpenAt() === 30 && mc.tradeCloseAt() === 100,
+    `해외에서 시작해둔 옛 시즌(total 144)도 창구가 30~100이다 (${mc.tradeOpenAt()}~${mc.tradeCloseAt()})`);
+  mid.season.game = 100;
+  check(mc.inSeasonTrade() && (mid.season.game = 101, !mc.inSeasonTrade()),
+    "그 시즌의 마감도 100경기에서 닫힌다");
 });
 
 console.log(fail ? `\n❌ ${fail}건 실패` : "\n✅ 통과");

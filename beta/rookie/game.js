@@ -127,10 +127,13 @@ const fmtMoney = (v) => (v >= 10000 ? `${(v / 10000).toFixed(1)}억` : `${Math.r
  *
  * career.js가 아니라 여기 두는 건 career.js가 IIFE라 그 안의 선언이 밖으로 안 새기
  * 때문이에요. 구단 목록·화면처럼 game.js 쪽에서도 리그를 읽어야 해요. */
+/* games — 그 리그의 정규시즌 경기 수예요. 실제와 같은 숫자로 뒀어요.
+ * KBO가 144라 옛 세이브(leagueOf가 KBO로 받아주는)는 예전과 한 톨도 안 달라요.
+ * 위로 갈수록 경기가 많아 누적(홈런·이닝·WAR)이 더 쌓여요 — 난이도를 일부 상쇄합니다. */
 const LEAGUES = [
-  { id: 1, tier: 1, name: "KBO",     short: "국내", flag: "🇰🇷", oppUp: 0,    prestige: 1.00 },
-  { id: 2, tier: 2, name: "열도 리그", short: "열도", flag: "🇯🇵", oppUp: 0.02, prestige: 1.40 },
-  { id: 3, tier: 3, name: "대륙 리그", short: "대륙", flag: "🗽", oppUp: 0.06, prestige: 2.30 },
+  { id: 1, tier: 1, name: "KBO",     short: "국내", flag: "🇰🇷", oppUp: 0,    prestige: 1.00, games: 144 },
+  { id: 2, tier: 2, name: "열도 리그", short: "열도", flag: "🇯🇵", oppUp: 0.02, prestige: 1.40, games: 143 },
+  { id: 3, tier: 3, name: "대륙 리그", short: "대륙", flag: "🗽", oppUp: 0.06, prestige: 2.30, games: 162 },
 ];
 
 /* 옛 세이브에는 S.league가 없어요. 마이그레이션하지 않고 없으면 KBO로 봐요.
