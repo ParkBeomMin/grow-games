@@ -125,7 +125,14 @@ function vstage(src, api) {
   V.clearTimeout = (id) => { const i = vt.findIndex((t) => t.id === id); if (i >= 0) vt.splice(i, 1); };
 
   /* 한 판을 돌려요. watch는 4ms마다 화면을 읽는 '눈'이에요 — fire(선택자, 이벤트)로 눌러요.
-   * ctl.noStart를 주면 준비 화면에서 손을 놓고 있어요 (누르기 전을 보는 검사용). */
+   *
+   * ctl로 줄 수 있는 것:
+   *   noStart   준비 화면에서 손을 놓고 있어요 (누르기 전을 보는 검사용)
+   *   start     "click"이면 포인터 이벤트가 없는 환경(마우스·키보드)처럼 click만 보내요
+   *   leak      시작 제스처의 꼬리(pointerup·click)가 갈 요소. 기본은 ".tm-btn"이에요
+   *   noTail    꼬리를 아예 안 보내요 (누수가 없던 세상 — 비교용 기준선)
+   *   stopAt    이 가상 시각에서 멈춰요 (판이 끝나기 전 화면을 그대로 찍어 보려고요)
+   *   tap3      { at, sel, via } — 새 탭 한 번을 그 시각에 보내요 */
   function trial(mech, opts, seed, watch, ctl) {
     vt = []; VT = 0; sched = 0;
     V.Math.random = mulberry32(seed);
@@ -133,24 +140,54 @@ function vstage(src, api) {
     box.innerHTML = "";
     let res = null, endedAt = 0;
     V[api][mech](box, opts, (r) => { res = r; endedAt = VT; });
+    const send = (el, type) => {
+      if (el) el.dispatchEvent(new V.Event(type, { bubbles: true, cancelable: true }));
+    };
     /* 🧭 준비 화면 — 사람이 ▶️ 시작을 누르는 자리예요. 우회하지 않고 실제로 눌러요.
      * 가상 시각 0에서 누르니 그 뒤로 흐르는 시간은 준비 화면이 없던 때와 똑같아요 —
-     * 판정 분포도 소요 시간도 이 화면 때문에 어긋나지 않아요. */
+     * 판정 분포도 소요 시간도 이 화면 때문에 어긋나지 않아요.
+     *
+     * ✋ 실기기가 보내는 순서를 **그대로** 보내요: pointerdown → pointerup → click.
+     * pointerdown에서 준비 화면이 지워지고 그 자리에 게임 상자가 그려지니까, 손을
+     * 뗄 때 오는 pointerup·click은 **그 지점에 새로 생긴 요소**로 가요. 그래서 꼬리는
+     * 기본으로 게임의 첫 버튼(.tm-btn)에게 보내요 — ▶️ 시작도 상자 맨 아래 버튼이라
+     * 손가락이 실제로 놓인 자리가 거기예요.
+     * pointerdown 하나만 보내던 시절에는 이 누수가 테스트에 아예 안 보였어요. */
     const readyBox = box.querySelector(".mg-ready");
     const preTimers = sched;                  // 누르기 전에 걸린 타이머 (0이어야 해요)
     const readyHTML = readyBox ? readyBox.innerHTML : "";
     if (readyBox && !(ctl && ctl.noStart)) {
       const go = readyBox.querySelector(".mg-go");
-      if (go) go.dispatchEvent(new V.Event("pointerdown", { bubbles: true, cancelable: true }));
+      if ((ctl && ctl.start) === "click") {
+        send(go, "click");                    // 🖱 포인터 이벤트가 없는 환경이에요
+      } else {
+        send(go, "pointerdown");              // 여기서 준비 화면이 지워지고 게임이 그려져요
+        if (!(ctl && ctl.noTail)) {
+          const tail = box.querySelector((ctl && ctl.leak) || ".tm-btn") || go;
+          send(tail, "pointerup");
+          send(tail, "click");
+        }
+      }
     }
     const wrap = box.querySelector(".tm-box");
     const fire = (sel, type) => {
       const el = typeof sel === "string" ? wrap.querySelector(sel) : sel;
-      if (el) el.dispatchEvent(new V.Event(type || "pointerdown", { bubbles: true, cancelable: true }));
+      send(el, type || "pointerdown");
     };
+    /* 새로 짚는 손가락 한 번. via "click"이면 마우스·키보드처럼 click만 와요. */
+    if (ctl && ctl.tap3) {
+      const c = ctl.tap3;
+      vt.push({ at: c.at, id: vid++, fn: () => {
+        const el = box.querySelector(c.sel);
+        if (!el) return;
+        if (c.via === "click") { send(el, "click"); return; }
+        send(el, "pointerdown"); send(el, "pointerup"); send(el, "click");
+      } });
+    }
     if (watch) for (let t = 4; t <= 9000; t += 4) vt.push({ at: t + 0.001, id: vid++, fn: () => { if (res === null) watch(wrap, VT, fire); } });
     let steps = 0;
-    while (vt.length && res === null && VT < 14000 && steps++ < 300000) {
+    const until = (ctl && ctl.stopAt) || 14000;
+    while (vt.length && res === null && VT < until && steps++ < 300000) {
       vt.sort((a, b) => a.at - b.at);
       const ev = vt.shift();
       VT = ev.at;
@@ -269,6 +306,86 @@ guard("준비 화면", () => {
   const got = OLD8.filter(([m, o]) => TM.trial(m, o, 3).ready).map(([m]) => m);
   check(got.length === 0, `기존 8종에는 준비 화면이 안 뜬다 (생긴 것: ${got.join(" · ") || "없음"})`);
   check(!/mg-ready/.test(TM_SRC), "timing.js에 준비 화면 코드가 한 줄도 안 들어갔다");
+});
+
+/* ================================================================
+ * ✋ 탭 누수 — 한 번의 탭이 두 번 먹히면 안 돼요
+ *
+ * 사용자 제보: "설명 보고 눌렀는데 게임이 그냥 바로 끝나버리는데".
+ *
+ * 실기기 한 번의 탭은 이벤트를 **셋** 보내요 — pointerdown → pointerup → click.
+ * ▶️ 시작은 pointerdown에서 처리해요(누르자마자 화면이 바뀌어야 하니까요). 그
+ * 순간 준비 화면이 지워지고 그 자리에 게임 버튼이 그려져요. 그래서 손을 뗄 때 오는
+ * click은 **방금 생긴 게임 버튼**에게 가요. 그 버튼에게는 난생처음 오는 입력이라
+ * TAP_ECHO 방어에 안 걸려요 — TAP_ECHO는 같은 요소 안의 중복만 막거든요.
+ * 결과가 곧 제보예요: 홈 승부는 손도 못 대고 협살/귀루로 끝나고, 볼카운트는
+ * 초구를 저절로 휘둘러요.
+ *
+ * 이 검사가 없어서 버그가 나갔어요. 예전 검사는 pointerdown **하나만** 보냈고,
+ * 그래서 실기기의 순서를 통째로 안 재현했어요. 여기서 못 박는 건 셋이에요.
+ *   ① 시작 제스처(셋 다)를 보내도 게임이 즉시 끝나지 않고 화면이 한 칸도 안 움직인다
+ *   ② 그 뒤 **새로 짚은 손가락**은 정상적으로 먹힌다
+ *   ③ 마우스 경로(click만 오는 환경)도 똑같다
+ * 꼬리가 어느 요소로 새는지는 기기·브라우저마다 달라서, onTap이 걸린 자리를
+ * 전부 돌아 봐요.
+ * ================================================================ */
+group("✋ 탭 누수 (한 번 누른 게 두 번 먹히면 안 돼요)");
+guard("탭 누수", () => {
+  const OPTS = {
+    count: { label: "t", zonePct: 22, tier: 0, button: "스윙! 🏏" },
+    dash: { label: "t", zonePct: 22, tier: 0, goText: "돌진! 🏃", stopText: "멈춰! ✋" },
+  };
+  /* 시작 제스처의 꼬리가 떨어질 만한 자리 — onTap이 걸린 요소를 전부 적어요.
+   * post-stage.js에 onTap이 새로 붙으면 여기도 같이 늘려야 해요. */
+  const SPOTS = {
+    count: [[".tm-btn", "스윙 버튼"], [".ps-plate", "홈플레이트(넓은 판)"]],
+    dash: [[".ps-go", "돌진 버튼"], [".ps-stop", "멈춰 버튼"]],
+  };
+  const NAME = { count: "🧊 볼카운트", dash: "🏃 홈 승부" };
+  const SNAP = 40;    // 시작 직후의 화면을 찍는 시각(ms)
+  const LATER = 240;  // 새 손가락을 짚는 시각(ms)
+  const live = (h) => /tm-box/.test(h) && !/tm-done-/.test(h);
+
+  for (const mech of ["count", "dash"]) {
+    /* 기준선 — 꼬리가 아예 안 샜을 때의 화면이에요. 같은 seed·같은 시각이라
+     * 타이머 일정이 완전히 같아서, 화면도 한 글자까지 같아야 정상이에요. */
+    const base = PS.trial(mech, OPTS[mech], 7, null, { noTail: true, stopAt: SNAP });
+    check(base.res === null && live(base.left),
+      `${NAME[mech]} — 기준선: 시작 ${SNAP}ms 뒤에도 판이 살아 있다 (${base.res || "판정 없음"})`);
+
+    for (const [sel, spot] of SPOTS[mech]) {
+      // ① 실기기 순서 그대로 — pointerdown → pointerup → click, 꼬리는 이 자리로
+      const leak = PS.trial(mech, OPTS[mech], 7, null, { leak: sel, stopAt: SNAP });
+      check(leak.res === null,
+        `${NAME[mech]} — 시작 탭이 ${spot}으로 새도 판정이 즉시 안 난다 (${leak.res || "판정 없음"})`);
+      check(live(leak.left), `${NAME[mech]} — 그러고도 화면이 살아 있다 (${spot})`);
+      check(leak.left === base.left,
+        `${NAME[mech]} — 화면이 한 칸도 안 움직였다 (${spot} · 꼬리가 안 샌 판과 같은 화면)`);
+
+      // ② 그 뒤 새로 짚은 손가락은 먹혀요 — 안 그러면 게임이 죽은 거예요
+      const after = PS.trial(mech, OPTS[mech], 7, null,
+        { leak: sel, stopAt: LATER + 40, tap3: { at: LATER, sel } });
+      const idle = PS.trial(mech, OPTS[mech], 7, null,
+        { leak: sel, stopAt: LATER + 40 });
+      check(after.left !== idle.left || after.res !== idle.res,
+        `${NAME[mech]} — 새 탭(pointerdown→pointerup→click)은 ${spot}에서 그대로 먹힌다`);
+
+      // ③ 마우스·키보드 경로 — click만 와도 시작하고, 그 뒤 click도 먹혀요
+      const mouse = PS.trial(mech, OPTS[mech], 7, null, { start: "click", stopAt: SNAP });
+      check(mouse.res === null && live(mouse.left) && mouse.left === base.left,
+        `${NAME[mech]} — 마우스(click만)로 시작해도 즉시 아무 일도 안 난다 (${spot})`);
+      const mouseTap = PS.trial(mech, OPTS[mech], 7, null,
+        { start: "click", stopAt: LATER + 40, tap3: { at: LATER, sel, via: "click" } });
+      const mouseIdle = PS.trial(mech, OPTS[mech], 7, null, { start: "click", stopAt: LATER + 40 });
+      check(mouseTap.left !== mouseIdle.left || mouseTap.res !== mouseIdle.res,
+        `${NAME[mech]} — 마우스 click 한 번도 ${spot}에서 그대로 먹힌다`);
+    }
+
+    // ④ 누수가 막혀도 판은 끝까지 굴러가요 (문이 닫힌 채로 남으면 안 돼요)
+    const full = PS.trial(mech, OPTS[mech], 7);
+    check(full.res !== null && full.left.trim() === "",
+      `${NAME[mech]} — 실기기 순서로 시작해도 판은 정상적으로 끝난다 (${full.res})`);
+  }
 });
 
 /* 🧊 count 사람 모델 — lag만큼 늦은 화면 두 장으로 도착점을 외삽해요.
@@ -666,13 +783,22 @@ function bootGame() {
    * 가상 시계를 아무리 돌려도 경기가 그 자리에 멈춰 있어요. 그게 바로 이 화면이
    * 지켜야 할 약속이라, 우회하지 않고 여기서 눌러 줘요. 몇 번 눌렀는지도 세요. */
   const ready = { taps: 0, after: null };
+  const send = (el, type) => {
+    if (el) el.dispatchEvent(new w.Event(type, { bubbles: true, cancelable: true }));
+  };
   const tapReady = () => {
     const holder = w.document.querySelector(".mg-ready");
     if (!holder) return false;
     const parent = holder.parentNode;               // 본 게임 상자가 붙을 자리예요
     ready.taps++;
-    holder.querySelector(".mg-go")
-      .dispatchEvent(new w.Event("pointerdown", { bubbles: true, cancelable: true }));
+    /* ✋ 실기기 순서를 그대로 보내요 — pointerdown → pointerup → click.
+     * pointerdown에서 준비 화면이 지워지고 그 자리에 게임 상자가 그려지니, 손을 뗄
+     * 때 오는 꼬리는 **새로 생긴 게임 버튼**에게 가요. 진짜 화면에서도 그 꼬리로는
+     * 게임이 안 움직여야 해요 — 움직이면 손도 못 댄 채로 판정이 나 버려요. */
+    send(holder.querySelector(".mg-go"), "pointerdown");
+    const tail = parent && parent.querySelector(".tm-box .tm-btn");
+    send(tail, "pointerup");
+    send(tail, "click");
     if (ready.after) ready.after(parent);           // 누른 직후의 화면을 보고 싶을 때
     return true;
   };

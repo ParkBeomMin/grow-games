@@ -71,18 +71,41 @@ window.PostStage = (() => {
    * 실기기에서는 pointerdown 뒤에 click이 한 번 더 오는데, 둘 다 세면 한 번 누른
    * 게 두 번이 돼요. 그래서 pointerdown 직후에 오는 click만 버려요. 시간으로
    * 가르면 포인터가 없는 환경(jsdom·구형 브라우저)의 키보드 입력도 같이 살아요.
-   * tour-stage.js가 같은 이유로 같은 모양을 갖고 있어요. */
+   * tour-stage.js가 같은 이유로 같은 모양을 갖고 있어요.
+   *
+   * ⚠️ TAP_ECHO만으로는 **같은 요소 안의 중복**밖에 못 막아요. 요소가 바뀌면
+   * 무력해요 — ▶️ 시작을 누른 pointerdown이 준비 화면을 지우고 그 자리에 게임
+   * 버튼을 그리면, 손을 뗄 때 오는 click은 **방금 생긴 게임 버튼**에게 가요.
+   * 그 버튼의 lastPointer는 초기값이라 방어에 안 걸리고, 한 번 댄 손가락이
+   * '시작'과 '첫 행동' 두 번으로 먹혀요. 그래서 gate가 따로 필요해요. */
   const TAP_ECHO = 700;
-  function onTap(el, fn) {
+
+  /* 🚪 제스처 문 — **시작한 손가락이 끝나기 전에는 게임이 입력을 안 받아요.**
+   *
+   * 한 판마다 새로 만들어요. 모듈 전역에 두면 앞 판의 상태가 다음 판으로 새고,
+   * 시계를 갈아끼우는 테스트에서는 판마다 시각이 되감겨서 시간으로 가를 수도
+   * 없어요. 판마다 새 물건이면 그런 자리가 아예 없어요.
+   *
+   *   shut=true  → 시작이 pointerdown이었어요. 뒤따라올 click 한 번은 그 제스처의
+   *                꼬리니까 삼켜요(그리고 문을 열어요 — 딱 한 번만 삼켜요).
+   *   pointerdown → 새로 짚은 손가락이에요. 무조건 문을 열어요.
+   *
+   * click으로 시작한 경우(포인터 이벤트가 없는 환경·키보드)에는 뒤따라올 것이
+   * 없으니 문을 잠그지 않아요. 잠그면 그 환경의 첫 입력이 통째로 사라져요. */
+  const newGate = () => ({ shut: false });
+
+  function onTap(el, fn, gate) {
     let lastPointer = -TAP_ECHO;
     el.addEventListener("pointerdown", (e) => {
       lastPointer = Date.now();
+      if (gate) gate.shut = false;          // 여기서부터가 이 판의 입력이에요
       if (e && e.cancelable) e.preventDefault();
-      fn();
+      fn(true);
     });
     el.addEventListener("click", () => {
-      if (Date.now() - lastPointer < TAP_ECHO) return;
-      fn();
+      if (Date.now() - lastPointer < TAP_ECHO) return;   // 같은 요소 안의 메아리
+      if (gate && gate.shut) { gate.shut = false; return; }   // 시작 제스처의 꼬리예요
+      fn(false);
     });
   }
 
@@ -92,6 +115,11 @@ window.PostStage = (() => {
    * 왜 필요하냐면: 여기 두 메커닉은 규칙이 여러 단계고(볼카운트) 버튼이 둘이라
    * (홈 승부) 한 줄짜리 .tm-label로는 첫 판을 통째로 날려요. "너무 빨리 지나가서
    * 뭐 하라는 건지 모르겠다"는 말이 정확히 그 뜻이에요.
+   *
+   * ✋ 약속이 하나 더 있어요 — **시작한 손가락으로는 게임을 못 건드려요.**
+   * ▶️ 시작은 pointerdown에서 곧바로 처리해요(누르자마자 화면이 바뀌어야 하니까요).
+   * 대신 그 손가락을 뗄 때 오는 click은 새로 그려진 게임 버튼으로 새어 들어가는데,
+   * 그건 gate가 삼켜요. 게임이 실제로 움직이는 건 **새로 짚은 손가락**부터예요.
    *
    * ⏱️ 이 화면의 약속 하나가 전부예요 — **누르기 전에는 아무것도 안 돌아요.**
    * requestAnimationFrame도 setTimeout도 performance.now()도 준비 화면 위에서는
@@ -145,12 +173,16 @@ window.PostStage = (() => {
       + (keys ? `<div class="mg-ready-keys">${keys}</div>` : "")
       + `<button type="button" class="btn btn-primary tm-btn mg-go">▶️ 시작</button>`;
     container.appendChild(wrap);
+    /* 이 판의 문. 시작이 pointerdown이면 잠근 채로 게임에 넘겨요 —
+     * 손을 뗄 때 오는 click 한 번이 게임 버튼으로 새거든요. */
+    const gate = newGate();
     let went = false;
-    onTap(wrap.querySelector(".mg-go"), () => {
+    onTap(wrap.querySelector(".mg-go"), (viaPointer) => {
       if (went) return;          // pointerdown과 click이 겹쳐도 한 번만 시작해요
       went = true;
+      gate.shut = !!viaPointer;
       wrap.remove();             // 준비 화면을 치우고 나서 본 게임 상자를 붙여요
-      start();
+      start(gate);
     });
   }
 
@@ -267,7 +299,7 @@ window.PostStage = (() => {
 
   /* 🧊 한 판. **여기서부터가 시간이 흐르는 자리예요** — 준비 화면의 ▶️ 시작을
    * 누른 뒤에만 불려요. 이 함수 밖에는 타이머가 한 줄도 없어요. */
-  function runCount(container, opts, cb) {
+  function runCount(container, opts, cb, gate) {
     const zone = zoneOf(opts), tier = tierOf(opts);
     const brk = countBreak(zone, tier);
     const edge = countEdge(zone, tier);
@@ -392,14 +424,16 @@ window.PostStage = (() => {
       raf = requestAnimationFrame(tick);
     }
 
-    onTap(btn, () => { if (live) { wrap.classList.add("ps-swing"); land(true); } });
-    onTap(wrap.querySelector(".ps-plate"), () => { if (live) { wrap.classList.add("ps-swing"); land(true); } });
+    const swing = () => { if (live) { wrap.classList.add("ps-swing"); land(true); } };
+    onTap(btn, swing, gate);
+    onTap(wrap.querySelector(".ps-plate"), swing, gate);
     newPitch();
   }
 
-  /* 바깥에서 부르는 건 이쪽이에요 — 준비 화면부터예요. */
+  /* 바깥에서 부르는 건 이쪽이에요 — 준비 화면부터예요.
+   * gate는 준비 화면이 만들어 넘겨줘요 (시작한 손가락을 게임에서 떼어 놓는 문). */
   function count(container, opts, cb) {
-    ready(container, countReady(opts), () => runCount(container, opts || {}, cb));
+    ready(container, countReady(opts), (gate) => runCount(container, opts || {}, cb, gate));
   }
 
   /* ================================================================
@@ -501,7 +535,7 @@ window.PostStage = (() => {
   }
 
   /* 🏃 한 판. runCount와 같아요 — 준비 화면을 누른 뒤에만 불리고, 시계는 여기서만 돌아요. */
-  function runDash(container, opts, cb) {
+  function runDash(container, opts, cb, gate) {
     const zone = zoneOf(opts), tier = tierOf(opts);
     const runMs = dashRun(zone);
     const revealAt = dashReveal(zone, tier);
@@ -590,17 +624,17 @@ window.PostStage = (() => {
       goBtn.classList.add("ps-picked");
       stopBtn.disabled = true;
       markEl.textContent = msg.going;
-    });
+    }, gate);
     onTap(stopBtn, () => {
       if (done || decided) return;
       finish(p <= backAt ? "good" : "miss", p <= backAt ? msg.back : msg.late);
-    });
+    }, gate);
     raf = requestAnimationFrame(tick);
   }
 
   /* 바깥에서 부르는 건 이쪽이에요 — 준비 화면부터예요. */
   function dash(container, opts, cb) {
-    ready(container, dashReady(opts), () => runDash(container, opts || {}, cb));
+    ready(container, dashReady(opts), (gate) => runDash(container, opts || {}, cb, gate));
   }
 
   return {

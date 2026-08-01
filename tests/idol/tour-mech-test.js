@@ -59,8 +59,15 @@ const gauss = (sd) => {
 };
 
 /* 한 판을 돌려요. taps는 누를 가상 시각(ms), watch는 5ms마다 화면을 읽는 눈이에요.
- * ctl.noStart를 주면 준비 화면에서 손을 놓고 있어요 (누르기 전을 보는 검사용).
- * ctl.opts는 준비 화면 문구를 보려고 버튼 이름 같은 걸 얹을 때 써요. */
+ *
+ * ctl로 줄 수 있는 것:
+ *   noStart  준비 화면에서 손을 놓고 있어요 (누르기 전을 보는 검사용)
+ *   opts     준비 화면 문구를 보려고 버튼 이름 같은 걸 얹을 때 써요
+ *   start    "click"이면 포인터 이벤트가 없는 환경(마우스·키보드)처럼 click만 보내요
+ *   leak     시작 제스처의 꼬리(pointerup·click)가 갈 요소. 기본은 ".tm-btn"이에요
+ *   noTail   꼬리를 아예 안 보내요 (누수가 없던 세상 — 비교용 기준선)
+ *   stopAt   이 가상 시각에서 멈춰요 (판이 끝나기 전 화면을 그대로 찍어 보려고요)
+ *   tap3     { at, sel, via } — 새 탭 한 번을 그 시각에 보내요 */
 function trial(mech, zone, seed, taps, watch, ctl) {
   vtimers = []; VT = 0; sched = 0;
   V.Math.random = mulberry32(seed);
@@ -69,22 +76,52 @@ function trial(mech, zone, seed, taps, watch, ctl) {
   let res = null, endedAt = 0;
   const opts = Object.assign({ label: "테스트", zonePct: zone }, (ctl && ctl.opts) || {});
   V.TourStage[mech](box, opts, (r) => { res = r; endedAt = VT; });
+  const send = (el, type) => {
+    if (el) el.dispatchEvent(new V.Event(type, { bubbles: true, cancelable: true }));
+  };
   /* 🧭 준비 화면 — 사람이 ▶️ 시작을 누르는 자리예요. 우회하지 않고 실제로 눌러요.
    * 가상 시각 0에서 누르니 그 뒤로 흐르는 시간은 준비 화면이 없던 때와 똑같아요 —
-   * 판정 분포도 소요 시간도 이 화면 때문에 어긋나지 않아요. */
+   * 판정 분포도 소요 시간도 이 화면 때문에 어긋나지 않아요.
+   *
+   * ✋ 실기기가 보내는 순서를 **그대로** 보내요: pointerdown → pointerup → click.
+   * pointerdown에서 준비 화면이 지워지고 그 자리에 무대 상자가 그려지니까, 손을
+   * 뗄 때 오는 pointerup·click은 **그 지점에 새로 생긴 요소**로 가요. 그래서 꼬리는
+   * 기본으로 무대의 첫 버튼(.tm-btn)에게 보내요 — ▶️ 시작도 상자 맨 아래 버튼이라
+   * 손가락이 실제로 놓인 자리가 거기예요.
+   * pointerdown 하나만 보내던 시절에는 이 누수가 테스트에 아예 안 보였어요. */
   const readyBox = box.querySelector(".mg-ready");
   const preTimers = sched;                  // 누르기 전에 걸린 타이머 (0이어야 해요)
   const readyHTML = readyBox ? readyBox.innerHTML : "";
   if (readyBox && !(ctl && ctl.noStart)) {
     const go = readyBox.querySelector(".mg-go");
-    if (go) go.dispatchEvent(new V.Event("pointerdown", { bubbles: true, cancelable: true }));
+    if ((ctl && ctl.start) === "click") {
+      send(go, "click");                    // 🖱 포인터 이벤트가 없는 환경이에요
+    } else {
+      send(go, "pointerdown");              // 여기서 준비 화면이 지워지고 무대가 그려져요
+      if (!(ctl && ctl.noTail)) {
+        const tail = box.querySelector((ctl && ctl.leak) || ".tm-btn") || go;
+        send(tail, "pointerup");
+        send(tail, "click");
+      }
+    }
   }
   const wrap = box.querySelector(".tm-box");
   const btn = wrap.querySelector(".tm-btn");
-  const tap = () => btn.dispatchEvent(new V.Event("pointerdown", { bubbles: true, cancelable: true }));
+  const tap = () => send(btn, "pointerdown");
   (taps || []).forEach((ms) => vtimers.push({ at: Math.max(1, ms), id: vid++, fn: tap }));
+  /* 새로 짚는 손가락 한 번. via "click"이면 마우스·키보드처럼 click만 와요. */
+  if (ctl && ctl.tap3) {
+    const c = ctl.tap3;
+    vtimers.push({ at: c.at, id: vid++, fn: () => {
+      const el = box.querySelector(c.sel);
+      if (!el) return;
+      if (c.via === "click") { send(el, "click"); return; }
+      send(el, "pointerdown"); send(el, "pointerup"); send(el, "click");
+    } });
+  }
   if (watch) for (let t = 5; t <= 7000; t += 5) vtimers.push({ at: t + 0.001, id: vid++, fn: () => { if (!res) watch(wrap, VT, tap); } });
-  while (vtimers.length && res === null && VT < 9000) {
+  const until = (ctl && ctl.stopAt) || 9000;
+  while (vtimers.length && res === null && VT < until) {
     vtimers.sort((a, b) => a.at - b.at);
     const ev = vtimers.shift();
     VT = ev.at;
@@ -253,6 +290,97 @@ check(Object.keys(JSON.parse(V.localStorage.getItem(T.READY_KEY))).every((k) => 
 check(!/mg-ready/.test(TSRC), "timing.js에는 준비 화면 코드가 한 줄도 안 들어갔다");
 V.localStorage.removeItem(T.READY_KEY);
 
+/* ================= ①-3 탭 누수 — 한 번의 탭이 두 번 먹히면 안 돼요 =================
+ *
+ * 사용자 제보: "설명 보고 눌렀는데 게임이 그냥 바로 끝나버리는데".
+ *
+ * 실기기 한 번의 탭은 이벤트를 **셋** 보내요 — pointerdown → pointerup → click.
+ * ▶️ 시작은 pointerdown에서 처리해요(누르자마자 화면이 바뀌어야 하니까요). 그
+ * 순간 준비 화면이 지워지고 그 자리에 무대 버튼이 그려져요. 그래서 손을 뗄 때 오는
+ * click은 **방금 생긴 무대 버튼**에게 가요. 그 버튼에게는 난생처음 오는 입력이라
+ * TAP_ECHO 방어에 안 걸려요 — TAP_ECHO는 같은 요소 안의 중복만 막거든요.
+ * 결과가 곧 제보예요: 싱크로는 시작하자마자 miss로 끝나고, 웨이브는 첫 구역을
+ * 잃은 채로 시작하고, 앵콜은 아무도 안 친 함성이 올라가요.
+ *
+ * 이 검사가 없어서 버그가 나갔어요. 예전 검사는 pointerdown **하나만** 보냈고,
+ * 그래서 실기기의 순서를 통째로 안 재현했어요. 여기서 못 박는 건 셋이에요.
+ *   ① 시작 제스처(셋 다)를 보내도 판정이 즉시 안 나고 화면이 한 칸도 안 움직인다
+ *   ② 그 뒤 **새로 짚은 손가락**은 정상적으로 먹힌다
+ *   ③ 마우스 경로(click만 오는 환경)도 똑같다
+ * 꼬리가 어느 요소로 새는지는 기기·브라우저마다 달라서, onTap이 걸린 자리를
+ * 전부 돌아 봐요. */
+console.log("\n=== ①-3 탭 누수 — 시작한 손가락으로는 무대를 못 건드린다 ===");
+{
+  /* 시작 제스처의 꼬리가 떨어질 만한 자리 — onTap이 걸린 요소를 전부 적어요.
+   * tour-stage.js에 onTap이 새로 붙으면 여기도 같이 늘려야 해요. */
+  const SPOTS = {
+    wave: [[".tm-btn", "함성 버튼"], [".ts-wave", "관객석(넓은 띠)"]],
+    sync: [[".tm-btn", "싱크 버튼"]],
+    roar: [[".tm-btn", "연타 버튼"]],
+  };
+  const NAME = { wave: "🎬 웨이브", sync: "✨ 싱크로", roar: "🔥 앵콜" };
+  const SNAP = 40;    // 시작 직후의 화면을 찍는 시각(ms)
+  const LATER = 300;  // 새 손가락을 짚는 시각(ms)
+  const alive = (h) => /tm-box/.test(h) && !/tm-done-/.test(h);
+
+  for (const m of MECHS) {
+    V.localStorage.removeItem(T.READY_KEY);
+    /* 기준선 — 꼬리가 아예 안 샜을 때의 화면이에요. 같은 seed·같은 시각이라
+     * 타이머 일정이 완전히 같아서, 화면도 한 글자까지 같아야 정상이에요. */
+    const base = trial(m, 22, 7, [], null, { noTail: true, stopAt: SNAP });
+    check(base.res === null && alive(base.left),
+      `${NAME[m]} — 기준선: 시작 ${SNAP}ms 뒤에도 무대가 살아 있다 (${base.res || "판정 없음"})`);
+
+    for (const [sel, spot] of SPOTS[m]) {
+      // ① 실기기 순서 그대로 — pointerdown → pointerup → click, 꼬리는 이 자리로
+      const leak = trial(m, 22, 7, [], null, { leak: sel, stopAt: SNAP });
+      check(leak.res === null,
+        `${NAME[m]} — 시작 탭이 ${spot}으로 새도 판정이 즉시 안 난다 (${leak.res || "판정 없음"})`);
+      check(alive(leak.left), `${NAME[m]} — 그러고도 무대가 살아 있다 (${spot})`);
+      check(leak.left === base.left,
+        `${NAME[m]} — 화면이 한 칸도 안 움직였다 (${spot} · 꼬리가 안 샌 판과 같은 화면)`);
+
+      // ② 그 뒤 새로 짚은 손가락은 먹혀요 — 안 그러면 무대가 죽은 거예요
+      const after = trial(m, 22, 7, [], null,
+        { leak: sel, stopAt: LATER + 40, tap3: { at: LATER, sel } });
+      const still = trial(m, 22, 7, [], null, { leak: sel, stopAt: LATER + 40 });
+      check(after.left !== still.left || after.res !== still.res,
+        `${NAME[m]} — 새 탭(pointerdown→pointerup→click)은 ${spot}에서 그대로 먹힌다`);
+
+      // ③ 마우스·키보드 경로 — click만 와도 시작하고, 그 뒤 click도 먹혀요
+      const mouse = trial(m, 22, 7, [], null, { start: "click", stopAt: SNAP });
+      check(mouse.res === null && alive(mouse.left) && mouse.left === base.left,
+        `${NAME[m]} — 마우스(click만)로 시작해도 즉시 아무 일도 안 난다 (${spot})`);
+      const mouseTap = trial(m, 22, 7, [], null,
+        { start: "click", stopAt: LATER + 40, tap3: { at: LATER, sel, via: "click" } });
+      const mouseStill = trial(m, 22, 7, [], null, { start: "click", stopAt: LATER + 40 });
+      check(mouseTap.left !== mouseStill.left || mouseTap.res !== mouseStill.res,
+        `${NAME[m]} — 마우스 click 한 번도 ${spot}에서 그대로 먹힌다`);
+    }
+
+    // ④ 누수가 막혀도 판은 끝까지 굴러가요 (문이 닫힌 채로 남으면 안 돼요)
+    const full = trial(m, 22, 7, [600]);
+    check(full.res !== null && full.left.trim() === "",
+      `${NAME[m]} — 실기기 순서로 시작해도 판은 정상적으로 끝난다 (${full.res})`);
+  }
+
+  /* ⑤ 한 번의 완전한 탭은 **한 번만** 먹혀요 (TAP_ECHO 회귀).
+   * 웨이브는 탭 한 번이 구역 하나를 확정하니 눈금(💧·🙌)으로 셀 수 있고,
+   * 앵콜은 게이지가 gain만큼만 올라야 해요. 여기가 무너지면 연타가 두 배로 세져요. */
+  V.localStorage.removeItem(T.READY_KEY);
+  const oneWave = trial("wave", 22, 7, [], null, { stopAt: 340, tap3: { at: 300, sel: ".tm-btn" } });
+  const marks = (oneWave.wrap.querySelector(".ts-dots").textContent.match(/[🙌💧]/gu) || []).length;
+  check(marks === 1, `🎬 웨이브 — 완전한 탭 한 번은 구역 하나만 확정한다 (확정 ${marks}칸)`);
+  V.localStorage.removeItem(T.READY_KEY);
+  const oneRoar = trial("roar", 22, 7, [], null, { stopAt: 316, tap3: { at: 300, sel: ".tm-btn" } });
+  const noRoar = trial("roar", 22, 7, [], null, { stopAt: 316 });
+  const rose = pctOf(oneRoar.wrap.querySelector(".ts-roar-fill").style.width)
+    - pctOf(noRoar.wrap.querySelector(".ts-roar-fill").style.width);
+  check(Math.abs(rose - T.ROAR.gain) < 0.01,
+    `🔥 앵콜 — 완전한 탭 한 번은 함성을 gain(${T.ROAR.gain})만큼만 올린다 (실제 ${rose.toFixed(2)})`);
+  V.localStorage.removeItem(T.READY_KEY);
+}
+
 // ================= ② 능력치가 판정을 느슨하게 한다 =================
 console.log("\n=== ② 능력치(zonePct)가 판정에 들어간다 ===");
 check(T.waveWinMs(40) > T.waveWinMs(10),
@@ -374,7 +502,17 @@ function playFrame(state) {
    * 이 화면은 .tm-box를 함께 달고 있어서(상자 모양을 물려받아요) 여기서 먼저 갈라야 해요. */
   if (box.classList.contains("mg-ready")) {
     state.ready = (state.ready || 0) + 1;
+    /* ✋ 여기서도 실기기 순서를 그대로 보내요 — pointerdown → pointerup → click.
+     * pointerdown에서 준비 화면이 지워지고 그 자리에 무대가 그려지니, 손을 뗄 때
+     * 오는 꼬리는 **새로 생긴 무대 버튼**에게 가요. 진짜 화면·진짜 시간에서도
+     * 그 꼬리로는 무대가 안 움직여야 해요. 아래 판정이 그걸 그대로 받아요 —
+     * 꼬리가 먹히면 싱크로가 시작하자마자 miss로 끝나서 perfect에 못 닿아요. */
     tapOn(box.querySelector(".mg-go"));
+    const tail = $("tour-moment").querySelector(".tm-box .tm-btn");
+    if (tail) {
+      tail.dispatchEvent(new w.Event("pointerup", { bubbles: true, cancelable: true }));
+      tail.dispatchEvent(new w.Event("click", { bubbles: true, cancelable: true }));
+    }
     return "ready";
   }
   const btn = box.querySelector(".tm-btn");

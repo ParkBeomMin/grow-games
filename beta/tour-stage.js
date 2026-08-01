@@ -54,18 +54,43 @@ window.TourStage = (() => {
    * 그 뒤 click은 전부 버린다"로 하면 간단하지만, 그러면 한 번 만진 뒤에는
    * 키보드(Enter·Space)로 누를 수 없게 돼요. 시간으로 가르면 둘 다 살아요.
    * click도 듣는 건 포인터 이벤트가 없는 환경(jsdom 테스트·아주 구형 브라우저)
-   * 때문이에요. timing.js의 hold가 pointerdown/pointerup을 쓰는 방식과 같은 결이에요. */
+   * 때문이에요. timing.js의 hold가 pointerdown/pointerup을 쓰는 방식과 같은 결이에요.
+   *
+   * ⚠️ 다만 TAP_ECHO는 **같은 요소 안의 중복**밖에 못 막아요. 요소가 바뀌면
+   * 무력해요 — ▶️ 시작을 누른 pointerdown이 준비 화면을 지우고 그 자리에 무대
+   * 버튼을 그리면, 손을 뗄 때 오는 click은 **방금 생긴 무대 버튼**에게 가요.
+   * 그 버튼의 lastPointer는 초기값이라 방어에 안 걸리고, 한 번 댄 손가락이
+   * '시작'과 '첫 행동' 두 번으로 먹혀요(싱크로는 그대로 판이 끝나요).
+   * 그래서 gate가 따로 필요해요. */
   const TAP_ECHO = 700;   // pointerdown 뒤 이 시간 안에 오는 click은 같은 한 번이에요
-  function onTap(el, fn) {
+
+  /* 🚪 제스처 문 — **시작한 손가락이 끝나기 전에는 무대가 입력을 안 받아요.**
+   *
+   * 한 판마다 새로 만들어요. 모듈 전역에 두면 앞 판의 상태가 다음 판으로 새고,
+   * 시계를 갈아끼우는 테스트에서는 판마다 시각이 되감겨서 시간으로 가를 수도
+   * 없어요. 판마다 새 물건이면 그런 자리가 아예 없어요.
+   *
+   *   shut=true  → 시작이 pointerdown이었어요. 뒤따라올 click 한 번은 그 제스처의
+   *                꼬리니까 삼켜요(그리고 문을 열어요 — 딱 한 번만 삼켜요).
+   *   pointerdown → 새로 짚은 손가락이에요. 무조건 문을 열어요.
+   *
+   * click으로 시작한 경우(포인터 이벤트가 없는 환경·키보드)에는 뒤따라올 것이
+   * 없으니 문을 잠그지 않아요. 잠그면 그 환경의 첫 입력이 통째로 사라져요.
+   * post-stage.js가 같은 이유로 같은 모양을 갖고 있어요. */
+  const newGate = () => ({ shut: false });
+
+  function onTap(el, fn, gate) {
     let lastPointer = -TAP_ECHO;
     el.addEventListener("pointerdown", (e) => {
       lastPointer = Date.now();
+      if (gate) gate.shut = false;          // 여기서부터가 이 판의 입력이에요
       if (e && e.cancelable) e.preventDefault();
-      fn();
+      fn(true);
     });
     el.addEventListener("click", () => {
-      if (Date.now() - lastPointer < TAP_ECHO) return;
-      fn();
+      if (Date.now() - lastPointer < TAP_ECHO) return;   // 같은 요소 안의 메아리
+      if (gate && gate.shut) { gate.shut = false; return; }   // 시작 제스처의 꼬리예요
+      fn(false);
     });
   }
 
@@ -75,6 +100,11 @@ window.TourStage = (() => {
    * 왜 필요하냐면: 이 셋은 규칙이 여러 단계예요(3연속으로 잡기 · 두 대상의 교차 ·
    * 연타 유지에 위쪽 한계까지). 한 줄짜리 .tm-label로는 첫 무대를 통째로 날려요.
    * "너무 빨리 지나가서 뭐 하라는 건지 모르겠다"는 말이 정확히 그 뜻이에요.
+   *
+   * ✋ 약속이 하나 더 있어요 — **시작한 손가락으로는 무대를 못 건드려요.**
+   * ▶️ 시작은 pointerdown에서 곧바로 처리해요(누르자마자 화면이 바뀌어야 하니까요).
+   * 대신 그 손가락을 뗄 때 오는 click은 새로 그려진 무대 버튼으로 새어 들어가는데,
+   * 그건 gate가 삼켜요. 무대가 실제로 움직이는 건 **새로 짚은 손가락**부터예요.
    *
    * ⏱️ 이 화면의 약속 하나가 전부예요 — **누르기 전에는 아무것도 안 돌아요.**
    * requestAnimationFrame도 setTimeout도 performance.now()도 준비 화면 위에서는
@@ -125,12 +155,16 @@ window.TourStage = (() => {
       + (keys ? `<div class="mg-ready-keys">${keys}</div>` : "")
       + `<button type="button" class="btn btn-primary tm-btn mg-go">▶️ 시작</button>`;
     container.appendChild(wrap);
+    /* 이 판의 문. 시작이 pointerdown이면 잠근 채로 무대에 넘겨요 —
+     * 손을 뗄 때 오는 click 한 번이 무대 버튼으로 새거든요. */
+    const gate = newGate();
     let went = false;
-    onTap(wrap.querySelector(".mg-go"), () => {
+    onTap(wrap.querySelector(".mg-go"), (viaPointer) => {
       if (went) return;          // pointerdown과 click이 겹쳐도 한 번만 시작해요
       went = true;
+      gate.shut = !!viaPointer;
       wrap.remove();             // 준비 화면을 치우고 나서 본 무대 상자를 붙여요
-      start();
+      start(gate);
     });
   }
 
@@ -215,7 +249,7 @@ window.TourStage = (() => {
 
   /* 🎬 한 판. **여기서부터가 시간이 흐르는 자리예요** — 준비 화면의 ▶️ 시작을
    * 누른 뒤에만 불려요. 이 함수 밖에는 타이머가 한 줄도 없어요. */
-  function runWave(container, opts, cb) {
+  function runWave(container, opts, cb, gate) {
     const zone = zoneOf(opts);
     const half = WAVE.speed * waveWinMs(zone) / 1000;   // 판정 창 절반(%)
     const seatsHTML = Array.from({ length: WAVE.seats }, (_, i) =>
@@ -294,8 +328,8 @@ window.TourStage = (() => {
       resolve(Math.abs(pos - waveCenter(WAVE.cues[cur])) <= half);
       if (cur >= WAVE.cues.length) finish();
     };
-    onTap(btn, tap);
-    onTap(strip, tap);                                    // 관객석을 직접 눌러도 돼요
+    onTap(btn, tap, gate);
+    onTap(strip, tap, gate);                              // 관객석을 직접 눌러도 돼요
     raf = requestAnimationFrame(tick);
   }
 
@@ -329,7 +363,7 @@ window.TourStage = (() => {
     gap <= syncPerf(zone) ? "perfect" : gap <= syncGood(zone) ? "good" : "miss";
 
   /* ✨ 한 판. runWave와 같아요 — 준비 화면을 누른 뒤에만 시계가 돌아요. */
-  function runSync(container, opts, cb) {
+  function runSync(container, opts, cb, gate) {
     const zone = zoneOf(opts);
     const perfW = syncPerf(zone), goodW = syncGood(zone);
     const wrap = makeBox(container, opts.label || "✨ 두 파트가 겹치는 순간!", `
@@ -383,7 +417,7 @@ window.TourStage = (() => {
       place();
       raf = requestAnimationFrame(tick);
     }
-    onTap(btn, () => { if (!done) finish(syncJudge(Math.abs(pa - pb), zone)); });
+    onTap(btn, () => { if (!done) finish(syncJudge(Math.abs(pa - pb), zone)); }, gate);
     raf = requestAnimationFrame(tick);
   }
 
@@ -448,7 +482,7 @@ window.TourStage = (() => {
     g < line ? 0 : ROAR.creditLow + (1 - ROAR.creditLow) * clampV((g - line) / band, 0, 1);
 
   /* 🔥 한 판. runWave와 같아요 — 준비 화면을 누른 뒤에만 시계가 돌아요. */
-  function runRoar(container, opts, cb) {
+  function runRoar(container, opts, cb, gate) {
     const zone = zoneOf(opts);
     let line = roarLine(zone, 0), crack = roarCrack(zone, 0);
     const decay = roarDecay(zone), band = roarBand(zone);
@@ -524,19 +558,20 @@ window.TourStage = (() => {
       }
       g = clampV(g, 0, 100);
       paint();
-    });
+    }, gate);
     raf = requestAnimationFrame(tick);
   }
 
-  /* 바깥에서 부르는 건 이 셋이에요 — 전부 준비 화면부터예요. */
+  /* 바깥에서 부르는 건 이 셋이에요 — 전부 준비 화면부터예요.
+   * gate는 준비 화면이 만들어 넘겨줘요 (시작한 손가락을 무대에서 떼어 놓는 문). */
   function wave(container, opts, cb) {
-    ready(container, stageReady("wave", opts, "함성! 🙌"), () => runWave(container, opts || {}, cb));
+    ready(container, stageReady("wave", opts, "함성! 🙌"), (gate) => runWave(container, opts || {}, cb, gate));
   }
   function sync(container, opts, cb) {
-    ready(container, stageReady("sync", opts, "싱크! ✨"), () => runSync(container, opts || {}, cb));
+    ready(container, stageReady("sync", opts, "싱크! ✨"), (gate) => runSync(container, opts || {}, cb, gate));
   }
   function roar(container, opts, cb) {
-    ready(container, stageReady("roar", opts, "연타! 🔥"), () => runRoar(container, opts || {}, cb));
+    ready(container, stageReady("roar", opts, "연타! 🔥"), (gate) => runRoar(container, opts || {}, cb, gate));
   }
 
   return {
