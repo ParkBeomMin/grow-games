@@ -14,6 +14,9 @@
  *   PostStage.count(box, { label, button, zonePct, tier, countLabels }, cb)  🧊 볼카운트 승부
  *   PostStage.dash (box, { label, goText, stopText, zonePct, tier }, cb)     🏃 홈 승부
  *
+ * 🧭 둘 다 **준비 화면**을 먼저 띄워요. 규칙을 읽고 ▶️ 시작을 눌러야 공이 오고
+ * 주자가 뛰어요 — 자세한 약속은 아래 ready()의 머리말에 적어 뒀어요.
+ *
  * ─────────────────────────────────────────────────────────────────────────
  * 🆕 무엇이 새로운가 — 이게 이 파일의 존재 이유예요
  *
@@ -80,6 +83,74 @@ window.PostStage = (() => {
     el.addEventListener("click", () => {
       if (Date.now() - lastPointer < TAP_ECHO) return;
       fn();
+    });
+  }
+
+  /* ================================================================
+   * 🧭 준비 화면 — 규칙을 읽고 나서, 눌러야 시작해요
+   *
+   * 왜 필요하냐면: 여기 두 메커닉은 규칙이 여러 단계고(볼카운트) 버튼이 둘이라
+   * (홈 승부) 한 줄짜리 .tm-label로는 첫 판을 통째로 날려요. "너무 빨리 지나가서
+   * 뭐 하라는 건지 모르겠다"는 말이 정확히 그 뜻이에요.
+   *
+   * ⏱️ 이 화면의 약속 하나가 전부예요 — **누르기 전에는 아무것도 안 돌아요.**
+   * requestAnimationFrame도 setTimeout도 performance.now()도 준비 화면 위에서는
+   * 한 번도 불리지 않아요. 진짜 메커닉은 runCount·runDash 안에 통째로 들어 있고,
+   * ready()가 그 함수를 붙잡고 있다가 ▶️ 시작을 눌렀을 때 비로소 놓아 줘요.
+   * 그래서 판정도 난이도도 한 줄 안 바뀌어요 — 사람이 잡는 건 '시작 시각'뿐이에요.
+   *
+   * 📖 매번 세 줄을 다 읽으면 성가셔요. 가을야구 한 시리즈에 미니게임이 여러 번
+   * 나오니까요. 그래서 메커닉마다 본 횟수를 세어 처음 FULL_SHOWS번만 전문을 펴고,
+   * 그 뒤에는 한 줄로 줄여요. **준비 화면 자체는 늘 떠요** — 줄어드는 건 설명의
+   * 길이지 시작 버튼이 아니에요. 시작 시점을 플레이어가 잡는 게 이 화면의 목적이라,
+   * 그 부분만은 익숙해져도 그대로예요.
+   *
+   * 🔑 세는 값은 새 열쇠(READY_KEY) 하나에만 담아요. 옛 저장은 한 칸도 안 건드려요 —
+   * 마이그레이션이 없고, 값이 없으면 그냥 0이에요(= 처음 보는 사람).
+   * 열쇠 안은 메커닉 이름별 횟수라, 야구와 아이돌이 같은 열쇠를 나눠 써도
+   * 이름이 겹치지 않아 서로를 덮지 않아요.
+   * ================================================================ */
+  const READY_KEY = "grow-mech-ready";
+  const FULL_SHOWS = 3;          // 처음 이만큼은 전문, 그 뒤로는 한 줄
+
+  const readSeen = () => {
+    try {
+      const o = JSON.parse(localStorage.getItem(READY_KEY) || "{}");
+      return (o && typeof o === "object") ? o : {};
+    } catch (e) { return {}; }   // 사생활 보호 모드처럼 못 읽는 자리도 있어요
+  };
+  /* 이번이 '보기 전 기준' 몇 번째인지 돌려줘요 — 0이면 난생처음 보는 거예요. */
+  const bumpSeen = (key) => {
+    const seen = readSeen();
+    const n = Number(seen[key]) || 0;
+    seen[key] = n + 1;
+    try { localStorage.setItem(READY_KEY, JSON.stringify(seen)); } catch (e) { /* 못 써도 넘어가요 */ }
+    return n;
+  };
+
+  /* info = { key, title, lines: [3줄], short: "한 줄", keys: [{ name, desc }] }
+   * keys는 **버튼이 각각 무엇인지**예요. 버튼이 둘인 홈 승부에서는 이게 없으면
+   * 준비 화면을 띄운 뜻이 없어요. 볼카운트는 '안 누르기'가 곧 두 번째 수라
+   * 그것도 한 칸으로 적어 둬요. */
+  function ready(container, info, start) {
+    const full = bumpSeen(info.key) < FULL_SHOWS;
+    const body = full
+      ? `<ul class="mg-ready-lines">${info.lines.map((t) => `<li>${t}</li>`).join("")}</ul>`
+      : `<p class="mg-ready-short">${info.short}</p>`;
+    const keys = (info.keys || [])
+      .map((k) => `<span class="mg-ready-key"><b>${k.name}</b><span>${k.desc}</span></span>`).join("");
+    const wrap = document.createElement("div");
+    wrap.className = "tm-box mg-ready";
+    wrap.innerHTML = `<p class="tm-label">${info.title}</p>${body}`
+      + (keys ? `<div class="mg-ready-keys">${keys}</div>` : "")
+      + `<button type="button" class="btn btn-primary tm-btn mg-go">▶️ 시작</button>`;
+    container.appendChild(wrap);
+    let went = false;
+    onTap(wrap.querySelector(".mg-go"), () => {
+      if (went) return;          // pointerdown과 click이 겹쳐도 한 번만 시작해요
+      went = true;
+      wrap.remove();             // 준비 화면을 치우고 나서 본 게임 상자를 붙여요
+      start();
     });
   }
 
@@ -152,25 +223,57 @@ window.PostStage = (() => {
   /* 한 공이 끝난 뒤 승부가 났는지. 안 났으면 null이에요 */
   const countEnd = (b, s) => (s >= COUNT.strikes ? "miss" : b >= COUNT.balls ? "good" : null);
 
-  function count(container, opts, cb) {
+  /* 문구는 통째로 갈아끼울 수 있어요. 투수는 같은 규칙을 '유인구와 몰린 공'으로
+   * 읽어야 말이 되거든요 — 투수가 "볼넷으로 걸어 나가요"를 보면 안 돼요.
+   * ready*로 시작하는 것들은 준비 화면 몫이에요. 같은 묶음에 둬야 투수 문구를
+   * 갈아끼울 때 준비 화면만 타자 말로 남는 일이 안 생겨요. */
+  const COUNT_MSG = {
+    hitPerfect: "💥 노림수 적중, 통타!",
+    hitGood: "🏏 받아쳤어요!",
+    whiff: "🌀 헛스윙…",
+    looking: "😐 존에 꽂혔어요",
+    taken: "👀 골라냈어요",
+    out: "❌ 삼진…",
+    free: "🚶 볼넷으로 걸어 나가요",
+    timeup: "⏱️ 승부 종료",
+    tip: "존을 벗어나면 참아요 · <b>유리한 카운트</b>에서 친 공만 완벽해요",
+    readyTitle: "🧊 볼카운트 승부",
+    readyLines: [
+      "공이 날아오다 도중에 <b>휘어요</b>. 점선 네모(스트라이크 존) 안에 꽂히는지, 밖으로 빠지는지 보고 정해요.",
+      "헛스윙과 루킹은 <b>스트라이크</b>, 벗어나는 공을 참으면 <b>볼</b>이에요. 3스트라이크면 삼진(실패), 4볼이면 볼넷(성공)이에요.",
+      "받아쳐도 <b>볼이 스트라이크보다 많을 때</b>만 완벽이에요 — 완벽에 닿으려면 적어도 한 번은 참아야 해요.",
+    ],
+    readyShort: "존을 벗어나면 참아요 · 볼이 스트라이크보다 많을 때 친 공만 완벽해요",
+    readySwing: "누르면 방망이를 내요. 존 안이면 받아치고, 밖이면 헛스윙이에요",
+    readyTake: "안 누르면 참는 거예요. 존 밖이면 골라내서 볼을 얻어요",
+  };
+  const countMsg = (opts) => Object.assign({}, COUNT_MSG, (opts && opts.msg) || {});
+
+  /* 준비 화면에 무엇을 띄울지. 버튼 문구는 opts에서 그대로 가져와요 —
+   * 화면의 버튼과 설명의 버튼 이름이 다르면 설명이 오히려 헷갈려요. */
+  function countReady(opts) {
+    const msg = countMsg(opts);
+    return {
+      key: "count",
+      title: msg.readyTitle,
+      lines: msg.readyLines,
+      short: msg.readyShort,
+      keys: [
+        { name: (opts && opts.button) || "스윙! 🏏", desc: msg.readySwing },
+        { name: "누르지 않기", desc: msg.readyTake },
+      ],
+    };
+  }
+
+  /* 🧊 한 판. **여기서부터가 시간이 흐르는 자리예요** — 준비 화면의 ▶️ 시작을
+   * 누른 뒤에만 불려요. 이 함수 밖에는 타이머가 한 줄도 없어요. */
+  function runCount(container, opts, cb) {
     const zone = zoneOf(opts), tier = tierOf(opts);
     const brk = countBreak(zone, tier);
     const edge = countEdge(zone, tier);
     const pS = countStrikeP(tier);
     const names = (opts && opts.countLabels) || ["볼", "스트라이크"];
-    /* 문구는 통째로 갈아끼울 수 있어요. 투수는 같은 규칙을 '유인구와 몰린 공'으로
-     * 읽어야 말이 되거든요 — 투수가 "볼넷으로 걸어 나가요"를 보면 안 돼요. */
-    const msg = Object.assign({
-      hitPerfect: "💥 노림수 적중, 통타!",
-      hitGood: "🏏 받아쳤어요!",
-      whiff: "🌀 헛스윙…",
-      looking: "😐 존에 꽂혔어요",
-      taken: "👀 골라냈어요",
-      out: "❌ 삼진…",
-      free: "🚶 볼넷으로 걸어 나가요",
-      timeup: "⏱️ 승부 종료",
-      tip: "존을 벗어나면 참아요 · <b>유리한 카운트</b>에서 친 공만 완벽해요",
-    }, (opts && opts.msg) || {});
+    const msg = countMsg(opts);
     const wrap = makeBox(container, opts.label || "🧊 볼카운트 승부! 벗어나는 공은 참아요", `
       <div class="ps-plate">
         <div class="ps-zone"></div>
@@ -294,6 +397,11 @@ window.PostStage = (() => {
     newPitch();
   }
 
+  /* 바깥에서 부르는 건 이쪽이에요 — 준비 화면부터예요. */
+  function count(container, opts, cb) {
+    ready(container, countReady(opts), () => runCount(container, opts || {}, cb));
+  }
+
   /* ================================================================
    * 🏃 홈 승부 — 정보와 시간을 맞바꿔요
    *
@@ -354,24 +462,52 @@ window.PostStage = (() => {
   const dashReveal = (zone, tier) => dashBack(zone, tier) *
     clampV(DASH.revealFrac + clampV(zone, 10, 40) * DASH.revealFracPer + tier * DASH.revealFracTier, 0.35, 0.95);
 
-  function dash(container, opts, cb) {
+  /* count와 같은 이유로 문구를 통째로 갈아끼울 수 있어요 — 투수는 주자가 아니라
+   * 중계·백업 자리에서 같은 판단을 해요. */
+  const DASH_MSG = {
+    safe: "🎉 홈 세이프! 득점이에요",
+    tagged: "❌ 홈에서 태그아웃…",
+    rundown: "❌ 3루와 홈 사이에서 협살…",
+    back: "🛑 3루에 안전하게 돌아왔어요",
+    late: "❌ 어정쩡하게 걸려 협살…",
+    going: "🏃 홈으로!!",
+    timeup: "⏱️ 주루 판단 실패…",
+    tip: "송구는 🌫️ 뒤에 숨어 있어요 · ✋ 선을 넘으면 <b>더는 못 돌아가요</b>",
+    readyTitle: "🏃 홈 승부 — 버튼이 둘이에요",
+    readyLines: [
+      "위 레인은 <b>송구</b>, 아래 레인은 <b>주자</b>예요. 먼저 🏠에 닿는 쪽이 이겨요.",
+      "송구는 처음엔 🌫️에 덮여 안 보이다가, 주자가 어느 지점을 지나면 드러나요. 그 사이에도 주자는 <b>계속 나아가요</b>.",
+      "아래 두 버튼 중 <b>반드시 하나를 고르세요</b>. 안 고르면 협살로 죽어요 — 여기서 가장 나쁜 수예요.",
+    ],
+    readyShort: "🌫️가 걷히기를 기다릴수록 ✋ 선이 가까워져요 · 둘 중 하나는 꼭 고르세요",
+    readyGo: "홈까지 전력으로 달려요. 송구보다 먼저 닿으면 득점, 늦으면 태그아웃이에요",
+    readyStop: "3루로 돌아가요. ✋ 선을 넘기 전이면 안전하고, 넘었으면 협살이에요",
+  };
+  const dashMsg = (opts) => Object.assign({}, DASH_MSG, (opts && opts.msg) || {});
+
+  /* 🏃 준비 화면 — **버튼이 둘이라 각각 무엇인지 적는 게 이 화면의 본론이에요.** */
+  function dashReady(opts) {
+    const msg = dashMsg(opts);
+    return {
+      key: "dash",
+      title: msg.readyTitle,
+      lines: msg.readyLines,
+      short: msg.readyShort,
+      keys: [
+        { name: (opts && opts.goText) || "돌진! 🏃", desc: msg.readyGo },
+        { name: (opts && opts.stopText) || "멈춰! ✋", desc: msg.readyStop },
+      ],
+    };
+  }
+
+  /* 🏃 한 판. runCount와 같아요 — 준비 화면을 누른 뒤에만 불리고, 시계는 여기서만 돌아요. */
+  function runDash(container, opts, cb) {
     const zone = zoneOf(opts), tier = tierOf(opts);
     const runMs = dashRun(zone);
     const revealAt = dashReveal(zone, tier);
     const backAt = dashBack(zone, tier);
     const throwMs = dashThrow(tier) * rand(DASH.throwLo, DASH.throwHi);
-    /* count와 같은 이유로 문구를 통째로 갈아끼울 수 있어요 — 투수는 주자가 아니라
-     * 중계·백업 자리에서 같은 판단을 해요. */
-    const msg = Object.assign({
-      safe: "🎉 홈 세이프! 득점이에요",
-      tagged: "❌ 홈에서 태그아웃…",
-      rundown: "❌ 3루와 홈 사이에서 협살…",
-      back: "🛑 3루에 안전하게 돌아왔어요",
-      late: "❌ 어정쩡하게 걸려 협살…",
-      going: "🏃 홈으로!!",
-      timeup: "⏱️ 주루 판단 실패…",
-      tip: "송구는 🌫️ 뒤에 숨어 있어요 · ✋ 선을 넘으면 <b>더는 못 돌아가요</b>",
-    }, (opts && opts.msg) || {});
+    const msg = dashMsg(opts);
     /* 🌫️ 안개는 레인을 통째로 덮어요. 예전에는 🌫️ 한 개를 오른쪽 끝(홈)에 세워
      * 뒀는데, 그러면 "송구가 이미 홈에 닿았다"로 읽혀서 다들 겁을 먹고 멈췄어요.
      * 모른다는 건 '어딘가에 있다'가 아니라 '레인 전체가 안 보인다'예요. */
@@ -462,14 +598,21 @@ window.PostStage = (() => {
     raf = requestAnimationFrame(tick);
   }
 
+  /* 바깥에서 부르는 건 이쪽이에요 — 준비 화면부터예요. */
+  function dash(container, opts, cb) {
+    ready(container, dashReady(opts), () => runDash(container, opts || {}, cb));
+  }
+
   return {
     count, dash,
     /* 테스트가 판정 산식을 그대로 굴려 볼 수 있게 열어 둬요 — 난이도를 손으로
-     * 베껴 두면 여기를 고칠 때 테스트만 옛 숫자로 남아요. */
+     * 베껴 두면 여기를 고칠 때 테스트만 옛 숫자로 남아요.
+     * 준비 화면 쪽도 같은 이유로 열어 둬요 (횟수 문턱을 테스트가 베껴 적지 않게요). */
     _t: {
       COUNT, DASH,
       countBreak, countEdge, countStrikeP, countHitGrade, countEnd,
       dashRun, dashThrow, dashReveal, dashBack,
+      READY_KEY, FULL_SHOWS, readSeen, countReady, dashReady,
     },
   };
 })();

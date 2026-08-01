@@ -114,22 +114,35 @@ function vstage(src, api) {
     { runScripts: "dangerously", pretendToBeVisual: true, url: "https://x.test/" });
   const V = dom.window;
   V.eval(src);
-  let VT = 0, vid = 1, vt = [];
+  let VT = 0, vid = 1, vt = [], sched = 0;
   V.performance.now = () => VT;
   V.Date.now = () => VT;
-  V.requestAnimationFrame = (cb) => { const id = vid++; vt.push({ at: VT + 16.667, id, fn: () => cb(VT) }); return id; };
+  /* sched는 '지금까지 걸린 타이머 수'예요 — 준비 화면 위에서 시계가 도는지
+   * 아닌지를 결과가 아니라 원인 쪽에서 못 박으려고 세요. */
+  V.requestAnimationFrame = (cb) => { sched++; const id = vid++; vt.push({ at: VT + 16.667, id, fn: () => cb(VT) }); return id; };
   V.cancelAnimationFrame = (id) => { const i = vt.findIndex((t) => t.id === id); if (i >= 0) vt.splice(i, 1); };
-  V.setTimeout = (fn, ms) => { const id = vid++; vt.push({ at: VT + (ms || 0), id, fn }); return id; };
+  V.setTimeout = (fn, ms) => { sched++; const id = vid++; vt.push({ at: VT + (ms || 0), id, fn }); return id; };
   V.clearTimeout = (id) => { const i = vt.findIndex((t) => t.id === id); if (i >= 0) vt.splice(i, 1); };
 
-  /* 한 판을 돌려요. watch는 4ms마다 화면을 읽는 '눈'이에요 — fire(선택자, 이벤트)로 눌러요. */
-  function trial(mech, opts, seed, watch) {
-    vt = []; VT = 0;
+  /* 한 판을 돌려요. watch는 4ms마다 화면을 읽는 '눈'이에요 — fire(선택자, 이벤트)로 눌러요.
+   * ctl.noStart를 주면 준비 화면에서 손을 놓고 있어요 (누르기 전을 보는 검사용). */
+  function trial(mech, opts, seed, watch, ctl) {
+    vt = []; VT = 0; sched = 0;
     V.Math.random = mulberry32(seed);
     const box = V.document.getElementById("box");
     box.innerHTML = "";
     let res = null, endedAt = 0;
     V[api][mech](box, opts, (r) => { res = r; endedAt = VT; });
+    /* 🧭 준비 화면 — 사람이 ▶️ 시작을 누르는 자리예요. 우회하지 않고 실제로 눌러요.
+     * 가상 시각 0에서 누르니 그 뒤로 흐르는 시간은 준비 화면이 없던 때와 똑같아요 —
+     * 판정 분포도 소요 시간도 이 화면 때문에 어긋나지 않아요. */
+    const readyBox = box.querySelector(".mg-ready");
+    const preTimers = sched;                  // 누르기 전에 걸린 타이머 (0이어야 해요)
+    const readyHTML = readyBox ? readyBox.innerHTML : "";
+    if (readyBox && !(ctl && ctl.noStart)) {
+      const go = readyBox.querySelector(".mg-go");
+      if (go) go.dispatchEvent(new V.Event("pointerdown", { bubbles: true, cancelable: true }));
+    }
     const wrap = box.querySelector(".tm-box");
     const fire = (sel, type) => {
       const el = typeof sel === "string" ? wrap.querySelector(sel) : sel;
@@ -143,13 +156,120 @@ function vstage(src, api) {
       VT = ev.at;
       ev.fn();
     }
-    return { res, endedAt, left: box.innerHTML };
+    return { res, endedAt, left: box.innerHTML, ready: !!readyBox, readyHTML, preTimers };
   }
   return { V, trial };
 }
 
 const PS = vstage(PS_SRC, "PostStage");
 const T = PS.V.PostStage._t;
+/* 기존 8종도 같은 가상 시계 위에 세워 둬요. 아래 ④에서 도입 전 기준선을 재는 데
+ * 쓰고, 바로 다음의 준비 화면 검사에서 "8종에는 이 화면이 없다"를 볼 때도 써요. */
+const TM = vstage(TM_SRC, "Timing");
+
+/* ================================================================
+ * 🧭 준비 화면 — 눌러야 시작해요
+ *
+ * 이번 수정의 본체예요. 규칙이 여러 단계고(볼카운트) 버튼이 둘이라(홈 승부)
+ * 한 줄짜리 안내로는 첫 판을 통째로 날렸어요.
+ * 여기서 못 박는 건 딱 하나예요 — **▶️ 시작을 누르기 전에는 시계가 안 돌아요.**
+ * 시간이 아무리 흘러도 판정이 나면 안 되고, 타이머가 한 개라도 걸려 있으면 안 돼요.
+ * ================================================================ */
+group("🧭 준비 화면");
+guard("준비 화면", () => {
+  const R = PS.V.PostStage._t;
+  const OPTS = {
+    count: { label: "t", zonePct: 22, tier: 0, button: "스윙! 🏏" },
+    dash: { label: "t", zonePct: 22, tier: 0, goText: "돌진! 🏃", stopText: "멈춰! ✋" },
+  };
+  const NAMES = [["🧊 볼카운트 승부", "count"], ["🏃 홈 승부", "dash"]];
+  // 준비 화면 한 칸에서 버튼 이름에 붙은 설명을 꺼내요
+  const keyDesc = (html, name) => {
+    const esc = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const m = html.match(new RegExp(`<b>${esc}</b><span>([^<]+)</span>`));
+    return m ? m[1] : "";
+  };
+  // 처음 보는 사람으로 되돌려요 — 값이 없으면 그냥 0이에요 (마이그레이션이 없어요)
+  PS.V.localStorage.removeItem(R.READY_KEY);
+
+  for (const [name, mech] of NAMES) {
+    /* ① 준비 화면이 뜨고, 누르기 전에는 아무것도 안 움직여요.
+     * watch가 4ms마다 화면을 보며 시계를 9초까지 밀어요. 두 메커닉의 안전망
+     * (COUNT.cap 5.8초 · DASH.cap 6.0초)이 전부 그 안에 있으니, 그래도 판정이
+     * 안 나면 정말로 아무것도 안 돌고 있는 거예요. */
+    let lastVT = 0, moved = 0;
+    const idle = PS.trial(mech, OPTS[mech], 1, (wrap, now) => {
+      lastVT = now;
+      if (wrap.querySelector(".ps-ball") || wrap.querySelector(".ps-runner")) moved++;
+    }, { noStart: true });
+    check(idle.ready, `${name} — 행동이 시작되기 전에 준비 화면이 먼저 뜬다`);
+    check(idle.preTimers === 0,
+      `${name} — 누르기 전에는 타이머가 하나도 안 걸린다 (rAF·setTimeout ${idle.preTimers}개)`);
+    check(lastVT > Math.max(R.COUNT.cap, R.DASH.cap),
+      `${name} — 시계는 실제로 흘렀다 (${(lastVT / 1000).toFixed(1)}초 · 안전망보다 길어요)`);
+    check(idle.res === null, `${name} — 그렇게 흘러도 판정이 안 난다 (${idle.res || "판정 없음"})`);
+    check(moved === 0, `${name} — 공도 주자도 화면에 안 나타난다 (나타난 프레임 ${moved})`);
+    check(/mg-go/.test(idle.readyHTML), `${name} — 준비 화면에 ▶️ 시작 버튼이 있다`);
+
+    // ② 누르면 시작되고 정상적으로 끝나요
+    const run = PS.trial(mech, OPTS[mech], 1);
+    check(run.res !== null, `${name} — ▶️ 시작을 누르면 실제로 굴러가고 끝난다 (${run.res})`);
+    check(run.left.trim() === "", `${name} — 끝나면 준비 화면도 본 상자도 안 남는다`);
+  }
+
+  /* ③ 버튼이 둘인 메커닉은 둘 다 설명에 나와요 — 이게 없으면 준비 화면을 띄운
+   * 뜻이 없어요. 화면에 뜨는 버튼 이름 그대로 적혀야 해요. */
+  PS.V.localStorage.removeItem(R.READY_KEY);
+  const dashHTML = PS.trial("dash", OPTS.dash, 1, null, { noStart: true }).readyHTML;
+  for (const btn of [OPTS.dash.goText, OPTS.dash.stopText]) {
+    const desc = keyDesc(dashHTML, btn);
+    check(desc.length >= 10, `🏃 홈 승부 — "${btn}"이 무엇을 하는지 적혀 있다 ("${desc}")`);
+  }
+  const countHTML = PS.trial("count", OPTS.count, 1, null, { noStart: true }).readyHTML;
+  check(keyDesc(countHTML, OPTS.count.button).length >= 10 && /누르지 않기/.test(countHTML),
+    `🧊 볼카운트 승부 — 누르는 것과 참는 것이 둘 다 적혀 있다 ("${keyDesc(countHTML, "누르지 않기")}")`);
+
+  /* ④ 여러 번 본 뒤에는 설명이 짧아져요. 줄어드는 건 설명의 길이지 시작
+   * 버튼이 아니에요 — 준비 화면 자체는 계속 떠야 해요. */
+  PS.V.localStorage.removeItem(R.READY_KEY);
+  const shots = [];
+  for (let i = 0; i < R.FULL_SHOWS + 3; i++) {
+    shots.push(PS.trial("count", OPTS.count, 1, null, { noStart: true }));
+  }
+  const full = shots.slice(0, R.FULL_SHOWS), brief = shots.slice(R.FULL_SHOWS);
+  check(shots.every((s) => s.ready), `${shots.length}번을 봐도 준비 화면 자체는 계속 뜬다`);
+  check(full.every((s) => /mg-ready-lines/.test(s.readyHTML)),
+    `처음 ${R.FULL_SHOWS}번은 설명을 다 펴서 보여준다`);
+  check(brief.every((s) => /mg-ready-short/.test(s.readyHTML) && !/mg-ready-lines/.test(s.readyHTML)),
+    `${R.FULL_SHOWS + 1}번째부터는 한 줄로 줄어든다`);
+  check(brief.every((s) => s.readyHTML.length < full[0].readyHTML.length),
+    `줄어든 쪽이 실제로 더 짧다 (${full[0].readyHTML.length}자 → ${brief[0].readyHTML.length}자)`);
+  check(brief.every((s) => /mg-go/.test(s.readyHTML)),
+    "짧아져도 ▶️ 시작 버튼은 그대로다 — 시작 시점은 계속 사람이 잡아요");
+  /* 위 검사는 문턱을 코드에서 읽어 와요(테스트가 숫자를 베껴 적지 않게요). 그래서
+   * 문턱 자체가 터무니없이 커지면 "줄어든다"가 참인 채로 기능이 죽어요 —
+   * 가을야구 한 번에 미니게임이 스무 판 넘게 나오니, 여기는 한 손 안이어야 해요. */
+  check(R.FULL_SHOWS >= 1 && R.FULL_SHOWS <= 5,
+    `전문을 펴 보이는 횟수가 한 손 안이다 (${R.FULL_SHOWS}번)`);
+  check(Object.keys(R.readSeen()).every((k) => ["count", "dash"].includes(k)),
+    `본 횟수는 새 열쇠(${R.READY_KEY}) 안에만 쌓인다 (${JSON.stringify(R.readSeen())})`);
+
+  /* ⑤ 기존 8종에는 준비 화면이 없어요 (회귀). 한 줄로 충분한 데다, 매 타석마다
+   * 한 번 더 눌러야 하면 경기가 늘어져요. */
+  const OLD8 = [
+    ["play", { zonePct: 22, label: "t" }],
+    ["hold", { zonePct: 22, label: "t" }],
+    ["drop", { zonePct: 22, label: "t" }],
+    ["sequence", { icons: ["⚾", "🧢", "🧤", "🏏"], showMs: 900 }],
+    ["reaction", { perfectMs: 400, goodMs: 800 }],
+    ["target", { count: 3, lifeMs: 900 }],
+    ["odd", { rounds: 2, sets: [["⚾", "🥎"], ["🧢", "⛑️"]] }],
+    ["duel", { choices: ["몸쪽", "가운데", "바깥쪽"], hintChance: 0.5 }],
+  ];
+  const got = OLD8.filter(([m, o]) => TM.trial(m, o, 3).ready).map(([m]) => m);
+  check(got.length === 0, `기존 8종에는 준비 화면이 안 뜬다 (생긴 것: ${got.join(" · ") || "없음"})`);
+  check(!/mg-ready/.test(TM_SRC), "timing.js에 준비 화면 코드가 한 줄도 안 들어갔다");
+});
 
 /* 🧊 count 사람 모델 — lag만큼 늦은 화면 두 장으로 도착점을 외삽해요.
  * 공 크기(font-size)가 얼마나 왔는지를 알려줘요 (사람도 크기로 거리를 봐요). */
@@ -376,8 +496,8 @@ guard("새 2종 난이도", () => {
   console.log(`   🏃 무작정 돌진 배수 ${mult(rush).toFixed(3)} · 손 놓기 ${mult(froze).toFixed(3)}`);
 });
 
-/* ---------- 도입 전 기준선: timing.js 8종을 같은 사람 모델로 ---------- */
-const TM = vstage(TM_SRC, "Timing");
+/* ---------- 도입 전 기준선: timing.js 8종을 같은 사람 모델로 ----------
+ * TM(가상 시계 위의 timing.js)은 준비 화면 검사에서 함께 세워 뒀어요. */
 function aimAs(mech, sel, prop, target, opts, seed, lag, sigma) {
   let hist = [], fired = false, plan = null, started = false;
   return TM.trial(mech, opts, seed, (wrap, now, fire) => {
@@ -541,9 +661,30 @@ function bootGame() {
   w.setInterval = (fn, ms) => { const i = vid++; vt.push({ at: VT + (ms || 1), id: i, fn, rep: ms || 1 }); return i; };
   const clr = (i) => { const k = vt.findIndex((t) => t.id === i); if (k >= 0) vt.splice(k, 1); };
   w.clearTimeout = clr; w.clearInterval = clr; w.cancelAnimationFrame = clr;
+  /* 🧭 준비 화면이 떠 있으면 ▶️ 시작을 눌러요 — 사람이 하는 그대로예요.
+   * 새 2종은 이 버튼을 누르기 전에 타이머를 한 개도 안 걸어서, 안 눌러 주면
+   * 가상 시계를 아무리 돌려도 경기가 그 자리에 멈춰 있어요. 그게 바로 이 화면이
+   * 지켜야 할 약속이라, 우회하지 않고 여기서 눌러 줘요. 몇 번 눌렀는지도 세요. */
+  const ready = { taps: 0, after: null };
+  const tapReady = () => {
+    const holder = w.document.querySelector(".mg-ready");
+    if (!holder) return false;
+    const parent = holder.parentNode;               // 본 게임 상자가 붙을 자리예요
+    ready.taps++;
+    holder.querySelector(".mg-go")
+      .dispatchEvent(new w.Event("pointerdown", { bubbles: true, cancelable: true }));
+    if (ready.after) ready.after(parent);           // 누른 직후의 화면을 보고 싶을 때
+    return true;
+  };
+  /* 큐가 빌 때마다 확인하고, 큐가 안 비는 경우(setInterval)를 위해 512걸음마다도 봐요.
+   * 매 걸음 DOM을 뒤지면 한 시즌 굴리는 데 몇 분씩 걸려요. */
   const pump = (max) => {
+    const cap = max || 60000;
     let n = 0;
-    while (vt.length && n++ < (max || 60000)) {
+    while (n < cap) {
+      if (!vt.length) { if (!tapReady()) break; continue; }
+      if ((n & 511) === 0) tapReady();
+      n++;
       vt.sort((a, b) => a.at - b.at);
       const ev = vt[0];
       VT = ev.at;
@@ -551,7 +692,7 @@ function bootGame() {
       ev.fn();
     }
   };
-  return { dom, w, pump, $: (id) => w.document.getElementById(id), get: w.__get, set: w.__set };
+  return { dom, w, pump, ready, $: (id) => w.document.getElementById(id), get: w.__get, set: w.__set };
 }
 
 const G = bootGame();
@@ -623,9 +764,14 @@ group("② 배치 — 가을야구에서만");
 guard("배치", () => {
   const realPost = G.w.PostStage, realTiming = G.w.Timing;
   const seen = { post: [], timing: [] };
-  // 상자가 실제로 화면에 그려졌는지도 같이 봐요. 가상 시계에서는 미니게임이
-  // 한 번의 pump 안에서 시작하고 끝나서, 밖에서 보면 이미 지워진 뒤예요.
-  const drawn = { plate: 0, field: 0, inMoment: 0, other: 0 };
+  /* 상자가 실제로 화면에 그려졌는지도 같이 봐요. 가상 시계에서는 미니게임이
+   * 한 번의 pump 안에서 시작하고 끝나서, 밖에서 보면 이미 지워진 뒤예요.
+   *
+   * 🧭 이제 부르자마자 그려지는 건 준비 화면이에요. 본 게임 화면(.ps-plate·.ps-field)은
+   * ▶️ 시작을 누른 뒤에야 생기니, 그건 tapReady가 누른 직후에(ready.after) 봐요.
+   * 두 시점을 따로 세는 것 자체가 "누르기 전에는 안 그려진다"를 말해 줘요. */
+  // early = 준비 화면을 누르기도 전에 본 게임이 그려진 판 (0이어야 해요)
+  const drawn = { ready: 0, early: 0, plate: 0, field: 0, inMoment: 0, other: 0 };
   const spy = (real, bag, watchDom) => new Proxy(real, {
     get(t, k) {
       const v = t[k];
@@ -634,15 +780,20 @@ guard("배치", () => {
         bag.push(k);
         const out = v.apply(t, a);
         if (watchDom && a[0] && a[0].querySelector) {
-          if (a[0].querySelector(".ps-plate")) drawn.plate++;
-          else if (a[0].querySelector(".ps-field")) drawn.field++;
-          else drawn.other++;
+          if (a[0].querySelector(".mg-ready")) drawn.ready++;
+          if (a[0].querySelector(".ps-plate") || a[0].querySelector(".ps-field")) drawn.early++;
           if (a[0].id === "game-moment") drawn.inMoment++;
         }
         return out;
       };
     },
   });
+  G.ready.after = (parent) => {
+    if (!parent || !parent.querySelector) return;
+    if (parent.querySelector(".ps-plate")) drawn.plate++;
+    else if (parent.querySelector(".ps-field")) drawn.field++;
+    else drawn.other++;
+  };
   G.w.PostStage = spy(realPost, seen.post, true);
   G.w.Timing = spy(realTiming, seen.timing, false);
   G.w.localStorage.setItem("grow-auto-mini", "0");   // 손으로 하는 경로예요
@@ -674,6 +825,7 @@ guard("배치", () => {
   let inPost = false;
   const postSeen = { post: 0, timing: 0, kinds: new Set() };
   const hookLen = { post: 0, timing: 0 };
+  const readyBefore = G.ready.taps;
   setupPro({ pos: "batter", stat: 140 });
   seen.post.length = 0; seen.timing.length = 0;
   const r = runToReport((st) => {
@@ -695,18 +847,35 @@ guard("배치", () => {
   check(postSeen.timing === 0, `가을야구에는 기존 8종이 안 뜬다 (${postSeen.timing}판)`);
   check(postSeen.kinds.size === 2, `두 메커닉이 다 나온다 (${[...postSeen.kinds].join(" · ")})`);
   check(drawn.plate > 0 && drawn.field > 0 && drawn.other === 0,
-    `두 메커닉 다 실제 DOM을 그린다 (🧊 존 ${drawn.plate}판 · 🏃 주루로 ${drawn.field}판 · 못 그린 판 ${drawn.other})`);
+    `▶️ 시작을 누르면 두 메커닉 다 실제 DOM을 그린다 (🧊 존 ${drawn.plate}판 · 🏃 주루로 ${drawn.field}판 · 못 그린 판 ${drawn.other})`);
   check(drawn.inMoment === drawn.plate + drawn.field,
     `미니게임이 경기 화면의 #game-moment 안에 붙는다 (${drawn.inMoment}/${drawn.plate + drawn.field}판)`);
+  /* 🧭 판마다 준비 화면이 먼저 떴어요. 위의 pump가 그걸 눌러 준 횟수가 곧 판 수예요 —
+   * 하나라도 안 떴으면 그 판은 준비 화면 없이 시작됐다는 뜻이에요. 반대로 안 눌러
+   * 주면 첫 판에서 경기가 멈춰서 postSeen.post가 1에서 안 늘어나요. */
+  const readyTaps = G.ready.taps - readyBefore;
+  check(drawn.ready === postSeen.post,
+    `가을야구 미니게임은 판마다 준비 화면을 먼저 띄운다 (${postSeen.post}판 · 준비 화면 ${drawn.ready}판)`);
+  check(drawn.early === 0,
+    `준비 화면을 누르기 전에는 본 게임 화면이 안 그려진다 (미리 그려진 판 ${drawn.early})`);
+  check(readyTaps === postSeen.post,
+    `그 준비 화면을 사람이 하나하나 눌러서 경기가 이어졌다 (${readyTaps}회)`);
+  G.ready.after = null;
 
   // autoMiniOn — 이 경로가 없으면 테스트도 확인 페이지도 여기서 막혀요
   seen.post.length = 0; seen.timing.length = 0;
+  const autoReadyBefore = G.ready.taps;
   G.w.localStorage.setItem("grow-auto-mini", "1");
   setupPro({ pos: "pitcher", stat: 140 });
   const auto = runToReport();
   check(auto.entered, "자동 판정으로도 가을야구를 완주한다");
   check(seen.post.length === 0 && seen.timing.length === 0,
     `자동 판정이면 미니게임 화면을 아예 안 띄운다 (post ${seen.post.length} · timing ${seen.timing.length})`);
+  /* 🧭 자동 플레이는 준비 화면도 안 거쳐요. playPostMini가 autoMiniOn()이면
+   * window.PostStage를 아예 안 부르는 구조라 그 앞의 준비 화면도 뜰 자리가 없어요 —
+   * 자동인데 ▶️를 눌러야 하면 자동이 아니에요. */
+  check(G.ready.taps === autoReadyBefore,
+    `자동 판정이면 준비 화면도 한 번을 안 뜬다 (${G.ready.taps - autoReadyBefore}회)`);
   check(/if \(autoMiniOn\(\)\) \{ cb\(autoRes\(mech\.stat\(\)\), txt\); return; \}/.test(GAME_SRC),
     "playPostMini에 autoMiniOn 경로가 있다");
   check(/if \(inPostMini\(\)\) \{ playPostMini\(container, cb\); return; \}/.test(GAME_SRC),

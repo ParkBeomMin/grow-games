@@ -15,7 +15,9 @@
  * 등급 분포(무작위 500회)와 보상 안전장치는 tour-depth-test.js가 봐요.
  */
 "use strict";
+const fs = require("fs");
 const { boot } = require("/workspace/grow-games/tests/idol/tour-harness.js");
+const GAME_SRC = fs.readFileSync("/workspace/grow-games/beta/idol/game.js", "utf8");
 
 const H = boot();
 const { w, $ } = H;
@@ -244,6 +246,22 @@ auto();
   check(n === r2.fills.length * 3,
     `자동 판정도 도시마다 세 번 불린다 (${r2.fills.length}도시 × 3 = ${r2.fills.length * 3} / 실제 ${n})`);
   check($("tour-log").textContent.includes("앵콜"), "자동 플레이 로그에도 앵콜 무대가 남는다");
+
+  /* 🧭 자동 플레이는 준비 화면을 아예 안 거쳐요. playTourSet이 autoMiniOn()이면
+   * window.TourStage를 부르지 않고 바로 판정하는 구조라, 미니게임 화면도 그 앞의
+   * 준비 화면도 한 번을 안 떠요 — 자동인데 ▶️를 눌러야 하면 자동이 아니에요. */
+  let stageCalls = 0;
+  const countStage = {};
+  for (const k of TOUR_MECHS) countStage[k] = (...a) => { stageCalls++; return realStage[k](...a); };
+  w.TourStage = countStage;
+  H.setupPro(9000, { condition: 90 });
+  const r3 = H.runTour({ res: "good" });
+  w.TourStage = realStage;
+  check(r3.entered && stageCalls === 0,
+    `자동 플레이는 미니게임 엔진을 아예 안 부른다 (도시 ${r3.fills.length}곳 · 호출 ${stageCalls}번)`);
+  check(!$("tour-moment").querySelector(".mg-ready"), "그래서 준비 화면도 한 번을 안 뜬다");
+  check(/if \(autoMiniOn\(\)\) \{ land\(autoRes\(mech\.stat\(\)\)\); return; \}/.test(GAME_SRC),
+    "playTourSet이 autoMiniOn()이면 TourStage를 안 부르고 바로 판정한다");
 }
 
 /* ---------- 9. 진짜 TourStage 엔진으로도 세 무대가 이어진다 ----------
@@ -266,18 +284,36 @@ async function realEngineCity() {
   const city = t0.cities[t0.i];
   $("btn-tour-go").click();
 
-  const box = () => $("tour-moment").querySelector(".tm-box");
+  /* 🧭 준비 화면은 상자 모양을 물려받으려고 .tm-box를 함께 달고 있어요.
+   * 그래서 '무대 상자'를 볼 때는 .mg-ready를 빼고 골라야 해요. */
+  const readyBox = () => $("tour-moment").querySelector(".mg-ready");
+  const box = () => $("tour-moment").querySelector(".tm-box:not(.mg-ready)");
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await sleep(80);
-  check(!!box(), "진짜 엔진에서도 첫 무대 미니게임이 화면에 뜬다");
+
+  /* 무대가 열리기 전에 준비 화면이 먼저 떠요. 그리고 **누르기 전에는 무대가 안 열려요** —
+   * 규칙을 읽는 동안 첫 무대가 지나가 버리면 이 화면을 만든 뜻이 없어요.
+   * 진짜 시간이라 0.4초를 실제로 흘려보내고 나서 봐요. */
+  check(!!readyBox(), "진짜 엔진에서도 첫 무대 앞에 준비 화면이 먼저 뜬다");
+  check(!!readyBox() && !!readyBox().querySelector(".mg-go"), "준비 화면에 ▶️ 시작 버튼이 있다");
+  check(!box(), "준비 화면 동안에는 무대 상자가 아직 없다");
+  await sleep(400);
+  check(!box(), "0.4초를 더 기다려도 무대는 안 열린다 — 시작 시점은 사람이 잡아요");
+  check($("btn-tour-go").disabled, "세 무대가 끝날 때까지 공연 버튼이 잠겨 있다");
+
+  readyBox().querySelector(".mg-go").click();        // ▶️ 시작 — 여기서부터 무대예요
+  await sleep(80);
+  check(!!box(), "▶️ 시작을 누르면 첫 무대 미니게임이 화면에 뜬다");
   check(!!box() && box().querySelector(".tm-label").textContent.includes(city),
     `화면에 뜬 무대 문구에 도시 이름이 있다 (${box() ? box().querySelector(".tm-label").textContent.slice(0, 28) : ""}…)`);
-  check($("btn-tour-go").disabled, "세 무대가 끝날 때까지 공연 버튼이 잠겨 있다");
   check(!!box() && !!box().querySelector(".ts-wave"),
     "첫 무대에 진짜 함성 웨이브(관객석 구역)가 그려진다 — 스파이가 아니다");
 
   const seen = [], parts = [];
+  let readyN = 1;                                    // 방금 첫 무대 것을 눌렀어요
   for (let step = 0; step < 400 && H.tourState().fills.length === 0; step++) {
+    const rb = readyBox();
+    if (rb) { readyN++; rb.querySelector(".mg-go").click(); }   // 다음 무대의 준비 화면
     const b = box();
     if (b) {
       const lab = b.querySelector(".tm-label");
@@ -291,6 +327,7 @@ async function realEngineCity() {
     }
     await sleep(60);
   }
+  check(readyN === 3, `세 무대가 각각 준비 화면을 하나씩 먼저 띄웠다 (${readyN}회)`);
   check(H.tourState().fills.length === 1,
     `진짜 엔진으로 한 도시를 끝냈다 (객석 ${Math.round((H.tourState().fills[0] || 0) * 100)}%)`);
   check(seen.length === 3, `세 무대가 차례로 화면을 갈아가며 떴다 (서로 다른 문구 ${seen.length}개)`);
