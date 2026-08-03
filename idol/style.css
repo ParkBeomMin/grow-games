@@ -282,3 +282,47 @@ body {
 @media (max-width: 380px) {
   .card-grid.three { grid-template-columns: 1fr; }
 }
+
+/* ───────────────────────────────────────────────────────────
+ * 🧭 미니게임 준비 화면 (.mg-ready) — ../tour-stage.js가 그려요.
+ *
+ * 상자·라벨·시작 버튼(.tm-box · .tm-label · .tm-btn)은 ../base.css 것을 그대로
+ * 물려받아요. 여기에는 설명 줄과 '버튼이 무엇인지' 칸만 둬요.
+ * 색은 전부 테마 변수예요 — 절대색을 쓰지 않아요. 흰색 alpha는 명암이라
+ * base.css의 .tm-* 관례를 그대로 따라요.
+ *
+ * 같은 블록이 beta/rookie/style.css에도 있어요. 두 게임이 각자 자기 style.css만 내려받으니
+ * (base.css는 8개 게임 공용이라 여기 넣을 것이 아니에요) 어쩔 수 없는 겹침이에요.
+ * 한쪽을 고치면 다른 쪽도 같이 고쳐 주세요.
+ * ─────────────────────────────────────────────────────────── */
+.mg-ready { text-align: left; }
+.mg-ready .tm-label { text-align: center; }
+
+/* 설명 줄 — 처음 몇 번만 이렇게 펴져요 */
+.mg-ready-lines { margin: 0; padding: 0; list-style: none; }
+.mg-ready-lines li {
+  position: relative; margin: 0 0 6px; padding-left: 14px;
+  font-size: .82rem; line-height: 1.55; color: var(--text);
+}
+.mg-ready-lines li::before { content: "•"; position: absolute; left: 2px; color: var(--accent); }
+.mg-ready-lines li:last-child { margin-bottom: 0; }
+
+/* 여러 번 본 뒤의 한 줄 — 준비 화면 자체는 그대로 뜨고 설명만 줄어요 */
+.mg-ready-short {
+  margin: 0; font-size: .82rem; line-height: 1.55;
+  color: var(--text); text-align: center;
+}
+.mg-ready-lines b, .mg-ready-short b { color: var(--cream); }
+
+/* 🎛 버튼이 각각 무엇인지 — 버튼이 둘인 메커닉에서는 이 칸이 본론이에요 */
+.mg-ready-keys { display: flex; flex-direction: column; gap: 6px; margin-top: 9px; }
+.mg-ready-key {
+  display: flex; align-items: baseline; gap: 8px;
+  padding: 6px 9px; border: 1px solid var(--line); border-radius: 10px;
+  background: rgba(255, 255, 255, .03);
+}
+.mg-ready-key > b {
+  flex: 0 0 auto; color: var(--accent); font-size: .78rem; white-space: nowrap;
+}
+.mg-ready-key > span { color: var(--dim); font-size: .74rem; line-height: 1.45; }
+.mg-ready .mg-go { width: 100%; }

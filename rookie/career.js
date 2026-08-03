@@ -115,7 +115,7 @@ window.Career = (() => {
 
   function renderPro() {
     $("pro-name").textContent = `${S.name} (${S.pos === "batter" ? "타자" : "투수"})`;
-    $("pro-team").textContent = `⚾ ${S.team} · ${S.role || ""} · ${S.age}세 · ${S.proYear}년차 · 종합 ${Math.round(overall())}`;
+    $("pro-team").innerHTML = `⚾ ${leagueBadge()}${S.team} · ${S.role || ""} · ${S.age}세 · ${S.proYear}년차 · 종합 ${Math.round(overall())}`;
     $("pro-turn").textContent = S.season ? `G ${S.season.game}/${S.season.total} · ${myRank()}위` : `캠프 훈련 ${3 - S.camp}/3`;
     $("pro-money").textContent = `💰 ${fmtMoney(S.money || 0)}`;
     renderStandings();
@@ -196,7 +196,7 @@ window.Career = (() => {
       // 훈련 타일과 성격이 달라요. 휴식·경기 시작과 같이 3칸을 다 쓰는 가로 버튼으로 둡니다.
       tr.className = "action-btn rest";
       tr.dataset.key = "__trade";
-      const left = TRADE_CLOSE - S.season.game;
+      const left = tradeCloseAt() - S.season.game;
       // 가로 배치라 한 줄에 늘어서요. 서브 문구가 길면 넘쳐서 짧게 씁니다.
       const sub = S.trade ? "협상 이어하기"
         : left <= 0 ? "오늘이 마감 · 컨디션 소모"
@@ -260,9 +260,42 @@ window.Career = (() => {
     "포스트시즌이 걸린 경기에서 역투! 🎯",
   ];
 
-  // ---------- 시즌 (144경기를 한 경기씩) ----------
-  const KBO_TEAMS = REGIONS.flatMap((r) => r.teams);
+  // ---------- 시즌 (리그별 경기 수만큼 한 경기씩) ----------
+  /* 지금 뛰는 리그의 구단 목록이에요. 옛 세이브(S.league 없음)는 KBO 구단만 나와요 —
+   * leagueOf가 막아주니 여기서 따로 마이그레이션하지 않아요.
+   * 상수가 아니라 함수인 건 해외로 나가면 목록이 통째로 바뀌기 때문이에요. */
+  const leagueTeams = () => teamsOf(leagueOf(S));
+  /* 리그 표에 games가 없던 시절의 값이에요. leagueOf가 옛 세이브를 KBO로 받아주니
+   * 실제로는 안 쓰이지만, 표가 깨져도 시즌이 0경기로 끝나지 않게 남겨둡니다. */
   const SEASON_TOTAL = 144;
+  const seasonTotal = () => leagueOf(S).games || SEASON_TOTAL;
+  /* 진행 중인 시즌의 경기 수예요. **저장본에 적힌 total이 정본**이고, 없을 때만
+   * 지금 리그로 떨어져요. 시즌 도중에 리그가 바뀌는 길은 없지만(포스팅은 오프시즌,
+   * 트레이드는 같은 리그 안), 여기를 매번 다시 계산하면 그런 길이 하나라도 생기는 순간
+   * 진행 중인 시즌의 길이가 바뀌어서 순위표와 트레이드 창구가 어긋나요. */
+  const curTotal = () => (S.season && S.season.total) || seasonTotal();
+
+  /* 🏋️ 한 시즌이 주는 훈련 횟수예요.
+   *
+   * 예전에는 경기마다 2회, 3연전이 끝나는 경기(이동일이 끼는 날)에는 3회를 줬어요.
+   * 144경기면 144×2 + 48 = 336회입니다.
+   *
+   * 🌏 경기 수가 리그마다 달라지면서 이 합까지 같이 늘면 안 돼요. 162경기 리그는
+   * 훈련 기회도 12.5% 많아져서 능력치가 더 빨리 커요. 그러면 난이도(oppUp·lgUp)로
+   * 깎아둔 몫을 성장 속도로 되돌려받게 돼서, **해외 진출이 도박이 아니라 정답**이 됩니다.
+   * 사다리 검사는 능력치를 고정해 두고 재기 때문에 이 새는 구멍을 못 봐요.
+   *
+   * 그래서 총 훈련 횟수를 336회로 못 박고 시즌 길이에 맞춰 나눠 줘요.
+   * 긴 시즌은 이동일이 덜 자주 오는 셈이에요 — 한 해에 쉬는 날 수는 같으니까요.
+   *
+   * ⚠️ 144경기에서는 예전 식과 **한 톨도 안 달라요.** floor(g×336/144) = floor(g×7/3)이라
+   * 칸 사이 차이가 2,2,3 …으로 돌아서 3연전 경계에서만 3회가 나오거든요.
+   * 난수를 안 쓰니 옛 세이브의 난수 호출 횟수도 그대로예요.
+   * tests/rookie/club-test.js ⑧이 두 성질을 다 지켜요. */
+  const CAMP_BASE_GAMES = 144;
+  const CAMP_TURNS = 336;                      // 144경기 × 2회 + 3연전 경계 48번
+  const campAt = (g, total) => Math.floor((g * CAMP_TURNS) / (total || CAMP_BASE_GAMES));
+  const campAfter = (g, total) => campAt(g, total) - campAt(g - 1, total);
 
   function runSeason() {
     if (!S.season) initSeason();
@@ -287,11 +320,11 @@ window.Career = (() => {
   function initSeason() {
     S.season = {
       game: 0,
-      total: SEASON_TOTAL,
+      total: seasonTotal(),
       teamW: 0,
       teamL: 0,
       // 팀 전력은 저장본에 남아요 — 이적할 때 '어느 팀인지'가 의미를 가지려면 필요해요
-      others: KBO_TEAMS.filter((t) => t !== S.team).map((name) => ({ name, w: 0, l: 0, str: teamStrOf(name) })),
+      others: leagueTeams().filter((t) => t !== S.team).map((name) => ({ name, w: 0, l: 0, str: teamStrOf(name) })),
       stats: S.pos === "batter" ? { ab: 0, hits: 0, hr: 0, sb: 0 } : { ip: 0, k: 0, er: 0, wins: 0, saves: 0, g: 0 },
     };
     save();
@@ -323,8 +356,11 @@ window.Career = (() => {
     if (!box) return;
     if (!S.season) { box.hidden = true; return; }
     box.hidden = false;
+    /* 🌏 해외에서는 순위표 제목에도 리그를 적어요 — 처음 보는 구단 이름만 늘어서면
+     * 여기가 어느 리그인지 알 길이 없어요. KBO는 예전 문구 그대로예요. */
+    const l = leagueOf(S);
     $("pro-standings-sum").textContent =
-      `📊 ${myRank()}위 · ${S.season.teamW}승 ${S.season.teamL}패`;
+      `📊 ${l.id === 1 ? "" : `${l.flag} ${l.name} · `}${myRank()}위 · ${S.season.teamW}승 ${S.season.teamL}패`;
     $("pro-standings-body").innerHTML = standingsHTML();
   }
 
@@ -356,7 +392,7 @@ window.Career = (() => {
 
   // 경기 화면 제목 — 포스트시즌엔 정규시즌 경기 번호 대신 라운드·차수를 써요.
   const gameLabel = () => (inPost()
-    ? `${Postseason.LABEL[S.post.myRound]} ${S.post.gameNo}차전`
+    ? `${postLabel(S.post.myRound)} ${S.post.gameNo}차전`
     : `G${S.season.game + 1}`);
   const seasonLabel = () => (inPost()
     ? `🍂 ${S.age}살 가을야구 — ${S.team}`
@@ -405,7 +441,7 @@ window.Career = (() => {
     renderGameSim({
       title: `${gameLabel()} vs ${opp}`,
       oppName: opp,
-      oppStr: teamStrOf(opp),   // 상대가 강할수록 치기 어렵고 막기 어려워요
+      oppStr: oppFor(opp),      // 상대가 강할수록 치기 어렵고 막기 어려워요 (리그 난이도 포함)
       homeName: S.team,
       perf, story,
       interactive: false,
@@ -438,7 +474,10 @@ window.Career = (() => {
     renderGameSim({
       title: `${gameLabel()} vs ${opp} (선발 등판)`,
       oppName: opp,
-      oppStr: teamStrOf(opp),   // 상대가 강할수록 치기 어렵고 막기 어려워요
+      oppStr: oppFor(opp),      // 상대가 강할수록 치기 어렵고 막기 어려워요 (리그 난이도 포함)
+      /* 위기 실점 '크기'에는 팀 전력이 아니라 리그 난이도만 걸려요. oppStr에 섞인 채로
+       * 키우면 KBO에서 강팀을 만날 때도 실점이 늘어 기존 밸런스가 흔들려요. */
+      lgUp: leagueOf(S).oppUp,
       homeName: S.team,
       perf, story,
       interactive: false,
@@ -545,8 +584,10 @@ window.Career = (() => {
     btn.textContent = "🔥 위기!";
 
     const resolve = (res) => {
-      // 선발 위기와 같은 식을 써요 (game.js의 crisisRuns)
-      const runs = crisisRuns(res, teamStrOf(opp));
+      /* 선발 위기와 같은 식을 써요 (game.js의 crisisRuns).
+       * 세 번째 인자가 리그 난이도예요 — 팀 전력(oppFor 안의 teamStrOf)과 갈라서 넘겨요.
+       * 여기를 빼먹으면 구원 투수만 리그를 안 느껴서 마무리가 해외에서 무조건 이득이 돼요. */
+      const runs = crisisRuns(res, oppFor(opp), leagueOf(S).oppUp);
       let txt, cls;
       if (runs === 0) {
         perf.k += res === "perfect" ? 2 : 1;
@@ -635,8 +676,9 @@ window.Career = (() => {
       extra,
       nextLabel: `🏋️ 다음 경기 준비 (G${sn.game + 1})`,
       nextFn: () => {
-        // 3연전 단위로 시리즈가 끝나면 이동일이 껴서 훈련 기회가 더 많아요
-        S.camp = sn.game % 3 === 0 ? 3 : 2;
+        // 시리즈가 끝나면 이동일이 껴서 훈련 기회가 더 많아요.
+        // 한 시즌의 총 훈련 횟수는 리그와 무관하게 336회예요 (campAfter 주석 참고).
+        S.camp = campAfter(sn.game, sn.total);
         save();
         renderPro();
         show("screen-pro");
@@ -683,7 +725,7 @@ window.Career = (() => {
     P.gameNo = 1;
     save();
     const won = s.winner === P.myTeam;
-    const label = Postseason.LABEL[s.round];
+    const label = postLabel(s.round);
     const line = {
       text: won ? `🎉 ${label} 승리! (${myW}-${opW})` : `😢 ${label} 탈락… (${myW}-${opW})`,
       cls: won ? "good" : "bad",
@@ -692,7 +734,7 @@ window.Career = (() => {
      * 연출 화면에 띄울 게 이 한 줄뿐이라, 결과 카드를 지우고 빈 상자를 보여주게 돼요.
      * 대신 결과 화면 위에서 축하만 하고, 다음 라운드로는 버튼을 눌러야 넘어가요.
      * 탈락·한국시리즈는 결산으로 가면서 다른 팀 결과도 함께 흘려보내야 해서 그대로 둬요. */
-    const nextName = Postseason.LABEL[ROUND_ORDER[ROUND_ORDER.indexOf(s.round) + 1]];
+    const nextName = postLabel(ROUND_ORDER[ROUND_ORDER.indexOf(s.round) + 1]);
     let cheering = false;
     const nextRound = () => {
       if (cheering) return;                 // 축하 도중 다시 눌려도 대진이 밀리지 않게요
@@ -752,6 +794,38 @@ window.Career = (() => {
   const ROUND_ORDER = ["wc", "semi", "po", "ks"];
   const inPost = () => !!(S.post && S.post.myRound && !S.post.eliminated);
 
+  /* 🍂 가을야구 라벨 — 대진 구조(postseason.js)는 KBO 그대로예요.
+   * 5팀 진출 · 와일드카드 → 준PO → PO → 마지막 시리즈. 새 대진 방식을 만들지 않아요.
+   * 리그마다 다른 건 **마지막 시리즈의 이름 하나뿐**이에요. 와일드카드·준PO·PO는
+   * 어느 리그에서 써도 뜻이 통해서 손대지 않아요.
+   *
+   * ⚠️ 라벨 매핑은 여기 한 곳뿐이에요. 화면·연출·결산이 전부 postLabel을 거칩니다.
+   * Postseason.LABEL을 직접 읽는 자리를 새로 만들지 마세요 — 그러면 대륙 리그에서
+   * "한국시리즈"가 다시 떠요. tests/rookie/posting-test.js가 그 자리를 세어서 막아요.
+   *
+   * 모르는 리그는 postseason.js의 기본 이름으로 떨어져요 (옛 세이브 방어와 같은 결). */
+  const KS_LABEL = { 1: "한국시리즈", 2: "열도시리즈", 3: "대륙시리즈" };
+  const postLabel = (round) =>
+    (round === "ks" && KS_LABEL[leagueOf(S).id]) || Postseason.LABEL[round];
+
+  /* 화면에 붙는 리그 꼬리표. KBO는 빈 문자열이라 예전 화면이 한 글자도 안 바뀌어요.
+   * id를 받는 쪽(leagueTagOf)이 본체예요 — 결산은 **그 시즌의 리그**를 붙여야 하니까요.
+   * 모르는 id·없는 id는 leagueOf가 KBO로 받아줘요 (옛 세이브 방어와 같은 결). */
+  const leagueTagOf = (id) => {
+    const l = leagueOf({ league: id });
+    return l.id === 1 ? "" : ` (${l.flag} ${l.short})`;
+  };
+  const leagueTag = () => {
+    return leagueTagOf(S.league);
+  };
+
+  /* 🌏 HUD에 붙는 리그 배지. 꼬리표는 팀 이름 뒤에 묻혀서 훈련 화면에서 '내가 지금
+   * 해외에 있다'는 게 잘 안 보였어요. KBO는 빈 문자열이라 국내 화면은 그대로예요. */
+  const leagueBadge = () => {
+    const l = leagueOf(S);
+    return l.id === 1 ? "" : `<span class="lg-badge">${l.flag} ${l.name}</span> `;
+  };
+
   /* 정규시즌이 끝나면 최종 순위로 가을야구 진출을 가려요. 6위 이하면 바로 결산이에요. */
   function enterPostseason() {
     const sn = S.season;
@@ -798,10 +872,10 @@ window.Career = (() => {
     const P = S.post, s = mySeries();
     const myW = s.a === P.myTeam ? s.aw : s.bw;
     const opW = s.a === P.myTeam ? s.bw : s.aw;
-    const label = Postseason.LABEL[s.round];
+    const label = postLabel(s.round);
 
     $("pro-name").textContent = `${S.name} (${S.pos === "batter" ? "타자" : "투수"})`;
-    $("pro-team").textContent = `⚾ ${S.team} · ${S.role || ""} · ${S.age}세 · ${S.proYear}년차 · 종합 ${Math.round(overall())}`;
+    $("pro-team").innerHTML = `⚾ ${leagueBadge()}${S.team} · ${S.role || ""} · ${S.age}세 · ${S.proYear}년차 · 종합 ${Math.round(overall())}`;
     $("pro-turn").textContent = `🍂 ${label} ${P.gameNo}차전`;
     $("pro-money").textContent = `💰 ${fmtMoney(S.money || 0)}`;
     $("pro-cond-num").textContent = Math.round(S.condition);
@@ -817,7 +891,7 @@ window.Career = (() => {
         const line = x.done
           ? `${x.a} ${x.aw}-${x.bw} ${x.b} → ${x.winner}`
           : x.b == null ? `${x.a} vs (미정)` : `${x.a} ${x.aw}-${x.bw} ${x.b}`;
-        return `<tr class="${x.round === P.myRound ? "me" : ""}"><td>${Postseason.LABEL[x.round]}</td><td>${line}</td></tr>`;
+        return `<tr class="${x.round === P.myRound ? "me" : ""}"><td>${postLabel(x.round)}</td><td>${line}</td></tr>`;
       }).join("")
     }</tbody></table>`;
 
@@ -864,7 +938,7 @@ window.Career = (() => {
         s.round, s.a, s.b, P.str[s.a], P.str[s.b], s.round === "wc" ? 1 : 0
       );
       const r = P.series[idx];
-      feeds.push({ text: `${Postseason.LABEL[r.round]}  ${r.a} ${r.aw}-${r.bw} ${r.b} → ${r.winner} 진출` });
+      feeds.push({ text: `${postLabel(r.round)}  ${r.a} ${r.aw}-${r.bw} ${r.b} → ${r.winner} 진출` });
     }
 
     // 가을야구 종료 — 우승 여부를 확정하고 결산으로
@@ -872,8 +946,8 @@ window.Career = (() => {
     P.wonKS = !!(ks.done && ks.winner === P.myTeam);
     P.myRound = null;
     save();
-    if (P.wonKS) feeds.push({ text: "🏆 한국시리즈 우승!! 헹가래의 주인공이 됐어요", cls: "good" });
-    else if (ks.done) feeds.push({ text: `🏆 ${ks.winner}이(가) 한국시리즈 우승을 차지했어요` });
+    if (P.wonKS) feeds.push({ text: `🏆 ${postLabel("ks")} 우승!! 헹가래의 주인공이 됐어요`, cls: "good" });
+    else if (ks.done) feeds.push({ text: `🏆 ${ks.winner}이(가) ${postLabel("ks")} 우승을 차지했어요` });
     if (feeds.length) playFeeds("🍂 가을야구", feeds, finishSeason); else finishSeason();
   }
 
@@ -925,18 +999,47 @@ window.Career = (() => {
     const rank = myRank();
     // 한국시리즈를 실제로 이겼을 때만 우승이에요 (예전엔 순위로 주사위를 굴렸어요)
     const champ = !!(S.post && S.post.wonKS);
+    /* 🌏 가중을 걸기 **전**의 수상 횟수예요. 아래 addAwardWeight가 이 값을 씁니다 —
+     * 여기서 안 떠 두면 상을 세고 난 뒤의 값(이번 상까지 포함된 값)을 이어붙이게 돼서
+     * 옛 세이브의 새 상이 두 번 세어져요. */
+    const preAward = { mvp: S.career.mvp || 0, gg: S.career.gg || 0, roy: S.career.roy || 0 };
     // 수상은 '리그 내 상대 비교' — 가상 경쟁자들의 WAR와 겨뤄 최고면 수상해요.
     // (압도적인 시즌은 랜덤에 밀려 MVP를 놓치지 않아요)
     const awards = [];
+    /* 🌏 수상 판정 전체를 **시즌 길이에 맞춰 늘려요.**
+     *
+     * 경쟁자 분포(0.5~2.5 · 3.5~7.8 · 4.2~6.2)는 **144경기짜리 리그 동료**를 그린
+     * 값이에요. 162경기 리그에서는 그 동료들도 162경기를 뛰니까 WAR이 같이 올라가야
+     * 하는데, 고정해 두면 나만 누적이 늘고 문턱은 그대로라 상이 그냥 싸집니다.
+     * 실제로 그렇게 뒀더니 준정상급(능력치 130)의 최적 리그가 열도에서 대륙으로
+     * 넘어갔어요 — 타자·투수 둘 다요.
+     *
+     * 진입 컷(1.5 · 5.5 · 4.5)도 **같이** 늘려요. 경쟁자만 늘리고 컷을 두면
+     * "겨루기는 그대로인데 입장은 쉬워지는" 반쪽이 돼서, 상 하나라도 받을 확률이
+     * 긴 리그에서만 올라가요. 여기서 WAR과 겨루는 값은 **전부** k가 붙습니다.
+     *
+     * 그래서 이 판정은 **경기당 성적이 같으면 리그가 달라도 수상 확률이 같아요.**
+     * 리그가 남기는 차이는 수상 확률이 아니라 ①난이도(oppUp·lgUp)로 깎인 성적과
+     * ②명예의 전당에 쌓이는 누적(warSum·홈런·이닝)이에요. 후자가 "경기가 많아
+     * 누적이 쌓인다"는 설계고, 그건 이 스케일과 무관하게 그대로 남아요.
+     *
+     * ⚠️ KBO는 144라 k가 정확히 1이에요 — 곱해도 값이 한 톨도 안 바뀝니다.
+     * 난수를 뽑는 **횟수**도 그대로예요(rand의 인자만 바뀌어요). 옛 세이브는
+     * S.season.total이 144라 여기로 떨어져요. tests/rookie/league-test.js ⑭가 지켜요.
+     *
+     * 기준은 **그 시즌의 total**이에요. 리그 표를 나중에 고쳐도 이미 치른 시즌의
+     * 판정 기준은 안 흔들려요. */
+    const AWARD_BASE = 144;
+    const awardK = ((S.season && S.season.total) || AWARD_BASE) / AWARD_BASE;
     /* 컷을 3.5 → 1.5로 내렸어요. 타격·투구 판정을 다시 잡으면서 WAR 스케일이
      * 내려갔고, 새 모델의 1년차는 WAR 0 언저리예요. 예전 컷으로는 신인왕이
      * 아예 나오지 않습니다. 경쟁자 분포도 같은 비율로 낮췄어요. */
-    if (S.proYear === 1 && war >= 1.5) {
-      const bestRookie = Math.max(...Array.from({ length: 4 }, () => rand(0.5, 2.5)));
+    if (S.proYear === 1 && war >= 1.5 * awardK) {
+      const bestRookie = Math.max(...Array.from({ length: 4 }, () => rand(0.5 * awardK, 2.5 * awardK)));
       if (war >= bestRookie) { awards.push("신인왕"); S.career.roy += 1; }
     }
-    const leagueBest = Math.max(...Array.from({ length: 6 }, () => rand(3.5, 7.8)));
-    if (war >= 5.5 && war >= leagueBest) {
+    const leagueBest = Math.max(...Array.from({ length: 6 }, () => rand(3.5 * awardK, 7.8 * awardK)));
+    if (war >= 5.5 * awardK && war >= leagueBest) {
       awards.push("MVP"); S.career.mvp += 1;
     }
     /* 골든글러브는 MVP와 별개로 판정해요.
@@ -945,13 +1048,19 @@ window.Career = (() => {
      *
      * 컷은 투수가 더 높아요. 골든글러브는 리그에 10자리인데 투수는 그중 1자리라,
      * 모든 투수가 한 자리를 두고 겨루거든요. 야수는 포지션 안에서만 겨룹니다. */
-    if (war >= 4.5) {
-      const posBar = S.pos === "batter" ? rand(4.2, 6.2) : rand(5.2, 7.2);
+    if (war >= 4.5 * awardK) {
+      const posBar = S.pos === "batter"
+        ? rand(4.2 * awardK, 6.2 * awardK)
+        : rand(5.2 * awardK, 7.2 * awardK);
       if (war >= posBar) { awards.push("골든글러브"); S.career.gg += 1; }
     }
+    addAwardWeight(awards, preAward);
     if (champ) S.career.rings += 1;
     S.career.warSum = Math.round((S.career.warSum + Math.max(war, 0)) * 10) / 10;
-    S.career.seasons.push({ y: S.proYear, age: S.age, war, line, rank, champ, awards, role: S.role, team: S.team, raw });
+    /* team·league — **그 시즌에 뛴 소속**을 결산 시점에 그냥 적어요. 여기 적힌 값이 정본이에요.
+     * league는 나중에 생긴 필드라 옛 기록에는 없어요. 그건 읽는 쪽(playedAt)이 S.moves에서
+     * 역산해 메워요 — 세이브는 고치지 않아요(클라우드 동기화와 부딪혀요). */
+    S.career.seasons.push({ y: S.proYear, age: S.age, war, line, rank, champ, awards, role: S.role, team: S.team, league: S.league, raw });
     if (window.Stats) Stats.log("season_end", { y: S.proYear, war, rank, champ });
 
     for (const d of STAT_DEFS[S.pos]) {
@@ -982,10 +1091,10 @@ window.Career = (() => {
     if (postLine) feeds.push({ text: postLine });
     if (champ) feeds.push({
       text: S.career.rings === 1
-        ? "🏆 한국시리즈 우승 — 첫 반지예요!"
-        : `🏆 한국시리즈 우승 — 통산 ${S.career.rings}번째 반지예요`,
+        ? `🏆 ${postLabel("ks")} 우승 — 첫 반지예요!`
+        : `🏆 ${postLabel("ks")} 우승 — 통산 ${S.career.rings}번째 반지예요`,
       cls: "good",
-      fx: () => Fx.celebrate("champion", "🏆 한국시리즈 우승!"),
+      fx: () => Fx.celebrate("champion", `🏆 ${postLabel("ks")} 우승!`),
     });
     // 수상은 하나씩 따로 띄워요 — 합쳐 놓으면 무엇을 받았는지 눈에 안 들어와요
     for (const a of awards) {
@@ -995,8 +1104,64 @@ window.Career = (() => {
     playFeeds(`📺 ${S.proYear}년차 시즌 결산`, feeds, seasonReport);
   }
 
+  /* 🔁 이적 하나가 어느 시즌부터 반영되는지 돌려줘요.
+   * 오프시즌 이적(inSeason이 아님)은 **다음** 시즌부터고, 시즌 중 트레이드는 **그** 시즌부터예요.
+   * inSeason이 없는 옛 기록은 전부 오프시즌 이적이에요 (시즌 중 트레이드는 나중에 생겼어요). */
+  const moveFrom = (m) => (m.inSeason ? m.y : m.y + 1);
+
+  /* y년차에 뛴 팀을 S.moves에서 역산해요.
+   *   ① y년차에 이미 반영된 이적 중 **마지막** 것의 도착팀
+   *   ② 그런 이적이 없으면 **가장 이른 이적의 출발팀** (y 뒤에만 옮겼다는 뜻)
+   *   ③ 이적이 아예 없으면 지금 팀 — 한 번도 안 옮긴 커리어예요
+   * 근거가 하나도 없으면 null을 돌려주고, 부르는 쪽이 지금 팀으로 떨어져요. */
+  function teamOfYear(y, st) {
+    const mv = ((st && st.moves) || []).filter((m) => m && m.y != null && m.to != null);
+    let last = null, first = null;
+    for (const m of mv) {
+      if (moveFrom(m) <= y && (!last || moveFrom(m) >= moveFrom(last))) last = m;
+      if (!first || moveFrom(m) < moveFrom(first)) first = m;
+    }
+    if (last) return last.to;
+    if (first && first.from != null) return first.from;
+    return st ? st.team : null;
+  }
+
+  /* y년차에 뛴 리그를 역산해요. 리그를 옮긴 이적(moveToLeague)만 fromLeague·league를
+   * 남기니까 그것만 봐요 — 같은 리그 안 이적(FA·트레이드)은 리그를 안 바꿔요. */
+  function leagueOfYear(y, st) {
+    const mv = ((st && st.moves) || []).filter((m) => m && m.y != null && m.league != null);
+    let last = null, first = null;
+    for (const m of mv) {
+      if (moveFrom(m) <= y && (!last || moveFrom(m) >= moveFrom(last))) last = m;
+      if (!first || moveFrom(m) < moveFrom(first)) first = m;
+    }
+    if (last) return last.league;
+    if (first && first.fromLeague != null) return first.fromLeague;
+    return st ? st.league : null;
+  }
+
+  /* 📊 그 시즌에 뛴 소속이에요 — **지금 소속이 아니라요.**
+   *
+   * 결산 화면에서 그대로 포스팅을 하면 화면이 다시 그려지는데, 여기서 S.team을 쓰면
+   * 방금 끝난 시즌 성적 옆에 **새 팀 이름**이 붙어요. 그 시즌은 옛 팀에서 뛴 거예요.
+   * ⚽ 축구(beta/soccer/career.js의 clubOfYear·fillClubs)가 같은 문제를 이렇게 풀었어요.
+   *
+   * 정본은 결산 때 적어둔 s.team·s.league고, 없으면 S.moves에서 역산해요.
+   * 세이브는 고치지 않아요 — 그릴 때만 계산합니다(클라우드 동기화와 부딪혀요). */
+  function playedAt(s, st) {
+    const y = s ? s.y : null;
+    const team = s && s.team != null ? s.team : (y != null ? teamOfYear(y, st) : (st && st.team));
+    const league = s && s.league != null ? s.league : (y != null ? leagueOfYear(y, st) : (st && st.league));
+    return { team: team != null ? team : (st && st.team), league };
+  }
+
   function seasonReport() {
     const s = S.career.seasons[S.career.seasons.length - 1];
+    /* 헤더는 **그 시즌에 뛴 팀**이에요. 이적하고 돌아와도 성적과 팀이 안 어긋나요. */
+    const at = playedAt(s, S);
+    const cur = leagueOf(S);
+    // 결산 뒤에 팀이나 리그가 바뀌었으면 따로 알려줘요 — 헤더를 덮어쓰지 않아요
+    const movedAfter = S.team !== at.team || cur.id !== leagueOf({ league: at.league }).id;
     const AWARD_TAG = { MVP: "MVP", 골든글러브: "GG", 신인왕: "신인왕" };
     const rows = S.career.seasons.slice(-8).map((x) => {
       const badges =
@@ -1017,8 +1182,9 @@ window.Career = (() => {
         s.war >= 2.5 ? "제 몫을 해낸 시즌" :
         s.war >= 0.5 ? "아쉬움이 남는 시즌" : "혹독한 시즌…"
       }</div>
-      <div class="draft-team">${S.team} <span class="team-str">${strLabel(teamStrOf(S.team))}</span> · ${s.line} · WAR ${s.war.toFixed(1)}</div>
-      ${(S.moves || []).length ? `<div class="hint">🔁 이적 이력 — ${S.moves.map((m) => `${m.y}년차 ${m.from}→${m.to}`).join(" · ")}</div>` : ""}
+      <div class="draft-team">${at.team}${leagueTagOf(at.league)} <span class="team-str">${strLabel(teamStrOf(at.team))}</span> · ${s.line} · WAR ${s.war.toFixed(1)}</div>
+      ${movedAfter ? `<div class="hint next-club">➡️ 다음 시즌 소속 — ${cur.flag} ${cur.name} · <b>${S.team}</b></div>` : ""}
+      ${(S.moves || []).length ? `<div class="hint">🔁 이적 이력 — ${S.moves.map((m) => `${m.type === "post" ? "🌏 " : ""}${m.y}년차 ${m.from}→${m.to}${m.inSeason ? " (시즌 중)" : ""}`).join(" · ")}</div>` : ""}
       ${S.lastStandings ? `<div class="hint">📊 최종 순위</div>${S.lastStandings}` : ""}
       <table class="season-table season-career"><thead><tr><th>시즌</th><th>나이</th><th>성적</th><th>WAR</th></tr></thead><tbody>${rows}</tbody></table>
       ${moreHint}
@@ -1039,16 +1205,36 @@ window.Career = (() => {
     if (!forcedRetire && faReady()) {
       const fa = document.createElement("button");
       fa.className = "btn btn-ghost";
-      fa.textContent = `💼 FA 선언 (${S.proYear}년차 자격)`;
+      fa.id = "btn-fa";
+      /* 문구를 짧게 둬요. 결산 버튼은 3열로 서서 폭이 좁아요 —
+       * "(N년차 자격)"까지 붙이면 폰에서 "FA 선언 (8년차 자"로 잘렸어요.
+       * 몇 년차인지는 FA 화면이 첫 줄에 적어줘요. */
+      fa.textContent = "💼 FA 선언";
       fa.onclick = showFa;
       act.appendChild(fa);
     }
     if (!forcedRetire && tradeReady()) {
       const tr = document.createElement("button");
       tr.className = "btn btn-ghost";
+      tr.id = "btn-trade";
       tr.textContent = "🔁 트레이드 요청";
       tr.onclick = startTrade;
       act.appendChild(tr);
+    }
+    /* 🌏 포스팅 — FA·트레이드와 같은 줄에 서요. 갈 곳이 하나라도 열려 있을 때만 보여요.
+     * 해외에 있으면 복귀 경로가 늘 열려 있어서 이 버튼도 늘 있어요 (그게 돌아오는 길이에요). */
+    if (!forcedRetire) {
+      const po = postingOffers();
+      if (po.length) {
+        const up = po.some((g) => g.league.tier > leagueOf(S).tier);
+        const btn = document.createElement("button");
+        btn.className = "btn btn-ghost";
+        btn.id = "btn-posting";
+        // "(포스팅)"은 뺐어요 — 좁은 3열에서 잘려요. 포스팅이라는 말은 이적 화면 제목에 있어요.
+        btn.textContent = up ? "🌏 해외 진출" : "🌏 리그 복귀";
+        btn.onclick = showPosting;
+        act.appendChild(btn);
+      }
     }
     const ret = document.createElement("button");
     ret.className = "btn btn-ghost";
@@ -1091,8 +1277,15 @@ window.Career = (() => {
   const TRADE_MIN_YEAR = 2;  // 트레이드 요청 가능 연차
   const TRADE_ROUNDS = 3;    // 협상 라운드 수
   /* 시즌 중 트레이드 창구. KBO 마감 시한(7월 31일)을 144경기의 약 70% 지점으로 옮겼어요.
-   * 시즌 초반에는 실제로도 트레이드가 거의 없어서 하한도 뒀어요. */
-  const TRADE_OPEN = 30, TRADE_CLOSE = 100;
+   * 시즌 초반에는 실제로도 트레이드가 거의 없어서 하한도 뒀어요.
+   *
+   * 🌏 리그마다 경기 수가 달라서 **비율로 씁니다.** 30·100을 그대로 쓰면 162경기
+   * 리그에서 마감이 62% 지점이 되고, 143경기 리그에서는 70%를 넘겨요 —
+   * "시즌의 어디쯤"이라는 뜻이 리그마다 달라져 버려요.
+   * 기준은 진행 중인 시즌의 total이라 옛 세이브(144)는 30·100 그대로예요. */
+  const TRADE_OPEN = 30, TRADE_CLOSE = 100, TRADE_BASE = 144;
+  const tradeOpenAt = () => Math.round((TRADE_OPEN * curTotal()) / TRADE_BASE);
+  const tradeCloseAt = () => Math.round((TRADE_CLOSE * curTotal()) / TRADE_BASE);
   const TRADE_COND_ROUND = 8;   // 협상 한 라운드당 컨디션
   const TRADE_COND_FAIL = 20;   // 시즌 중 무산되면 추가로 깎이는 컨디션
   const TRADE_FRONT_PENALTY = 12; // 시즌 중엔 전력 이탈이라 구단이 더 꺼려요
@@ -1106,12 +1299,49 @@ window.Career = (() => {
   // '작년에 강했던 팀'이 올해도 대체로 강해요.
   function teamStrOf(name) {
     if (!S.teamStr) S.teamStr = {};
-    if (typeof S.teamStr[name] !== "number") S.teamStr[name] = Math.round(rand(0.38, 0.60) * 1000) / 1000;
+    if (typeof S.teamStr[name] !== "number") {
+      /* 해외 구단은 목록에 전력이 못 박혀 있어요 — 리그마다 평균이 달라야 하니까요.
+       * KBO 구단과 모르는 이름은 undefined라 예전 그대로 뽑아요. 난수를 뽑는 횟수까지
+       * 예전과 같아야 진행 중인 캐릭터의 순위표가 안 튑니다. */
+      const fixed = clubStrOf(name);
+      S.teamStr[name] = typeof fixed === "number" ? fixed : Math.round(rand(0.38, 0.60) * 1000) / 1000;
+    }
     return S.teamStr[name];
   }
+  /* 타석·위기 판정에 넘기는 '상대 수준'이에요. 팀 전력 위에 리그 난이도를 얹어요.
+   * 상위 리그에서는 모든 상대가 그만큼 셉니다.
+   *
+   * 순위표·팀 승률이 쓰는 teamStrOf와 일부러 갈라놨어요. 거기까지 oppUp을 얹으면
+   * 리그를 옮긴 순간 우리 팀 승률과 가을야구 대진까지 함께 무너져요
+   * (⚽ 축구에서 같은 자리를 놓쳐 수비수 팀 승률이 7%가 된 적이 있어요).
+   * 리그 난이도는 '내가 상대하는 공'에만 걸립니다. 해외 구단의 전력은 구단 목록이 정해요.
+   *
+   * KBO는 oppUp이 0이라 teamStrOf와 한 톨까지 같아요 — 그래서 진행 중인 캐릭터의
+   * 성적이 안 튀고, 기존 저장 데이터를 마이그레이션하지 않아도 됩니다. */
+  function oppFor(name) {
+    return teamStrOf(name) + leagueOf(S).oppUp;
+  }
+  /* 시즌마다 팀 전력이 조금씩 흔들려요. 울타리는 리그마다 달라요 —
+   * KBO 울타리(0.36~0.63)를 해외에 그대로 씌우면 몇 시즌 만에 리그 차이가 녹아 없어져요.
+   *
+   * 🌏 **한 번이라도 알게 된 구단은 리그를 떠나 있어도 계속 흔들려요.**
+   * 예전에는 지금 리그만 흔들어서, 해외에 나가 있는 동안 KBO 전력이 얼어붙었어요.
+   * 5년 만에 돌아오면 5년 전 순위표가 그대로 살아나서, 리빌딩이던 팀이 여전히
+   * 리빌딩이고 우승 후보가 여전히 우승 후보였죠. 복귀 경로가 생긴 지금은 실제로 보여요.
+   *
+   * 다른 리그는 **이미 S.teamStr에 있는 구단만** 흔들어요. 없는 구단까지 여기서
+   * 만들어버리면 KBO만 뛴 옛 세이브가 뽑는 난수 횟수가 달라져서 순위표가 튑니다.
+   * KBO만 뛴 세이브는 tier 1만 돌고 나머지는 통째로 건너뛰어요 — 예전과 한 톨도 안 달라요. */
   function driftTeamStr() {
-    for (const t of KBO_TEAMS) {
-      S.teamStr[t] = Math.round(clamp(teamStrOf(t) + rand(-0.03, 0.03), 0.36, 0.63) * 1000) / 1000;
+    if (!S.teamStr) S.teamStr = {};
+    const cur = leagueOf(S);
+    for (const l of LEAGUES.slice().sort((a, b) => a.tier - b.tier)) {
+      const mine = l.id === cur.id;
+      const [lo, hi] = driftBandOf(l);
+      for (const t of teamsOf(l)) {
+        if (!mine && typeof S.teamStr[t] !== "number") continue;
+        S.teamStr[t] = Math.round(clamp(teamStrOf(t) + rand(-0.03, 0.03), lo, hi) * 1000) / 1000;
+      }
     }
   }
   const strLabel = (v) =>
@@ -1183,7 +1413,7 @@ window.Career = (() => {
   function faOffers() {
     const mv = marketValue();
     const n = mv >= 60 ? 4 : mv >= 40 ? 3 : mv >= 22 ? 2 : 1;
-    const others = shuffle(KBO_TEAMS.filter((t) => t !== S.team)).slice(0, n);
+    const others = shuffle(leagueTeams().filter((t) => t !== S.team)).slice(0, n);
     const offers = others.map((name) => {
       const str = teamStrOf(name);
       // 전력 계수를 크게 잡아야 '돈이냐 우승이냐'가 또렷해져요. 흔들림은 작게.
@@ -1245,7 +1475,7 @@ window.Career = (() => {
   const tradeReady = () => S.proYear >= TRADE_MIN_YEAR && S.tradeYear !== S.proYear;
   // 시즌 중 신청 자격 — 연 1회 제약은 오프시즌과 공유해요
   const inSeasonTrade = () =>
-    !!S.season && S.season.game >= TRADE_OPEN && S.season.game <= TRADE_CLOSE && tradeReady();
+    !!S.season && S.season.game >= tradeOpenAt() && S.season.game <= tradeCloseAt() && tradeReady();
 
   /* 협상 카드. front = 구단 프런트의 태도, fans = 팬 여론.
    * 어느 쪽도 공짜가 없어서 매 라운드 저울질을 하게 돼요. */
@@ -1410,7 +1640,7 @@ window.Career = (() => {
     // 기본은 3팀까지, 여론이 받쳐주면 한 팀 더. 안쪽 상한을 빼면 시장 가치가 높은
     // 선수는 기본이 이미 4가 돼서 여론 보너스가 아무 일도 안 해요.
     const slots = clamp(Math.min(3, 1 + Math.floor(mv / 30)) + (T.fans >= FANS_EXTRA ? 1 : 0), 2, 4);
-    const pool = shuffle(KBO_TEAMS.filter((t) => t !== S.team))
+    const pool = shuffle(leagueTeams().filter((t) => t !== S.team))
       .filter((t) => teamStrOf(t) < 0.52 || T.fans >= FANS_CONTENDER)
       .slice(0, slots);
     // 시즌 중엔 새 팀의 현재 성적도 보여줘요 — 가을야구 진출이 걸린 정보예요
@@ -1418,7 +1648,7 @@ window.Career = (() => {
       const o = S.season && S.season.others.find((x) => x.name === name);
       return o ? ` · ${o.w}승 ${o.l}패` : "";
     };
-    const suitors = (pool.length ? pool : shuffle(KBO_TEAMS.filter((t) => t !== S.team)).slice(0, 2))
+    const suitors = (pool.length ? pool : shuffle(leagueTeams().filter((t) => t !== S.team)).slice(0, 2))
       .map((name) => ({ name, str: teamStrOf(name), rec: rec(name) }));
     const sour = T.fans < 35;
     /* 환영 계약금 — 팬이 반기면 새 구단이 지갑을 열어요.
@@ -1455,6 +1685,214 @@ window.Career = (() => {
     moveActions([]);
   }
 
+  /* ---------- 🌏 해외 진출 (포스팅) ----------
+   * 오프시즌에만, 한 해에 한 번. FA(8년차)·트레이드(2년차)와 나란히 서는 세 번째 창구예요.
+   *
+   * **세 번째 화면을 만들지 않았어요.** screen-move를 그대로 씁니다 —
+   * moveTitle·moveCard·moveActions·`.offer` 목록까지 FA 화면과 같은 모양이에요.
+   * 셋이 결산 화면의 같은 자리에서 같은 생김새로 열려야 '팀을 옮기는 일'이라는
+   * 한 갈래로 읽혀요. 대신 자격 창구는 셋을 섞지 않았어요 — 아래 설명을 보세요.
+   *
+   * 왜 FA 화면에 섞지 않았나: FA는 8년차부터인데 포스팅은 4년차부터예요.
+   * 섞으면 4~7년차에는 해외 제안을 볼 창구가 아예 없어지고, 8년차부터는 같은 목록에
+   * 자격 연차가 다른 두 제도가 뒤엉켜요. 트레이드는 구단을 설득하는 협상 게임이라
+   * 성격이 아예 달라서 거기에도 못 넣어요.
+   *
+   * 문턱은 **위로 갈 때만** 있어요. 돌아오는 이적은 언제든 됩니다.
+   * 강등·방출은 없어요 — 벌이 무거우면 아무도 도전하지 않아요. */
+  const POST_GATE = [
+    // KBO → 열도: 첫 해외예요. 연차와 성적을 함께 봐요.
+    { from: 1, to: 2, year: 4, war: 4.0 },
+    /* 열도 → 대륙: 이미 해외를 겪었으니 연차는 안 봐요 (열도에 있다는 것 자체가 4년차 이상).
+     * 그래서 직행보다 성적 문턱도 낮아요 — 실제 커리어 경로와 같아요. */
+    { from: 2, to: 3, year: 0, war: 4.5 },
+    // KBO → 대륙 직행: 가장 어려운 길이에요. 연차·성적 둘 다 제일 높아요.
+    { from: 1, to: 3, year: 7, war: 5.5 },
+  ];
+
+  const lastSeason = () => {
+    const ss = (S.career && S.career.seasons) || [];
+    return ss.length ? ss[ss.length - 1] : null;
+  };
+  // 직전 시즌 WAR. 아직 한 시즌도 안 치렀으면 어떤 문턱도 못 넘어요.
+  const lastWar = () => { const s = lastSeason(); return s ? s.war : -Infinity; };
+  /* 오프시즌에만, 한 해에 한 번이에요 (FA의 S.faYear · 트레이드의 S.tradeYear와 같은 방식).
+   * 옛 세이브엔 S.postYear가 없어요 — undefined !== proYear라 그대로 열려요. */
+  const postingReady = () => !S.season && S.postYear !== S.proYear;
+
+  /* 두 리그 사이의 문턱. 없으면 null(그 길이 아예 없다)이에요.
+   * 내려가는 이적은 표에 없어도 언제나 열려요 — 이게 '복귀는 문턱이 없다'입니다. */
+  function gateFor(from, to) {
+    if (!from || !to || from.id === to.id) return null;
+    if (to.tier < from.tier) return { from: from.id, to: to.id, year: 0, war: -Infinity, back: true };
+    return POST_GATE.find((g) => g.from === from.id && g.to === to.id) || null;
+  }
+
+  /* 갈 수 있는 곳과 못 가는 곳을 **함께** 돌려줘요. 화면이 잠긴 리그도 보여주면서
+   * 무엇이 모자란지 적어야 도전할 목표가 생겨요. tier 순서로 정렬해요(id 아니에요). */
+  function postingGates() {
+    const cur = leagueOf(S);
+    const war = lastWar();
+    const open = postingReady();
+    return LEAGUES.slice().sort((a, b) => a.tier - b.tier)
+      .filter((l) => l.id !== cur.id)
+      .map((l) => {
+        const gate = gateFor(cur, l);
+        const okYear = !!gate && S.proYear >= gate.year;
+        const okWar = !!gate && war >= gate.war;
+        return { league: l, gate, okYear, okWar, ok: !!gate && okYear && okWar && open };
+      });
+  }
+  const postingOffers = () => postingGates().filter((g) => g.ok);
+
+  /* 🌏 리그 난이도를 숫자로 — 도박의 크기를 감추지 않으려면 여기가 정확해야 해요.
+   *
+   * 투수는 game.js의 crisisRuns를 **그대로 돌려요**(흉내 내지 않아요). 난수를 고정 씨앗으로
+   * 갈아끼워서 같은 화면이 늘 같은 숫자를 보이게 합니다 — 다시 눌렀는데 숫자가 흔들리면
+   * 크기를 재는 자가 못 돼요. 끝나면 finally에서 반드시 원래 Math.random으로 되돌려요
+   * (crisisRuns는 동기 함수라 그 사이에 다른 코드가 끼어들지 않아요).
+   *
+   * 타자 쪽 hitP는 game.js의 타석 판정 안에 박혀 있어 부를 수가 없어서, 여기서 같은 식을
+   * 한 번 더 씁니다. **소스에서 값을 옮겨 적은 유일한 자리예요.**
+   * tests/rookie/posting-test.js가 진짜 hitP를 game.js에서 뽑아 이 함수와 대조해서
+   * 둘이 어긋나면 빨간불이 떠요. */
+  const HIT_OPP_K = 0.55;   // game.js hitP의 (oppStr - 0.49) 계수와 같아야 해요
+  const hitPreview = (oppStr) =>
+    clamp(0.16 + S.stats.contact / 800 - (oppStr - 0.49) * HIT_OPP_K, 0.10, 0.46) * clutch("contact");
+
+  const CRISIS_PREVIEW_N = 4000;
+  function crisisPreview(oppStr, lgUp) {
+    const real = Math.random;
+    let seed = 20260731;
+    Math.random = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; };
+    try {
+      let sum = 0;
+      for (let i = 0; i < CRISIS_PREVIEW_N; i++) sum += crisisRuns(autoRes(S.stats.control), oppStr, lgUp);
+      return sum / CRISIS_PREVIEW_N;
+    } finally { Math.random = real; }
+  }
+
+  /* 그 리그에서 내 판정이 어떻게 되는지 한 숫자로. 리그 평균 상대(0.49)를 기준으로 봐요 —
+   * 어느 구단에 갈지는 다음 화면에서 따로 고르니까, 여기서는 '리그가 바뀌면 무엇이
+   * 달라지는지'만 떼어 보여줍니다. 타자는 안타 확률(클수록 좋음),
+   * 투수는 위기 한 번당 실점(작을수록 좋음)이에요. */
+  const leagueMetric = (lg) => (S.pos === "batter"
+    ? hitPreview(0.49 + lg.oppUp)
+    : crisisPreview(0.49 + lg.oppUp, lg.oppUp));
+  /* 화면에 적히는 숫자예요. 차이(dTxt)도 **이 반올림한 값끼리** 빼요 —
+   * 원값으로 빼면 "29.8% → 28.6%"인데 차이는 "−1.1%p"로 적히는 어긋남이 생겨요. */
+  const metricRound = (v) => (S.pos === "batter" ? Math.round(v * 1000) / 10 : Math.round(v * 100) / 100);
+  const metricDigits = () => (S.pos === "batter" ? 1 : 2);
+  const metricUnit = () => (S.pos === "batter" ? "%" : "점");
+  const metricTxt = (v) => `${metricRound(v).toFixed(metricDigits())}${metricUnit()}`;
+  const metricName = () => (S.pos === "batter" ? "🏏 타석당 안타 확률" : "🔥 위기 한 번당 실점");
+
+  function postingRow(g, i, cur, mine) {
+    const l = g.league;
+    const v = leagueMetric(l);
+    const bat = S.pos === "batter";
+    const diff = metricRound(v) - metricRound(mine);
+    const dTxt = `${diff >= 0 ? "+" : "−"}${Math.abs(diff).toFixed(metricDigits())}${bat ? "%p" : "점"}`;
+    // 타자는 안타 확률이 내려가면 손해, 투수는 실점이 올라가면 손해예요
+    const worse = bat ? diff < 0 : diff > 0;
+    const dOpp = l.oppUp - cur.oppUp;
+    const need = !g.gate
+      ? "이 리그로 가는 길은 없어요"
+      : [g.okYear ? "" : `${g.gate.year}년차 이상`,
+         g.okWar ? "" : `직전 시즌 WAR ${g.gate.war.toFixed(1)} 이상`].filter(Boolean).join(" · ")
+        || "올해는 이미 한 번 신청했어요";
+    return `
+      <button class="offer lg-offer${g.ok ? "" : " locked"}" data-i="${i}"${g.ok ? "" : " disabled"}>
+        <span class="offer-team">${l.flag} ${l.name}${l.tier < cur.tier ? ' <span class="offer-stay">복귀</span>' : ""}</span>
+        <span class="offer-str">상대 수준 ${dOpp >= 0 ? "+" : "−"}${Math.abs(dOpp).toFixed(2)} · 리그 위세 ×${l.prestige.toFixed(2)}</span>
+        <span class="lg-num ${worse ? "down" : "up"}">${metricName()} ${metricTxt(mine)} → ${metricTxt(v)} <b>${dTxt}</b></span>
+        ${g.ok ? "" : `<span class="lg-need">🔒 ${need}</span>`}
+      </button>`;
+  }
+
+  function showPosting() {
+    const cur = leagueOf(S);
+    const gates = postingGates();
+    const war = lastWar();
+    const mine = leagueMetric(cur);
+    moveTitle("🌏 리그 이적 (포스팅)");
+    moveCard(`
+      <div class="draft-emoji">🌏</div>
+      <div class="draft-title">${S.proYear}년차 — 포스팅 신청</div>
+      <div class="draft-team">지금 ${cur.flag} ${cur.name} · ${S.team} · 직전 시즌 WAR ${war === -Infinity ? "—" : war.toFixed(1)}</div>
+      <div class="hint">오프시즌에 한 해 한 번만 신청할 수 있어요. <b>돌아오는 이적은 문턱이 없어요</b> — 언제든 내려올 수 있고, 성적이 나빠도 리그가 저절로 내려가지는 않아요.</div>
+      <div class="offer-list">${gates.map((g, i) => postingRow(g, i, cur, mine)).join("")}</div>
+      <div class="hint lg-warn">⚠️ <b>팀 승률과 가을야구 진출은 리그를 옮겨도 거의 그대로예요.</b>
+        해외로 간다고 팀 성적이 좋아지지 않아요. 바뀌는 건 위에 적힌 <b>내 개인 성적</b>과,
+        거기서 받은 상이 명예의 전당에 남는 <b>값어치(리그 위세)</b>예요.</div>`);
+    $("move-card").querySelectorAll(".offer").forEach((b) => {
+      b.onclick = () => {
+        const g = gates[+b.dataset.i];
+        if (g && g.ok) showPostingClubs(g);
+      };
+    });
+    moveActions([{ label: "← 결산으로 돌아가기", ghost: true, onClick: seasonReport }]);
+    show("screen-move");
+  }
+
+  /* 행선지 구단 고르기. FA와 같은 방식이에요 — 시장 가치가 높을수록 손을 내미는
+   * 구단이 많아요. 리그의 열 구단을 통째로 보여주면 늘 최강팀만 고르게 돼서
+   * '어디로 갈지'가 선택이 아니게 됩니다. */
+  function showPostingClubs(g) {
+    const lg = g.league, mv = marketValue();
+    const n = mv >= 60 ? 4 : mv >= 40 ? 3 : 2;
+    const clubs = shuffle(teamsOf(lg).filter((t) => t !== S.team)).slice(0, n)
+      .map((name) => ({ name, str: teamStrOf(name) }));
+    const v = leagueMetric(lg), mine = leagueMetric(leagueOf(S));
+    moveTitle(`${lg.flag} ${lg.name} 이적`);
+    moveCard(`
+      <div class="draft-emoji">${lg.flag}</div>
+      <div class="draft-title">${lg.name} — 행선지 선택</div>
+      <div class="draft-team">시장 가치 ${mv} / 100 · 손을 내민 구단 ${clubs.length}곳</div>
+      <div class="hint">${metricName()} ${metricTxt(mine)} → <b>${metricTxt(v)}</b> · 리그 위세 ×${lg.prestige.toFixed(2)}</div>
+      <div class="offer-list">${clubs.map((o, i) => `
+        <button class="offer" data-i="${i}">
+          <span class="offer-team">${o.name}</span>
+          <span class="offer-str">${strLabel(o.str)}</span>
+        </button>`).join("")}</div>`);
+    $("move-card").querySelectorAll(".offer").forEach((b) => {
+      b.onclick = () => {
+        const o = clubs[+b.dataset.i];
+        if (!confirm(
+          `${lg.flag} ${lg.name}의 ${o.name}(으)로 옮길까요?\n\n`
+          + `· 팀 전력 ${strLabel(o.str)}\n`
+          + `· ${metricName().replace(/^\S+\s/, "")} ${metricTxt(mine)} → ${metricTxt(v)}\n`
+          + `· 리그 위세 ×${lg.prestige.toFixed(2)}\n\n`
+          + `올해는 다시 신청할 수 없어요. 돌아오는 건 언제든 됩니다.`
+        )) return;
+        moveToLeague(lg, o.name);
+        if (window.Fx) Fx.celebrate("award", `${lg.flag} ${o.name} 이적!`);
+        seasonReport();
+      };
+    });
+    moveActions([{ label: "← 리그 목록으로", ghost: true, onClick: showPosting }]);
+    show("screen-move");
+  }
+
+  /* 리그를 실제로 옮겨요. 오프시즌에만 불려서 S.season이 없어요 —
+   * 다음 initSeason이 leagueTeams()로 순위표를 새로 짜면 상대 구단이 통째로 바뀝니다.
+   * 여기서 S.league를 내리는 코드는 어디에도 없어요. 강등이 없다는 건 그런 뜻이에요. */
+  function moveToLeague(lg, team) {
+    const from = S.team, fromLg = leagueOf(S);
+    S.league = lg.id;
+    S.team = team;
+    S.postYear = S.proYear;
+    S.moves = S.moves || [];
+    // fromLeague·league를 함께 남겨요 — 옛 기록에는 없는 필드라 있으면 리그 이적이에요
+    S.moves.push({
+      y: S.proYear, age: S.age, from, to: team,
+      type: "post", inSeason: false, fromLeague: fromLg.id, league: lg.id,
+    });
+    proLog(`🌏 ${fromLg.name} → ${lg.name} 이적! (${from} → ${team})`);
+    if (window.Stats) Stats.log("transfer", { type: "post", from, to: team, y: S.proYear, league: lg.id });
+    save();
+  }
+
   // ---------- 명예의 전당 ----------
   /* 컷을 새 WAR 스케일에 맞춰 올렸어요. 예전 800은 개편 전 모델에서 4년이면
    * 닿아 이미 너무 낮았습니다. 점수 식(careerScore)은 그대로 두고 컷만 옮겨요 —
@@ -1470,10 +1908,51 @@ window.Career = (() => {
     return "🌱 짧고 굵은 야구 인생";
   }
 
+  /* 🌏 리그 가중 — 같은 상이라도 위 리그에서 받은 게 명예의 전당에 크게 남아요.
+   * 이적 화면이 "리그 위세 ×2.30"이라고 적어두는 그 배수고, 여기가 그 약속을 지키는 자리예요.
+   *
+   * 세 상(MVP·골든글러브·신인왕)에 **같은** 배수를 걸어요. 한 상만 크게 얹으면
+   * league-test ⑨⑩이 '상 하나라도 × 위세'로 재둔 사다리가 흔들려요.
+   *
+   * ⚠️ 옛 세이브에는 가중 카운터(mvpW…)가 없어요. `(S.career.mvpW || 0) + prestige`로
+   * 쓰면 MVP 4회짜리 세이브가 5번째를 받는 순간 지난 4회가 통째로 사라집니다
+   * (점수 200 → 50). ⚽ 축구에서 실제로 낸 버그예요.
+   * 그래서 가중 카운터가 없으면 **옛 카운터를 1배로 세어 이어붙여요.**
+   *
+   * 로드 시점에 마이그레이션하지 않아요. 상을 받는 이 순간에만 만듭니다 —
+   * 그래야 상을 한 번도 안 받고 끝나는 옛 세이브가 한 톨도 안 바뀌어요. */
+  function addAwardWeight(awards, pre) {
+    // 이름표를 밖에 두지 않아요 — 밖에 두면 이 함수만 떼어다 돌리는 검사에서 조용히 비어요
+    const KEY = { MVP: "mvp", 골든글러브: "gg", 신인왕: "roy" };
+    const prestige = leagueOf(S).prestige;
+    for (const a of awards) {
+      const k = KEY[a];
+      if (!k) continue;
+      const base = S.career[k + "W"] != null ? S.career[k + "W"] : ((pre && pre[k]) || 0);
+      // 1.4 + 1.4가 2.8000000000000003이 되는 부동소수 찌꺼기를 여기서 끊어요
+      S.career[k + "W"] = Math.round((base + prestige) * 100) / 100;
+    }
+  }
+
+  /* 읽는 쪽도 같은 규칙이에요 — 가중 카운터가 없으면 옛 카운터로 떨어져요.
+   * KBO는 위세가 1이라 국내만 뛴 커리어의 점수는 예전과 완전히 같습니다. */
+  const awardW = (c, key) => (c[key + "W"] != null ? c[key + "W"] : (c[key] || 0));
+
+  /* warSum에는 가중을 걸지 않아요. 이유가 셋이에요.
+   *  ① WAR은 상위 리그에서 이미 내려가요(그게 난이도예요). 거기에 위세를 곱하면
+   *     난이도를 스스로 되돌리는 셈이에요.
+   *  ② 투수 WAR이 타자보다 훨씬 커요(능력치 100에서 6.4 vs 3.0). warSum에 위세를 걸면
+   *     같은 배수인데도 투수가 얻는 점수가 훨씬 커져서, 타자·투수가 같은 사다리를
+   *     가져야 한다는 요구가 깨져요.
+   *  ③ 실측이 사다리를 뒤집어요 — warSum까지 가중하면 능력치 100(평범) 구간의 최적이
+   *     KBO를 벗어납니다(타자 열도 · 투수 대륙). 아랫칸이 무너지면 "실력이 되면 올라가는
+   *     게 이득"이 아니라 "무조건 나가는 게 이득"이 돼요.
+   * 실측 표는 tests/rookie/league-test.js ⑫에 있고, '커리어 점수가 지금 리그를 아예
+   * 안 읽는다'는 구조는 tests/rookie/hof-test.js ⑧이 지켜요. */
   function careerScore() {
     const c = S.career || { seasons: [], mvp: 0, gg: 0, roy: 0, rings: 0, warSum: 0 };
     return Math.round(
-      c.warSum * 10 + c.rings * 25 + c.mvp * 40 + c.gg * 15 + c.roy * 20 +
+      c.warSum * 10 + c.rings * 25 + awardW(c, "mvp") * 40 + awardW(c, "gg") * 15 + awardW(c, "roy") * 20 +
       (S.trophies ? S.trophies.length : 0) * 8 + S.scout * 0.05 +
       transTotal() * 25   // ✨ 초월 단계 보너스
     );
@@ -1540,13 +2019,23 @@ window.Career = (() => {
       (c.roy || 0) ? "🌟신인왕" : "",
     ].filter(Boolean).join(" · ");
     const seasons = (c.seasons || []).length;
-    return `    ${S.name} · ${seasons}시즌 · WAR ${(c.warSum || 0).toFixed(1)}\n`
-      + (awards ? `    ${awards}\n` : "    수상 기록 없음\n");
+    return `    ${S.name} · ${seasons}시즌 · WAR ${(c.warSum || 0).toFixed(1)}${leagueTag()}\n`
+      + (awards ? `    ${awards}${weightNote(c)}\n` : "    수상 기록 없음\n");
+  }
+
+  /* 🌏 상 옆에 붙는 한 줄. 리그 가중이 실제로 얹혀 있을 때만 보여줘요 —
+   * "MVP 3"이라고만 적어두면 점수가 왜 그렇게 큰지 화면 어디서도 알 수가 없어요. */
+  function weightNote(c) {
+    const raw = (c.mvp || 0) * 40 + (c.gg || 0) * 15 + (c.roy || 0) * 20;
+    const w = awardW(c, "mvp") * 40 + awardW(c, "gg") * 15 + awardW(c, "roy") * 20;
+    return raw > 0 && Math.abs(w - raw) > 0.05 ? ` (🌏 리그 위세로 ×${(w / raw).toFixed(2)})` : "";
   }
 
   function enshrine(team) {
     const c = S.career || { seasons: [], mvp: 0, gg: 0, roy: 0, rings: 0, warSum: 0 };
     const score = careerScore();
+    // S를 지우기 전에 떠 둬요 — 아래 은퇴식 화면은 S가 null이 된 뒤에도 이 값을 씁니다
+    const lgTag = leagueTag(), wNote = weightNote(c);
     const entry = {
       id: "p" + Date.now(),
       game: "rookie",
@@ -1556,6 +2045,10 @@ window.Career = (() => {
       seasons: c.seasons.length,
       warSum: c.warSum,
       rings: c.rings, mvp: c.mvp, gg: c.gg, roy: c.roy,
+      /* 🌏 어느 리그에서 마쳤는지와, 상이 리그 위세로 얼마나 크게 남았는지예요.
+       * 옛 기록에는 없는 칸이라 화면은 없어도 되게 그려요 (마이그레이션하지 않아요). */
+      league: leagueOf(S).id,
+      mvpW: awardW(c, "mvp"), ggW: awardW(c, "gg"), royW: awardW(c, "roy"),
       finalOvr: Math.round(overall()),
       trans: transTotal(),
       gen: loadLegacy().gen + 1,
@@ -1575,9 +2068,9 @@ window.Career = (() => {
       <div class="draft-emoji">⚾</div>
       <div class="draft-title">${entry.name}, 그라운드와 작별</div>
       <div class="draft-team">${entry.grade}</div>
-      <div>${entry.seasons ? `${entry.team}에서 ${entry.seasons}시즌을 뛰었어요.` : "프로 무대 대신 다른 길을 택했어요."}</div>
+      <div>${entry.seasons ? `${entry.team}${lgTag}에서 ${entry.seasons}시즌을 뛰었어요.` : "프로 무대 대신 다른 길을 택했어요."}</div>
       <div class="draft-summary">
-        통산 WAR ${(+entry.warSum).toFixed(1)} · 🏆 ${entry.rings} · MVP ${entry.mvp} · GG ${entry.gg}${entry.roy ? " · 신인왕" : ""}<br/>
+        통산 WAR ${(+entry.warSum).toFixed(1)} · 🏆 ${entry.rings} · MVP ${entry.mvp} · GG ${entry.gg}${entry.roy ? " · 신인왕" : ""}${wNote}<br/>
         커리어 점수 <b>${entry.score}</b> — 명예의 전당에 영구 기록됐어요
       </div>`;
     const act = $("career-actions");
@@ -1861,6 +2354,19 @@ window.Career = (() => {
     showSeasonReport: seasonReport,
     // 테스트에서 내부 계산을 들여다보기 위한 창구예요 (게임 로직은 이걸 쓰지 않아요)
     _internals: { marketValue, teamWinP, teamStrOf, faOffers },
+    /* 리그 관련 창구예요. 시리즈의 다른 게임(⚽ 축구)이 `_t`로 통일돼 있어서
+     * 해외 진출로 새로 붙는 것들은 여기에 모아요. LEAGUES·leagueOf는 game.js의
+     * 전역이지만, 테스트가 한 곳만 보면 되게 여기서 같이 내보내요. */
+    _t: {
+      LEAGUES, leagueOf, oppFor, teamStrOf,
+      POST_GATE, postingGates, postingOffers, moveToLeague, postLabel, KS_LABEL,
+      LEAGUE_CLUBS, teamsOf, clubStrOf, driftBandOf, leagueTeams, driftTeamStr, teamWinP, gameWinP,
+      // ⚾ 리그별 경기 수와, 거기에 비례해 움직이는 트레이드 창구
+      seasonTotal, curTotal, tradeOpenAt, tradeCloseAt, inSeasonTrade,
+      // 📊 그 시즌에 뛴 소속 — 결산 헤더가 지금 팀을 쓰지 않는지 화면에서 대조할 때 써요
+      playedAt,
+      state: () => S,
+    },
     enterPro,
     showHof,
     showBattle,
@@ -1868,8 +2374,9 @@ window.Career = (() => {
       // 가을야구 도중에 나갔다 와도 그 자리에서 이어져요
       if (inPost()) { renderPost(); show("screen-pro"); }
       else if ((S.season && S.pendingGame) || S.camp > 0) { renderPro(); show("screen-pro"); }
-      // 정규시즌 144경기를 다 치른 뒤라면 결산으로 이어져야 해요. 여기서 runSeason으로
-      // 떨어지면 145번째 경기가 생기고, 방금 딴 우승이 새 대진에 덮여 사라져요.
+      // 정규시즌을 다 치른 뒤라면 결산으로 이어져야 해요. 여기서 runSeason으로
+      // 떨어지면 한 경기가 더 생기고, 방금 딴 우승이 새 대진에 덮여 사라져요.
+      // 기준은 저장본의 total이에요 — 리그마다 경기 수가 다르니 숫자를 못 박지 않아요.
       else if (S.season && S.season.game >= S.season.total) {
         if (S.post) advancePostseason(); else finishSeason();
       }

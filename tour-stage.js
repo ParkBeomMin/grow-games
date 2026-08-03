@@ -17,6 +17,9 @@
  *   TourStage.sync(box, { label, button, zonePct }, cb)   ✨ 킬링파트 — 싱크로
  *   TourStage.roar(box, { label, button, zonePct }, cb)   🔥 앵콜 — 함성 유지
  *
+ * 🧭 셋 다 **준비 화면**을 먼저 띄워요. 규칙을 읽고 ▶️ 시작을 눌러야 빛이 흐르고
+ * 바가 움직여요 — 자세한 약속은 아래 ready()의 머리말에 적어 뒀어요.
+ *
  * zonePct는 game.js의 miniZone(stat)이 준 값(10~40)이에요. 능력치와 컨디션이
  * 높으면 커져요. 셋 다 이 값으로 판정을 느슨하게 해요 — 육성이 투어에 닿는 자리예요.
  * 무대별로 어느 능력치를 보는지는 game.js의 TOUR_MECH가 정해요.
@@ -51,20 +54,166 @@ window.TourStage = (() => {
    * 그 뒤 click은 전부 버린다"로 하면 간단하지만, 그러면 한 번 만진 뒤에는
    * 키보드(Enter·Space)로 누를 수 없게 돼요. 시간으로 가르면 둘 다 살아요.
    * click도 듣는 건 포인터 이벤트가 없는 환경(jsdom 테스트·아주 구형 브라우저)
-   * 때문이에요. timing.js의 hold가 pointerdown/pointerup을 쓰는 방식과 같은 결이에요. */
+   * 때문이에요. timing.js의 hold가 pointerdown/pointerup을 쓰는 방식과 같은 결이에요.
+   *
+   * ⚠️ 다만 TAP_ECHO는 **같은 요소 안의 중복**밖에 못 막아요. 요소가 바뀌면
+   * 무력해요 — ▶️ 시작을 누른 pointerdown이 준비 화면을 지우고 그 자리에 무대
+   * 버튼을 그리면, 손을 뗄 때 오는 click은 **방금 생긴 무대 버튼**에게 가요.
+   * 그 버튼의 lastPointer는 초기값이라 방어에 안 걸리고, 한 번 댄 손가락이
+   * '시작'과 '첫 행동' 두 번으로 먹혀요(싱크로는 그대로 판이 끝나요).
+   * 그래서 gate가 따로 필요해요. */
   const TAP_ECHO = 700;   // pointerdown 뒤 이 시간 안에 오는 click은 같은 한 번이에요
-  function onTap(el, fn) {
+
+  /* 🚪 제스처 문 — **시작한 손가락이 끝나기 전에는 무대가 입력을 안 받아요.**
+   *
+   * 한 판마다 새로 만들어요. 모듈 전역에 두면 앞 판의 상태가 다음 판으로 새고,
+   * 시계를 갈아끼우는 테스트에서는 판마다 시각이 되감겨서 시간으로 가를 수도
+   * 없어요. 판마다 새 물건이면 그런 자리가 아예 없어요.
+   *
+   *   shut=true  → 시작이 pointerdown이었어요. 뒤따라올 click 한 번은 그 제스처의
+   *                꼬리니까 삼켜요(그리고 문을 열어요 — 딱 한 번만 삼켜요).
+   *   pointerdown → 새로 짚은 손가락이에요. 무조건 문을 열어요.
+   *
+   * click으로 시작한 경우(포인터 이벤트가 없는 환경·키보드)에는 뒤따라올 것이
+   * 없으니 문을 잠그지 않아요. 잠그면 그 환경의 첫 입력이 통째로 사라져요.
+   * post-stage.js가 같은 이유로 같은 모양을 갖고 있어요. */
+  const newGate = () => ({ shut: false });
+
+  function onTap(el, fn, gate) {
     let lastPointer = -TAP_ECHO;
     el.addEventListener("pointerdown", (e) => {
       lastPointer = Date.now();
+      if (gate) gate.shut = false;          // 여기서부터가 이 판의 입력이에요
       if (e && e.cancelable) e.preventDefault();
-      fn();
+      fn(true);
     });
     el.addEventListener("click", () => {
-      if (Date.now() - lastPointer < TAP_ECHO) return;
-      fn();
+      if (Date.now() - lastPointer < TAP_ECHO) return;   // 같은 요소 안의 메아리
+      if (gate && gate.shut) { gate.shut = false; return; }   // 시작 제스처의 꼬리예요
+      fn(false);
     });
   }
+
+  /* ================================================================
+   * 🧭 준비 화면 — 규칙을 읽고 나서, 눌러야 시작해요
+   *
+   * 왜 필요하냐면: 이 셋은 규칙이 여러 단계예요(3연속으로 잡기 · 두 대상의 교차 ·
+   * 연타 유지에 위쪽 한계까지). 한 줄짜리 .tm-label로는 첫 무대를 통째로 날려요.
+   * "너무 빨리 지나가서 뭐 하라는 건지 모르겠다"는 말이 정확히 그 뜻이에요.
+   *
+   * ✋ 약속이 하나 더 있어요 — **시작한 손가락으로는 무대를 못 건드려요.**
+   * ▶️ 시작은 pointerdown에서 곧바로 처리해요(누르자마자 화면이 바뀌어야 하니까요).
+   * 대신 그 손가락을 뗄 때 오는 click은 새로 그려진 무대 버튼으로 새어 들어가는데,
+   * 그건 gate가 삼켜요. 무대가 실제로 움직이는 건 **새로 짚은 손가락**부터예요.
+   *
+   * ⏱️ 이 화면의 약속 하나가 전부예요 — **누르기 전에는 아무것도 안 돌아요.**
+   * requestAnimationFrame도 setTimeout도 performance.now()도 준비 화면 위에서는
+   * 한 번도 불리지 않아요. 진짜 메커닉은 runWave·runSync·runRoar 안에 통째로 들어
+   * 있고, ready()가 그 함수를 붙잡고 있다가 ▶️ 시작을 눌렀을 때 놓아 줘요.
+   * 판정도 난이도도 한 줄 안 바뀌어요 — 사람이 잡는 건 '시작 시각'뿐이에요.
+   *
+   * 📖 도시 8곳 × 3무대 = 24판이라 매번 세 줄을 다 읽으면 성가셔요. 메커닉마다 본
+   * 횟수를 세어 처음 FULL_SHOWS번만 전문을 펴고, 그 뒤에는 한 줄로 줄여요.
+   * **준비 화면 자체는 늘 떠요** — 줄어드는 건 설명의 길이지 시작 버튼이 아니에요.
+   *
+   * 🔑 세는 값은 새 열쇠(READY_KEY) 하나에만 담아요. 옛 저장은 한 칸도 안 건드려요 —
+   * 마이그레이션이 없고, 값이 없으면 그냥 0이에요(= 처음 보는 사람).
+   * 열쇠 안은 메커닉 이름별 횟수예요. post-stage.js와 같은 열쇠를 쓰지만 이름
+   * (wave·sync·roar ↔ count·dash)이 겹치지 않아 서로를 덮지 않아요.
+   * ================================================================ */
+  const READY_KEY = "grow-mech-ready";
+  const FULL_SHOWS = 3;          // 처음 이만큼은 전문, 그 뒤로는 한 줄
+
+  const readSeen = () => {
+    try {
+      const o = JSON.parse(localStorage.getItem(READY_KEY) || "{}");
+      return (o && typeof o === "object") ? o : {};
+    } catch (e) { return {}; }   // 사생활 보호 모드처럼 못 읽는 자리도 있어요
+  };
+  /* 이번이 '보기 전 기준' 몇 번째인지 돌려줘요 — 0이면 난생처음 보는 거예요. */
+  const bumpSeen = (key) => {
+    const seen = readSeen();
+    const n = Number(seen[key]) || 0;
+    seen[key] = n + 1;
+    try { localStorage.setItem(READY_KEY, JSON.stringify(seen)); } catch (e) { /* 못 써도 넘어가요 */ }
+    return n;
+  };
+
+  /* info = { key, title, lines: [3줄], short: "한 줄", keys: [{ name, desc }] }
+   * keys는 **버튼이 각각 무엇인지**예요. 투어 3종은 버튼이 하나씩이지만, 하나라도
+   * 무엇을 하는 버튼인지는 적어 둬요 — 연타인지 한 번인지가 여기서 갈려요. */
+  function ready(container, info, start) {
+    const full = bumpSeen(info.key) < FULL_SHOWS;
+    const body = full
+      ? `<ul class="mg-ready-lines">${info.lines.map((t) => `<li>${t}</li>`).join("")}</ul>`
+      : `<p class="mg-ready-short">${info.short}</p>`;
+    const keys = (info.keys || [])
+      .map((k) => `<span class="mg-ready-key"><b>${k.name}</b><span>${k.desc}</span></span>`).join("");
+    const wrap = document.createElement("div");
+    wrap.className = "tm-box mg-ready";
+    wrap.innerHTML = `<p class="tm-label">${info.title}</p>${body}`
+      + (keys ? `<div class="mg-ready-keys">${keys}</div>` : "")
+      + `<button type="button" class="btn btn-primary tm-btn mg-go">▶️ 시작</button>`;
+    container.appendChild(wrap);
+    /* 이 판의 문. 시작이 pointerdown이면 잠근 채로 무대에 넘겨요 —
+     * 손을 뗄 때 오는 click 한 번이 무대 버튼으로 새거든요. */
+    const gate = newGate();
+    let went = false;
+    onTap(wrap.querySelector(".mg-go"), (viaPointer) => {
+      if (went) return;          // pointerdown과 click이 겹쳐도 한 번만 시작해요
+      went = true;
+      gate.shut = !!viaPointer;
+      wrap.remove();             // 준비 화면을 치우고 나서 본 무대 상자를 붙여요
+      start(gate);
+    });
+  }
+
+  /* 세 무대의 준비 화면 문구. 무대와 메커닉이 1:1이라 여기 붙여 둬요 —
+   * 도시 이름이 들어가는 상황 문구(label)는 본 무대 상자가 그대로 들고 있어요. */
+  const READY = {
+    wave: {
+      key: "wave",
+      title: "🎬 함성 웨이브",
+      lines: [
+        "관객석을 따라 빛이 왼쪽에서 오른쪽으로 흘러요.",
+        "🙌 표시가 있는 구역 <b>3곳</b>에 빛이 닿는 순간마다 한 번씩 눌러요.",
+        "3번 다 잡으면 완벽, 2번이면 성공이에요. 미리 치면 그 구역은 놓친 것으로 굳어요 — 마구 두드리면 안 돼요.",
+      ],
+      short: "🙌 구역에 빛이 닿는 순간마다 한 번씩 · 3번 연속이면 완벽해요",
+      desc: "🙌 구역에 빛이 닿는 순간 눌러요 (관객석을 직접 눌러도 돼요)",
+    },
+    sync: {
+      key: "sync",
+      title: "✨ 싱크로",
+      lines: [
+        "🎤와 🎶 두 바가 <b>서로 다른 속도로</b> 좌우를 왕복해요.",
+        "둘이 위아래로 겹치는 순간에 <b>딱 한 번</b> 눌러요. 그때의 간격이 그대로 판정이에요.",
+        "겹침은 여러 번 와요. 천천히 다가오는 겹침을 기다리는 쪽이 훨씬 잡기 쉬워요.",
+      ],
+      short: "두 바가 겹치는 순간 한 번만 · 기다리면 잡기 쉬운 겹침이 와요",
+      desc: "두 바가 겹친 순간 눌러요 (한 번 누르면 그대로 끝나요)",
+    },
+    roar: {
+      key: "roar",
+      title: "🔥 함성 유지",
+      lines: [
+        "함성 게이지가 계속 식어요. <b>연타</b>로 올려서 목표선(│) 위에 붙잡아 둬요.",
+        "목표선 위에 머문 시간이 쌓여요. 높이 올릴수록 더 빨리 쌓이고, 목표선은 시간이 갈수록 조금씩 올라가요.",
+        "너무 세게 쳐서 붉은 구간까지 올리면 <b>삑사리(🎙️💥)</b>가 나요 — 게이지가 꺾이고 잠깐 안 먹혀요.",
+      ],
+      short: "연타로 목표선(│) 위에서 버텨요 · 붉은 구간까지 올리면 삑사리예요",
+      desc: "빠르게 여러 번 눌러 함성을 끌어올려요",
+    },
+  };
+  /* 버튼 이름은 opts에서 그대로 가져와요 — 화면의 버튼과 설명의 버튼 이름이
+   * 다르면 설명이 오히려 헷갈려요. */
+  const stageReady = (mech, opts, fallback) => ({
+    key: READY[mech].key,
+    title: READY[mech].title,
+    lines: READY[mech].lines,
+    short: READY[mech].short,
+    keys: [{ name: (opts && opts.button) || fallback, desc: READY[mech].desc }],
+  });
 
   /* ================================================================
    * 🎬 오프닝 — 함성 웨이브
@@ -98,7 +247,9 @@ window.TourStage = (() => {
   const waveCenter = (i) => ((i + 0.5) / WAVE.seats) * 100;
   const waveJudge = (hits) => (hits >= 3 ? "perfect" : hits === 2 ? "good" : "miss");
 
-  function wave(container, opts, cb) {
+  /* 🎬 한 판. **여기서부터가 시간이 흐르는 자리예요** — 준비 화면의 ▶️ 시작을
+   * 누른 뒤에만 불려요. 이 함수 밖에는 타이머가 한 줄도 없어요. */
+  function runWave(container, opts, cb, gate) {
     const zone = zoneOf(opts);
     const half = WAVE.speed * waveWinMs(zone) / 1000;   // 판정 창 절반(%)
     const seatsHTML = Array.from({ length: WAVE.seats }, (_, i) =>
@@ -177,8 +328,8 @@ window.TourStage = (() => {
       resolve(Math.abs(pos - waveCenter(WAVE.cues[cur])) <= half);
       if (cur >= WAVE.cues.length) finish();
     };
-    onTap(btn, tap);
-    onTap(strip, tap);                                    // 관객석을 직접 눌러도 돼요
+    onTap(btn, tap, gate);
+    onTap(strip, tap, gate);                              // 관객석을 직접 눌러도 돼요
     raf = requestAnimationFrame(tick);
   }
 
@@ -211,7 +362,8 @@ window.TourStage = (() => {
   const syncJudge = (gap, zone) =>
     gap <= syncPerf(zone) ? "perfect" : gap <= syncGood(zone) ? "good" : "miss";
 
-  function sync(container, opts, cb) {
+  /* ✨ 한 판. runWave와 같아요 — 준비 화면을 누른 뒤에만 시계가 돌아요. */
+  function runSync(container, opts, cb, gate) {
     const zone = zoneOf(opts);
     const perfW = syncPerf(zone), goodW = syncGood(zone);
     const wrap = makeBox(container, opts.label || "✨ 두 파트가 겹치는 순간!", `
@@ -265,7 +417,7 @@ window.TourStage = (() => {
       place();
       raf = requestAnimationFrame(tick);
     }
-    onTap(btn, () => { if (!done) finish(syncJudge(Math.abs(pa - pb), zone)); });
+    onTap(btn, () => { if (!done) finish(syncJudge(Math.abs(pa - pb), zone)); }, gate);
     raf = requestAnimationFrame(tick);
   }
 
@@ -329,7 +481,8 @@ window.TourStage = (() => {
   const roarCredit = (g, line, band) =>
     g < line ? 0 : ROAR.creditLow + (1 - ROAR.creditLow) * clampV((g - line) / band, 0, 1);
 
-  function roar(container, opts, cb) {
+  /* 🔥 한 판. runWave와 같아요 — 준비 화면을 누른 뒤에만 시계가 돌아요. */
+  function runRoar(container, opts, cb, gate) {
     const zone = zoneOf(opts);
     let line = roarLine(zone, 0), crack = roarCrack(zone, 0);
     const decay = roarDecay(zone), band = roarBand(zone);
@@ -405,19 +558,33 @@ window.TourStage = (() => {
       }
       g = clampV(g, 0, 100);
       paint();
-    });
+    }, gate);
     raf = requestAnimationFrame(tick);
+  }
+
+  /* 바깥에서 부르는 건 이 셋이에요 — 전부 준비 화면부터예요.
+   * gate는 준비 화면이 만들어 넘겨줘요 (시작한 손가락을 무대에서 떼어 놓는 문). */
+  function wave(container, opts, cb) {
+    ready(container, stageReady("wave", opts, "함성! 🙌"), (gate) => runWave(container, opts || {}, cb, gate));
+  }
+  function sync(container, opts, cb) {
+    ready(container, stageReady("sync", opts, "싱크! ✨"), (gate) => runSync(container, opts || {}, cb, gate));
+  }
+  function roar(container, opts, cb) {
+    ready(container, stageReady("roar", opts, "연타! 🔥"), (gate) => runRoar(container, opts || {}, cb, gate));
   }
 
   return {
     wave, sync, roar,
     /* 테스트가 판정 산식을 그대로 굴려 볼 수 있게 열어 둬요 — 난이도를 손으로
-     * 베껴 두면 여기를 고칠 때 테스트만 옛 숫자로 남아요. */
+     * 베껴 두면 여기를 고칠 때 테스트만 옛 숫자로 남아요.
+     * 준비 화면 쪽도 같은 이유로 열어 둬요 (횟수 문턱을 테스트가 베껴 적지 않게요). */
     _t: {
       WAVE, SYNC, ROAR,
       waveWinMs, waveCenter, waveJudge,
       syncPerf, syncGood, syncJudge,
       roarLine, roarBand, roarDecay, roarCrack, roarCredit, roarJudge,
+      READY_KEY, FULL_SHOWS, readSeen, READY, stageReady,
     },
   };
 })();

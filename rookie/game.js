@@ -97,6 +97,123 @@ const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 const STAT_CAP = 130; // 100 이후는 '한계 돌파' 구간 (성장 효율 절반)
 const fmtMoney = (v) => (v >= 10000 ? `${(v / 10000).toFixed(1)}억` : `${Math.round(v)}만`);
 
+/* 🌏 리그 사다리 — KBO에서 시작해 해외로 올라가요. tier가 순서예요.
+ * id는 옛 세이브의 S.league가 가리키는 값이라 절대 안 바꿔요 — 번호를 다시 매기면
+ * 진행 중인 캐릭터가 엉뚱한 리그로 갑니다. (⚽ 축구에서 id로 순서를 판단해 사고가 났어요.)
+ * 축구와 달리 아래로 가는 층은 없어요. KBO가 바닥입니다.
+ *
+ * 난이도는 상대 수준(oppStr)에 얹어요. 축구는 평가가 순위 기반이라 경기 평점을
+ * 깎았지만, 야구는 평가가 타율·홈런·방어율에서 나오니 상대를 세게 하면
+ * 그 숫자가 자연히 내려가요. 실제로 벌어지는 일과도 같습니다 —
+ * 메이저에서 타율이 떨어지는 건 투수가 좋기 때문이에요.
+ * WAR이 내려가면 MVP·골든글러브가 자동으로 어려워지니 문턱(bar)을 따로 두지 않아요.
+ *
+ * 다만 oppStr 하나로는 투수에게 안 닿아요. 투수의 시즌 실점은 전부 위기 판정에서
+ * 나오는데 거기서 oppStr은 '완전히 막을 확률'만 바꾸고 실점 크기는 안 건드리거든요.
+ * 그래서 투수 쪽 통로가 하나 더 있어요 — crisisRuns의 lgUp(CRISIS_LEAGUE_K)입니다.
+ *
+ * 세 값은 감이 아니라 시뮬레이션으로 잡았어요. 판단 기준은 수상 확률이 아니라
+ * '수상 확률 × prestige'(명예의 전당 가치)고, 능력치 100·110에서는 KBO가,
+ * 130에서는 열도가, 150(초월 구간)에서는 대륙이 최적이 되게 맞췄어요.
+ * 타자와 투수가 '같은' prestige를 쓰면서 둘 다 그 순서를 지켜야 해서 여유가 빠듯해요 —
+ * prestige를 1.5/2.2에서 1.4/2.3으로 옮긴 것도 그래서예요. 투수가 열도에서 너무
+ * 이득이고(능력치 110) 대륙에서 너무 손해라(150), 2층을 낮추고 3층을 올렸어요.
+ * oppUp을 더 키우면 hitP의 하한(0.10)에 눌려서 난이도가 더 안 올라가요 —
+ * 축구의 평점 천장과 같은 실패라, tests/rookie/league-test.js ⑦이 그 자리를 지킵니다.
+ * 투수를 맞추려고 oppUp을 키우지 않은 것도 그래서예요. 투수는 lgUp으로 따로 맞춰요.
+ *
+ * 실제 리그명은 쓰지 않아요. 이 저장소는 상표를 전부 가상 명칭으로 바꿨어요
+ * (KBO만 이미 코드에 있던 이름이라 그대로 둡니다).
+ *
+ * career.js가 아니라 여기 두는 건 career.js가 IIFE라 그 안의 선언이 밖으로 안 새기
+ * 때문이에요. 구단 목록·화면처럼 game.js 쪽에서도 리그를 읽어야 해요. */
+/* games — 그 리그의 정규시즌 경기 수예요. 실제와 같은 숫자로 뒀어요.
+ * KBO가 144라 옛 세이브(leagueOf가 KBO로 받아주는)는 예전과 한 톨도 안 달라요.
+ * 위로 갈수록 경기가 많아 누적(홈런·이닝·WAR)이 더 쌓여요 — 난이도를 일부 상쇄합니다. */
+const LEAGUES = [
+  { id: 1, tier: 1, name: "KBO",     short: "국내", flag: "🇰🇷", oppUp: 0,    prestige: 1.00, games: 144 },
+  { id: 2, tier: 2, name: "열도 리그", short: "열도", flag: "🇯🇵", oppUp: 0.02, prestige: 1.40, games: 143 },
+  { id: 3, tier: 3, name: "대륙 리그", short: "대륙", flag: "🗽", oppUp: 0.06, prestige: 2.30, games: 162 },
+];
+
+/* 옛 세이브에는 S.league가 없어요. 마이그레이션하지 않고 없으면 KBO로 봐요.
+ * 깨진 값도 KBO로 막아요 — oppUp이 0이라 진행 중인 캐릭터의 성적이 안 튑니다. */
+function leagueOf(st) {
+  const id = (st && st.league) || 1;
+  return LEAGUES.find((l) => l.id === id) || LEAGUES.find((l) => l.id === 1) || LEAGUES[0];
+}
+
+/* 🌏 리그별 구단 — 전력은 teamStrOf와 같은 눈금이에요(0.49가 한가운데).
+ *
+ * KBO 구단은 str이 null이에요. 예전처럼 teamStrOf가 0.38~0.60에서 뽑고, 저장본에
+ * 남습니다 — 진행 중인 캐릭터의 순위표가 안 튀어야 해서 그 경로를 한 톨도 안 건드려요.
+ * 해외 구단만 값을 못 박아요. 리그가 높을수록 평균이 높고, 그게 곧 '위로 갈수록
+ * 순위 싸움이 빡빡하다'는 뜻이에요 (다른 팀 승수는 finishProGame이 str로 굴려요).
+ *
+ * ⚠️ 이 값은 난이도(oppUp)와 다른 통로예요. oppUp은 '내가 상대하는 공'에만 걸리지만,
+ * 여기 적힌 전력은 teamWinP(내 팀 보너스)·순위표·가을야구 대진(S.post.str)까지 흘러가요.
+ * 그래서 위쪽 끝을 함부로 못 올려요 — gameWinP가 가을야구에서
+ * `base - (상대 전력 - 0.49) * 1.8`을 빼는데, 상대가 0.64를 넘으면 웬만한 팀 승률이
+ * 30% 밑으로 떨어집니다. ⚽ 축구에서 수비수 팀 승률이 7%가 된 게 정확히 이 자리예요.
+ * 상한을 대륙 0.62(드리프트 여유 0.64)로 묶어둔 이유고,
+ * tests/rookie/club-test.js ④가 그 자리를 지켜요.
+ *
+ * 실제 구단명은 쓰지 않아요. 이 저장소는 상표를 전부 가상 명칭으로 바꿨어요
+ * (KBO 구단명도 그래서 바꿨습니다). 지역·색·동물 같은 결로 지었어요. */
+const LEAGUE_CLUBS = {
+  1: REGIONS.flatMap((r) => r.teams).map((name) => ({ name, str: null })),
+  2: [
+    { name: "아오바 팬서스", str: 0.58 },
+    { name: "코가네 라이노스", str: 0.56 },
+    { name: "하야테 게일스", str: 0.54 },
+    { name: "미도리 오터스", str: 0.53 },
+    { name: "시라네 울브스", str: 0.52 },
+    { name: "소라이 헤론스", str: 0.51 },
+    { name: "아카네 폭스", str: 0.49 },
+    { name: "이와쿠라 아이벡스", str: 0.48 },
+    { name: "츠키미 루나스", str: 0.46 },
+    { name: "하마카제 스톰스", str: 0.44 },
+  ],
+  3: [
+    { name: "레이크사이드 엘크스", str: 0.62 },
+    { name: "아이언필드 벌컨스", str: 0.60 },
+    { name: "노스쇼어 미티어스", str: 0.59 },
+    { name: "하이랜드 볼케이노스", str: 0.57 },
+    { name: "웨스트게이트 콘도르스", str: 0.56 },
+    { name: "스톤크릭 그리핀스", str: 0.55 },
+    { name: "선셋베이 코브라스", str: 0.53 },
+    { name: "리버벤드 아이비스", str: 0.52 },
+    { name: "골드코스트 퀘이사스", str: 0.51 },
+    { name: "파인힐 세이블스", str: 0.48 },
+  ],
+};
+
+/* 시즌마다 전력이 흔들릴 때(driftTeamStr) 넘지 않는 울타리예요.
+ * KBO 값(0.36~0.63)은 예전 그대로고, 해외는 그 리그 목록의 위아래에 0.02씩 여유를 준 값이에요.
+ * 리그마다 따로 두지 않으면 드리프트가 전부 KBO 울타리로 끌려와 리그 차이가 녹아 없어져요. */
+const LEAGUE_DRIFT = { 1: [0.36, 0.63], 2: [0.42, 0.60], 3: [0.46, 0.64] };
+
+// league는 리그 객체(leagueOf가 준 것)나 id 숫자 둘 다 받아요. 모르는 값이면 KBO예요.
+const leagueIdOf = (league) => {
+  const id = league && typeof league === "object" ? league.id : league;
+  // 숫자만 받아요. "2" 같은 문자열을 통과시키면 leagueOf가 막아둔 깨진 값이 여기로 새요.
+  return typeof id === "number" && LEAGUE_CLUBS[id] ? id : 1;
+};
+// 그 리그의 구단 이름 목록이에요. 옛 세이브(S.league 없음)는 KBO 구단만 받아요.
+function teamsOf(league) {
+  return LEAGUE_CLUBS[leagueIdOf(league)].map((c) => c.name);
+}
+function driftBandOf(league) {
+  return LEAGUE_DRIFT[leagueIdOf(league)];
+}
+/* 구단 이름 → 못 박아둔 전력. KBO 구단과 모르는 이름은 undefined라
+ * teamStrOf가 예전처럼 직접 뽑아요. */
+const CLUB_STR = {};
+for (const id of Object.keys(LEAGUE_CLUBS)) {
+  for (const c of LEAGUE_CLUBS[id]) if (typeof c.str === "number") CLUB_STR[c.name] = c.str;
+}
+const clubStrOf = (name) => CLUB_STR[name];
+
 // 시작 능력치 뽑기 — 이름 화면에서 미리 보고 다시 뽑을 수 있어요
 function rollStats(pos) {
   const stats = {};
@@ -275,18 +392,45 @@ function clutch(key) {
   const t = (S && S.talents && S.talents[key]) || 1.3;
   return clamp(1 + (t - 1.3) * CLUTCH_SCALE + Math.min(transLv(key) * 0.004, 0.06), 0.9, 1.16);
 }
+/* 🌏 상위 리그의 '한 방' 계수예요.
+ *
+ * 리그 난이도를 억제 확률(hold)에만 얹었더니 실점 '크기'가 리그와 무관했어요.
+ * 특히 실투(miss) 분기는 randInt(1,3) 고정이라 KBO와 한 톨도 안 달랐고,
+ * 그래서 투수가 리그를 거의 못 느꼈어요 — 능력치 100에서 대륙 리그로 가도
+ * WAR이 6.4 → 6.2로 0.2밖에 안 내려갔어요(타자는 -1.8). 사다리가 무너지는 자리예요.
+ *
+ * 억제력(hold)의 여집합에 비례해요. 잘 막는 투수일수록 상위 리그에서도 덜 무너지고,
+ * 그 기울기가 곧 사다리예요 — 평평하게 걸면 정상급 투수까지 같이 무너져서
+ * '실력이 되면 올라가는 게 이득'이 성립하지 않아요.
+ * 9는 감이 아니라 시뮬레이션으로 잡았어요 (tests/rookie/league-test.js ⑩·⑪). */
+const CRISIS_LEAGUE_K = 9;
+const CRISIS_LEAGUE_CAP = 0.6;   // 리그가 아무리 세도 위기 하나가 한 방 이상 더 커지진 않아요
+
 /* 🔥 위기 실점 — 타자 타석 판정과 같은 뼈대예요.
  * 예전에는 퍼펙트가 실점 0을 확정해서, 위기를 다 막으면 시즌 ERA 0.45가 나왔어요.
  * 이제 제구가 억제 수준을 정하고 판정이 배수로 흔들어요.
- * 선발(game.js)과 구원 등판(career.js)이 같은 식을 씁니다. */
-function crisisRuns(res, oppStr) {
+ * 선발(game.js)과 구원 등판(career.js)이 같은 식을 씁니다.
+ *
+ * lgUp은 '리그 난이도만' 떼어낸 값이에요. oppStr에는 팀 전력과 리그 난이도가 섞여
+ * 있는데, 그걸로 실점 크기를 키우면 KBO에서 강팀을 만날 때도 실점이 늘어서
+ * 이미 맞춰둔 팀 전력 밸런스가 함께 흔들려요. 그래서 호출부가 리그 몫을 따로 넘겨요.
+ * 안 넘기면 0(KBO)이라, 리그를 모르는 옛 호출부도 예전 그대로 굴러가요. */
+function crisisRuns(res, oppStr, lgUp) {
   const hold = clamp(0.02 + S.stats.control / 300 - ((typeof oppStr === "number" ? oppStr : 0.49) - 0.49) * 0.6,
     0.10, 0.90) * clutch("control");
-  if (res === "perfect") return Math.random() < hold ? 0 : 1;
-  if (res === "good") return Math.random() < hold * 0.35 ? 0 : randInt(1, 2);
+  let runs;
+  if (res === "perfect") runs = Math.random() < hold ? 0 : 1;
+  else if (res === "good") runs = Math.random() < hold * 0.35 ? 0 : randInt(1, 2);
   // 실투해도 최소 실점으로 끊을 때가 있어요. 2~3 고정이면 저스탯 자동 진행에서
   // 이 항 하나가 실점을 지배해 첫 시즌 ERA가 7점대로 튑니다.
-  return randInt(1, 3);
+  else runs = randInt(1, 3);
+  /* 이미 무너진 위기가 상위 리그에서는 한 점 더 커져요. 막아낸 위기(0실점)는 그대로예요 —
+   * 리그가 세다고 '막았는데 점수가 난다'가 되면 판정이 거짓말이 됩니다.
+   * up이 0이면 난수를 아예 안 뽑아요. KBO가 리그 도입 전과 난수 한 톨까지 같아야 해서예요. */
+  const up = typeof lgUp === "number" ? lgUp : 0;
+  if (runs > 0 && up > 0
+    && Math.random() < clamp(up * CRISIS_LEAGUE_K * (1 - hold), 0, CRISIS_LEAGUE_CAP)) runs += 1;
+  return runs;
 }
 function clutchAvg() {
   const ks = Object.keys((S && S.talents) || {});
@@ -1307,8 +1451,142 @@ const REACT_PIT = { ok: "강습 타구를 낚아챘어요! ⚡", great: "총알 
 const DUEL_BAT = { ok: "노림수 적중! 안타! 🧠", great: "완벽한 수읽기, 통타!! 💥", bad: "유인구에 속았다… 삼진" };
 const DUEL_PIT = { ok: "타자의 노림수를 피했어요! 🧠", great: "허를 찌른 결정구, 삼진!! 🎯", bad: "딱 노리던 코스였다… 통타" };
 
+/* ─────────────────────────────────────────────────────────────────────────
+ * 🍂 가을야구 전용 미니게임 — 실행은 ../post-stage.js(window.PostStage)에 있어요.
+ *
+ * 가을야구는 야구의 절정인데 예전에는 5월의 평범한 경기와 판정이 똑같았어요.
+ * 이제 **가을야구에서만** 아래 두 메커닉이 나와요. 정규시즌·고교 대회는
+ * 예전 8종(timing.js) 그대로예요 — playRandomMini의 첫 줄에서만 갈라져요.
+ *
+ *   🎯 mind  — 수싸움. 상대와 **동시에** 세 코스 중 하나를 골라요. 같은 코스면
+ *              타자가 이겨요. 날아오는 것도 시간 제한도 없어요 — 물음이 "언제"가
+ *              아니라 "어디"예요. 상대의 버릇(기색)을 읽고, 내 패턴이 읽히지 않게
+ *              해야 해요. 3구를 거쳐 결과가 쌓여요.
+ *   🏃 dash  — 홈 승부. 정보가 늦게 오는데 기다리면 물러설 자리를 잃어요
+ *
+ * 왜 새로운지는 post-stage.js 머리말에 적어 뒀어요. 요약하면 기존 8종과 투어
+ * 3종은 열한 개 모두 '언제 누르나'가 물음인데, 이 둘은 아니에요.
+ *
+ * 시리즈가 깊을수록 어려워져요(tier) — 와일드카드·준PO 0 / PO 1 / 마지막 시리즈 2.
+ * 상대가 버릇을 덜 흘리고 어깨가 강해져요. 판정 규칙은 그대로예요.
+ *
+ * window.PostStage를 부를 때마다 찾아가요(변수에 캐시하지 않아요) — 테스트가
+ * 기록용으로 갈아끼울 수 있어야 하니까요. window.Timing을 쓰던 방식과 같아요. */
+const POST_TIER = { wc: 0, semi: 0, po: 1, ks: 2 };
+/* 지금 내가 가을야구 경기를 치르는 중인가. career.js의 inPost()와 같은 뜻이지만
+ * 여기서도 S만 보고 판단해요 — game.js는 career.js보다 먼저 실행돼요. */
+const inPostMini = () => !!(S.post && S.post.myRound && !S.post.eliminated);
+const postTier = () => (S.post && POST_TIER[S.post.myRound]) || 0;
+
+// 🎯 수싸움 결과 문구 · 🏃 홈 승부 결과 문구 (타자 / 투수)
+const MIND_BAT = { ok: "한 번 읽어내 살아 나갔어요! 🎯", great: "코스를 완전히 읽어낸 통타!! 💥", bad: "끝까지 못 읽고 삼진…" };
+const MIND_PIT = { ok: "수싸움에서 밀리지 않았어요! 🎯", great: "타자의 노림수를 세 번 다 피했어요!! ⚡", bad: "노림수에 걸려 통타를 맞았어요…" };
+const DASH_BAT = { ok: "무리하지 않고 3루에 남았어요 🛑", great: "과감한 홈 쇄도, 헤드퍼스트 세이프!! 🏃💨", bad: "홈에서 아웃… 통한의 주루사" };
+const DASH_PIT = { ok: "중계로 끊어 주자를 묶었어요 🛑", great: "완벽한 홈 백업, 홈에서 잡아냈어요!! 🎯", bad: "판단이 늦어 홈을 그대로 내줬어요…" };
+
+/* 같은 규칙을 타자와 투수가 정반대로 읽어요. 코드는 하나예요 — aim과 문구만 갈아끼워요.
+ *   타자(aim: match) — 상대와 **같은 칸**을 고르면 이겨요. 투수의 버릇을 읽고,
+ *                      같은 칸만 거듭 노리면 투수가 그 칸을 피해요.
+ *   투수(aim: dodge) — 타자와 **다른 칸**을 골라야 이겨요. 타자의 노림수를 읽고,
+ *                      같은 칸만 거듭 던지면 타자가 그 칸에서 기다려요.
+ * 유불리가 통째로 뒤집히는 자리라, 문구도 '적중 ↔ 읽힘'으로 같이 뒤집어요.
+ * 그래야 투수가 "맞혔어요!"를 보는 일이 없어요. */
+const POST_MECH = {
+  mind: {
+    stat: () => (S.pos === "batter" ? S.stats.contact : S.stats.control),
+    txt: () => (S.pos === "batter" ? MIND_BAT : MIND_PIT),
+    run: (box, tier, cb) => {
+      const bat = S.pos === "batter";
+      window.PostStage.mind(box, {
+        label: bat
+          ? "🎯 가을야구의 한 타석! 투수의 버릇을 읽어요 — 같은 코스를 고르면 받아쳐요"
+          : "🎯 상대 4번과의 승부! 노림수를 피해요 — 타자와 다른 코스로 던져야 이겨요",
+        aim: bat ? "match" : "dodge",
+        zonePct: miniZone(bat ? S.stats.contact : S.stats.control),
+        tier,
+        msg: bat ? null : {
+          /* 투수는 '읽히지 않는 것'이 이기는 것이라 hit와 slip의 뜻이 뒤집혀요.
+           * 같은 칸 = 타자가 노림수를 맞힌 것 = 나쁜 일이에요. */
+          tellCue: "🔎 타자의 노림수 — 진한 칸에서 기다리고 있어요",
+          face: "🧢",                 // 타자가 실제로 노린 칸에 찍혀요
+          hit: "❗ 노리던 코스였어요 — 딱 걸렸어요",
+          slip: "🎯 허를 찔렀어요! 방망이가 헛돌아요",
+          win: "⚡ 세 번 다 피했어요 — 삼진!!",
+          even: "🔥 한 번 걸렸지만 잘 넘겼어요",
+          lose: "❌ 노림수에 걸려 통타를 맞았어요…",
+          timeup: "⏱️ 승부 종료",
+          scoreLabel: "읽힘",
+          tip: "타자가 노리는 칸을 <b>피해요</b> · <b>같은 칸만 거듭 던지면</b> 타자가 거기서 기다려요 · 서두를 필요 없어요",
+          /* 🧭 준비 화면도 투수 말로 갈아끼워요. 같은 규칙인데 부호가 반대라,
+           * 여기만 타자 말로 남으면 "같은 칸을 고르라"는 설명을 투수가 읽게 돼요.
+           * ⚠️ readyPick·readyTell에는 태그를 넣지 마세요 — 설명 칸에 그대로 들어가요. */
+          readyTitle: "🎯 수싸움",
+          readyLines: [
+            "타자와 <b>동시에</b> 코스를 골라요. 세 칸 중 <b>다른 칸</b>으로 던져야 이겨요.",
+            "<b>날아오는 공도, 제한 시간도 없어요.</b> 화면은 누르기 전까지 멈춰 있으니 천천히 보고 정하세요.",
+            "칸마다 선 <b>기색 막대</b>가 타자의 노림수예요 — 제구가 좋을수록 진짜 노림수에 가깝게 보여요.",
+            "내가 던진 자국(●)이 칸에 남아요. <b>같은 칸만 거듭 던지면 타자가 거기서 기다려요.</b>",
+            "3구 동안 <b>한 번도 안 읽히면</b> 삼진(완벽), 한 번 읽히면 잘 넘긴 거고, 두 번 읽히면 통타를 맞아요.",
+          ],
+          readyShort: "타자가 노리는 칸을 피하되, 같은 칸만 거듭 던지면 거기서 기다려요 · 3구 동안 안 읽히면 완벽",
+          readyPick: "세 칸 중 하나를 눌러 던져요. 타자와 다른 칸이면 피한 거예요 — 언제 눌러도 결과는 같아요",
+          readyTell: "칸 안의 막대는 타자의 노림수, 아래 점(●)은 내가 그 칸에 던진 자국이에요",
+        },
+      }, cb);
+    },
+  },
+  dash: {
+    stat: () => (S.pos === "batter" ? S.stats.run : S.stats.defense),
+    txt: () => (S.pos === "batter" ? DASH_BAT : DASH_PIT),
+    run: (box, tier, cb) => {
+      const bat = S.pos === "batter";
+      window.PostStage.dash(box, {
+        label: bat
+          ? "🏃 2사 후 큰 타구! 3루를 돌까요, 멈출까요?"
+          : "🏃 외야로 빠진 타구! 홈에서 승부할까요, 끊을까요?",
+        goText: bat ? "홈으로!! 🏃" : "홈 승부! 🎯",
+        stopText: bat ? "멈춰! ✋" : "끊어! 🧤",
+        zonePct: miniZone(bat ? S.stats.run : S.stats.defense),
+        tier,
+        msg: bat ? null : {
+          safe: "❌ 홈을 내줬어요…",   // 투수는 주자를 막는 쪽이라 뜻이 뒤집혀요
+          tagged: "🎉 홈에서 잡았어요!",
+          rundown: "❌ 우물쭈물하다 홈을 내줬어요…",
+          back: "🛑 끊어서 추가 진루를 막았어요",
+          late: "❌ 어정쩡한 중계, 주자가 다 살았어요…",
+          going: "🎯 홈으로 뿌려요!!",
+          timeup: "⏱️ 판단이 늦었어요…",
+          tip: "송구는 🌫️ 뒤에 숨어 있어요 · ✋ 선을 넘으면 <b>끊을 수 없어요</b>",
+          /* 🧭 여기도 준비 화면을 투수 말로. 버튼 이름(goText·stopText)은
+           * post-stage.js가 화면 버튼에서 그대로 가져가니 여기서 안 적어요. */
+          readyTitle: "🏃 홈 승부 — 버튼이 둘이에요",
+          readyLines: [
+            "위 레인은 <b>우리 송구</b>, 아래 레인은 <b>상대 주자</b>예요. 먼저 🏠에 닿는 쪽이 이겨요.",
+            "타구를 쫓는 동안(🌫️)은 송구가 어디쯤인지 안 보여요. 그 사이에도 주자는 <b>계속 홈으로 와요</b>.",
+            "아래 두 버튼 중 <b>반드시 하나를 고르세요</b>. 안 고르면 그대로 홈을 내줘요 — 여기서 가장 나쁜 수예요.",
+          ],
+          readyShort: "🌫️가 걷히기를 기다릴수록 ✋ 선이 가까워져요 · 둘 중 하나는 꼭 고르세요",
+          readyGo: "홈으로 뿌려요. 주자보다 송구가 먼저 닿으면 잡고, 늦으면 홈을 내줘요",
+          readyStop: "중계로 끊어요. ✋ 선을 넘기 전이면 추가 진루를 막고, 넘었으면 다 살아요",
+        },
+      }, cb);
+    },
+  },
+};
+
+/* 가을야구 미니게임 한 판. playRandomMini와 같은 계약이에요 — cb(res, txt).
+ * autoMiniOn() 경로가 없으면 테스트도 확인 페이지도 여기서 막혀요. */
+function playPostMini(container, cb) {
+  const mech = POST_MECH[pick(["mind", "dash"])];
+  const txt = mech.txt();
+  if (autoMiniOn()) { cb(autoRes(mech.stat()), txt); return; }
+  mech.run(container, postTier(), (res) => cb(res, txt));
+}
+
 // 승부처 미니게임 — 타이밍/홀드/사인 암기/반응 속도/수싸움 5종 랜덤
 function playRandomMini(container, cb) {
+  // 🍂 가을야구에서는 전용 메커닉 2종만 나와요. 정규시즌은 아래 8종 그대로예요.
+  if (inPostMini()) { playPostMini(container, cb); return; }
   const isBat = S.pos === "batter";
   const mech = pick(["bar", "hold", "seq", "react", "duel", "target", "drop", "odd"]);
   if (mech === "bar") {
@@ -1369,7 +1647,12 @@ function playRandomMini(container, cb) {
     const stat = isBat ? S.stats.contact : S.stats.control;
     if (autoMiniOn()) { cb(autoRes(stat), isBat ? DUEL_BAT : DUEL_PIT); return; }
     window.Timing.duel(container, {
-      label: isBat ? "🧠 수 싸움! 투수의 결정구 코스를 읽어라" : "🧠 수 싸움! 타자가 노리는 코스를 피해 던져라",
+      /* 🏷️ 예전 이름은 "수 싸움"이었어요. 가을야구 전용으로 🎯 수싸움이 새로 생기면서
+       * 이름이 겹쳤어요 — 5월에 본 것과 10월에 보는 것이 같은 게임처럼 읽히면
+       * 가을야구를 특별하게 만든 뜻이 사라져요. 여기(timing.js의 duel)는 힌트 한 줄을
+       * 보고 한 번 찍는 3택이라 '결정구 읽기'가 실제로 하는 일에 더 가까워요.
+       * timing.js는 한 줄도 안 건드렸어요 — 화면에 뜨는 이름은 이 label이 정해요. */
+      label: isBat ? "🧠 결정구 읽기! 투수가 노리는 코스를 찍어라" : "🧠 결정구 읽기! 타자가 노리는 코스를 피해 던져라",
       choices: ["몸쪽", "가운데", "바깥쪽"],
       hintChance: clamp((stat - 40) / 80 + (S.condition - 50) / 400, 0, 0.9),
     }, (res) => cb(res, isBat ? DUEL_BAT : DUEL_PIT));
@@ -1384,6 +1667,10 @@ function renderGameSim(cfg) {
   // 상대 팀 전력. career.js가 teamStrOf(상대)를 넘겨줘요.
   // 고교 대회처럼 안 넘기는 경로는 리그 평균(0.49)으로 봅니다.
   const oppStr = () => (typeof cfg.oppStr === "number" ? cfg.oppStr : 0.49);
+  /* 🌏 oppStr에 섞여 있는 리그 난이도 몫만 따로 받아요. 실점 '크기'에는 팀 전력이
+   * 아니라 이것만 걸려야 하거든요 (crisisRuns의 lgUp 설명 참고).
+   * 고교 대회처럼 안 넘기는 경로는 0 — KBO와 같아요. */
+  const lgUp = () => (typeof cfg.lgUp === "number" ? cfg.lgUp : 0);
   $("tour-round").textContent = cfg.title;
   const heads = Array.from({ length: 9 }, (_, i) => `<th>${i + 1}</th>`).join("");
   const cells = (side) => Array.from({ length: 9 }, (_, i) => `<td id="sb-${side}-${i}"></td>`).join("");
@@ -1500,7 +1787,7 @@ function renderGameSim(cfg) {
     } else {
       applyStep({ feeds: [{ text: `🔥 ${i + 1}회초, 주자가 쌓이며 위기!`, cls: "bad" }] });
       const doRes = (res) => {
-        const runs = crisisRuns(res, oppStr());
+        const runs = crisisRuns(res, oppStr(), lgUp());
         let txt, cls;
         if (runs === 0) {
           if (res === "perfect") { perf.k += 2; txt = "연속 탈삼진으로 위기 탈출!! 🧊"; }
