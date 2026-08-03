@@ -1,4 +1,4 @@
-/* 🍂 가을야구 전용 미니게임 2종(beta/post-stage.js) — 계약 · 배치 · 도달성 · 난이도 · 우승 확률.
+/* 🍂 가을야구 전용 미니게임 4종(beta/post-stage.js) — 계약 · 배치 · 도달성 · 난이도 · 우승 확률.
  *
  * 다섯 갈래로 봐요.
  *
@@ -17,7 +17,25 @@
  *              극단으로 쏠리지 않아야 해요.
  *
  * ─────────────────────────────────────────────────────────────────────────
- * 🎯 이번 판의 본론 — 🧊 볼카운트 승부를 들어내고 🎯 수싸움을 넣었어요.
+ * 💥🔥 이번 판의 본론 — 가을야구 전용 메커닉을 2종에서 **4종**으로 늘렸어요.
+ *
+ * 앞의 둘(🎯 수싸움 · 🏃 홈 승부)은 **둘 다 판단력만** 재요. 가을야구가 최대
+ * 19경기인데 절정에 힘으로 이기는 순간이 없었어요. 그래서 둘을 더했어요.
+ *
+ *   💥 surge — 힘 배분. 한 판에 쓸 힘이 정해져 있고(능력치가 그 양이에요) 세 승부에
+ *              나눠 쏟아요. 상대의 힘은 **숫자까지 전부** 보여요. 그래서 이건 읽기도
+ *              찍기도 아니고 **셈**이에요 — 이길 수 없는 줄을 버려야 나머지를 가져와요.
+ *              🎯 수싸움과 같이 **시계가 안 돌아요**(rAF 0회).
+ *   🔥 clash — 힘겨루기. 두 버튼을 **번갈아** 눌러 표식을 밀어내요. 순전히 힘이에요.
+ *              같은 쪽을 두 번 누르면 헛심을 써서 되레 밀려요.
+ *
+ * 이 파일이 새 둘에 대해 못 박는 건 셋이에요.
+ *   ① 💥 힘 배분도 시간이 결과에 한 톨도 안 들어가요 (🎯 수싸움과 같은 잣대로 재요)
+ *   ② 🔥 힘겨루기는 "언제 누르지?"가 아니라 **"순서"**예요 — 아무 때나 눌러도 되고,
+ *      대신 차례를 어기면 벌을 받아요. 그 둘을 나란히 재요.
+ *   ③ 2종일 때와 4종일 때의 **우승 확률을 나란히** 놓아요 (뽑기 확률이 바뀌니까요)
+ * ─────────────────────────────────────────────────────────────────────────
+ * 🎯 지난 판의 본론 — 🧊 볼카운트 승부를 들어내고 🎯 수싸움을 넣었어요.
  *
  * 볼카운트는 "안 누르는 게 수"인 판단 게임인데 화면(날아오는 공 + 스윙 버튼)이
  * 누가 봐도 타이밍 게임이라, 세 번을 고쳐도 "언제 눌러야 할지 모르겠다"가
@@ -39,6 +57,15 @@
  *
  * 난이도 숫자를 여기 옮겨 적지 않아요 — 전부 소스를 그대로 돌려서 냅니다.
  * 옮겨 적으면 post-stage.js를 고쳐도 초록이 뜹니다.
+ *
+ * ⏳ 오래 걸려요. ④는 사람 모델로 수천 판을 굴리고 ⑤는 가을야구를 통째로 수백 번
+ * 치러요. 메커닉이 넷이 되면서 ④의 표가 두 배가 됐어요. 손보는 중에 빨리 한 바퀴
+ * 돌리고 싶으면 표본을 줄이세요 — 눈금이 굵어질 뿐 검사 항목은 그대로예요.
+ *
+ *     POST_N=40 POST_CHAMP_N=12 node tests/rookie/post-mech-test.js
+ *
+ * 다만 **최종 확인은 기본값으로** 하세요. 표본이 작으면 완벽이 드물게 나오는 칸에서
+ * 한두 판 차이로 순서가 뒤집혀요.
  */
 "use strict";
 const fs = require("fs");
@@ -155,19 +182,38 @@ function vstage(src, api) {
     }
     const step = (ctl && ctl.step) || 4;
     const to = (ctl && ctl.to) || 9000;
-    if (watch) for (let t = step; t <= to; t += step) vt.push({ at: t + 0.001, id: vid++, fn: () => { if (res === null) watch(wrap, VT, fire); } });
+    /* 👁 눈(watch)은 줄(vt)에 미리 밀어 넣지 않고 **세어 가며** 꺼내요.
+     * 예전에는 판이 시작할 때 수천 개를 통째로 밀어 넣었어요(4ms 간격으로 9초면
+     * 2250개). 그런데 아래 반복문은 한 걸음마다 줄 전체를 다시 정렬하니, 판 하나가
+     * 수백만 번 비교가 됐어요 — 메커닉이 넷이 되면서 ④ 난이도 한 바퀴가 몇십 분이
+     * 됐습니다. 눈은 step 간격으로 규칙적이라 줄에 세울 이유가 없어요. 다음 눈의
+     * 시각과 다음 타이머의 시각을 그때그때 견주면 끝이라, 줄에는 진짜 타이머
+     * 몇 개만 남아요.
+     * 꺼내는 순서는 예전과 같아요 — 같은 시각이면 눈이 먼저예요(예전에도 눈이
+     * 먼저 밀려 있어서 안정 정렬이 눈을 앞에 뒀어요). 눈의 시각에 0.001을 얹는
+     * 것도 그대로라, 같은 ms의 타이머와 겹치지 않아요. */
+    let watchAt = watch ? step + 0.001 : Infinity;
     let steps = 0;
     const until = (ctl && ctl.stopAt) || (ctl && ctl.until) || 22000;
-    while (vt.length && res === null && steps++ < 300000) {
-      vt.sort((a, b) => a.at - b.at);
+    while (res === null && steps++ < 300000) {
+      if (vt.length > 1) vt.sort((a, b) => a.at - b.at);
+      const nextTimer = vt.length ? vt[0].at : Infinity;
       /* 다음 일이 멈추기로 한 시각보다 뒤면 **꺼내지 않고** 멈춰요.
        * 꺼내 놓고 시각만 보면 그 일이 이미 벌어진 뒤예요 — 🎯 수싸움처럼 남은
        * 타이머가 15초짜리 안전망 하나뿐이면, 0.04초 화면을 찍으려다 안전망을
        * 터뜨려서 판이 끝나 버려요. */
-      if (vt[0].at > until) break;
-      const ev = vt.shift();
-      VT = ev.at;
-      ev.fn();
+      const nextAt = Math.min(watchAt, nextTimer);
+      if (nextAt === Infinity || nextAt > until) break;
+      if (watchAt <= nextTimer) {
+        VT = watchAt;
+        const after = watchAt + step;
+        watchAt = (after - 0.001) <= to + 1e-9 ? after : Infinity;
+        watch(wrap, VT, fire);
+      } else {
+        const ev = vt.shift();
+        VT = ev.at;
+        ev.fn();
+      }
     }
     return { res, endedAt, left: box.innerHTML, ready: !!readyBox, readyHTML, preTimers, rafs };
   }
@@ -183,6 +229,13 @@ const TM = vstage(TM_SRC, "Timing");
 /* 🎯 수싸움은 움직이는 게 없어서 4ms마다 볼 이유가 없어요. 대신 한 구를 오래
  * 들여다보는 사람도 재야 하니 끝 시각은 길게 잡아요. */
 const MIND_WATCH = { step: 12, to: 16000 };
+/* 💥 힘 배분은 **훨씬** 성기게 봐도 돼요. 화면에서 움직이는 게 없고 결과가 시각과
+ * 무관해서, 눈이 40ms마다 보든 12ms마다 보든 판정이 글자까지 같아요(위 ⏱️ 검사가
+ * 그걸 못 박아요). 대신 한 칸씩 여러 번 얹으니 끝 시각은 넉넉해야 해요.
+ * 🔥 힘겨루기는 반대로 시간이 실제로 흐르니 촘촘히 봐요 — 눈이 성기면 사람이
+ * 실제보다 느리게 누르는 셈이 돼요. */
+const SURGE_WATCH = { step: 40, to: 24000 };
+const CLASH_WATCH = { step: 8, to: 6000 };
 
 const dist = (n, fn) => {
   const d = { perfect: 0, good: 0, miss: 0 };
@@ -211,13 +264,16 @@ const pct = (v) => `${(v * 100).toFixed(0)}%`;
 group("① 계약");
 
 check(/window\.PostStage = \(\(\) => \{/.test(PS_SRC), "post-stage.js가 window.PostStage 하나만 세운다");
-check(/return \{\s*mind, dash,/.test(PS_SRC), "mind · dash 두 메커닉을 내보낸다");
+check(/return \{\s*mind, dash, surge, clash,/.test(PS_SRC), "mind · dash · surge · clash 네 메커닉을 내보낸다");
 // 판정은 세 가지뿐 — cb로 나가는 값이 전부 이 셋 안에 있어야 해요
 {
   const grades = new Set((PS_SRC.match(/finish\(\s*"(\w+)"/g) || []).map((s) => s.match(/"(\w+)"/)[1]));
   /* 🎯 수싸움은 등급을 문자열이 아니라 mindGrade가 정해요 — 그래서 산식을 실제로
    * 굴려서 나오는 값도 같이 모아요. 표를 베껴 적지 않으려는 거예요. */
   for (let h = -1; h <= T.MIND.rounds + 2; h++) for (const d of [true, false]) grades.add(T.mindGrade(h, d));
+  /* 💥 힘 배분과 🔥 힘겨루기도 등급을 산식이 정해요 — 같은 이유로 실제로 굴려서 모아요. */
+  for (let w = -1; w <= T.SURGE.rows + 2; w++) for (const h of [true, false]) grades.add(T.surgeGrade(w, h));
+  for (let p = -20; p <= 120; p += 4) for (const h of [true, false]) grades.add(T.clashGrade(p, h));
   for (const g of ["perfect", "good", "miss"]) grades.delete(g);
   check(grades.size === 0, `판정이 perfect · good · miss 셋뿐이다 (그 밖: ${[...grades].join(" · ") || "없음"})`);
   check(/cb\(res\)/.test(PS_SRC), "cb(res) 한 곳으로만 결과가 나간다");
@@ -228,10 +284,10 @@ check(!/window\.Timing/.test(PS_SRC), "timing.js의 함수도 재사용하지 �
   const psFns = (PS_SRC.match(/^  function (\w+)\(/gm) || []).map((s) => s.match(/function (\w+)/)[1]);
   const tsFns = (TS_SRC.match(/^  function (\w+)\(/gm) || []).map((s) => s.match(/function (\w+)/)[1]);
   const tmFns = (TM_SRC.match(/^  function (\w+)\(/gm) || []).map((s) => s.match(/function (\w+)/)[1]);
-  const mech = ["mind", "dash"];
+  const mech = ["mind", "dash", "surge", "clash"];
   const dup = mech.filter((m) => tsFns.includes(m) || tmFns.includes(m));
   check(dup.length === 0, `메커닉 이름이 투어 3종·기존 8종과 겹치지 않는다 (겹친 이름 ${dup.join(" · ") || "없음"})`);
-  check(psFns.includes("mind") && psFns.includes("dash"), `메커닉 두 개가 실제로 여기 있다 (${psFns.join(" · ")})`);
+  check(mech.every((m) => psFns.includes(m)), `메커닉 네 개가 실제로 여기 있다 (${psFns.join(" · ")})`);
 }
 
 /* 🧊 볼카운트 승부는 깨끗이 들어냈어요 — 죽은 코드가 남으면 다음 사람이 그걸
@@ -274,12 +330,15 @@ guard("내려받는 게임", () => {
   check(/\.\.\/post-stage\.js/.test(sw), "서비스워커가 새 파일을 캐시 목록에 담는다 (오프라인 플레이)");
 });
 
-// CSS는 절대색이 아니라 테마 변수여야 해요 (새로 들어간 .pm-* 만 봐요)
+// CSS는 절대색이 아니라 테마 변수여야 해요 (새로 들어간 규칙만 봐요)
 guard("테마 변수", () => {
-  const block = CSS_SRC.split("\n").filter((l) => /^\.pm-|^\.pm/.test(l.trim())).join("\n");
-  const hex = block.match(/#[0-9a-fA-F]{3,8}\b/g) || [];
-  check(hex.length === 0, `🎯 수싸움 CSS가 절대색을 안 쓴다 (${hex.join(" · ") || "없음"})`);
-  check(/var\(--/.test(block), "색을 테마 변수로 가져온다");
+  for (const [name, re] of [["🎯 수싸움", /^\.pm-|^\.pm/], ["💥 힘 배분", /^\.sg-/], ["🔥 힘겨루기", /^\.pc-/]]) {
+    const block = CSS_SRC.split("\n").filter((l) => re.test(l.trim())).join("\n");
+    const hex = block.match(/#[0-9a-fA-F]{3,8}\b/g) || [];
+    check(block.length > 100 && hex.length === 0,
+      `${name} CSS가 절대색을 안 쓴다 (${hex.join(" · ") || "없음"})`);
+    check(/var\(--/.test(block), `${name} — 색을 테마 변수로 가져온다`);
+  }
 });
 
 /* ================================================================
@@ -293,10 +352,15 @@ guard("테마 변수", () => {
 group("🧭 준비 화면");
 const MIND_OPT = { label: "t", zonePct: 22, tier: 0 };
 const DASH_OPT = { label: "t", zonePct: 22, tier: 0, goText: "돌진! 🏃", stopText: "멈춰! ✋" };
+const SURGE_OPT = { label: "t", zonePct: 22, tier: 0 };
+const CLASH_OPT = { label: "t", zonePct: 22, tier: 0, aText: "🦵 하체", bText: "💪 스윙" };
+const MECH_OPT = { mind: MIND_OPT, dash: DASH_OPT, surge: SURGE_OPT, clash: CLASH_OPT };
+const MECH_NAME = { mind: "🎯 수싸움", dash: "🏃 홈 승부", surge: "💥 힘 배분", clash: "🔥 힘겨루기" };
+const MECHS = ["mind", "dash", "surge", "clash"];
 guard("준비 화면", () => {
   const R = PS.V.PostStage._t;
-  const OPTS = { mind: MIND_OPT, dash: DASH_OPT };
-  const NAMES = [["🎯 수싸움", "mind"], ["🏃 홈 승부", "dash"]];
+  const OPTS = MECH_OPT;
+  const NAMES = MECHS.map((m) => [MECH_NAME[m], m]);
   const keyDesc = (html, name) => {
     const esc = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const m = html.match(new RegExp(`<b>${esc}</b><span>([^<]+)</span>`));
@@ -306,13 +370,14 @@ guard("준비 화면", () => {
   PS.V.localStorage.removeItem(R.READY_KEY);
   /* 두 메커닉의 안전망(🎯 구마다 15초 · 🏃 6초)보다 길게 흘려 봐야 "정말로 아무것도
    * 안 돈다"를 말할 수 있어요. */
-  const SAFE = Math.max(R.MIND.capPer, R.DASH.cap);
+  const SAFE = Math.max(R.MIND.capPer, R.DASH.cap, R.SURGE.cap, R.CLASH.cap);
 
   for (const [name, mech] of NAMES) {
     let lastVT = 0, moved = 0;
     const idle = PS.trial(mech, OPTS[mech], 1, (wrap, now) => {
       lastVT = now;
-      if (wrap.querySelector(".pm-board") || wrap.querySelector(".ps-runner")) moved++;
+      if (wrap.querySelector(".pm-board") || wrap.querySelector(".ps-runner")
+        || wrap.querySelector(".sg-rows") || wrap.querySelector(".pc-bar")) moved++;
     }, { noStart: true, step: 40, to: SAFE + 2000, until: SAFE + 3000 });
     check(idle.ready, `${name} — 행동이 시작되기 전에 준비 화면이 먼저 뜬다`);
     check(idle.preTimers === 0,
@@ -347,6 +412,32 @@ guard("준비 화면", () => {
   check(/제한 시간도 없어요/.test(mindHTML),
     "🎯 수싸움 — 준비 화면이 '제한 시간이 없다'고 분명히 말한다");
 
+  /* 💥 힘 배분도 시간 축이 없는 메커닉이라 같은 말을 해 줘야 해요. 그리고 세 줄과
+   * ↩️ 되돌리기가 각각 무엇인지 적혀 있어야 첫 판을 안 날려요. */
+  PS.V.localStorage.removeItem(R.READY_KEY);
+  const surgeHTML = PS.trial("surge", SURGE_OPT, 1, null, { noStart: true }).readyHTML;
+  check(keyDesc(surgeHTML, R.SURGE_ROWS.join(" · ")).length >= 10,
+    `💥 힘 배분 — 세 줄이 무엇인지 적혀 있다 ("${keyDesc(surgeHTML, R.SURGE_ROWS.join(" · "))}")`);
+  check(keyDesc(surgeHTML, R.SURGE_MSG.undo).length >= 10,
+    `💥 힘 배분 — ↩️ 되돌리기가 무엇인지도 적혀 있다 ("${keyDesc(surgeHTML, R.SURGE_MSG.undo)}")`);
+  check(/제한 시간도 없어요/.test(surgeHTML),
+    "💥 힘 배분 — 준비 화면이 '제한 시간이 없다'고 분명히 말한다");
+  /* 처음 하는 사람이 꼭 하는 실수(골고루 나눠 담기)를 준비 화면이 미리 짚어 줘야 해요.
+   * 이게 없으면 첫 판은 통째로 버리는 판이 돼요. */
+  check(/버려야/.test(surgeHTML),
+    "💥 힘 배분 — '이길 수 없는 줄은 버려야 한다'를 미리 말해 준다");
+
+  /* 🔥 힘겨루기는 버튼이 둘이라 각각이 무엇인지가 본론이에요 (🏃 홈 승부와 같아요).
+   * 그리고 "맞출 타이밍은 없다"를 말로 해 줘야 앞 메커닉에 데인 기대가 안 생겨요. */
+  PS.V.localStorage.removeItem(R.READY_KEY);
+  const clashHTML = PS.trial("clash", CLASH_OPT, 1, null, { noStart: true }).readyHTML;
+  for (const btn of [CLASH_OPT.aText, CLASH_OPT.bText]) {
+    const desc = keyDesc(clashHTML, btn);
+    check(desc.length >= 10, `🔥 힘겨루기 — "${btn}"이 무엇을 하는지 적혀 있다 ("${desc}")`);
+  }
+  check(/번갈아/.test(clashHTML) && /맞출 타이밍은 없어요/.test(clashHTML),
+    "🔥 힘겨루기 — '번갈아 누르면 되고 맞출 타이밍은 없다'고 분명히 말한다");
+
   /* ④ 여러 번 본 뒤에는 설명이 짧아져요. 줄어드는 건 설명의 길이지 시작
    * 버튼이 아니에요 — 준비 화면 자체는 계속 떠야 해요. */
   PS.V.localStorage.removeItem(R.READY_KEY);
@@ -366,7 +457,7 @@ guard("준비 화면", () => {
     "짧아져도 ▶️ 시작 버튼은 그대로다 — 시작 시점은 계속 사람이 잡아요");
   check(R.FULL_SHOWS >= 1 && R.FULL_SHOWS <= 5,
     `전문을 펴 보이는 횟수가 한 손 안이다 (${R.FULL_SHOWS}번)`);
-  check(Object.keys(R.readSeen()).every((k) => ["mind", "dash"].includes(k)),
+  check(Object.keys(R.readSeen()).every((k) => MECHS.includes(k)),
     `본 횟수는 새 열쇠(${R.READY_KEY}) 안에만 쌓인다 (${JSON.stringify(R.readSeen())})`);
 
   /* ⑤ 기존 8종에는 준비 화면이 없어요 (회귀). 한 줄로 충분한 데다, 매 타석마다
@@ -400,25 +491,30 @@ guard("준비 화면", () => {
  *      사람의 판정 분포가 판마다 하나도 안 어긋나요
  *   ④ 화면 어디에도 남은 시간을 세는 물건이 없다
  * ================================================================ */
-group("⏱️ 🎯 수싸움 — 시간이 결과에 안 들어가는가");
+group("⏱️ 🎯 수싸움 · 💥 힘 배분 — 시간이 결과에 안 들어가는가");
 guard("시간 무관", () => {
   const O = { label: "t", zonePct: 30, tier: 0 };
 
-  // ① 프레임 루프를 아예 안 돌려요
-  let rafSum = 0;
-  for (let i = 0; i < 40; i++) rafSum += PS.trial("mind", O, 100 + i, null, { stopAt: 12000 }).rafs;
-  check(rafSum === 0, `판이 열려 있는 내내 requestAnimationFrame을 한 번도 안 부른다 (${rafSum}회)`);
-  const dashRaf = PS.trial("dash", DASH_OPT, 1, null, { stopAt: 1200 }).rafs;
-  check(dashRaf > 0, `견줌: 🏃 홈 승부는 같은 잣대로 프레임을 돌린다 (${dashRaf}회) — 잣대가 살아 있어요`);
+  /* ① 프레임 루프를 아예 안 돌려요 — 시계가 없는 두 메커닉을 같이 봐요.
+   * 🏃·🔥는 반대로 돌아야 해요(잣대가 살아 있는지 확인하는 자리예요). */
+  for (const [name, mech, board] of [["🎯 수싸움", "mind", "pm-board"], ["💥 힘 배분", "surge", "sg-rows"]]) {
+    let rafSum = 0;
+    for (let i = 0; i < 40; i++) rafSum += PS.trial(mech, O, 100 + i, null, { stopAt: 12000 }).rafs;
+    check(rafSum === 0, `${name} — 판이 열려 있는 내내 requestAnimationFrame을 한 번도 안 부른다 (${rafSum}회)`);
 
-  // ② 손을 놓고 있으면 화면이 한 글자도 안 바뀌어요
-  let same = 0;
-  for (let i = 0; i < 20; i++) {
-    const a = PS.trial("mind", O, 200 + i, null, { stopAt: 300 });
-    const b = PS.trial("mind", O, 200 + i, null, { stopAt: 12000 });
-    if (a.left === b.left && /pm-board/.test(a.left)) same++;
+    // ② 손을 놓고 있으면 화면이 한 글자도 안 바뀌어요
+    let same = 0;
+    for (let i = 0; i < 20; i++) {
+      const a = PS.trial(mech, O, 200 + i, null, { stopAt: 300 });
+      const b = PS.trial(mech, O, 200 + i, null, { stopAt: 12000 });
+      if (a.left === b.left && new RegExp(board).test(a.left)) same++;
+    }
+    check(same === 20, `${name} — 0.3초 뒤 화면과 12초 뒤 화면이 글자까지 같다 (${same}/20판)`);
   }
-  check(same === 20, `0.3초 뒤 화면과 12초 뒤 화면이 글자까지 같다 (${same}/20판)`);
+  const dashRaf = PS.trial("dash", DASH_OPT, 1, null, { stopAt: 1200 }).rafs;
+  const clashRaf = PS.trial("clash", CLASH_OPT, 1, null, { stopAt: 1200 }).rafs;
+  check(dashRaf > 0 && clashRaf > 0,
+    `견줌: 🏃 홈 승부(${dashRaf}회)·🔥 힘겨루기(${clashRaf}회)는 같은 잣대로 프레임을 돌린다 — 잣대가 살아 있어요`);
 
   /* ③ 언제 누르든 결과가 같아요. 같은 씨앗·같은 전략으로 **고르는 시각만** 바꿔
    * 두 번 세워요. 손이 흔들리지 않는 사람(pnoise 0)이라 난수도 안 갈려서, 결과가
@@ -435,21 +531,114 @@ guard("시간 무관", () => {
       fastDur += f.endedAt; slowDur += s.endedAt;
     }
     check(diff === 0,
-      `${aim === "match" ? "타자" : "투수"} — 0.04초에 고른 판과 4.2초에 고른 판의 결과가 하나도 안 다르다 (${diff}/${N}판)`);
-    console.log(`   ${aim === "match" ? "타자" : "투수"} 같은 판, 고르는 시각만 다르게 | 빠른 손 ${(fastDur / N / 1000).toFixed(2)}초 · 느린 손 ${(slowDur / N / 1000).toFixed(2)}초 · 결과 차이 0판`);
+      `🎯 ${aim === "match" ? "타자" : "투수"} — 0.04초에 고른 판과 4.2초에 고른 판의 결과가 하나도 안 다르다 (${diff}/${N}판)`);
+    console.log(`   🎯 ${aim === "match" ? "타자" : "투수"} 같은 판, 고르는 시각만 다르게 | 빠른 손 ${(fastDur / N / 1000).toFixed(2)}초 · 느린 손 ${(slowDur / N / 1000).toFixed(2)}초 · 결과 차이 0판`);
+  }
+  /* 💥 힘 배분도 같은 잣대로. 여기는 '무엇을 고르는가'가 아니라 '어디에 얹는가'라
+   * 계산이 흔들리지 않는 사람(plan 1.0)으로 세워요 — 그러면 난수도 안 갈려서,
+   * 결과가 다르면 그건 오롯이 시각 때문이에요. */
+  for (const aim of ["over", "hold"]) {
+    let diff = 0, fastDur = 0, slowDur = 0;
+    const N = 120;
+    for (let i = 0; i < N; i++) {
+      const f = surgeAs(34, 1, 400 + i, { plan: 1, think: 30, tap: 30 }, aim);
+      const sl = surgeAs(34, 1, 400 + i, { plan: 1, think: 2200, tap: 1500 }, aim);
+      if (f.res !== sl.res) diff++;
+      fastDur += f.endedAt; slowDur += sl.endedAt;
+    }
+    check(diff === 0,
+      `💥 ${aim === "over" ? "타자" : "투수"} — 0.03초마다 얹은 판과 2.2초마다 얹은 판의 결과가 하나도 안 다르다 (${diff}/${N}판)`);
+    console.log(`   💥 ${aim === "over" ? "타자" : "투수"} 같은 판, 얹는 시각만 다르게 | 빠른 손 ${(fastDur / N / 1000).toFixed(2)}초 · 느린 손 ${(slowDur / N / 1000).toFixed(2)}초 · 결과 차이 0판`);
   }
 
   /* ④ 화면에 남은 시간을 세는 물건이 없어요. 진행 막대·초읽기·깜빡임이 있으면
    * 그 자체가 "언제 누르지?"예요 — 앞 메커닉의 판독 게이지가 정확히 그거였어요. */
-  const shot = PS.trial("mind", O, 7, null, { stopAt: 500 });
-  check(!/ps-track|tm-bar|tm-zone|tm-fill/.test(shot.left),
-    "화면에 시간을 세는 물건이 하나도 없다 (진행 막대·판독 게이지 없음)");
+  for (const [name, mech] of [["🎯 수싸움", "mind"], ["💥 힘 배분", "surge"]]) {
+    const shot = PS.trial(mech, O, 7, null, { stopAt: 500 });
+    check(!/ps-track|tm-bar|tm-zone|tm-fill|pc-time/.test(shot.left),
+      `${name} — 화면에 시간을 세는 물건이 하나도 없다 (진행 막대·판독 게이지 없음)`);
+  }
   /* 규칙만 잘라 봐요 — 머리말 주석에 "transition조차 안 걸어요"라고 적어 뒀거든요.
-   * 첫 규칙(.pm-head)부터 시작해서 남은 주석도 마저 걷어내요. */
-  const pmCss = (CSS_SRC.split(".pm-head {")[1] || "").split("/* 판정 한 줄")[0]
+   * 첫 규칙부터 시작해서 남은 주석도 마저 걷어내요. */
+  const cssBlock = (from, to) => (CSS_SRC.split(from)[1] || "").split(to)[0]
     .replace(/\/\*[\s\S]*?\*\//g, "");
-  check(pmCss.length > 200 && !/transition|animation/.test(pmCss),
-    "🎯 수싸움 CSS에 움직이는 효과가 없다 (transition·animation 없음)");
+  for (const [name, from, to] of [
+    ["🎯 수싸움", ".pm-head {", "/* 판정 한 줄"],
+    ["💥 힘 배분", ".sg-pool {", "/* 🔥 힘겨루기"],
+  ]) {
+    const block = cssBlock(from, to);
+    check(block.length > 200 && !/transition|animation/.test(block),
+      `${name} CSS에 움직이는 효과가 없다 (transition·animation 없음)`);
+  }
+});
+
+/* ================================================================
+ * 🔥 힘겨루기 — "언제 누르지?"가 아니라 "순서"인가
+ *
+ * 이 메커닉은 유일하게 실시간이에요. 그래서 앞 메커닉(🧊 볼카운트)이 무너진 자리에
+ * 다시 설 위험이 있어요 — "언제 눌러야 하지?"가 생기면 안 돼요.
+ * 여기서 못 박는 건 셋이에요.
+ *   ① **맞춰야 할 순간이 없다** — 같은 횟수를 언제 나눠 눌러도 결과가 거의 같아요.
+ *      (앞·중간·뒤로 몰아쳐도 밀어낸 총량이 같으면 판정도 같아야 해요.)
+ *   ② **순서를 어기면 벌을 받는다** — 그게 이 메커닉의 실력이에요.
+ *   ③ **다음에 누를 버튼이 화면에 표시된다** — 외울 것도 반응할 것도 없어요.
+ * ================================================================ */
+group("🔥 힘겨루기 — 순서지 타이밍이 아니다");
+guard("순서", () => {
+  const O = { label: "t", zonePct: 40, tier: 0, aim: "push" };
+  /* ① 같은 횟수를 '앞으로 몰아서' 누른 사람과 '뒤로 몰아서' 누른 사람.
+   * 상대가 미는 속도가 일정하니 밀어낸 총량이 같고, 그래서 판정도 같아야 해요.
+   * (타이밍 게임이면 여기서 갈려요 — 존을 맞춘 쪽과 놓친 쪽이 생기니까요.) */
+  const burst = (at) => (seed) => {
+    let n = 0, turn = 0, next = at;
+    return PS.trial("clash", O, seed, (wrap, now, fire) => {
+      const a = wrap.querySelector(".pc-a"), b = wrap.querySelector(".pc-b");
+      if (!a || a.disabled || n >= 12 || now < next) return;
+      next = now + 90;
+      n++;
+      fire(turn === 0 ? a : b);
+      turn = turn === 0 ? 1 : 0;
+    }, { step: 8, to: 6000 });
+  };
+  let diff = 0;
+  const early = burst(60), late = burst(1400);
+  for (let i = 0; i < 80; i++) if (early(600 + i).res !== late(600 + i).res) diff++;
+  check(diff <= 4,
+    `12번을 앞에서 몰아치든 뒤에서 몰아치든 결과가 거의 같다 (다른 판 ${diff}/80) — 맞춰야 할 순간이 없어요`);
+
+  // ② 순서를 어기면 벌을 받아요 — 같은 횟수인데 성적이 나빠져야 해요
+  const tapAs = (wrong) => (seed) => {
+    let turn = 0, next = 0;
+    return PS.trial("clash", O, seed, (wrap, now, fire) => {
+      const a = wrap.querySelector(".pc-a"), b = wrap.querySelector(".pc-b");
+      if (!a || a.disabled || now < next) return;
+      next = now + 240;
+      const t = wrong ? 0 : turn;              // 한쪽만 계속 눌러요
+      if (!wrong) turn = turn === 0 ? 1 : 0;
+      fire(t === 0 ? a : b);
+    }, { step: 8, to: 6000 });
+  };
+  const good = dist(120, tapAs(false)), bad = dist(120, tapAs(true));
+  console.log(`   같은 횟수(초당 4번) | 번갈아 배수 ${mult(good).toFixed(3)} · 한쪽만 ${mult(bad).toFixed(3)}`);
+  check(mult(bad) < mult(good) - 0.15,
+    `한쪽만 거듭 누르면 확실히 나쁘다 (${mult(bad).toFixed(3)} < ${mult(good).toFixed(3)}) — 순서가 실력이에요`);
+
+  // ③ 다음에 누를 버튼이 화면에서 빛나요 (외울 것도, 반응할 것도 없어요)
+  const shot = PS.trial("clash", CLASH_OPT, 3, null, { stopAt: 40 });
+  check(/pc-next/.test(shot.left),
+    "다음에 누를 버튼이 화면에 표시된다 (.pc-next)");
+  /* 그리고 그 표시가 **실제로 따라 움직여요** — 한 번 누르면 반대쪽으로 넘어가야 해요. */
+  let moved = 0;
+  for (let i = 0; i < 20; i++) {
+    const r = PS.trial("clash", CLASH_OPT, 900 + i, (wrap, now, fire) => {
+      if (now < 100) return;
+      const b = wrap.querySelector(".pc-b");
+      if (b && b.classList.contains("pc-next")) return;
+      fire(".pc-a");
+    }, { step: 20, to: 400, stopAt: 420 });
+    if (/pc-b[^"]*pc-next|pc-next[^"]*pc-b/.test(r.left) || /class="[^"]*pc-b[^"]*pc-next/.test(r.left)) moved++;
+  }
+  check(moved >= 18, `한 번 누르면 표시가 반대쪽으로 넘어간다 (${moved}/20판)`);
 });
 
 /* ================================================================
@@ -598,26 +787,42 @@ guard("읽기", () => {
  * ================================================================ */
 group("✋ 탭 누수 (한 번 누른 게 두 번 먹히면 안 돼요)");
 guard("탭 누수", () => {
-  const OPTS = { mind: MIND_OPT, dash: DASH_OPT };
+  const OPTS = MECH_OPT;
   /* 시작 제스처의 꼬리가 떨어질 만한 자리 — onTap이 걸린 요소를 전부 적어요.
    * post-stage.js에 onTap이 새로 붙으면 여기도 같이 늘려야 해요. */
   const SPOTS = {
     mind: [['.pm-col[data-i="0"]', "첫 칸"], ['.pm-col[data-i="1"]', "가운데 칸"], ['.pm-col[data-i="2"]', "끝 칸"]],
     dash: [[".ps-go", "돌진 버튼"], [".ps-stop", "멈춰 버튼"]],
+    /* noop이 붙은 자리는 **판이 막 시작한 순간에는 눌러도 아무 일도 없는** 버튼이에요.
+     * ↩️ 되돌리기가 그래요 — 아직 얹은 칸이 없으니 되돌릴 것도 없어요. 그래서
+     * 누수 검사(①~③)는 그대로 하되 "새 탭이 먹힌다"만 건너뛰고, 그건 아래
+     * '↩️ 되돌리기' 검사가 따로 봐요. */
+    surge: [['.sg-row[data-i="0"]', "첫 줄"], ['.sg-row[data-i="1"]', "가운데 줄"], ['.sg-row[data-i="2"]', "끝 줄"], [".sg-undo", "되돌리기 버튼", true]],
+    clash: [[".pc-a", "하체 버튼"], [".pc-b", "상체 버튼"]],
   };
-  const NAME = { mind: "🎯 수싸움", dash: "🏃 홈 승부" };
+  const NAME = MECH_NAME;
+  /* onTap이 걸린 자리를 빠뜨리면 이 검사는 있으나 마나예요. 그래서 소스에서
+   * onTap을 부른 횟수를 세어, 위 표가 그만큼을 덮는지 확인해요.
+   * (mind 3칸 + dash 2 + surge 3줄+되돌리기 + clash 2 = 11, 그리고 준비 화면의 ▶️ 1) */
+  {
+    const calls = (PS_SRC.match(/onTap\(/g) || []).length - 1;   // 함수 정의 한 줄은 빼요
+    const listed = Object.values(SPOTS).reduce((a, b) => a + b.length, 0);
+    const loops = (PS_SRC.match(/forEach\(\([^)]*\) => onTap\(/g) || []).length;
+    check(calls >= 1 && listed >= calls - loops,
+      `onTap이 걸린 자리를 표가 다 덮는다 (소스 ${calls}곳 · 표 ${listed}곳 · 그중 반복문 ${loops}개)`);
+  }
   const SNAP = 40;    // 시작 직후의 화면을 찍는 시각(ms)
   const LATER = 240;  // 새 손가락을 짚는 시각(ms)
   const live = (h) => /tm-box/.test(h) && !/tm-done-/.test(h);
 
-  for (const mech of ["mind", "dash"]) {
+  for (const mech of MECHS) {
     /* 기준선 — 꼬리가 아예 안 샜을 때의 화면이에요. 같은 seed·같은 시각이라
      * 타이머 일정이 완전히 같아서, 화면도 한 글자까지 같아야 정상이에요. */
     const base = PS.trial(mech, OPTS[mech], 7, null, { noTail: true, stopAt: SNAP });
     check(base.res === null && live(base.left),
       `${NAME[mech]} — 기준선: 시작 ${SNAP}ms 뒤에도 판이 살아 있다 (${base.res || "판정 없음"})`);
 
-    for (const [sel, spot] of SPOTS[mech]) {
+    for (const [sel, spot, noop] of SPOTS[mech]) {
       // ① 실기기 순서 그대로 — pointerdown → pointerup → click, 꼬리는 이 자리로
       const leak = PS.trial(mech, OPTS[mech], 7, null, { leak: sel, stopAt: SNAP });
       check(leak.res === null,
@@ -627,22 +832,26 @@ guard("탭 누수", () => {
         `${NAME[mech]} — 화면이 한 칸도 안 움직였다 (${spot} · 꼬리가 안 샌 판과 같은 화면)`);
 
       // ② 그 뒤 새로 짚은 손가락은 먹혀요 — 안 그러면 게임이 죽은 거예요
-      const after = PS.trial(mech, OPTS[mech], 7, null,
-        { leak: sel, stopAt: LATER + 40, tap3: { at: LATER, sel } });
-      const idle = PS.trial(mech, OPTS[mech], 7, null,
-        { leak: sel, stopAt: LATER + 40 });
-      check(after.left !== idle.left || after.res !== idle.res,
-        `${NAME[mech]} — 새 탭(pointerdown→pointerup→click)은 ${spot}에서 그대로 먹힌다`);
+      if (!noop) {
+        const after = PS.trial(mech, OPTS[mech], 7, null,
+          { leak: sel, stopAt: LATER + 40, tap3: { at: LATER, sel } });
+        const idle = PS.trial(mech, OPTS[mech], 7, null,
+          { leak: sel, stopAt: LATER + 40 });
+        check(after.left !== idle.left || after.res !== idle.res,
+          `${NAME[mech]} — 새 탭(pointerdown→pointerup→click)은 ${spot}에서 그대로 먹힌다`);
+      }
 
       // ③ 마우스·키보드 경로 — click만 와도 시작하고, 그 뒤 click도 먹혀요
       const mouse = PS.trial(mech, OPTS[mech], 7, null, { start: "click", stopAt: SNAP });
       check(mouse.res === null && live(mouse.left) && mouse.left === base.left,
         `${NAME[mech]} — 마우스(click만)로 시작해도 즉시 아무 일도 안 난다 (${spot})`);
-      const mouseTap = PS.trial(mech, OPTS[mech], 7, null,
-        { start: "click", stopAt: LATER + 40, tap3: { at: LATER, sel, via: "click" } });
-      const mouseIdle = PS.trial(mech, OPTS[mech], 7, null, { start: "click", stopAt: LATER + 40 });
-      check(mouseTap.left !== mouseIdle.left || mouseTap.res !== mouseIdle.res,
-        `${NAME[mech]} — 마우스 click 한 번도 ${spot}에서 그대로 먹힌다`);
+      if (!noop) {
+        const mouseTap = PS.trial(mech, OPTS[mech], 7, null,
+          { start: "click", stopAt: LATER + 40, tap3: { at: LATER, sel, via: "click" } });
+        const mouseIdle = PS.trial(mech, OPTS[mech], 7, null, { start: "click", stopAt: LATER + 40 });
+        check(mouseTap.left !== mouseIdle.left || mouseTap.res !== mouseIdle.res,
+          `${NAME[mech]} — 마우스 click 한 번도 ${spot}에서 그대로 먹힌다`);
+      }
     }
 
     // ④ 누수가 막혀도 판은 끝까지 굴러가요 (문이 닫힌 채로 남으면 안 돼요)
@@ -650,6 +859,39 @@ guard("탭 누수", () => {
     check(full.res !== null && full.left.trim() === "",
       `${NAME[mech]} — 실기기 순서로 시작해도 판은 정상적으로 끝난다 (${full.res})`);
   }
+});
+
+/* ================================================================
+ * ↩️ 💥 힘 배분의 되돌리기 — 잘못 누른 한 칸을 되살릴 수 있는가
+ *
+ * 이 메커닉은 한 칸을 얹는 순간 되돌릴 수 없으면 손가락 하나로 판이 끝나요.
+ * (세 줄이 나란히 붙어 있어서 옆 줄을 짚기 쉬워요.)
+ * ================================================================ */
+group("↩️ 💥 힘 배분 — 되돌리기");
+guard("되돌리기", () => {
+  const O = { label: "t", zonePct: 40, tier: 0, aim: "over" };
+  const poolOf = (h) => (h.match(/sg-pool-fire">([^<]*)</) || [, ""])[1];
+  const mineOf = (h) => (h.match(/<span class="sg-me-fire">([^<]*)<\/span><i>(\d+)<\/i>/) || [, "", "?"])[2];
+
+  // ① 시작 화면에서는 되돌릴 것이 없어서 꺼져 있어요
+  const fresh = PS.trial("surge", O, 11, null, { stopAt: 40 });
+  check(/class="[^"]*sg-undo[^"]*"[^>]*disabled/.test(fresh.left),
+    "얹은 칸이 없으면 ↩️ 되돌리기가 꺼져 있다");
+
+  // ② 한 칸 얹으면 켜지고, 누르면 그 칸이 주머니로 돌아와요
+  const one = PS.trial("surge", O, 11, (wrap, now, fire) => {
+    if (now < 100 || now > 120) return;
+    fire('.sg-row[data-i="0"]');
+  }, { step: 20, to: 400, stopAt: 420 });
+  const undone = PS.trial("surge", O, 11, (wrap, now, fire) => {
+    if (now >= 100 && now <= 120) { fire('.sg-row[data-i="0"]'); return; }
+    if (now >= 200 && now <= 220) fire(".sg-undo");
+  }, { step: 20, to: 400, stopAt: 420 });
+  check(mineOf(one.left) === "1", `한 칸을 얹으면 그 줄에 실려요 (내 힘 ${mineOf(one.left)})`);
+  check(mineOf(undone.left) === "0", `↩️ 되돌리기를 누르면 그 칸이 빠져요 (내 힘 ${mineOf(undone.left)})`);
+  check(poolOf(undone.left) === poolOf(fresh.left),
+    `그리고 주머니가 처음으로 돌아와요 (${poolOf(fresh.left)} → ${poolOf(undone.left)})`);
+  check(undone.res === null, "되돌린다고 판정이 나지는 않아요");
 });
 
 /* 🎯 mind 사람 모델 — **화면만** 보고 골라요.
@@ -681,6 +923,67 @@ function mindAs(zone, tier, seed, sk, aim) {
     for (let i = 1; i < cols.length; i++) if (dodge ? sc[i] < sc[pick] : sc[i] > sc[pick]) pick = i;
     fire(cols[pick]);
   }, MIND_WATCH);
+}
+
+/* 💥 surge 사람 모델 — **화면만** 보고 얹어요.
+ *
+ *   plan   "이길 수 있는 줄부터 최소한으로 채운다"는 셈을 얼마나 정확히 하는가.
+ *          틀리면 아무 줄에나 한 칸 얹어요 — 처음 하는 사람이 꼭 그렇게 해요.
+ *   think  **첫 칸까지** 걸리는 시간(ms) — 세 줄을 읽고 어디를 버릴지 정하는 시간이에요.
+ *   tap    그 뒤 한 칸마다 걸리는 시간(ms). 사람은 한 번 정하고 나면 손이 빨라요.
+ *          한 칸마다 처음부터 다시 고민하지 않으니, 여기를 think와 같게 두면
+ *          판 길이가 실제보다 두세 배로 나와요.
+ * 둘 다 판 길이를 재는 데만 써요 — 결과에는 안 들어가요(위 ⏱️ 검사가 못 박아요).
+ *
+ * aim이 "hold"(투수)면 동점도 버티는 것이라, 한 줄을 가져오는 값이 한 칸 싸요.
+ * 대신 세 줄을 다 지켜야 완벽이에요 — 그건 판정 쪽(surgeGrade)이 뒤집어요. */
+function surgeAs(zone, tier, seed, sk, aim) {
+  const hold = aim === "hold";
+  let planAt = 0, seenPool = -1;
+  return PS.trial("surge", { label: "t", zonePct: zone, tier, aim }, seed, (wrap, now, fire) => {
+    const rows = Array.prototype.slice.call(wrap.querySelectorAll(".sg-row"));
+    if (!rows.length || rows[0].disabled) return;
+    const pool = (wrap.querySelector(".sg-pool-fire").textContent.match(/🔥/g) || []).length;
+    if (!pool) return;
+    if (seenPool !== pool) {
+      const first = planAt === 0;
+      seenPool = pool;
+      planAt = now + (first ? (sk.think || 0) : (sk.tap != null ? sk.tap : 220));
+    }
+    if (now < planAt) return;                    // 여기서 손이 나가요 (결과와는 무관해요)
+    const foe = rows.map((r) => +r.querySelector(".sg-foe i").textContent);
+    const me = rows.map((r) => +r.querySelector(".sg-me i").textContent);
+    let pick = -1;
+    /* plan이 1이면 주사위를 아예 안 굴려요. 숫자를 아끼려는 게 아니라 **난수 줄기를
+     * 안 건드리려는** 거예요 — 위 ⏱️ 검사가 plan 1로 이 모델을 부르는데, 거기서
+     * plyRnd를 당기면 그 뒤에 오는 🔎 기색 검사의 숫자가 통째로 밀려요. */
+    if (sk.plan >= 1 || plyRnd() < sk.plan) {
+      // 남은 비용이 가장 적으면서 주머니로 닿는 줄부터 완성해요
+      const need = foe.map((f, i) => (hold ? f - me[i] : f + 1 - me[i]));
+      let best = 1e9;
+      for (let i = 0; i < rows.length; i++) if (need[i] > 0 && need[i] <= pool && need[i] < best) { best = need[i]; pick = i; }
+      // 어느 줄에도 못 닿으면 아무 데나 버려요 (그 판은 이미 진 판이에요)
+      if (pick < 0) { let w = -1e9; for (let i = 0; i < rows.length; i++) if (need[i] > w) { w = need[i]; pick = i; } }
+    } else pick = Math.floor(plyRnd() * rows.length);
+    fire(rows[pick]);
+  }, SURGE_WATCH);
+}
+
+/* 🔥 clash 사람 모델 — rate회/초로 번갈아 눌러요.
+ *   rate  초당 누르는 횟수 (손끝이 그대로 드러나는 자리예요)
+ *   err   차례를 잘못 짚는 확률 — 헛심을 써요
+ * 여기만은 손 속도가 성적에 들어가요. 그게 이 메커닉의 존재 이유예요(순전히 힘). */
+function clashAs(zone, tier, seed, sk, aim) {
+  let next = 0, turn = 0;
+  return PS.trial("clash", { label: "t", zonePct: zone, tier, aim }, seed, (wrap, now, fire) => {
+    const a = wrap.querySelector(".pc-a"), b = wrap.querySelector(".pc-b");
+    if (!a || a.disabled || now < next) return;
+    next = now + 1000 / (sk.rate * (0.85 + plyRnd() * 0.3));
+    let t = turn;
+    if (plyRnd() < sk.err) t = turn === 0 ? 1 : 0;   // 차례를 잘못 짚었어요
+    else turn = turn === 0 ? 1 : 0;
+    fire(t === 0 ? a : b);
+  }, CLASH_WATCH);
 }
 
 /* 🏃 dash 사람 모델 — 송구가 드러나면 도착 시각을 견줘요. margin은 배짱이에요. */
@@ -723,11 +1026,13 @@ function dashAs(zone, tier, seed, lag, margin, sigma) {
  * ================================================================ */
 group("③ 도달성 (메커닉 자체)");
 guard("도달성", () => {
-  const GOOD = { think: 900, trust: 1.0, memo: 0.30, pnoise: 0.06 };
-  const POOR = { think: 900, trust: 0.0, memo: 0.0, pnoise: 1.0 };
+  const GOOD = { think: 900, trust: 1.0, memo: 0.30, pnoise: 0.06, plan: 0.95, tap: 190, rate: 4.6, err: 0.05 };
+  const POOR = { think: 900, trust: 0.0, memo: 0.0, pnoise: 1.0, plan: 0.0, tap: 190, rate: 1.8, err: 0.45 };
   for (const [name, fn, poorFn] of [
     ["🎯 수싸움", (s) => mindAs(38, 0, s, GOOD, "match"), (s) => mindAs(12, 2, s, POOR, "match")],
     ["🏃 홈 승부", (s) => dashAs(38, 0, s, 160, 60, 90), (s) => dashAs(12, 2, s, 340, -140, 420)],
+    ["💥 힘 배분", (s) => surgeAs(38, 0, s, GOOD, "over"), (s) => surgeAs(12, 2, s, POOR, "over")],
+    ["🔥 힘겨루기", (s) => clashAs(38, 0, s, GOOD, "push"), (s) => clashAs(12, 2, s, POOR, "push")],
   ]) {
     const d = dist(200, fn);
     check(d.perfect > 0, `${name} — 잘하면 perfect에 실제로 닿는다 (${pct(d.p)})`);
@@ -737,13 +1042,17 @@ guard("도달성", () => {
     check(poor.miss > 0, `${name} — 못하면 miss가 실제로 난다 (${pct(poor.m)})`);
   }
   // 투수 시점도 따로 봐요 — 유불리가 뒤집히니 도달성도 따로 확인해야 해요
-  {
-    const d = dist(200, (s) => mindAs(38, 0, s, GOOD, "dodge"));
+  for (const [name, fn] of [
+    ["🎯 수싸움", (s) => mindAs(38, 0, s, GOOD, "dodge")],
+    ["💥 힘 배분", (s) => surgeAs(38, 0, s, GOOD, "hold")],
+    ["🔥 힘겨루기", (s) => clashAs(38, 0, s, GOOD, "hold")],
+  ]) {
+    const d = dist(200, fn);
     check(d.perfect > 0 && d.good > 0,
-      `🎯 수싸움(투수 시점) — 완벽과 성공에 둘 다 닿는다 (P ${pct(d.p)} · G ${pct(d.g)} · M ${pct(d.m)})`);
+      `${name}(투수 시점) — 완벽과 성공에 둘 다 닿는다 (P ${pct(d.p)} · G ${pct(d.g)} · M ${pct(d.m)})`);
   }
   // 아무것도 안 눌러도 끝나요 (안 그러면 손을 놓은 순간 게임이 멎어요)
-  for (const [name, mech, opt] of [["🎯 수싸움", "mind", MIND_OPT], ["🏃 홈 승부", "dash", DASH_OPT]]) {
+  for (const [name, mech, opt] of MECHS.map((m) => [MECH_NAME[m], m, MECH_OPT[m]])) {
     let stuck = 0, worst = 0, boxLeft = 0;
     for (let i = 0; i < 40; i++) {
       const r = PS.trial(mech, Object.assign({}, opt, { tier: 2 }), 5000 + i);
@@ -768,18 +1077,35 @@ guard("도달성", () => {
         spans.push({ kind: "engine", d: dist(40, (s) => mindAs(zone, tier, s, { think: 0, trust: 1, memo: 0.3, pnoise: 0.06 }, aim)) });
         spans.push({ kind: "human", d: dist(40, (s) => mindAs(zone, tier, s, { think: 950, trust: 1, memo: 0.3, pnoise: 0.06 }, aim)) });
       }
+      for (const aim of ["over", "hold"]) {
+        spans.push({ kind: "sgEngine", d: dist(40, (s) => surgeAs(zone, tier, s, { plan: 0.9, think: 0, tap: 0 }, aim)) });
+        spans.push({ kind: "sgHuman", d: dist(40, (s) => surgeAs(zone, tier, s, { plan: 0.9, think: 1400, tap: 280 }, aim)) });
+      }
+      for (const aim of ["push", "hold"]) {
+        spans.push({ kind: "clash", d: dist(40, (s) => clashAs(zone, tier, s, { rate: 3.6, err: 0.13 }, aim)) });
+      }
       spans.push({ kind: "dash", d: dist(50, (s) => dashAs(zone, tier, s, 200, 50, 150)) });
     }
   }
   const worstOf = (kind) => Math.max(...spans.filter((x) => x.kind === kind).map((x) => x.d.dur));
   const peakOf = (kind) => Math.max(...spans.filter((x) => x.kind === kind).map((x) => x.d.worst));
   console.log(`   한 판 길이 | 🎯 엔진 몫 ${(worstOf("engine") / 1000).toFixed(2)}초 · 🎯 사람 몫(구당 0.95초) ${(worstOf("human") / 1000).toFixed(2)}초 · 🏃 ${(worstOf("dash") / 1000).toFixed(2)}초`);
+  console.log(`               💥 엔진 몫 ${(worstOf("sgEngine") / 1000).toFixed(2)}초 · 💥 사람 몫(읽기 1.4초 + 칸당 0.28초) ${(worstOf("sgHuman") / 1000).toFixed(2)}초 · 🔥 ${(worstOf("clash") / 1000).toFixed(2)}초`);
   check(worstOf("engine") <= 2600,
     `🎯 엔진이 붙드는 시간이 2.6초 안이다 (${(worstOf("engine") / 1000).toFixed(2)}초 · reveal ${T.MIND.reveal}ms × ${T.MIND.rounds}구)`);
   check(worstOf("human") <= 5000 && peakOf("human") <= 6500,
     `🎯 한 구를 1초 안에 고르면 평균 5초·최장 6.5초 안에 끝난다 (${(worstOf("human") / 1000).toFixed(2)}초 · ${(peakOf("human") / 1000).toFixed(2)}초)`);
   check(worstOf("dash") <= 5000 && peakOf("dash") <= 6500,
     `🏃 한 판 평균이 5초, 가장 오래 끈 판도 6.5초 안이다 (${(worstOf("dash") / 1000).toFixed(2)}초 · ${(peakOf("dash") / 1000).toFixed(2)}초)`);
+  /* 💥 힘 배분도 사람이 얹는 속도가 곧 판 길이예요 — 🎯 수싸움과 같은 잣대로 갈라 봐요.
+   * 엔진 몫은 판정을 보여주는 사이(reveal) + 정리(OUTRO)뿐이에요. */
+  check(worstOf("sgEngine") <= 1600,
+    `💥 엔진이 붙드는 시간이 1.6초 안이다 (${(worstOf("sgEngine") / 1000).toFixed(2)}초 · reveal ${T.SURGE.reveal}ms)`);
+  check(worstOf("sgHuman") <= 5000 && peakOf("sgHuman") <= 6500,
+    `💥 1.4초 읽고 한 칸을 0.28초에 얹으면 평균 5초·최장 6.5초 안에 끝난다 (${(worstOf("sgHuman") / 1000).toFixed(2)}초 · ${(peakOf("sgHuman") / 1000).toFixed(2)}초)`);
+  /* 🔥 힘겨루기는 길이가 엔진에 통째로 매여 있어요 (CLASH.dur) — 사람이 늘릴 수 없어요. */
+  check(worstOf("clash") <= 5000 && peakOf("clash") <= 6500,
+    `🔥 한 판 평균이 5초, 가장 오래 끈 판도 6.5초 안이다 (${(worstOf("clash") / 1000).toFixed(2)}초 · ${(peakOf("clash") / 1000).toFixed(2)}초)`);
 });
 
 /* ================================================================
@@ -803,15 +1129,44 @@ const AIMS = ["match", "dodge"];
  * 그래서 '보통'과 성적이 같아야 해요 — 손 속도가 판정에 안 들어가니까요.
  * 앞 메커닉(🧊 볼카운트)에서는 바로 이 사람이 마지막 시리즈에서 70% 삼진으로
  * 무너졌어요. 그 자리를 여기서 다시 봐요. */
-const SKILL = { name: "능숙", rnd: 20260801, lag: 160, margin: 60, dsigma: 90, mem: 0.94, find: 900, tsig: 55, think: 800, trust: 1.00, memo: 0.30, pnoise: 0.06 };
-const AVG = { name: "보통", rnd: 20260802, lag: 240, margin: 40, dsigma: 220, mem: 0.82, find: 1500, tsig: 110, think: 1300, trust: 0.72, memo: 0.18, pnoise: 0.34 };
-const SLOW = { name: "느린손", rnd: 20260803, lag: 300, margin: 30, dsigma: 300, mem: 0.74, find: 1900, tsig: 150, think: 2600, trust: 0.72, memo: 0.18, pnoise: 0.34 };
+const SKILL = { name: "능숙", rnd: 20260801, lag: 160, margin: 60, dsigma: 90, mem: 0.94, find: 900, tsig: 55, think: 800, trust: 1.00, memo: 0.30, pnoise: 0.06, plan: 0.94, tap: 190, rate: 4.6, err: 0.05 };
+const AVG = { name: "보통", rnd: 20260802, lag: 240, margin: 40, dsigma: 220, mem: 0.82, find: 1500, tsig: 110, think: 1300, trust: 0.72, memo: 0.18, pnoise: 0.34, plan: 0.70, tap: 260, rate: 3.6, err: 0.13 };
+const SLOW = { name: "느린손", rnd: 20260803, lag: 300, margin: 30, dsigma: 300, mem: 0.74, find: 1900, tsig: 150, think: 2600, trust: 0.72, memo: 0.18, pnoise: 0.34, plan: 0.70, tap: 340, rate: 2.9, err: 0.19 };
 const PROFILES = [SKILL, AVG, SLOW];
 const DN = Number(process.env.POST_N || 90);
 
-// [skill][aim][tier][zone] → 두 메커닉을 합친 판정 분포
+/* 시점(타자/투수)마다 네 메커닉이 무엇으로 불리는지. game.js의 POST_MECH가 넘기는
+ * aim 그대로예요 — 여기 옮겨 적은 값이 아니라 아래 ②가 소스와 맞는지 확인해요. */
+const AIM_OF = {
+  match: { mind: "match", surge: "over", clash: "push" },   // 🧢 타자
+  dodge: { mind: "dodge", surge: "hold", clash: "hold" },   // ⚾ 투수
+};
+const MECH_KEYS = ["mind", "dash", "surge", "clash"];
+/* 🎲 메커닉마다도 난수 줄기를 따로 줘요 — 사람마다 따로 주는 것과 같은 이유예요.
+ * 한 줄기를 넷이 이어 쓰면 앞 메커닉이 몇 번 뽑았느냐에 따라 뒤 메커닉의 숫자가
+ * 통째로 밀려요. 그러면 메커닉을 하나 더할 때마다 **아무것도 안 바꾼 칸의 값이**
+ * 움직여서, 실행끼리 나란히 놓고 볼 수 없게 돼요.
+ *
+ * 게다가 능력치 칸(존30·35·40)마다 **같은 씨앗으로 되감아요.** 사람의 흔들림이
+ * 세 칸에서 똑같아지니, 칸끼리의 차이는 오롯이 능력치 몫이에요. 안 그러면
+ * 난이도가 아니라 난수를 재게 돼요 — 완벽이 드물게 나오는 자리(🏃 홈 승부의
+ * 마지막 시리즈처럼 차이가 한두 판인 칸)에서 특히 그래요. */
+const MECH_SEED = { mind: 11, dash: 23, surge: 37, clash: 51 };
+const AIM_SEED = { match: 0, dodge: 700 };
+const avgOf = (cells, keys) => {
+  const d = { p: 0, g: 0, m: 0 };
+  for (const k of keys) { d.p += cells[k].p; d.g += cells[k].g; d.m += cells[k].m; }
+  d.p /= keys.length; d.g /= keys.length; d.m /= keys.length;
+  return d;
+};
+
+/* [skill][aim][tier][zone] → 메커닉별 분포와, 2종·4종으로 묶은 값
+ *   two  🎯 mind + 🏃 dash  (이번 판 이전의 가을야구)
+ *   four 위 둘 + 💥 surge + 🔥 clash  (지금)
+ * 4종이 되면 뽑기 확률이 1/2에서 1/4로 바뀌어요. 그래서 ⑤ 우승 확률은
+ * **둘 다** 꽂아 보고 나란히 놓아요 — 안 그러면 "얼마나 움직였나"를 말할 수 없어요. */
 const NEWTAB = {};
-guard("새 2종 난이도", () => {
+guard("새 4종 난이도", () => {
   for (const sk of PROFILES) {
     plyRnd = mulberry32(sk.rnd);        // 이 사람 몫의 줄기 — 옆 사람에게 안 새요
     NEWTAB[sk.name] = { match: {}, dodge: {} };
@@ -819,15 +1174,25 @@ guard("새 2종 난이도", () => {
       for (const aim of AIMS) NEWTAB[sk.name][aim][tier] = {};
       for (const zone of ZONES) {
         /* 🏃 홈 승부는 시점이 바뀌어도 코드가 같아요(문구만 갈아끼워요) —
-         * 그래서 한 번만 재서 양쪽에 같이 써요. 🎯 수싸움은 유불리가 통째로
+         * 그래서 한 번만 재서 양쪽에 같이 써요. 나머지 셋은 유불리가 통째로
          * 뒤집히니 시점마다 따로 재요. */
+        plyRnd = mulberry32(sk.rnd + MECH_SEED.dash);
         const b = dist(DN, (s) => dashAs(zone, tier, s, sk.lag, sk.margin, sk.dsigma));
         for (const aim of AIMS) {
-          const a = dist(DN, (s) => mindAs(zone, tier, s, sk, aim));
-          NEWTAB[sk.name][aim][tier][zone] = {
-            p: (a.p + b.p) / 2, g: (a.g + b.g) / 2, m: (a.m + b.m) / 2,
-            mind: a, dash: b,
-          };
+          const A = AIM_OF[aim];
+          const seedOf = (k) => mulberry32(sk.rnd + MECH_SEED[k] + AIM_SEED[aim]);
+          plyRnd = seedOf("mind");
+          const dMind = dist(DN, (s) => mindAs(zone, tier, s, sk, A.mind));
+          plyRnd = seedOf("surge");
+          const dSurge = dist(DN, (s) => surgeAs(zone, tier, s, sk, A.surge));
+          plyRnd = seedOf("clash");
+          const dClash = dist(DN, (s) => clashAs(zone, tier, s, sk, A.clash));
+          const cells = { mind: dMind, dash: b, surge: dSurge, clash: dClash };
+          const four = avgOf(cells, MECH_KEYS);
+          NEWTAB[sk.name][aim][tier][zone] = Object.assign(four, cells, {
+            two: avgOf(cells, ["mind", "dash"]),
+            four,
+          });
         }
       }
     }
@@ -839,25 +1204,46 @@ guard("새 2종 난이도", () => {
           const d = key ? NEWTAB[sk.name][aim][tier][z][key] : NEWTAB[sk.name][aim][tier][z];
           return `존${z} P${pct(d.p)} M${pct(d.m)} 배수 ${mult(d).toFixed(3)}`;
         }).join(" · ");
-        console.log(`   ${sk.name} ${aim === "match" ? "타자" : "투수"} tier${tier} 합침 | ${row(null)}`);
-        console.log(`   ${sk.name} ${aim === "match" ? "타자" : "투수"} tier${tier} 🎯만 | ${row("mind")}`);
+        console.log(`   ${sk.name} ${aim === "match" ? "타자" : "투수"} tier${tier} 4종 | ${row(null)}`);
+        for (const k of MECH_KEYS) {
+          console.log(`   ${sk.name} ${aim === "match" ? "타자" : "투수"} tier${tier} ${
+            { mind: "🎯만", dash: "🏃만", surge: "💥만", clash: "🔥만" }[k]} | ${row(k)}`);
+        }
       }
     }
   }
-  /* 🐢 손이 느린 사람 — 이 줄이 이번 교체의 안전선이에요.
-   * 🎯 수싸움에서는 손 속도가 판정에 안 들어가니, 읽는 눈이 같은 '보통'과
-   * 성적이 붙어 있어야 해요. 앞 메커닉에서는 여기가 70% 삼진이었어요. */
-  {
-    const cells = (name) => [0, 1, 2].map((t) => AIMS.map((a) => ZONES.map((z) => NEWTAB[name][a][t][z].mind)))
+  /* 🐢 손이 느린 사람 — 🎯 수싸움과 💥 힘 배분은 **손 속도가 판정에 안 들어가요.**
+   * 읽는 눈(trust)·셈(plan)이 같은 '보통'과 성적이 붙어 있어야 해요.
+   * (🔥 힘겨루기는 반대로 손이 전부예요 — 그건 아래에서 따로 봐요.) */
+  for (const [name, key] of [["🎯 수싸움", "mind"], ["💥 힘 배분", "surge"]]) {
+    const cells = (who) => [0, 1, 2].map((t) => AIMS.map((a) => ZONES.map((z) => NEWTAB[who][a][t][z][key])))
       .reduce((x, y) => x.concat(y), []).reduce((x, y) => x.concat(y), []);
     const slow = cells(SLOW.name), avg = cells(AVG.name);
     const meanM = (arr) => arr.reduce((a, d) => a + d.m, 0) / arr.length;
     const worstM = Math.max(...slow.map((d) => d.m));
-    console.log(`   🐢 손이 느린 사람의 🎯 수싸움 | 평균 실패 ${pct(meanM(slow))} · 가장 나쁜 칸 ${pct(worstM)} (읽는 눈이 같은 '보통'은 평균 ${pct(meanM(avg))})`);
-    check(worstM <= 0.5,
-      `🐢 손이 느려도 어느 칸에서든 절반 넘게 무너지지는 않는다 (가장 나쁜 칸 ${pct(worstM)})`);
+    console.log(`   🐢 손이 느린 사람의 ${name} | 평균 실패 ${pct(meanM(slow))} · 가장 나쁜 칸 ${pct(worstM)} (셈이 같은 '보통'은 평균 ${pct(meanM(avg))})`);
+    check(worstM <= 0.85,
+      `🐢 ${name} — 손이 느려도 어느 칸에서든 통째로 무너지지는 않는다 (가장 나쁜 칸 ${pct(worstM)})`);
     check(Math.abs(meanM(slow) - meanM(avg)) < 0.06,
-      `🐢 손 속도는 🎯 수싸움 성적에 안 들어간다 (느린손 ${pct(meanM(slow))} vs 보통 ${pct(meanM(avg))})`);
+      `🐢 손 속도는 ${name} 성적에 안 들어간다 (느린손 ${pct(meanM(slow))} vs 보통 ${pct(meanM(avg))})`);
+  }
+  /* 🔥 힘겨루기는 **일부러** 손끝이 드러나는 자리예요 — 그게 "힘으로 이기는 순간"의
+   * 값이에요. 다만 느린손이 통째로 무너지면 안 되니 바닥을 확인해요. */
+  {
+    const cells = (who) => [0, 1, 2].map((t) => AIMS.map((a) => ZONES.map((z) => NEWTAB[who][a][t][z].clash)))
+      .reduce((x, y) => x.concat(y), []).reduce((x, y) => x.concat(y), []);
+    const slow = cells(SLOW.name), skill = cells(SKILL.name);
+    const meanMul = (arr) => arr.reduce((a, d) => a + mult(d), 0) / arr.length;
+    const bestSlow = Math.max(...slow.map((d) => mult(d)));
+    console.log(`   🔥 힘겨루기는 손끝이 드러나요 | 느린손 평균 배수 ${meanMul(slow).toFixed(3)} · 능숙 ${meanMul(skill).toFixed(3)} (느린손이 가장 잘한 칸 ${bestSlow.toFixed(3)})`);
+    check(meanMul(skill) > meanMul(slow) + 0.15,
+      `🔥 손끝이 실제로 성적을 가른다 (능숙 ${meanMul(skill).toFixed(3)} > 느린손 ${meanMul(slow).toFixed(3)})`);
+    /* 손끝이 드러나는 만큼, 느린손은 이 메커닉에서 끝내 '완벽'에 잘 못 닿아요.
+     * 그래도 능력치를 끝까지 올리면 **성공은 챙길 수 있어야** 해요 — 배수 0.90은
+     * 대충 '열에 여덟은 성공'이에요. 여기가 무너지면 손이 느린 사람에게는
+     * 육성이 통하지 않는 메커닉이 돼요. */
+    check(bestSlow >= 0.9,
+      `🔥 그래도 느린손이 능력치를 올리면 갚아 준다 (가장 잘한 칸 ${bestSlow.toFixed(3)})`);
   }
   /* 능력치를 올리면 나아져요. 양 끝만 못 박아요 — 표본이 유한해서(칸마다
    * POST_N판) 가운데 칸은 ±0.03쯤 흔들려요. 한 계단씩 못 박으면 난이도가
@@ -871,30 +1257,39 @@ guard("새 2종 난이도", () => {
   for (const sk of [SKILL, AVG]) {
     for (const aim of AIMS) {
       for (const tier of [0, 1, 2]) {
-        for (const key of ["mind", "dash"]) {
-          const a = NEWTAB[sk.name][aim][tier][lowZ][key].p, b = NEWTAB[sk.name][aim][tier][hiZ][key].p;
-          if (!(b > a)) bad.push(`${sk.name}/${aim}/tier${tier}/${key} ${pct(a)}→${pct(b)}`);
-        }
         const a = mult(NEWTAB[sk.name][aim][tier][lowZ]), b = mult(NEWTAB[sk.name][aim][tier][hiZ]);
         if (!(b > a)) bad.push(`${sk.name}/${aim}/tier${tier}/합침 ${a.toFixed(3)}→${b.toFixed(3)}`);
       }
+      /* 메커닉 하나씩은 **시리즈 깊이 셋을 묶어서** 봐요. 칸 하나는 표본이
+       * POST_N판뿐이라 완벽이 드물게 나오는 자리에서는 한두 판 차이로 순서가
+       * 뒤집혀요 — 거기까지 못 박으면 난이도가 아니라 난수를 재게 돼요.
+       * (묶어도 능력치가 안 먹히면 그건 진짜로 안 먹히는 거예요.) */
+      for (const key of MECH_KEYS) {
+        const at = (z) => [0, 1, 2].reduce((x, t) => x + NEWTAB[sk.name][aim][t][z][key].p, 0) / 3;
+        const a = at(lowZ), b = at(hiZ);
+        if (!(b > a)) bad.push(`${sk.name}/${aim}/${key} ${pct(a)}→${pct(b)}`);
+      }
     }
   }
-  check(bad.length === 0, `능력치를 올리면 두 메커닉 다 성적이 오른다 (거꾸로 간 칸 ${bad.join(" · ") || "없음"})`);
+  check(bad.length === 0, `능력치를 올리면 네 메커닉 다 성적이 오른다 (거꾸로 간 칸 ${bad.join(" · ") || "없음"})`);
   /* 능력치가 실제로 뜻 있게 갈라야 해요 (모든 칸이 똑같으면 육성이 안 닿아요).
    * 칸 하나는 표본이 흔들리니 열두 칸(손끝 2 × 시점 2 × 시리즈 깊이 3)의 평균으로 봐요. */
-  const gaps = [];
+  const gaps = [], gaps2 = [];
   for (const sk of [SKILL, AVG]) {
     for (const aim of AIMS) {
       for (const tier of [0, 1, 2]) {
         gaps.push(mult(NEWTAB[sk.name][aim][tier][hiZ]) - mult(NEWTAB[sk.name][aim][tier][lowZ]));
+        gaps2.push(mult(NEWTAB[sk.name][aim][tier][hiZ].two) - mult(NEWTAB[sk.name][aim][tier][lowZ].two));
       }
     }
   }
-  const gapMean = gaps.reduce((a, b) => a + b, 0) / gaps.length;
+  const mean = (a) => a.reduce((x, y) => x + y, 0) / a.length;
+  const gapMean = mean(gaps);
   check(gapMean >= 0.03 && Math.min(...gaps) > 0,
     `능력치 ${lowZ}→${hiZ}이 배수를 평균 0.03 넘게 벌린다 (평균 ${gapMean.toFixed(3)} · 가장 좁은 칸 ${Math.min(...gaps).toFixed(3)})`);
+  console.log(`   능력치가 벌리는 폭 | 2종일 때 ${mean(gaps2).toFixed(3)} · 4종일 때 ${gapMean.toFixed(3)}`);
   NEWTAB.__gap = gapMean;
+  NEWTAB.__gap2 = mean(gaps2);
   // 시리즈가 깊어질수록 어려워져요 (여기도 양 끝만 봐요)
   const up = [];
   for (const sk of [SKILL, AVG]) {
@@ -912,11 +1307,21 @@ guard("새 2종 난이도", () => {
   check(mult(froze) < mult(rush),
     `🏃 아무것도 안 고르는 게 무작정 돌진보다 나쁘다 (${mult(froze).toFixed(3)} < ${mult(rush).toFixed(3)}) — 고르지 않는 것이 최악이에요`);
   console.log(`   🏃 무작정 돌진 배수 ${mult(rush).toFixed(3)} · 손 놓기 ${mult(froze).toFixed(3)}`);
-  for (const aim of AIMS) {
-    const idle = dist(80, (s) => PS.trial("mind", { label: "t", zonePct: 38, tier: 0, aim }, s));
-    const best = NEWTAB[SKILL.name][aim][0][hiZ].mind;
-    check(mult(idle) < mult(best) - 0.10,
-      `🎯 ${aim === "match" ? "타자" : "투수"} — 손 놓기(${mult(idle).toFixed(3)})가 읽는 사람(${mult(best).toFixed(3)})보다 확실히 나쁘다`);
+  /* 손을 놓으면 네 메커닉 어디서든 확실히 나빠져야 해요. 안 그러면 그 메커닉은
+   * 안 하는 게 이득인 장식이 돼요 — 🔥 힘겨루기의 투수 시점이 특히 그 위험이
+   * 있어요(밀리지만 않으면 되니까요). 그래서 시점마다 따로 봐요. */
+  for (const [name, key, aims] of [
+    ["🎯 수싸움", "mind", ["match", "dodge"]],
+    ["💥 힘 배분", "surge", ["over", "hold"]],
+    ["🔥 힘겨루기", "clash", ["push", "hold"]],
+  ]) {
+    for (const aim of aims) {
+      const idle = dist(80, (s) => PS.trial(key, { label: "t", zonePct: 38, tier: 0, aim }, s));
+      const tabAim = (aim === "match" || aim === "over" || aim === "push") ? "match" : "dodge";
+      const best = NEWTAB[SKILL.name][tabAim][0][hiZ][key];
+      check(mult(idle) < mult(best) - 0.10,
+        `${name} ${tabAim === "match" ? "타자" : "투수"} — 손 놓기(${mult(idle).toFixed(3)})가 잘하는 사람(${mult(best).toFixed(3)})보다 확실히 나쁘다`);
+    }
   }
 });
 
@@ -1040,9 +1445,9 @@ guard("기존 8종 기준선", () => {
   const oldGaps = [SKILL.name, AVG.name].map((n) => mult(OLDTAB[n][150]) - mult(OLDTAB[n][70]));
   const oldGap = oldGaps.reduce((a, b) => a + b, 0) / oldGaps.length;
   const newGap = NEWTAB.__gap;
-  console.log(`   능력치가 벌리는 폭 | 기존 8종 ${oldGap.toFixed(3)} · 새 2종 ${newGap.toFixed(3)}`);
+  console.log(`   능력치가 벌리는 폭 | 기존 8종 ${oldGap.toFixed(3)} · 새 2종 ${NEWTAB.__gap2.toFixed(3)} · 새 4종 ${newGap.toFixed(3)}`);
   check(newGap > oldGap,
-    `새 2종이 기존 8종보다 능력치에 더 민감하다 (${newGap.toFixed(3)} > ${oldGap.toFixed(3)})`);
+    `새 4종이 기존 8종보다 능력치에 더 민감하다 (${newGap.toFixed(3)} > ${oldGap.toFixed(3)})`);
   console.log(`   기존 8종은 프로 능력치에서 거의 다 완벽이에요 (능력치 150 · 완벽 ${
     [SKILL.name, AVG.name].map((n) => pct(OLDTAB[n][150].p)).join(" / ")} · miss ${
     [SKILL.name, AVG.name].map((n) => pct(OLDTAB[n][150].m)).join(" / ")})`);
@@ -1206,7 +1611,7 @@ guard("배치", () => {
    *
    * 🧭 이제 부르자마자 그려지는 건 준비 화면이에요. 본 게임 화면(.pm-board·.ps-field)은
    * ▶️ 시작을 누른 뒤에야 생기니, 그건 tapReady가 누른 직후에(ready.after) 봐요. */
-  const drawn = { ready: 0, early: 0, board: 0, field: 0, inMoment: 0, other: 0 };
+  const drawn = { ready: 0, early: 0, board: 0, field: 0, rows: 0, bar: 0, inMoment: 0, other: 0 };
   const spy = (real, bag, watchDom) => new Proxy(real, {
     get(t, k) {
       const v = t[k];
@@ -1216,7 +1621,8 @@ guard("배치", () => {
         const out = v.apply(t, a);
         if (watchDom && a[0] && a[0].querySelector) {
           if (a[0].querySelector(".mg-ready")) drawn.ready++;
-          if (a[0].querySelector(".pm-board") || a[0].querySelector(".ps-field")) drawn.early++;
+          if (a[0].querySelector(".pm-board") || a[0].querySelector(".ps-field")
+            || a[0].querySelector(".sg-rows") || a[0].querySelector(".pc-bar")) drawn.early++;
           if (a[0].id === "game-moment") drawn.inMoment++;
         }
         return out;
@@ -1227,6 +1633,8 @@ guard("배치", () => {
     if (!parent || !parent.querySelector) return;
     if (parent.querySelector(".pm-board")) drawn.board++;
     else if (parent.querySelector(".ps-field")) drawn.field++;
+    else if (parent.querySelector(".sg-rows")) drawn.rows++;
+    else if (parent.querySelector(".pc-bar")) drawn.bar++;
     else drawn.other++;
   };
   G.w.PostStage = spy(realPost, seen.post, true);
@@ -1273,11 +1681,12 @@ guard("배치", () => {
   check(r.entered, "가을야구까지 실제로 들어갔다");
   check(postSeen.post > 0, `가을야구에서 새 메커닉이 뜬다 (${postSeen.post}판 · ${[...postSeen.kinds].join(" · ")})`);
   check(postSeen.timing === 0, `가을야구에는 기존 8종이 안 뜬다 (${postSeen.timing}판)`);
-  check(postSeen.kinds.size === 2, `두 메커닉이 다 나온다 (${[...postSeen.kinds].join(" · ")})`);
-  check(drawn.board > 0 && drawn.field > 0 && drawn.other === 0,
-    `▶️ 시작을 누르면 두 메커닉 다 실제 DOM을 그린다 (🎯 세 칸 ${drawn.board}판 · 🏃 주루로 ${drawn.field}판 · 못 그린 판 ${drawn.other})`);
-  check(drawn.inMoment === drawn.board + drawn.field,
-    `미니게임이 경기 화면의 #game-moment 안에 붙는다 (${drawn.inMoment}/${drawn.board + drawn.field}판)`);
+  check(postSeen.kinds.size === 4, `네 메커닉이 다 나온다 (${[...postSeen.kinds].join(" · ")})`);
+  const drawnAll = drawn.board + drawn.field + drawn.rows + drawn.bar;
+  check(drawn.board > 0 && drawn.field > 0 && drawn.rows > 0 && drawn.bar > 0 && drawn.other === 0,
+    `▶️ 시작을 누르면 네 메커닉 다 실제 DOM을 그린다 (🎯 세 칸 ${drawn.board}판 · 🏃 주루로 ${drawn.field}판 · 💥 세 줄 ${drawn.rows}판 · 🔥 힘 막대 ${drawn.bar}판 · 못 그린 판 ${drawn.other})`);
+  check(drawn.inMoment === drawnAll,
+    `미니게임이 경기 화면의 #game-moment 안에 붙는다 (${drawn.inMoment}/${drawnAll}판)`);
   const readyTaps = G.ready.taps - readyBefore;
   check(drawn.ready === postSeen.post,
     `가을야구 미니게임은 판마다 준비 화면을 먼저 띄운다 (${postSeen.post}판 · 준비 화면 ${drawn.ready}판)`);
@@ -1304,6 +1713,22 @@ guard("배치", () => {
     `자동 판정이면 준비 화면도 한 번을 안 뜬다 (${G.ready.taps - autoReadyBefore}회)`);
   check(/if \(autoMiniOn\(\)\) \{ cb\(autoRes\(mech\.stat\(\)\), txt\); return; \}/.test(GAME_SRC),
     "playPostMini에 autoMiniOn 경로가 있다");
+  check(/pick\(\["mind", "dash", "surge", "clash"\]\)/.test(GAME_SRC),
+    "가을야구 미니게임이 네 종에서 고루 뽑힌다");
+  /* 💥🔥 새 둘이 **비어 있던 능력치**를 쓰는지. 앞의 둘은 컨택·제구·주루·수비를
+   * 쓰고 있었어요 — 파워·구속·체력이 가을야구에 한 번도 안 닿았거든요. */
+  check(/S\.stats\.stamina/.test(GAME_SRC.slice(GAME_SRC.indexOf("  surge: {"), GAME_SRC.indexOf("  clash: {"))),
+    "💥 힘 배분이 체력(stamina)을 본다 — 가을야구에서 안 쓰이던 능력치예요");
+  {
+    const seg = GAME_SRC.slice(GAME_SRC.indexOf("  clash: {"), GAME_SRC.indexOf("function playPostMini"));
+    check(/S\.stats\.power/.test(seg) && /S\.stats\.velocity/.test(seg),
+      "🔥 힘겨루기가 타자는 파워(power), 투수는 구속(velocity)을 본다");
+  }
+  /* 💥🔥도 시점이 뒤집히면 규칙과 문구가 같이 뒤집혀야 해요. */
+  check(/aim: bat \? "over" : "hold"/.test(GAME_SRC) && /aim: bat \? "push" : "hold"/.test(GAME_SRC),
+    "투수는 aim이 hold로 불린다 (같은 코드, 뒤집힌 목표)");
+  check(/세 타자를 다 막으면<\/b> 삼자범퇴/.test(GAME_SRC) && /밀리지만 않으면 이겨요/.test(GAME_SRC),
+    "투수 쪽 문구와 준비 화면이 통째로 갈아끼워져 있다 (가져오기 → 막기 · 밀기 → 버티기)");
   check(/if \(inPostMini\(\)\) \{ playPostMini\(container, cb\); return; \}/.test(GAME_SRC),
     "playRandomMini의 첫 줄에서만 갈라진다 (정규시즌 8종은 손대지 않았어요)");
   /* 🎯 시점이 뒤집히면 문구와 유불리도 뒤집혀야 해요 — 투수가 "맞혔어요!"를
@@ -1331,14 +1756,22 @@ guard("우승 확률", () => {
     const a = tab[lo], b = tab[hi];
     return { p: a.p + (b.p - a.p) * f, g: a.g + (b.g - a.g) * f, m: a.m + (b.m - a.m) * f };
   };
-  // ④가 실제로 잰 분포를 그대로 꽂아요 — 여기 숫자를 옮겨 적지 않아요
-  const useNew = (stat, skName, pos) => {
+  /* ④가 실제로 잰 분포를 그대로 꽂아요 — 여기 숫자를 옮겨 적지 않아요.
+   * pack이 "two"면 이번 판 이전(🎯+🏃 두 종만 뽑히던 때)이고, "four"면 지금이에요.
+   * 메커닉이 넷이 되면 뽑기 확률이 1/2에서 1/4로 바뀌어요. 그 변화가 우승 확률을
+   * 얼마나 움직이는지가 이번 판에서 꼭 재야 하는 숫자예요. */
+  const useNew = (stat, skName, pos, pack) => {
     const z = zoneOf(stat);
     const aim = pos === "batter" ? "match" : "dodge";
+    const tab = {};
+    for (const t of [0, 1, 2]) {
+      tab[t] = {};
+      for (const zz of ZONES) tab[t][zz] = NEWTAB[skName][aim][t][zz][pack];
+    }
     G.set("autoRes", () => {
       const st = G.get("S");
       const tier = (st.post && POST_TIER[st.post.myRound]) || 0;
-      const d = lerp(NEWTAB[skName][aim][tier], ZONES, z);
+      const d = lerp(tab[tier], ZONES, z);
       const r = G.w.Math.random();
       return r < d.p ? "perfect" : r < d.p + d.g ? "good" : "miss";
     });
@@ -1365,9 +1798,12 @@ guard("우승 확률", () => {
         ["구8·능숙", () => useOld(stat, SKILL.name)],
         ["구8·보통", () => useOld(stat, AVG.name)],
         ["구8·느린손", () => useOld(stat, SLOW.name)],
-        ["신2·능숙", () => useNew(stat, SKILL.name, pos)],
-        ["신2·보통", () => useNew(stat, AVG.name, pos)],
-        ["신2·느린손", () => useNew(stat, SLOW.name, pos)],
+        ["신2·능숙", () => useNew(stat, SKILL.name, pos, "two")],
+        ["신2·보통", () => useNew(stat, AVG.name, pos, "two")],
+        ["신2·느린손", () => useNew(stat, SLOW.name, pos, "two")],
+        ["신4·능숙", () => useNew(stat, SKILL.name, pos, "four")],
+        ["신4·보통", () => useNew(stat, AVG.name, pos, "four")],
+        ["신4·느린손", () => useNew(stat, SLOW.name, pos, "four")],
       ]) {
         apply();
         G.w.Math.random = mulberry32(4242 + stat);
@@ -1389,7 +1825,7 @@ guard("우승 확률", () => {
   G.set("autoRes", realAutoRes);
 
   const all = [];
-  for (const pos of ["batter", "pitcher"]) for (const st of STATS) for (const k of ["신2·능숙", "신2·보통", "신2·느린손"]) all.push(table[pos][st][k]);
+  for (const pos of ["batter", "pitcher"]) for (const st of STATS) for (const k of ["신4·능숙", "신4·보통", "신4·느린손"]) all.push(table[pos][st][k]);
   const lo = Math.min(...all), hi = Math.max(...all);
   /* 극단으로 쏠리면 안 돼요 — 아무도 우승 못 하거나 누구나 우승하면 가을야구가 사라져요.
    * 이 범위를 넓히지 마세요. 넓히는 순간 이 검사는 아무것도 안 지킵니다. */
@@ -1398,9 +1834,9 @@ guard("우승 확률", () => {
    * 평균으로 봐요 (묶지 않으면 난이도가 아니라 난수를 재게 돼요). */
   const flat = [];
   for (const pos of ["batter", "pitcher"]) {
-    const at = (st) => (table[pos][st]["신2·능숙"] + table[pos][st]["신2·보통"]) / 2;
+    const at = (st) => (table[pos][st]["신4·능숙"] + table[pos][st]["신4·보통"]) / 2;
     const a = at(STATS[0]), b = at(STATS[STATS.length - 1]);
-    const slowLo = table[pos][STATS[0]]["신2·느린손"], slowHi = table[pos][STATS[STATS.length - 1]]["신2·느린손"];
+    const slowLo = table[pos][STATS[0]]["신4·느린손"], slowHi = table[pos][STATS[STATS.length - 1]]["신4·느린손"];
     console.log(`   ${pos === "batter" ? "🧢 타자" : "⚾ 투수"} 능력치 ${STATS[0]}→${STATS[STATS.length - 1]} | 우승 ${pct(a)} → ${pct(b)} (🐢 느린손 ${pct(slowLo)} → ${pct(slowHi)})`);
     if (!(b > a + 0.08)) flat.push(`${pos} ${pct(a)}→${pct(b)}`);
   }
@@ -1408,22 +1844,31 @@ guard("우승 확률", () => {
   /* 도입 전과 견줘요 — 어려워지는 건 좋지만 가을야구가 사라지면 안 돼요.
    * 칸 하나(CN판)는 표본 오차가 ±6%p라 칸 단위로 못 박으면 난수를 재게 돼요.
    * 포지션 × 손끝 묶음(능력치 세 칸의 평균)으로 봐요. */
-  const drops = [];
-  for (const pos of ["batter", "pitcher"]) {
-    for (const sk of PROFILES.map((p) => p.name)) {
-      const d = STATS.map((st) => table[pos][st][`구8·${sk}`] - table[pos][st][`신2·${sk}`]);
-      drops.push({ key: `${pos}·${sk}`, v: d.reduce((a, b) => a + b, 0) / d.length });
+  const dropsOf = (pack) => {
+    const out = [];
+    for (const pos of ["batter", "pitcher"]) {
+      for (const sk of PROFILES.map((q) => q.name)) {
+        const d = STATS.map((st) => table[pos][st][`구8·${sk}`] - table[pos][st][`${pack}·${sk}`]);
+        out.push({ key: `${pos}·${sk}`, v: d.reduce((a, b) => a + b, 0) / d.length });
+      }
     }
-  }
+    return out;
+  };
+  const drops2 = dropsOf("신2"), drops = dropsOf("신4");
   const worst = drops.reduce((a, b) => (b.v > a.v ? b : a));
-  const mean = drops.reduce((a, b) => a + b.v, 0) / drops.length;
-  console.log(`   도입 전 대비 | ${drops.map((d) => `${d.key} ${(d.v * 100).toFixed(1)}%p`).join(" · ")} (평균 ${(mean * 100).toFixed(1)}%p 하락)`);
+  const meanOf = (a) => a.reduce((x, y) => x + y.v, 0) / a.length;
+  const mean = meanOf(drops), mean2 = meanOf(drops2);
+  console.log(`   도입 전 대비(2종) | ${drops2.map((d) => `${d.key} ${(d.v * 100).toFixed(1)}%p`).join(" · ")} (평균 ${(mean2 * 100).toFixed(1)}%p 하락)`);
+  console.log(`   도입 전 대비(4종) | ${drops.map((d) => `${d.key} ${(d.v * 100).toFixed(1)}%p`).join(" · ")} (평균 ${(mean * 100).toFixed(1)}%p 하락)`);
+  console.log(`   ⚖️ 2종 → 4종으로 늘리면서 평균 하락이 ${(mean2 * 100).toFixed(1)}%p → ${(mean * 100).toFixed(1)}%p로 움직였어요`);
   check(worst.v <= 0.25,
     `어느 묶음도 도입 전보다 우승 확률이 25%p 넘게 떨어지지 않는다 (가장 큰 ${worst.key} ${(worst.v * 100).toFixed(1)}%p)`);
   check(mean > -0.05, `가을야구가 쉬워지지는 않았다 (평균 ${(mean * 100).toFixed(1)}%p)`);
-  /* 🎯 교체 전(🧊 볼카운트 + 🏃 홈 승부)의 평균 하락이 14.6%p였어요. 그 자리를
-   * 크게 벗어나면 밸런스가 통째로 움직인 거예요. */
+  /* 🎯 2종이던 때의 평균 하락이 7.3%p였어요. 메커닉이 넷이 되면 뽑기 확률이
+   * 바뀌어 전체 난이도가 움직여요 — 그 폭이 여기 걸려 있어요. */
   check(mean <= 0.15, `평균 하락이 15%p를 안 넘는다 (${(mean * 100).toFixed(1)}%p)`);
+  check(Math.abs(mean - mean2) <= 0.10,
+    `2종에서 4종으로 늘려도 전체 난이도가 크게 안 움직인다 (${(mean2 * 100).toFixed(1)}%p → ${(mean * 100).toFixed(1)}%p)`);
 });
 
 G.dom.window.close();

@@ -1,4 +1,4 @@
-/* 🍂 가을야구 전용 미니게임 2종 — 야구(더 드래프트)만 내려받아요.
+/* 🍂 가을야구 전용 미니게임 4종 — 야구(더 드래프트)만 내려받아요.
  *
  * 왜 timing.js가 아니고 여기냐면: timing.js(8종)는 8개 게임이 전부 내려받아요.
  * 가을야구에서만 쓰는 메커닉을 거기 넣으면 쓰지 않는 7개 게임까지 무게를 져요.
@@ -11,10 +11,12 @@
  * DOM 구성·이벤트·정리 순서도 timing.js의 관례를 그대로 따라요: .tm-box를
  * container에 붙이고, 끝나면 tm-done-* 를 붙여 잠깐 보여준 뒤 박스를 지우고 cb를 불러요.
  *
- *   PostStage.mind(box, { label, courses, aim, zonePct, tier }, cb)       🎯 수싸움
- *   PostStage.dash(box, { label, goText, stopText, zonePct, tier }, cb)   🏃 홈 승부
+ *   PostStage.mind(box,  { label, courses, aim, zonePct, tier }, cb)        🎯 수싸움
+ *   PostStage.dash(box,  { label, goText, stopText, zonePct, tier }, cb)    🏃 홈 승부
+ *   PostStage.surge(box, { label, aim, rows, zonePct, tier }, cb)           💥 힘 배분
+ *   PostStage.clash(box, { label, aim, aText, bText, zonePct, tier }, cb)   🔥 힘겨루기
  *
- * 🧭 둘 다 **준비 화면**을 먼저 띄워요. 규칙을 읽고 ▶️ 시작을 눌러야 판이 시작돼요 —
+ * 🧭 넷 다 **준비 화면**을 먼저 띄워요. 규칙을 읽고 ▶️ 시작을 눌러야 판이 시작돼요 —
  * 자세한 약속은 아래 ready()의 머리말에 적어 뒀어요.
  *
  * ─────────────────────────────────────────────────────────────────────────
@@ -38,6 +40,25 @@
  *     지나야 드러나는데, 그 사이 주자는 계속 나아가서 **되돌아갈 수 있는 자리를
  *     잃어요.** 더 알고 싶으면 물러설 권리를 내놔야 해요. 게다가 버튼이 둘이라
  *     "언제 누르나"가 아니라 "무엇을 고르나"가 물음이에요.
+ *
+ * 그런데 이 둘은 **둘 다 판단력만 재요.** 힘으로 이기는 순간이 없었어요.
+ * 가을야구가 야구의 절정인데 절정에 힘이 없으면 이상해요. 그래서 둘을 더해요.
+ *
+ *  💥 surge — **자원을 나누는 게임이에요.** 열세 개 중 어느 것도 "가진 것을
+ *     어디에 얼마나 쓸까"를 묻지 않아요. 여기서는 한 판에 쓸 수 있는 힘이 정해져
+ *     있고(능력치가 그 양이에요), 세 번의 승부에 그걸 나눠 쏟아요. 상대가 각
+ *     승부에 실은 힘은 **숫자까지 전부 보여요** — 감출 것이 없어요. 그래서 이건
+ *     읽기도 찍기도 아니고 **셈**이에요. 다 이기려 들면 셋 다 모자라고, 이길 수
+ *     없는 승부를 버려야 이겨요. 🎯 수싸움과 나란히 놓아도 축이 달라요 —
+ *     수싸움은 정보가 불완전한 심리전이고, 여기는 정보가 완전한 배분 문제예요.
+ *     시계는 여기서도 안 돌아요(rAF를 한 번도 안 불러요).
+ *
+ *  🔥 clash — **순전히 힘이에요.** 표식을 사이에 두고 상대와 밀고 밀려요.
+ *     그런데 버튼이 **둘**이고 **번갈아** 눌러야만 힘이 실려요 — 같은 쪽을 두 번
+ *     누르면 헛심을 쓰고 되레 밀려요. 투어의 🔥 연타(roar)는 한 버튼을 빠르게
+ *     쳐서 게이지를 선 위로 **유지**하는 게임이고, 여기는 두 버튼의 **순서**를
+ *     지키며 표식을 **밀어내는** 경주예요. 무엇보다 "언제 누르지?"가 없어요 —
+ *     답이 **"지금, 그리고 계속"**이고, 다음에 눌러야 할 버튼이 화면에서 빛나요.
  * ─────────────────────────────────────────────────────────────────────────
  *
  * zonePct는 game.js의 miniZone(stat)이 준 값(10~40)이에요. 능력치와 컨디션이
@@ -47,7 +68,7 @@
  * tier는 시리즈의 깊이예요 (0 와일드카드·준PO / 1 PO / 2 마지막 시리즈).
  * 뒤로 갈수록 상대의 버릇이 덜 보이고 어깨가 강해져요 — 같은 능력치로도 더 어려워요.
  *
- * 두 메커닉 모두 3~5초에 끝나요(수싸움은 사람이 고르는 속도만큼이에요).
+ * 네 메커닉 모두 3~5초에 끝나요(수싸움과 힘 배분은 사람이 고르는 속도만큼이에요).
  * 가을야구 한 시리즈가 최대 5경기, 경기마다 미니게임이 여러 번이라 한 판이 길면
  * 그 자체가 버그예요.
  * 실제 소요·난이도·우승 확률은 tests/rookie/post-mech-test.js가 재요.
@@ -682,16 +703,473 @@ window.PostStage = (() => {
     ready(container, dashReady(opts), (gate) => runDash(container, opts || {}, cb, gate));
   }
 
+  /* ================================================================
+   * 💥 힘 배분 — 어느 승부에 힘을 쏟을까
+   *
+   * 세 번의 승부가 세로로 놓여 있어요. 승부마다 **상대가 실은 힘**이 🔥 개수로
+   * 적혀 있고, 숫자까지 그대로 보여요 — 감춘 것이 하나도 없어요.
+   * 나에게는 이 판에 쓸 **힘 주머니**가 있어요. 능력치가 곧 그 크기예요.
+   * 승부 줄을 누르면 주머니에서 🔥 하나가 그 줄로 옮겨가요. 주머니가 비면
+   * 그 자리에서 판정이 나요.
+   *
+   * ⏱️ **시간 축이 없어요.** 🎯 수싸움과 같은 약속이에요 — requestAnimationFrame을
+   * 한 번도 안 부르고, 손을 놓고 있으면 화면이 한 글자도 안 바뀌고, 언제 누르든
+   * 결과가 같아요. 유일한 시계는 판정을 보여주는 사이(reveal)와, 탭을 통째로 놓친
+   * 기기를 위한 안전망(cap)뿐이에요.
+   *
+   * 🧮 그럼 왜 어려우냐 — **다 이기려 들면 셋 다 모자라요.**
+   * 상대의 힘 총합이 내 주머니보다 커요. 그래서 이길 수 없는 승부를 **버리고**
+   * 이길 수 있는 승부에 딱 한 칸씩 더 얹는 게 정답이에요. 골고루 나눠 담으면
+   * 세 줄 다 한 칸씩 모자라서 통째로 져요 — 처음 하는 사람이 꼭 그렇게 해요.
+   * 🎯 수싸움이 정보가 불완전한 심리전이라면 여기는 정보가 완전한 **셈**이에요.
+   *
+   * ↔️ 시점이 뒤집히면 **동점의 주인과 이겨야 할 줄 수가 같이 뒤집혀요.**
+   *   타자(over) — 상대보다 **많이** 실어야 그 승부를 가져와요. 세 줄 중 **2줄**을
+   *                가져오면 완벽이에요. 남는 힘으로 한 방을 노리는 쪽이에요.
+   *   투수(hold) — 같기만 해도 **버텨요**(동점은 투수 것). 대신 **한 줄도 안 내줘야**
+   *                완벽이에요. 한 줄을 내주면 겨우 넘긴 거고, 두 줄이면 무너져요.
+   * 그래서 타자는 "어디를 버릴까", 투수는 "어디가 새는가"를 봐요. 같은 화면인데
+   * 정반대로 읽어요 — 🎯 수싸움의 match/dodge와 같은 결이에요.
+   *
+   * 🎚 능력치(zonePct)는 **주머니 크기** 한 곳에 들어가요. 판정 규칙은 안 건드려요.
+   *   zone 30 → 4칸 · zone 35 → 6칸 · zone 40 → 8칸
+   * ⚠️ 폭(30~40)을 넓히지 마세요. 🎯 수싸움의 readFrom/readTo와 같은 이유예요 —
+   * 이 메커닉은 가을야구에서만 나오고, 거기 오는 선수는 miniZone이 30~40이에요.
+   * tier가 깊어지면 상대의 힘 총합이 늘어요 — 큰 경기의 상대일수록 세게 나와요.
+   * ================================================================ */
+  const SURGE = {
+    rows: 3,
+    /* 내 힘 주머니 — 능력치가 사는 단 한 곳이에요. 칸 수라 정수로 떨어져요. */
+    poolFrom: 30, poolTo: 40, poolLo: 4, poolHi: 8,
+    /* 상대가 세 줄에 나눠 실은 힘의 총합이에요. 줄마다 최소 1칸은 실어요.
+     * 투수(hold)는 동점도 버티니 그 이득만큼 상대가 덜 실어요 — 안 그러면
+     * 투수 쪽만 헐거워져요. 대신 투수는 세 줄을 다 지켜야 완벽이에요.
+     *
+     * ⚠️ foeSpread를 0으로 두지 마세요. 총합이 고정이면 **투수 쪽 판정이 판마다
+     * 똑같아져요** — 세 줄을 다 지키는 데 드는 값이 곧 총합이라, 주머니가 그보다
+     * 크면 늘 완벽이고 작으면 늘 못 해요. 능력치가 아니라 계단이 되는 자리예요. */
+    foeBase: 9, foeTier: 1, foeHold: -3, foeSpread: 2,
+    /* 판정을 보여주는 사이예요. 세 줄의 승패를 한꺼번에 읽어야 해서 🎯 수싸움의
+     * 한 구(reveal 520)보다 조금 길어요. */
+    reveal: 620,
+    /* 🛟 안전망 — 화면에는 아무 표시도 안 해요(보이는 순간 제한 시간이 되거든요).
+     * 여기 닿으면 **주머니에 남은 힘을 못 쓴 채** 판정해요. 손을 놓으면 나빠져요.
+     *
+     * **한 칸 얹을 때마다 새로 걸어요.** 🎯 수싸움이 구마다 다시 거는 것과 같은
+     * 이유예요 — 판에 한 번만 걸면 주머니가 큰 선수(능력치가 높은 쪽)일수록
+     * 얹을 칸이 많아서 먼저 잘려요. 능력치가 높은 게 벌이 되면 안 되잖아요.
+     * 한 칸을 얹는 데 1~2초라, 15초는 "탭을 통째로 놓쳤다" 말고는 닿을 수 없어요. */
+    cap: 15000,
+  };
+  const SURGE_ROWS = ["1구", "2구", "3구"];
+  const surgePool = (zone) => Math.round(
+    SURGE.poolLo
+    + (clampV(zone, SURGE.poolFrom, SURGE.poolTo) - SURGE.poolFrom) / (SURGE.poolTo - SURGE.poolFrom)
+      * (SURGE.poolHi - SURGE.poolLo));
+  /* extra는 판마다 흔들리는 몫이에요 (0 ~ foeSpread). 이 흔들림이 없으면
+   * 투수 쪽 판정이 계단이 돼요 — 위 foeSpread 주석에 적어 뒀어요. */
+  const surgeFoeTotal = (tier, hold, extra) =>
+    Math.max(SURGE.rows,
+      SURGE.foeBase + tier * SURGE.foeTier + (hold ? SURGE.foeHold : 0) + (extra || 0));
+  /* 총합을 세 줄에 흩뿌려요 — 줄마다 최소 1칸이에요. 어떤 판은 (1,2,3)처럼
+   * 한쪽이 헐겁고 어떤 판은 (2,2,2)처럼 고르게 나와요. 그 차이가 곧 그 판의
+   * 숙제예요 — 버릴 줄이 뚜렷한 판과 그렇지 않은 판이 갈려요. */
+  function surgeDeal(tier, hold, rows) {
+    const n = rows || SURGE.rows;
+    const foe = new Array(n).fill(1);
+    const extra = Math.floor(Math.random() * (SURGE.foeSpread + 1));
+    let left = surgeFoeTotal(tier, hold, extra) - n;
+    while (left-- > 0) foe[Math.floor(Math.random() * n)] += 1;
+    return foe;
+  }
+  /* 한 줄을 가져왔는가 — 동점의 주인이 시점마다 달라요. */
+  const surgeWon = (mine, foe, hold) => (hold ? mine >= foe : mine > foe);
+  /* 가져온 줄 수 → 판정. hold(투수)는 문턱이 통째로 위로 올라가요 —
+   * 한 줄도 안 내줘야 완벽이라, 세 줄을 다 지켜야 해요. */
+  const surgeGrade = (won, hold) => (hold
+    ? (won >= 3 ? "perfect" : won >= 2 ? "good" : "miss")
+    : (won >= 2 ? "perfect" : won >= 1 ? "good" : "miss"));
+
+  const SURGE_MSG = {
+    poolLabel: "남은 힘",
+    foeLabel: "상대",
+    meLabel: "내 힘",
+    cue: "🧮 상대가 실은 힘은 전부 보여요 — 이길 수 없는 줄은 버리세요",
+    win: "💥 힘으로 눌러 이겼어요!",
+    even: "🏏 한 줄을 가져와 살아 나갔어요",
+    lose: "❌ 힘이 골고루 모자랐어요… 범타",
+    timeup: "⏱️ 힘을 다 못 쓰고 승부가 끝났어요",
+    tip: "줄을 눌러 힘을 실어요 · <b>골고루 나누면 셋 다 모자라요</b> · 서두를 필요 없어요",
+    undo: "↩️ 되돌리기",
+    readyTitle: "💥 힘 배분",
+    readyLines: [
+      "이 타석에 쓸 <b>힘 주머니</b>가 있어요. 세 번의 승부에 그 힘을 나눠 쏟아요.",
+      "<b>날아오는 공도, 제한 시간도 없어요.</b> 화면은 누르기 전까지 멈춰 있으니 천천히 세어 보세요.",
+      "상대가 각 승부에 실은 힘(🔥)은 <b>숫자까지 다 보여요</b>. 상대보다 <b>많이</b> 실은 줄을 가져와요.",
+      "상대의 힘 총합이 내 주머니보다 커요. <b>이길 수 없는 줄은 버려야</b> 나머지를 가져올 수 있어요.",
+      "세 줄 중 <b>2줄 이상</b> 가져오면 통타(완벽), 1줄이면 살아 나가고, 한 줄도 못 가져오면 범타예요.",
+    ],
+    readyShort: "이길 수 없는 줄은 버리고 나머지에 한 칸씩 더 · 3줄 중 2줄을 가져오면 완벽",
+    /* ⚠️ 이 두 줄에는 태그를 넣지 마세요. 준비 화면의 설명 칸에 그대로 들어가요 */
+    readyPick: "승부 줄을 누르면 주머니에서 힘 한 칸이 그 줄로 옮겨가요 — 언제 눌러도 결과는 같아요",
+    readyUndo: "마지막으로 실은 한 칸을 주머니로 되돌려요. 잘못 눌러도 되살릴 수 있어요",
+  };
+  const surgeMsg = (opts) => Object.assign({}, SURGE_MSG, (opts && opts.msg) || {});
+
+  function surgeReady(opts) {
+    const msg = surgeMsg(opts);
+    return {
+      key: "surge",
+      title: msg.readyTitle,
+      lines: msg.readyLines,
+      short: msg.readyShort,
+      keys: [
+        { name: ((opts && opts.rows) || SURGE_ROWS).join(" · "), desc: msg.readyPick },
+        { name: msg.undo, desc: msg.readyUndo },
+      ],
+    };
+  }
+
+  /* 💥 한 판. runMind와 같아요 — 시계는 사람을 재촉하지 않고, 프레임 루프를
+   * 한 번도 안 돌려요. 걸리는 타이머는 판정을 보여주는 사이와 안전망뿐이에요. */
+  function runSurge(container, opts, cb, gate) {
+    const zone = zoneOf(opts), tier = tierOf(opts);
+    const hold = (opts && opts.aim) === "hold";
+    const names = (opts && opts.rows) || SURGE_ROWS;
+    const msg = surgeMsg(opts);
+    const pool = surgePool(zone);
+    const foe = surgeDeal(tier, hold, names.length);
+    const mine = names.map(() => 0);
+    const stack = [];                     // 실은 순서 — ↩️ 되돌리기가 여기서 하나씩 빼요
+
+    const fires = (n) => (n > 0 ? "🔥".repeat(n) : "·");
+    const wrap = makeBox(container, opts.label || "💥 힘 배분! 어느 승부에 힘을 쏟을까요", `
+      <p class="sg-pool"><span class="sg-pool-label">${msg.poolLabel}</span><span class="sg-pool-fire"></span></p>
+      <p class="pm-cue">${msg.cue}</p>
+      <div class="sg-rows">${names.map((n, i) => `
+        <button type="button" class="btn btn-ghost tm-btn sg-row" data-i="${i}">
+          <span class="sg-no">${n}</span>
+          <span class="sg-foe"><b>${msg.foeLabel}</b>${fires(foe[i])}<i>${foe[i]}</i></span>
+          <span class="sg-me"><b>${msg.meLabel}</b><span class="sg-me-fire">·</span><i>0</i></span>
+          <span class="sg-flag"></span>
+        </button>`).join("")}</div>
+      <p class="ps-mark">&nbsp;</p>
+      <p class="tm-legend-tip">${msg.tip}</p>
+      <button type="button" class="btn btn-ghost tm-btn sg-undo" disabled>${msg.undo}</button>`);
+
+    const rows = Array.prototype.slice.call(wrap.querySelectorAll(".sg-row"));
+    const poolEl = wrap.querySelector(".sg-pool-fire");
+    const undoBtn = wrap.querySelector(".sg-undo");
+    const markEl = wrap.querySelector(".ps-mark");
+    let done = false, busy = false, guard = 0, endTimer = 0;
+
+    const left = () => pool - stack.length;
+    function paint() {
+      poolEl.textContent = fires(left());
+      wrap.classList.toggle("sg-empty", left() <= 0);
+      rows.forEach((r, i) => {
+        r.querySelector(".sg-me-fire").textContent = fires(mine[i]);
+        r.querySelector(".sg-me i").textContent = String(mine[i]);
+      });
+      undoBtn.disabled = stack.length === 0;
+    }
+    paint();
+
+    function finish(res, note) {
+      if (done) return;
+      done = true;
+      busy = true;
+      clearTimeout(guard);
+      clearTimeout(endTimer);
+      rows.forEach((r) => { r.disabled = true; });
+      undoBtn.disabled = true;
+      markEl.textContent = note;
+      wrap.classList.add(`tm-done-${res}`);
+      setTimeout(() => { wrap.remove(); cb(res); }, OUTRO);
+    }
+
+    /* 주머니를 다 쓰면(또는 안전망이 걷으면) 세 줄의 승패를 한꺼번에 드러내요. */
+    function resolve(note) {
+      if (done || busy) return;
+      busy = true;
+      clearTimeout(guard);
+      let won = 0;
+      rows.forEach((r, i) => {
+        const ok = surgeWon(mine[i], foe[i], hold);
+        if (ok) won += 1;
+        r.disabled = true;
+        r.classList.add(ok ? "sg-won" : "sg-lost");
+        r.querySelector(".sg-flag").textContent = ok ? "✅" : "❌";
+      });
+      undoBtn.disabled = true;
+      const g = surgeGrade(won, hold);
+      markEl.textContent = note || (g === "perfect" ? msg.win : g === "good" ? msg.even : msg.lose);
+      endTimer = setTimeout(() => finish(g, markEl.textContent), SURGE.reveal);
+    }
+
+    /* 🛟 안전망. 남은 힘을 못 쓴 채로 그 자리에서 판정해요 — 손을 놓으면 나빠져요.
+     * 손이 한 번 갈 때마다 다시 걸어요(위 SURGE.cap 주석 참고). */
+    function armGuard() {
+      clearTimeout(guard);
+      guard = setTimeout(() => resolve(msg.timeup), SURGE.cap);
+    }
+    armGuard();
+
+    rows.forEach((row, i) => onTap(row, () => {
+      if (done || busy || left() <= 0) return;
+      mine[i] += 1;
+      stack.push(i);
+      paint();
+      if (left() <= 0) { resolve(null); return; }
+      armGuard();
+    }, gate));
+    onTap(undoBtn, () => {
+      if (done || busy || !stack.length) return;
+      mine[stack.pop()] -= 1;
+      paint();
+      armGuard();
+    }, gate);
+  }
+
+  function surge(container, opts, cb) {
+    ready(container, surgeReady(opts), (gate) => runSurge(container, opts || {}, cb, gate));
+  }
+
+  /* ================================================================
+   * 🔥 힘겨루기 — 두 버튼을 번갈아 눌러 밀어내요
+   *
+   * 가운데에 표식(⚾)이 있고, 상대가 **꾸준히** 내 쪽(왼쪽)으로 밀어요. 나는 아래
+   * 두 버튼을 **번갈아** 눌러 표식을 상대 쪽(오른쪽)으로 밀어내요.
+   *
+   * 🔁 왜 두 버튼이냐면 — 야구의 힘은 하체에서 상체로 **차례차례** 옮겨 가요.
+   * 한쪽만 거듭 쓰면 힘이 안 실려요. 그래서 **차례가 아닌 버튼을 누르면 헛심**을
+   * 쓰고 되레 조금 밀려요. 다음에 눌러야 할 버튼은 화면에서 빛나요(.pc-next).
+   *
+   * ⏱️ "언제 누르지?"가 생길 자리가 없어요 — 답이 **"지금, 그리고 계속"**이에요.
+   * 판정하는 순간이 따로 없고(맞춰야 할 존도, 지나가는 마커도 없어요), 남은 시간은
+   * 막대로 그대로 보여요. 늦게 누르면 그만큼 덜 밀릴 뿐이라, 망설일 이유가 없어요.
+   *
+   * 🆚 투어의 🔥 연타(roar)와 다른 자리 — roar는 **한 버튼**을 빠르게 쳐서 게이지를
+   * 목표선 **위로 유지**하는 게임이고(너무 세게 치면 삑사리), 여기는 **두 버튼의
+   * 순서**를 지키며 표식을 **밀어내는 경주**예요. 유지할 선도, 넘치면 터지는 천장도
+   * 없어요. 겨루는 상대가 화면 안에 있고, 그 상대가 되민 만큼 자리를 잃어요.
+   *
+   * ↔️ 시점이 뒤집히면 **이겨야 하는 자리가 통째로 반대가 돼요.**
+   *   타자(push) — 밀어붙이는 쪽이에요. 상대 진영 끝까지 밀면 그대로 담장 밖,
+   *                끝까지 못 가도 상대 쪽으로 넉넉히 밀어 두면 안타예요.
+   *                가운데 근처에서 끝나면 범타고, 내 쪽으로 밀리면 헛스윙이에요.
+   *   투수(hold) — 버티는 쪽이에요. 타자가 훨씬 세게 밀어붙이는 대신, **밀리지만
+   *                않으면** 이겨요. 가운데를 지켜 내면 그게 삼진이고, 절반쯤
+   *                내주면 겨우 막은 거고, 끝까지 밀리면 담장을 넘겨요.
+   * 같은 자리(예: 표식이 40%)가 타자에게는 범타, 투수에게는 완벽이에요.
+   * 화면에도 그 문턱이 선으로 그려져요 — 어디까지 가야 하는지 모르면 불공정해요.
+   *
+   * 🎚 능력치(zonePct)는 **한 번 누를 때 밀리는 양**에 들어가요.
+   *   zone 30 → 2.2% · zone 35 → 3.0% · zone 40 → 3.8%
+   * tier가 깊어지면 상대가 더 세게 밀어요.
+   * ================================================================ */
+  const CLASH = {
+    dur: 3600,            // 한 판의 길이(ms). OUTRO까지 더해도 4.1초예요
+    start: 50,            // 표식의 시작 자리(%)
+    /* 한 번 누를 때 밀리는 양(%). 🎯 수싸움·💥 힘 배분과 같은 이유로 폭을 30~40에
+     * 걸어요 — 가을야구에 오는 선수의 miniZone이 그 구간이에요. */
+    gainFrom: 30, gainTo: 40, gainLo: 2.2, gainHi: 3.8,
+    /* 차례가 아닌 버튼을 눌렀을 때 되밀리는 양(%). 벌이 없으면 그냥 양손 연타가
+     * 정답이 돼서 '번갈아'가 장식이 돼요. 반대로 너무 세면 한 번 엇나갔을 때
+     * 판이 통째로 끝나요 — 되돌릴 수 있는 크기로 잡아요. */
+    slip: 2.2,
+    /* 상대가 되미는 속도(%/초). tier가 깊을수록 세게 밀어요.
+     * 투수(hold)는 **훨씬** 세게 밀려요 — 버티기만 하면 되는 이득(문턱이 낮아요)을
+     * 여기서 통째로 돌려받는 자리예요. 이 둘을 비슷하게 맞추면 투수 쪽은
+     * 손을 놓고 있어도 성공이 나와요.
+     *
+     * ⚠️ foeJit을 0으로 두지 마세요. 상대의 힘이 판마다 안 흔들리면 결과가
+     * 탭 수만으로 정해지는 계단이 돼요 — 같은 손끝이면 능력치를 올려도 판정이
+     * 한 칸씩 뚝뚝 뛰고, 그 사이 구간에서는 아예 안 움직여요.
+     * 곱셈(×0.8~1.2)이 아니라 **덧셈(±)**인 이유는, 투수 쪽 상대가 세 배쯤 세서
+     * 곱셈으로 흔들면 투수 판만 널을 뛰기 때문이에요. 흔들림의 크기는 두 시점이
+     * 같아야 공평해요. */
+    foePush: 5.6, foeHold: 16.4, foeTier: 0.9, foeJit: 3.4,
+    /* 끝났을 때 표식이 어디에 있어야 하는가. aim마다 통째로 달라요 —
+     * 같은 자리(예: 40%)가 타자에게는 범타, 투수에게는 완벽이에요. */
+    /* ⚠️ good 선을 더 올리지 마세요. 여기가 **손이 느린 사람의 바닥**이에요.
+     * 이 메커닉만은 손끝이 성적에 그대로 들어가는데(그게 '힘으로 이기는 순간'의
+     * 값이에요), 문턱까지 높으면 능력치를 아무리 올려도 갚아 주지 못해요.
+     * 대신 타자 쪽 good 선은 30보다는 위여야 해요 — 손을 놓고 있으면 표식이
+     * 30쯤에서 끝나는데, 그게 성공이 되면 안 하는 게 이득이 돼요. */
+    linePush: { perfect: 80, good: 42 },
+    lineHold: { perfect: 36, good: 9 },
+    /* 프레임이 끊긴 기기를 위한 안전망이에요. 정상 경로에서는 tick이 끝내요. */
+    cap: 4900,
+  };
+  const clashGain = (zone) =>
+    CLASH.gainLo
+    + (clampV(zone, CLASH.gainFrom, CLASH.gainTo) - CLASH.gainFrom) / (CLASH.gainTo - CLASH.gainFrom)
+      * (CLASH.gainHi - CLASH.gainLo);
+  const clashFoe = (tier, hold) =>
+    (hold ? CLASH.foeHold : CLASH.foePush) + tier * CLASH.foeTier;
+  const clashLines = (hold) => (hold ? CLASH.lineHold : CLASH.linePush);
+  /* 표식의 자리 → 판정. 문턱이 aim마다 통째로 갈려요. */
+  const clashGrade = (p, hold) => {
+    const L = clashLines(hold);
+    return p >= L.perfect ? "perfect" : p >= L.good ? "good" : "miss";
+  };
+
+  const CLASH_MSG = {
+    aText: "🦵 하체",
+    bText: "💪 상체",
+    blast: "💥 완전히 밀어냈어요, 담장 밖!!",
+    win: "💥 힘으로 눌렀어요! 통타!!",
+    even: "🏏 밀어내며 버텨 안타로 연결했어요",
+    lose: "❌ 힘에서 밀렸어요… 헛스윙",
+    crush: "❌ 그대로 밀려 버렸어요…",
+    tip: "빛나는 버튼을 <b>번갈아</b> 눌러요 · 같은 쪽을 두 번 누르면 헛심이에요",
+    readyTitle: "🔥 힘겨루기 — 번갈아 눌러요",
+    readyLines: [
+      "가운데 표식을 사이에 두고 상대와 밀고 밀려요. 상대는 <b>가만히 있어도 계속</b> 나를 밀어붙여요.",
+      "아래 두 버튼을 <b>번갈아</b> 눌러야 힘이 실려요. 다음에 누를 버튼이 <b>환하게 빛나요</b> — 그것만 보고 계속 누르면 돼요.",
+      "같은 쪽을 두 번 누르면 헛심을 써서 <b>되레 밀려요.</b> 맞출 타이밍은 없어요, 순서만 지키면 돼요.",
+      "막대 위의 선이 목표예요. <b>먼 선</b>을 넘기면 통타, <b>가까운 선</b>까지만 가면 안타, 못 넘기면 범타예요.",
+    ],
+    readyShort: "빛나는 버튼을 번갈아 계속 눌러요 · 같은 쪽을 두 번 누르면 되밀려요",
+    readyA: "하체로 버티고 밀어요. 여기서 힘이 시작돼요 — 먼저 이쪽부터예요",
+    readyB: "상체로 이어받아 밀어붙여요. 하체 다음은 반드시 이쪽이에요",
+  };
+  const clashMsg = (opts) => Object.assign({}, CLASH_MSG, (opts && opts.msg) || {});
+
+  /* 🔥 준비 화면 — 버튼이 둘이라 각각 무엇인지 적는 게 본론이에요 (🏃 홈 승부와 같아요). */
+  function clashReady(opts) {
+    const msg = clashMsg(opts);
+    return {
+      key: "clash",
+      title: msg.readyTitle,
+      lines: msg.readyLines,
+      short: msg.readyShort,
+      keys: [
+        { name: (opts && opts.aText) || msg.aText, desc: msg.readyA },
+        { name: (opts && opts.bText) || msg.bText, desc: msg.readyB },
+      ],
+    };
+  }
+
+  /* 🔥 한 판. 여기는 진짜로 시간이 흘러요(상대가 계속 밀거든요) — 🏃 홈 승부와
+   * 같은 편이에요. 다만 사람이 하는 일은 '순간을 맞추는 것'이 아니라
+   * '순서를 지키며 계속 누르는 것'이에요. */
+  function runClash(container, opts, cb, gate) {
+    const zone = zoneOf(opts), tier = tierOf(opts);
+    const hold = (opts && opts.aim) === "hold";
+    const msg = clashMsg(opts);
+    const gain = clashGain(zone);
+    /* 상대의 힘은 판마다 조금씩 달라요 — 어떤 판은 버겁고 어떤 판은 해 볼 만해요.
+     * 🏃 홈 승부의 throwLo/throwHi와 같은 이유예요. */
+    const foe = Math.max(0.5, clashFoe(tier, hold) + rand(-CLASH.foeJit, CLASH.foeJit));
+    const L = clashLines(hold);
+    const aText = (opts && opts.aText) || msg.aText;
+    const bText = (opts && opts.bText) || msg.bText;
+
+    const wrap = makeBox(container, opts.label || "🔥 힘겨루기! 번갈아 눌러 밀어내세요", `
+      <div class="pc-field">
+        <div class="pc-bar">
+          <span class="pc-line pc-line-good"></span>
+          <span class="pc-line pc-line-perfect"></span>
+          <span class="pc-mark">⚾</span>
+        </div>
+        <div class="pc-time"><i></i></div>
+      </div>
+      <p class="ps-mark">&nbsp;</p>
+      <p class="tm-legend-tip">${msg.tip}</p>
+      <div class="tm-duel pc-pick">
+        <button type="button" class="btn btn-primary tm-btn pc-a pc-next">${aText}</button>
+        <button type="button" class="btn btn-ghost tm-btn pc-b">${bText}</button>
+      </div>`);
+
+    const markEl = wrap.querySelector(".ps-mark");
+    const dot = wrap.querySelector(".pc-mark");
+    const timeEl = wrap.querySelector(".pc-time i");
+    const btnA = wrap.querySelector(".pc-a");
+    const btnB = wrap.querySelector(".pc-b");
+    wrap.querySelector(".pc-line-good").style.left = `${L.good}%`;
+    wrap.querySelector(".pc-line-perfect").style.left = `${L.perfect}%`;
+
+    let p = CLASH.start, elapsed = 0, turn = 0, done = false, raf = 0;
+
+    function paint() {
+      dot.style.left = `${clampV(p, 0, 100)}%`;
+      timeEl.style.width = `${clampV(100 - elapsed / CLASH.dur * 100, 0, 100).toFixed(1)}%`;
+      btnA.classList.toggle("pc-next", turn === 0);
+      btnB.classList.toggle("pc-next", turn === 1);
+      wrap.classList.toggle("pc-ahead", p >= L.good);
+    }
+    paint();
+
+    function finish(res, note) {
+      if (done) return;
+      done = true;
+      cancelAnimationFrame(raf);
+      clearTimeout(guard);
+      btnA.disabled = true;
+      btnB.disabled = true;
+      markEl.textContent = note;
+      wrap.classList.add(`tm-done-${res}`);
+      setTimeout(() => { wrap.remove(); cb(res); }, OUTRO);
+    }
+    const guard = setTimeout(() => {
+      const g = clashGrade(p, hold);
+      finish(g, g === "perfect" ? msg.win : g === "good" ? msg.even : msg.lose);
+    }, CLASH.cap);
+
+    let last = performance.now();
+    function tick(now) {
+      const dt = Math.min(now - last, 50);
+      last = now;
+      elapsed += dt;
+      p -= foe * dt / 1000;
+      paint();
+      if (p <= 0) { finish("miss", msg.crush); return; }         // 끝까지 밀렸어요
+      if (p >= 100) { finish("perfect", msg.blast); return; }    // 끝까지 밀어냈어요
+      if (elapsed >= CLASH.dur) {
+        const g = clashGrade(p, hold);
+        finish(g, g === "perfect" ? msg.win : g === "good" ? msg.even : msg.lose);
+        return;
+      }
+      raf = requestAnimationFrame(tick);
+    }
+
+    const shove = (which) => {
+      if (done) return;
+      if (which === turn) {
+        p += gain;
+        turn = which === 0 ? 1 : 0;
+        wrap.classList.remove("pc-slip");
+      } else {
+        p -= CLASH.slip;                    // 헛심 — 차례가 아닌 쪽을 눌렀어요
+        wrap.classList.add("pc-slip");
+      }
+      paint();
+    };
+    onTap(btnA, () => shove(0), gate);
+    onTap(btnB, () => shove(1), gate);
+    raf = requestAnimationFrame(tick);
+  }
+
+  function clash(container, opts, cb) {
+    ready(container, clashReady(opts), (gate) => runClash(container, opts || {}, cb, gate));
+  }
+
   return {
-    mind, dash,
+    mind, dash, surge, clash,
     /* 테스트가 판정 산식을 그대로 굴려 볼 수 있게 열어 둬요 — 난이도를 손으로
      * 베껴 두면 여기를 고칠 때 테스트만 옛 숫자로 남아요.
      * 준비 화면 쪽도 같은 이유로 열어 둬요 (횟수 문턱을 테스트가 베껴 적지 않게요). */
     _t: {
-      MIND, DASH, MIND_MSG, DASH_MSG, MIND_COURSES,
+      MIND, DASH, SURGE, CLASH, MIND_MSG, DASH_MSG, SURGE_MSG, CLASH_MSG,
+      MIND_COURSES, SURGE_ROWS,
       mindRead, mindGrade, mindSettled,
       dashRun, dashThrow, dashReveal, dashBack,
-      READY_KEY, FULL_SHOWS, readSeen, mindReady, dashReady,
+      surgePool, surgeFoeTotal, surgeDeal, surgeWon, surgeGrade,
+      clashGain, clashFoe, clashLines, clashGrade,
+      READY_KEY, FULL_SHOWS, readSeen,
+      mindReady, dashReady, surgeReady, clashReady,
     },
   };
 })();

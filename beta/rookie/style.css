@@ -40,11 +40,15 @@
 .next-club b { color: var(--cream); }
 
 /* ─────────────────────────────────────────────────────────────
- * 🍂 가을야구 전용 미니게임 2종 (../post-stage.js)
+ * 🍂 가을야구 전용 미니게임 4종 (../post-stage.js)
  *
  * 상자·라벨·버튼·판정 테두리(.tm-box · .tm-label · .tm-btn · .tm-done-*)는
- * ../base.css 것을 그대로 물려받아요. 여기에는 이 두 메커닉에만 있는 줄만 둬요.
+ * ../base.css 것을 그대로 물려받아요. 여기에는 이 네 메커닉에만 있는 줄만 둬요.
  * 색은 전부 테마 변수예요 — 절대색을 쓰지 않아요.
+ *
+ *   .pm-*  🎯 수싸움    .ps-*  🏃 홈 승부
+ *   .sg-*  💥 힘 배분   .pc-*  🔥 힘겨루기
+ * (판정 한 줄 .ps-mark는 넷이 같이 써요 — 자리를 잡아 두는 한 줄이라 같은 물건이에요)
  * ───────────────────────────────────────────────────────────── */
 
 /* 🎯 수싸움 — 세 칸을 놓고 서로를 읽어요 (../post-stage.js의 mind)
@@ -143,6 +147,75 @@
 .ps-pick { gap: 8px; }
 .ps-pick .tm-btn { flex: 1; margin-top: 10px; padding: 12px 4px; font-size: 1rem; }
 .ps-picked { box-shadow: 0 0 12px var(--accent); }
+
+/* 💥 힘 배분 — 세 줄에 힘을 나눠 쏟아요 (../post-stage.js의 surge)
+ *
+ * ⏱️ 🎯 수싸움과 같은 약속이에요 — **움직이는 것이 하나도 없어요.**
+ * transition도 animation도 안 걸어요. 칸이 살짝 자라기만 해도 사람은 그걸
+ * 카운트다운으로 읽어요. 여기서 바뀌는 건 오직 내가 누른 결과예요. */
+
+/* 남은 힘 주머니 — 이게 곧 이 판에 남은 밑천이에요 */
+.sg-pool {
+  display: flex; justify-content: center; align-items: baseline; gap: 8px;
+  margin: 0 0 6px; font-size: .9rem;
+}
+.sg-pool-label { font-size: .74rem; color: var(--dim); }
+.sg-pool-fire { letter-spacing: 1px; color: var(--accent); }
+/* 주머니가 비면 더 담을 곳이 없다는 걸 색으로도 말해 줘요 */
+.sg-empty .sg-pool-fire { color: var(--dim); }
+
+.sg-rows { display: flex; flex-direction: column; gap: 6px; }
+/* 줄 하나가 곧 버튼이에요 — 읽는 자리와 누르는 자리를 떼어 놓으면 눈이 두 번 움직여요 */
+.sg-row {
+  display: flex; align-items: center; gap: 8px;
+  margin-top: 0; padding: 8px 10px; text-align: left;
+}
+.sg-no { flex: 0 0 auto; font-size: .8rem; color: var(--dim); }
+.sg-foe, .sg-me { flex: 1 1 0; display: flex; align-items: baseline; gap: 5px; min-width: 0; }
+.sg-foe > b, .sg-me > b { flex: 0 0 auto; font-size: .68rem; font-weight: 400; color: var(--dim); }
+/* 🔥 개수만으로는 5칸 넘어가면 한눈에 안 세여서 숫자를 나란히 적어요 */
+.sg-foe > i, .sg-me > i { flex: 0 0 auto; font-style: normal; font-size: .78rem; color: var(--cream); }
+.sg-foe { color: var(--accent2); }
+.sg-me { color: var(--accent); }
+.sg-me-fire { letter-spacing: 1px; }
+.sg-flag { flex: 0 0 auto; min-width: 1.1rem; font-size: .95rem; text-align: right; }
+/* 판정에서 줄이 잠겨요. .pm-col과 같은 이유로 흐림만 걷어요 — 그 순간이
+ * 바로 **어느 줄을 가져왔는지 읽는 자리**거든요. */
+.sg-rows .sg-row:disabled { opacity: 1; cursor: default; }
+.sg-row.sg-won { border-color: var(--accent); box-shadow: 0 0 10px var(--accent); }
+.sg-row.sg-lost { border-color: var(--dim); }
+/* ↩️ 되돌리기 — 실수 하나로 판이 끝나면 안 되니까요. 담을 게 없으면 꺼져요 */
+.sg-undo { width: 100%; margin-top: 8px; padding: 8px 4px; font-size: .82rem; }
+
+/* 🔥 힘겨루기 — 표식을 사이에 두고 밀고 밀려요 (../post-stage.js의 clash)
+ *
+ * 여기는 진짜로 시간이 흘러요. 대신 "언제 누르지?"가 없어요 — 답이 늘
+ * "지금, 그리고 계속"이라, 화면이 말해 주는 건 **다음에 누를 버튼**뿐이에요. */
+.pc-field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 6px; }
+.pc-bar {
+  position: relative; height: 46px; border: 1px solid var(--line); border-radius: 10px;
+  background: linear-gradient(90deg, rgba(216, 176, 119, .12), rgba(127, 209, 232, .12));
+}
+/* 목표선 둘 — 어디까지 밀어야 하는지 모르면 불공정해요.
+ * 시점에 따라 자리가 통째로 달라요(post-stage.js가 left를 넣어 줘요). */
+.pc-line { position: absolute; top: 0; bottom: 0; width: 0; }
+.pc-line-good { border-left: 2px dashed var(--sand); opacity: .7; }
+.pc-line-perfect { border-left: 2px solid var(--accent); opacity: .8; }
+.pc-mark {
+  position: absolute; top: 50%; transform: translate(-50%, -50%);
+  font-size: 1.4rem; line-height: 1;
+}
+/* 남은 시간 — 보여 줘야 공정해요. 이건 "언제 누를까"가 아니라 "얼마나 남았나"예요 */
+.pc-time { height: 6px; border-radius: 999px; background: rgba(255, 255, 255, .06); overflow: hidden; }
+.pc-time > i { display: block; height: 100%; width: 100%; background: var(--sky); opacity: .55; }
+/* 가까운 선을 넘어서 있으면 막대가 살아나요 */
+.pc-ahead .pc-bar { border-color: var(--accent); }
+/* 헛심을 썼을 때 — 잘못 눌렀다는 걸 말해 줘야 다음 손이 고쳐져요 */
+.pc-slip .pc-bar { border-color: var(--accent2); }
+.pc-pick { gap: 8px; }
+.pc-pick .tm-btn { flex: 1; margin-top: 10px; padding: 12px 4px; font-size: 1rem; }
+/* 다음에 눌러야 할 버튼 — 이 게임에서 사람이 볼 것은 사실상 이것 하나예요 */
+.pc-pick .pc-next { border-color: var(--accent); box-shadow: 0 0 12px var(--accent); }
 
 /* ───────────────────────────────────────────────────────────
  * 🧭 미니게임 준비 화면 (.mg-ready) — ../post-stage.js가 그려요.

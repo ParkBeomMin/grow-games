@@ -90,7 +90,12 @@ function makeCheckPage(preSeed) {
   html = html.replace("<!--SEED-->", preSeed
     ? `<script>(function(){var d=${JSON.stringify(preSeed)};for(var k in d)localStorage.setItem(k,d[k]);})();</script>`
     : "");
-  const dom = new JSDOM(html, {
+  /* 🌐 jsdom에는 fetch가 없어요. _check.html은 머리에 붙일 판 번호를 받으려고
+   * ../VERSION을 한 번 불러오는데, 그게 없으면 스크립트가 통째로 멎어서
+   * 아래 검사가 전부 무너져요. 화면 검사와는 상관없는 자리라 조용히 막아 둬요
+   * (tests/rookie/post-mech-test.js의 PRELUDE가 같은 이유로 같은 모양이에요). */
+  const dom = new JSDOM(html.replace("<head>",
+    `<head><script>window.fetch = () => Promise.reject(new Error("net off"));</script>`), {
     runScripts: "dangerously", pretendToBeVisual: true, url: "https://x.test/beta/_check.html",
   });
   return dom;
