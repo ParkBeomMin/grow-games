@@ -166,7 +166,14 @@ window.WingerCareer = (() => {
   const RIVAL_GROUPS = ["에이스 스트라이커", "월드클래스 MF", "철벽 수비수", "득점왕 후보", "라이벌 윙어", "베테랑 캡틴", "괴물 신인", "국대 주전"];
 
   function rollRivals() {
-    return RIVAL_GROUPS.map((name) => ({ name, pop: rand(52, 88) }));
+    /* 이름은 실제 선수 이름처럼 짓고, 역할은 소속 옆 딱지로 남겨요.
+     * 예전에는 "에이스 스트라이커" 같은 역할 딱지가 이름 자리에 있어서
+     * 순위표가 선수 명단이 아니라 설명문처럼 보였어요. */
+    const clubs = shuffle(oppClubs(S));
+    return RIVAL_GROUPS.map((role, i) => ({
+      name: randomPlayerName(MARKETS[Math.random() < 0.5 ? 0 : 1]),
+      role, pop: rand(52, 88), club: clubs[i % clubs.length],
+    }));
   }
 
   /* 🏆 리그 순위표 — 예전에는 내 팀 성적(teamW/D/L)만 쌓고 다른 팀 기록이 없어서
@@ -387,9 +394,20 @@ window.WingerCareer = (() => {
    * 최대 112까지 올라가요. 그건 MOM 순위를 가리는 값이지 평점이 아닌데,
    * 그대로 10으로 나눠 보여줘서 10.7 같은 평점이 찍혔어요.
    * 순서는 원래 점수로 가리고, 보여줄 때만 10점으로 맞춥니다. */
-  function chartHTML(rows) {
-    return `<table class="rank-table season-standings"><thead><tr><th>#</th><th>선수</th><th>평점</th></tr></thead>
-      <tbody>${rows.map((r, i) => `<tr class="${r.me ? "me" : ""}"><td>${i + 1}</td><td>${r.name}</td><td>${clamp(r.score / 10, 1, 10).toFixed(1)}</td></tr>`).join("")}</tbody></table>`;
+  /* 주간 평점 순위. 상위 5명만 보여주되, 내가 5위 밖이면 내 줄을 아래에 붙여요 —
+   * 예전에는 5위 밖이면 내 평점이 아예 안 보여서 "몇 점 받았는지"를 알 수가 없었어요. */
+  function chartHTML(rows, top) {
+    const N = top || 5;
+    const shown = rows.slice(0, N);
+    const myIdx = rows.findIndex((r) => r.me);
+    const line = (r, i) => `<tr class="${r.me ? "me" : ""}"><td>${i + 1}</td><td>${r.name}</td>`
+      + `<td class="ch-club">${r.club || (r.me ? S.group : "-")}${r.role ? `<span class="ch-role">${r.role}</span>` : ""}</td>`
+      + `<td>${clamp(r.score / 10, 1, 10).toFixed(1)}</td></tr>`;
+    const pinned = myIdx >= N
+      ? `<tr class="hof-gap-row"><td colspan="4">⋯</td></tr>` + line(rows[myIdx], myIdx)
+      : "";
+    return `<table class="rank-table season-standings"><thead><tr><th>#</th><th>선수</th><th>소속</th><th>평점</th></tr></thead>
+      <tbody>${shown.map(line).join("")}${pinned}</tbody></table>`;
   }
 
   function playShow() {
@@ -412,7 +430,18 @@ window.WingerCareer = (() => {
   // 프로 경기 결과 반영 (MOM 평점 순위 + 보상 + 다음 진행)
   function proMatchFinalize(act, info, rating) {
     const momAdj = info.momentRes === "perfect" ? 8 : info.momentRes === "miss" ? -8 : 0;
-    const myRankScore = rating * 10 + momAdj + rand(-4, 4);
+    /* 그 경기에서 실제로 한 일을 평점에 반영해요.
+     * 예전에는 rating(스탯·컨디션·명성)과 랜덤만 봐서, 4:2로 이긴 경기에 3골을
+     * 넣고도 7위가 나올 수 있었어요 — 골·도움·수비도 승패도 식에 없었거든요.
+     *
+     * posAxis로 재면 포지션이 자동으로 보정돼요 (수비 3.5회 ≈ 골 1.6개).
+     * 기대치(그 평점이면 보통 이만큼)와 견줘서 잘했으면 +, 못했으면 −.
+     * 기대치도 평점을 따라 움직여야 실력 좋은 선수가 이중으로 이득 보지 않아요. */
+    const perfNow = clamp((rating - 5) / 4 + 0.6, 0.15, 1.6);
+    const axisNow = posAxis({ goals: info.myGoals, assists: info.assists, defense: info.defense }, S.pos);
+    const doneBonus = (axisNow - 2.05 * perfNow) * 8;
+    const resultBonus = info.res === "W" ? 3 : info.res === "L" ? -3 : 0;
+    const myRankScore = rating * 10 + momAdj + doneBonus + resultBonus + rand(-4, 4);
     const rows = [
       { name: S.name, score: myRankScore, me: true },
       ...act.rivals.map((r) => ({ name: r.name, score: r.pop + rand(-8, 8) })),
@@ -422,6 +451,8 @@ window.WingerCareer = (() => {
     const hypeDelta = (5 - rank) * 0.35 + (info.momentRes === "perfect" ? 0.5 : info.momentRes === "miss" ? -0.5 : 0);
 
     act.apps = (act.apps || 0) + 1;
+    // 시즌 평균 평점 — 기록 화면에 보여줘요
+    act.ratingSum = (act.ratingSum || 0) + clamp(myRankScore / 10, 1, 10);
     act.goals = (act.goals || 0) + info.myGoals;
     act.assists = (act.assists || 0) + info.assists;
     act.defense = (act.defense || 0) + info.defense;
@@ -444,6 +475,20 @@ window.WingerCareer = (() => {
     }
     S.fandom = Math.max(0, (S.fandom || 0) + dFan);
     S.money = (S.money || 0) + pay;
+    /* ⚡ 실전 성장 — 낮은 확률로 경기에서 뭔가를 깨쳐요.
+     * 훈련만으로 크는 게 아니라 경기가 선수를 키운다는 감각을 주려는 거예요.
+     * 잘한 경기일수록 확률이 올라가요. 상한에 닿은 능력치는 대상에서 빼요. */
+    const growP = clamp(0.06 + (rank <= 3 ? 0.06 : 0) + (info.momentRes === "perfect" ? 0.05 : 0), 0, 0.2);
+    if (Math.random() < growP) {
+      const pool = STAT_DEFS.filter((d) => !atCap(d.key));
+      if (pool.length) {
+        const d = pick(pool);
+        const gain = Math.round(rand(0.4, 1.4) * S.talents[d.key] * 10) / 10;
+        S.stats[d.key] = clamp(S.stats[d.key] + gain, 0, statCap(d.key));
+        proLog(`⚡ 실전에서 ${d.name}을(를) 깨쳤어요! +${gain.toFixed(1)} (${Math.round(S.stats[d.key])})`);
+        if (window.Fx) Fx.flash(`⚡ ${d.name} +${gain.toFixed(1)}`);
+      }
+    }
     S.condition = clamp(S.condition - randInt(3, 6), 0, 100);
     S.pendingShow = false;
 
@@ -460,7 +505,7 @@ window.WingerCareer = (() => {
     const resultHTML = `
       <div class="ms-final ${scoreClass}">${info.home} ${info.teamGoals} : ${info.oppGoals} ${info.away} · ${RES_LABEL[info.res]}</div>
       <div class="tour-vs">${won ? "🏅 MOM!" : `평점 ${rank}위`} <span class="${won ? "win" : ""}">${S.name}</span> · ⚽${info.myGoals} 🅰️${info.assists} 🛡️${info.defense}</div>
-      ${chartHTML(rows.slice(0, 5))}
+      ${chartHTML(rows)}
       <div class="tour-pts">💰 경기 수당 +${pay}만 · ${dFan >= 0 ? `⭐ 명성 +${dFan}` : `📉 명성 ${dFan}`}</div>
       ${extraLine}`;
 
@@ -556,11 +601,17 @@ window.WingerCareer = (() => {
     S.career.teamW = (S.career.teamW || 0) + (act.teamW || 0);
     S.career.teamD = (S.career.teamD || 0) + (act.teamD || 0);
     S.career.teamL = (S.career.teamL || 0) + (act.teamL || 0);
-    if (awards.length && window.Fx) Fx.celebrate("award", `🎖️ ${awards.join(" · ")}!`);
+    /* 수상은 하나씩 띄워요. 한 번에 합쳐 부르면 연출이 겹쳐서 뭘 받았는지 안 보여요
+     * — ⚾ 더 드래프트에서 2.11.2에 같은 문제를 고쳤습니다. */
+    if (awards.length && window.Fx) {
+      awards.forEach((a, i) => setTimeout(() => Fx.celebrate("award", `🎖️ ${a}!`), i * 1700));
+    }
     /* club·league — 그 시즌에 뛴 소속을 결산 시점에 그냥 적어요. 여기 적힌 값이 정본이에요.
      * 이 필드가 생기기 전에 쌓인 옛 항목에는 club이 없어요. 그건 읽는 쪽(fillClubs)이
      * S.moves에서 역산해 메워요 — 세이브는 고치지 않아요(클라우드 동기화와 부딪혀요). */
-    S.career.years.push({ y: S.proYear, hype: Math.round(hype * 10) / 10, wins, sales, dFan, awards, goals: gg, assists: ga, defense: gd, apps, club: S.group, league: S.league });
+    // 평균 평점 — 골·도움만으로는 안 드러나는 '꾸준함'을 보여줘요
+    const avgRating = apps ? Math.round(((act.ratingSum || 0) / apps) * 10) / 10 : null;
+    S.career.years.push({ y: S.proYear, hype: Math.round(hype * 10) / 10, wins, sales, dFan, awards, goals: gg, assists: ga, defense: gd, apps, avg: avgRating, club: S.group, league: S.league });
     if (window.Stats) Stats.log("year_end", { y: S.proYear, wins, sales, goals: gg, assists: ga });
     for (const d of STAT_DEFS) {
       if (S.proYear <= 3) S.stats[d.key] = clamp(S.stats[d.key] + rand(0, 1) * S.talents[d.key], 0, statCap(d.key));
@@ -661,7 +712,8 @@ window.WingerCareer = (() => {
     const g = x.goals != null ? x.goals : "-";
     const a = x.assists != null ? x.assists : "-";
     const d = x.defense != null ? x.defense : "-";
-    return `<td class="yr-stat">${g}골 ${a}도움 ${d}수비</td>`;
+    // 평균 평점 — 골·도움만으로는 안 드러나는 꾸준함이 보여요. 옛 기록에는 없어서 "-"로 둡니다.
+    return `<td class="yr-stat">${g}골 ${a}도움 ${d}수비</td><td class="yr-avg">${x.avg != null ? x.avg.toFixed(1) : "-"}</td>`;
   }
 
   function yearReport() {
@@ -685,8 +737,9 @@ window.WingerCareer = (() => {
         y.hype >= 6.0 ? "제 몫을 해낸 시즌" :
         y.hype >= 3.5 ? "아쉬움이 남는 시즌" : "혹독한 시즌…"
       }</div>
-      <div class="draft-team">${leagueOf(S).flag} ${S.group} · ${leagueOf(S).name} · 전력 ${clubStrOf(S)} · ${y.apps || 0}경기 ⚽${y.goals || 0}골 🅰️${y.assists || 0}도움 🛡️${y.defense || 0} · MOM ${y.wins}회</div>
-      <table class="season-table season-soccer"><thead><tr><th>시즌</th><th>소속</th><th>성적</th><th>수상</th></tr></thead><tbody>${rows}</tbody></table>
+      <div class="draft-team">${leagueOf({ league: y.league || S.league }).flag} ${y.club || S.group} · ${leagueOf({ league: y.league || S.league }).name} · 전력 ${clubStrOf(S)} · ${y.apps || 0}경기 ⚽${y.goals || 0}골 🅰️${y.assists || 0}도움 🛡️${y.defense || 0} · MOM ${y.wins}회${y.avg != null ? ` · 평균 평점 ${y.avg.toFixed(1)}` : ""}</div>
+      ${y.club && y.club !== S.group ? `<div class="hint">🔁 <b>${S.group}</b>로 이적했어요 — ${(y.y || 0) + 1}시즌부터 새 팀에서 뜁니다</div>` : ""}
+      <table class="season-table season-soccer"><thead><tr><th>시즌</th><th>소속</th><th>성적</th><th>평점</th><th>수상</th></tr></thead><tbody>${rows}</tbody></table>
       <div class="draft-summary">
         통산 ${cr.years.length}시즌 · 출전 ${cr.apps || 0} · ⚽ ${cr.goals || 0}골 · 🅰️ ${cr.assists || 0}도움 · 🛡️ ${cr.defense || 0} · 🏅 MOM ${cr.wins}회<br/>
         🏆 MVP ${cr.daesang} · 베스트11 ${cr.bonsang}${cr.rookie ? " · 신인왕" : ""} · ⭐ 명성 ${Math.round(S.fandom)}<br/>

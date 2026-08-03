@@ -33,6 +33,8 @@
   <main id="app">
     <section class="screen active">
       <h2>🔍 화면 확인용</h2>
+      <!-- 어느 버전을 보고 있는지 — 배포 직후 캐시가 남았는지 바로 알 수 있어요 -->
+      <p class="hint" id="ck-version" style="margin:-6px 0 10px">버전 확인 중…</p>
 
       <div class="ck-warn">
         <b>⚠️ 개발 확인용 — 세이브를 덮어씁니다</b><br />
@@ -188,6 +190,13 @@
       }
       $("ck-foot").textContent =
         `🗓️ ${F.generatedAt || "?"} 에 뽑은 세이브예요. 산식이 바뀌면 node scripts/make-fixtures.js 로 다시 뽑으세요.`;
+
+    /* 지금 보고 있는 게 어느 버전인지 — 배포했는데 화면이 그대로면
+     * 대개 서비스워커 캐시예요. 여기서 바로 가려낼 수 있어요. */
+    fetch("../VERSION", { cache: "no-store" })
+      .then((r) => (r.ok ? r.text() : Promise.reject()))
+      .then((v) => { document.getElementById("ck-version").textContent = `📦 상용 VERSION ${v.trim()} · 이 페이지는 beta/`; })
+      .catch(() => { document.getElementById("ck-version").textContent = "📦 VERSION을 못 읽었어요 (로컬 파일로 열면 안 보여요)"; });
     }
 
     /* 이 스크립트는 </body> 바로 앞이라, 필요한 요소는 이미 다 파싱돼 있어요.

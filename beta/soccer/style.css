@@ -249,3 +249,8 @@ body {
 .standings-box > summary::-webkit-details-marker { display: none; }
 .standings-box > summary::before { content: "▸ "; color: var(--dim); }
 .standings-box[open] > summary::before { content: "▾ "; }
+
+/* 평균 평점 칸 — 좁게 고정해 '성적'이 세로로 접히지 않게 해요 */
+.yr-avg { white-space: nowrap; width: 38px; color: var(--cream); }
+.ch-club { color: var(--dim); font-size: .92em; }
+.ch-role { display: block; font-size: .78em; opacity: .6; }

@@ -624,12 +624,15 @@ function renderRecord() {
         x.goals != null ? `${x.goals}골` : null,
         x.assists != null ? `${x.assists}도움` : null,
         x.defense != null ? `${x.defense}수비` : null,
-      ].filter(Boolean).join(" ") || "-"}</td><td>${x.awards && x.awards.length ? "🏆" + x.awards.join(",") : "-"}</td></tr>`
+      ].filter(Boolean).join(" ") || "-"}</td><td class="yr-avg">${x.avg != null ? x.avg.toFixed(1) : "-"}</td><td>${x.awards && x.awards.length ? "🏆" + x.awards.join(",") : "-"}</td></tr>`
     ).join("");
     const cr = S.career;
     proHtml = `
-      <table class="season-table season-record"><thead><tr><th>시즌</th><th>성적</th><th>수상</th></tr></thead><tbody>${rows}</tbody></table>
-      <div>통산 ${cr.years.length}시즌 · 출전 ${cr.apps || 0}경기 · ⚽ ${cr.goals || 0}골 · 🅰️ ${cr.assists || 0}도움 · 🛡️ 수비 ${cr.defense || 0} · 🏅 MOM ${cr.wins}회<br/>🏆 MVP ${cr.daesang} · 베스트11 ${cr.bonsang}${cr.rookie ? " · 신인왕" : ""}</div>`;
+      <table class="season-table season-record"><thead><tr><th>시즌</th><th>성적</th><th>평점</th><th>수상</th></tr></thead><tbody>${rows}</tbody></table>
+      <div>통산 ${cr.years.length}시즌 · 출전 ${cr.apps || 0}경기${(() => {
+        const ys = cr.years.filter((y) => y.avg != null);
+        return ys.length ? ` · 평균 평점 ${(ys.reduce((a, y) => a + y.avg, 0) / ys.length).toFixed(1)}` : "";
+      })()} · ⚽ ${cr.goals || 0}골 · 🅰️ ${cr.assists || 0}도움 · 🛡️ 수비 ${cr.defense || 0} · 🏅 MOM ${cr.wins}회<br/>🏆 MVP ${cr.daesang} · 베스트11 ${cr.bonsang}${cr.rookie ? " · 신인왕" : ""}</div>`;
   }
   const gearList = STAT_DEFS
     .map((d) => {
