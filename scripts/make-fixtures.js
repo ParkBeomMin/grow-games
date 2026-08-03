@@ -461,6 +461,51 @@ function makeSoccerReport() {
   log("  ❌ 조건에 맞는 상태를 못 만들었어요 (연말 결산)");
 }
 
+/* ⚽ 팀 승강제 — 리그 순위표 1위/꼴찌로 내 팀이 통째로 리그를 오르내려요.
+ * 개인 이적 사다리와는 다른 축이라, 화면에서 둘이 어떻게 겹치는지 봐야 해요.
+ * 승격이 실제로 일어난 시즌의 결산 화면을 심습니다. */
+function makeSoccerPromoRelegation() {
+  log("⚽ ⑥ 팀 승강제 — 리그 우승 승격 / 최하위 강등");
+  /* 38경기 시즌을 jsdom에서 여러 번 굴리면 무거워요(시드 40 × 8시즌에서 메모리가 터졌어요).
+   * 승격은 자주 일어나서(승률 60%면 시즌의 91%) 적게 굴려도 잡힙니다. */
+  for (const seed of seeds(6)) {
+    let P;
+    try {
+      P = makePage("soccer", seed);
+      soccerDebut(P, "pro", "pos");
+      let hit = null;
+      for (let y = 1; y <= 3; y++) {
+        if (!playSeason(P, "pos")) break;
+        const yrs = P.state().career.years || [];
+        const last = yrs[yrs.length - 1];
+        if (last && last.promo) { hit = last; break; }
+        const b = P.$("btn-next-season") || nextSeasonBtn(P);
+        if (!b) break;
+        b.click();
+      }
+      const st = P.state();
+      if (hit && P.active() === "screen-career") {
+        add({
+          id: "soccer-promo",
+          game: "soccer", url: "soccer/", emoji: hit.promo === "up" ? "🔺" : "🔻",
+          title: hit.promo === "up" ? "팀 승격 — 리그 우승" : "팀 강등 — 최하위",
+          state: `${st.group} · ${hit.y}시즌 ${hit.promo === "up" ? "우승 → 승격" : "최하위 → 강등"} · 다음 리그 ${hit.promoTo}`,
+          check: "결산에 🔺/🔻 안내가 뜨는지, 다음 시즌 준비 화면의 리그와 순위표가 바뀐 리그로 바뀌는지 봐주세요",
+          steps: ["게임이 열리면 <b>이어하기</b> → 선수 카드", "결산 화면에 승강 안내가 있어요", "<b>다음 시즌 시작</b>을 누르면 새 리그예요"],
+          keys: snapshot(P),
+        });
+        P.close();
+        return;
+      }
+      P.close();
+    } catch (e) {
+      if (P) P.close();
+      log(`  · 시드 ${seed}: ${e.message}`);
+    }
+  }
+  log("  ❌ 조건에 맞는 상태를 못 만들었어요 (팀 승강제)");
+}
+
 /* ⚽ ④·⑤ 유스 엔딩 두 종 — 세이브만으로는 재현이 안 돼요.
  *
  * 엔딩 화면은 '프로 도전'의 판정 결과가 정하는데, 그 판정은 세이브에 안 남아요.
@@ -1151,6 +1196,7 @@ if (want("soccer-promote", "soccer")) makeSoccerPromote();
 if (want("soccer-youth-ext", "soccer")) makeSoccerEnding("youth");
 if (want("soccer-semipro", "soccer")) makeSoccerEnding("semi");
 if (want("soccer-report", "soccer")) makeSoccerReport();
+if (want("soccer-promo", "soccer")) makeSoccerPromoRelegation();
 if (want("idol-concept", "idol")) {
   makeIdolConcept("idol-concept", "컴백 컨셉 선택 화면", "🎬",
     "컨셉 카드 4장이 좁은 화면에서 안 겹치고, 소문 2장에 🗣 배지가 붙는지", false, 2);

@@ -27,6 +27,58 @@
     .ck-odds { color: var(--accent2); font-size: .78rem; line-height: 1.5; }
     .ck-group { color: var(--sky); font-size: 1.05rem; margin: 6px 0 10px; }
     .ck-back { display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px; }
+
+    /* 🎮 미니게임 바로 해보기 — 세이브와 상관없는 칸이라 테두리 색을 따로 줬어요. */
+    .mg-box {
+      border: 2px solid var(--sky);
+      border-radius: 14px;
+      padding: 14px;
+      margin-bottom: 22px;
+      background: rgba(255, 255, 255, .03);
+    }
+    .mg-box h3 { margin: 0 0 6px; }
+    .mg-safe { color: var(--sky); font-size: .8rem; line-height: 1.6; margin: 0 0 12px; }
+    .mg-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 10px; }
+    .mg-row > b { color: var(--cream); font-size: .82rem; min-width: 4.6em; }
+    .mg-seg { display: flex; flex-wrap: wrap; gap: 6px; }
+    .mg-seg button {
+      font: inherit;
+      font-size: .78rem;
+      padding: 5px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: transparent;
+      color: var(--dim);
+      cursor: pointer;
+    }
+    .mg-seg button.on { border-color: var(--accent); background: rgba(255, 255, 255, .1); color: var(--accent); }
+    .mg-range { flex: 1 1 120px; min-width: 110px; accent-color: var(--accent); }
+    .mg-out { color: var(--sky); font-size: .78rem; }
+    .mg-list { display: flex; flex-direction: column; gap: 8px; margin: 12px 0 0; }
+    .mg-item {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 2px;
+      text-align: left;
+      width: 100%;
+      font: inherit;
+      padding: 10px 12px;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+      background: transparent;
+      color: var(--text);
+      cursor: pointer;
+    }
+    .mg-item.on { border-color: var(--accent); background: rgba(255, 255, 255, .07); }
+    .mg-item b { color: var(--accent); font-size: .98rem; }
+    .mg-item span { color: var(--dim); font-size: .76rem; line-height: 1.5; }
+    .mg-item .mg-stat { color: var(--sky); }
+    .mg-now { color: var(--dim); font-size: .78rem; margin: 12px 0 6px; }
+    .mg-frame { display: block; width: 100%; min-height: 240px; border: 0; border-radius: 12px; background: var(--bg2); }
+    .mg-res { color: var(--cream); font-size: .92rem; margin: 10px 0; min-height: 1.3em; }
+    .mg-acts { display: flex; gap: 8px; }
+    .mg-acts .btn { flex: 1; margin: 0; }
   </style>
 </head>
 <body>
@@ -35,6 +87,41 @@
       <h2>🔍 화면 확인용</h2>
       <!-- 어느 버전을 보고 있는지 — 배포 직후 캐시가 남았는지 바로 알 수 있어요 -->
       <p class="hint" id="ck-version" style="margin:-6px 0 10px">버전 확인 중…</p>
+
+      <!-- 🎮 미니게임을 그 자리에서 돌려 보는 칸이에요. 세이브와 아무 상관 없어요. -->
+      <section class="mg-box" id="mg">
+        <h3 class="ck-group">🎮 미니게임 바로 해보기</h3>
+        <p class="mg-safe">
+          가을야구 4종·투어 3종은 경기 중에 <b>무작위로</b> 나와요. 하나를 보려고 운에 맡길 필요 없이 여기서 바로 돌려 봐요.<br />
+          ✅ <b>세이브를 한 글자도 안 건드려요</b> — 아래 시나리오 칸의 백업·되돌리기와도 완전히 따로예요.
+        </p>
+
+        <div class="mg-row">
+          <b>👤 시점</b><span class="mg-seg" id="mg-pos"></span>
+          <span class="mg-out">— ⚾ 야구 4종만 갈려요</span>
+        </div>
+        <div class="mg-row">
+          <b>🏆 시리즈</b><span class="mg-seg" id="mg-tier"></span>
+        </div>
+        <div class="mg-row">
+          <b>📊 능력치</b>
+          <input class="mg-range" id="mg-stat" type="range" min="0" max="100" step="5" value="55"
+                 aria-label="능력치" />
+          <span class="mg-out" id="mg-stat-out"></span>
+        </div>
+
+        <div class="mg-list" id="mg-list"></div>
+
+        <div id="mg-stage" hidden>
+          <p class="mg-now" id="mg-now"></p>
+          <div id="mg-hold"></div>
+          <p class="mg-res" id="mg-res"></p>
+          <div class="mg-acts">
+            <button type="button" class="btn btn-primary" id="mg-again">🔁 다시 하기</button>
+            <button type="button" class="btn btn-ghost" id="mg-close">✖️ 닫기</button>
+          </div>
+        </div>
+      </section>
 
       <div class="ck-warn">
         <b>⚠️ 개발 확인용 — 세이브를 덮어씁니다</b><br />
@@ -142,6 +229,298 @@
       return String(s).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
     }
 
+    /* ============================================================
+     * 🎮 미니게임 바로 해보기
+     *
+     * 가을야구 4종(🎯 수싸움 · 🏃 홈 승부 · 💥 힘 배분 · 🔥 힘겨루기)과 투어 3종
+     * (🎬 함성 웨이브 · ✨ 싱크로 · 🔥 함성 유지)은 **경기 중에 무작위로** 나와요.
+     * 특정 하나를 보려면 운에 맡기고 계속 플레이해야 했어요. 여기서는 고른 것을
+     * 그 자리에서 돌려 봅니다.
+     *
+     * 🔒 세이브는 한 글자도 안 건드려요. 위 시나리오 칸의 심기·백업·되돌리기와
+     *    코드가 아예 안 겹쳐요. 유일하게 쓰이는 열쇠(grow-mech-ready — 준비 화면을
+     *    몇 번째 보는지)도 mgKeep()이 판마다 원래 값으로 되돌려 놔요.
+     *
+     * 📎 문구·판정·능력치는 **게임 소스에서 그대로 떼어 와요.** 여기 옮겨 적으면
+     *    게임이 바뀔 때 이 페이지만 옛말을 하게 되니까요.
+     *      · rookie/game.js의 POST_MECH  → 야구 4종 (S.pos로 타자/투수가 갈려요)
+     *      · idol/game.js의 TOUR_MECH    → 투어 3종
+     *    두 덩어리 모두 S(내 선수)와 miniZone만 있으면 도는 순수한 조각이라,
+     *    S를 우리가 만들어 끼우면 능력치도 시점도 마음대로 바꿀 수 있어요.
+     *
+     * 🖼 실행은 <iframe> 안에서 해요. 미니게임의 모양은 rookie/style.css와
+     *    idol/style.css에 들어 있는데, 그 파일들은 :root 색까지 갈아치워서 이
+     *    페이지에 그냥 붙이면 확인 페이지가 통째로 물들어요. 게임의 진짜 색으로
+     *    보려면 칸을 나눠야 해요. 덤으로 타이머·window도 그 칸 것이 돼요.
+     * ============================================================ */
+    const MG_POS = [{ id: "batter", label: "🧢 타자" }, { id: "pitcher", label: "⚾ 투수" }];
+    // 시리즈가 깊을수록 어려워져요 — game.js의 POST_TIER가 넘기는 값과 같은 0·1·2예요.
+    const MG_TIER = [
+      { v: 0, label: "와일드카드·준PO" },
+      { v: 1, label: "플레이오프" },
+      { v: 2, label: "마지막 시리즈" },
+    ];
+    const MG_MECHS = [
+      { id: "mind", game: "rookie", emoji: "🎯", name: "수싸움", desc: "세 코스를 상대와 동시에 골라요 (시간 제한 없음)" },
+      { id: "dash", game: "rookie", emoji: "🏃", name: "홈 승부", desc: "홈으로 뛸지 멈출지 — 정보가 늦게 와요" },
+      { id: "surge", game: "rookie", emoji: "💥", name: "힘 배분", desc: "정해진 힘을 세 승부에 나눠 쏟아요" },
+      { id: "clash", game: "rookie", emoji: "🔥", name: "힘겨루기", desc: "두 버튼을 번갈아 눌러 밀어내요" },
+      { id: "wave", game: "idol", emoji: "🎬", name: "함성 웨이브", desc: "객석을 흐르는 함성을 3번 잡아요" },
+      { id: "sync", game: "idol", emoji: "✨", name: "싱크로", desc: "두 파트가 겹치는 순간에 한 번" },
+      { id: "roar", game: "idol", emoji: "🔥", name: "함성 유지", desc: "연타로 목표선 위에 붙잡아 둬요" },
+    ];
+    const MG_FILES = {
+      rookie: { game: "rookie/game.js", stage: "post-stage.js" },
+      idol: { game: "idol/game.js", stage: "tour-stage.js" },
+    };
+    const MG_RES = { perfect: "🌟 perfect — 완벽", good: "🙆 good — 성공", miss: "😵 miss — 실패" };
+    // 아이돌은 시점이 아니라 포지션이에요. ✨ 싱크로만 이 값을 봐요(포지션 주 스탯).
+    const MG_IDOL_POS = "vocal";
+    const MG = { pos: "batter", tier: 0, stat: 55, id: null };
+    const MG_GAMES = {};          // game → 받아 오는 중인 Promise
+    const mgDone = {};            // game → { stage, glue, meta, S } (다 받은 알맹이)
+    const mgReady = (game) => mgDone[game] || null;
+    let mgFrame = null, mgFit = 0;
+
+    /* ---- 게임 소스에서 조각 떼어 오기 ---- */
+    function srcCut(src, from, to) {
+      const a = src.indexOf(from);
+      const b = a < 0 ? -1 : src.indexOf(to, a + from.length);
+      if (a < 0 || b < 0) throw new Error(`소스에서 ${from} 를 못 찾았어요`);
+      return src.slice(a, b);
+    }
+    /* 최상위 선언 하나를 통째로 — 다음 최상위 const/let/function 앞까지 잘라요.
+     * 안쪽 줄은 전부 들여쓰기가 있어서 여기 걸리지 않아요. */
+    function srcBlock(src, head) {
+      const a = src.indexOf(head);
+      if (a < 0) throw new Error(`소스에서 ${head} 를 못 찾았어요`);
+      const ends = ["\nconst ", "\nlet ", "\nfunction "]
+        .map((t) => src.indexOf(t, a + head.length)).filter((i) => i > 0);
+      return src.slice(a, ends.length ? Math.min.apply(null, ends) : src.length);
+    }
+    /* S 하나만 받아 { mech, zone, defs }를 돌려주는 함수의 몸통을 만들어요.
+     * mech의 run()이 window.PostStage / window.TourStage를 찾으니, 이 몸통을
+     * 어느 창에서 돌리느냐가 곧 미니게임이 그려질 창이에요. */
+    function mgGlue(game, src) {
+      const parts = [srcBlock(src, "const clamp = "), srcBlock(src, "const STAT_DEFS = ")];
+      if (game === "rookie") {
+        parts.push(srcBlock(src, "const miniZone = "));
+        parts.push(srcCut(src, "const MIND_BAT", "const POST_MECH = {"));
+        parts.push(srcBlock(src, "const POST_MECH = {"));
+        parts.push("return { mech: POST_MECH, zone: miniZone, defs: STAT_DEFS };");
+      } else {
+        parts.push(srcBlock(src, "const POS_INFO = {"));
+        parts.push(srcBlock(src, "const miniZone = "));
+        parts.push(srcBlock(src, "const TOUR_MECH = {"));
+        parts.push("return { mech: TOUR_MECH, zone: miniZone, defs: STAT_DEFS };");
+      }
+      return parts.join("\n");
+    }
+    function mgFetch(url) {
+      return fetch(url, { cache: "no-store" }).then((r) => {
+        if (!r.ok) throw new Error(`${url} (${r.status})`);
+        return r.text();
+      });
+    }
+    /* 한 번만 받아 둬요. 실패는 남기지 않아요 — 로컬 파일로 열었거나 잠깐 끊겼을
+     * 때 한 번 실패했다고 영영 못 쓰게 되면 안 되니까요. */
+    function mgLoad(game) {
+      if (!MG_GAMES[game]) {
+        const f = MG_FILES[game];
+        MG_GAMES[game] = Promise.all([mgFetch(f.game), mgFetch(f.stage)]).then((r) => {
+          const glue = mgGlue(game, r[0]);
+          const S = { pos: game === "rookie" ? MG.pos : MG_IDOL_POS, condition: 50, stats: {} };
+          /* meta는 이 창에서 만들어요 — stat()·zone()은 화면을 안 만지는 순수한
+           * 계산이라 목록의 라벨을 그리는 데 바로 쓸 수 있어요. run()만 칸 안에서
+           * 다시 만들어 돌려요. */
+          // eslint-disable-next-line no-new-func
+          const meta = new Function("S", glue)(S);
+          const g = { game, stage: r[1], glue, meta, S };
+          for (const d of mgDefs(g, game)) g.S.stats[d.key] = MG.stat;
+          mgDone[game] = g;
+          MG_GAMES[game] = Promise.resolve(g);
+          return g;
+        }).catch((e) => { MG_GAMES[game] = null; throw e; });
+      }
+      return MG_GAMES[game];
+    }
+    // STAT_DEFS는 야구가 { batter: [], pitcher: [] }, 아이돌이 [] 예요.
+    const mgDefs = (g, game) => (game === "rookie"
+      ? [].concat(g.meta.defs.batter, g.meta.defs.pitcher) : g.meta.defs);
+    /* 이 메커닉이 어느 능력치를 보는지 — 표로 옮겨 적지 않고 소스의 stat()에
+     * 직접 물어봐요. 능력치마다 다른 숫자를 잠깐 끼워 두고, 돌아온 숫자로 어느
+     * 칸이었는지 되짚어요. 능력치가 옮겨 가도 이 줄은 알아서 따라와요. */
+    function mgStatName(g, id) {
+      const list = mgDefs(g, g.game);
+      const keep = g.S.stats;
+      const marks = {};
+      list.forEach((d, i) => { marks[d.key] = i + 1; });
+      g.S.stats = marks;
+      let v = 0;
+      try { v = g.meta.mech[id].stat(); } finally { g.S.stats = keep; }
+      const d = list[v - 1];
+      return d ? d.name : "?";
+    }
+
+    /* ---- 준비 화면 횟수는 우리 몫만 따로 세요 ----
+     * post-stage.js·tour-stage.js는 '이 미니게임을 몇 번째 보는지'를
+     * grow-mech-ready에 적어 두고, 세 번까지는 설명 전문을 보여줘요.
+     * 여기서 돌린 판이 진짜 게임의 그 값을 밀어 올리면 안 되니, 우리 값을 잠깐
+     * 끼워 넣고 돌린 뒤 원래 값을 그대로 되돌려 놔요. */
+    const MG_READY_KEY = "grow-mech-ready";
+    const mgSeen = {};
+    function mgKeep(W, fn) {
+      const LS = W.localStorage;
+      let old = null, had = false;
+      try { old = LS.getItem(MG_READY_KEY); had = true; LS.setItem(MG_READY_KEY, JSON.stringify(mgSeen)); } catch { /* 못 써도 판은 돌아가요 */ }
+      try { fn(); } finally {
+        if (had) {
+          try {
+            const now = JSON.parse(LS.getItem(MG_READY_KEY) || "{}");
+            for (const k in now) mgSeen[k] = now[k];
+            if (old === null) LS.removeItem(MG_READY_KEY); else LS.setItem(MG_READY_KEY, old);
+          } catch { /* 마찬가지예요 */ }
+        }
+      }
+    }
+
+    function mgTeardown() {
+      if (mgFit) { clearInterval(mgFit); mgFit = 0; }
+      if (mgFrame) { mgFrame.remove(); mgFrame = null; }
+    }
+    // 미니게임 상자는 판마다 키가 달라요 — 칸 높이를 안쪽 내용에 맞춰 줘요.
+    function mgFitTo(ifr, D) {
+      try { ifr.style.height = `${Math.max(240, D.body.scrollHeight + 20)}px`; } catch { /* 이미 닫혔어요 */ }
+    }
+    function mgPlay(id) {
+      const m = MG_MECHS.find((x) => x.id === id);
+      if (!m) return;
+      MG.id = id;
+      $("mg-stage").hidden = false;
+      $("mg-res").textContent = "";
+      $("mg-now").textContent = "⏳ 미니게임을 불러오는 중이에요…";
+      renderMg();
+      mgTeardown();
+      /* 미리 받아 두던 판이 마침 실패했을 수도 있어요(잠깐 끊겼다든가) —
+       * 누른 김에 한 번 더 받아 봐요. 그래도 안 되면 그때 알려 드려요. */
+      mgLoad(m.game).catch(() => mgLoad(m.game)).then((g) => {
+        g.S.pos = m.game === "rookie" ? MG.pos : MG_IDOL_POS;
+        for (const d of mgDefs(g, m.game)) g.S.stats[d.key] = MG.stat;
+        const zone = g.meta.zone(MG.stat);
+        $("mg-now").textContent = `${m.emoji} ${m.name} · `
+          + (m.game === "rookie" ? `${MG_POS.find((p) => p.id === MG.pos).label} · ${MG_TIER[MG.tier].label} · ` : "🎤 투어 · ")
+          + `능력치 ${MG.stat}(${mgStatName(g, id)}) → 판정 존 ${zone.toFixed(1)}%`;
+        const ifr = document.createElement("iframe");
+        ifr.className = "mg-frame";
+        ifr.title = `${m.name} 실행 칸`;
+        $("mg-hold").appendChild(ifr);
+        mgFrame = ifr;
+        const boot = () => {
+          if (mgFrame !== ifr) return;                 // 그 사이 다른 판으로 넘어갔어요
+          const W = ifr.contentWindow, D = ifr.contentDocument;
+          const link = (href) => {
+            const l = D.createElement("link");
+            l.rel = "stylesheet";
+            l.href = new URL(href, location.href).href;
+            D.head.appendChild(l);
+          };
+          link("base.css");
+          link(`${m.game}/style.css`);                 // 미니게임의 진짜 모양이 여기 있어요
+          const st = D.createElement("style");
+          st.textContent = "body{margin:0;padding:10px;background:transparent;overflow-x:hidden}";
+          D.head.appendChild(st);
+          const box = D.createElement("div");
+          box.id = "mg-play";
+          D.body.appendChild(box);
+          /* 칸 쪽 Function으로 돌려요 — 그래야 window·document·타이머가 전부 이
+           * 칸의 것이 되고, 확인 페이지와 한 톨도 안 섞여요.
+           * eval을 안 쓰는 이유는 파일 머리말에 적어 둔 그대로예요(선언이 갇혀요). */
+          W.Function(g.stage)();
+          const mod = W.Function("S", g.glue)(g.S);
+          const done = (res) => {
+            $("mg-res").textContent = `결과 → ${MG_RES[res] || res}`;
+            mgFitTo(ifr, D);
+          };
+          mgKeep(W, () => {
+            if (m.game === "rookie") mod.mech[id].run(box, MG.tier, done);
+            else mod.mech[id].run(box, mod.mech[id].label("서울", "앵콜!"), done);
+          });
+          mgFit = setInterval(() => mgFitTo(ifr, D), 150);
+          mgFitTo(ifr, D);
+        };
+        if (ifr.contentDocument && ifr.contentDocument.body) boot();
+        else ifr.onload = boot;
+      }).catch((e) => {
+        $("mg-now").textContent =
+          `❌ 게임 소스를 못 읽었어요 (${e.message}) — 로컬 파일로 열면 못 가져와요. 서버로 열어 주세요.`;
+      });
+    }
+
+    function renderMg() {
+      const seg = (host, items, on, pick) => {
+        host.innerHTML = "";
+        for (const it of items) {
+          const b = document.createElement("button");
+          b.type = "button";
+          b.textContent = it.label;
+          b.dataset.v = String(it.v !== undefined ? it.v : it.id);
+          if (on(it)) b.className = "on";
+          b.onclick = () => { pick(it); renderMg(); };
+          host.appendChild(b);
+        }
+      };
+      seg($("mg-pos"), MG_POS, (it) => it.id === MG.pos, (it) => { MG.pos = it.id; });
+      seg($("mg-tier"), MG_TIER, (it) => it.v === MG.tier, (it) => { MG.tier = it.v; });
+
+      /* 판정 존은 소스의 miniZone이 내요 — 여기서 산식을 베끼지 않아요.
+       * 아직 소스를 못 읽었으면 능력치 숫자만 보여줘요. */
+      const g0 = mgReady("rookie") || mgReady("idol");
+      $("mg-stat-out").textContent = MG.stat
+        + (g0 ? ` → 판정 존 ${g0.meta.zone(MG.stat).toFixed(1)}%` : "");
+
+      const list = $("mg-list");
+      list.innerHTML = "";
+      for (const m of MG_MECHS) {
+        const g = mgReady(m.game);
+        const stat = g ? mgStatName(g, m.id) : "…";
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = `mg-item${MG.id === m.id ? " on" : ""}`;
+        b.dataset.mech = m.id;
+        b.dataset.game = m.game;
+        b.innerHTML = `<b>${esc(m.emoji)} ${esc(m.name)}</b>`
+          + `<span>${esc(m.desc)}</span>`
+          + `<span class="mg-stat">📊 ${esc(stat)}${m.game === "rookie" ? " · 🏆 시리즈 단계 적용" : ""}</span>`;
+        b.onclick = () => mgPlay(m.id);
+        list.appendChild(b);
+      }
+    }
+
+    /* 🎮 미니게임 칸은 세이브와 아예 무관해요. 검사에서 이 자리만 따로 흔들 수
+     * 있게 손잡이를 내어 둬요 — 시점·시리즈·능력치를 바꾸고 한 판 돌리는 것까지요. */
+    api.mg = {
+      mechs: MG_MECHS,
+      state: () => MG,
+      set: (k, v) => { MG[k] = v; renderMg(); },
+      play: (id) => mgPlay(id),
+      frame: () => mgFrame,
+      loaded: (game) => mgReady(game),
+      seenKey: MG_READY_KEY,
+    };
+
+    function mgInit() {
+      const st = $("mg-stat");
+      st.value = String(MG.stat);
+      st.oninput = () => { MG.stat = Number(st.value) || 0; renderMg(); };
+      $("mg-again").onclick = () => { if (MG.id) mgPlay(MG.id); };
+      $("mg-close").onclick = () => { mgTeardown(); MG.id = null; $("mg-stage").hidden = true; renderMg(); };
+      renderMg();
+      // 라벨(어느 능력치인지)과 판정 존을 채우려면 소스가 필요해요. 미리 받아 둬요.
+      for (const game of ["rookie", "idol"]) {
+        mgLoad(game).then((g) => { mgDone[game] = g; renderMg(); }).catch(() => { /* 누르면 다시 받아요 */ });
+      }
+    }
+
     function render() {
       const b = backupInfo();
       $("ck-backup-line").innerHTML = b
@@ -203,6 +582,7 @@
      * DOMContentLoaded를 기다리면 파싱이 끝난 뒤에야 그려지는데, jsdom 검사는
      * 그 전에 화면을 읽어서 "버튼이 하나도 없다"로 보여요. 바로 그립니다. */
     render();
+    mgInit();
     $("ck-restore").onclick = restore;
     return api;
   })();

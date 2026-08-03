@@ -251,6 +251,43 @@ window.WingerCareer = (() => {
     if (changed) save();
   }
 
+  /* 🔺🔻 팀 승강제 — 리그 순위표 1위면 위로, 꼴찌면 아래로 내 팀이 통째로 움직여요.
+   *
+   * 개인 이적 사다리(PROMOTE_HYPE)와는 **다른 축**이에요.
+   * 그건 "내가 좋은 제안을 받아 클럽을 옮기는 것", 이건 "내 클럽이 리그를 오르내리는 것".
+   * 둘이 섞이면 사다리가 두 번 작동해서 한 시즌에 두 단계를 뛰어넘어요.
+   *
+   * 국내 3부(K리그3 · K리그2 · K리그1)에서만 돌아요. 유로파·챔피언스리그는
+   * 승강제가 있는 리그가 아니라 개인 성적으로 초청받는 무대라, 그쪽은 기존
+   * 이적 사다리에 그대로 맡깁니다. */
+  const DOMESTIC_TIERS = [5, 4, 1];          // K리그3 → K리그2 → K리그1 (tier 오름차순)
+
+  function applyPromotion() {
+    if (!tableReady()) return null;
+    const rows = tableRows();
+    if (rows.length < 3) return null;
+    const rank = myTableRank();
+    const at = DOMESTIC_TIERS.indexOf(leagueOf(S).id);
+    if (at < 0) return null;                 // 유럽 무대는 승강제 밖이에요
+
+    let to = null, kind = null;
+    if (rank === 1 && at < DOMESTIC_TIERS.length - 1) { to = DOMESTIC_TIERS[at + 1]; kind = "up"; }
+    else if (rank === rows.length && at > 0) { to = DOMESTIC_TIERS[at - 1]; kind = "down"; }
+    if (to == null) return null;
+
+    const from = leagueOf(S).name;
+    S.league = to;
+    /* 클럽 전력도 함께 움직여요. 승격하면 상위 리그에서는 하위권, 강등되면
+     * 하위 리그에서는 상위권이 되는 게 자연스러워요. */
+    const list = CLUBS[to] || [];
+    if (list.length) {
+      const ref = kind === "up" ? list[list.length - 1] : list[0];
+      S.clubStr = ref ? ref.str : S.clubStr;
+    }
+    S.table = null;                          // 새 리그에서 표를 다시 만들어요
+    return { kind, from, to: leagueOf(S).name, rank };
+  }
+
   function initActivity() {
     initTable();
     S.activity = {
@@ -618,6 +655,16 @@ window.WingerCareer = (() => {
       awards.push("발롱도르");
       S.career.ballon = (S.career.ballon || 0) + 1;
     }
+    /* 🔺🔻 팀 승강제 — 수상까지 끝난 뒤에 판정해요 (수상은 그 시즌 리그 기준이라야 맞아요).
+     * ⚠️ applyPromotion이 S.league을 바꿔요. 시즌 기록에는 **치른 리그**를 남겨야
+     * 지난 시즌 화면이 새 리그로 바뀌지 않아요 — 이적 표시에서 겪은 것과 같은 함정이에요. */
+    const leaguePlayed = S.league;
+    const move = applyPromotion();
+    if (move) {
+      proLog(move.kind === "up"
+        ? `🔺 리그 우승! ${move.from} → ${move.to} 승격!!`
+        : `🔻 최하위… ${move.from} → ${move.to} 강등`);
+    }
     S.career.sales += sales;
     const gg = act.goals || 0, ga = act.assists || 0, gd = act.defense || 0, apps = act.apps || 0;
     S.career.goals = (S.career.goals || 0) + gg;
@@ -637,7 +684,7 @@ window.WingerCareer = (() => {
      * S.moves에서 역산해 메워요 — 세이브는 고치지 않아요(클라우드 동기화와 부딪혀요). */
     // 평균 평점 — 골·도움만으로는 안 드러나는 '꾸준함'을 보여줘요
     const avgRating = apps ? Math.round(((act.ratingSum || 0) / apps) * 10) / 10 : null;
-    S.career.years.push({ y: S.proYear, hype: Math.round(hype * 10) / 10, wins, sales, dFan, awards, goals: gg, assists: ga, defense: gd, apps, avg: avgRating, club: S.group, league: S.league });
+    S.career.years.push({ y: S.proYear, hype: Math.round(hype * 10) / 10, wins, sales, dFan, awards, goals: gg, assists: ga, defense: gd, apps, avg: avgRating, club: S.group, league: leaguePlayed, promo: move ? move.kind : null, promoTo: move ? move.to : null });
     if (window.Stats) Stats.log("year_end", { y: S.proYear, wins, sales, goals: gg, assists: ga });
     for (const d of STAT_DEFS) {
       if (S.proYear <= 3) S.stats[d.key] = clamp(S.stats[d.key] + rand(0, 1) * S.talents[d.key], 0, statCap(d.key));
@@ -764,6 +811,9 @@ window.WingerCareer = (() => {
         y.hype >= 3.5 ? "아쉬움이 남는 시즌" : "혹독한 시즌…"
       }</div>
       <div class="draft-team">${leagueOf({ league: y.league || S.league }).flag} ${y.club || S.group} · ${leagueOf({ league: y.league || S.league }).name} · 전력 ${clubStrOf(S)} · ${y.apps || 0}경기 ⚽${y.goals || 0}골 🅰️${y.assists || 0}도움 🛡️${y.defense || 0} · MOM ${y.wins}회${y.avg != null ? ` · 평균 평점 ${y.avg.toFixed(1)}` : ""}</div>
+      ${y.promo ? `<div class="hint">${y.promo === "up"
+        ? `🔺 <b>리그 우승!</b> ${(y.y || 0) + 1}시즌부터 <b>${y.promoTo}</b>에서 뜁니다`
+        : `🔻 최하위로 강등… ${(y.y || 0) + 1}시즌부터 <b>${y.promoTo}</b>에서 다시 시작해요`}</div>` : ""}
       ${y.club && y.club !== S.group ? `<div class="hint">🔁 <b>${S.group}</b>로 이적했어요 — ${(y.y || 0) + 1}시즌부터 새 팀에서 뜁니다</div>` : ""}
       <table class="season-table season-soccer"><thead><tr><th>시즌</th><th>소속</th><th>성적</th><th>평점</th><th>수상</th></tr></thead><tbody>${rows}</tbody></table>
       <div class="draft-summary">
