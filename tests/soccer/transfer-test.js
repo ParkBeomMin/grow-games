@@ -409,11 +409,19 @@ guard("능력치 70의 챔피언스리그 차단", () => {
     check(!!list && cardsOf(1).length === OFFERS_PER_LEAGUE,
       `대신 같은 리그 이적은 그대로 열려 있다 (${NM(1)} ${list ? cardsOf(1).length : 0}장)`);
   }
-  /* 꼬리가 실재한다는 것도 같이 못 박는다. 이 검사가 없으면 위 두 줄은
-   * "챔피언스리그 카드를 아예 안 그린다"는 버그로도 초록이 뜬다. */
-  const top = openTransfer({ league: 1, group: CLUBS[1][5].name, clubStr: CLUBS[1][5].str, hype: max, moves: [] });
+  /* 문턱이 실제로 hype를 본다는 것도 못 박는다. 이 검사가 없으면 위 두 줄은
+   * "챔피언스리그 카드를 아예 안 그린다"는 버그로도 초록이 뜬다.
+   *
+   * 예전에는 능력치 70의 커리어 하이로 이 문을 열었다. 한 시즌을 12경기에서
+   * 38경기로 늘리면서 시즌 변동성이 줄어(경기가 많을수록 운이 평균으로 수렴한다)
+   * 꼬리가 더는 문턱에 닿지 않는다. 그건 그것대로 확인하고, 문턱이 hype를 본다는
+   * 것은 문턱 위 값을 직접 박아 확인한다. */
+  check(max < PROMOTE_HYPE[3],
+    `능력치 70은 커리어 하이로도 ${NM(3)} 문턱을 못 넘는다 (최고 ${max.toFixed(2)} vs 문턱 ${PROMOTE_HYPE[3]})`);
+  const overBar = PROMOTE_HYPE[3] + 0.5;
+  const top = openTransfer({ league: 1, group: CLUBS[1][5].name, clubStr: CLUBS[1][5].str, hype: overBar, moves: [] });
   check(!!top && cardsOf(3).length === OFFERS_PER_LEAGUE,
-    `능력치 70의 커리어 하이(hype ${max.toFixed(2)})는 ${NM(3)} 문을 연다 — 문턱이 실제로 hype를 보고 있다는 뜻이다 (${top ? cardsOf(3).length : 0}장)`);
+    `문턱을 넘는 hype(${overBar.toFixed(2)})에서는 ${NM(3)} 문이 열린다 — 문턱이 실제로 hype를 보고 있다는 뜻이다 (${top ? cardsOf(3).length : 0}장)`);
   check(!!top && (top || []).filter((el) => Number(el.dataset.league) === 3)
     .every((el) => el.textContent.includes(`-${leagueById(3).penalty.toFixed(1)}`)),
     `그 카드에도 평점 -${leagueById(3).penalty.toFixed(1)}이 그대로 적혀 있다 (도박의 크기를 감추지 않는다)`);

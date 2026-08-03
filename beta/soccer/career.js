@@ -37,7 +37,10 @@ window.WingerCareer = (() => {
     df: { g: 2.0, a: 1.0, d: 0.55, n: 0.72 },
   };
   const AXIS_K = 3.00;
-  const AXIS_OFF = 4.19;
+  /* 경기 수를 12 → 38로 올리면서 시즌 축이 3.23배가 됐어요. log가 AXIS_K(3.00)로
+   * 곱해지므로 hype가 3.52 올라갑니다 — 그만큼 offset을 올려 수상 문턱
+   * (MVP 5.5 · 베스트11 4.5 · 신인왕 3)의 의미를 그대로 지켜요. */
+  const AXIS_OFF = 7.71;
 
   // 시즌 축 점수. 옛 세이브에는 집계 필드가 없을 수 있어서 전부 || 0으로 받아요.
   function posAxis(act, pos) {
@@ -160,7 +163,12 @@ window.WingerCareer = (() => {
 
   // ---------- 시즌 활동 (전/후반기 × 리그 6라운드) ----------
   const CB_PER_YEAR = 2;
-  const WEEKS_PER_CB = 6;
+  /* 한 시즌 38경기 — 실제 K리그1과 같아요. 예전에는 12경기(전반 6 + 후반 6)라
+   * 실제의 3분의 1도 안 됐고, 한 경기 운이 시즌을 통째로 흔들었어요.
+   * ⚠️ 리그마다 다르게 하지 않고 상수로 둡니다 — tests/soccer의 여러 테스트가
+   * 이 상수를 소스에서 읽어 시즌을 굴려요. 함수로 바꾸면 테스트는 12경기로
+   * 굴리는데 게임은 38경기로 돌아 기대값이 통째로 어긋납니다. */
+  const WEEKS_PER_CB = 19;
   const CB_LABELS = ["전반기", "후반기"];
   const cbLabel = (n) => CB_LABELS[n - 1] || `${n}차`;
   const RIVAL_GROUPS = ["에이스 스트라이커", "월드클래스 MF", "철벽 수비수", "득점왕 후보", "라이벌 윙어", "베테랑 캡틴", "괴물 신인", "국대 주전"];
@@ -225,6 +233,23 @@ window.WingerCareer = (() => {
     const i = rows.findIndex((r) => r.name === S.group);
     return i < 0 ? rows.length : i + 1;
   };
+
+  /* 진행 중이던 세이브의 라이벌에는 이름·소속이 없어요 — 예전에는 역할 딱지가
+   * 이름 자리에 있었고 클럽은 아예 없었습니다. 라이벌은 반기마다 다시 뽑히므로
+   * 시즌 도중에는 갱신되지 않아 "소속이 비어 있음"으로 보였어요.
+   * 그릴 때 비어 있는 것만 채워 넣습니다(이미 있는 값은 안 건드려요). */
+  function fillRivals(act) {
+    if (!act || !Array.isArray(act.rivals) || !act.rivals.length) return;
+    let changed = false;
+    const clubs = shuffle(oppClubs(S));
+    act.rivals.forEach((r, i) => {
+      if (!r.role && RIVAL_GROUPS.includes(r.name)) { r.role = r.name; r.name = null; changed = true; }
+      if (!r.name) { r.name = randomPlayerName(MARKETS[Math.random() < 0.5 ? 0 : 1]); changed = true; }
+      if (!r.role) { r.role = RIVAL_GROUPS[i % RIVAL_GROUPS.length]; changed = true; }
+      if (!r.club) { r.club = clubs[i % clubs.length]; changed = true; }
+    });
+    if (changed) save();
+  }
 
   function initActivity() {
     initTable();
@@ -429,6 +454,7 @@ window.WingerCareer = (() => {
 
   // 프로 경기 결과 반영 (MOM 평점 순위 + 보상 + 다음 진행)
   function proMatchFinalize(act, info, rating) {
+    fillRivals(act);                    // 옛 세이브의 라이벌에 이름·소속을 채워요
     const momAdj = info.momentRes === "perfect" ? 8 : info.momentRes === "miss" ? -8 : 0;
     /* 그 경기에서 실제로 한 일을 평점에 반영해요.
      * 예전에는 rating(스탯·컨디션·명성)과 랜덤만 봐서, 4:2로 이긴 경기에 3골을
@@ -578,13 +604,13 @@ window.WingerCareer = (() => {
     }
     /* ⚽ 축구 전용 부문상 — 포지션마다 노릴 트로피가 하나씩 생겨요.
      * 문턱은 12경기 시즌의 실측 생산량으로 잡았어요 (능력치 100·평점 6.5 기준):
-     *   공격수 골 18.8 · 미드필더 도움 17.2 · 수비수 수비 41.8 · 윙어 공격P 29.3
+     *   공격수 골 60.6 · 미드필더 도움 53.8 · 수비수 수비 132.1 · 윙어 공격P 91.8 (38경기)
      * 좋은 시즌이면 닿고 평범하면 안 닿는 자리예요. bar를 곱해 리그 경쟁 강도를 반영해요. */
     const G_ = act.goals || 0, A_ = act.assists || 0, D_ = act.defense || 0;
-    if (G_ >= rand(16, 24) * bar) awards.push("골든부츠");
-    if (A_ >= rand(15, 22) * bar) awards.push("플레이메이커");
-    if (D_ >= rand(36, 52) * bar) awards.push("철벽상");
-    if (G_ + A_ >= rand(27, 38) * bar) awards.push("공격포인트왕");
+    if (G_ >= rand(51, 72) * bar) awards.push("골든부츠");
+    if (A_ >= rand(46, 65) * bar) awards.push("플레이메이커");
+    if (D_ >= rand(112, 157) * bar) awards.push("철벽상");
+    if (G_ + A_ >= rand(78, 110) * bar) awards.push("공격포인트왕");
     /* 🏅 발롱도르 — 리그 최고를 넘어 세계 최고예요.
      * 리그MVP를 받은 시즌 중에서도, 리그격(prestige)을 곱한 값이 문턱을 넘어야 해요.
      * 하부 리그에서 아무리 잘해도 안 되고, 빅클럽에서 압도해야 닿습니다. */

@@ -541,12 +541,16 @@ function makeAdSlotButton(rerender) {
 }
 
 // ---------- 장비 상점 ----------
+/* 경기 수를 12 → 38로 올리면서 시즌 수입이 약 3배가 됐어요. 값을 그대로 두면
+ * 장비를 3분의 1 시간에 다 사서 능력치가 빨리 오르고, 다시 잡은 수상 문턱이
+ * 또 어긋납니다. 같은 배로 올려 진행 속도를 지켜요.
+ * (경기당 보상은 안 건드려요 — 한 경기의 값어치가 줄면 손맛이 죽어요) */
 const GEAR_TIERS = [
-  { n: "I", bonus: 3, price: 500 },
-  { n: "II", bonus: 5, price: 1500 },
-  { n: "III", bonus: 8, price: 4000 },
-  { n: "IV", bonus: 12, price: 10000 },
-  { n: "V", bonus: 16, price: 25000 },
+  { n: "I", bonus: 3, price: 1600 },
+  { n: "II", bonus: 5, price: 4800 },
+  { n: "III", bonus: 8, price: 12000 },
+  { n: "IV", bonus: 12, price: 30000 },
+  { n: "V", bonus: 16, price: 75000 },
 ];
 let shopReturn = "screen-main";
 function statDefs() { return Array.isArray(STAT_DEFS) ? STAT_DEFS : STAT_DEFS[S.pos]; }
