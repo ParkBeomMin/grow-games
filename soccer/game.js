@@ -157,7 +157,29 @@ function oppClubs(st) {
   return names.length ? names : list.map((c) => c.name);
 }
 
-const PLAYER_NAMES = ["도현", "시우", "주원", "하준", "은우", "서준", "이안", "리오", "카이", "마테오", "루카", "지안"];
+/* 선수 이름 — 예전에는 홑이름 12개뿐이라 "도현" 같은 이름만 나왔어요.
+ * 성을 붙여 실제 선수 이름처럼 보이게 하고, 유스 시장에 따라 계열을 바꿔요.
+ *
+ * 명예의 전당에 올라온 이름을 재사용하자는 의견이 있었지만 쓰지 않았어요.
+ * 플레이어가 직접 입력한 값이라 실존 인물 이름이 섞일 수 있고, 그러면
+ * 실존 구단명을 가상화했던 것(2.7.1·2.8.1·2.10.2)과 같은 문제가 됩니다.
+ * 대신 조합 수를 400개 이상으로 늘려 겹칠 일을 줄였어요. */
+const KR_SUR = ["김", "이", "박", "최", "정", "강", "조", "윤", "장", "임",
+                "한", "오", "서", "신", "권", "황", "안", "송", "류", "홍"];
+const KR_GIVEN = ["도현", "시우", "주원", "하준", "은우", "서준", "민준", "지호", "예준", "선우",
+                  "연우", "유준", "시윤", "이준", "건우", "서진", "현우", "우진", "도윤", "지훈"];
+// 유럽 쪽은 실존 선수와 겹치지 않게 흔한 이름과 흔한 성을 따로 섞어요
+const EU_FIRST = ["리오", "카이", "마테오", "루카", "지안", "니코", "티모", "엔조",
+                  "라파", "오스카", "빅토르", "레안", "밀란", "요난", "다니", "파블로"];
+const EU_LAST = ["베르너", "포르테", "린드블롬", "카스티요", "모레티", "반더르", "라이너", "델가도",
+                 "노바크", "피셔", "코발", "산토", "베르그", "듀몽", "리케르", "말디니"];
+const PLAYER_NAMES = KR_GIVEN;          // 옛 코드가 참조할 수 있어 남겨둬요
+function randomPlayerName(market) {
+  const eu = market && market.id === "eu";
+  // 유럽 유스라도 한국 선수가 갈 수 있으니 완전히 가르지는 않아요
+  if (eu ? Math.random() < 0.7 : Math.random() < 0.15) return `${pick(EU_FIRST)} ${pick(EU_LAST)}`;
+  return `${pick(KR_SUR)}${pick(KR_GIVEN)}`;
+}
 
 // 평가 경기 종목: 주 스탯 / 보조 스탯 가중치
 const STAGE_TYPES = [
@@ -762,7 +784,7 @@ document.querySelectorAll("#position-list .card").forEach((btn) => {
   btn.addEventListener("click", () => {
     chosenPos = btn.dataset.pos;
     $("name-hint").textContent = `${chosenMarket.name} ${POS_INFO[chosenPos].name} 유망주의 이름은?`;
-    $("input-name").value = pick(PLAYER_NAMES);
+    $("input-name").value = randomPlayerName(chosenMarket);
     pendingRoll = rollStats(chosenPos);
     show("screen-name");
     renderRoll();
@@ -770,11 +792,11 @@ document.querySelectorAll("#position-list .card").forEach((btn) => {
 });
 
 $("btn-random-name").addEventListener("click", () => {
-  $("input-name").value = pick(PLAYER_NAMES);
+  $("input-name").value = randomPlayerName(chosenMarket);
 });
 
 $("btn-start").addEventListener("click", () => {
-  const name = $("input-name").value.trim() || pick(PLAYER_NAMES);
+  const name = $("input-name").value.trim() || randomPlayerName(chosenMarket);
   curSlot = null;
   if (window.Stats) Stats.log("new_player", { pos: chosenPos, agency: chosenMarket.name });
   if (window.Match) Match.register("soccer", name);
