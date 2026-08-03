@@ -47,73 +47,57 @@
  * 색은 전부 테마 변수예요 — 절대색을 쓰지 않아요.
  * ───────────────────────────────────────────────────────────── */
 
-/* 🧊 볼카운트 승부 — 포수 시점의 스트라이크 존 */
-.ps-plate {
-  position: relative; height: 148px; margin-bottom: 8px;
-  border: 1px solid var(--line); border-radius: 12px; overflow: hidden;
-  background: linear-gradient(180deg, rgba(255, 255, 255, .04), rgba(0, 0, 0, .18));
-  touch-action: manipulation; cursor: pointer;
-}
-.ps-zone {
-  position: absolute; border: 2px dashed var(--sand); border-radius: 4px;
-  background: rgba(255, 255, 255, .05);
-}
-.ps-ball {
-  position: absolute; transform: translate(-50%, -50%); line-height: 1;
-  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, .55));
-}
-/* 스윙한 순간만 잠깐 반짝여요 — 눌렀는지 아닌지가 손끝에서 확실해야 해요 */
-.ps-swing .ps-plate { border-color: var(--accent); box-shadow: inset 0 0 14px var(--accent); }
-
-/* ⏱️ 판독 게이지 — **꺾이는 순간을 눈에 보이게** 만드는 자리예요.
+/* 🎯 수싸움 — 세 칸을 놓고 서로를 읽어요 (../post-stage.js의 mind)
  *
- * 공은 휘는 지점을 지나야 진짜 자리로 갈라져요. 그 전에 휘두르면 눈감고 치는
- * 거라 존 안이어도 빗맞아요. 그런데 화면에 표시가 없으면 그 사실 자체를 못
- * 배워요 — "언제 휘둘러야 할지 모르겠다"가 정확히 그 말이에요.
- * 그래서 비행을 막대로 펴 두고 꺾이는 자리에 눈금(┊)을 세워요. 눈금이 어디에
- * 서는지는 능력치가 정해요(../post-stage.js의 countBreak) — 선구안이 좋을수록
- * 왼쪽에 서서, 휘두를 수 있는 구간이 눈으로 보이게 넓어져요. */
-.ps-track {
-  position: relative; height: 18px; margin: 0 0 6px;
-  border: 1px solid var(--line); border-radius: 999px; overflow: hidden;
+ * ⏱️ 여기에는 **움직이는 것이 하나도 없어요.** 흐르는 막대도, 도는 애니메이션도,
+ * 커지는 공도 없어요 — 있으면 그게 곧 "언제 누르지?"가 되거든요. 앞서 있던
+ * 🧊 볼카운트 승부를 들어낸 이유가 정확히 그거예요. transition조차 안 걸어요:
+ * 칸이 살짝 자라기만 해도 사람은 그걸 카운트다운으로 읽어요. */
+
+/* 구 수와 지금까지의 적중(투수 시점이면 읽힌 횟수) */
+.pm-head {
+  display: flex; justify-content: space-between; align-items: baseline;
+  margin: 0 0 6px; font-size: .78rem; color: var(--dim);
+}
+.pm-score { letter-spacing: 2px; color: var(--sky); }
+.pm-cue { margin: 0 0 6px; font-size: .72rem; color: var(--dim); text-align: center; }
+
+.pm-board { display: flex; gap: 8px; }
+/* 칸 하나가 곧 버튼이에요 — 읽는 자리와 고르는 자리를 떼어 놓으면 눈이 두 번 움직여요 */
+.pm-col {
+  flex: 1; display: flex; flex-direction: column; align-items: center; gap: 5px;
+  margin-top: 0; padding: 9px 4px;
+}
+/* 상대가 무엇을 골랐는지. 고르기 전에는 ❔, 판정에서 그 칸에만 표식이 찍혀요 */
+.pm-face { font-size: 1.15rem; line-height: 1; opacity: .45; }
+/* 🔎 기색 막대 — 상대의 버릇이 여기 비쳐요. 능력치가 높을수록 진짜에 가까워요 */
+.pm-gauge {
+  position: relative; width: 100%; height: 46px;
+  display: flex; align-items: flex-end; overflow: hidden;
+  border: 1px solid var(--line); border-radius: 6px;
   background: rgba(255, 255, 255, .04);
 }
-.ps-track-fill {
-  position: absolute; left: 0; top: 0; bottom: 0; width: 0;
-  background: var(--dim); opacity: .3;
-}
-/* 폭을 0으로 둬야 눈금이 정확히 그 자리에 서요 (🏃의 .ps-back과 같은 방식이에요) */
-.ps-track-brk { position: absolute; top: 0; bottom: 0; width: 0; border-left: 2px dashed var(--sand); }
-.ps-track-txt {
-  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
-  font-size: .72rem; color: var(--dim); letter-spacing: .5px;
-}
-/* 👁️ 눈금을 넘은 순간 — 막대·존·공·버튼이 한꺼번에 살아나요.
- * 신호가 한 군데만 있으면 공을 보던 눈이 그걸 못 봐요. */
-.ps-broke .ps-track-fill { background: var(--sky); opacity: .5; }
-.ps-broke .ps-track-brk { border-left-color: var(--accent); }
-.ps-broke .ps-track-txt { color: var(--accent); font-weight: 700; }
-.ps-broke .ps-zone { border-color: var(--accent); background: rgba(255, 255, 255, .12); }
-.ps-broke .ps-ball { animation: ps-broke-pop .24s ease-out; }
-@keyframes ps-broke-pop {
-  0% { filter: drop-shadow(0 2px 3px rgba(0, 0, 0, .55)); }
-  35% { filter: drop-shadow(0 0 11px var(--accent)); }
-  100% { filter: drop-shadow(0 2px 3px rgba(0, 0, 0, .55)); }
-}
-/* 스윙 버튼은 꺾이기 전에는 흐려요 — 눌러도 되지만 아직 눈감고 치는 거예요.
- * 못 누르게 막지는 않아요. 참기가 수(手)인 메커닉이라 손을 묶으면 안 돼요. */
-.ps-tap { opacity: .58; transition: opacity .12s ease, box-shadow .12s ease; }
-.ps-broke .ps-tap { opacity: 1; box-shadow: 0 0 12px var(--accent); }
-/* ⏱️ 너무 일찍 낸 방망이 — 다음 공까지 막대에 남아요.
- * 빨랐다는 걸 알아야 다음에 고칠 수 있어요. */
-.ps-rush .ps-track { border-color: var(--accent2); }
-.ps-rush .ps-track-fill { background: var(--accent2); opacity: .45; }
-.ps-rush .ps-track-txt { color: var(--accent2); font-weight: 700; }
+.pm-gauge > i { display: block; width: 100%; height: 0; background: var(--sand); opacity: .5; }
+.pm-sign { font-size: .9rem; line-height: 1; }
+.pm-name { font-size: .85rem; color: var(--text); }
+/* 내가 그 칸을 고른 자국. 상대가 보는 것이 바로 이거예요 — 그래서 경고색이에요 */
+.pm-mine { min-height: .95rem; font-size: .7rem; letter-spacing: 1px; color: var(--accent2); }
 
-.ps-count { margin: 0 0 2px; font-size: .84rem; letter-spacing: 1px; text-align: center; }
-.ps-c-ball { color: var(--sky); }
-.ps-c-strike { color: var(--accent); }
-.ps-c-sep { color: var(--dim); margin: 0 8px; }
+/* 판정을 보여주는 동안 칸은 잠겨요. 그런데 base.css의 .btn:disabled가 통째로
+ * 흐려 놓는데, 정작 그 순간이 **상대가 무엇을 골랐는지 보는 자리**예요.
+ * 여기서만 흐림을 걷어요 — 못 누른다는 건 판정 테두리가 이미 말해 줘요. */
+.pm-board .pm-col:disabled { opacity: 1; cursor: default; }
+
+/* 판정 — 내가 고른 칸과 상대가 고른 칸이 동시에 드러나요 */
+.pm-col.pm-chosen { border-color: var(--accent); box-shadow: 0 0 10px var(--accent); }
+.pm-col.pm-truth { border-color: var(--sky); }
+.pm-col.pm-truth .pm-face { opacity: 1; }
+.pm-col.pm-truth .pm-gauge > i { background: var(--sky); opacity: .55; }
+/* 같은 칸이었는지 아닌지를 테두리로도 한 번 더 말해 줘요.
+ * 맞힌 판에서는 한 칸에 pm-chosen과 pm-truth가 같이 붙는데, 그때는 '맞혔다'가
+ * 먼저 읽혀야 해서 여기가 이겨요(선택자가 더 깊어요). */
+.pm-same .pm-board .pm-chosen { border-color: var(--accent); box-shadow: 0 0 14px var(--accent); }
+.pm-diff .pm-board .pm-chosen { border-color: var(--dim); box-shadow: none; }
 
 /* 판정 한 줄. 자리를 늘 잡아 둬야 글이 뜰 때 아래 버튼이 밀리지 않아요 */
 .ps-mark {

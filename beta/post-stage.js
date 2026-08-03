@@ -11,24 +11,27 @@
  * DOM 구성·이벤트·정리 순서도 timing.js의 관례를 그대로 따라요: .tm-box를
  * container에 붙이고, 끝나면 tm-done-* 를 붙여 잠깐 보여준 뒤 박스를 지우고 cb를 불러요.
  *
- *   PostStage.count(box, { label, button, zonePct, tier, countLabels }, cb)  🧊 볼카운트 승부
- *   PostStage.dash (box, { label, goText, stopText, zonePct, tier }, cb)     🏃 홈 승부
+ *   PostStage.mind(box, { label, courses, aim, zonePct, tier }, cb)       🎯 수싸움
+ *   PostStage.dash(box, { label, goText, stopText, zonePct, tier }, cb)   🏃 홈 승부
  *
- * 🧭 둘 다 **준비 화면**을 먼저 띄워요. 규칙을 읽고 ▶️ 시작을 눌러야 공이 오고
- * 주자가 뛰어요 — 자세한 약속은 아래 ready()의 머리말에 적어 뒀어요.
+ * 🧭 둘 다 **준비 화면**을 먼저 띄워요. 규칙을 읽고 ▶️ 시작을 눌러야 판이 시작돼요 —
+ * 자세한 약속은 아래 ready()의 머리말에 적어 뒀어요.
  *
  * ─────────────────────────────────────────────────────────────────────────
  * 🆕 무엇이 새로운가 — 이게 이 파일의 존재 이유예요
  *
  * 기존 8종(timing.js)은 play·hold·sequence·reaction·duel·target·drop·odd이고,
  * 투어 3종(tour-stage.js)은 이동하는 판정 창·두 대상의 교차·연타 유지예요.
- * **열한 개 모두 "누르는 것"이 곧 행동이에요.** 안 누르면 그냥 실패예요.
+ * **열한 개 모두 "언제 누르나"가 물음이에요.** 화면에서 무언가가 움직이고,
+ * 그게 어느 자리에 왔을 때 눌러야 해요.
  *
- *  🧊 count — **참는 것이 수(手)예요.** 존을 벗어나는 공을 골라내면 카운트가
- *     유리해지고, 유리한 카운트에서 친 공만 완벽이에요. 즉 완벽에 닿으려면
- *     **적어도 한 번은 반드시 손을 내지 않아야** 해요. 그리고 판이 한 번에 끝나지
- *     않아요 — 볼카운트라는 상태가 공과 공 사이를 건너가면서, 앞 공의 선택이
- *     뒤 공의 값어치를 바꿔요. 열한 개 중 어느 것도 이 두 가지를 갖고 있지 않아요.
+ *  🎯 mind — **시간 축이 아예 없어요.** 움직이는 것도, 흘러가는 것도, 재는 것도
+ *     없어요. 상대와 동시에 세 코스 중 하나를 고르고, 같은 코스면 타자가 이겨요.
+ *     물음은 "언제"가 아니라 **"어디"** 예요. 화면은 내가 누르기 전까지 한 픽셀도
+ *     안 움직이고, 언제 누르든 결과가 똑같아요(테스트가 그걸 못 박아요).
+ *     대신 두 가지 정보를 읽어요 — ① 상대의 **버릇**이 기색 막대로 흐릿하게 보이고
+ *     (능력치가 높을수록 또렷해요), ② 상대는 **내가 고른 자국**에 적응해요.
+ *     같은 칸만 거듭 고르면 그 칸이 말라붙어요. 열한 개 중 어느 것도 이 축이 없어요.
  *
  *  🏃 dash — **정보와 시간을 맞바꿔요.** 열한 개는 전부 화면이 처음부터 전부
  *     보여요(존도, 커서도, 아이콘도). 여기서는 송구가 처음에 안 보이고 시간이
@@ -42,10 +45,11 @@
  * 닿는 자리예요. 어느 능력치를 보는지는 game.js의 POST_MECH가 정해요.
  *
  * tier는 시리즈의 깊이예요 (0 와일드카드·준PO / 1 PO / 2 마지막 시리즈).
- * 뒤로 갈수록 공이 늦게 휘고 어깨가 강해져요 — 같은 능력치로도 더 어려워요.
+ * 뒤로 갈수록 상대의 버릇이 덜 보이고 어깨가 강해져요 — 같은 능력치로도 더 어려워요.
  *
- * 두 메커닉 모두 3~5초에 끝나요. 가을야구 한 시리즈가 최대 5경기, 경기마다
- * 미니게임이 여러 번이라 한 판이 길면 그 자체가 버그예요.
+ * 두 메커닉 모두 3~5초에 끝나요(수싸움은 사람이 고르는 속도만큼이에요).
+ * 가을야구 한 시리즈가 최대 5경기, 경기마다 미니게임이 여러 번이라 한 판이 길면
+ * 그 자체가 버그예요.
  * 실제 소요·난이도·우승 확률은 tests/rookie/post-mech-test.js가 재요.
  */
 "use strict";
@@ -112,9 +116,9 @@ window.PostStage = (() => {
   /* ================================================================
    * 🧭 준비 화면 — 규칙을 읽고 나서, 눌러야 시작해요
    *
-   * 왜 필요하냐면: 여기 두 메커닉은 규칙이 여러 단계고(볼카운트) 버튼이 둘이라
-   * (홈 승부) 한 줄짜리 .tm-label로는 첫 판을 통째로 날려요. "너무 빨리 지나가서
-   * 뭐 하라는 건지 모르겠다"는 말이 정확히 그 뜻이에요.
+   * 왜 필요하냐면: 여기 두 메커닉은 이기는 조건이 여러 구에 걸쳐 있고(수싸움)
+   * 버튼이 둘이라(홈 승부) 한 줄짜리 .tm-label로는 첫 판을 통째로 날려요.
+   * "너무 빨리 지나가서 뭐 하라는 건지 모르겠다"는 말이 정확히 그 뜻이에요.
    *
    * ✋ 약속이 하나 더 있어요 — **시작한 손가락으로는 게임을 못 건드려요.**
    * ▶️ 시작은 pointerdown에서 곧바로 처리해요(누르자마자 화면이 바뀌어야 하니까요).
@@ -123,7 +127,7 @@ window.PostStage = (() => {
    *
    * ⏱️ 이 화면의 약속 하나가 전부예요 — **누르기 전에는 아무것도 안 돌아요.**
    * requestAnimationFrame도 setTimeout도 performance.now()도 준비 화면 위에서는
-   * 한 번도 불리지 않아요. 진짜 메커닉은 runCount·runDash 안에 통째로 들어 있고,
+   * 한 번도 불리지 않아요. 진짜 메커닉은 runMind·runDash 안에 통째로 들어 있고,
    * ready()가 그 함수를 붙잡고 있다가 ▶️ 시작을 눌렀을 때 비로소 놓아 줘요.
    * 그래서 판정도 난이도도 한 줄 안 바뀌어요 — 사람이 잡는 건 '시작 시각'뿐이에요.
    *
@@ -158,8 +162,8 @@ window.PostStage = (() => {
 
   /* info = { key, title, lines: [3줄], short: "한 줄", keys: [{ name, desc }] }
    * keys는 **버튼이 각각 무엇인지**예요. 버튼이 둘인 홈 승부에서는 이게 없으면
-   * 준비 화면을 띄운 뜻이 없어요. 볼카운트는 '안 누르기'가 곧 두 번째 수라
-   * 그것도 한 칸으로 적어 둬요. */
+   * 준비 화면을 띄운 뜻이 없어요. 수싸움은 세 칸이 같은 역할이라, 대신 '칸이
+   * 무엇을 말해 주는지'(기색 막대·내 자국)를 그 자리에 적어 둬요. */
   function ready(container, info, start) {
     const full = bumpSeen(info.key) < FULL_SHOWS;
     const body = full
@@ -187,327 +191,293 @@ window.PostStage = (() => {
   }
 
   /* ================================================================
-   * 🧊 볼카운트 승부 — 참는 것이 수(手)예요
+   * 🎯 수싸움 — 상대와 동시에 코스를 골라요
    *
-   * 포수 시점이에요. 스트라이크 존이 가운데 있고, 공이 작게 나타나 커지면서
-   * 날아와요. 처음에는 전부 한가운데로 오는 것처럼 보이다가 **휘는 지점**을
-   * 지나면서 진짜 자리로 갈라져요 — 존 안에 꽂히거나, 존을 벗어나거나.
+   * 세 칸(몸쪽·가운데·바깥쪽)이 나란히 있어요. 나도 하나를 고르고 상대도 하나를
+   * 골라요. **같은 칸이면 타자가 이기고, 다른 칸이면 투수가 이겨요.** 그게 전부예요.
    *
-   * 버튼은 하나예요. 누르면 스윙, **안 누르면 참기**예요. 참기가 아무것도
-   * 하지 않는 게 아니라는 게 이 메커닉의 전부예요.
+   * ⏱️ **시간 축이 아예 없어요.** 날아오는 것도, 흘러가는 막대도, 재는 숫자도
+   * 없어요. 내가 누르기 전까지 화면은 한 픽셀도 안 움직이고(프레임 루프를 아예
+   * 안 돌려요), 1초에 누르든 8초에 누르든 결과가 똑같아요. 이건 취향이 아니라
+   * 이 메커닉의 존재 이유예요 — 앞서 있던 🧊 볼카운트 승부는 "안 누르는 게 수"인
+   * 판단 게임인데 화면이 타이밍 게임처럼 생겨서, 셋 다 고쳐도 끝내 "언제 누르지?"가
+   * 안 없어졌어요. 그래서 **기대를 만들 물건 자체를 화면에서 들어냈어요.**
+   * 유일한 타이머는 판정을 보여주는 사이(reveal)와, 탭을 통째로 놓친 기기를 위한
+   * 안전망(capPer · 구마다 15초)뿐이에요. 둘 다 사람의 선택을 재촉하지 않아요.
    *
-   * ⏱️ 그리고 **언제 휘두르느냐가 결과를 바꿔요.** 공은 휘는 지점(brk)을 지나야
-   * 진짜 자리로 갈라져요 — 그 전에는 어디로 갈지 아무도 몰라요. 그러니 꺾이기
-   * 전에 내는 방망이는 **눈감고 치는 것**이에요. 실제 타격이 정확히 그래요.
+   * 🔎 그럼 찍기냐 — 아니에요. 읽을 것이 둘이에요.
    *
-   *   꺾인 뒤 스윙 & 존 안  → 받아쳤어요. 여기서 판이 끝나요.
-   *                           지금 카운트가 볼 > 스트라이크면 perfect, 아니면 good
-   *   꺾인 뒤 스윙 & 존 밖  → 헛스윙. 스트라이크 +1
-   *   꺾기 전 스윙 & 존 안  → 🫧 빗맞은 파울. 스트라이크 +1
-   *                           (2스트라이크에서는 카운트가 안 늘어요 — 야구 그대로예요)
-   *   꺾기 전 스윙 & 존 밖  → 헛스윙. 스트라이크 +1
-   *   참기 & 존 안          → 루킹. 스트라이크 +1
-   *   참기 & 존 밖          → 골라냈어요. 볼 +1
+   *   ① **버릇(tell)** — 상대에게는 즐겨 쓰는 코스가 하나 있어요. 그게 칸마다
+   *      '기색' 막대로 흐릿하게 비쳐요. 능력치가 높을수록 이 막대가 상대의 진짜
+   *      성향에 가까워지고(read), 낮으면 흔들려서 거의 못 믿어요.
+   *   ② **적응** — 상대는 **내가 고른 자국**을 봐요. 칸마다 내가 몇 번 골랐는지
+   *      점(●)으로 남고, 타자 시점이면 상대가 그 칸을 **피하고**(match), 투수
+   *      시점이면 타자가 그 칸을 **노려요**(dodge). 같은 칸만 거듭 고르면 말라붙어요.
    *
-   * 즉 **꺾이기 전에 휘두르면 절대 좋아질 수 없어요.** 잘해야 파울로 버티는 거예요.
-   * 대신 벌이 모질지도 않아요 — 존 안을 일찍 친 값은 루킹으로 보낸 값과 같아요.
-   * 반응이 느린 사람이 삼진만 당하지 않도록 여기를 일부러 낮게 뒀어요.
+   * 두 정보가 서로를 보완해요. 눈이 좋으면 ①만으로 충분하고, 눈이 나빠도 ②는
+   * 공짜로 알 수 있어요 — "내가 두 번 간 자리는 이제 아니다"는 능력치가 필요 없거든요.
+   * 그래서 능력치가 낮아도 완전히 캄캄하지는 않고, 높으면 확실히 유리해요.
    *
-   * 👁️ 꺾이는 순간은 **화면에 드러나야 해요.** 벌만 주고 신호를 안 주면 여전히
-   * "언제 휘둘러야 할지 모르겠다"예요. 그래서 비행을 막대(.ps-track)로 펴 두고
-   * 꺾이는 자리에 눈금을 세워요. 눈금을 넘는 순간 막대·존·공·버튼이 한꺼번에
-   * 살아나요(.ps-broke). 일찍 낸 방망이는 막대가 붉어져서(.ps-rush) 남아요 —
-   * **빨랐다는 걸 알아야 다음 공에 고칠 수 있어요.**
+   * 🔁 3구를 거쳐 쌓여요. 앞 구의 선택이 뒤 구의 판을 바꾸니까(적응) 한 구씩
+   * 따로 노는 게 아니에요.
+   *   타자(match) — 3구 중 2번 이상 맞히면 perfect, 1번이면 good, 0번이면 miss
+   *   투수(dodge) — 한 번도 안 읽히면 perfect, 한 번 읽히면 good, 두 번이면 miss
+   * 이미 결과가 정해지면 남은 구를 안 던져요(mindSettled) — 판이 짧아져요.
    *
-   * 1볼 1스트라이크에서 시작해요(위기 상황을 이어받는 거예요). 3스트라이크면
-   * 삼진(miss), 4볼이면 볼넷(good)이에요. 시작 카운트 덕에 **네 번째 공까지
-   * 가면 반드시 어느 한쪽 문턱에 닿아요** — 애매하게 끝나는 판이 없어요.
+   * ⚖️ 그냥 찍는 사람의 성적이 곧 바닥이에요. 세 칸이라 한 구 적중률이 1/3이고,
+   * 타자면 perfect 26%·miss 30%, 투수면 그 거울이에요. 읽는 사람은 여기서 위로
+   * 올라가요. 아무것도 안 고르면 안전망이 미스로 끊어요 — 🏃 홈 승부와 같아요.
    *
-   * ⚖️ 여기서 나오는 것: 초구를 그냥 받아치면 카운트가 1-1(동률)이라 아무리 잘
-   * 맞아도 good이에요. **perfect는 볼을 하나라도 골라낸 사람만 볼 수 있어요.**
-   * 반대로 욕심내 참다가 존에 꽂히는 공을 두 번 보내면 그대로 삼진이에요.
-   * "칠 수 있는 공을 참는 배짱"과 "속지 않는 눈"이 같은 자리에서 부딪혀요.
-   *
-   * 🎚 능력치(zonePct)는 두 곳에 들어가요.
-   *   ① 휘는 지점이 빨라져요 — 진짜 자리를 볼 시간이 길어져요 (선구안·제구)
-   *      = 눈금이 왼쪽으로 옮겨 가서 **휘두를 수 있는 구간이 넓어져요**
-   *   ② 볼이 존에서 더 크게 벗어나요 — 애매한 공이 줄어요
-   * 두 가지 다 "판독이 쉬워진다"예요. 판정 문턱은 능력치로 안 흔들어요 —
-   * 카운트 규칙은 야구 규칙이라 사람마다 다르면 거짓말이 돼요.
+   * 🎚 능력치(zonePct)는 **버릇이 얼마나 또렷하게 보이는지** 한 곳에 들어가요.
+   * 판정 규칙(같은 칸이면 이긴다)은 사람마다 다르면 거짓말이 되니까 안 건드려요.
+   *   zone 10 → read 0.30 (기색이 거의 안 맞아요) · zone 40 → read 0.72
+   * tier가 깊어지면 read가 깎여요 — 큰 경기의 상대일수록 버릇을 안 흘려요.
    * ================================================================ */
-  const COUNT = {
-    flight: 900,          // 공 하나가 홈까지 오는 시간(ms)
-    gap: 180,             // 다음 공까지 쉬는 시간(ms)
-    b0: 1, s0: 1,         // 시작 카운트 — 위기를 이어받아요
-    balls: 4, strikes: 3, // 볼넷 · 삼진 문턱 (야구 그대로예요)
-    /* 존을 지나는 공의 비율. 실제 야구의 존 통과율(45% 안팎)에 맞춰 뒀어요.
-     * 이 값이 곧 "참기와 스윙을 눈 없이 반반 고르는 사람"의 성적을 정해요.
-     * (초구부터 무작정 휘두르는 사람의 성적은 이 값이 아니라 타이밍이 정해요 —
-     *  꺾이기 전 스윙은 존 안이어도 파울이라 카운트가 좋아지지 않거든요.) */
-    pStrike: 0.44,
-    pStrikeTier: -0.015,  // 뒤 시리즈일수록 유인구가 늘어요
-    zx: [34, 66], zy: [26, 74],   // 스트라이크 존 (박스 안 %)
-    /* 휘는 지점(비행 비율). 능력치가 높으면 앞당겨져요 —
-     * zone 10 tier 0 → 0.515(판독 437ms) · zone 40 tier 0 → 0.32(612ms) */
-    breakBase: 0.58, breakPer: -0.0065, breakTier: 0.03,
-    /* 공이 존 경계에서 벗어나거나(볼) 파고드는(스트라이크) 정도(%).
-     * zone 10 → 2.6 · zone 40 → 7.4. **여기가 이 메커닉의 난이도 손잡이예요.**
-     * 능력치가 낮으면 볼과 스트라이크가 종이 한 장 차이로 지나가서, 잘 봐도
-     * 갈라내지 못해요 — 그게 곧 '선구안이 없다'예요. 휘는 지점만으로 난이도를
-     * 잡아 보니 능력치를 올려도 성적이 거의 안 움직였어요(실측 34% → 34%).
-     * 사람은 궤적의 방향까지 보고 도착점을 꽤 잘 외삽하거든요. */
-    edgeBase: 1.0, edgePer: 0.16, edgeTier: -0.35,
-    /* 위아래는 존이 넓고 화면은 가로로 길어요. 같은 %가 픽셀로는 더 작게
-     * 보여서, 위아래로 뺄 때만 이만큼 곱해요. */
-    edgeY: 1.5,
-    /* 프레임이 안 돌아도 여기서 끝내요. 정상 경로에서는 늦어도 네 번째 공에서
-     * 끝나요 — 문턱(3스트라이크·4볼)에 닿거나, 파울로 버텼으면 공을 다 쓴 것으로
-     * land()가 끊어요 (최대 4×1080ms). 파울이 카운트를 안 올리는 자리가 있어서
-     * '끝나지 않는 타석'이 될 뻔한데, 그 공 수 제한이 그걸 막아요. */
-    cap: 5800,
+  const MIND = {
+    rounds: 3,
+    /* 상대의 버릇 — 즐겨 쓰는 칸 하나에 실리는 가중치예요. 5.2면 첫 구에 그 칸이
+     * 나올 확률이 5.2/7.2 ≈ 72%예요. 이 값이 곧 "완벽하게 읽는 사람의 천장"이라,
+     * 1에 가까우면 읽을 것이 사라지고 너무 크면 기색만 따라가는 게임이 돼요.
+     * 그래도 천장이 72%인 건 첫 구뿐이에요 — 그 칸을 고르는 순간 adapt가 깎아요. */
+    habit: 5.2,
+    /* 내가 그 칸을 고른 횟수마다 상대가 기우는 배수. match면 그만큼 **피하고**,
+     * dodge면 그만큼 **노려요.** 이게 "같은 곳만 고르면 불리해진다"의 전부예요.
+     * 여기를 세게 걸면(2 이상) "안 겹치게만 고르면 된다"가 정답이 돼서 읽기가
+     * 무의미해져요 — 실제로 2.1로 두었더니 능력치를 올려도 성적이 안 움직였어요. */
+    adapt: 1.45,
+    /* 기색이 진짜 성향에 얼마나 가까운가 — **능력치가 사는 단 한 곳이에요.**
+     * zone 30 이하 → 0.02 (아예 안 보여요) · zone 40 → 0.68 (tier 0)
+     *
+     * ⚠️ 폭(30~40)을 넓히지 마세요. 이 메커닉은 가을야구에서만 나오고, 거기 오는
+     * 선수는 miniZone(stat)이 30~40이에요. 10~40으로 펴면 실제로 쓰이는 구간에서는
+     * 기색이 거의 안 갈려요 — 실제로 그렇게 뒀더니 능력치가 배수를 0.04밖에 못
+     * 벌렸고(들어낸 🧊 볼카운트는 0.10이었어요), 우승 확률도 능력치를 안 따라갔어요.
+     * 능력치가 실제로 오가는 구간에 폭을 얹어야 육성이 닿아요.
+     * ⚠️ 위도 0.75 넘게 올리지 마세요. read가 0.7쯤이면 가장 진한 칸이 **거의 항상**
+     * 진짜 성향의 1등이라, 그 위로는 올려도 성적이 안 변해요 — 능력치가 죽는 자리예요. */
+    readFrom: 30, readTo: 40, readLo: 0.02, readHi: 0.68, readTier: -0.16,
+    /* 못 읽는 만큼 기색이 흔들리는 폭이에요. read가 1이면 흔들림이 0이 돼요. */
+    noise: 1.45,
+    /* 한 구의 결과를 보여주고 다음 구로 넘어가는 시간. 사람을 재촉하는 시계가
+     * 아니라 **읽을 틈**이에요 — 이 사이에는 입력을 아예 안 받아요.
+     * 한 판이 3구라 여기가 곧 판 길이의 절반이에요. 늘리면 경기가 늘어져요. */
+    reveal: 520,
+    /* 🛟 안전망이에요. 화면에는 아무 표시도 안 해요 — 보이는 순간 제한 시간이
+     * 되거든요. **구마다 새로 걸어요.** 한 판에 한 번만 걸면 앞 구에서 오래 고민한
+     * 사람이 뒤 구에서 손도 못 대고 잘려요. 사람이 한 구를 고르는 데 1~3초라,
+     * 15초는 "탭을 통째로 놓쳤다" 말고는 닿을 수 없는 자리예요.
+     * 여기 닿으면 남은 구를 다 진 것으로 쳐요 — 손을 놓으면 나빠져야 하니까요. */
+    capPer: 15000,
   };
-  const countBreak = (zone, tier) =>
-    clampV(COUNT.breakBase + clampV(zone, 10, 40) * COUNT.breakPer + tier * COUNT.breakTier, 0.2, 0.75);
-  const countEdge = (zone, tier) =>
-    Math.max(1.2, COUNT.edgeBase + clampV(zone, 10, 40) * COUNT.edgePer + tier * COUNT.edgeTier);
-  const countStrikeP = (tier) => clampV(COUNT.pStrike + tier * COUNT.pStrikeTier, 0.2, 0.8);
-  /* 받아쳤을 때의 등급 — 유리한 카운트(볼 > 스트라이크)에서만 완벽이에요 */
-  const countHitGrade = (b, s) => (b > s ? "perfect" : "good");
-  /* 한 공이 끝난 뒤 승부가 났는지. 안 났으면 null이에요 */
-  const countEnd = (b, s) => (s >= COUNT.strikes ? "miss" : b >= COUNT.balls ? "good" : null);
+  const MIND_COURSES = ["몸쪽", "가운데", "바깥쪽"];
+  const mindRead = (zone, tier) => clampV(
+    MIND.readLo
+      + (clampV(zone, MIND.readFrom, MIND.readTo) - MIND.readFrom) / (MIND.readTo - MIND.readFrom)
+        * (MIND.readHi - MIND.readLo)
+      + tier * MIND.readTier,
+    0.02, 0.95);
+  /* 적중 수 → 판정. dodge(투수)는 뜻이 뒤집혀요 — 읽힌 횟수가 곧 적중 수예요. */
+  const mindGrade = (hits, dodge) => (dodge
+    ? (hits <= 0 ? "perfect" : hits === 1 ? "good" : "miss")
+    : (hits >= 2 ? "perfect" : hits === 1 ? "good" : "miss"));
+  /* 남은 구를 다 이겨도(=다 져도) 등급이 안 바뀌면 더 던질 이유가 없어요.
+   * 문턱을 여기 베껴 적지 않고 mindGrade를 두 번 불러서 물어봐요 — 문턱을 고쳐도
+   * 이 함수는 저절로 맞아요. */
+  const mindSettled = (hits, round, dodge) =>
+    mindGrade(hits, dodge) === mindGrade(hits + (MIND.rounds - round), dodge);
 
-  /* 문구는 통째로 갈아끼울 수 있어요. 투수는 같은 규칙을 '유인구와 몰린 공'으로
-   * 읽어야 말이 되거든요 — 투수가 "볼넷으로 걸어 나가요"를 보면 안 돼요.
-   * ready*로 시작하는 것들은 준비 화면 몫이에요. 같은 묶음에 둬야 투수 문구를
-   * 갈아끼울 때 준비 화면만 타자 말로 남는 일이 안 생겨요. */
-  const COUNT_MSG = {
-    hitPerfect: "💥 노림수 적중, 통타!",
-    hitGood: "🏏 받아쳤어요!",
-    whiff: "🌀 헛스윙…",
-    /* ⏱️ 일찍 낸 방망이 — 결과가 아니라 **무엇이 틀렸는지**를 말해 줘야 배워요 */
-    foul: "🫧 너무 일렀어요 — 빗맞은 파울",
-    rush: "🌀 꺾이기 전에 휘둘렀어요 — 헛스윙…",
-    looking: "😐 존에 꽂혔어요",
-    taken: "👀 골라냈어요",
-    out: "❌ 삼진…",
-    free: "🚶 볼넷으로 걸어 나가요",
+  /* 문구는 통째로 갈아끼울 수 있어요. 투수는 같은 규칙을 정반대로 읽어야 말이
+   * 되거든요 — 투수가 "맞혔어요!"를 보면 안 돼요. ready*로 시작하는 것들은 준비
+   * 화면 몫이에요. 같은 묶음에 둬야 투수 문구를 갈아끼울 때 준비 화면만 타자
+   * 말로 남는 일이 안 생겨요. */
+  const MIND_MSG = {
+    tellCue: "🔎 상대의 기색 — 진한 칸이 그 투수의 버릇이에요",
+    face: "⚾",                 // 상대가 실제로 고른 칸에 찍히는 표식
+    hit: "🎯 노림수 적중! 같은 코스였어요",
+    slip: "🌀 빗나갔어요 — 다른 코스였어요",
+    win: "💥 완전히 읽었어요, 통타!",
+    even: "🏏 한 번 맞혀 살아 나갔어요",
+    lose: "❌ 끝까지 못 읽었어요… 삼진",
     timeup: "⏱️ 승부 종료",
-    stall: "⏱️ 파울로 버티다 승부가 끝났어요",
-    /* 👁️ 판독 게이지에 뜨는 두 마디. 꺾이기 전에는 "아직", 넘으면 "지금"이에요 */
-    cueWait: "🙈 아직 몰라요 — 기다려요",
-    cueRead: "👁️ 꺾였어요! 지금 판단해요",
-    tip: "눈금(┊)을 <b>넘은 뒤에</b> 휘둘러요 · 벗어나는 공은 참고, <b>유리한 카운트</b>에서 친 공만 완벽해요",
-    readyTitle: "🧊 볼카운트 승부",
+    scoreLabel: "적중",
+    roundLabel: "구",
+    tip: "기색이 진한 칸이 유력해요 · <b>같은 칸만 거듭 고르면</b> 상대가 피해요 · 서두를 필요 없어요",
+    readyTitle: "🎯 수싸움",
     readyLines: [
-      "공이 날아오다 도중에 <b>휘어요</b>. 휘기 전에는 어디로 갈지 아무도 몰라요 — 아래 막대의 눈금(┊)이 그 자리예요.",
-      "<b>눈금을 넘은 뒤에</b> 친 공만 제대로 맞아요. 그 전에 휘두르면 눈감고 치는 거라, 존 안이어도 빗맞은 파울이에요.",
-      "헛스윙·루킹·파울은 <b>스트라이크</b>, 벗어나는 공을 참으면 <b>볼</b>이에요. 3스트라이크면 삼진(실패), 4볼이면 볼넷(성공)이에요.",
-      "받아쳐도 <b>볼이 스트라이크보다 많을 때</b>만 완벽이에요 — 완벽에 닿으려면 적어도 한 번은 참아야 해요.",
+      "상대와 <b>동시에</b> 코스를 골라요. 세 칸 중 <b>같은 칸</b>을 고르면 맞힌 거예요.",
+      "<b>날아오는 공도, 제한 시간도 없어요.</b> 화면은 누르기 전까지 멈춰 있으니 천천히 보고 정하세요.",
+      "칸마다 선 <b>기색 막대</b>가 상대의 버릇이에요 — 선구안이 좋을수록 진짜 성향에 가깝게 보여요.",
+      "내가 고른 자국(●)이 칸에 남아요. <b>같은 칸만 거듭 고르면 상대가 그 칸을 피해요.</b>",
+      "3구 중 <b>2번 이상</b> 맞히면 통타(완벽), 1번이면 살아 나가고, 한 번도 못 맞히면 삼진이에요.",
     ],
-    readyShort: "눈금(┊)을 넘은 뒤에 판단해요 · 벗어나면 참고, 볼이 스트라이크보다 많을 때 친 공만 완벽해요",
-    /* ⚠️ 이 두 줄에는 태그를 넣지 마세요. 준비 화면의 버튼 설명 칸에 그대로 들어가요 */
-    readySwing: "누르면 방망이를 내요. 눈금을 넘은 뒤 존 안이면 받아치고, 넘기 전이면 빗맞아요",
-    readyTake: "안 누르면 참는 거예요. 존 밖이면 골라내서 볼을 얻어요",
+    readyShort: "기색이 진한 칸을 노리되, 같은 칸만 거듭 고르면 상대가 피해요 · 3구 중 2번 맞히면 완벽",
+    /* ⚠️ 이 두 줄에는 태그를 넣지 마세요. 준비 화면의 설명 칸에 그대로 들어가요 */
+    readyPick: "세 칸 중 하나를 눌러요. 상대와 같은 칸이면 맞힌 거예요 — 언제 눌러도 결과는 같아요",
+    readyTell: "칸 안의 막대는 상대의 버릇, 아래 점(●)은 내가 그 칸을 고른 자국이에요",
   };
-  const countMsg = (opts) => Object.assign({}, COUNT_MSG, (opts && opts.msg) || {});
+  const mindMsg = (opts) => Object.assign({}, MIND_MSG, (opts && opts.msg) || {});
 
-  /* 준비 화면에 무엇을 띄울지. 버튼 문구는 opts에서 그대로 가져와요 —
-   * 화면의 버튼과 설명의 버튼 이름이 다르면 설명이 오히려 헷갈려요. */
-  function countReady(opts) {
-    const msg = countMsg(opts);
+  /* 준비 화면에 무엇을 띄울지. 세 칸은 역할이 같아서 버튼마다 적을 것이 없어요 —
+   * 대신 '무엇을 누르는지'와 '칸이 무엇을 말해 주는지'를 한 칸씩 적어요. */
+  function mindReady(opts) {
+    const msg = mindMsg(opts);
+    const names = (opts && opts.courses) || MIND_COURSES;
     return {
-      key: "count",
+      key: "mind",
       title: msg.readyTitle,
       lines: msg.readyLines,
       short: msg.readyShort,
       keys: [
-        { name: (opts && opts.button) || "스윙! 🏏", desc: msg.readySwing },
-        { name: "누르지 않기", desc: msg.readyTake },
+        { name: names.join(" · "), desc: msg.readyPick },
+        { name: "기색 막대 · ●", desc: msg.readyTell },
       ],
     };
   }
 
-  /* 🧊 한 판. **여기서부터가 시간이 흐르는 자리예요** — 준비 화면의 ▶️ 시작을
-   * 누른 뒤에만 불려요. 이 함수 밖에는 타이머가 한 줄도 없어요. */
-  function runCount(container, opts, cb, gate) {
+  /* 🎯 한 판. **여기서도 시계는 사람을 안 재촉해요** — 걸리는 타이머는 판정을
+   * 보여주는 사이(reveal)와 안전망(cap)뿐이고, requestAnimationFrame은 한 번도
+   * 안 불러요. 준비 화면의 ▶️ 시작을 누른 뒤에만 불려요. */
+  function runMind(container, opts, cb, gate) {
     const zone = zoneOf(opts), tier = tierOf(opts);
-    const brk = countBreak(zone, tier);
-    const edge = countEdge(zone, tier);
-    const pS = countStrikeP(tier);
-    const names = (opts && opts.countLabels) || ["볼", "스트라이크"];
-    const msg = countMsg(opts);
-    const wrap = makeBox(container, opts.label || "🧊 볼카운트 승부! 꺾인 뒤에 판단해요", `
-      <div class="ps-plate">
-        <div class="ps-zone"></div>
-        <div class="ps-ball">⚾</div>
-      </div>
-      <div class="ps-track">
-        <span class="ps-track-fill"></span>
-        <span class="ps-track-brk"></span>
-        <span class="ps-track-txt"></span>
-      </div>
-      <p class="ps-count"></p>
+    const read = mindRead(zone, tier);
+    const dodge = (opts && opts.aim) === "dodge";
+    const names = (opts && opts.courses) || MIND_COURSES;
+    const msg = mindMsg(opts);
+    /* 이 상대의 버릇이에요. 한 판 내내 안 바뀌어요 — 세 구 안에 읽어 내라는 게
+     * 이 메커닉의 숙제라, 매 구 바뀌면 읽을 것이 사라져요. */
+    const habit = Math.floor(Math.random() * names.length);
+    const mine = names.map(() => 0);       // 칸마다 내가 고른 횟수 (= 상대가 보는 자국)
+
+    const wrap = makeBox(container, opts.label || "🎯 수싸움! 상대와 같은 코스를 고르면 이겨요", `
+      <p class="pm-head"><span class="pm-round"></span><span class="pm-score"></span></p>
+      <p class="pm-cue">${msg.tellCue}</p>
+      <div class="pm-board">${names.map((n, i) => `
+        <button type="button" class="btn btn-ghost tm-btn pm-col" data-i="${i}">
+          <span class="pm-face">❔</span>
+          <span class="pm-gauge"><i></i></span>
+          <span class="pm-sign">〰️</span>
+          <span class="pm-name">${n}</span>
+          <span class="pm-mine">·</span>
+        </button>`).join("")}</div>
       <p class="ps-mark">&nbsp;</p>
-      <p class="tm-legend-tip">${msg.tip}</p>
-      <button type="button" class="btn btn-primary tm-btn ps-tap">${opts.button || "스윙! 🏏"}</button>`);
+      <p class="tm-legend-tip">${msg.tip}</p>`);
 
-    const zoneEl = wrap.querySelector(".ps-zone");
-    const ball = wrap.querySelector(".ps-ball");
-    const countEl = wrap.querySelector(".ps-count");
+    const cols = Array.prototype.slice.call(wrap.querySelectorAll(".pm-col"));
     const markEl = wrap.querySelector(".ps-mark");
-    const btn = wrap.querySelector(".tm-btn");
-    const fillEl = wrap.querySelector(".ps-track-fill");
-    const cueEl = wrap.querySelector(".ps-track-txt");
-    zoneEl.style.left = `${COUNT.zx[0]}%`;
-    zoneEl.style.width = `${COUNT.zx[1] - COUNT.zx[0]}%`;
-    zoneEl.style.top = `${COUNT.zy[0]}%`;
-    zoneEl.style.height = `${COUNT.zy[1] - COUNT.zy[0]}%`;
-    /* 👁️ 눈금은 **꺾이는 자리**예요. 판이 시작될 때 한 번만 세워요 — 능력치가
-     * 높을수록 왼쪽에 서서, 휘두를 수 있는 구간이 눈으로 보이게 넓어져요. */
-    wrap.querySelector(".ps-track-brk").style.left = `${(brk * 100).toFixed(1)}%`;
-    cueEl.textContent = msg.cueWait;
+    const roundEl = wrap.querySelector(".pm-round");
+    const scoreEl = wrap.querySelector(".pm-score");
 
-    let b = COUNT.b0, s = COUNT.s0, pitches = 0;
-    let cur = null, t0 = 0, raf = 0, done = false, live = false, broke = false;
+    let round = 0, hits = 0, truth = -1;
+    let done = false, busy = true, nextTimer = 0, guard = 0;
 
+    /* 상대가 이번 구에 각 칸을 고를 진짜 확률이에요. 버릇에 가중치를 얹고,
+     * 내 자국만큼 기울여요 — match면 피하고(나눔) dodge면 노려요(곱함). */
+    function odds() {
+      const w = names.map((n, i) =>
+        (i === habit ? MIND.habit : 1) * Math.pow(MIND.adapt, dodge ? mine[i] : -mine[i]));
+      const sum = w.reduce((a, b) => a + b, 0);
+      return w.map((v) => v / sum);
+    }
+    /* 화면에 뜨는 기색. 진짜 확률(q)을 read만큼만 남기고 나머지는 평평하게 뭉갠 뒤,
+     * 못 읽는 만큼 흔들어요. read가 1이면 q 그대로, 0이면 순전한 잡음이에요. */
+    function tellOf(q) {
+      const flat = 1 / names.length;
+      const raw = q.map((v) => {
+        const blur = v * read + flat * (1 - read);
+        return Math.max(0.02, blur * (1 + (1 - read) * (Math.random() * 2 - 1) * MIND.noise));
+      });
+      const sum = raw.reduce((a, b) => a + b, 0);
+      return raw.map((v) => v / sum);
+    }
+    const drawFrom = (q) => {
+      let r = Math.random();
+      for (let i = 0; i < q.length; i++) { r -= q[i]; if (r <= 0) return i; }
+      return q.length - 1;
+    };
     const dots = (n, max) => "●".repeat(n) + "○".repeat(Math.max(0, max - n));
-    function paintCount() {
-      countEl.innerHTML =
-        `<span class="ps-c-ball">${names[0]} ${dots(b, COUNT.balls)}</span>` +
-        `<span class="ps-c-sep">·</span>` +
-        `<span class="ps-c-strike">${names[1]} ${dots(s, COUNT.strikes)}</span>`;
-    }
-    paintCount();
 
-    function newPitch() {
-      pitches += 1;
-      const strike = Math.random() < pS;
-      // 처음에는 전부 한가운데로 오는 것처럼 보여요 (fake) — 갈라지는 건 휘는 지점부터예요
-      const c = {
-        strike,
-        sx: rand(46, 54), sy: rand(44, 56),
-        fx: rand(COUNT.zx[0] + 7, COUNT.zx[1] - 7), fy: rand(COUNT.zy[0] + 9, COUNT.zy[1] - 9),
-        dx: rand(COUNT.zx[0] + 6, COUNT.zx[1] - 6), dy: rand(COUNT.zy[0] + 8, COUNT.zy[1] - 8),
-      };
-      /* 볼과 스트라이크가 정확히 대칭이에요 — 네 변 중 하나를 골라, 그 경계에서
-       * off만큼 **밖(볼)** 또는 **안(스트라이크)** 에 꽂혀요. 한쪽만 경계에 붙이면
-       * "가장자리로 오는 공은 전부 볼"이라는 공짜 힌트가 생겨서 눈이 필요 없어져요. */
-      const side = Math.floor(Math.random() * 4);
-      const off = rand(0.6, 1.0) * edge * (side >= 2 ? COUNT.edgeY : 1) * (strike ? -1 : 1);
-      if (side === 0) c.dx = COUNT.zx[0] - off;
-      else if (side === 1) c.dx = COUNT.zx[1] + off;
-      else if (side === 2) c.dy = COUNT.zy[0] - off;
-      else c.dy = COUNT.zy[1] + off;
-      cur = c;
-      live = true;
-      broke = false;
-      /* 새 공이니 판독 게이지를 처음으로 되돌려요 — 앞 공의 '빨랐다'도 여기서 지워져요 */
-      wrap.classList.remove("ps-swing", "ps-broke", "ps-rush");
-      cueEl.textContent = msg.cueWait;
-      t0 = performance.now();
-      paintBall(0);
-      raf = requestAnimationFrame(tick);
+    function paintHead() {
+      roundEl.textContent = `${round}${msg.roundLabel} / ${MIND.rounds}${msg.roundLabel}`;
+      scoreEl.textContent = `${msg.scoreLabel} ${dots(hits, MIND.rounds)}`;
     }
 
-    function paintBall(t) {
-      const f = Math.min(1, t / brk);
-      const u = t <= brk ? 0 : (t - brk) / (1 - brk);
-      const g = 1 - (1 - u) * (1 - u);          // 휜 뒤에는 금방 벌어져요
-      ball.style.left = `${cur.sx + (cur.fx - cur.sx) * f + (cur.dx - cur.fx) * g}%`;
-      ball.style.top = `${cur.sy + (cur.fy - cur.sy) * f + (cur.dy - cur.fy) * g}%`;
-      ball.style.fontSize = `${(0.7 + 1.15 * t).toFixed(2)}rem`;   // 다가올수록 커져요
-      /* 👁️ 비행을 막대로 펴 둬요. 눈금을 넘는 순간이 곧 '보고 칠 수 있게 된 순간'이라,
-       * 그 한 프레임에서 막대·존·공·버튼이 한꺼번에 살아나요. */
-      fillEl.style.width = `${Math.min(100, t * 100).toFixed(1)}%`;
-      if (!broke && t >= brk) {
-        broke = true;
-        wrap.classList.add("ps-broke");
-        cueEl.textContent = msg.cueRead;
-      }
+    function newRound() {
+      round += 1;
+      const q = odds();
+      truth = drawFrom(q);
+      const tell = tellOf(q);
+      const top = Math.max.apply(null, tell);
+      const order = tell.slice().sort((a, b) => b - a);
+      cols.forEach((col, i) => {
+        col.classList.remove("pm-chosen", "pm-truth");
+        col.disabled = false;
+        col.querySelector(".pm-gauge i").style.height = `${(tell[i] / top * 100).toFixed(0)}%`;
+        col.querySelector(".pm-sign").textContent =
+          tell[i] === order[0] ? "🔥" : tell[i] === order[order.length - 1] ? "💤" : "〰️";
+        col.querySelector(".pm-mine").textContent = mine[i] ? "●".repeat(mine[i]) : "·";
+        col.querySelector(".pm-face").textContent = "❔";
+      });
+      wrap.classList.remove("pm-same", "pm-diff");
+      markEl.innerHTML = "&nbsp;";
+      paintHead();
+      armGuard();                       // 🛟 구마다 안전망을 새로 걸어요
+      busy = false;                     // 여기서부터 사람의 차례예요 (시계는 안 돌아요)
     }
 
-    /* note는 화면에 남길 한 줄이에요. 바깥의 msg(문구 묶음)와 이름이 겹치면
-     * 안에서 msg.timeup 같은 걸 못 읽게 돼요 — 그래서 일부러 다르게 불러요. */
+    // note는 화면에 남길 한 줄이에요 — 바깥의 msg와 이름이 겹치지 않게 따로 불러요
     function finish(res, note) {
       if (done) return;
       done = true;
-      live = false;
-      cancelAnimationFrame(raf);
+      busy = true;
       clearTimeout(guard);
-      clearTimeout(gapTimer);
-      btn.disabled = true;
+      clearTimeout(nextTimer);
+      cols.forEach((c) => { c.disabled = true; });
       markEl.textContent = note;
       wrap.classList.add(`tm-done-${res}`);
       setTimeout(() => { wrap.remove(); cb(res); }, OUTRO);
     }
-    const guard = setTimeout(() => finish(countEnd(b, s) || (b > s ? "good" : "miss"), msg.timeup), COUNT.cap);
-    let gapTimer = 0;
-
-    /* 한 공을 끝내요. swung이 true면 스윙, false면 참은 거예요.
-     *
-     * ⏱️ **언제 휘둘렀는지를 여기서 봐요.** 지금이 비행의 몇 할인지(t)를 재서
-     * 꺾이는 지점(brk) 앞이면 '눈감고 낸 방망이(rush)'예요. 존 안이어도
-     * 받아치지 못하고 빗맞은 파울이 돼요 — 타이밍이 판정에 들어가는 자리예요. */
-    function land(swung) {
-      if (done || !live) return;
-      live = false;
-      cancelAnimationFrame(raf);
-      const t = (performance.now() - t0) / COUNT.flight;
-      const rush = swung && t < brk;
-      if (swung && cur.strike && !rush) {     // 보고 친 공만 받아쳐요
-        finish(countHitGrade(b, s), b > s ? msg.hitPerfect : msg.hitGood);
-        return;
-      }
-      if (rush) wrap.classList.add("ps-rush");   // 빨랐다는 걸 화면에 남겨요
-      let note;
-      if (rush && cur.strike) {
-        /* 🫧 빗맞은 파울. 2스트라이크에서는 카운트가 안 늘어요(야구 그대로예요) —
-         * 성급한 스윙의 벌을 루킹과 같은 값으로 묶어 두는 자리예요. 여기를 더
-         * 세게 걸면 반응이 느린 사람이 삼진만 당해요. */
-        if (s < COUNT.strikes - 1) s += 1;
-        note = msg.foul;
-      } else if (swung) {
-        s += 1;
-        note = rush ? msg.rush : msg.whiff;   // 꺾이기 전 헛스윙은 이유까지 말해 줘요
-      } else if (cur.strike) {
-        s += 1;
-        note = msg.looking;
-      } else {
-        b += 1;
-        note = msg.taken;
-      }
-      paintCount();
-      markEl.textContent = note;
-      const end = countEnd(b, s);
-      if (end) {
-        finish(end, end === "miss" ? msg.out : msg.free);
-        return;
-      }
-      if (pitches >= COUNT.balls) {           // 파울로 버티다 공을 다 쓴 자리예요
-        finish(b > s ? "good" : "miss", msg.stall);
-        return;
-      }
-      gapTimer = setTimeout(newPitch, COUNT.gap);
+    /* 🛟 안전망 — 남은 구를 다 진 것으로 쳐요. 타자면 적중이 안 늘고, 투수면
+     * 남은 구를 다 읽힌 셈이라 그만큼 늘어요. 어느 쪽이든 손을 놓으면 나빠져요.
+     * 구마다 다시 걸어요(newRound). 화면에는 아무 표시도 안 해요. */
+    function armGuard() {
+      clearTimeout(guard);
+      guard = setTimeout(() => {
+        const left = MIND.rounds - round + 1;
+        finish(mindGrade(dodge ? hits + left : hits, dodge), msg.timeup);
+      }, MIND.capPer);
     }
 
-    function tick(now) {
-      if (done || !live) return;
-      const t = (now - t0) / COUNT.flight;
-      paintBall(Math.min(t, 1));
-      if (t >= 1) { land(false); return; }    // 그냥 지나가면 참은 거예요
-      raf = requestAnimationFrame(tick);
+    function choose(i) {
+      if (done || busy) return;
+      busy = true;                      // 판정을 보여주는 동안은 입력을 안 받아요
+      clearTimeout(guard);              // 골랐으니 이 구의 안전망은 내려요
+      mine[i] += 1;
+      const same = i === truth;
+      if (same) hits += 1;
+      cols.forEach((c) => { c.disabled = true; });
+      cols[i].classList.add("pm-chosen");
+      cols[truth].classList.add("pm-truth");
+      cols[truth].querySelector(".pm-face").textContent = msg.face;
+      cols[i].querySelector(".pm-mine").textContent = "●".repeat(mine[i]);
+      wrap.classList.add(same ? "pm-same" : "pm-diff");
+      markEl.textContent = same ? msg.hit : msg.slip;
+      paintHead();
+      const over = mindSettled(hits, round, dodge) || round >= MIND.rounds;
+      nextTimer = setTimeout(() => {
+        if (!over) { newRound(); return; }
+        const g = mindGrade(hits, dodge);
+        finish(g, g === "perfect" ? msg.win : g === "good" ? msg.even : msg.lose);
+      }, MIND.reveal);
     }
 
-    const swing = () => { if (live) { wrap.classList.add("ps-swing"); land(true); } };
-    onTap(btn, swing, gate);
-    onTap(wrap.querySelector(".ps-plate"), swing, gate);
-    newPitch();
+    cols.forEach((col, i) => onTap(col, () => choose(i), gate));
+    newRound();
   }
 
   /* 바깥에서 부르는 건 이쪽이에요 — 준비 화면부터예요.
    * gate는 준비 화면이 만들어 넘겨줘요 (시작한 손가락을 게임에서 떼어 놓는 문). */
-  function count(container, opts, cb) {
-    ready(container, countReady(opts), (gate) => runCount(container, opts || {}, cb, gate));
+  function mind(container, opts, cb) {
+    ready(container, mindReady(opts), (gate) => runMind(container, opts || {}, cb, gate));
   }
 
   /* ================================================================
@@ -570,7 +540,7 @@ window.PostStage = (() => {
   const dashReveal = (zone, tier) => dashBack(zone, tier) *
     clampV(DASH.revealFrac + clampV(zone, 10, 40) * DASH.revealFracPer + tier * DASH.revealFracTier, 0.35, 0.95);
 
-  /* count와 같은 이유로 문구를 통째로 갈아끼울 수 있어요 — 투수는 주자가 아니라
+  /* mind와 같은 이유로 문구를 통째로 갈아끼울 수 있어요 — 투수는 주자가 아니라
    * 중계·백업 자리에서 같은 판단을 해요. */
   const DASH_MSG = {
     safe: "🎉 홈 세이프! 득점이에요",
@@ -608,7 +578,8 @@ window.PostStage = (() => {
     };
   }
 
-  /* 🏃 한 판. runCount와 같아요 — 준비 화면을 누른 뒤에만 불리고, 시계는 여기서만 돌아요. */
+  /* 🏃 한 판. runMind와 같아요 — 준비 화면을 누른 뒤에만 불려요.
+   * 다만 여기는 진짜로 시간이 흘러요(주자와 송구가 움직여요) — 수싸움과 갈리는 자리예요. */
   function runDash(container, opts, cb, gate) {
     const zone = zoneOf(opts), tier = tierOf(opts);
     const runMs = dashRun(zone);
@@ -659,7 +630,7 @@ window.PostStage = (() => {
     }
     paint();
 
-    // note를 msg와 다르게 부르는 이유는 count의 finish와 같아요
+    // note를 msg와 다르게 부르는 이유는 mind의 finish와 같아요
     function finish(res, note) {
       if (done) return;
       done = true;
@@ -712,15 +683,15 @@ window.PostStage = (() => {
   }
 
   return {
-    count, dash,
+    mind, dash,
     /* 테스트가 판정 산식을 그대로 굴려 볼 수 있게 열어 둬요 — 난이도를 손으로
      * 베껴 두면 여기를 고칠 때 테스트만 옛 숫자로 남아요.
      * 준비 화면 쪽도 같은 이유로 열어 둬요 (횟수 문턱을 테스트가 베껴 적지 않게요). */
     _t: {
-      COUNT, DASH, COUNT_MSG, DASH_MSG,
-      countBreak, countEdge, countStrikeP, countHitGrade, countEnd,
+      MIND, DASH, MIND_MSG, DASH_MSG, MIND_COURSES,
+      mindRead, mindGrade, mindSettled,
       dashRun, dashThrow, dashReveal, dashBack,
-      READY_KEY, FULL_SHOWS, readSeen, countReady, dashReady,
+      READY_KEY, FULL_SHOWS, readSeen, mindReady, dashReady,
     },
   };
 })();
