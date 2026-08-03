@@ -309,6 +309,86 @@ guard("준비 화면", () => {
 });
 
 /* ================================================================
+ * 👁️ 꺾이는 순간 — 화면에 보여야 배울 수 있어요
+ *
+ * 사용자 제보: "스윙하는 거 타이밍을 잘 모르겠네".
+ *
+ * 원인이 둘이었어요. ① land()가 존 안이냐만 봐서 타이밍이 결과에 아예 안
+ * 들어갔고(그건 ④에서 재요), ② 꺾이는 순간이 화면 어디에도 안 적혀 있었어요.
+ * ②를 안 고치면 ①만 고쳐 봐야 "왜 졌는지 모르겠다"가 될 뿐이에요.
+ *
+ * 여기서 못 박는 건 넷이에요.
+ *   ① 눈금이 **판정이 쓰는 그 값**(countBreak)과 같은 자리에 선다
+ *   ② 넘기 전과 넘은 뒤의 화면이 실제로 다르다 (.ps-broke · 안내 문구)
+ *   ③ 능력치가 높으면 눈금이 왼쪽으로 옮겨 간다 (휘두를 구간이 넓어져요)
+ *   ④ 일찍 낸 방망이는 화면에 흔적이 남는다 (.ps-rush · 이유를 적은 한 줄)
+ * ================================================================ */
+group("👁️ 꺾이는 순간이 화면에 보이는가");
+guard("꺾이는 신호", () => {
+  const OPTS = { label: "t", zonePct: 26, tier: 0, button: "스윙! 🏏" };
+  const M = T.COUNT_MSG;
+  const FLIGHT = T.COUNT.flight;
+  const brk = T.countBreak(OPTS.zonePct, OPTS.tier);
+  /* 판이 멈춘 자리에서 화면을 그대로 들여다봐요 — trial은 상자를 지우지 않고
+   * 멈추니까(다음 판이 시작될 때 지워요) 여기서 DOM을 직접 물어볼 수 있어요. */
+  const q = (sel) => PS.V.document.querySelector(sel);
+
+  // ① 눈금이 판정과 같은 자리에 선다
+  PS.trial("count", OPTS, 11, null, { stopAt: brk * FLIGHT - 80 });
+  const markAt = pctOf(q(".ps-track-brk").style.left);
+  check(Math.abs(markAt - brk * 100) < 0.2,
+    `눈금이 판정이 쓰는 꺾이는 지점에 정확히 선다 (화면 ${markAt}% · 판정 ${(brk * 100).toFixed(1)}%)`);
+
+  // ② 넘기 전 — 아직 아무것도 안 살아났어요
+  const preWrap = q(".tm-box"), preCue = q(".ps-track-txt").textContent;
+  const preFill = pctOf(q(".ps-track-fill").style.width);
+  check(!preWrap.classList.contains("ps-broke"), "꺾이기 전에는 화면이 '아직'인 채로 있다 (.ps-broke 없음)");
+  check(preCue === M.cueWait, `꺾이기 전 안내가 기다리라고 말한다 ("${preCue}")`);
+  check(preFill < markAt, `막대가 아직 눈금에 못 닿았다 (${preFill}% < ${markAt}%)`);
+
+  // ② 넘은 뒤 — 막대·안내가 한꺼번에 바뀌어요
+  PS.trial("count", OPTS, 11, null, { stopAt: brk * FLIGHT + 80 });
+  const postWrap = q(".tm-box"), postCue = q(".ps-track-txt").textContent;
+  const postFill = pctOf(q(".ps-track-fill").style.width);
+  check(postWrap.classList.contains("ps-broke"), "꺾이는 순간 화면이 살아난다 (.ps-broke)");
+  check(postCue === M.cueRead && postCue !== preCue, `꺾인 뒤 안내가 지금이라고 말한다 ("${postCue}")`);
+  check(postFill > markAt, `막대가 눈금을 넘어섰다 (${postFill}% > ${markAt}%)`);
+
+  // ③ 능력치가 높으면 눈금이 왼쪽으로 — 휘두를 수 있는 구간이 넓어져요
+  const at = (zone) => {
+    PS.trial("count", { label: "t", zonePct: zone, tier: 0 }, 11, null, { stopAt: 40 });
+    return pctOf(q(".ps-track-brk").style.left);
+  };
+  const lowMark = at(10), hiMark = at(40);
+  check(hiMark < lowMark - 5,
+    `능력치가 높으면 눈금이 왼쪽으로 옮겨 간다 (존10 ${lowMark}% → 존40 ${hiMark}%)`);
+
+  /* ④ 일찍 낸 방망이는 흔적을 남겨요. 첫 공 도중(꺾이기 한참 전)에 새로 짚은
+   * 손가락 한 번을 보내고, **그 자리에서** 화면을 봐요.
+   * stopAt을 스윙 시각에 딱 맞춰요 — 스윙하면 이 공의 프레임이 끊겨서, 시계에
+   * 남은 다음 일이 곧 '다음 공'이에요. 조금이라도 더 굴리면 그 공이 시작되면서
+   * 흔적을 지워 버려요(새 공마다 게이지를 처음으로 되돌리니까요). */
+  const early = Math.round(brk * FLIGHT * 0.4);
+  PS.trial("count", OPTS, 11, null, { tap3: { at: early, sel: ".ps-tap" }, stopAt: early });
+  const rushWrap = q(".tm-box"), rushMark = q(".ps-mark").textContent;
+  check(rushWrap.classList.contains("ps-rush"),
+    `일찍 휘두르면 화면에 '빨랐다'가 남는다 (.ps-rush · ${early}ms에 스윙)`);
+  check(!rushWrap.classList.contains("ps-broke"), "그때는 아직 꺾이기 전이었다 (.ps-broke 없음)");
+  check(rushMark === M.foul || rushMark === M.rush,
+    `무엇이 틀렸는지 한 줄로 말해 준다 ("${rushMark}")`);
+
+  /* ⑤ 준비 화면도 같은 말을 해요. 화면에는 눈금이 있는데 설명에 없으면,
+   * 처음 보는 사람은 그 선이 무엇인지 끝까지 몰라요. */
+  PS.V.localStorage.removeItem(T.READY_KEY);
+  const readyHTML = PS.trial("count", OPTS, 11, null, { noStart: true }).readyHTML;
+  check(/눈금/.test(readyHTML), "준비 화면이 눈금을 설명한다 (꺾인 뒤에 판단하라는 말)");
+  check(/눈금/.test(M.readyShort) && /눈금/.test(M.tip),
+    "짧아진 안내와 화면 아래 한 줄에도 그 말이 남는다");
+  check(/눈금/.test(GAME_SRC),
+    "투수 쪽 문구(game.js)도 같이 갈아끼웠다 — 한쪽만 타자 말로 남으면 안 돼요");
+});
+
+/* ================================================================
  * ✋ 탭 누수 — 한 번의 탭이 두 번 먹히면 안 돼요
  *
  * 사용자 제보: "설명 보고 눌렀는데 게임이 그냥 바로 끝나버리는데".
@@ -389,8 +469,12 @@ guard("탭 누수", () => {
 });
 
 /* 🧊 count 사람 모델 — lag만큼 늦은 화면 두 장으로 도착점을 외삽해요.
- * 공 크기(font-size)가 얼마나 왔는지를 알려줘요 (사람도 크기로 거리를 봐요). */
-function countAs(zone, tier, seed, lag, sigma) {
+ * 공 크기(font-size)가 얼마나 왔는지를 알려줘요 (사람도 크기로 거리를 봐요).
+ *
+ * ⏱️ at은 **방망이를 내는 시각**(비행 비율)이에요. 기본 0.90은 "마지막까지 보고
+ * 정하는 사람"이라 늘 꺾인 뒤예요. 손이 느린 사람은 이 값을 뒤로 미뤄서 재요. */
+function countAs(zone, tier, seed, lag, sigma, at) {
+  const when = at == null ? 0.90 : at;
   let hist = [], lastT = 9, swung = false;
   return PS.trial("count", { label: "t", zonePct: zone, tier }, seed, (wrap, now, fire) => {
     const ball = wrap.querySelector(".ps-ball");
@@ -399,7 +483,7 @@ function countAs(zone, tier, seed, lag, sigma) {
     if (t < lastT - 0.02) { hist = []; swung = false; }        // 새 공이에요
     lastT = t;
     hist.push({ now, t, x: pctOf(ball.style.left), y: pctOf(ball.style.top) });
-    if (swung || t < 0.90) return;                              // 마지막까지 보고 정해요
+    if (swung || t < when) return;                              // 여기서 손이 나가요
     let a = hist[0], b = hist[0];
     for (const h of hist) { if (h.now <= now - lag) b = h; }
     for (const h of hist) { if (h.now <= now - lag - 44) a = h; }
@@ -409,6 +493,26 @@ function countAs(zone, tier, seed, lag, sigma) {
     const Z = T.COUNT;
     swung = true;
     if (px > Z.zx[0] && px < Z.zx[1] && py > Z.zy[0] && py < Z.zy[1]) fire(".ps-tap");
+  });
+}
+
+/* ⏱️ 타이밍만 다른 사람 — 판독은 아예 안 하고 정해진 시각에 그냥 휘둘러요.
+ *
+ * 꺾이기 전에는 공이 전부 한가운데로 오는 것처럼 보여요. 그래서 그때 내는
+ * 방망이는 판독이 아니라 **그냥 휘두르는 것**이에요 — 그게 '눈감고 치기'의
+ * 정의라 이 모델이 곧 그 사람이에요. at만 바꿔서 같은 사람을 꺾기 전과 꺾은 뒤에
+ * 세워 두면, 판정 차이가 오롯이 **타이밍 때문**이라고 말할 수 있어요. */
+function countBlindAs(zone, tier, seed, at) {
+  let lastT = 9, swung = false;
+  return PS.trial("count", { label: "t", zonePct: zone, tier }, seed, (wrap, now, fire) => {
+    const ball = wrap.querySelector(".ps-ball");
+    if (!ball) return;
+    const t = (remOf(ball.style.fontSize) - 0.7) / 1.15;
+    if (t < lastT - 0.02) swung = false;                        // 새 공이에요
+    lastT = t;
+    if (swung || t < at) return;
+    swung = true;
+    fire(".ps-tap");
   });
 }
 
@@ -526,19 +630,38 @@ guard("도달성", () => {
 group("④ 난이도");
 
 const ZONES = [26, 32, 38];
-const SKILL = { name: "능숙", lag: 160, sigma: 2.0, margin: 60, dsigma: 90, mem: 0.94, find: 900, tsig: 55 };
-const AVG = { name: "보통", lag: 240, sigma: 4.5, margin: 40, dsigma: 220, mem: 0.82, find: 1500, tsig: 110 };
+/* rnd는 **이 사람 몫의 난수 씨앗**이에요. 사람 모델은 gauss(공용 plyRnd)를 쓰는데,
+ * 한 줄기를 셋이 이어 쓰면 앞사람이 몇 번 뽑았느냐에 따라 뒷사람 숫자가 통째로
+ * 흔들려요. 실제로 여기 '느린손'을 새로 세웠더니 그 뒤에 재는 **기존 8종 기준선이
+ * 같이 움직여서**, 아무것도 안 바뀐 칸의 '도입 전 대비 하락'이 10.2%p에서 15.7%p로
+ * 보였어요 — 난이도가 아니라 표본이 움직인 거예요. 사람마다 씨앗을 따로 주면
+ * 사람을 더 세워도 남의 숫자가 안 흔들려서, 실행끼리 나란히 놓고 볼 수 있어요. */
+const SKILL = { name: "능숙", rnd: 20260731, lag: 160, sigma: 2.0, margin: 60, dsigma: 90, mem: 0.94, find: 900, tsig: 55 };
+const AVG = { name: "보통", rnd: 20260732, lag: 240, sigma: 4.5, margin: 40, dsigma: 220, mem: 0.82, find: 1500, tsig: 110 };
+/* 🐢 손이 느린 사람 — **꺾이는 걸 보고 나서** 비로소 반응해요(react ms).
+ * 타이밍이 판정에 들어간 뒤로 "반응이 느리면 계속 삼진 아니냐"가 진짜 물음이
+ * 됐어요. 그 물음을 답으로 바꾸려고 세운 세 번째 사람이에요 — 앞의 둘과 달리
+ * 난이도 단조성 검사에는 안 넣고(표본이 더 흔들려요) 값만 재서 보고해요. */
+const SLOW = { name: "느린손", rnd: 20260733, lag: 300, sigma: 5.5, margin: 30, dsigma: 300, mem: 0.74, find: 1900, tsig: 150, react: 380 };
+const PROFILES = [SKILL, AVG, SLOW];
 const DN = Number(process.env.POST_N || 90);
+
+/* 방망이가 나가는 시각(비행 비율). react가 없으면 "마지막까지 보고 정하는 사람"이에요.
+ * react가 있으면 꺾이는 지점 + 반응 시간이라, 그게 비행보다 길면 손이 아예 못 나가요
+ * (= 다 지켜보게 돼요). 숫자를 여기 옮겨 적지 않아요 — 꺾이는 지점은 소스에서 읽어요. */
+const swingAt = (sk, zone, tier) =>
+  (sk.react == null ? undefined : T.countBreak(zone, tier) + sk.react / T.COUNT.flight);
 
 // [skill][tier][zone] → 두 메커닉을 합친 판정 분포
 const NEWTAB = {};
 guard("새 2종 난이도", () => {
-  for (const sk of [SKILL, AVG]) {
+  for (const sk of PROFILES) {
+    plyRnd = mulberry32(sk.rnd);        // 이 사람 몫의 줄기 — 옆 사람에게 안 새요
     NEWTAB[sk.name] = {};
     for (const tier of [0, 1, 2]) {
       NEWTAB[sk.name][tier] = {};
       for (const zone of ZONES) {
-        const a = dist(DN, (s) => countAs(zone, tier, s, sk.lag, sk.sigma));
+        const a = dist(DN, (s) => countAs(zone, tier, s, sk.lag, sk.sigma, swingAt(sk, zone, tier)));
         const b = dist(DN, (s) => dashAs(zone, tier, s, sk.lag, sk.margin, sk.dsigma));
         NEWTAB[sk.name][tier][zone] = {
           p: (a.p + b.p) / 2, g: (a.g + b.g) / 2, m: (a.m + b.m) / 2,
@@ -547,13 +670,24 @@ guard("새 2종 난이도", () => {
       }
     }
   }
-  for (const sk of [SKILL, AVG]) {
+  for (const sk of PROFILES) {
     for (const tier of [0, 1, 2]) {
       console.log(`   ${sk.name} tier${tier} | ${ZONES.map((z) => {
         const d = NEWTAB[sk.name][tier][z];
         return `존${z} P${pct(d.p)} M${pct(d.m)} 배수 ${mult(d).toFixed(3)}`;
       }).join(" · ")}`);
     }
+  }
+  /* 🐢 손이 느려도 삼진만 당하지는 않아요. 이 줄이 이번 변경의 안전선이에요 —
+   * 타이밍을 판정에 넣으면서 가장 먼저 다치는 사람이 여기니까요. */
+  {
+    const slow = [0, 1, 2].map((tier) => ZONES.map((z) => NEWTAB[SLOW.name][tier][z].count))
+      .reduce((a, b) => a.concat(b), []);
+    const worstM = Math.max(...slow.map((d) => d.m));
+    const meanM = slow.reduce((a, d) => a + d.m, 0) / slow.length;
+    console.log(`   🐢 손이 느린 사람의 🧊 볼카운트 | 평균 실패 ${pct(meanM)} · 가장 나쁜 칸 ${pct(worstM)}`);
+    check(worstM <= 0.5,
+      `🐢 손이 느려도 어느 칸에서든 절반 넘게 삼진당하지는 않는다 (가장 나쁜 칸 ${pct(worstM)})`);
   }
   /* 능력치를 올리면 나아져요. 양 끝만 못 박아요 — 표본이 유한해서(칸마다
    * POST_N판) 가운데 칸은 ±0.03쯤 흔들려요. 한 계단씩 못 박으면 난이도가
@@ -610,6 +744,30 @@ guard("새 2종 난이도", () => {
   check(mult(froze) < mult(rush),
     `🏃 아무것도 안 고르는 게 무작정 돌진보다 나쁘다 (${mult(froze).toFixed(3)} < ${mult(rush).toFixed(3)}) — 고르지 않는 것이 최악이에요`);
   console.log(`   🧊 무작정 스윙 배수 ${mult(mash).toFixed(3)} · 전부 참기 ${mult(idle).toFixed(3)} · 잘 보는 사람 ${mult(best).toFixed(3)}`);
+
+  /* ⏱️ **타이밍이 정말로 결과에 들어가는가** — 이번 변경의 본체예요.
+   *
+   * 같은 사람(판독 없이 그냥 휘두르는 사람)을 시각만 바꿔 두 번 세워요.
+   * 전략도 화면도 난수도 같고 **방망이가 나가는 순간만** 달라요. 그런데도 성적이
+   * 갈리면, 갈린 몫은 오롯이 타이밍이에요. 예전에는 이 둘이 완전히 같았어요 —
+   * land()가 존 안이냐만 봤거든요. 그래서 화면은 타이밍 게임인데 손은 아무 데나
+   * 눌러도 됐고, 그게 "스윙 타이밍을 모르겠다"의 정체였어요. */
+  {
+    const cases = [[26, 0], [32, 1], [38, 2]];
+    const lines = [], gaps2 = [];
+    for (const [zone, tier] of cases) {
+      const brk = T.countBreak(zone, tier);
+      const early = dist(150, (s) => countBlindAs(zone, tier, s, brk * 0.6));   // 꺾이기 전
+      const late = dist(150, (s) => countBlindAs(zone, tier, s, 0.95));         // 꺾인 뒤
+      gaps2.push(mult(late) - mult(early));
+      lines.push(`존${zone}/tier${tier} 꺾기 전 ${mult(early).toFixed(3)}(P${pct(early.p)}) → 꺾은 뒤 ${mult(late).toFixed(3)}(P${pct(late.p)})`);
+      check(early.perfect === 0,
+        `🧊 꺾이기 전에 낸 방망이는 완벽이 아예 안 나온다 (존${zone}/tier${tier} · ${early.perfect}판)`);
+    }
+    console.log(`   ⏱️ 같은 사람, 시각만 다르게 | ${lines.join(" · ")}`);
+    check(Math.min(...gaps2) > 0.10,
+      `🧊 꺾인 뒤에 휘두른 쪽이 확실히 낫다 — 타이밍이 결과에 들어간다 (가장 좁은 칸 ${Math.min(...gaps2).toFixed(3)})`);
+  }
   console.log(`   🏃 무작정 돌진 배수 ${mult(rush).toFixed(3)} · 손 놓기 ${mult(froze).toFixed(3)}`);
 });
 
@@ -716,7 +874,10 @@ function old8(stat, zone, sk, n) {
 }
 const OLDTAB = {};
 guard("기존 8종 기준선", () => {
-  for (const sk of [SKILL, AVG]) {
+  for (const sk of PROFILES) {
+    /* 기존 8종 기준선도 사람마다 제 줄기를 써요. 여기가 '도입 전'이라, 이 숫자가
+     * 실행마다 흔들리면 "새 메커닉이 얼마나 어려워졌나"를 아예 말할 수 없어요. */
+    plyRnd = mulberry32(sk.rnd + 500);
     OLDTAB[sk.name] = {};
     for (const stat of [70, 110, 150]) {
       const zone = Math.min(40, Math.max(10, 13 + stat * 0.22 + 30 * 0.08));
@@ -1053,12 +1214,17 @@ guard("우승 확률", () => {
     for (const stat of STATS) {
       table[pos][stat] = {};
       const cells = [];
+      /* 🐢 손이 느린 사람도 같이 재요. 타이밍을 판정에 넣은 뒤로 "반응이 느리면
+       * 가을야구를 못 하는 것 아니냐"가 진짜 물음이 됐고, 그건 우승 확률로만
+       * 답할 수 있어요 — 미니게임 한 판이 아니라 시리즈 전체를 봐야 하니까요. */
       for (const [nm, apply] of [
         ["게임 기본", () => G.set("autoRes", realAutoRes)],
         ["구8·능숙", () => useOld(stat, SKILL.name)],
         ["구8·보통", () => useOld(stat, AVG.name)],
+        ["구8·느린손", () => useOld(stat, SLOW.name)],
         ["신2·능숙", () => useNew(stat, SKILL.name)],
         ["신2·보통", () => useNew(stat, AVG.name)],
+        ["신2·느린손", () => useNew(stat, SLOW.name)],
       ]) {
         apply();
         G.w.Math.random = mulberry32(4242 + stat);
@@ -1080,7 +1246,7 @@ guard("우승 확률", () => {
   G.set("autoRes", realAutoRes);
 
   const all = [];
-  for (const pos of ["batter", "pitcher"]) for (const st of STATS) for (const k of ["신2·능숙", "신2·보통"]) all.push(table[pos][st][k]);
+  for (const pos of ["batter", "pitcher"]) for (const st of STATS) for (const k of ["신2·능숙", "신2·보통", "신2·느린손"]) all.push(table[pos][st][k]);
   const lo = Math.min(...all), hi = Math.max(...all);
   /* 극단으로 쏠리면 안 돼요 — 아무도 우승 못 하거나 누구나 우승하면 가을야구가 사라져요.
    * 이 범위를 넓히지 마세요. 넓히는 순간 이 검사는 아무것도 안 지킵니다. */
@@ -1091,7 +1257,8 @@ guard("우승 확률", () => {
   for (const pos of ["batter", "pitcher"]) {
     const at = (st) => (table[pos][st]["신2·능숙"] + table[pos][st]["신2·보통"]) / 2;
     const a = at(STATS[0]), b = at(STATS[STATS.length - 1]);
-    console.log(`   ${pos === "batter" ? "🧢 타자" : "⚾ 투수"} 능력치 ${STATS[0]}→${STATS[STATS.length - 1]} | 우승 ${pct(a)} → ${pct(b)}`);
+    const slowLo = table[pos][STATS[0]]["신2·느린손"], slowHi = table[pos][STATS[STATS.length - 1]]["신2·느린손"];
+    console.log(`   ${pos === "batter" ? "🧢 타자" : "⚾ 투수"} 능력치 ${STATS[0]}→${STATS[STATS.length - 1]} | 우승 ${pct(a)} → ${pct(b)} (🐢 느린손 ${pct(slowLo)} → ${pct(slowHi)})`);
     if (!(b > a + 0.08)) flat.push(`${pos} ${pct(a)}→${pct(b)}`);
   }
   check(flat.length === 0, `능력치를 올리면 우승 확률이 오른다 (안 오른 칸: ${flat.join(" · ") || "없음"})`);
@@ -1100,7 +1267,7 @@ guard("우승 확률", () => {
    * 포지션 × 손끝 묶음(능력치 세 칸의 평균)으로 봐요. */
   const drops = [];
   for (const pos of ["batter", "pitcher"]) {
-    for (const sk of [SKILL.name, AVG.name]) {
+    for (const sk of PROFILES.map((p) => p.name)) {
       const d = STATS.map((st) => table[pos][st][`구8·${sk}`] - table[pos][st][`신2·${sk}`]);
       drops.push({ key: `${pos}·${sk}`, v: d.reduce((a, b) => a + b, 0) / d.length });
     }

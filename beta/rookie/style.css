@@ -65,6 +65,51 @@
 /* 스윙한 순간만 잠깐 반짝여요 — 눌렀는지 아닌지가 손끝에서 확실해야 해요 */
 .ps-swing .ps-plate { border-color: var(--accent); box-shadow: inset 0 0 14px var(--accent); }
 
+/* ⏱️ 판독 게이지 — **꺾이는 순간을 눈에 보이게** 만드는 자리예요.
+ *
+ * 공은 휘는 지점을 지나야 진짜 자리로 갈라져요. 그 전에 휘두르면 눈감고 치는
+ * 거라 존 안이어도 빗맞아요. 그런데 화면에 표시가 없으면 그 사실 자체를 못
+ * 배워요 — "언제 휘둘러야 할지 모르겠다"가 정확히 그 말이에요.
+ * 그래서 비행을 막대로 펴 두고 꺾이는 자리에 눈금(┊)을 세워요. 눈금이 어디에
+ * 서는지는 능력치가 정해요(../post-stage.js의 countBreak) — 선구안이 좋을수록
+ * 왼쪽에 서서, 휘두를 수 있는 구간이 눈으로 보이게 넓어져요. */
+.ps-track {
+  position: relative; height: 18px; margin: 0 0 6px;
+  border: 1px solid var(--line); border-radius: 999px; overflow: hidden;
+  background: rgba(255, 255, 255, .04);
+}
+.ps-track-fill {
+  position: absolute; left: 0; top: 0; bottom: 0; width: 0;
+  background: var(--dim); opacity: .3;
+}
+/* 폭을 0으로 둬야 눈금이 정확히 그 자리에 서요 (🏃의 .ps-back과 같은 방식이에요) */
+.ps-track-brk { position: absolute; top: 0; bottom: 0; width: 0; border-left: 2px dashed var(--sand); }
+.ps-track-txt {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  font-size: .72rem; color: var(--dim); letter-spacing: .5px;
+}
+/* 👁️ 눈금을 넘은 순간 — 막대·존·공·버튼이 한꺼번에 살아나요.
+ * 신호가 한 군데만 있으면 공을 보던 눈이 그걸 못 봐요. */
+.ps-broke .ps-track-fill { background: var(--sky); opacity: .5; }
+.ps-broke .ps-track-brk { border-left-color: var(--accent); }
+.ps-broke .ps-track-txt { color: var(--accent); font-weight: 700; }
+.ps-broke .ps-zone { border-color: var(--accent); background: rgba(255, 255, 255, .12); }
+.ps-broke .ps-ball { animation: ps-broke-pop .24s ease-out; }
+@keyframes ps-broke-pop {
+  0% { filter: drop-shadow(0 2px 3px rgba(0, 0, 0, .55)); }
+  35% { filter: drop-shadow(0 0 11px var(--accent)); }
+  100% { filter: drop-shadow(0 2px 3px rgba(0, 0, 0, .55)); }
+}
+/* 스윙 버튼은 꺾이기 전에는 흐려요 — 눌러도 되지만 아직 눈감고 치는 거예요.
+ * 못 누르게 막지는 않아요. 참기가 수(手)인 메커닉이라 손을 묶으면 안 돼요. */
+.ps-tap { opacity: .58; transition: opacity .12s ease, box-shadow .12s ease; }
+.ps-broke .ps-tap { opacity: 1; box-shadow: 0 0 12px var(--accent); }
+/* ⏱️ 너무 일찍 낸 방망이 — 다음 공까지 막대에 남아요.
+ * 빨랐다는 걸 알아야 다음에 고칠 수 있어요. */
+.ps-rush .ps-track { border-color: var(--accent2); }
+.ps-rush .ps-track-fill { background: var(--accent2); opacity: .45; }
+.ps-rush .ps-track-txt { color: var(--accent2); font-weight: 700; }
+
 .ps-count { margin: 0 0 2px; font-size: .84rem; letter-spacing: 1px; text-align: center; }
 .ps-c-ball { color: var(--sky); }
 .ps-c-strike { color: var(--accent); }

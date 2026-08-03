@@ -194,13 +194,30 @@ window.PostStage = (() => {
    * 지나면서 진짜 자리로 갈라져요 — 존 안에 꽂히거나, 존을 벗어나거나.
    *
    * 버튼은 하나예요. 누르면 스윙, **안 누르면 참기**예요. 참기가 아무것도
-   * 하지 않는 게 아니라는 게 이 메커닉의 전부예요:
+   * 하지 않는 게 아니라는 게 이 메커닉의 전부예요.
    *
-   *   스윙 & 존 안  → 받아쳤어요. 여기서 판이 끝나요.
-   *                   지금 카운트가 볼 > 스트라이크면 perfect, 아니면 good
-   *   스윙 & 존 밖  → 헛스윙. 스트라이크 +1
-   *   참기 & 존 안  → 루킹. 스트라이크 +1
-   *   참기 & 존 밖  → 골라냈어요. 볼 +1
+   * ⏱️ 그리고 **언제 휘두르느냐가 결과를 바꿔요.** 공은 휘는 지점(brk)을 지나야
+   * 진짜 자리로 갈라져요 — 그 전에는 어디로 갈지 아무도 몰라요. 그러니 꺾이기
+   * 전에 내는 방망이는 **눈감고 치는 것**이에요. 실제 타격이 정확히 그래요.
+   *
+   *   꺾인 뒤 스윙 & 존 안  → 받아쳤어요. 여기서 판이 끝나요.
+   *                           지금 카운트가 볼 > 스트라이크면 perfect, 아니면 good
+   *   꺾인 뒤 스윙 & 존 밖  → 헛스윙. 스트라이크 +1
+   *   꺾기 전 스윙 & 존 안  → 🫧 빗맞은 파울. 스트라이크 +1
+   *                           (2스트라이크에서는 카운트가 안 늘어요 — 야구 그대로예요)
+   *   꺾기 전 스윙 & 존 밖  → 헛스윙. 스트라이크 +1
+   *   참기 & 존 안          → 루킹. 스트라이크 +1
+   *   참기 & 존 밖          → 골라냈어요. 볼 +1
+   *
+   * 즉 **꺾이기 전에 휘두르면 절대 좋아질 수 없어요.** 잘해야 파울로 버티는 거예요.
+   * 대신 벌이 모질지도 않아요 — 존 안을 일찍 친 값은 루킹으로 보낸 값과 같아요.
+   * 반응이 느린 사람이 삼진만 당하지 않도록 여기를 일부러 낮게 뒀어요.
+   *
+   * 👁️ 꺾이는 순간은 **화면에 드러나야 해요.** 벌만 주고 신호를 안 주면 여전히
+   * "언제 휘둘러야 할지 모르겠다"예요. 그래서 비행을 막대(.ps-track)로 펴 두고
+   * 꺾이는 자리에 눈금을 세워요. 눈금을 넘는 순간 막대·존·공·버튼이 한꺼번에
+   * 살아나요(.ps-broke). 일찍 낸 방망이는 막대가 붉어져서(.ps-rush) 남아요 —
+   * **빨랐다는 걸 알아야 다음 공에 고칠 수 있어요.**
    *
    * 1볼 1스트라이크에서 시작해요(위기 상황을 이어받는 거예요). 3스트라이크면
    * 삼진(miss), 4볼이면 볼넷(good)이에요. 시작 카운트 덕에 **네 번째 공까지
@@ -213,6 +230,7 @@ window.PostStage = (() => {
    *
    * 🎚 능력치(zonePct)는 두 곳에 들어가요.
    *   ① 휘는 지점이 빨라져요 — 진짜 자리를 볼 시간이 길어져요 (선구안·제구)
+   *      = 눈금이 왼쪽으로 옮겨 가서 **휘두를 수 있는 구간이 넓어져요**
    *   ② 볼이 존에서 더 크게 벗어나요 — 애매한 공이 줄어요
    * 두 가지 다 "판독이 쉬워진다"예요. 판정 문턱은 능력치로 안 흔들어요 —
    * 카운트 규칙은 야구 규칙이라 사람마다 다르면 거짓말이 돼요.
@@ -223,8 +241,9 @@ window.PostStage = (() => {
     b0: 1, s0: 1,         // 시작 카운트 — 위기를 이어받아요
     balls: 4, strikes: 3, // 볼넷 · 삼진 문턱 (야구 그대로예요)
     /* 존을 지나는 공의 비율. 실제 야구의 존 통과율(45% 안팎)에 맞춰 뒀어요.
-     * 이 값이 곧 "아무 생각 없이 초구부터 휘두르는 사람"의 성적을 정해요 —
-     * 0.44면 good 69% · miss 31%라 기존 8종을 무작위로 하는 것과 비슷해요. */
+     * 이 값이 곧 "참기와 스윙을 눈 없이 반반 고르는 사람"의 성적을 정해요.
+     * (초구부터 무작정 휘두르는 사람의 성적은 이 값이 아니라 타이밍이 정해요 —
+     *  꺾이기 전 스윙은 존 안이어도 파울이라 카운트가 좋아지지 않거든요.) */
     pStrike: 0.44,
     pStrikeTier: -0.015,  // 뒤 시리즈일수록 유인구가 늘어요
     zx: [34, 66], zy: [26, 74],   // 스트라이크 존 (박스 안 %)
@@ -241,8 +260,10 @@ window.PostStage = (() => {
     /* 위아래는 존이 넓고 화면은 가로로 길어요. 같은 %가 픽셀로는 더 작게
      * 보여서, 위아래로 뺄 때만 이만큼 곱해요. */
     edgeY: 1.5,
-    /* 프레임이 안 돌아도 여기서 끝내요. 정상 경로에서는 네 번째 공에서
-     * 반드시 문턱에 닿아 tick이 먼저 끝내요 (최대 4×1080ms). */
+    /* 프레임이 안 돌아도 여기서 끝내요. 정상 경로에서는 늦어도 네 번째 공에서
+     * 끝나요 — 문턱(3스트라이크·4볼)에 닿거나, 파울로 버텼으면 공을 다 쓴 것으로
+     * land()가 끊어요 (최대 4×1080ms). 파울이 카운트를 안 올리는 자리가 있어서
+     * '끝나지 않는 타석'이 될 뻔한데, 그 공 수 제한이 그걸 막아요. */
     cap: 5800,
   };
   const countBreak = (zone, tier) =>
@@ -263,20 +284,29 @@ window.PostStage = (() => {
     hitPerfect: "💥 노림수 적중, 통타!",
     hitGood: "🏏 받아쳤어요!",
     whiff: "🌀 헛스윙…",
+    /* ⏱️ 일찍 낸 방망이 — 결과가 아니라 **무엇이 틀렸는지**를 말해 줘야 배워요 */
+    foul: "🫧 너무 일렀어요 — 빗맞은 파울",
+    rush: "🌀 꺾이기 전에 휘둘렀어요 — 헛스윙…",
     looking: "😐 존에 꽂혔어요",
     taken: "👀 골라냈어요",
     out: "❌ 삼진…",
     free: "🚶 볼넷으로 걸어 나가요",
     timeup: "⏱️ 승부 종료",
-    tip: "존을 벗어나면 참아요 · <b>유리한 카운트</b>에서 친 공만 완벽해요",
+    stall: "⏱️ 파울로 버티다 승부가 끝났어요",
+    /* 👁️ 판독 게이지에 뜨는 두 마디. 꺾이기 전에는 "아직", 넘으면 "지금"이에요 */
+    cueWait: "🙈 아직 몰라요 — 기다려요",
+    cueRead: "👁️ 꺾였어요! 지금 판단해요",
+    tip: "눈금(┊)을 <b>넘은 뒤에</b> 휘둘러요 · 벗어나는 공은 참고, <b>유리한 카운트</b>에서 친 공만 완벽해요",
     readyTitle: "🧊 볼카운트 승부",
     readyLines: [
-      "공이 날아오다 도중에 <b>휘어요</b>. 점선 네모(스트라이크 존) 안에 꽂히는지, 밖으로 빠지는지 보고 정해요.",
-      "헛스윙과 루킹은 <b>스트라이크</b>, 벗어나는 공을 참으면 <b>볼</b>이에요. 3스트라이크면 삼진(실패), 4볼이면 볼넷(성공)이에요.",
+      "공이 날아오다 도중에 <b>휘어요</b>. 휘기 전에는 어디로 갈지 아무도 몰라요 — 아래 막대의 눈금(┊)이 그 자리예요.",
+      "<b>눈금을 넘은 뒤에</b> 친 공만 제대로 맞아요. 그 전에 휘두르면 눈감고 치는 거라, 존 안이어도 빗맞은 파울이에요.",
+      "헛스윙·루킹·파울은 <b>스트라이크</b>, 벗어나는 공을 참으면 <b>볼</b>이에요. 3스트라이크면 삼진(실패), 4볼이면 볼넷(성공)이에요.",
       "받아쳐도 <b>볼이 스트라이크보다 많을 때</b>만 완벽이에요 — 완벽에 닿으려면 적어도 한 번은 참아야 해요.",
     ],
-    readyShort: "존을 벗어나면 참아요 · 볼이 스트라이크보다 많을 때 친 공만 완벽해요",
-    readySwing: "누르면 방망이를 내요. 존 안이면 받아치고, 밖이면 헛스윙이에요",
+    readyShort: "눈금(┊)을 넘은 뒤에 판단해요 · 벗어나면 참고, 볼이 스트라이크보다 많을 때 친 공만 완벽해요",
+    /* ⚠️ 이 두 줄에는 태그를 넣지 마세요. 준비 화면의 버튼 설명 칸에 그대로 들어가요 */
+    readySwing: "누르면 방망이를 내요. 눈금을 넘은 뒤 존 안이면 받아치고, 넘기 전이면 빗맞아요",
     readyTake: "안 누르면 참는 거예요. 존 밖이면 골라내서 볼을 얻어요",
   };
   const countMsg = (opts) => Object.assign({}, COUNT_MSG, (opts && opts.msg) || {});
@@ -306,10 +336,15 @@ window.PostStage = (() => {
     const pS = countStrikeP(tier);
     const names = (opts && opts.countLabels) || ["볼", "스트라이크"];
     const msg = countMsg(opts);
-    const wrap = makeBox(container, opts.label || "🧊 볼카운트 승부! 벗어나는 공은 참아요", `
+    const wrap = makeBox(container, opts.label || "🧊 볼카운트 승부! 꺾인 뒤에 판단해요", `
       <div class="ps-plate">
         <div class="ps-zone"></div>
         <div class="ps-ball">⚾</div>
+      </div>
+      <div class="ps-track">
+        <span class="ps-track-fill"></span>
+        <span class="ps-track-brk"></span>
+        <span class="ps-track-txt"></span>
       </div>
       <p class="ps-count"></p>
       <p class="ps-mark">&nbsp;</p>
@@ -321,13 +356,19 @@ window.PostStage = (() => {
     const countEl = wrap.querySelector(".ps-count");
     const markEl = wrap.querySelector(".ps-mark");
     const btn = wrap.querySelector(".tm-btn");
+    const fillEl = wrap.querySelector(".ps-track-fill");
+    const cueEl = wrap.querySelector(".ps-track-txt");
     zoneEl.style.left = `${COUNT.zx[0]}%`;
     zoneEl.style.width = `${COUNT.zx[1] - COUNT.zx[0]}%`;
     zoneEl.style.top = `${COUNT.zy[0]}%`;
     zoneEl.style.height = `${COUNT.zy[1] - COUNT.zy[0]}%`;
+    /* 👁️ 눈금은 **꺾이는 자리**예요. 판이 시작될 때 한 번만 세워요 — 능력치가
+     * 높을수록 왼쪽에 서서, 휘두를 수 있는 구간이 눈으로 보이게 넓어져요. */
+    wrap.querySelector(".ps-track-brk").style.left = `${(brk * 100).toFixed(1)}%`;
+    cueEl.textContent = msg.cueWait;
 
     let b = COUNT.b0, s = COUNT.s0, pitches = 0;
-    let cur = null, t0 = 0, raf = 0, done = false, live = false;
+    let cur = null, t0 = 0, raf = 0, done = false, live = false, broke = false;
 
     const dots = (n, max) => "●".repeat(n) + "○".repeat(Math.max(0, max - n));
     function paintCount() {
@@ -359,7 +400,10 @@ window.PostStage = (() => {
       else c.dy = COUNT.zy[1] + off;
       cur = c;
       live = true;
-      wrap.classList.remove("ps-swing");
+      broke = false;
+      /* 새 공이니 판독 게이지를 처음으로 되돌려요 — 앞 공의 '빨랐다'도 여기서 지워져요 */
+      wrap.classList.remove("ps-swing", "ps-broke", "ps-rush");
+      cueEl.textContent = msg.cueWait;
       t0 = performance.now();
       paintBall(0);
       raf = requestAnimationFrame(tick);
@@ -372,6 +416,14 @@ window.PostStage = (() => {
       ball.style.left = `${cur.sx + (cur.fx - cur.sx) * f + (cur.dx - cur.fx) * g}%`;
       ball.style.top = `${cur.sy + (cur.fy - cur.sy) * f + (cur.dy - cur.fy) * g}%`;
       ball.style.fontSize = `${(0.7 + 1.15 * t).toFixed(2)}rem`;   // 다가올수록 커져요
+      /* 👁️ 비행을 막대로 펴 둬요. 눈금을 넘는 순간이 곧 '보고 칠 수 있게 된 순간'이라,
+       * 그 한 프레임에서 막대·존·공·버튼이 한꺼번에 살아나요. */
+      fillEl.style.width = `${Math.min(100, t * 100).toFixed(1)}%`;
+      if (!broke && t >= brk) {
+        broke = true;
+        wrap.classList.add("ps-broke");
+        cueEl.textContent = msg.cueRead;
+      }
     }
 
     /* note는 화면에 남길 한 줄이에요. 바깥의 msg(문구 묶음)와 이름이 겹치면
@@ -391,26 +443,48 @@ window.PostStage = (() => {
     const guard = setTimeout(() => finish(countEnd(b, s) || (b > s ? "good" : "miss"), msg.timeup), COUNT.cap);
     let gapTimer = 0;
 
-    /* 한 공을 끝내요. swung이 true면 스윙, false면 참은 거예요. */
+    /* 한 공을 끝내요. swung이 true면 스윙, false면 참은 거예요.
+     *
+     * ⏱️ **언제 휘둘렀는지를 여기서 봐요.** 지금이 비행의 몇 할인지(t)를 재서
+     * 꺾이는 지점(brk) 앞이면 '눈감고 낸 방망이(rush)'예요. 존 안이어도
+     * 받아치지 못하고 빗맞은 파울이 돼요 — 타이밍이 판정에 들어가는 자리예요. */
     function land(swung) {
       if (done || !live) return;
       live = false;
       cancelAnimationFrame(raf);
-      if (swung && cur.strike) {
+      const t = (performance.now() - t0) / COUNT.flight;
+      const rush = swung && t < brk;
+      if (swung && cur.strike && !rush) {     // 보고 친 공만 받아쳐요
         finish(countHitGrade(b, s), b > s ? msg.hitPerfect : msg.hitGood);
         return;
       }
-      if (swung || cur.strike) s += 1; else b += 1;
+      if (rush) wrap.classList.add("ps-rush");   // 빨랐다는 걸 화면에 남겨요
+      let note;
+      if (rush && cur.strike) {
+        /* 🫧 빗맞은 파울. 2스트라이크에서는 카운트가 안 늘어요(야구 그대로예요) —
+         * 성급한 스윙의 벌을 루킹과 같은 값으로 묶어 두는 자리예요. 여기를 더
+         * 세게 걸면 반응이 느린 사람이 삼진만 당해요. */
+        if (s < COUNT.strikes - 1) s += 1;
+        note = msg.foul;
+      } else if (swung) {
+        s += 1;
+        note = rush ? msg.rush : msg.whiff;   // 꺾이기 전 헛스윙은 이유까지 말해 줘요
+      } else if (cur.strike) {
+        s += 1;
+        note = msg.looking;
+      } else {
+        b += 1;
+        note = msg.taken;
+      }
       paintCount();
-      markEl.textContent = swung ? (cur.strike ? "" : msg.whiff)
-        : cur.strike ? msg.looking : msg.taken;
+      markEl.textContent = note;
       const end = countEnd(b, s);
       if (end) {
         finish(end, end === "miss" ? msg.out : msg.free);
         return;
       }
-      if (pitches >= COUNT.balls) {           // 여기 오면 안 돼요 (문턱이 먼저 잡아요)
-        finish(b > s ? "good" : "miss", msg.timeup);
+      if (pitches >= COUNT.balls) {           // 파울로 버티다 공을 다 쓴 자리예요
+        finish(b > s ? "good" : "miss", msg.stall);
         return;
       }
       gapTimer = setTimeout(newPitch, COUNT.gap);
@@ -643,7 +717,7 @@ window.PostStage = (() => {
      * 베껴 두면 여기를 고칠 때 테스트만 옛 숫자로 남아요.
      * 준비 화면 쪽도 같은 이유로 열어 둬요 (횟수 문턱을 테스트가 베껴 적지 않게요). */
     _t: {
-      COUNT, DASH,
+      COUNT, DASH, COUNT_MSG, DASH_MSG,
       countBreak, countEdge, countStrikeP, countHitGrade, countEnd,
       dashRun, dashThrow, dashReveal, dashBack,
       READY_KEY, FULL_SHOWS, readSeen, countReady, dashReady,
