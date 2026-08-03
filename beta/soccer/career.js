@@ -169,7 +169,58 @@ window.WingerCareer = (() => {
     return RIVAL_GROUPS.map((name) => ({ name, pop: rand(52, 88) }));
   }
 
+  /* 🏆 리그 순위표 — 예전에는 내 팀 성적(teamW/D/L)만 쌓고 다른 팀 기록이 없어서
+   * 순위표를 만들 수가 없었어요. 리그의 6팀을 시즌 내내 함께 굴립니다.
+   * ⚠️ S.league은 이미 '리그 ID'라 이름이 겹쳐요. 표는 S.table에 둡니다. */
+  function initTable() {
+    const list = CLUBS[leagueOf(S).id] || CLUBS[1];
+    const rows = list.map((c) => ({ name: c.name, str: c.str, w: 0, d: 0, l: 0 }));
+    // 승격·이적으로 내 클럽이 목록에 없을 수도 있어요. 없으면 넣어줍니다.
+    if (S.group && !rows.some((r) => r.name === S.group)) {
+      rows.push({ name: S.group, str: 55, w: 0, d: 0, l: 0 });
+    }
+    S.table = { y: S.proYear, league: leagueOf(S).id, rows };
+  }
+  const tableReady = () => S.table && S.table.y === S.proYear && S.table.league === leagueOf(S).id;
+
+  /* 한 라운드 결과를 표에 반영해요. 내 경기 결과를 먼저 넣고, 남은 팀들을 짝지어
+   * 굴립니다 — 짝을 지어야 승과 패의 총합이 맞아 표가 말이 돼요. */
+  function recordRound(myOpp, res) {
+    if (!tableReady()) initTable();
+    const rows = S.table.rows;
+    const find = (n) => rows.find((r) => r.name === n);
+    const me = find(S.group), op = find(myOpp);
+    if (me && op) {
+      if (res === "W") { me.w += 1; op.l += 1; }
+      else if (res === "L") { me.l += 1; op.w += 1; }
+      else { me.d += 1; op.d += 1; }
+    }
+    const rest = shuffle(rows.filter((r) => r !== me && r !== op));
+    for (let i = 0; i + 1 < rest.length; i += 2) {
+      const a = rest[i], b = rest[i + 1];
+      if (Math.random() < 0.22) { a.d += 1; b.d += 1; continue; }   // 무승부 비율
+      const pA = clamp(0.5 + (a.str - b.str) / 60, 0.15, 0.85);
+      if (Math.random() < pA) { a.w += 1; b.l += 1; } else { b.w += 1; a.l += 1; }
+    }
+  }
+
+  const tableRows = () => (S.table ? S.table.rows : [])
+    .map((r) => ({ ...r, pts: r.w * 3 + r.d, gp: r.w + r.d + r.l }))
+    .sort((a, b) => b.pts - a.pts || (b.w - b.l) - (a.w - a.l) || a.name.localeCompare(b.name));
+
+  function tableHTML() {
+    const rows = tableRows();
+    return `<table class="rank-table"><thead><tr><th>#</th><th>팀</th><th>경기</th><th>승무패</th><th>승점</th></tr></thead>
+      <tbody>${rows.map((r, i) => `<tr class="${r.name === S.group ? "me" : ""}"><td>${i + 1}</td><td>${r.name}</td><td>${r.gp}</td><td>${r.w}-${r.d}-${r.l}</td><td>${r.pts}</td></tr>`).join("")}</tbody></table>`;
+  }
+  const myTableRank = () => {
+    const rows = tableRows();
+    const i = rows.findIndex((r) => r.name === S.group);
+    return i < 0 ? rows.length : i + 1;
+  };
+
   function initActivity() {
+    initTable();
     S.activity = {
       cb: 1, cbTotal: CB_PER_YEAR,
       week: 0, weekTotal: WEEKS_PER_CB,
@@ -205,6 +256,20 @@ window.WingerCareer = (() => {
     $("pro-money").textContent = `💰 ${fmtMoney(S.money || 0)}`;
   $("pro-cond-num").textContent = Math.round(S.condition);
     $("pro-cond-bar").style.width = `${S.condition}%`;
+
+    /* 🏆 리그 순위표 — 시즌 중에만 보여줘요. 접어둬서 훈련 화면이 길어지지 않게 합니다.
+     * "리그 경기중인데 리그 팀 순위표를 볼 수가 없네"에서 나왔어요. */
+    const tbl = $("pro-table");
+    if (S.activity && tableReady()) {
+      tbl.hidden = false;
+      const rows = tableRows();
+      const me = rows.find((r) => r.name === S.group);
+      $("pro-table-sum").textContent =
+        `🏆 ${leagueOf(S).name} ${myTableRank()}위` + (me ? ` · ${me.w}승 ${me.d}무 ${me.l}패 · 승점 ${me.pts}` : "");
+      $("pro-table-body").innerHTML = tableHTML();
+    } else {
+      tbl.hidden = true;
+    }
 
     const stats = $("pro-stats");
     stats.innerHTML = "";
@@ -363,6 +428,7 @@ window.WingerCareer = (() => {
     if (info.res === "W") act.teamW = (act.teamW || 0) + 1;
     else if (info.res === "D") act.teamD = (act.teamD || 0) + 1;
     else act.teamL = (act.teamL || 0) + 1;
+    recordRound(act.opp, info.res);          // 리그 순위표에도 반영해요
 
     act.week += 1;
     act.hypeSum += hypeDelta;
@@ -464,6 +530,22 @@ window.WingerCareer = (() => {
       const posBar = rand(4.2 * bar, 6.2 * bar);
       // 베스트11도 같은 방식으로 리그격만큼 가중해요 (바로 위 리그MVP 주석 참고).
       if (hype >= posBar) { awards.push("베스트11"); S.career.bonsangW = (S.career.bonsangW != null ? S.career.bonsangW : S.career.bonsang) + leagueOf(S).prestige; S.career.bonsang += 1; }
+    }
+    /* ⚽ 축구 전용 부문상 — 포지션마다 노릴 트로피가 하나씩 생겨요.
+     * 문턱은 12경기 시즌의 실측 생산량으로 잡았어요 (능력치 100·평점 6.5 기준):
+     *   공격수 골 18.8 · 미드필더 도움 17.2 · 수비수 수비 41.8 · 윙어 공격P 29.3
+     * 좋은 시즌이면 닿고 평범하면 안 닿는 자리예요. bar를 곱해 리그 경쟁 강도를 반영해요. */
+    const G_ = act.goals || 0, A_ = act.assists || 0, D_ = act.defense || 0;
+    if (G_ >= rand(16, 24) * bar) awards.push("골든부츠");
+    if (A_ >= rand(15, 22) * bar) awards.push("플레이메이커");
+    if (D_ >= rand(36, 52) * bar) awards.push("철벽상");
+    if (G_ + A_ >= rand(27, 38) * bar) awards.push("공격포인트왕");
+    /* 🏅 발롱도르 — 리그 최고를 넘어 세계 최고예요.
+     * 리그MVP를 받은 시즌 중에서도, 리그격(prestige)을 곱한 값이 문턱을 넘어야 해요.
+     * 하부 리그에서 아무리 잘해도 안 되고, 빅클럽에서 압도해야 닿습니다. */
+    if (awards.includes("리그MVP") && hype * leagueOf(S).prestige >= rand(9, 13)) {
+      awards.push("발롱도르");
+      S.career.ballon = (S.career.ballon || 0) + 1;
     }
     S.career.sales += sales;
     const gg = act.goals || 0, ga = act.assists || 0, gd = act.defense || 0, apps = act.apps || 0;
@@ -885,8 +967,9 @@ window.WingerCareer = (() => {
      * 1부만 뛴 커리어는 prestige가 1이라 두 경로의 값이 같아요 — 점수가 안 변합니다. */
     const dae = c.daesangW != null ? c.daesangW : (c.daesang || 0);
     const bon = c.bonsangW != null ? c.bonsangW : (c.bonsang || 0);
+    // 🏅 발롱도르는 리그MVP 위의 상이라 점수도 그만큼 큽니다
     return Math.round(
-      S.fandom * 0.5 + c.wins * 6 + dae * 50 + bon * 15 + c.rookie * 20 +
+      S.fandom * 0.5 + c.wins * 6 + dae * 50 + bon * 15 + c.rookie * 20 + (c.ballon || 0) * 80 +
       (c.years ? c.years.length : 0) * 5 + (S.trophies ? S.trophies.length : 0) * 8 + (S.center ? 30 : 0) +
       transTotal() * 25   // ✨ 초월 단계 보너스
     );

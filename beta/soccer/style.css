@@ -242,3 +242,10 @@ body {
 .season-record th:nth-child(1), .season-record td:nth-child(1) { width: 44px; }
 .season-record th:nth-child(2), .season-record td:nth-child(2) { width: 112px; }
 .season-record .yr-stat { white-space: nowrap; }
+
+/* 🏆 리그 순위표 — 접이식. 루키의 같은 요소와 모양을 맞춰요 */
+.standings-box { margin: 0 0 10px; border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; }
+.standings-box > summary { cursor: pointer; font-size: .85rem; color: var(--cream); list-style: none; }
+.standings-box > summary::-webkit-details-marker { display: none; }
+.standings-box > summary::before { content: "▸ "; color: var(--dim); }
+.standings-box[open] > summary::before { content: "▾ "; }
