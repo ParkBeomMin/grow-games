@@ -472,7 +472,9 @@ function makeSoccerPromoRelegation() {
     let P;
     try {
       P = makePage("soccer", seed);
-      soccerDebut(P, "pro", "pos");
+      /* 세미프로로 데뷔해요 — K리그3에서 시작해야 올라갈 곳이 있어요.
+       * 프로 계약(K리그1)으로 시작하면 국내 최상위라 승격 자체가 불가능합니다. */
+      soccerDebut(P, "semi", "pos");
       let hit = null;
       for (let y = 1; y <= 3; y++) {
         if (!playSeason(P, "pos")) break;
