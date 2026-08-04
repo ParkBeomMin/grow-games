@@ -562,7 +562,7 @@ reach("rookie-cont-series", (P, first) => {
 });
 
 /* ---------- ⑥ 🎮 미니게임 바로 해보기 ----------
- * 가을야구 4종(🎯 수싸움 · 🏃 홈 승부 · 💥 힘 배분 · 🔥 힘겨루기)과 투어 3종
+ * 가을야구 4종(🎯 수싸움 · 🏃 홈 승부 · 🥵 버티기 · 🔥 힘겨루기)과 투어 3종
  * (🎬 함성 웨이브 · ✨ 싱크로 · 🔥 함성 유지)은 **경기 중에 무작위로** 나와요.
  * 위 ④의 세이브 심기는 "가을야구 화면까지" 데려다줄 뿐이라, 어떤 미니게임이
  * 나올지는 거기서부터 다시 운이에요. 그래서 확인 페이지에 곧바로 돌리는 칸이
@@ -605,7 +605,7 @@ async function playground() {
   if (!mg) { dom2.window.close(); return; }
   check(items().length === 7, `미니게임이 7종 다 목록에 있다 (${items().length}종)`);
   const ids = items().map((b) => b.dataset.mech);
-  for (const want of ["mind", "dash", "surge", "clash", "wave", "sync", "roar"]) {
+  for (const want of ["mind", "dash", "grind", "clash", "wave", "sync", "roar"]) {
     check(ids.includes(want), `${want}이(가) 목록에 있다`);
   }
 
@@ -614,13 +614,13 @@ async function playground() {
   /* ③-1 어느 능력치를 보는지 — 표를 옮겨 적지 않고 소스의 stat()에 물어서 그려요.
    * 그래서 시점을 뒤집으면 이 줄이 같이 뒤집혀야 해요. */
   mg.set("pos", "batter");
-  const asBat = ["mind", "dash", "surge", "clash"].map(statLine);
+  const asBat = ["mind", "dash", "grind", "clash"].map(statLine);
   mg.set("pos", "pitcher");
-  const asPit = ["mind", "dash", "surge", "clash"].map(statLine);
+  const asPit = ["mind", "dash", "grind", "clash"].map(statLine);
   check(asBat.every((s) => s && !s.includes("…")), `버튼마다 어느 능력치인지 적혀 있다 (${asBat.join(" / ")})`);
   check(asBat[0] !== asPit[0] && asBat[1] !== asPit[1] && asBat[3] !== asPit[3],
     `시점을 바꾸면 보는 능력치가 뒤집힌다 (타자 ${asBat.join("·")} → 투수 ${asPit.join("·")})`);
-  check(asBat[2] === asPit[2], `💥 힘 배분만 시점과 무관하게 같은 능력치다 (${asBat[2]})`);
+  check(asBat[2] === asPit[2], `🥵 버티기만 시점과 무관하게 같은 능력치다 (${asBat[2]})`);
 
   /* ③-2 능력치를 올리면 판정 존이 넓어져요 — opts.zonePct가 곧 난이도예요. */
   const zoneOut = () => D.getElementById("mg-stat-out").textContent;
@@ -646,7 +646,7 @@ async function playground() {
   /* ② 7종을 하나씩 눌러서 **정말 그려지는지** 봐요.
    * 준비 화면(▶️ 시작)이 먼저 뜨고, 누르면 본 미니게임 상자가 서야 해요. */
   mg.set("stat", 55);
-  for (const id of ["mind", "dash", "surge", "clash", "wave", "sync", "roar"]) {
+  for (const id of ["mind", "dash", "grind", "clash", "wave", "sync", "roar"]) {
     const btn = D.querySelector(`.mg-item[data-mech="${id}"]`);
     btn.click();
     await wait(80);
