@@ -464,36 +464,51 @@ function makeSoccerReport() {
 /* ⚽ 팀 승강제 — 리그 순위표 1위/꼴찌로 내 팀이 통째로 리그를 오르내려요.
  * 개인 이적 사다리와는 다른 축이라, 화면에서 둘이 어떻게 겹치는지 봐야 해요.
  * 승격이 실제로 일어난 시즌의 결산 화면을 심습니다. */
-function makeSoccerPromoRelegation() {
-  log("⚽ ⑥ 팀 승강제 — 리그 우승 승격 / 최하위 강등");
-  /* 38경기 시즌을 jsdom에서 여러 번 굴리면 무거워요(시드 40 × 8시즌에서 메모리가 터졌어요).
-   * 승격은 자주 일어나서(승률 60%면 시즌의 91%) 적게 굴려도 잡힙니다. */
-  for (const seed of seeds(6)) {
+/* ⚽ 팀 승강제 — 리그 순위표 1위/꼴찌로 내 팀이 통째로 리그를 오르내려요.
+ * 개인 이적 사다리와는 다른 축이라, 화면에서 둘이 어떻게 겹치는지 봐야 해요.
+ *
+ * kind: "up" 승격 · "down" 강등
+ *  · 승격은 K리그3(세미프로 데뷔)에서 봐야 해요 — 프로 계약은 K리그1이라 국내
+ *    최상위여서 올라갈 곳이 없습니다.
+ *  · 강등은 반대로 K리그1(프로 계약)에서 시작해야 내려갈 곳이 있어요.
+ *
+ * 승강 조건이 '2위와 승점 8 차 + 그 리그 3시즌째'라 평범하게 굴리면 오래 걸려요.
+ * 능력치를 실어(또는 눌러) 리그를 압도하거나 바닥을 치게 만듭니다 — 확인하려는 건
+ * 승강 화면이지 "능력치를 어떻게 만들었나"가 아니에요.
+ * 훈련으로 능력치가 움직이니 매 시즌 다시 눌러줍니다. */
+function makeSoccerPromoRelegation(kind) {
+  const up = kind === "up";
+  log(up ? "⚽ ⑥ 팀 승격 — 리그 우승" : "⚽ ⑦ 팀 강등 — 최하위");
+  for (const seed of seeds(8)) {
     let P;
     try {
       P = makePage("soccer", seed);
-      /* 세미프로로 데뷔해요 — K리그3에서 시작해야 올라갈 곳이 있어요.
-       * 프로 계약(K리그1)으로 시작하면 국내 최상위라 승격 자체가 불가능합니다. */
-      soccerDebut(P, "semi", "pos");
+      soccerDebut(P, up ? "semi" : "pro", "pos");
+      const setPower = () => {
+        const st = P.state();                 // 실제 상태 객체라 직접 고치면 돼요
+        for (const k of Object.keys(st.stats)) st.stats[k] = up ? 110 : 8;
+        st.condition = up ? 90 : 30;
+      };
+      setPower();
       let hit = null;
-      for (let y = 1; y <= 3; y++) {
+      for (let y = 1; y <= 5; y++) {
         if (!playSeason(P, "pos")) break;
-        const yrs = P.state().career.years || [];
-        const last = yrs[yrs.length - 1];
-        if (last && last.promo) { hit = last; break; }
-        const b = P.$("btn-next-season") || nextSeasonBtn(P);
+        const last = (P.state().career.years || []).slice(-1)[0];
+        if (last && last.promo === (up ? "up" : "down")) { hit = last; break; }
+        const b = nextSeasonBtn(P);
         if (!b) break;
         b.click();
+        setPower();
       }
       const st = P.state();
       if (hit && P.active() === "screen-career") {
         add({
-          id: "soccer-promo",
-          game: "soccer", url: "soccer/", emoji: hit.promo === "up" ? "🔺" : "🔻",
-          title: hit.promo === "up" ? "팀 승격 — 리그 우승" : "팀 강등 — 최하위",
-          state: `${st.group} · ${hit.y}시즌 ${hit.promo === "up" ? "우승 → 승격" : "최하위 → 강등"} · 다음 리그 ${hit.promoTo}`,
-          check: "결산에 🔺/🔻 안내가 뜨는지, 다음 시즌 준비 화면의 리그와 순위표가 바뀐 리그로 바뀌는지 봐주세요",
-          steps: ["게임이 열리면 <b>이어하기</b> → 선수 카드", "결산 화면에 승강 안내가 있어요", "<b>다음 시즌 시작</b>을 누르면 새 리그예요"],
+          id: up ? "soccer-promo" : "soccer-releg",
+          game: "soccer", url: "soccer/", emoji: up ? "🔺" : "🔻",
+          title: up ? "팀 승격 — 리그 우승" : "팀 강등 — 최하위",
+          state: `${st.group} · ${hit.y}시즌 ${up ? "우승 → 승격" : "최하위 → 강등"} · 다음 리그 ${hit.promoTo}`,
+          check: `결산에 ${up ? "🔺" : "🔻"} 안내가 뜨는지, 다음 시즌 준비 화면의 리그와 순위표가 바뀐 리그로 바뀌는지 봐주세요`,
+          steps: ["게임이 열리면 <b>이어하기</b> → 선수 카드", `결산 화면에 ${up ? "승격" : "강등"} 안내가 있어요`, "<b>다음 시즌 시작</b>을 누르면 새 리그예요"],
           keys: snapshot(P),
         });
         P.close();
@@ -505,7 +520,7 @@ function makeSoccerPromoRelegation() {
       log(`  · 시드 ${seed}: ${e.message}`);
     }
   }
-  log("  ❌ 조건에 맞는 상태를 못 만들었어요 (팀 승강제)");
+  log(`  ❌ 조건에 맞는 상태를 못 만들었어요 (팀 ${up ? "승격" : "강등"})`);
 }
 
 /* ⚽ ④·⑤ 유스 엔딩 두 종 — 세이브만으로는 재현이 안 돼요.
@@ -1198,7 +1213,8 @@ if (want("soccer-promote", "soccer")) makeSoccerPromote();
 if (want("soccer-youth-ext", "soccer")) makeSoccerEnding("youth");
 if (want("soccer-semipro", "soccer")) makeSoccerEnding("semi");
 if (want("soccer-report", "soccer")) makeSoccerReport();
-if (want("soccer-promo", "soccer")) makeSoccerPromoRelegation();
+if (want("soccer-promo", "soccer")) makeSoccerPromoRelegation("up");
+if (want("soccer-releg", "soccer")) makeSoccerPromoRelegation("down");
 if (want("idol-concept", "idol")) {
   makeIdolConcept("idol-concept", "컴백 컨셉 선택 화면", "🎬",
     "컨셉 카드 4장이 좁은 화면에서 안 겹치고, 소문 2장에 🗣 배지가 붙는지", false, 2);
