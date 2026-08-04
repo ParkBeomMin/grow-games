@@ -546,7 +546,10 @@ window.WingerCareer = (() => {
     const myRankScore = rating * 10 + momAdj + doneBonus + resultBonus + rand(-4, 4);
     const rows = [
       { name: S.name, score: myRankScore, me: true },
-      ...act.rivals.map((r) => ({ name: r.name, score: r.pop + rand(-8, 8) })),
+      /* club·role도 함께 옮겨요. 예전에는 name과 score만 옮겨서, fillRivals가
+       * 소속을 제대로 채워 놔도 이 자리에서 버려졌어요 — 표에는 내 줄만 클럽이
+       * 나오고 상위 5명은 전부 "-"로 보였습니다. */
+      ...act.rivals.map((r) => ({ name: r.name, club: r.club, role: r.role, score: r.pop + rand(-8, 8) })),
     ].sort((a, b) => b.score - a.score);
     const rank = rows.findIndex((r) => r.me) + 1;
     const won = rank === 1;

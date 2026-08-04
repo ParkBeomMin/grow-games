@@ -461,6 +461,67 @@ function makeSoccerReport() {
   log("  ❌ 조건에 맞는 상태를 못 만들었어요 (연말 결산)");
 }
 
+/* ⚽ 경기 결과의 평점 순위표 — 라이벌 '소속' 칸.
+ *
+ * 순위 행을 만드는 map이 name·score만 옮겨서, 라이벌 소속이 전부 "-"로 보였어요.
+ * 함께 버려졌던 역할 딱지(에이스 스트라이커 …)도 이제 같이 나와요 —
+ * CSS가 display:block이라 소속 아래로 한 줄이 더 붙습니다. 그 모양을 봐야 해요.
+ *
+ * 결과 화면 자체는 세이브에 안 남아요(경기 도중 상태예요). 그래서 **다음 경기가
+ * 대기 중인 상태**를 심어요. 열고 '경기하러 가기'를 한 번 누르면 그 화면이 나옵니다.
+ * 시즌 중반까지 굴려서 라이벌 평점이 골고루 흩어지게 합니다. */
+function makeSoccerChart() {
+  log("⚽ ⑧ 경기 결과 평점 순위표 — 라이벌 소속");
+  const MATCHES = 6;
+  for (const seed of seeds(12)) {
+    let P;
+    try {
+      P = makePage("soccer", seed);
+      soccerDebut(P, "pro", "pos");
+      let played = 0;
+      for (let g = 0; g < 4000; g++) {
+        const id = P.active();
+        if (id === "screen-stage") { P.$("btn-stage-next").click(); continue; }
+        if (id !== "screen-pro") break;
+        const go = P.w.document.querySelector("#pro-actions .go-game");
+        if (go) {
+          if (played >= MATCHES) break;   // 여기서 멈춰요 — 다음 경기가 대기 중
+          go.click(); played++; continue;
+        }
+        if (!doAct(P, "#pro-actions .action-btn", "pos")) break;
+      }
+      const st = P.state();
+      const rivals = (st.activity && st.activity.rivals) || [];
+      const ready = P.active() === "screen-pro" && !!P.w.document.querySelector("#pro-actions .go-game");
+      // 라이벌에 소속이 실제로 박혀 있어야 확인이 의미가 있어요
+      const clubsOK = rivals.length >= 5 && rivals.every((r) => r.club && r.name);
+      if (played >= MATCHES && ready && clubsOK) {
+        add({
+          id: "soccer-chart",
+          game: "soccer", url: "soccer/", emoji: "⭐",
+          title: "경기 결과 평점 순위표 — 라이벌 소속",
+          state: `${st.group} · ${st.proYear}시즌 · ${played}경기 소화 · 라이벌 ${rivals.length}명`,
+          check: "순위표 소속 칸에 라이벌 클럽이 나오는지 봐주세요 (예전엔 전부 \"-\"였어요). "
+            + "소속 아래 작은 글씨로 역할 딱지가 한 줄 더 붙는데, 표가 너무 길어 보이면 말씀해 주세요",
+          steps: [
+            "게임이 열리면 <b>이어하기</b> → 선수 카드",
+            "<b>⚽ 경기하러 가기</b>를 눌러요",
+            "경기가 끝나면 아래에 평점 순위표가 나와요",
+          ],
+          keys: snapshot(P),
+        });
+        P.close();
+        return;
+      }
+      P.close();
+    } catch (e) {
+      if (P) P.close();
+      log(`  · 시드 ${seed}: ${e.message}`);
+    }
+  }
+  log("  ❌ 조건에 맞는 상태를 못 만들었어요 (평점 순위표)");
+}
+
 /* ⚽ 팀 승강제 — 리그 순위표 1위/꼴찌로 내 팀이 통째로 리그를 오르내려요.
  * 개인 이적 사다리와는 다른 축이라, 화면에서 둘이 어떻게 겹치는지 봐야 해요.
  * 승격이 실제로 일어난 시즌의 결산 화면을 심습니다. */
@@ -1213,6 +1274,7 @@ if (want("soccer-promote", "soccer")) makeSoccerPromote();
 if (want("soccer-youth-ext", "soccer")) makeSoccerEnding("youth");
 if (want("soccer-semipro", "soccer")) makeSoccerEnding("semi");
 if (want("soccer-report", "soccer")) makeSoccerReport();
+if (want("soccer-chart", "soccer")) makeSoccerChart();
 if (want("soccer-promo", "soccer")) makeSoccerPromoRelegation("up");
 if (want("soccer-releg", "soccer")) makeSoccerPromoRelegation("down");
 if (want("idol-concept", "idol")) {
