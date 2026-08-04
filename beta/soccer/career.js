@@ -582,15 +582,56 @@ window.WingerCareer = (() => {
     S.money = (S.money || 0) + pay;
     /* ⚡ 실전 성장 — 낮은 확률로 경기에서 뭔가를 깨쳐요.
      * 훈련만으로 크는 게 아니라 경기가 선수를 키운다는 감각을 주려는 거예요.
-     * 잘한 경기일수록 확률이 올라가요. 상한에 닿은 능력치는 대상에서 빼요. */
-    const growP = clamp(0.06 + (rank <= 3 ? 0.06 : 0) + (info.momentRes === "perfect" ? 0.05 : 0), 0, 0.2);
+     * 잘한 경기일수록 확률이 올라가요. 상한에 닿은 능력치는 대상에서 빼요.
+     *
+     * ⚠️ 예전에는 후보에서 **아무거나** 뽑았어요. 1골 0도움 0수비인 경기에서
+     * 수비가 오르니 "경기가 선수를 키운다"가 아니라 그냥 랜덤 보너스로 보였습니다.
+     * 이제 그 경기에 실제로 한 일이 무게가 돼요 — 골을 넣었으면 슛, 도움이면 패스,
+     * 몸으로 막았으면 수비 쪽으로 기울어요.
+     *
+     * 바닥 무게(GROW_BASE)를 남겨 두는 이유: 90분을 뛴 이상 아무 일도 없던 칸이
+     * 절대 안 오르는 건 과해요. 다만 한 일이 있으면 그쪽이 훨씬 무거워집니다.
+     * 체력은 이벤트가 없어서 바닥 무게만 조금 높게 둡니다 — 뛴 것 자체가 근거예요. */
+    const GROW_BASE = 0.5;
+    const growWeight = {
+      shoot: GROW_BASE + info.myGoals * 3,
+      pass: GROW_BASE + info.assists * 3,
+      // 돌파는 골·도움 장면을 만드는 과정이라 둘 다에서 조금씩 와요
+      dribble: GROW_BASE + (info.myGoals + info.assists) * 1.2,
+      defense: GROW_BASE + info.defense * 2,
+      stamina: 1,
+    };
+    /* 계기를 문구로도 남겨요. 왜 그게 올랐는지 화면에서 읽혀야 해요 —
+     * 지금까지는 "실전에서 수비를 깨쳤어요"만 떠서 근거를 알 수가 없었어요. */
+    const GROW_WHY = {
+      shoot: info.myGoals > 0 ? "골을 넣은 감각이 남아" : "",
+      pass: info.assists > 0 ? "도움 장면의 시야가 붙어" : "",
+      dribble: info.myGoals + info.assists > 0 ? "돌파가 통한 게 남아" : "",
+      defense: info.defense > 0 ? "몸으로 막아낸 게 남아" : "",
+      stamina: "",
+    };
+    /* 활약이 클수록 확률도 올라가요. 승패도 봅니다 — 이긴 경기에서 더 배워요.
+     * posAxis를 쓰면 포지션 보정이 자동으로 붙어 수비수가 손해 보지 않아요. */
+    const didAxis = posAxis({ goals: info.myGoals, assists: info.assists, defense: info.defense }, S.pos);
+    const growP = clamp(
+      0.06
+      + (rank <= 3 ? 0.06 : 0)
+      + (info.momentRes === "perfect" ? 0.05 : 0)
+      + (info.res === "W" ? 0.03 : info.res === "L" ? -0.02 : 0)
+      + Math.min(0.05, didAxis * 0.03),
+      0.02, 0.25
+    );
     if (Math.random() < growP) {
       const pool = STAT_DEFS.filter((d) => !atCap(d.key));
-      if (pool.length) {
-        const d = pick(pool);
+      const total = pool.reduce((sum, d) => sum + growWeight[d.key], 0);
+      if (pool.length && total > 0) {
+        let roll = Math.random() * total;
+        let d = pool[pool.length - 1];
+        for (const cand of pool) { roll -= growWeight[cand.key]; if (roll < 0) { d = cand; break; } }
         const gain = Math.round(rand(0.4, 1.4) * S.talents[d.key] * 10) / 10;
         S.stats[d.key] = clamp(S.stats[d.key] + gain, 0, statCap(d.key));
-        proLog(`⚡ 실전에서 ${d.name}을(를) 깨쳤어요! +${gain.toFixed(1)} (${Math.round(S.stats[d.key])})`);
+        const why = GROW_WHY[d.key];
+        proLog(`⚡ ${why ? why + " " : "실전에서 "}${d.name}을(를) 깨쳤어요! +${gain.toFixed(1)} (${Math.round(S.stats[d.key])})`);
         if (window.Fx) Fx.flash(`⚡ ${d.name} +${gain.toFixed(1)}`);
       }
     }
