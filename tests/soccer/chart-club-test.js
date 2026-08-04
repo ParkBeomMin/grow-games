@@ -21,6 +21,8 @@ const grab = (src, re) => { const m = src.match(re); return m ? m[0] : null; };
 const parts = {
   rows: grab(SRC, /const rows = \[\s*\{ name: S\.name[\s\S]*?\]\.sort\([^;]*\);/),
   line: grab(SRC, /const line = \(r, i\) =>[\s\S]*?<\/tr>`;/),
+  adj: grab(SRC, /const rivalResAdj = [^;]+;/),
+  resKo: grab(SRC, /const RES_KO = \{[^}]*\};/),
 };
 const missing = Object.entries(parts).filter(([, v]) => !v).map(([k]) => k);
 if (missing.length) { console.log(`❌ 소스에서 못 찾았어요: ${missing.join(", ")}`); process.exit(1); }
@@ -41,15 +43,21 @@ const RIVALS = [
   { name: "이준석",      role: "국대 주전",        pop: 74, club: "베르단 SC" },
 ];
 
+/* rows 식은 그 라운드 결과(roundRes)와 rivalResAdj·info를 함께 본다.
+ * 여기서는 소속이 표에 실리는지만 보므로, 결과는 전부 무승부로 둬서 점수를 안 흔든다. */
 const run = new Function(
-  "S", "act", "myRankScore", "clamp", "rand",
-  `${parts.rows}
+  "S", "act", "myRankScore", "clamp", "rand", "info", "roundRes",
+  `${parts.adj}
+   ${parts.resKo}
+   ${parts.rows}
    ${parts.line}
    return rows.slice(0, 5).map(line).join("");`
 );
 
 const S = { name: "리오", group: "레알 몬테" };
-const html = run(S, { rivals: RIVALS.map((r) => ({ ...r })) }, 34, clamp, rand);
+const DRAWS = {};
+RIVALS.forEach((r) => { DRAWS[r.club] = "D"; });
+const html = run(S, { rivals: RIVALS.map((r) => ({ ...r })) }, 34, clamp, rand, { res: "L" }, DRAWS);
 
 let bad = 0;
 const check = (ok, msg) => { console.log(`${ok ? "✅" : "❌"} ${msg}`); if (!ok) bad++; };
@@ -70,22 +78,27 @@ check(dashes === 0, `소속이 "-"인 줄이 없다 (지금 ${dashes}줄)`);
 check(html.includes("에이스 스트라이커"), "역할 딱지도 살아 있다");
 
 // ④ 내 줄은 S.group으로 떨어진다 (라이벌과 달리 club을 안 들고 다닌다)
-const mine = run(S, { rivals: [] }, 34, clamp, rand);
+const mine = run(S, { rivals: [] }, 34, clamp, rand, { res: "W" }, {});
 check(mine.includes("레알 몬테"), "내 줄은 S.group으로 채워진다");
 
 /* 변이 검증 — club을 안 옮기는 옛 map으로 바꾸면 반드시 빨간불이 떠야 한다.
  * 이게 안 잡히면 위의 초록불은 아무것도 안 지키고 있는 것이다. */
+/* ⚠️ map이 여러 줄이라 한 줄짜리 정규식으로는 안 잡힌다 — 조용히 치환에 실패하면
+ * 변이 검증이 "무너지지 않았다"고 말하는 셈이라, 치환이 실제로 됐는지도 확인한다. */
 const brokenRows = parts.rows.replace(
-  /\.\.\.act\.rivals\.map\([^\n]*\),/,
-  "...act.rivals.map((r) => ({ name: r.name, score: r.pop + rand(-8, 8) })),"
+  /\.\.\.act\.rivals\.map\(\(r\) => \(\{[\s\S]*?\}\)\),/,
+  "...act.rivals.map((r) => ({ name: r.name, score: r.pop })),"
 );
+if (brokenRows === parts.rows) { console.log("❌ 변이 치환이 안 됐어요 — 정규식이 소스와 안 맞아요"); process.exit(1); }
 const brokenRun = new Function(
-  "S", "act", "myRankScore", "clamp", "rand",
-  `${brokenRows}
+  "S", "act", "myRankScore", "clamp", "rand", "info", "roundRes",
+  `${parts.adj}
+   ${parts.resKo}
+   ${brokenRows}
    ${parts.line}
    return rows.slice(0, 5).map(line).join("");`
 );
-const brokenHTML = brokenRun(S, { rivals: RIVALS.map((r) => ({ ...r })) }, 34, clamp, rand);
+const brokenHTML = brokenRun(S, { rivals: RIVALS.map((r) => ({ ...r })) }, 34, clamp, rand, { res: "L" }, DRAWS);
 const brokenDashes = (brokenHTML.match(/class="ch-club">-/g) || []).length;
 check(brokenDashes === 5, `변이 검증 — 옛 map을 넣으면 5줄 모두 "-"로 무너진다 (${brokenDashes}줄)`);
 

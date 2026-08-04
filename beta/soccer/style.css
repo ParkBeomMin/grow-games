@@ -256,3 +256,8 @@ body {
 .yr-avg { white-space: nowrap; width: 38px; color: var(--cream); }
 .ch-club { color: var(--dim); font-size: .92em; }
 .ch-role { display: block; font-size: .78em; opacity: .6; }
+/* 그 라운드 클럽 성적 — 소속 옆에 한 글자. 줄을 새로 만들지 않아요(inline) */
+.ch-res { margin-left: .28em; font-size: .78em; }
+.ch-res.r-w { color: var(--accent); }
+.ch-res.r-l { color: var(--accent2); }
+.ch-res.r-d { color: var(--dim); }
