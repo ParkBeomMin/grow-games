@@ -202,25 +202,56 @@ window.WingerCareer = (() => {
   const tableReady = () => S.table && S.table.y === S.proYear && S.table.league === leagueOf(S).id;
 
   /* 한 라운드 결과를 표에 반영해요. 내 경기 결과를 먼저 넣고, 남은 팀들을 짝지어
-   * 굴립니다 — 짝을 지어야 승과 패의 총합이 맞아 표가 말이 돼요. */
+   * 굴립니다 — 짝을 지어야 승과 패의 총합이 맞아 표가 말이 돼요.
+   *
+   * 그 라운드에 각 팀이 뭘 했는지를 { 팀이름: "W"|"D"|"L" }로 돌려줘요.
+   * 평점 순위표가 이걸 봐서 라이벌 점수에 반영합니다 — 예전에는 순위표와
+   * 평점표가 서로를 안 봐서, 라이벌 클럽이 지든 이기든 그 선수 평점이 똑같았어요.
+   * 팀이 홀수라 짝이 안 맞으면 한 팀은 그 라운드를 쉬어요(키가 안 담겨요). */
   function recordRound(myOpp, res) {
     if (!tableReady()) initTable();
     const rows = S.table.rows;
     const find = (n) => rows.find((r) => r.name === n);
     const me = find(S.group), op = find(myOpp);
+    const out = {};
     if (me && op) {
-      if (res === "W") { me.w += 1; op.l += 1; }
-      else if (res === "L") { me.l += 1; op.w += 1; }
-      else { me.d += 1; op.d += 1; }
+      if (res === "W") { me.w += 1; op.l += 1; out[S.group] = "W"; out[myOpp] = "L"; }
+      else if (res === "L") { me.l += 1; op.w += 1; out[S.group] = "L"; out[myOpp] = "W"; }
+      else { me.d += 1; op.d += 1; out[S.group] = "D"; out[myOpp] = "D"; }
     }
     const rest = shuffle(rows.filter((r) => r !== me && r !== op));
     for (let i = 0; i + 1 < rest.length; i += 2) {
       const a = rest[i], b = rest[i + 1];
-      if (Math.random() < 0.22) { a.d += 1; b.d += 1; continue; }   // 무승부 비율
+      if (Math.random() < 0.22) {                                   // 무승부 비율
+        a.d += 1; b.d += 1; out[a.name] = "D"; out[b.name] = "D"; continue;
+      }
       const pA = clamp(0.5 + (a.str - b.str) / 60, 0.15, 0.85);
-      if (Math.random() < pA) { a.w += 1; b.l += 1; } else { b.w += 1; a.l += 1; }
+      if (Math.random() < pA) { a.w += 1; b.l += 1; out[a.name] = "W"; out[b.name] = "L"; }
+      else { b.w += 1; a.l += 1; out[b.name] = "W"; out[a.name] = "L"; }
     }
+    return out;
   }
+
+  /* 라이벌 점수에 얹는 그 라운드 클럽 성적.
+   *
+   * 내 결과 보정(±3)보다 폭이 큰 이유가 있어요. 내 점수에는 골·도움·수비를 재는
+   * doneBonus가 이미 들어 있는데, 라이벌에 대해 아는 건 **소속 클럽의 결과뿐**이에요.
+   * 그 하나가 그들의 '그날 활약' 전부를 대신하니 무게가 더 실려야 맞아요.
+   * 명성(pop 52~88)의 인접 간격이 5 안팎이라, 이 폭이면 순위가 실제로 뒤집혀요.
+   *
+   * ⚠️ 이걸 **더하기만 하면 안 돼요.** 라이벌 8명 중 최고점의 분포가 넓어져서
+   * MOM이 조용히 어려워집니다 — 실측하니 능력치 90에서 77.6% → 63.3%로 떨어졌어요.
+   * 그래서 순수 흔들림을 ±8 → ±6으로 **줄여서 그 자리를 결과가 대신하게** 했어요.
+   * 흔드는 양은 비슷한데, 흔드는 이유가 랜덤에서 경기 결과로 바뀐 거예요.
+   *
+   *   기준 (±8, 보정 없음)  MOM 13.4% / 40.9% / 77.6%   (능력치 80 / 85 / 90)
+   *   지금 (±6, 보정 1.5~6) MOM 11.1% / 37.0% / 74.5%
+   *   명성 5 차이는 결과로 67.6% 뒤집혀요 (예전엔 결과를 아예 안 봤어요)
+   *
+   * MOM은 수상 판정에 안 쓰여요(수상은 hype 기준). 팬 증가(wins × 3)와
+   * 명예의 전당 점수(wins × 6)에만 들어가서, 이 정도 차이는 영향이 작아요. */
+  const rivalResAdj = (r) => (r === "W" ? rand(1.5, 6) : r === "L" ? -rand(1.5, 6) : r === "D" ? rand(-1.5, 1.5) : 0);
+  const RES_KO = { W: "승", D: "무", L: "패" };
 
   const tableRows = () => (S.table ? S.table.rows : [])
     .map((r) => ({ ...r, pts: r.w * 3 + r.d, gp: r.w + r.d + r.l }))
@@ -501,8 +532,13 @@ window.WingerCareer = (() => {
     const N = top || 5;
     const shown = rows.slice(0, N);
     const myIdx = rows.findIndex((r) => r.me);
+    /* 소속 옆의 승·무·패는 **그 라운드 그 클럽의 결과**예요. 라이벌 점수가 이걸 보고
+     * 오르내리니 근거가 화면에 있어야 해요 — 없으면 순위가 왜 뒤집혔는지 알 수가 없어요.
+     * 한 글자 inline이라 줄을 새로 만들지 않아요. */
     const line = (r, i) => `<tr class="${r.me ? "me" : ""}"><td>${i + 1}</td><td>${r.name}</td>`
-      + `<td class="ch-club">${r.club || (r.me ? S.group : "-")}${r.role ? `<span class="ch-role">${r.role}</span>` : ""}</td>`
+      + `<td class="ch-club">${r.club || (r.me ? S.group : "-")}`
+      + `${r.res ? `<span class="ch-res r-${r.res.toLowerCase()}">${RES_KO[r.res] || ""}</span>` : ""}`
+      + `${r.role ? `<span class="ch-role">${r.role}</span>` : ""}</td>`
       + `<td>${clamp(r.score / 10, 1, 10).toFixed(1)}</td></tr>`;
     const pinned = myIdx >= N
       ? `<tr class="hof-gap-row"><td colspan="4">⋯</td></tr>` + line(rows[myIdx], myIdx)
@@ -544,9 +580,20 @@ window.WingerCareer = (() => {
     const doneBonus = (axisNow - 2.05 * perfNow) * 8;
     const resultBonus = info.res === "W" ? 3 : info.res === "L" ? -3 : 0;
     const myRankScore = rating * 10 + momAdj + doneBonus + resultBonus + rand(-4, 4);
+    /* ⚠️ 순위표를 **먼저** 굴려요. 그래야 그 라운드에 각 클럽이 뭘 했는지가 나오고,
+     * 라이벌 점수가 그걸 볼 수 있어요. 예전에는 순위 행을 다 만든 뒤에 굴려서
+     * 둘이 같은 라운드를 보면서도 서로 모르는 사이였습니다. */
+    const roundRes = recordRound(act.opp, info.res);
     const rows = [
-      { name: S.name, score: myRankScore, me: true },
-      ...act.rivals.map((r) => ({ name: r.name, score: r.pop + rand(-8, 8) })),
+      { name: S.name, score: myRankScore, me: true, res: info.res },
+      /* club·role도 함께 옮겨요. 예전에는 name과 score만 옮겨서, fillRivals가
+       * 소속을 제대로 채워 놔도 이 자리에서 버려졌어요 — 표에는 내 줄만 클럽이
+       * 나오고 상위 5명은 전부 "-"로 보였습니다.
+       * res는 그 라운드 소속 클럽의 결과예요. 내가 이긴 상대 팀의 라이벌은 같이 떨어져요. */
+      ...act.rivals.map((r) => ({
+        name: r.name, club: r.club, role: r.role, res: roundRes[r.club] || null,
+        score: r.pop + rand(-6, 6) + rivalResAdj(roundRes[r.club]),
+      })),
     ].sort((a, b) => b.score - a.score);
     const rank = rows.findIndex((r) => r.me) + 1;
     const won = rank === 1;
@@ -561,7 +608,6 @@ window.WingerCareer = (() => {
     if (info.res === "W") act.teamW = (act.teamW || 0) + 1;
     else if (info.res === "D") act.teamD = (act.teamD || 0) + 1;
     else act.teamL = (act.teamL || 0) + 1;
-    recordRound(act.opp, info.res);          // 리그 순위표에도 반영해요
 
     act.week += 1;
     act.hypeSum += hypeDelta;
@@ -579,15 +625,56 @@ window.WingerCareer = (() => {
     S.money = (S.money || 0) + pay;
     /* ⚡ 실전 성장 — 낮은 확률로 경기에서 뭔가를 깨쳐요.
      * 훈련만으로 크는 게 아니라 경기가 선수를 키운다는 감각을 주려는 거예요.
-     * 잘한 경기일수록 확률이 올라가요. 상한에 닿은 능력치는 대상에서 빼요. */
-    const growP = clamp(0.06 + (rank <= 3 ? 0.06 : 0) + (info.momentRes === "perfect" ? 0.05 : 0), 0, 0.2);
+     * 잘한 경기일수록 확률이 올라가요. 상한에 닿은 능력치는 대상에서 빼요.
+     *
+     * ⚠️ 예전에는 후보에서 **아무거나** 뽑았어요. 1골 0도움 0수비인 경기에서
+     * 수비가 오르니 "경기가 선수를 키운다"가 아니라 그냥 랜덤 보너스로 보였습니다.
+     * 이제 그 경기에 실제로 한 일이 무게가 돼요 — 골을 넣었으면 슛, 도움이면 패스,
+     * 몸으로 막았으면 수비 쪽으로 기울어요.
+     *
+     * 바닥 무게(GROW_BASE)를 남겨 두는 이유: 90분을 뛴 이상 아무 일도 없던 칸이
+     * 절대 안 오르는 건 과해요. 다만 한 일이 있으면 그쪽이 훨씬 무거워집니다.
+     * 체력은 이벤트가 없어서 바닥 무게만 조금 높게 둡니다 — 뛴 것 자체가 근거예요. */
+    const GROW_BASE = 0.5;
+    const growWeight = {
+      shoot: GROW_BASE + info.myGoals * 3,
+      pass: GROW_BASE + info.assists * 3,
+      // 돌파는 골·도움 장면을 만드는 과정이라 둘 다에서 조금씩 와요
+      dribble: GROW_BASE + (info.myGoals + info.assists) * 1.2,
+      defense: GROW_BASE + info.defense * 2,
+      stamina: 1,
+    };
+    /* 계기를 문구로도 남겨요. 왜 그게 올랐는지 화면에서 읽혀야 해요 —
+     * 지금까지는 "실전에서 수비를 깨쳤어요"만 떠서 근거를 알 수가 없었어요. */
+    const GROW_WHY = {
+      shoot: info.myGoals > 0 ? "골을 넣은 감각이 남아" : "",
+      pass: info.assists > 0 ? "도움 장면의 시야가 붙어" : "",
+      dribble: info.myGoals + info.assists > 0 ? "돌파가 통한 게 남아" : "",
+      defense: info.defense > 0 ? "몸으로 막아낸 게 남아" : "",
+      stamina: "",
+    };
+    /* 활약이 클수록 확률도 올라가요. 승패도 봅니다 — 이긴 경기에서 더 배워요.
+     * posAxis를 쓰면 포지션 보정이 자동으로 붙어 수비수가 손해 보지 않아요. */
+    const didAxis = posAxis({ goals: info.myGoals, assists: info.assists, defense: info.defense }, S.pos);
+    const growP = clamp(
+      0.06
+      + (rank <= 3 ? 0.06 : 0)
+      + (info.momentRes === "perfect" ? 0.05 : 0)
+      + (info.res === "W" ? 0.03 : info.res === "L" ? -0.02 : 0)
+      + Math.min(0.05, didAxis * 0.03),
+      0.02, 0.25
+    );
     if (Math.random() < growP) {
       const pool = STAT_DEFS.filter((d) => !atCap(d.key));
-      if (pool.length) {
-        const d = pick(pool);
+      const total = pool.reduce((sum, d) => sum + growWeight[d.key], 0);
+      if (pool.length && total > 0) {
+        let roll = Math.random() * total;
+        let d = pool[pool.length - 1];
+        for (const cand of pool) { roll -= growWeight[cand.key]; if (roll < 0) { d = cand; break; } }
         const gain = Math.round(rand(0.4, 1.4) * S.talents[d.key] * 10) / 10;
         S.stats[d.key] = clamp(S.stats[d.key] + gain, 0, statCap(d.key));
-        proLog(`⚡ 실전에서 ${d.name}을(를) 깨쳤어요! +${gain.toFixed(1)} (${Math.round(S.stats[d.key])})`);
+        const why = GROW_WHY[d.key];
+        proLog(`⚡ ${why ? why + " " : "실전에서 "}${d.name}을(를) 깨쳤어요! +${gain.toFixed(1)} (${Math.round(S.stats[d.key])})`);
         if (window.Fx) Fx.flash(`⚡ ${d.name} +${gain.toFixed(1)}`);
       }
     }
