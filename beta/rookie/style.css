@@ -47,7 +47,7 @@
  * 색은 전부 테마 변수예요 — 절대색을 쓰지 않아요.
  *
  *   .pm-*  🎯 수싸움    .ps-*  🏃 홈 승부
- *   .gr-*  🥵 버티기   .pc-*  🔥 힘겨루기
+ *   .cs-*  🎯 코스 공략   .pc-*  🔥 힘겨루기
  * (판정 한 줄 .ps-mark는 넷이 같이 써요 — 자리를 잡아 두는 한 줄이라 같은 물건이에요)
  * ───────────────────────────────────────────────────────────── */
 
@@ -148,55 +148,46 @@
 .ps-pick .tm-btn { flex: 1; margin-top: 10px; padding: 12px 4px; font-size: 1rem; }
 .ps-picked { box-shadow: 0 0 12px var(--accent); }
 
-/* 🥵 버티기 — 체력이 바닥나기 전에 얼마나 밀어붙일까 (../post-stage.js의 grind)
+/* 🎯 코스 공략 — 좌우로 오가는 조준을 밝은 칸(갭·코너)에 꽂아요 (../post-stage.js의 course)
  *
- * ⏱️ 🎯 수싸움·💥과 같은 약속이에요 — **움직이는 것이 하나도 없어요.**
- * transition도 animation도 안 걸어요. 막대가 스르르 자라기만 해도 사람은 그걸
- * 카운트다운으로 읽어요. 여기서 바뀌는 건 오직 내가 민 결과예요. */
-
-/* 남은 체력 — 이게 곧 얼마나 더 밀 수 있느냐예요 */
-.gr-stam {
-  display: flex; justify-content: center; align-items: baseline; gap: 8px;
-  margin: 0 0 6px; font-size: .9rem;
+ * 🏃 홈 승부·🔥 힘겨루기처럼 진짜로 시간이 흘러요(조준이 움직여요). 조준은 매
+ * 프레임 left가 바뀌니 transition을 걸지 않아요 — 걸면 오히려 한 박자 늦게 따라와요.
+ * 색은 전부 테마 변수예요(초록 그라운드 위라 밝은 칸은 모래·강조색으로 띄워요). */
+.cs-field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 6px; }
+.cs-lane {
+  position: relative; height: 48px; overflow: hidden;
+  border: 1px solid var(--line); border-radius: 10px;
+  background: linear-gradient(90deg, rgba(216, 176, 119, .06), rgba(127, 209, 232, .06));
 }
-.gr-stam-label { font-size: .74rem; color: var(--dim); }
-.gr-stam-fire { letter-spacing: 1px; color: var(--accent); }
-.gr-stam-n { font-style: normal; font-size: .82rem; color: var(--cream); }
-
-/* 버팀 막대 — 민 만큼 왼쪽부터 차올라요. 목표선 둘이 어디까지 가야 하는지 말해 줘요 */
-.gr-track {
-  position: relative; height: 46px; margin-bottom: 2px;
-  border: 1px solid var(--line); border-radius: 10px; overflow: hidden;
-  background: linear-gradient(90deg, rgba(216, 176, 119, .12), rgba(127, 209, 232, .12));
+/* 노려야 할 밝은 칸 — 타자는 갭, 투수는 코너. post-stage.js가 left·width를 넣어 줘요.
+ * 안쪽의 진한 칸이 '정중앙'(장타·삼진)이 어디인지 말해 줘요. */
+.cs-zone {
+  position: absolute; top: 4px; bottom: 4px; border-radius: 6px;
+  background: var(--sand); opacity: .2;
 }
-.gr-fill {
-  position: absolute; left: 0; top: 0; bottom: 0; width: 0;
-  background: var(--sand); opacity: .5;
+.cs-zone-perfect { background: var(--accent); opacity: .34; }
+/* 나쁜 자리의 표식 — 타자 정면의 수비수(🧤), 투수 한복판의 방망이(🏏) */
+.cs-mark {
+  position: absolute; top: 50%; transform: translate(-50%, -50%);
+  font-size: 1.05rem; opacity: .8;
 }
-/* 목표선 둘 — 시점에 따라 자리가 통째로 달라요(post-stage.js가 left를 넣어 줘요) */
-.gr-line { position: absolute; top: 0; bottom: 0; width: 0; }
-.gr-line-good { border-left: 2px dashed var(--sand); opacity: .7; }
-.gr-line-perfect { border-left: 2px solid var(--accent); opacity: .85; }
-/* 지금까지 민 칸 수 · 판정 깃발 */
-.gr-mark-n {
-  position: absolute; left: 8px; top: 50%; transform: translateY(-50%);
-  font-style: normal; font-size: 1.1rem; font-weight: 700; color: var(--cream);
+/* 좌우로 오가는 조준 — 사람이 볼 것은 사실상 이것 하나예요 */
+.cs-aim {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  font-size: 1.35rem; line-height: 1; z-index: 2;
 }
-.gr-flag {
-  position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
-  font-size: 1.1rem;
-}
-/* 목표선을 넘어서 있으면 막대가 살아나요 */
-.gr-reach-good .gr-track { border-color: var(--sand); }
-.gr-reach-perfect .gr-track { border-color: var(--accent); }
-.gr-reach-perfect .gr-fill { color: var(--accent); opacity: .6; }
-.gr-won .gr-track { border-color: var(--accent); box-shadow: 0 0 10px var(--accent); }
-.gr-lost .gr-track { border-color: var(--dim); }
-.gr-pick { gap: 8px; }
-.gr-pick .tm-btn { flex: 1; margin-top: 10px; padding: 12px 4px; font-size: 1rem; }
-/* 다음 한 칸에 드는 체력 — 버튼에 −숫자로 적혀요. 남으면 밝게, 넘치면 경고색이에요 */
-.gr-dig-cost { font-size: .8rem; color: var(--sky); }
-.gr-over .gr-dig-cost { color: var(--accent2); }
+/* 조준이 밝은 칸 위에 있으면 판이 살아나요 — "지금이야"를 눈으로 알려 줘요 */
+.cs-on .cs-lane { border-color: var(--sand); }
+.cs-on .cs-aim { filter: drop-shadow(0 0 6px var(--accent)); }
+/* 눌러서 멈춘 자리 판정 */
+.cs-aim.cs-lock-perfect { filter: drop-shadow(0 0 9px var(--accent)); }
+.cs-aim.cs-lock-good { filter: drop-shadow(0 0 6px var(--sand)); }
+.cs-aim.cs-lock-miss { opacity: .5; }
+/* 남은 시간 — 🔥 힘겨루기와 같아요. "언제 누를까"가 아니라 "얼마나 남았나"예요 */
+.cs-time { height: 6px; border-radius: 999px; background: rgba(255, 255, 255, .06); overflow: hidden; }
+.cs-time > i { display: block; height: 100%; width: 100%; background: var(--sky); opacity: .55; }
+.cs-pick { gap: 8px; }
+.cs-pick .tm-btn { flex: 1; margin-top: 10px; padding: 12px 4px; font-size: 1rem; }
 
 /* 🔥 힘겨루기 — 표식을 사이에 두고 밀고 밀려요 (../post-stage.js의 clash)
  *

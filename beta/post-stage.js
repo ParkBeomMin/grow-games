@@ -13,7 +13,7 @@
  *
  *   PostStage.mind(box,  { label, courses, aim, zonePct, tier }, cb)        🎯 수싸움
  *   PostStage.dash(box,  { label, goText, stopText, zonePct, tier }, cb)    🏃 홈 승부
- *   PostStage.grind(box, { label, aim, digText, endText, zonePct, tier }, cb)  🥵 버티기
+ *   PostStage.course(box, { label, aim, hitText, zonePct, tier }, cb)        🎯 코스 공략
  *   PostStage.clash(box, { label, aim, aText, bText, zonePct, tier }, cb)   🔥 힘겨루기
  *
  * 🧭 넷 다 **준비 화면**을 먼저 띄워요. 규칙을 읽고 ▶️ 시작을 눌러야 판이 시작돼요 —
@@ -41,16 +41,18 @@
  *     잃어요.** 더 알고 싶으면 물러설 권리를 내놔야 해요. 게다가 버튼이 둘이라
  *     "언제 누르나"가 아니라 "무엇을 고르나"가 물음이에요.
  *
- * 그런데 이 둘은 **둘 다 판단력만 재요.** 힘으로 이기는 순간이 없었어요.
- * 가을야구가 야구의 절정인데 절정에 힘이 없으면 이상해요. 그래서 둘을 더해요.
+ * 그런데 이 둘은 **둘 다 판단력만 재요.** 힘으로 밀어붙이는 순간도, 손끝으로
+ * 노려 꽂는 순간도 없었어요. 가을야구가 야구의 절정인데 그러면 밋밋해요.
+ * 그래서 힘(🔥 힘겨루기)과 정교함(🎯 코스 공략) 둘을 더해요.
  *
-   *  🥵 grind — **어디까지 밀지 정하는 게임이에요.** 열세 개 중 어느 것도 "밀수록
-   *     비싸지는 자원"을 다루지 않아요. 여기서는 한 번 밀 때마다 드는 체력이 앞보다
-   *     커지고(지치니까요), 남은 체력을 넘겨 밀면 그 자리에서 지쳐 무너져요. 그래서
-   *     이건 읽기도 찍기도 연타도 아니고 **멈출 자리를 고르는 셈**이에요 — 욕심내면
-   *     무너지고 일찍 끊으면 못 미쳐요. 💥 자원 배분과 나란히 놓아도 축이 달라요 —
-   *     거기는 정해진 밑천을 한꺼번에 나누는 문제고, 여기는 값이 커지는 한 줄 위에서
-   *     **언제 멈출까**를 묻는 문제예요. 시계는 여기서도 안 돌아요(rAF를 한 번도 안 불러요).
+ *  🎯 course — **여러 빈 곳 중 하나를 골라 꽂아요.** 좌우로 오가는 조준을 수비수
+ *     사이 갭에 맞춰 밀어쳐요. timing.js의 play·target은 판정 존이 **한 곳에 고정**돼
+ *     커서가 그리 올 때를 노리는데, 여기는 노려야 할 자리가 **여럿**(갭 둘)이고
+ *     어느 갭을 고를지까지 내 몫이에요. 게다가 시점이 뒤집히면 좋은 자리가 통째로
+ *     옮겨 가요(갭 ↔ 코너). "지나갈 때 한 번 누르기"가 아니라 **"어디로 꽂을까"**라,
+ *     물음이 "언제"만이 아니에요. 시계는 돌지만("언제"도 살아 있어요), 앞서 들어낸
+ *     🧊 볼카운트와 달리 화면과 하는 일이 어긋나지 않아요 — 노려서 밀어치는 화면이고
+ *     실제로 노려서 밀어치는 게임이거든요.
    *
  *  🔥 clash — **순전히 힘이에요.** 표식을 사이에 두고 상대와 밀고 밀려요.
  *     그런데 버튼이 **둘**이고 **번갈아** 눌러야만 힘이 실려요 — 같은 쪽을 두 번
@@ -67,7 +69,7 @@
  * tier는 시리즈의 깊이예요 (0 와일드카드·준PO / 1 PO / 2 마지막 시리즈).
  * 뒤로 갈수록 상대의 버릇이 덜 보이고 어깨가 강해져요 — 같은 능력치로도 더 어려워요.
  *
- * 네 메커닉 모두 3~5초에 끝나요(수싸움과 버티기는 사람이 고르는 속도만큼이에요).
+ * 네 메커닉 모두 3~5초에 끝나요(🎯 수싸움만은 사람이 고르는 속도만큼이에요).
  * 가을야구 한 시리즈가 최대 5경기, 경기마다 미니게임이 여러 번이라 한 판이 길면
  * 그 자체가 버그예요.
  * 실제 소요·난이도·우승 확률은 tests/rookie/post-mech-test.js가 재요.
@@ -703,232 +705,208 @@ window.PostStage = (() => {
   }
 
   /* ================================================================
-   * 🥵 버티기 — 체력이 바닥나기 전에 얼마나 밀어붙일까
+   * 🎯 코스 공략 — 좌우로 오가는 조준을 빈 곳에 꽂아요
    *
-   * 버튼이 둘이에요 — [더 밀어붙인다] 와 [여기까지].
-   *   밀어붙인다 → 버팀 표시가 한 칸 나아가고 체력이 그만큼 줄어요. 그런데 **한 번 밀
-   *                때마다 드는 체력이 점점 커져요** — 지치니까 다음 힘이 앞 힘보다 더 들어요.
-   *                다음에 얼마가 드는지는 버튼에 −숫자로 적혀 있어요.
-   *   여기까지   → 지금까지 민 만큼으로 판정해요.
-   * 남은 체력을 **넘겨서 밀면** 그 자리에서 지쳐 무너져요(범타). 무리는 최악의 수예요.
+   * 조준(🎯)이 판 위를 좌우로 **왕복**해요. 아래 [밀어친다]를 누르면 그 순간 조준이
+   * 멈춘 자리로 판정해요.
+   *   갭(빈 곳) 정중앙 → 담장을 가르는 장타(perfect)
+   *   갭 언저리       → 사이로 빠지는 안타(good)
+   *   수비수 정면      → 그대로 잡혀요(miss)
    *
-   * ⏱️ **시간 축이 없어요.** 🎯 수싸움·💥과 같은 약속이에요 — requestAnimationFrame을
-   * 한 번도 안 부르고, 손을 놓고 있으면 화면이 한 글자도 안 바뀌고, 언제 누르든 결과가
-   * 같아요. 유일한 시계는 판정을 보여주는 사이(reveal)와, 탭을 통째로 놓친 기기를 위한
-   * 안전망(cap)뿐이에요. 그래서 이건 "언제 누르나"가 아니라 **"어디까지 미나"**예요.
+   * ⏱️ 여기는 진짜로 시간이 흘러요(조준이 움직여요) — 🏃 홈 승부·🔥 힘겨루기와 같은
+   * 편이에요. 그런데 앞서 들어낸 🧊 볼카운트와 달리 **화면이 만드는 기대와 하는 일이
+   * 정확히 맞아요.** 좌우로 흐르는 조준을 보고 "저기 갔을 때 누른다"가 그대로 하는
+   * 일이라, "언제 눌러야 하지?"가 애매하지 않아요 — 조준이 답을 눈앞에 그려 줘요.
+   * 볼카운트는 날아오는 공을 스윙하는 화면인데 핵심이 '안 누르는 게 수'라 어긋났지만,
+   * 여기는 노려서 밀어치는 화면이고 실제로 노려서 밀어치는 게임이에요.
    *
-   * 🧮 그럼 왜 어려우냐 — **밀수록 다음 한 칸이 비싸져요.** 남은 체력은 정해져 있는데(능력치가
-   * 그 크기예요) 뒤로 갈수록 한 칸의 값이 커지니, 어디서 멈출지가 숙제예요. 욕심내 먼
-   * 목표선을 노리면 체력을 넘겨 무너지고, 너무 일찍 끊으면 목표선에 못 미쳐요.
+   * 🆕 열세 개 중 어느 것도 이 축이 아니에요. timing.js의 play·target은 **판정 존이
+   * 한 곳에 고정**돼 있고 커서가 그리 지나갈 때를 노려요. 여기는 반대예요 — 노려야 할
+   * 자리가 **여럿**(갭 둘)이고, 어느 갭을 고를지까지 내 몫이에요. 게다가 시점이 뒤집히면
+   * 좋은 자리가 통째로 옮겨 가요(갭 ↔ 코너). "지나갈 때 한 번 누르기"가 아니라
+   * "여러 빈 곳 중 하나를 골라 꽂기"라, 물음이 "언제"만이 아니라 **"어디로"**예요.
    *
-   * ↔️ 시점이 뒤집히면 **목표선과 소모 곡선이 같이 뒤집혀요.**
-   *   타자(push) — 멀리 밀어야 담장 밖. 목표선이 **높아요**(무리하다 지치기 쉬워요).
-   *                남은 체력을 끝까지 짜내는 쪽이에요.
-   *   투수(hold) — 조금만 버텨도 삼진. 목표선이 **낮은 대신** 한 번 미는 데 **더 지쳐요**
-   *                (지친 몸으로 위기를 막는 거라 소모가 가팔라요). 밀리지만 않으면 돼요.
-   * 그래서 타자는 "어디까지 밀까", 투수는 "언제 끊을까"를 봐요 — 🎯 수싸움의 match/dodge,
-   * 🔥 힘겨루기의 push/hold와 같은 결이에요.
+   * ↔️ 시점이 뒤집히면 **좋은 자리가 통째로 옮겨 가요.**
+   *   타자(gap)    — 수비수 사이 **갭**을 노려요. 정중앙일수록 장타예요.
+   *   투수(corner) — 방망이를 피해 **코너**에 꽂아요. 한복판(가운데)은 그대로 맞아요.
+   * 그래서 타자는 "갭이 어디냐", 투수는 "코너가 어디냐"를 봐요 — 🎯 수싸움의 match/dodge,
+   * 🔥 힘겨루기의 push/hold와 같은 결이에요. 코드는 하나고 centers 하나로 갈려요.
+   * 그래야 투수가 "안타!"를 이긴 것으로 보는 일이 없어요.
    *
-   * 🎚 능력치(zonePct)는 **남은 체력** 한 곳에 들어가요. 판정 규칙(목표선)은 안 건드려요.
-   *   zone 30 → 6칸 · zone 35 → 14칸 · zone 40 → 22칸 (판마다 0~jit칸 흔들려요)
-   * ⚠️ 폭(30~40)을 넓히지 마세요. 🎯 수싸움의 readFrom/readTo와 같은 이유예요 —
-   * 이 메커닉은 가을야구에서만 나오고, 거기 오는 선수는 miniZone이 30~40이에요.
-   * ⚠️ jit(체력의 판마다 흔들림)을 0으로 두지 마세요. 남은 체력이 판마다 딱 떨어지면
-   * **밀 수 있는 칸 수가 능력치의 계단이 돼요** — 같은 존이면 늘 같은 판정이라 능력치가
-   * 아니라 눈금이 돼요. 💥의 foeSpread를 0으로 두면 안 되는 것과 같은 자리예요.
-   * tier가 깊어지면 한 칸의 밑값이 커져요 — 큰 경기일수록 같은 체력으로 덜 밀려요.
+   * 🎚 능력치(zonePct)는 **판정 반경**에 들어가요 — 잘 키운 선수일수록 갭(코너)의
+   *   스윗스팟이 넓어서 웬만큼 빗나가도 안타로 이어져요. 판정 자리(갭·코너의 중심)는
+   *   사람마다 다르면 거짓말이 되니까 안 건드려요.
+   *   zone 30 → good 6% · perf 2% · zone 40 → good 12% · perf 4.5% (지름은 이 두 배)
+   * ⚠️ 폭(30~40)을 넓히지 마세요. 🎯 수싸움과 같은 이유예요 — 이 메커닉은
+   * 가을야구에서만 나오고, 거기 오는 선수의 miniZone이 30~40이에요.
+   * tier가 깊어지면 ① 조준이 빨라지고 ② 반경이 살짝 줄어요 — 큰 경기일수록 어려워요.
    * ================================================================ */
-  const GRIND = {
-    /* 남은 체력 주머니 — 능력치가 사는 단 한 곳이에요. 칸 수라 정수로 떨어져요. */
-    poolFrom: 30, poolTo: 40, poolLo: 6, poolHi: 22,
-    /* 판마다 0~jit칸 더 얹어요. 이 흔들림이 없으면 판정이 능력치의 계단이 돼요
-     * (위 ⚠️ jit 주석 참고 · 💥의 foeSpread와 같은 이유예요). */
-    jit: 4,
-    /* k번째로 미는 데 드는 체력이에요. 밑값(costBase)에서 시작해 밀수록(k) 더 들고,
-     * 시리즈가 깊을수록(tier) 밑값이 커져요. 투수(hold)는 지친 몸으로 위기를 막는
-     * 거라 소모가 더 가팔라요(rampHold > rampPush). */
-    costBase: 2, rampPush: 1, rampHold: 2, costTier: 1,
-    /* 목표선(민 칸 수). 시점마다 통째로 달라요 — 타자는 멀리, 투수는 가까이.
-     * ⚠️ 타자 good 선을 1로 내리지 마세요. 손을 놓고 있으면 0칸에서 끝나는데,
-     * 그게 성공이 되면 안 하는 게 이득이 돼요(🔥 힘겨루기의 good 선과 같은 자리). */
-    linePush: { perfect: 5, good: 2 },
-    lineHold: { perfect: 4, good: 1 },
-    /* 판정을 보여주는 사이예요. 💥과 같은 감각이에요. */
-    reveal: 620,
-    /* 🛟 안전망 — 화면에는 아무 표시도 안 해요(보이는 순간 제한 시간이 되거든요).
-     * 여기 닿으면 **더 밀지 못한 채** 그 자리에서 판정해요. 손을 놓으면 나빠져요.
-     * **손이 한 번 갈 때마다 새로 걸어요.** 🎯·💥이 그러는 것과 같은 이유예요 —
-     * 판에 한 번만 걸면 여러 칸 미는 선수(능력치가 높은 쪽)가 먼저 잘려요. */
-    cap: 15000,
+  const COURSE = {
+    /* 조준의 왕복 속도(%/초). tier로만 갈려요(능력치와 무관) — 능력치는 반경으로
+     * 갚아 줘요. 속도가 능력치를 안 타야 "발 빠른 손이 곧 실력"이 아니라 "잘 키운
+     * 선수가 유리"가 돼요. 🔥 힘겨루기가 손끝을 재는 자리를 하나 두었으니, 여기서는
+     * 능력치가 손끝을 덮을 만큼 반경을 벌려요(아래 ⚠️ 반경 폭 참고). */
+    spdBase: 52, spdTier: 11,
+    /* 좋은 자리의 중심들. aim마다 통째로 달라요 — 타자는 갭 둘, 투수는 코너 둘.
+     * 판 양 끝(0·100)은 왕복이 되돌아가는 자리라 조준이 거기 오래 안 머물러요.
+     * 그래서 코너를 12·88에 둬요(0·100에 두면 닿기가 지나치게 어려워요). */
+    gapCenters: [28, 72],
+    cornerCenters: [12, 88],
+    /* 판정 반경 — 능력치가 사는 단 한 곳이에요. 지름은 이 값의 두 배예요. */
+    radFrom: 30, radTo: 40, goodLo: 6, goodHi: 12, perfLo: 2, perfHi: 4.5,
+    /* tier가 깊어지면 반경이 줄어요(상대 수비가 촘촘하고 코너가 좁아요).
+     * perf 쪽은 절반만 깎아요 — 안 그러면 마지막 시리즈에서 장타가 씨가 말라요. */
+    radTier: -0.8,
+    /* 한 판의 최대 시간(ms). 안 누르면 이때 miss로 끝나요 — 손을 놓으면 나빠져야
+     * 하니까요. OUTRO까지 더해도 5초 안이에요. */
+    dur: 4200,
+    /* 프레임이 끊긴 기기를 위한 안전망이에요(dur보다 뒤). 정상 경로에서는 tick이 끝내요. */
+    cap: 5200,
   };
-  const grindPool = (zone, jit) => Math.round(
-    GRIND.poolLo
-    + (clampV(zone, GRIND.poolFrom, GRIND.poolTo) - GRIND.poolFrom) / (GRIND.poolTo - GRIND.poolFrom)
-      * (GRIND.poolHi - GRIND.poolLo)) + (jit || 0);
-  const grindCost = (k, hold, tier) =>
-    GRIND.costBase + tier * GRIND.costTier + (k - 1) * (hold ? GRIND.rampHold : GRIND.rampPush);
-  const grindLines = (hold) => (hold ? GRIND.lineHold : GRIND.linePush);
-  /* 민 칸 수 → 판정. 무너진(무리) 판은 이 함수를 거치지 않고 곧장 miss예요. */
-  const grindGrade = (marker, hold) => {
-    const L = grindLines(hold);
-    return marker >= L.perfect ? "perfect" : marker >= L.good ? "good" : "miss";
-  };
-
-  const GRIND_MSG = {
-    stamLabel: "남은 체력",
-    cue: "🥵 밀수록 다음 힘이 더 들어요 — 체력을 넘겨 밀면 그 자리에서 지쳐 무너져요",
-    win: "💥 끝까지 밀어붙였어요! 담장 밖!!",
-    even: "🏏 버티고 버텨 안타로 이었어요",
-    lose: "❌ 얼마 못 밀고 힘이 빠졌어요… 범타",
-    collapse: "💥 무리하게 밀다 그대로 지쳐 무너졌어요…",
-    timeup: "⏱️ 더 밀지 못한 채 승부가 끝났어요",
-    tip: "💪로 밀고 🏁로 마무리해요 · <b>남은 체력을 넘겨 밀면 무너져요</b> · 서두를 필요 없어요",
-    digText: "더 밀어붙인다 💪",
-    endText: "여기까지 🏁",
-    readyTitle: "🥵 버티기",
-    readyLines: [
-      "체력이 바닥나기 전에 <b>얼마나 밀어붙일지</b> 정해요. 멀리 밀수록 좋아요.",
-      "<b>날아오는 공도, 제한 시간도 없어요.</b> 화면은 누르기 전까지 멈춰 있으니 천천히 정하세요.",
-      "한 번 밀 때마다 드는 체력이 <b>점점 커져요</b> — 다음 힘이 앞 힘보다 더 들어요. 버튼에 다음 소모가 −숫자로 적혀 있어요.",
-      "남은 체력을 <b>넘겨서 밀면 그 자리에서 지쳐 무너져요</b>(범타). 무리는 최악의 수예요.",
-      "<b>먼 목표선</b>까지 밀면 통타(완벽), <b>가까운 선</b>까지만 가도 안타예요.",
-    ],
-    readyShort: "체력을 넘기지 않는 선에서 멀리 밀어요 · 먼 목표선까지 가면 완벽",
-    /* ⚠️ 이 두 줄에는 태그를 넣지 마세요. 준비 화면의 설명 칸에 그대로 들어가요 */
-    readyDig: "체력을 써서 한 칸 더 밀어붙여요. 밀수록 다음 한 칸이 더 들어요 — 언제 눌러도 결과는 같아요",
-    readyEnd: "지금까지 민 만큼으로 마무리해요. 넘치게 밀어 무너지기 전에 끊어요",
-  };
-  const grindMsg = (opts) => Object.assign({}, GRIND_MSG, (opts && opts.msg) || {});
-
-  /* 🥵 준비 화면 — 버튼이 둘이라 각각이 무엇인지 적는 게 본론이에요 (🏃 홈 승부와 같아요). */
-  function grindReady(opts) {
-    const msg = grindMsg(opts);
+  const courseCenters = (corner) => (corner ? COURSE.cornerCenters : COURSE.gapCenters);
+  const courseRad = (zone, tier) => {
+    const t = (clampV(zone, COURSE.radFrom, COURSE.radTo) - COURSE.radFrom) / (COURSE.radTo - COURSE.radFrom);
     return {
-      key: "grind",
+      good: Math.max(1, COURSE.goodLo + t * (COURSE.goodHi - COURSE.goodLo) + tier * COURSE.radTier),
+      perf: Math.max(0.5, COURSE.perfLo + t * (COURSE.perfHi - COURSE.perfLo) + tier * COURSE.radTier * 0.5),
+    };
+  };
+  /* 조준이 멈춘 자리(p) → 판정. 가장 가까운 중심까지의 거리로 재요.
+   * corner면 중심이 코너로 옮겨 갈 뿐 규칙은 같아요. */
+  const courseGrade = (p, corner, zone, tier) => {
+    const rad = courseRad(zone, tier);
+    const d = Math.min.apply(null, courseCenters(corner).map((c) => Math.abs(p - c)));
+    return d <= rad.perf ? "perfect" : d <= rad.good ? "good" : "miss";
+  };
+
+  /* 🎯 문구도 통째로 갈아끼울 수 있어요 — 투수는 같은 규칙을 코너로 읽어야 말이
+   * 돼요(투수가 "장타!"를 이긴 것으로 보면 안 돼요). ready*는 준비 화면 몫이에요. */
+  const COURSE_MSG = {
+    cue: "🎯 조준이 좌우로 오가요 — 수비수 사이 빈 곳(갭)에 맞춰 밀어쳐요",
+    hitText: "밀어친다! 🎯",
+    fielderIc: "🧤",           // 타자: 정면이면 잡히는 자리
+    dangerIc: "🏏",            // 투수: 한복판이면 방망이가 기다리는 자리
+    win: "💥 갭 정중앙! 담장을 가르는 장타!!",
+    even: "🏏 수비수 사이로 빠지는 안타!",
+    lose: "❌ 정면으로 가 그대로 잡혔어요…",
+    timeup: "⏱️ 노려보지도 못한 채 타이밍을 놓쳤어요…",
+    tip: "🎯가 <b>갭</b>에 왔을 때 눌러요 · <b>정중앙일수록</b> 장타예요",
+    readyTitle: "🎯 코스 공략",
+    readyLines: [
+      "조준(🎯)이 <b>좌우로 오가요</b>. [밀어친다]를 누르면 그 순간 멈춘 자리로 판정해요.",
+      "밝은 칸이 <b>수비수 사이 빈 곳(갭)</b>이에요. 조준이 거기 왔을 때 눌러요.",
+      "<b>정중앙</b>에 가까울수록 장타, 갭 언저리면 안타예요. 수비수 <b>정면</b>이면 그대로 잡혀요.",
+      "잘 키운 선수일수록 갭이 <b>넓게</b> 열려요 — 웬만큼 빗나가도 안타로 이어져요.",
+    ],
+    readyShort: "조준이 갭(밝은 칸)에 왔을 때 밀어쳐요 · 정중앙일수록 장타",
+    /* ⚠️ 이 두 줄에는 태그를 넣지 마세요 — 준비 화면의 설명 칸에 그대로 들어가요 */
+    readyAim: "좌우로 오가는 조준이에요. 밝은 칸(갭)이 노려야 할 빈 곳이고, 정중앙일수록 장타예요",
+    readyHit: "누르는 순간 조준이 멈춘 자리로 판정해요. 갭에 왔을 때를 노려요",
+  };
+  const courseMsg = (opts) => Object.assign({}, COURSE_MSG, (opts && opts.msg) || {});
+
+  /* 🎯 준비 화면 — 버튼은 하나지만 '조준이 무엇이고 어디를 노리는지'가 본론이라,
+   * 🎯 수싸움처럼 '무엇을 누르는지'와 '밝은 칸이 무엇인지'를 한 칸씩 적어요. */
+  function courseReady(opts) {
+    const msg = courseMsg(opts);
+    return {
+      key: "course",
       title: msg.readyTitle,
       lines: msg.readyLines,
       short: msg.readyShort,
       keys: [
-        { name: (opts && opts.digText) || msg.digText, desc: msg.readyDig },
-        { name: (opts && opts.endText) || msg.endText, desc: msg.readyEnd },
+        { name: "🎯 조준 · 밝은 칸", desc: msg.readyAim },
+        { name: (opts && opts.hitText) || msg.hitText, desc: msg.readyHit },
       ],
     };
   }
 
-  /* 🥵 한 판. runMind·runSurge와 같아요 — 시계는 사람을 재촉하지 않고, 프레임 루프를
-   * 한 번도 안 돌려요. 걸리는 타이머는 판정을 보여주는 사이와 안전망뿐이에요. */
-  function runGrind(container, opts, cb, gate) {
+  /* 🎯 한 판. 🔥 힘겨루기·🏃 홈 승부와 같은 편이에요 — 진짜로 시간이 흘러요
+   * (조준이 움직여요). 준비 화면의 ▶️ 시작을 누른 뒤에만 불려요. */
+  function runCourse(container, opts, cb, gate) {
     const zone = zoneOf(opts), tier = tierOf(opts);
-    const hold = (opts && opts.aim) === "hold";
-    const msg = grindMsg(opts);
-    const jit = Math.floor(Math.random() * (GRIND.jit + 1));
-    const pool = grindPool(zone, jit);
-    const L = grindLines(hold);
-    const span = L.perfect + 2;               // 화면 막대의 끝 — 목표선이 다 보이게 여유를 둬요
-    const digText = (opts && opts.digText) || msg.digText;
-    const endText = (opts && opts.endText) || msg.endText;
+    const corner = (opts && opts.aim) === "corner";
+    const msg = courseMsg(opts);
+    const spd = COURSE.spdBase + tier * COURSE.spdTier;
+    const centers = courseCenters(corner);
+    const rad = courseRad(zone, tier);
+    const hitText = (opts && opts.hitText) || msg.hitText;
+    const nearest = (x) => Math.min.apply(null, centers.map((c) => Math.abs(x - c)));
 
-    const fires = (n) => (n > 0 ? "🔋".repeat(Math.min(n, 8)) : "·");
-    const wrap = makeBox(container, opts.label || "🥵 버티기! 체력이 바닥나기 전에 얼마나 밀까요", `
-      <p class="gr-stam"><span class="gr-stam-label">${msg.stamLabel}</span><span class="gr-stam-fire"></span><i class="gr-stam-n">${pool}</i></p>
+    /* 나쁜 자리에 표식을 세워요 — 타자는 수비수(🧤) 셋, 투수는 한복판의 방망이(🏏).
+     * 눈으로도 "여기 말고"가 보여야 밝은 칸(갭·코너)의 뜻이 또렷해져요. */
+    const marks = corner
+      ? [{ at: 50, ic: msg.dangerIc }]
+      : [{ at: 6, ic: msg.fielderIc }, { at: 50, ic: msg.fielderIc }, { at: 94, ic: msg.fielderIc }];
+    const zoneHTML = centers.map((c) => `
+      <span class="cs-zone" style="left:${clampV(c - rad.good, 0, 100).toFixed(1)}%;width:${(rad.good * 2).toFixed(1)}%"></span>
+      <span class="cs-zone cs-zone-perfect" style="left:${clampV(c - rad.perf, 0, 100).toFixed(1)}%;width:${(rad.perf * 2).toFixed(1)}%"></span>`).join("");
+    const markHTML = marks.map((m) => `<span class="cs-mark" style="left:${m.at}%">${m.ic}</span>`).join("");
+
+    const wrap = makeBox(container, opts.label || "🎯 코스 공략! 조준을 갭에 맞춰 밀어쳐요", `
       <p class="pm-cue">${msg.cue}</p>
-      <div class="gr-track">
-        <span class="gr-line gr-line-good" data-k="${L.good}"></span>
-        <span class="gr-line gr-line-perfect" data-k="${L.perfect}"></span>
-        <span class="gr-fill"></span>
-        <span class="gr-flag"></span>
-        <b class="gr-mark-n">0</b>
+      <div class="cs-field">
+        <div class="cs-lane">${zoneHTML}${markHTML}<span class="cs-aim">🎯</span></div>
+        <div class="cs-time"><i></i></div>
       </div>
       <p class="ps-mark">&nbsp;</p>
       <p class="tm-legend-tip">${msg.tip}</p>
-      <div class="tm-duel gr-pick">
-        <button type="button" class="btn btn-primary tm-btn gr-dig">${digText} <span class="gr-dig-cost">−${grindCost(1, hold, tier)}</span></button>
-        <button type="button" class="btn btn-ghost tm-btn gr-end">${endText}</button>
+      <div class="tm-duel cs-pick">
+        <button type="button" class="btn btn-primary tm-btn cs-hit">${hitText}</button>
       </div>`);
 
-    const stamN = wrap.querySelector(".gr-stam-n");
-    const stamFire = wrap.querySelector(".gr-stam-fire");
-    const fillEl = wrap.querySelector(".gr-fill");
-    const markN = wrap.querySelector(".gr-mark-n");
-    const flagEl = wrap.querySelector(".gr-flag");
-    const digBtn = wrap.querySelector(".gr-dig");
-    const digCostEl = wrap.querySelector(".gr-dig-cost");
-    const endBtn = wrap.querySelector(".gr-end");
+    const aimEl = wrap.querySelector(".cs-aim");
+    const timeEl = wrap.querySelector(".cs-time i");
+    const hitBtn = wrap.querySelector(".cs-hit");
     const markEl = wrap.querySelector(".ps-mark");
-    wrap.querySelector(".gr-line-good").style.left = `${(L.good / span * 100).toFixed(1)}%`;
-    wrap.querySelector(".gr-line-perfect").style.left = `${(L.perfect / span * 100).toFixed(1)}%`;
 
-    let marker = 0, spent = 0, done = false, busy = false, guard = 0, endTimer = 0;
-    const remain = () => pool - spent;
+    /* 시작 자리와 방향은 판마다 흔들려요 — 안 그러면 조준의 위상이 늘 같아서
+     * "몇 초에 누르면 된다"가 외워져요. 🔥 힘겨루기의 foeJit과 같은 자리예요. */
+    let p = rand(8, 92), dir = Math.random() < 0.5 ? 1 : -1, elapsed = 0, done = false, raf = 0;
 
     function paint() {
-      stamN.textContent = String(remain());
-      stamFire.textContent = fires(remain());
-      markN.textContent = String(marker);
-      fillEl.style.width = `${clampV(marker / span * 100, 0, 100).toFixed(1)}%`;
-      digCostEl.textContent = `−${grindCost(marker + 1, hold, tier)}`;
-      wrap.classList.toggle("gr-reach-good", marker >= L.good);
-      wrap.classList.toggle("gr-reach-perfect", marker >= L.perfect);
-      /* 다음 한 칸을 감당 못 하면 버튼에 경고를 켜요 — 눌러도 되지만 무너져요. */
-      digBtn.classList.toggle("gr-over", grindCost(marker + 1, hold, tier) > remain());
+      aimEl.style.left = `${clampV(p, 0, 100)}%`;
+      timeEl.style.width = `${clampV(100 - elapsed / COURSE.dur * 100, 0, 100).toFixed(1)}%`;
+      wrap.classList.toggle("cs-on", nearest(p) <= rad.good);   // 갭 위에 있으면 살아나요
     }
     paint();
 
     function finish(res, note) {
       if (done) return;
-      done = true; busy = true;
-      clearTimeout(guard); clearTimeout(endTimer);
-      digBtn.disabled = true; endBtn.disabled = true;
+      done = true;
+      cancelAnimationFrame(raf);
+      clearTimeout(guard);
+      hitBtn.disabled = true;
       markEl.textContent = note;
       wrap.classList.add(`tm-done-${res}`);
       setTimeout(() => { wrap.remove(); cb(res); }, OUTRO);
     }
+    const guard = setTimeout(() => finish("miss", msg.timeup), COURSE.cap);
 
-    /* 밀기를 멈추고(또는 안전망이 걷으면) 지금까지 민 만큼으로 판정해요. */
-    function settle(note) {
-      if (done || busy) return;
-      busy = true;
-      clearTimeout(guard);
-      const g = grindGrade(marker, hold);
-      flagEl.textContent = g === "perfect" ? "🌟" : g === "good" ? "✅" : "❌";
-      digBtn.disabled = true; endBtn.disabled = true;
-      wrap.classList.add(g === "miss" ? "gr-lost" : "gr-won");
-      markEl.textContent = note || (g === "perfect" ? msg.win : g === "good" ? msg.even : msg.lose);
-      endTimer = setTimeout(() => finish(g, markEl.textContent), GRIND.reveal);
-    }
-
-    /* 🛟 안전망. 손이 한 번 갈 때마다 다시 걸어요 (위 GRIND.cap 주석 참고). */
-    function armGuard() {
-      clearTimeout(guard);
-      guard = setTimeout(() => settle(msg.timeup), GRIND.cap);
-    }
-    armGuard();
-
-    onTap(digBtn, () => {
-      if (done || busy) return;
-      const cost = grindCost(marker + 1, hold, tier);
-      marker += 1;
-      if (cost > remain()) {                  // 무리해서 밀었어요 — 그 자리에서 지쳐 무너져요
-        spent = pool;
-        busy = true;
-        clearTimeout(guard);
-        paint();
-        flagEl.textContent = "💥";
-        wrap.classList.add("gr-lost");
-        digBtn.disabled = true; endBtn.disabled = true;
-        markEl.textContent = msg.collapse;
-        endTimer = setTimeout(() => finish("miss", msg.collapse), GRIND.reveal);
-        return;
-      }
-      spent += cost;
+    let last = performance.now();
+    function tick(now) {
+      const dt = Math.min(now - last, 50);
+      last = now;
+      elapsed += dt;
+      p += dir * spd * dt / 1000;
+      if (p >= 100) { p = 100; dir = -1; }                       // 끝에서 되돌아와요(왕복)
+      if (p <= 0) { p = 0; dir = 1; }
       paint();
-      armGuard();
+      if (elapsed >= COURSE.dur) { finish("miss", msg.timeup); return; }   // 못 노리고 시간이 다 됐어요
+      raf = requestAnimationFrame(tick);
+    }
+
+    onTap(hitBtn, () => {
+      if (done) return;
+      const g = courseGrade(p, corner, zone, tier);
+      aimEl.classList.add(g === "perfect" ? "cs-lock-perfect" : g === "miss" ? "cs-lock-miss" : "cs-lock-good");
+      finish(g, g === "perfect" ? msg.win : g === "good" ? msg.even : msg.lose);
     }, gate);
-    onTap(endBtn, () => settle(null), gate);
+    raf = requestAnimationFrame(tick);
   }
 
-  function grind(container, opts, cb) {
-    ready(container, grindReady(opts), (gate) => runGrind(container, opts || {}, cb, gate));
+  function course(container, opts, cb) {
+    ready(container, courseReady(opts), (gate) => runCourse(container, opts || {}, cb, gate));
   }
 
   /* ================================================================
@@ -967,7 +945,7 @@ window.PostStage = (() => {
   const CLASH = {
     dur: 3600,            // 한 판의 길이(ms). OUTRO까지 더해도 4.1초예요
     start: 50,            // 표식의 시작 자리(%)
-    /* 한 번 누를 때 밀리는 양(%). 🎯 수싸움·🥵 버티기와 같은 이유로 폭을 30~40에
+    /* 한 번 누를 때 밀리는 양(%). 🎯 수싸움·🎯 코스 공략과 같은 이유로 폭을 30~40에
      * 걸어요 — 가을야구에 오는 선수의 miniZone이 그 구간이에요. */
     gainFrom: 30, gainTo: 40, gainLo: 2.2, gainHi: 3.8,
     /* 차례가 아닌 버튼을 눌렀을 때 되밀리는 양(%). 벌이 없으면 그냥 양손 연타가
@@ -1153,19 +1131,19 @@ window.PostStage = (() => {
   }
 
   return {
-    mind, dash, grind, clash,
+    mind, dash, course, clash,
     /* 테스트가 판정 산식을 그대로 굴려 볼 수 있게 열어 둬요 — 난이도를 손으로
      * 베껴 두면 여기를 고칠 때 테스트만 옛 숫자로 남아요.
      * 준비 화면 쪽도 같은 이유로 열어 둬요 (횟수 문턱을 테스트가 베껴 적지 않게요). */
     _t: {
-      MIND, DASH, GRIND, CLASH, MIND_MSG, DASH_MSG, GRIND_MSG, CLASH_MSG,
+      MIND, DASH, COURSE, CLASH, MIND_MSG, DASH_MSG, COURSE_MSG, CLASH_MSG,
       MIND_COURSES,
       mindRead, mindGrade, mindSettled,
       dashRun, dashThrow, dashReveal, dashBack,
-      grindPool, grindCost, grindLines, grindGrade,
+      courseCenters, courseRad, courseGrade,
       clashGain, clashFoe, clashLines, clashGrade,
       READY_KEY, FULL_SHOWS, readSeen,
-      mindReady, dashReady, grindReady, clashReady,
+      mindReady, dashReady, courseReady, clashReady,
     },
   };
 })();
