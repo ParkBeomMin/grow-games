@@ -214,6 +214,19 @@ for (const id of Object.keys(LEAGUE_CLUBS)) {
 }
 const clubStrOf = (name) => CLUB_STR[name];
 
+/* 🌏 그 리그 구단 전력의 평균이에요 — LEAGUE_CLUBS에서 그때그때 계산해요(값을 손으로
+ * 적지 않아요). oppFor가 상대를 '그 리그 평균 대비'로 읽을 때 기준이 되는 값이에요.
+ * 리그가 세다는 효과는 오직 oppUp에서만 오게 하고, 해외 구단 전력이 애초에 높게
+ * 박혀 있는 것 자체는 난이도로 새어들지 않게 하려는 거예요.
+ *
+ * KBO 구단은 str이 전부 null이라 teamStrOf가 0.38~0.60에서 뽑는 그 한가운데(0.49)로
+ * 봐요 — 그래서 KBO 보정이 정확히 0이 되고, oppFor가 teamStrOf와 한 톨까지 같아져
+ * 진행 중인 캐릭터의 성적이 안 튑니다. 구단을 더하면 평균이 자동으로 따라가요. */
+function leagueAvgStr(league) {
+  const strs = LEAGUE_CLUBS[leagueIdOf(league)].map((c) => c.str).filter((s) => typeof s === "number");
+  return strs.length ? strs.reduce((a, b) => a + b, 0) / strs.length : 0.49;
+}
+
 // 시작 능력치 뽑기 — 이름 화면에서 미리 보고 다시 뽑을 수 있어요
 function rollStats(pos) {
   const stats = {};

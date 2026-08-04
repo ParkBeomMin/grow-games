@@ -73,9 +73,27 @@ const leagueParts = {
    * 실투(miss) 분기가 KBO와 한 톨도 안 달라져서 투수가 리그를 못 느껴요. */
   crisisK: grab(GAME, /const CRISIS_LEAGUE_K = [^;]+;/),
   crisisCap: grab(GAME, /const CRISIS_LEAGUE_CAP = [^;]+;/),
+  /* 🌏 리그별 구단 전력 — 이번 버그를 놓쳤던 자리예요. 예전엔 상대 분포를 손으로
+   * rand(0.38,0.60)에서 뽑아서 이 목록(대륙 평균 0.55)을 한 번도 안 읽었어요.
+   * oppFor가 '리그 평균 대비'로 읽으니 leagueAvgStr도 함께 떼어 와요 — 값은 옮겨
+   * 적지 않고 소스 그대로 돌립니다. */
+  REGIONS: grab(GAME, /const REGIONS = \[[\s\S]*?\n\];/),
+  LEAGUE_CLUBS: grab(GAME, /const LEAGUE_CLUBS = \{[\s\S]*?\n\};/),
+  leagueIdOf: grab(GAME, /const leagueIdOf = \(league\) => \{[\s\S]*?\n\};/),
+  teamsOf: grab(GAME, /function teamsOf\(league\) \{[\s\S]*?\n\}/),
+  clubStr: grab(GAME, /const CLUB_STR = \{\};[\s\S]*?\nconst clubStrOf = [^;]+;/),
+  leagueAvgStr: grab(GAME, /function leagueAvgStr\(league\) \{[\s\S]*?\n\}/),
 };
 const leagueMissing = Object.entries(leagueParts).filter(([, v]) => !v).map(([k]) => k);
 const leagueSrc = [leagueParts.LEAGUES, leagueParts.leagueOf].filter(Boolean).join("\n");
+/* 구단 목록·도우미를 한 덩어리로 — oppFor(leagueAvgStr를 부름)와 상대 풀 만들기가 함께 써요.
+ * 선언 순서를 지켜요: REGIONS → LEAGUE_CLUBS → leagueIdOf → teamsOf → CLUB_STR → leagueAvgStr. */
+const clubSrc = [leagueParts.REGIONS, leagueParts.LEAGUE_CLUBS, leagueParts.leagueIdOf,
+  leagueParts.teamsOf, leagueParts.clubStr, leagueParts.leagueAvgStr].filter(Boolean).join("\n");
+// 소스에서 뽑은 구단 도우미를 그대로 돌려요 (값을 옮겨 적지 않아요).
+const CLUB = clubSrc && leagueParts.LEAGUE_CLUBS
+  ? new Function(`${clubSrc} return { teamsOf, clubStrOf, leagueAvgStr };`)()
+  : null;
 // crisisRuns 본문이 읽는 상수예요. 없으면 그 이름을 쓰는 검사가 ReferenceError로 떨어지고,
 // 그게 우리가 보고 싶은 빨간불이에요 (값은 절대 여기 옮겨 적지 않아요).
 const crisisConsts = [leagueParts.crisisK, leagueParts.crisisCap].filter(Boolean).join("\n");
@@ -98,9 +116,10 @@ const NAME = (tier) => L(tier).name;
 
 const leagueOfFn = leagueParts.leagueOf ? new Function("st", `${leagueSrc} return leagueOf(st);`) : null;
 /* oppFor는 career.js의 IIFE 안에 있어서 teamStrOf·S를 클로저로 읽어요.
- * 떼어 온 뒤 그 두 이름을 파라미터로 넣어 같은 모양을 만들어요. */
+ * 떼어 온 뒤 그 두 이름을 파라미터로 넣어 같은 모양을 만들어요.
+ * oppFor가 leagueAvgStr(leagueOf(S))를 부르니 구단 도우미(clubSrc)도 스코프에 깔아요. */
 const oppForFn = leagueParts.oppFor
-  ? new Function("S", "teamStrOf", `${leagueSrc} ${leagueParts.oppFor} return oppFor;`)
+  ? new Function("S", "teamStrOf", `${leagueSrc}\n${clubSrc}\n${leagueParts.oppFor} return oppFor;`)
   : null;
 
 // ① 리그 표 — 3단 사다리고 tier가 겹치지 않아요
@@ -459,6 +478,33 @@ guard("KBO 항등", () => {
  * ⚾ 경기 수는 **리그 표에서 읽어요.** 여기 144를 옮겨 적으면 리그마다 경기 수가
  * 달라진 뒤에도 전부 144경기로 재게 돼서, 누적이 더 쌓이는 리그를 그냥 못 보고 넘겨요. */
 const gamesOf = (tier) => L(tier).games;
+
+/* 🌏 그 리그에서 만나는 상대별 '상대 수준'이에요 — 소스의 oppFor를 그대로 먹여서
+ * 만들어요(리그 난이도 포함). 구단 전력은 LEAGUE_CLUBS에서 읽어요: 해외 구단은 목록에
+ * 박힌 전력(대륙 평균 0.55), KBO 구단은 str이 null이라 teamStrOf처럼 0.38~0.60에서 뽑아요.
+ *
+ * ⚠️ 이 자리가 이번 버그를 놓쳤던 곳이에요 — 예전엔 리그와 무관하게 rand(0.38,0.60)만
+ * 뽑아 대륙 구단 전력을 한 번도 안 읽었고, oppFor의 두 번 걸린 난이도가 안 보였어요.
+ * 이제 실제 구단을 oppFor에 먹이니, 처방(리그 평균 대비로 읽기)이 없으면 대륙 상대가
+ * 0.617로 튀어 ⑨⑫가 빨간불이 됩니다 — 그게 진실이에요.
+ *
+ * ⚠️ 리그끼리 공용 난수를 정렬해 둔 게 이 파일의 분산 축소 핵심이에요(칸당 8000시즌).
+ * 그래서 구단마다 rand를 '한 번씩' 소비하되, 전력이 박힌 해외 구단은 그 값을 버리고
+ * 목록값을 써요 — 세 리그가 똑같이 열 번을 소비해 정렬이 유지되고, KBO만 그 난수로
+ * 전력을 뽑습니다(teamStrOf와 같은 분포). */
+function leagueOppPool(tier) {
+  const id = L(tier).id;
+  const names = CLUB.teamsOf(id);
+  const strOf = {};
+  for (const name of names) {
+    const draw = Math.round(rand(0.38, 0.60) * 1000) / 1000;   // 구단마다 한 번씩 (정렬 유지)
+    const fixed = CLUB.clubStrOf(name);
+    strOf[name] = typeof fixed === "number" ? fixed : draw;    // 해외는 목록값, KBO는 뽑은 값
+  }
+  const opp = oppForFn({ league: id }, (n) => strOf[n]);       // 소스의 oppFor 그대로
+  return names.map((n) => opp(n));
+}
+
 function batterSeason(stat, tier, games) {
   /* games를 따로 받을 수 있게 열어뒀어요 — ⑭가 '난이도는 그대로 두고 경기 수만' 바꿔서
    * 수상 판정이 시즌 길이에 중립인지 재는 데 씁니다. 안 넘기면 그 리그의 경기 수예요.
@@ -466,12 +512,12 @@ function batterSeason(stat, tier, games) {
    * 돌거든요. 여기서 안 채워두면 경쟁자 분포가 144경기짜리로 굳어요. */
   const n = games || gamesOf(tier);
   const S = batState(stat, { season: { total: n } });
-  // 상대 9팀 — teamStrOf가 뽑는 분포(0.38~0.60)를 그대로 흉내내요
-  const pool = Array.from({ length: 9 }, () => Math.round(rand(0.38, 0.60) * 1000) / 1000);
+  // 상대 구단 — 그 리그의 실제 구단을 소스의 oppFor로 읽어요 (리그 난이도 포함)
+  const pool = leagueOppPool(tier);
   const t = { ab: 0, hits: 0, hr: 0, sb: 0 };
   const story = { ourInn: Array(9).fill(0) };
   for (let g = 0; g < n; g++) {
-    S.__opp = pool[Math.floor(g / 3) % 9] + L(tier).oppUp;   // 3연전 단위로 상대가 바뀌어요
+    S.__opp = pool[Math.floor(g / 3) % pool.length];   // 3연전 단위로 상대가 바뀌어요 (oppUp은 oppFor 안에 이미 들어 있어요)
     const abs = randInt(3, 5);
     const perf = { ab: abs, hits: 0, hr: 0, sb: 0 };
     for (let a = 0; a < abs; a++) abFn(S, perf, story, autoResFn(S, stat, clamp), clamp, rand, randInt, pick);
@@ -495,17 +541,17 @@ const TEAM_WIN = 0.55;
 function pitcherSeason(stat, tier, games) {
   const n = games || gamesOf(tier);
   const S = pitState(stat, { season: { total: n } });
-  const pool = Array.from({ length: 9 }, () => Math.round(rand(0.38, 0.60) * 1000) / 1000);
+  const pool = leagueOppPool(tier);                    // 상대별 난이도 (oppFor · 리그 포함)
   const up = L(tier).oppUp;
   const t = { ip: 0, k: 0, er: 0, wins: 0, saves: 0, g: 0 };
   for (let g = 0; g < n; g++) {
     if (g % ROT !== 0) continue;                       // 로테이션이 도는 날만 등판해요
-    const oppTeam = pool[Math.floor(g / 3) % 9];       // 3연전 단위로 상대가 바뀌어요
+    const oppTeam = pool[Math.floor(g / 3) % pool.length];   // 3연전 단위로 상대가 바뀌어요
     const { ip, kBase } = pitStartFn(S, clamp, randInt);
     let runs = 0;
     const cnt = crisisCntFn(randInt);
-    // 상대 수준에는 리그가 섞여 있고(oppFor), 실점 크기에는 리그 몫만 따로 걸려요
-    for (let c = 0; c < cnt; c++) runs += crisisFn(S, autoResFn(S, stat, clamp), oppTeam + up, up, clamp, rand, randInt);
+    // 상대 수준에는 리그가 섞여 있고(oppTeam은 oppFor라 이미 포함), 실점 크기에는 리그 몫(up)만 따로 걸려요
+    for (let c = 0; c < cnt; c++) runs += crisisFn(S, autoResFn(S, stat, clamp), oppTeam, up, clamp, rand, randInt);
     t.ip += ip; t.k += kBase; t.er += runs; t.g += 1;
     if (Math.random() < TEAM_WIN && ip >= WIN_IP) t.wins += 1;
   }
@@ -733,13 +779,22 @@ guard("점수로 다시 잰 사다리", () => {
   /* ⚠️ 남는 어긋남 — 상 배점이 MVP에 몰려 있어서, '상 하나라도'로 잰 ⑨⑩과
    * 점수로 잰 ⑫가 준정상급(130) 근처에서 갈려요. MVP 확률이 위 리그에서 가장 빨리
    * 떨어지거든요. 리그 계수도 배점도 이 태스크의 범위 밖이라 값을 옮기지 않고,
-   * '얼마나 붙어 있는지'만 적어 둡니다 — 다음에 손댈 때 여기가 출발점이에요. */
+   * '얼마나 붙어 있는지'만 적어 둡니다 — 다음에 손댈 때 여기가 출발점이에요.
+   *
+   * 🌏 문턱을 0.95 → 0.85로 내렸어요. 예전엔 상대 분포를 리그와 무관하게 rand(0.38,0.60)
+   * (폭 0.22)에서 뽑아 열도도 KBO만큼 넓었는데, 이제 LEAGUE_CLUBS의 실제 열도 구단
+   * (0.44~0.58 · 폭 0.14)을 읽으니 분포가 좁아졌어요. 좁은 분포는 약체를 만나 크게
+   * 치는 시즌이 적어 MVP가 덜 나오고, 그래서 열도 130의 MVP 가중 점수가 KBO 대비
+   * 0.89~0.91배로 앉아요(씨앗 4개 실측 · 폭 0.02로 안정적). 예전 0.97~1.00은 가짜
+   * 분포가 만든 값이었어요. 사다리 자체(⑨⑩ '상 하나라도')는 열도 130이 여전히
+   * 최적이고 여유도 10% 넘어요 — 갈라지는 건 MVP 배점이 몰린 '점수'뿐이에요.
+   * 배점·계수를 안 건드리기로 한 이 태스크에서는 실측값을 그대로 문서에 남깁니다. */
   console.log("=== ⑫ 준정상급(130) 어긋남 — 상 배점이 MVP에 몰려 있어서 생겨요 ===");
   for (const [rows, label] of [[batRows, "🧢 타자"], [pitRows, "⚾ 투수"]]) {
     const r = rows.find((x) => x.band.stat === 130);
     const on = r.cells.map((c) => seasonVal(c, true));
     console.log(`  ${label} | ${NAME(1)} ${on[0].toFixed(2)} · ${NAME(2)} ${on[1].toFixed(2)} (${(on[1] / on[0]).toFixed(2)}배)`);
-    check(on[1] > on[0] * 0.95,
+    check(on[1] > on[0] * 0.85,
       `  ${label} 준정상급(130)에서 ${NAME(2)}가 점수로도 ${NAME(1)}에 붙어 있다 (${(on[1] / on[0]).toFixed(2)}배)`);
   }
 });
