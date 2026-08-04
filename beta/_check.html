@@ -34,7 +34,7 @@
       border-radius: 14px;
       padding: 14px;
       margin-bottom: 22px;
-      background: rgba(255, 255, 255, .03);
+      background: var(--bg2);
     }
     .mg-box h3 { margin: 0 0 6px; }
     .mg-safe { color: var(--sky); font-size: .8rem; line-height: 1.6; margin: 0 0 12px; }
@@ -51,7 +51,7 @@
       color: var(--dim);
       cursor: pointer;
     }
-    .mg-seg button.on { border-color: var(--accent); background: rgba(255, 255, 255, .1); color: var(--accent); }
+    .mg-seg button.on { border-color: var(--accent); background: var(--field); color: var(--accent); }
     .mg-range { flex: 1 1 120px; min-width: 110px; accent-color: var(--accent); }
     .mg-out { color: var(--sky); font-size: .78rem; }
     .mg-list { display: flex; flex-direction: column; gap: 8px; margin: 12px 0 0; }
@@ -70,12 +70,12 @@
       color: var(--text);
       cursor: pointer;
     }
-    .mg-item.on { border-color: var(--accent); background: rgba(255, 255, 255, .07); }
+    .mg-item.on { border-color: var(--accent); background: var(--field); }
     .mg-item b { color: var(--accent); font-size: .98rem; }
     .mg-item span { color: var(--dim); font-size: .76rem; line-height: 1.5; }
     .mg-item .mg-stat { color: var(--sky); }
     .mg-now { color: var(--dim); font-size: .78rem; margin: 12px 0 6px; }
-    .mg-frame { display: block; width: 100%; min-height: 240px; border: 0; border-radius: 12px; background: var(--bg2); }
+    .mg-frame { display: block; width: 100%; min-height: 240px; border: 0; border-radius: 12px; background: var(--bg); }
     .mg-res { color: var(--cream); font-size: .92rem; margin: 10px 0; min-height: 1.3em; }
     .mg-acts { display: flex; gap: 8px; }
     .mg-acts .btn { flex: 1; margin: 0; }
@@ -105,7 +105,7 @@
         </div>
         <div class="mg-row">
           <b>📊 능력치</b>
-          <input class="mg-range" id="mg-stat" type="range" min="0" max="100" step="5" value="55"
+          <input class="mg-range" id="mg-stat" type="range" min="0" max="150" step="5" value="55"
                  aria-label="능력치" />
           <span class="mg-out" id="mg-stat-out"></span>
         </div>
@@ -344,6 +344,13 @@
       }
       return MG_GAMES[game];
     }
+    /* 라벨(어느 능력치를 보는지)과 판정 존을 그리려면 소스가 있어야 해요.
+     * 누르기 전에 미리 받아 둬요 — 실패해도 조용히 넘어가고, 누르면 다시 받아요. */
+    function mgLoadAll() {
+      return Promise.all(["rookie", "idol"]
+        .map((g) => mgLoad(g).catch(() => mgLoad(g)).catch(() => null)))
+        .then(() => { renderMg(); });
+    }
     // STAT_DEFS는 야구가 { batter: [], pitcher: [] }, 아이돌이 [] 예요.
     const mgDefs = (g, game) => (game === "rookie"
       ? [].concat(g.meta.defs.batter, g.meta.defs.pitcher) : g.meta.defs);
@@ -351,6 +358,7 @@
      * 직접 물어봐요. 능력치마다 다른 숫자를 잠깐 끼워 두고, 돌아온 숫자로 어느
      * 칸이었는지 되짚어요. 능력치가 옮겨 가도 이 줄은 알아서 따라와요. */
     function mgStatName(g, id) {
+      g.S.pos = g.game === "rookie" ? MG.pos : MG_IDOL_POS;   // 시점이 바뀌면 보는 능력치도 바뀌어요
       const list = mgDefs(g, g.game);
       const keep = g.S.stats;
       const marks = {};
@@ -406,6 +414,7 @@
       mgLoad(m.game).catch(() => mgLoad(m.game)).then((g) => {
         g.S.pos = m.game === "rookie" ? MG.pos : MG_IDOL_POS;
         for (const d of mgDefs(g, m.game)) g.S.stats[d.key] = MG.stat;
+        renderMg();                                   // 이제 라벨(어느 능력치인지)을 채울 수 있어요
         const zone = g.meta.zone(MG.stat);
         $("mg-now").textContent = `${m.emoji} ${m.name} · `
           + (m.game === "rookie" ? `${MG_POS.find((p) => p.id === MG.pos).label} · ${MG_TIER[MG.tier].label} · ` : "🎤 투어 · ")
@@ -447,6 +456,8 @@
           });
           mgFit = setInterval(() => mgFitTo(ifr, D), 150);
           mgFitTo(ifr, D);
+          // 폰에서는 목록이 길어서 실행 칸이 화면 밖에 있어요 — 눌렀으면 보이게 해 줘요.
+          try { $("mg-stage").scrollIntoView({ block: "nearest", behavior: "smooth" }); } catch { /* 안 되는 브라우저도 있어요 */ }
         };
         if (ifr.contentDocument && ifr.contentDocument.body) boot();
         else ifr.onload = boot;
@@ -488,6 +499,7 @@
         b.className = `mg-item${MG.id === m.id ? " on" : ""}`;
         b.dataset.mech = m.id;
         b.dataset.game = m.game;
+        b.dataset.stat = stat;                        // 검사가 라벨을 꺼내 볼 자리예요
         b.innerHTML = `<b>${esc(m.emoji)} ${esc(m.name)}</b>`
           + `<span>${esc(m.desc)}</span>`
           + `<span class="mg-stat">📊 ${esc(stat)}${m.game === "rookie" ? " · 🏆 시리즈 단계 적용" : ""}</span>`;
@@ -503,6 +515,7 @@
       state: () => MG,
       set: (k, v) => { MG[k] = v; renderMg(); },
       play: (id) => mgPlay(id),
+      load: mgLoadAll,
       frame: () => mgFrame,
       loaded: (game) => mgReady(game),
       seenKey: MG_READY_KEY,
@@ -515,10 +528,7 @@
       $("mg-again").onclick = () => { if (MG.id) mgPlay(MG.id); };
       $("mg-close").onclick = () => { mgTeardown(); MG.id = null; $("mg-stage").hidden = true; renderMg(); };
       renderMg();
-      // 라벨(어느 능력치인지)과 판정 존을 채우려면 소스가 필요해요. 미리 받아 둬요.
-      for (const game of ["rookie", "idol"]) {
-        mgLoad(game).then((g) => { mgDone[game] = g; renderMg(); }).catch(() => { /* 누르면 다시 받아요 */ });
-      }
+      mgLoadAll();
     }
 
     function render() {

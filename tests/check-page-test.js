@@ -561,6 +561,159 @@ reach("rookie-cont-series", (P, first) => {
     `경기 안내 줄도 ${KS}다 (${P.$("pro-camp-title").textContent})`);
 });
 
+/* ---------- ⑥ 🎮 미니게임 바로 해보기 ----------
+ * 가을야구 4종(🎯 수싸움 · 🏃 홈 승부 · 💥 힘 배분 · 🔥 힘겨루기)과 투어 3종
+ * (🎬 함성 웨이브 · ✨ 싱크로 · 🔥 함성 유지)은 **경기 중에 무작위로** 나와요.
+ * 위 ④의 세이브 심기는 "가을야구 화면까지" 데려다줄 뿐이라, 어떤 미니게임이
+ * 나올지는 거기서부터 다시 운이에요. 그래서 확인 페이지에 곧바로 돌리는 칸이
+ * 생겼습니다. 여기서 못 박는 건 다섯이에요.
+ *
+ *   ① 7종이 전부 목록에 있다
+ *   ② 누르면 **미니게임 DOM이 실제로 그려진다** — 준비 화면 → ▶️ 시작 → 본 상자
+ *   ③ 시점·능력치·시리즈 단계를 실제로 바꿀 수 있다 (야구는 시점에 따라 보는
+ *      능력치와 문구가 통째로 뒤집혀요 — 그 뒤집힘을 여기서 봅니다)
+ *   ④ 끝까지 하면 판정(perfect/good/miss)이 화면에 뜬다
+ *   ⑤ **세이브를 한 글자도 안 건드린다** — 이 칸은 진짜 캐릭터와 무관해야 해요
+ *
+ * 🌐 jsdom에는 fetch가 없어요. 이 칸은 rookie/game.js의 POST_MECH와
+ * idol/game.js의 TOUR_MECH를 **소스에서 그대로 떼어다** 쓰거든요(문구를 확인
+ * 페이지에 옮겨 적으면 게임이 바뀔 때 이 페이지만 옛말을 하니까요).
+ * 그래서 파일을 그대로 내주는 가짜 fetch를 끼워 줍니다. */
+async function playground() {
+  console.log("\n=== ⑥ 🎮 미니게임 바로 해보기 ===");
+  /* 앞 검사에서 심고 되돌린 흔적과 섞이지 않게 페이지를 새로 띄워요 —
+   * "세이브를 안 건드린다"를 재려면 출발선이 깨끗해야 해요. */
+  const dom2 = makeCheckPage(OLD_SAVE);
+  const W = dom2.window, D = W.document;
+  W.fetch = (u) => {
+    const p = path.resolve(BETA, String(u).replace(/^\.\//, ""));
+    if (!fs.existsSync(p)) return Promise.reject(new Error(`404 ${u}`));
+    return Promise.resolve({ ok: true, status: 200, text: () => Promise.resolve(fs.readFileSync(p, "utf8")) });
+  };
+  const mg = W.CheckPage.mg;
+  const items = () => Array.from(D.querySelectorAll(".mg-item"));
+  const statLine = (id) => ((D.querySelector(`.mg-item[data-mech="${id}"]`) || { dataset: {} }).dataset.stat || "");
+  const dump = () => {
+    const ls = W.localStorage, out = {};
+    for (let i = 0; i < ls.length; i++) { const k = ls.key(i); if (k) out[k] = ls.getItem(k); }
+    return out;
+  };
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const before = JSON.stringify(dump());
+
+  check(!!mg, "확인 페이지가 미니게임 칸을 내어 준다");
+  if (!mg) { dom2.window.close(); return; }
+  check(items().length === 7, `미니게임이 7종 다 목록에 있다 (${items().length}종)`);
+  const ids = items().map((b) => b.dataset.mech);
+  for (const want of ["mind", "dash", "surge", "clash", "wave", "sync", "roar"]) {
+    check(ids.includes(want), `${want}이(가) 목록에 있다`);
+  }
+
+  await mg.load();
+
+  /* ③-1 어느 능력치를 보는지 — 표를 옮겨 적지 않고 소스의 stat()에 물어서 그려요.
+   * 그래서 시점을 뒤집으면 이 줄이 같이 뒤집혀야 해요. */
+  mg.set("pos", "batter");
+  const asBat = ["mind", "dash", "surge", "clash"].map(statLine);
+  mg.set("pos", "pitcher");
+  const asPit = ["mind", "dash", "surge", "clash"].map(statLine);
+  check(asBat.every((s) => s && !s.includes("…")), `버튼마다 어느 능력치인지 적혀 있다 (${asBat.join(" / ")})`);
+  check(asBat[0] !== asPit[0] && asBat[1] !== asPit[1] && asBat[3] !== asPit[3],
+    `시점을 바꾸면 보는 능력치가 뒤집힌다 (타자 ${asBat.join("·")} → 투수 ${asPit.join("·")})`);
+  check(asBat[2] === asPit[2], `💥 힘 배분만 시점과 무관하게 같은 능력치다 (${asBat[2]})`);
+
+  /* ③-2 능력치를 올리면 판정 존이 넓어져요 — opts.zonePct가 곧 난이도예요. */
+  const zoneOut = () => D.getElementById("mg-stat-out").textContent;
+  mg.set("stat", 10);
+  const lowTxt = zoneOut();
+  mg.set("stat", 100);
+  const highTxt = zoneOut();
+  const pct = (s) => parseFloat((String(s).match(/([\d.]+)%/) || [])[1] || "0");
+  check(pct(lowTxt) > 0 && pct(highTxt) > pct(lowTxt),
+    `능력치를 올리면 판정 존이 넓어진다 (${lowTxt} → ${highTxt})`);
+
+  /* ③-3 시리즈 단계 — 뒤 시리즈일수록 어려워져요(post-stage.js의 tier). */
+  const tiers = Array.from(D.querySelectorAll("#mg-tier button"));
+  check(tiers.length === 3, `시리즈 단계가 3칸이다 (${tiers.map((b) => b.textContent).join(" · ")})`);
+  if (tiers.length === 3) {
+    tiers[2].click();
+    check(mg.state().tier === 2, `마지막 시리즈를 고르면 tier가 2가 된다 (${mg.state().tier})`);
+    // 고른 뒤에는 칸이 다시 그려져요 — 새로 찾아서 표시가 남았는지 봐요.
+    const on = Array.from(D.querySelectorAll("#mg-tier button.on")).map((b) => b.dataset.v);
+    check(on.join() === "2", `고른 칸에만 표시가 남는다 (${on.join(" · ") || "없음"})`);
+  }
+
+  /* ② 7종을 하나씩 눌러서 **정말 그려지는지** 봐요.
+   * 준비 화면(▶️ 시작)이 먼저 뜨고, 누르면 본 미니게임 상자가 서야 해요. */
+  mg.set("stat", 55);
+  for (const id of ["mind", "dash", "surge", "clash", "wave", "sync", "roar"]) {
+    const btn = D.querySelector(`.mg-item[data-mech="${id}"]`);
+    btn.click();
+    await wait(80);
+    const ifr = mg.frame();
+    if (!ifr) {
+      check(false, `${id} — 실행 칸이 안 생겼다 (${D.getElementById("mg-now").textContent})`);
+      continue;
+    }
+    const FD = ifr.contentDocument;
+    /* 미니게임 모양은 rookie/style.css·idol/style.css에 있어요. 그 옷을 안 입히면
+     * 폰에서 겹겹이 뭉개진 채로 뜨는데, jsdom은 CSS를 안 그리니 링크로 봐요. */
+    const hrefs = Array.from(FD.querySelectorAll("link")).map((l) => String(l.href));
+    const wantCss = id === "wave" || id === "sync" || id === "roar" ? "idol/style.css" : "rookie/style.css";
+    check(hrefs.some((h) => h.endsWith("base.css")) && hrefs.some((h) => h.endsWith(wantCss)),
+      `${id} — 실행 칸이 게임의 진짜 옷(${wantCss})을 입는다`);
+    const ready = FD.querySelector(".mg-ready .mg-go");
+    check(!!ready, `${id} — 준비 화면(▶️ 시작)이 뜬다`);
+    if (!ready) continue;
+    ready.click();
+    await wait(40);
+    const boxes = Array.from(FD.querySelectorAll("#mg-play .tm-box"))
+      .filter((b) => !b.classList.contains("mg-ready"));
+    check(boxes.length === 1, `${id} — 시작을 누르면 미니게임이 실제로 그려진다 (상자 ${boxes.length}개)`);
+    check(!!(boxes[0] && boxes[0].querySelector(".tm-label")),
+      `${id} — 무엇을 하는 판인지 상황 문구가 붙어 있다`);
+  }
+
+  /* ③-4 같은 규칙을 타자와 투수가 정반대로 읽어요 — 준비 화면 문구가 뒤집혀야 해요.
+   * (문구를 여기 옮겨 적지 않아요. 두 화면이 **다르다**는 것만 못 박습니다.) */
+  const readyText = async (pos) => {
+    mg.set("pos", pos);
+    mg.play("mind");
+    await wait(80);
+    const el = mg.frame().contentDocument.querySelector(".mg-ready");
+    return el ? el.textContent.replace(/\s+/g, " ").trim() : "";
+  };
+  const batTxt = await readyText("batter");
+  const pitTxt = await readyText("pitcher");
+  check(!!batTxt && !!pitTxt && batTxt !== pitTxt,
+    "🎯 수싸움의 준비 화면이 타자·투수에서 서로 다르다 (규칙이 뒤집히는 자리예요)");
+
+  /* ④ 끝까지 해서 판정이 뜨는지 — 🎯 수싸움은 시간 축이 없어서 눌러 넘길 수 있어요. */
+  const FD = mg.frame().contentDocument;
+  FD.querySelector(".mg-ready .mg-go").click();
+  await wait(40);
+  const res = () => D.getElementById("mg-res").textContent;
+  for (let i = 0; i < 6 && !res(); i++) {
+    const col = FD.querySelector("#mg-play .pm-col");
+    if (col) col.click();
+    await wait(700);
+  }
+  check(/perfect|good|miss/.test(res()), `끝까지 하면 판정이 화면에 뜬다 (${res() || "안 떴어요"})`);
+
+  /* ⑤ 세이브 — 이 칸은 진짜 캐릭터와 무관해야 해요.
+   * 시나리오 칸의 백업/되돌리기와도 섞이면 안 되고, 미니게임이 준비 화면 횟수를
+   * 적어 두는 열쇠(grow-mech-ready)까지 원래대로 돌려놔야 해요. */
+  check(JSON.stringify(dump()) === before, "일곱 판을 돌려도 세이브가 한 글자도 안 바뀐다");
+  check(!W.localStorage.getItem(W.CheckPage.BACKUP_KEY), "백업이 만들어지지 않는다 (시나리오 칸과 안 섞여요)");
+  const RAW = mg.frame().contentWindow.localStorage;   // 실행 칸은 env.js를 안 거쳐요 = 날것 그대로
+  check(RAW.getItem(mg.seenKey) === null,
+    `준비 화면 횟수(${mg.seenKey})도 원래대로 돌려놓는다 (${RAW.getItem(mg.seenKey)})`);
+
+  D.getElementById("mg-close").click();
+  check(!mg.frame(), "✖️ 닫기를 누르면 실행 칸이 치워진다");
+  try { dom2.window.close(); } catch { /* 이미 닫혔으면 넘어가요 */ }
+}
+
 /* ---------- ⑤ 은퇴식 · 명예의 전당 (비동기) ----------
  * 은퇴식은 세이브에 담기지 않아요 — 누르는 순간 만들어지고, 그 순간 세이브가 지워져요.
  * 그래서 '누르기 직전'을 심고 여기서 실제로 눌러 봅니다.
@@ -621,6 +774,8 @@ async function finish() {
       if (P) P.close();
     }
   }
+
+  await playground();
 
   console.log(fail ? `\n❌ 실패 ${fail}건` : "\n✅ 전부 통과");
   process.exit(fail ? 1 : 0);
