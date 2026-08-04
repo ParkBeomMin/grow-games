@@ -349,7 +349,9 @@ window.WingerCareer = (() => {
 
   function renderPrep() {
     $("pro-name").textContent = `${S.name} (${POS_INFO[S.pos].name})`;
-    $("pro-team").textContent = `⚽ ${S.group}${S.center ? " · 주장" : ""} · ${S.proYear}시즌 · 종합 ${Math.round(overall())}`;
+    // 리그 이름을 함께 보여줘요 — 승격·강등하면 여기가 바뀌는 게 제일 먼저 눈에 띄어야 해요
+    $("pro-team").textContent =
+      `${leagueOf(S).flag} ${S.group}${S.center ? " · 주장" : ""} · ${leagueOf(S).name} · ${S.proYear}시즌 · 종합 ${Math.round(overall())}`;
     $("pro-turn").textContent = S.activity
       ? `${cbLabel(S.activity.cb)} · R${S.activity.week}/${S.activity.weekTotal} · MOM ${S.activity.wins}회`
       : `시즌 준비 ${3 - S.camp}/3`;
@@ -360,12 +362,18 @@ window.WingerCareer = (() => {
     /* 🏆 리그 순위표 — 시즌 중에만 보여줘요. 접어둬서 훈련 화면이 길어지지 않게 합니다.
      * "리그 경기중인데 리그 팀 순위표를 볼 수가 없네"에서 나왔어요. */
     const tbl = $("pro-table");
-    if (S.activity && tableReady()) {
+    /* 시즌 준비 중에도 보여줘요. 표는 원래 시즌이 시작될 때 만들어져서, 승격 직후
+     * 준비 화면에서는 "내가 어느 리그에 왔는지"를 볼 방법이 없었어요.
+     * 아직 없으면 새 리그의 표를 미리 만들어 둡니다 (전부 0경기로 시작해요). */
+    if (S.phase === "pro" && !tableReady()) { initTable(); save(); }
+    if (tableReady()) {
       tbl.hidden = false;
       const rows = tableRows();
       const me = rows.find((r) => r.name === S.group);
-      $("pro-table-sum").textContent =
-        `🏆 ${leagueOf(S).name} ${myTableRank()}위` + (me ? ` · ${me.w}승 ${me.d}무 ${me.l}패 · 승점 ${me.pts}` : "");
+      const played = me ? me.w + me.d + me.l : 0;
+      $("pro-table-sum").textContent = played
+        ? `🏆 ${leagueOf(S).name} ${myTableRank()}위 · ${me.w}승 ${me.d}무 ${me.l}패 · 승점 ${me.pts}`
+        : `🏆 ${leagueOf(S).name} — 개막 전 (${tableRows().length}팀)`;
       $("pro-table-body").innerHTML = tableHTML();
     } else {
       tbl.hidden = true;
