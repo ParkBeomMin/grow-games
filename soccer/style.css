@@ -72,7 +72,9 @@ body {
  * 폭을 늘리는 것만으로는 이름이 더 길어지면 또 새니, overflow로 구조적으로 막아요.
  * padding-right가 이름과 성적 사이 여백을 보장해요. */
 .season-soccer .yr-club {
-  vertical-align: top;
+  /* 수상 칸이 여러 줄로 늘어나면 행이 높아지는데, 소속만 top이라 혼자 위에
+     붙어 보였어요. 다른 칸과 같은 눈높이로 맞춥니다. */
+  vertical-align: middle;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

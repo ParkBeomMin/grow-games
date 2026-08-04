@@ -136,6 +136,9 @@ window.WingerCareer = (() => {
     S.clubStr = debutClub.str;
     S.center = !!captain;
     S.proYear = 0;
+    // 데뷔 시즌부터 정착 기간을 세요 (갓 입단해서 첫 시즌에 승격하는 건 이상해요).
+    // ⚠️ S.proYear를 0으로 세운 **뒤에** 잡아야 해요 — 앞에 두면 undefined가 들어갑니다.
+    S.leagueSince = 0;
     /* daesangW · bonsangW는 리그격을 곱해 쌓는 가중 수상 카운터예요.
      * 옛 카운터(daesang · bonsang)는 화면에 "MVP 3회"처럼 횟수로 보여주는 데 그대로 써요. */
     S.career = { years: [], wins: 0, daesang: 0, bonsang: 0, daesangW: 0, bonsangW: 0, rookie: 0, sales: 0, goals: 0, assists: 0, defense: 0, apps: 0, teamW: 0, teamD: 0, teamL: 0 };
@@ -251,6 +254,71 @@ window.WingerCareer = (() => {
     if (changed) save();
   }
 
+  /* 🔺🔻 팀 승강제 — 리그 순위표 1위면 위로, 꼴찌면 아래로 내 팀이 통째로 움직여요.
+   *
+   * 개인 이적 사다리(PROMOTE_HYPE)와는 **다른 축**이에요.
+   * 그건 "내가 좋은 제안을 받아 클럽을 옮기는 것", 이건 "내 클럽이 리그를 오르내리는 것".
+   * 둘이 섞이면 사다리가 두 번 작동해서 한 시즌에 두 단계를 뛰어넘어요.
+   *
+   * 국내 3부(K리그3 · K리그2 · K리그1)에서만 돌아요. 유로파·챔피언스리그는
+   * 승강제가 있는 리그가 아니라 개인 성적으로 초청받는 무대라, 그쪽은 기존
+   * 이적 사다리에 그대로 맡깁니다. */
+  const DOMESTIC_TIERS = [5, 4, 1];          // K리그3 → K리그2 → K리그1 (tier 오름차순)
+  /* 승격 문턱. 순위만 보면 사다리가 죽어요 — 실측하니 내 승률 60%에서 시즌의 91.5%가
+   * 1위였습니다. 팀 성적이 사실상 내 성적이라(내 골이 곧 팀 득점) 잘하는 선수는
+   * 매 시즌 1위를 해요. 승점 차를 걸어도 75% 승률에서 98.8%라 소용이 없었어요.
+   *
+   * 그래서 **내 실력과 무관한 축**을 겁니다 — 승격한 리그에는 최소 두 시즌 머물러요.
+   * 실제로도 갓 승격한 팀이 곧바로 또 올라가는 일은 드물어요.
+   * K리그3에서 K리그1까지 최소 6시즌이 걸려, 개인 이적 사다리(PROMOTE_HYPE)가
+   * 여전히 '빠른 길'로 남습니다. 강등에는 안 걸어요 — 위험은 바로 와야 무섭습니다. */
+  const PROMO_GAP = 8;                       // 2위와 벌려야 하는 승점 차
+  const PROMO_SETTLE = 2;                    // 승격 뒤 머물러야 하는 시즌 수
+
+  function applyPromotion() {
+    if (!tableReady()) return null;
+    const rows = tableRows();
+    if (rows.length < 3) return null;
+    const rank = myTableRank();
+    const at = DOMESTIC_TIERS.indexOf(leagueOf(S).id);
+    if (at < 0) return null;                 // 유럽 무대는 승강제 밖이에요
+
+    /* 정착 기간은 승격·강등 **둘 다**에 걸어요. 승격에만 걸면 데뷔 시즌에 강등당하는데,
+     * 갓 입단한 선수의 첫 시즌이 그렇게 끝나는 건 이상하고, 지난 시즌 기록의 리그가
+     * 곧바로 어긋나 화면도 헷갈립니다. */
+    const settled = S.leagueSince == null || (S.proYear - S.leagueSince) >= PROMO_SETTLE;
+    if (!settled) return null;
+
+    /* 국내 최상위(K리그1)에서 1위면 올라갈 데가 없어요. 승격 대신 **리그 우승**이에요.
+     * 아무 일도 안 일어나면 1위를 해도 화면에 남는 게 없습니다. */
+    if (rank === 1 && at === DOMESTIC_TIERS.length - 1) {
+      S.trophies = S.trophies || [];
+      const title = `${S.proYear}시즌 ${leagueOf(S).name} 우승`;
+      if (!S.trophies.includes(title)) S.trophies.push(title);
+      return { kind: "title", from: leagueOf(S).name, to: leagueOf(S).name, rank };
+    }
+
+    let to = null, kind = null;
+    if (rank === 1 && at < DOMESTIC_TIERS.length - 1) {
+      const me = rows[0], second = rows[1];
+      if (me.pts - (second ? second.pts : 0) >= PROMO_GAP) { to = DOMESTIC_TIERS[at + 1]; kind = "up"; }
+    } else if (rank === rows.length && at > 0) { to = DOMESTIC_TIERS[at - 1]; kind = "down"; }
+    if (to == null) return null;
+
+    const from = leagueOf(S).name;
+    S.league = to;
+    /* 클럽 전력도 함께 움직여요. 승격하면 상위 리그에서는 하위권, 강등되면
+     * 하위 리그에서는 상위권이 되는 게 자연스러워요. */
+    const list = CLUBS[to] || [];
+    if (list.length) {
+      const ref = kind === "up" ? list[list.length - 1] : list[0];
+      S.clubStr = ref ? ref.str : S.clubStr;
+    }
+    S.table = null;                          // 새 리그에서 표를 다시 만들어요
+    S.leagueSince = S.proYear;               // 이 리그에 들어온 시즌 — 연속 승격을 막아요
+    return { kind, from, to: leagueOf(S).name, rank };
+  }
+
   function initActivity() {
     initTable();
     S.activity = {
@@ -281,7 +349,9 @@ window.WingerCareer = (() => {
 
   function renderPrep() {
     $("pro-name").textContent = `${S.name} (${POS_INFO[S.pos].name})`;
-    $("pro-team").textContent = `⚽ ${S.group}${S.center ? " · 주장" : ""} · ${S.proYear}시즌 · 종합 ${Math.round(overall())}`;
+    // 리그 이름을 함께 보여줘요 — 승격·강등하면 여기가 바뀌는 게 제일 먼저 눈에 띄어야 해요
+    $("pro-team").textContent =
+      `${leagueOf(S).flag} ${S.group}${S.center ? " · 주장" : ""} · ${leagueOf(S).name} · ${S.proYear}시즌 · 종합 ${Math.round(overall())}`;
     $("pro-turn").textContent = S.activity
       ? `${cbLabel(S.activity.cb)} · R${S.activity.week}/${S.activity.weekTotal} · MOM ${S.activity.wins}회`
       : `시즌 준비 ${3 - S.camp}/3`;
@@ -292,12 +362,18 @@ window.WingerCareer = (() => {
     /* 🏆 리그 순위표 — 시즌 중에만 보여줘요. 접어둬서 훈련 화면이 길어지지 않게 합니다.
      * "리그 경기중인데 리그 팀 순위표를 볼 수가 없네"에서 나왔어요. */
     const tbl = $("pro-table");
-    if (S.activity && tableReady()) {
+    /* 시즌 준비 중에도 보여줘요. 표는 원래 시즌이 시작될 때 만들어져서, 승격 직후
+     * 준비 화면에서는 "내가 어느 리그에 왔는지"를 볼 방법이 없었어요.
+     * 아직 없으면 새 리그의 표를 미리 만들어 둡니다 (전부 0경기로 시작해요). */
+    if (S.phase === "pro" && !tableReady()) { initTable(); save(); }
+    if (tableReady()) {
       tbl.hidden = false;
       const rows = tableRows();
       const me = rows.find((r) => r.name === S.group);
-      $("pro-table-sum").textContent =
-        `🏆 ${leagueOf(S).name} ${myTableRank()}위` + (me ? ` · ${me.w}승 ${me.d}무 ${me.l}패 · 승점 ${me.pts}` : "");
+      const played = me ? me.w + me.d + me.l : 0;
+      $("pro-table-sum").textContent = played
+        ? `🏆 ${leagueOf(S).name} ${myTableRank()}위 · ${me.w}승 ${me.d}무 ${me.l}패 · 승점 ${me.pts}`
+        : `🏆 ${leagueOf(S).name} — 개막 전 (${tableRows().length}팀)`;
       $("pro-table-body").innerHTML = tableHTML();
     } else {
       tbl.hidden = true;
@@ -618,6 +694,17 @@ window.WingerCareer = (() => {
       awards.push("발롱도르");
       S.career.ballon = (S.career.ballon || 0) + 1;
     }
+    /* 🔺🔻 팀 승강제 — 수상까지 끝난 뒤에 판정해요 (수상은 그 시즌 리그 기준이라야 맞아요).
+     * ⚠️ applyPromotion이 S.league을 바꿔요. 시즌 기록에는 **치른 리그**를 남겨야
+     * 지난 시즌 화면이 새 리그로 바뀌지 않아요 — 이적 표시에서 겪은 것과 같은 함정이에요. */
+    const leaguePlayed = S.league;
+    const move = applyPromotion();
+    if (move) {
+      proLog(move.kind === "title" ? `🏆 ${move.from} 우승!! 리그 정상에 섰어요`
+        : move.kind === "up" ? `🔺 리그 우승! ${move.from} → ${move.to} 승격!!`
+        : `🔻 최하위… ${move.from} → ${move.to} 강등`);
+      if (move.kind === "title" && window.Fx) Fx.celebrate("champion", `🏆 ${move.from} 우승!`);
+    }
     S.career.sales += sales;
     const gg = act.goals || 0, ga = act.assists || 0, gd = act.defense || 0, apps = act.apps || 0;
     S.career.goals = (S.career.goals || 0) + gg;
@@ -637,7 +724,7 @@ window.WingerCareer = (() => {
      * S.moves에서 역산해 메워요 — 세이브는 고치지 않아요(클라우드 동기화와 부딪혀요). */
     // 평균 평점 — 골·도움만으로는 안 드러나는 '꾸준함'을 보여줘요
     const avgRating = apps ? Math.round(((act.ratingSum || 0) / apps) * 10) / 10 : null;
-    S.career.years.push({ y: S.proYear, hype: Math.round(hype * 10) / 10, wins, sales, dFan, awards, goals: gg, assists: ga, defense: gd, apps, avg: avgRating, club: S.group, league: S.league });
+    S.career.years.push({ y: S.proYear, hype: Math.round(hype * 10) / 10, wins, sales, dFan, awards, goals: gg, assists: ga, defense: gd, apps, avg: avgRating, club: S.group, league: leaguePlayed, promo: move ? move.kind : null, promoTo: move ? move.to : null });
     if (window.Stats) Stats.log("year_end", { y: S.proYear, wins, sales, goals: gg, assists: ga });
     for (const d of STAT_DEFS) {
       if (S.proYear <= 3) S.stats[d.key] = clamp(S.stats[d.key] + rand(0, 1) * S.talents[d.key], 0, statCap(d.key));
@@ -764,6 +851,10 @@ window.WingerCareer = (() => {
         y.hype >= 3.5 ? "아쉬움이 남는 시즌" : "혹독한 시즌…"
       }</div>
       <div class="draft-team">${leagueOf({ league: y.league || S.league }).flag} ${y.club || S.group} · ${leagueOf({ league: y.league || S.league }).name} · 전력 ${clubStrOf(S)} · ${y.apps || 0}경기 ⚽${y.goals || 0}골 🅰️${y.assists || 0}도움 🛡️${y.defense || 0} · MOM ${y.wins}회${y.avg != null ? ` · 평균 평점 ${y.avg.toFixed(1)}` : ""}</div>
+      ${y.promo ? `<div class="hint">${
+        y.promo === "title" ? `🏆 <b>${y.promoTo} 우승!</b> 리그 정상에 섰어요`
+        : y.promo === "up" ? `🔺 <b>리그 우승!</b> ${(y.y || 0) + 1}시즌부터 <b>${y.promoTo}</b>에서 뜁니다`
+        : `🔻 최하위로 강등… ${(y.y || 0) + 1}시즌부터 <b>${y.promoTo}</b>에서 다시 시작해요`}</div>` : ""}
       ${y.club && y.club !== S.group ? `<div class="hint">🔁 <b>${S.group}</b>로 이적했어요 — ${(y.y || 0) + 1}시즌부터 새 팀에서 뜁니다</div>` : ""}
       <table class="season-table season-soccer"><thead><tr><th>시즌</th><th>소속</th><th>성적</th><th>평점</th><th>수상</th></tr></thead><tbody>${rows}</tbody></table>
       <div class="draft-summary">
@@ -1016,6 +1107,7 @@ window.WingerCareer = (() => {
     S.group = club.name;
     S.clubStr = club.str;
     S.league = league.id;
+    S.leagueSince = S.proYear;               // 이적으로 리그가 바뀌어도 정착 기간을 새로 세요
     S.money = (S.money || 0) + (bonus || 0);
     if (!Array.isArray(S.moves)) S.moves = [];
     S.moves.push({ y: S.proYear, from, to: club.name, fromLg: prevLeague, toLg: league.id });
