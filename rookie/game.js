@@ -812,11 +812,11 @@ function initTitle() {
     renderRegions();
     show("screen-region");
   };
-  // 지금까지 등록된 루키 수
+  // 지금까지 등록된 선수 수
   if (window.Match && Match.enabled()) {
     Match.count("rookie").then((n) => {
       if (n) {
-        $("title-count").innerHTML = `⚾ 지금까지 <b>${n.toLocaleString()}명</b>의 루키가 그라운드를 밟았어요!`;
+        $("title-count").innerHTML = `⚾ 지금까지 <b>${n.toLocaleString()}명</b>의 신인이 그라운드를 밟았어요!`;
         $("title-count").classList.remove("hidden");
       }
     });

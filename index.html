@@ -113,7 +113,13 @@
       { slug: "dev",    emoji: "💻", title: "더 커밋",     sub: "개발자 키우기",       genre: "IT",    save: "devgrow-save-v1" },
       { slug: "chef",   emoji: "🍜", title: "더 셰프",     sub: "요리사 키우기",       genre: "요리",  save: "chef-save-v1" },
       { slug: "stream", emoji: "📺", title: "더 스트리머", sub: "스트리머 키우기",     genre: "방송",  save: "streamer-save-v1" },
-      { slug: "unicorn", emoji: "🦄", title: "더 유니콘",   sub: "창업 방치 (NEW)",     genre: "방치",  save: "unicorn-save-v1" },
+      /* 🦄 더 유니콘은 목록에서 내렸어요 (2026-08-04).
+       *  · 외부 레퍼런스와 지나치게 닮아 있어요.
+       *  · 지표도 유일하게 무너져 있었어요 — 방문자 127명에 재방문 1.06회(전체 최저),
+       *    48명이 시작해 4명만 첫 목표에 닿았고 데카콘은 0명이었습니다.
+       *  · 방치형이라 구조가 달라 8종 공통 개편에서 늘 예외였어요.
+       * 파일과 /unicorn/ 주소는 그대로 둡니다 — 세이브가 브라우저에 있어서
+       * 페이지를 지우면 진행 중인 사람의 기록이 날아가요. 목록에서만 내려요. */
     ];
 
     const readSlots = (save) => {
