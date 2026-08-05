@@ -214,6 +214,19 @@ for (const id of Object.keys(LEAGUE_CLUBS)) {
 }
 const clubStrOf = (name) => CLUB_STR[name];
 
+/* 🌏 그 리그 구단 전력의 평균이에요 — LEAGUE_CLUBS에서 그때그때 계산해요(값을 손으로
+ * 적지 않아요). oppFor가 상대를 '그 리그 평균 대비'로 읽을 때 기준이 되는 값이에요.
+ * 리그가 세다는 효과는 오직 oppUp에서만 오게 하고, 해외 구단 전력이 애초에 높게
+ * 박혀 있는 것 자체는 난이도로 새어들지 않게 하려는 거예요.
+ *
+ * KBO 구단은 str이 전부 null이라 teamStrOf가 0.38~0.60에서 뽑는 그 한가운데(0.49)로
+ * 봐요 — 그래서 KBO 보정이 정확히 0이 되고, oppFor가 teamStrOf와 한 톨까지 같아져
+ * 진행 중인 캐릭터의 성적이 안 튑니다. 구단을 더하면 평균이 자동으로 따라가요. */
+function leagueAvgStr(league) {
+  const strs = LEAGUE_CLUBS[leagueIdOf(league)].map((c) => c.str).filter((s) => typeof s === "number");
+  return strs.length ? strs.reduce((a, b) => a + b, 0) / strs.length : 0.49;
+}
+
 // 시작 능력치 뽑기 — 이름 화면에서 미리 보고 다시 뽑을 수 있어요
 function rollStats(pos) {
   const stats = {};
@@ -1455,7 +1468,7 @@ const DUEL_PIT = { ok: "타자의 노림수를 피했어요! 🧠", great: "허�
  * 🍂 가을야구 전용 미니게임 — 실행은 ../post-stage.js(window.PostStage)에 있어요.
  *
  * 가을야구는 야구의 절정인데 예전에는 5월의 평범한 경기와 판정이 똑같았어요.
- * 이제 **가을야구에서만** 아래 두 메커닉이 나와요. 정규시즌·고교 대회는
+ * 이제 **가을야구에서만** 아래 네 메커닉이 나와요. 정규시즌·고교 대회는
  * 예전 8종(timing.js) 그대로예요 — playRandomMini의 첫 줄에서만 갈라져요.
  *
  *   🎯 mind  — 수싸움. 상대와 **동시에** 세 코스 중 하나를 골라요. 같은 코스면
@@ -1463,9 +1476,13 @@ const DUEL_PIT = { ok: "타자의 노림수를 피했어요! 🧠", great: "허�
  *              아니라 "어디"예요. 상대의 버릇(기색)을 읽고, 내 패턴이 읽히지 않게
  *              해야 해요. 3구를 거쳐 결과가 쌓여요.
  *   🏃 dash  — 홈 승부. 정보가 늦게 오는데 기다리면 물러설 자리를 잃어요
+ *   🎯 course — 코스 공략. 좌우로 오가는 조준을 수비수 사이 갭(타자)·코너(투수)에
+ *              맞춰 밀어쳐요. 정중앙일수록 장타·삼진, 정면·한복판이면 잡혀요
+ *   🔥 clash — 힘겨루기. 두 버튼을 **번갈아** 눌러 표식을 밀어내요. 순전히 힘이에요
  *
  * 왜 새로운지는 post-stage.js 머리말에 적어 뒀어요. 요약하면 기존 8종과 투어
- * 3종은 열한 개 모두 '언제 누르나'가 물음인데, 이 둘은 아니에요.
+ * 3종은 열한 개 모두 '언제 누르나'가 물음인데, 이 넷은 아니에요.
+ * 앞의 둘은 판단력만 재서 힘으로 이기는 순간이 없었고, 뒤의 둘이 그 자리예요.
  *
  * 시리즈가 깊을수록 어려워져요(tier) — 와일드카드·준PO 0 / PO 1 / 마지막 시리즈 2.
  * 상대가 버릇을 덜 흘리고 어깨가 강해져요. 판정 규칙은 그대로예요.
@@ -1478,11 +1495,15 @@ const POST_TIER = { wc: 0, semi: 0, po: 1, ks: 2 };
 const inPostMini = () => !!(S.post && S.post.myRound && !S.post.eliminated);
 const postTier = () => (S.post && POST_TIER[S.post.myRound]) || 0;
 
-// 🎯 수싸움 결과 문구 · 🏃 홈 승부 결과 문구 (타자 / 투수)
+// 🎯 수싸움 · 🏃 홈 승부 · 🎯 코스 공략 · 🔥 힘겨루기 결과 문구 (타자 / 투수)
 const MIND_BAT = { ok: "한 번 읽어내 살아 나갔어요! 🎯", great: "코스를 완전히 읽어낸 통타!! 💥", bad: "끝까지 못 읽고 삼진…" };
 const MIND_PIT = { ok: "수싸움에서 밀리지 않았어요! 🎯", great: "타자의 노림수를 세 번 다 피했어요!! ⚡", bad: "노림수에 걸려 통타를 맞았어요…" };
 const DASH_BAT = { ok: "무리하지 않고 3루에 남았어요 🛑", great: "과감한 홈 쇄도, 헤드퍼스트 세이프!! 🏃💨", bad: "홈에서 아웃… 통한의 주루사" };
 const DASH_PIT = { ok: "중계로 끊어 주자를 묶었어요 🛑", great: "완벽한 홈 백업, 홈에서 잡아냈어요!! 🎯", bad: "판단이 늦어 홈을 그대로 내줬어요…" };
+const COURSE_BAT = { ok: "수비수 사이로 정확히 밀어친 안타! 🎯", great: "갭 정중앙을 가른 통렬한 장타!! 💥", bad: "정면으로 가 그대로 잡혔어요… 범타" };
+const COURSE_PIT = { ok: "코너를 찔러 범타로 막았어요! 🎯", great: "칼날 같은 코너워크로 삼진!! ⚡", bad: "한복판으로 몰려 통타를 맞았어요…" };
+const CLASH_BAT = { ok: "힘으로 밀어내 안타를 만들었어요! 💪", great: "완전히 눌러 버린 한 방!! 🚀", bad: "구위에 밀렸어요… 헛스윙" };
+const CLASH_PIT = { ok: "구위로 버텨 범타로 막았어요! 🔥", great: "정면승부로 윽박질러 삼진!! ⚡", bad: "힘에서 밀려 그대로 맞았어요…" };
 
 /* 같은 규칙을 타자와 투수가 정반대로 읽어요. 코드는 하나예요 — aim과 문구만 갈아끼워요.
  *   타자(aim: match) — 상대와 **같은 칸**을 고르면 이겨요. 투수의 버릇을 읽고,
@@ -1572,12 +1593,99 @@ const POST_MECH = {
       }, cb);
     },
   },
+  /* 🎯 코스 공략 — 좌우로 오가는 조준을 빈 곳에 꽂아요. 여기도 시점이 통째로 뒤집혀요.
+   *   타자(aim: gap)    — 수비수 사이 **갭**을 노려요. 정중앙일수록 장타예요.
+   *   투수(aim: corner) — 방망이를 피해 **코너**에 꽂아요. 한복판은 그대로 맞아요.
+   * 능력치는 **체력**이에요 — 승부처에서 지친 몸으로도 정교함을 지키는 자리라서요.
+   * 투수 쪽이 특히 현실적이에요: 체력이 떨어진 투수는 제구가 한복판으로 몰려요.
+   * 타자·투수 둘 다 stamina를 봐요 (기존 8종에서는 안 쓰이던 능력치예요). */
+  course: {
+    stat: () => S.stats.stamina,
+    txt: () => (S.pos === "batter" ? COURSE_BAT : COURSE_PIT),
+    run: (box, tier, cb) => {
+      const bat = S.pos === "batter";
+      window.PostStage.course(box, {
+        label: bat
+          ? "🎯 승부처의 한 타석! 수비수 사이 갭을 노려 밀어쳐요"
+          : "🎯 만루 위기! 방망이를 피해 코너에 꽂아 막아요",
+        aim: bat ? "gap" : "corner",
+        hitText: bat ? "밀어친다! 🎯" : "꽂는다! 🎯",
+        zonePct: miniZone(S.stats.stamina),
+        tier,
+        msg: bat ? null : {
+          /* 투수는 코너를 노리는 쪽이라 좋은 자리(갭↔코너)와 문구가 통째로 뒤집혀요.
+           * 나쁜 표식(🏏)은 한복판에 서요 — post-stage.js가 corner일 때 dangerIc를 세워요. */
+          cue: "🎯 조준이 좌우로 오가요 — 방망이를 피해 코너에 꽂아요",
+          win: "⚡ 칼날 같은 코너! 방망이가 닿지 못한 삼진!!",
+          even: "🎯 코너를 찔러 범타로 막았어요!",
+          lose: "❌ 한복판으로 몰려 그대로 맞았어요…",
+          timeup: "⏱️ 코너를 노려보지도 못한 채 승부가 끝났어요…",
+          tip: "🎯가 <b>코너</b>에 왔을 때 꽂아요 · 한복판(가운데)은 그대로 맞아요",
+          readyTitle: "🎯 코스 공략",
+          readyLines: [
+            "조준(🎯)이 <b>좌우로 오가요</b>. [꽂는다]를 누르면 그 순간 멈춘 자리로 판정해요.",
+            "밝은 칸이 방망이가 닿지 못하는 <b>코너</b>예요. 조준이 거기 왔을 때 눌러요.",
+            "<b>코너 깊이</b> 꽂을수록 삼진, 언저리면 범타예요. 가운데(<b>한복판</b>)로 몰리면 그대로 맞아요.",
+            "잘 키운 투수일수록 코너가 <b>넓게</b> 살아요 — 지쳐도 제구가 덜 몰려요.",
+          ],
+          readyShort: "조준이 코너(밝은 칸)에 왔을 때 꽂아요 · 한복판은 그대로 맞아요",
+          /* ⚠️ readyAim·readyHit에는 태그를 넣지 마세요 — 설명 칸에 그대로 들어가요. */
+          readyAim: "좌우로 오가는 조준이에요. 밝은 칸(코너)이 노려야 할 자리고, 깊이 꽂을수록 삼진이에요",
+          readyHit: "누르는 순간 조준이 멈춘 자리로 판정해요. 코너에 왔을 때를 노려요",
+        },
+      }, cb);
+    },
+  },
+  /* 🔥 힘겨루기 — 두 버튼을 번갈아 눌러 표식을 밀어내요. 순전히 힘이에요.
+   *   타자(aim: push) — 밀어붙이는 쪽. 멀리 밀수록 좋아요.
+   *   투수(aim: hold) — 버티는 쪽. 타자가 훨씬 세게 밀지만, **밀리지만 않으면** 이겨요.
+   * 같은 자리가 타자에겐 범타, 투수에겐 완벽이에요 — 유불리가 통째로 뒤집혀요.
+   * 능력치는 타자 **파워**, 투수 **구속**이에요 (가을야구에서 안 쓰이던 자리예요). */
+  clash: {
+    stat: () => (S.pos === "batter" ? S.stats.power : S.stats.velocity),
+    txt: () => (S.pos === "batter" ? CLASH_BAT : CLASH_PIT),
+    run: (box, tier, cb) => {
+      const bat = S.pos === "batter";
+      window.PostStage.clash(box, {
+        label: bat
+          ? "🔥 정면승부! 힘 대 힘 — 밀어내면 담장을 넘겨요"
+          : "🔥 정면승부! 힘 대 힘 — 밀리지만 않으면 이겨요",
+        aim: bat ? "push" : "hold",
+        aText: bat ? "🦵 하체" : "🦵 축발",
+        bText: bat ? "💪 스윙" : "💪 릴리스",
+        zonePct: miniZone(bat ? S.stats.power : S.stats.velocity),
+        tier,
+        msg: bat ? {
+          readyA: "하체로 버티고 밀어요. 여기서 힘이 시작돼요 — 먼저 이쪽부터예요",
+          readyB: "상체를 돌려 방망이에 힘을 실어요. 하체 다음은 반드시 이쪽이에요",
+        } : {
+          /* 투수는 버티는 쪽이라 승패의 자리가 통째로 반대예요. */
+          blast: "⚡ 완전히 윽박질렀어요, 삼진!!",
+          win: "⚡ 구위로 눌렀어요! 삼진!!",
+          even: "🔥 밀리지 않고 범타로 막았어요",
+          lose: "❌ 힘에서 밀렸어요… 통타를 맞았어요",
+          crush: "❌ 그대로 밀려 담장을 넘겼어요…",
+          tip: "빛나는 버튼을 <b>번갈아</b> 눌러요 · 같은 쪽을 두 번 누르면 헛심이에요",
+          readyTitle: "🔥 힘겨루기 — 번갈아 눌러요",
+          readyLines: [
+            "가운데 표식을 사이에 두고 타자와 밀고 밀려요. 타자는 <b>가만히 있어도 계속</b> 밀어붙여요.",
+            "아래 두 버튼을 <b>번갈아</b> 눌러야 힘이 실려요. 다음에 누를 버튼이 <b>환하게 빛나요</b> — 그것만 보고 계속 누르면 돼요.",
+            "같은 쪽을 두 번 누르면 헛심을 써서 <b>되레 밀려요.</b> 맞출 타이밍은 없어요, 순서만 지키면 돼요.",
+            "타자보다 훨씬 유리한 선에서 시작해요. <b>먼 선</b>을 지키면 삼진, <b>가까운 선</b>까지 버티면 범타, 밀리면 맞아요.",
+          ],
+          readyShort: "빛나는 버튼을 번갈아 계속 눌러요 · 밀리지만 않으면 이겨요",
+          readyA: "축발로 버텨요. 여기서 힘이 시작돼요 — 먼저 이쪽부터예요",
+          readyB: "팔을 채 공에 힘을 실어요. 축발 다음은 반드시 이쪽이에요",
+        },
+      }, cb);
+    },
+  },
 };
 
 /* 가을야구 미니게임 한 판. playRandomMini와 같은 계약이에요 — cb(res, txt).
  * autoMiniOn() 경로가 없으면 테스트도 확인 페이지도 여기서 막혀요. */
 function playPostMini(container, cb) {
-  const mech = POST_MECH[pick(["mind", "dash"])];
+  const mech = POST_MECH[pick(["mind", "dash", "course", "clash"])];
   const txt = mech.txt();
   if (autoMiniOn()) { cb(autoRes(mech.stat()), txt); return; }
   mech.run(container, postTier(), (res) => cb(res, txt));
@@ -1585,7 +1693,7 @@ function playPostMini(container, cb) {
 
 // 승부처 미니게임 — 타이밍/홀드/사인 암기/반응 속도/수싸움 5종 랜덤
 function playRandomMini(container, cb) {
-  // 🍂 가을야구에서는 전용 메커닉 2종만 나와요. 정규시즌은 아래 8종 그대로예요.
+  // 🍂 가을야구에서는 전용 메커닉 4종만 나와요. 정규시즌은 아래 8종 그대로예요.
   if (inPostMini()) { playPostMini(container, cb); return; }
   const isBat = S.pos === "batter";
   const mech = pick(["bar", "hold", "seq", "react", "duel", "target", "drop", "odd"]);

@@ -40,11 +40,15 @@
 .next-club b { color: var(--cream); }
 
 /* ─────────────────────────────────────────────────────────────
- * 🍂 가을야구 전용 미니게임 2종 (../post-stage.js)
+ * 🍂 가을야구 전용 미니게임 4종 (../post-stage.js)
  *
  * 상자·라벨·버튼·판정 테두리(.tm-box · .tm-label · .tm-btn · .tm-done-*)는
- * ../base.css 것을 그대로 물려받아요. 여기에는 이 두 메커닉에만 있는 줄만 둬요.
+ * ../base.css 것을 그대로 물려받아요. 여기에는 이 네 메커닉에만 있는 줄만 둬요.
  * 색은 전부 테마 변수예요 — 절대색을 쓰지 않아요.
+ *
+ *   .pm-*  🎯 수싸움    .ps-*  🏃 홈 승부
+ *   .cs-*  🎯 코스 공략   .pc-*  🔥 힘겨루기
+ * (판정 한 줄 .ps-mark는 넷이 같이 써요 — 자리를 잡아 두는 한 줄이라 같은 물건이에요)
  * ───────────────────────────────────────────────────────────── */
 
 /* 🎯 수싸움 — 세 칸을 놓고 서로를 읽어요 (../post-stage.js의 mind)
@@ -143,6 +147,77 @@
 .ps-pick { gap: 8px; }
 .ps-pick .tm-btn { flex: 1; margin-top: 10px; padding: 12px 4px; font-size: 1rem; }
 .ps-picked { box-shadow: 0 0 12px var(--accent); }
+
+/* 🎯 코스 공략 — 좌우로 오가는 조준을 밝은 칸(갭·코너)에 꽂아요 (../post-stage.js의 course)
+ *
+ * 🏃 홈 승부·🔥 힘겨루기처럼 진짜로 시간이 흘러요(조준이 움직여요). 조준은 매
+ * 프레임 left가 바뀌니 transition을 걸지 않아요 — 걸면 오히려 한 박자 늦게 따라와요.
+ * 색은 전부 테마 변수예요(초록 그라운드 위라 밝은 칸은 모래·강조색으로 띄워요). */
+.cs-field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 6px; }
+.cs-lane {
+  position: relative; height: 48px; overflow: hidden;
+  border: 1px solid var(--line); border-radius: 10px;
+  background: linear-gradient(90deg, rgba(216, 176, 119, .06), rgba(127, 209, 232, .06));
+}
+/* 노려야 할 밝은 칸 — 타자는 갭, 투수는 코너. post-stage.js가 left·width를 넣어 줘요.
+ * 안쪽의 진한 칸이 '정중앙'(장타·삼진)이 어디인지 말해 줘요. */
+.cs-zone {
+  position: absolute; top: 4px; bottom: 4px; border-radius: 6px;
+  background: var(--sand); opacity: .2;
+}
+.cs-zone-perfect { background: var(--accent); opacity: .34; }
+/* 나쁜 자리의 표식 — 타자 정면의 수비수(🧤), 투수 한복판의 방망이(🏏) */
+.cs-mark {
+  position: absolute; top: 50%; transform: translate(-50%, -50%);
+  font-size: 1.05rem; opacity: .8;
+}
+/* 좌우로 오가는 조준 — 사람이 볼 것은 사실상 이것 하나예요 */
+.cs-aim {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  font-size: 1.35rem; line-height: 1; z-index: 2;
+}
+/* 조준이 밝은 칸 위에 있으면 판이 살아나요 — "지금이야"를 눈으로 알려 줘요 */
+.cs-on .cs-lane { border-color: var(--sand); }
+.cs-on .cs-aim { filter: drop-shadow(0 0 6px var(--accent)); }
+/* 눌러서 멈춘 자리 판정 */
+.cs-aim.cs-lock-perfect { filter: drop-shadow(0 0 9px var(--accent)); }
+.cs-aim.cs-lock-good { filter: drop-shadow(0 0 6px var(--sand)); }
+.cs-aim.cs-lock-miss { opacity: .5; }
+/* 남은 시간 — 🔥 힘겨루기와 같아요. "언제 누를까"가 아니라 "얼마나 남았나"예요 */
+.cs-time { height: 6px; border-radius: 999px; background: rgba(255, 255, 255, .06); overflow: hidden; }
+.cs-time > i { display: block; height: 100%; width: 100%; background: var(--sky); opacity: .55; }
+.cs-pick { gap: 8px; }
+.cs-pick .tm-btn { flex: 1; margin-top: 10px; padding: 12px 4px; font-size: 1rem; }
+
+/* 🔥 힘겨루기 — 표식을 사이에 두고 밀고 밀려요 (../post-stage.js의 clash)
+ *
+ * 여기는 진짜로 시간이 흘러요. 대신 "언제 누르지?"가 없어요 — 답이 늘
+ * "지금, 그리고 계속"이라, 화면이 말해 주는 건 **다음에 누를 버튼**뿐이에요. */
+.pc-field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 6px; }
+.pc-bar {
+  position: relative; height: 46px; border: 1px solid var(--line); border-radius: 10px;
+  background: linear-gradient(90deg, rgba(216, 176, 119, .12), rgba(127, 209, 232, .12));
+}
+/* 목표선 둘 — 어디까지 밀어야 하는지 모르면 불공정해요.
+ * 시점에 따라 자리가 통째로 달라요(post-stage.js가 left를 넣어 줘요). */
+.pc-line { position: absolute; top: 0; bottom: 0; width: 0; }
+.pc-line-good { border-left: 2px dashed var(--sand); opacity: .7; }
+.pc-line-perfect { border-left: 2px solid var(--accent); opacity: .8; }
+.pc-mark {
+  position: absolute; top: 50%; transform: translate(-50%, -50%);
+  font-size: 1.4rem; line-height: 1;
+}
+/* 남은 시간 — 보여 줘야 공정해요. 이건 "언제 누를까"가 아니라 "얼마나 남았나"예요 */
+.pc-time { height: 6px; border-radius: 999px; background: rgba(255, 255, 255, .06); overflow: hidden; }
+.pc-time > i { display: block; height: 100%; width: 100%; background: var(--sky); opacity: .55; }
+/* 가까운 선을 넘어서 있으면 막대가 살아나요 */
+.pc-ahead .pc-bar { border-color: var(--accent); }
+/* 헛심을 썼을 때 — 잘못 눌렀다는 걸 말해 줘야 다음 손이 고쳐져요 */
+.pc-slip .pc-bar { border-color: var(--accent2); }
+.pc-pick { gap: 8px; }
+.pc-pick .tm-btn { flex: 1; margin-top: 10px; padding: 12px 4px; font-size: 1rem; }
+/* 다음에 눌러야 할 버튼 — 이 게임에서 사람이 볼 것은 사실상 이것 하나예요 */
+.pc-pick .pc-next { border-color: var(--accent); box-shadow: 0 0 12px var(--accent); }
 
 /* ───────────────────────────────────────────────────────────
  * 🧭 미니게임 준비 화면 (.mg-ready) — ../post-stage.js가 그려요.

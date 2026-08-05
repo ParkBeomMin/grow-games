@@ -644,6 +644,89 @@ window.Career = (() => {
     playRandomMini($("game-moment"), resolve);
   }
 
+  /* ⚡ 실전 성장 — 낮은 확률로 경기에서 한 단계 깨쳐요. 더 윙어의 같은 이름 기능을
+   * 야구로 옮긴 거예요(soccer/career.js의 proMatchFinalize). 훈련만으로 크는 게 아니라
+   * 경기가 선수를 키운다는 감각을 줘요. 그 경기에 **실제로 한 일**이 무게가 돼요 —
+   * 안타면 타격, 홈런이면 파워, 도루면 주루, 삼진이면 구위·변화구, 무실점이면 제구
+   * 쪽으로 기울어요. 바닥 무게(baseW)를 남겨 아무 일 없던 칸도 조금은 열어 둬요.
+   *
+   * ⚖️ 축구(한 시즌 38경기)와 달리 야구는 144~162경기예요. 같은 확률이면 네 배로
+   * 자라 훈련이 무의미해져요. 그래서 **경기당 확률을 훨씬 낮게** 잡아 한 시즌 기대
+   * 성장이 두세 점에 머물게 했어요 — tests/rookie/growth-test.js가 실측으로 못 박아요. */
+  const MATCH_GROW = {
+    base: 0.008,                    // 경기당 바닥 확률
+    win: 0.004, loss: -0.002,       // 이긴 경기에서 더 배워요
+    actK: 0.010, actCap: 0.012,     // 활약이 클수록 확률이 올라요(상한까지)
+    lo: 0.004, hi: 0.030,
+    baseW: 0.5,                     // 아무 일 없던 칸도 조금은 열어 둬요 — 경기를 뛴 값이에요
+    gainLo: 0.4, gainHi: 1.4,
+  };
+  /* 이 경기에 무엇을 했나 → 어느 능력치가 오를까. 타자·투수가 통째로 달라요. */
+  function growWeightOf(perf) {
+    const b = MATCH_GROW.baseW, p = perf || {};
+    if (S.pos === "batter") {
+      return {
+        contact: b + (p.hits || 0) * 2.2,
+        power: b + (p.hr || 0) * 4.0,
+        run: b + (p.sb || 0) * 3.5,
+        defense: b,
+        stamina: 1,                 // 뛴 것 자체가 근거라 바닥이 조금 높아요
+      };
+    }
+    return {
+      velocity: b + (p.k || 0) * 0.9,
+      breaking: b + (p.k || 0) * 0.7,
+      control: b + Math.max(0, 3 - (p.runs || 0)) * 1.1,   // 실점 없이 막아낸 제구
+      defense: b,
+      stamina: 1 + (p.ip || 0) * 0.3,                      // 긴 이닝 = 체력
+    };
+  }
+  /* 왜 그게 올랐는지 문구로 남겨요 — 화면에서 근거가 읽혀야 랜덤 보너스로 안 보여요. */
+  function growWhyOf(perf, key) {
+    const p = perf || {};
+    const why = S.pos === "batter" ? {
+      contact: (p.hits || 0) > 0 ? "안타를 친 감각이 남아" : "",
+      power: (p.hr || 0) > 0 ? "담장을 넘긴 손맛이 남아" : "",
+      run: (p.sb || 0) > 0 ? "베이스를 훔친 감이 붙어" : "",
+      defense: "", stamina: "",
+    } : {
+      velocity: (p.k || 0) > 0 ? "삼진을 잡은 구위가 남아" : "",
+      breaking: (p.k || 0) > 0 ? "변화구가 춤춘 게 남아" : "",
+      control: (p.runs || 0) === 0 ? "실점 없이 막아낸 제구가 붙어" : "",
+      defense: "", stamina: (p.ip || 0) >= 6 ? "긴 이닝을 버틴 게 남아" : "",
+    };
+    return why[key] || "";
+  }
+  /* 활약이 클수록 확률도 올라가요. 승패도 봐요. posAxis를 안 쓰고 직접 재는 건
+   * 야구는 타자·투수 지표가 아예 달라서예요(축구는 골·도움·수비 한 축이었어요). */
+  function growPOf(perf, win) {
+    const p = perf || {};
+    const didAxis = S.pos === "batter"
+      ? (p.hits || 0) + (p.hr || 0) * 1.5 + (p.sb || 0)
+      : (p.k || 0) * 0.6 + Math.max(0, (p.ip || 0) - (p.runs || 0) * 1.5);
+    return clamp(
+      MATCH_GROW.base
+      + (win ? MATCH_GROW.win : MATCH_GROW.loss)
+      + Math.min(MATCH_GROW.actCap, didAxis * MATCH_GROW.actK),
+      MATCH_GROW.lo, MATCH_GROW.hi);
+  }
+  /* 경기 한 판이 끝날 때마다 한 번 굴려요 (정규시즌·가을야구 공통). */
+  function matchGrowth(perf, win) {
+    if (Math.random() >= growPOf(perf, win)) return;
+    const w = growWeightOf(perf);
+    const pool = STAT_DEFS[S.pos].filter((d) => !atCap(d.key));   // 상한에 닿은 칸은 빼요
+    const total = pool.reduce((sum, d) => sum + (w[d.key] || 0), 0);
+    if (!pool.length || total <= 0) return;
+    let roll = Math.random() * total, d = pool[pool.length - 1];
+    for (const cand of pool) { roll -= w[cand.key] || 0; if (roll < 0) { d = cand; break; } }
+    const gain = Math.round(rand(MATCH_GROW.gainLo, MATCH_GROW.gainHi) * S.talents[d.key] * 10) / 10;
+    if (gain <= 0) return;
+    S.stats[d.key] = clamp(S.stats[d.key] + gain, 0, statCap(d.key));
+    const why = growWhyOf(perf, d.key);
+    proLog(`⚡ ${why ? why + " " : "실전에서 "}${d.name}을(를) 깨쳤어요! +${gain.toFixed(1)} (${Math.round(S.stats[d.key])})`);
+    if (window.Fx) Fx.flash(`⚡ ${d.name} +${gain.toFixed(1)}`);
+  }
+
   // 경기 종료 후 공통 처리 — 팀/리그/개인 기록 갱신
   function finishProGame(win, perf) {
     if (inPost()) return finishPostGame(win, perf);
@@ -663,6 +746,7 @@ window.Career = (() => {
         if (S.role === "마무리 투수" && win && !perf.blown) t.saves += 1;
       }
     }
+    matchGrowth(perf, win);          // ⚡ 실전 성장 — 낮은 확률로 경기에서 한 단계 깨쳐요
     const pay = win ? 40 : 20;
     S.money = (S.money || 0) + pay;
     S.condition = clamp(S.condition - randInt(3, 6), 0, 100);
@@ -706,6 +790,7 @@ window.Career = (() => {
         if (S.role === "마무리 투수" && win && !perf.blown) t.saves += 1;
       }
     }
+    matchGrowth(perf, win);          // ⚡ 실전 성장 — 가을야구에서도 한 단계 깨쳐요
     const pay = win ? 80 : 40;              // 가을야구 수당은 정규시즌의 두 배예요
     S.money = (S.money || 0) + pay;
     S.condition = clamp(S.condition - randInt(3, 6), 0, 100);
@@ -1317,9 +1402,15 @@ window.Career = (() => {
    * 리그 난이도는 '내가 상대하는 공'에만 걸립니다. 해외 구단의 전력은 구단 목록이 정해요.
    *
    * KBO는 oppUp이 0이라 teamStrOf와 한 톨까지 같아요 — 그래서 진행 중인 캐릭터의
-   * 성적이 안 튀고, 기존 저장 데이터를 마이그레이션하지 않아도 됩니다. */
+   * 성적이 안 튀고, 기존 저장 데이터를 마이그레이션하지 않아도 됩니다.
+   *
+   * 🌏 상대를 '그 리그 평균 대비'로 읽어요. 해외 구단은 전력 자체가 높게 박혀 있어서
+   * (대륙 평균 0.55), teamStrOf를 그대로 쓰면 리그 단차가 oppUp(0.06)보다 훨씬 커져
+   * 대륙 타율이 무너졌어요 — 실제 단차가 의도의 2배가 됐죠. 그래서 리그 평균을 빼서
+   * '리그가 세다'는 효과는 오직 oppUp에서만 오게 합니다. 평균을 빼도 리그 안의
+   * 강팀·약팀 편차는 그대로 남아요. KBO는 평균이 0.49라 보정이 0 — 국내는 완전 항등이에요. */
   function oppFor(name) {
-    return teamStrOf(name) + leagueOf(S).oppUp;
+    return teamStrOf(name) - leagueAvgStr(leagueOf(S)) + 0.49 + leagueOf(S).oppUp;
   }
   /* 시즌마다 팀 전력이 조금씩 흔들려요. 울타리는 리그마다 달라요 —
    * KBO 울타리(0.36~0.63)를 해외에 그대로 씌우면 몇 시즌 만에 리그 차이가 녹아 없어져요.
@@ -1772,10 +1863,17 @@ window.Career = (() => {
     } finally { Math.random = real; }
   }
 
-  /* 그 리그에서 내 판정이 어떻게 되는지 한 숫자로. 리그 평균 상대(0.49)를 기준으로 봐요 —
+  /* 그 리그에서 내 판정이 어떻게 되는지 한 숫자로. 리그 평균 상대를 기준으로 봐요 —
    * 어느 구단에 갈지는 다음 화면에서 따로 고르니까, 여기서는 '리그가 바뀌면 무엇이
    * 달라지는지'만 떼어 보여줍니다. 타자는 안타 확률(클수록 좋음),
-   * 투수는 위기 한 번당 실점(작을수록 좋음)이에요. */
+   * 투수는 위기 한 번당 실점(작을수록 좋음)이에요.
+   *
+   * 🌏 기준 상대는 oppFor 처방과 **같은 계산**이라야 화면이 거짓말을 안 해요. oppFor가
+   * 상대를 '그 리그 평균 대비'로 읽으니(teamStrOf − leagueAvgStr + 0.49 + oppUp), 리그
+   * 평균 구단은 편차가 0이라 어느 리그든 정확히 0.49 + oppUp이 돼요 — 그게 그 리그에서
+   * 실제로 만나는 상대의 평균이에요. 예전엔 여기는 0.49 + oppUp인데 실제 oppFor는
+   * teamStrOf + oppUp(대륙 0.617)이라, 화면이 대륙의 실제 깎임을 절반 넘게 감췄어요.
+   * 처방으로 실제 평균이 0.49 + oppUp과 맞아떨어지면서 이 숫자가 정직해집니다. */
   const leagueMetric = (lg) => (S.pos === "batter"
     ? hitPreview(0.49 + lg.oppUp)
     : crisisPreview(0.49 + lg.oppUp, lg.oppUp));
@@ -2365,6 +2463,8 @@ window.Career = (() => {
       seasonTotal, curTotal, tradeOpenAt, tradeCloseAt, inSeasonTrade,
       // 📊 그 시즌에 뛴 소속 — 결산 헤더가 지금 팀을 쓰지 않는지 화면에서 대조할 때 써요
       playedAt,
+      // ⚡ 실전 성장 — 확률·무게 산식을 테스트가 그대로 굴려 볼 수 있게 열어 둬요
+      MATCH_GROW, growWeightOf, growWhyOf, growPOf, matchGrowth,
       state: () => S,
     },
     enterPro,
