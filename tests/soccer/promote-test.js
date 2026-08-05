@@ -311,12 +311,24 @@ guard("하향 이적", () => {
     + `(${BY_TIER.map((l) => `${l.name} ${top ? cardsOf(l).length : 0}`).join(" · ")})`);
 });
 
-// ---------- ⑥ 강등이 없다 ----------
-/* 성적이 바닥이어도 리그가 자동으로 내려가면 안 된다. 시즌을 여러 번 굴려 확인한다.
+// ---------- ⑥ 성적이 바닥이면 팀이 내려간다 ----------
+/* ⚠️ 이 항목은 규칙이 바뀌어 뜻이 뒤집혔다.
+ *
+ * 예전에는 "유럽 무대에는 강등이 없다"였다. 유로파·챔피언스리그가 승강제 밖이라
+ * 성적이 바닥이어도 계속 그 리그였다. 그래서 유럽에 가는 순간 순위표가 아무 데도
+ * 안 닿았고, "떨어질 걱정 없는 리그"가 됐다.
+ *
+ * 이제 유럽에도 사다리가 있다 — 유로파 ↔ 챔스, 그리고 유로파 최하위는 K리그1로
+ * 내려온다(유럽 출전권 상실). 그러니 여기서 지킬 것은 "안 내려간다"가 아니라
+ * **"내려가되 한 번에 한 칸씩, 정착 기간을 두고"**다.
+ *
+ * 개인 이적 사다리(PROMOTE_HYPE)에 강등이 없다는 건 여전히 참이고, ⑤에서 본다.
+ * 여기서 보는 건 팀 승강제다 — 다른 축이다.
+ *
  * 훈련은 한 번도 안 하고 휴식만 눌러서(playSeason) 능력치를 그대로 둔 채 굴린다 —
  * 유로파리그의 평점 -1.6을 능력치 30대로 맞으니 성적은 바닥을 친다. */
-console.log("=== ⑥ 강등은 없다 ===");
-guard("강등 없음", () => {
+console.log("=== ⑥ 성적이 바닥이면 팀이 내려간다 (한 칸씩) ===");
+guard("팀 강등", () => {
   set("S", get('newState(MARKETS[0], "fw", "테스트")'));
   Career.onEnding(true, false);
   $("btn-go-debut").click();
@@ -337,8 +349,15 @@ guard("강등 없음", () => {
     nb.click();
   }
   console.log(`  ${SEASONS}시즌 성적(hype): ${hypes.join(" · ")} — 소속 리그: ${[...new Set(seen)].map((id) => leagueById(id).name).join(", ")}`);
-  check(seen.length === SEASONS && seen.every((id) => id === EUR.id),
-    `성적이 바닥이어도 ${SEASONS}시즌 내내 ${EUR.name} 소속 그대로다 (리그 ${[...new Set(seen)].map((id) => leagueById(id).name).join(", ")})`);
+  const tiers = seen.map((id) => leagueById(id).tier);
+  check(seen.length === SEASONS && seen[0] === EUR.id,
+    `${SEASONS}시즌을 ${EUR.name}에서 시작해 전부 굴렸다 (${seen.length}시즌)`);
+  check(new Set(seen).size > 1,
+    `성적이 바닥이면 리그가 실제로 내려간다 (${[...new Set(seen)].map((id) => leagueById(id).name).join(" → ")})`);
+  check(tiers.every((t, i) => i === 0 || t <= tiers[i - 1]),
+    `부진한 시즌에 리그가 올라가는 일은 없다 (tier ${tiers.join(" → ")})`);
+  check(tiers.every((t, i) => i === 0 || tiers[i - 1] - t <= 1),
+    `한 시즌에 두 칸 넘게 안 내려간다 — 정착 기간이 걸려 있다 (tier ${tiers.join(" → ")})`);
   check(hypes.every((h) => h != null && h < PROMOTE_HYPE[UCL.id]),
     `그 시즌들이 실제로 부진했다 — 위 리그 문턱 근처에도 못 갔다 (최고 ${Math.max(...hypes)} < ${PROMOTE_HYPE[UCL.id]})`);
 });

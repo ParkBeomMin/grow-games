@@ -22,6 +22,7 @@ const parts = {
   rows: grab(SRC, /const rows = \[\s*\{ name: S\.name[\s\S]*?\]\.sort\([^;]*\);/),
   line: grab(SRC, /const line = \(r, i\) =>[\s\S]*?<\/tr>`;/),
   adj: grab(SRC, /const rivalResAdj = [^;]+;/),
+  pull: grab(SRC, /const RIVAL_POP_PULL = [^;]+;/),
   resKo: grab(SRC, /const RES_KO = \{[^}]*\};/),
 };
 const missing = Object.entries(parts).filter(([, v]) => !v).map(([k]) => k);
@@ -48,6 +49,7 @@ const RIVALS = [
 const run = new Function(
   "S", "act", "myRankScore", "clamp", "rand", "info", "roundRes",
   `${parts.adj}
+   ${parts.pull}
    ${parts.resKo}
    ${parts.rows}
    ${parts.line}
@@ -93,6 +95,7 @@ if (brokenRows === parts.rows) { console.log("❌ 변이 치환이 안 됐어요
 const brokenRun = new Function(
   "S", "act", "myRankScore", "clamp", "rand", "info", "roundRes",
   `${parts.adj}
+   ${parts.pull}
    ${parts.resKo}
    ${brokenRows}
    ${parts.line}

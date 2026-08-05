@@ -17,6 +17,7 @@ const grab = (re) => { const m = SRC.match(re); return m ? m[0] : null; };
 
 const parts = {
   adj: grab(/const rivalResAdj = [^;]+;/),
+  pull: grab(/const RIVAL_POP_PULL = [^;]+;/),
   record: grab(/function recordRound\(myOpp, res\) \{[\s\S]*?\n  \}/),
   rows: grab(/const rows = \[\s*\{ name: S\.name[\s\S]*?\]\.sort\([^;]*\);/),
 };
@@ -61,11 +62,12 @@ check(Object.keys(full).length === TEAMS.length, `6팀 전부 결과가 나온�
 // ── ①② 라이벌 점수가 결과를 따라간다 ──────────────────────────────
 /* 점수식도 소스에서 뽑는다 — 흔들림 폭(±6)을 여기 옮겨 적으면 원본이 바뀌어도
  * 초록이 뜬다. 실제로 그 폭이 MOM 균형을 잡는 값이라 조용히 어긋나면 안 된다. */
-const scoreExpr = grab(/score: r\.pop \+ rand\([^)]*\) \+ rivalResAdj\(roundRes\[r\.club\]\),/);
+const scoreExpr = grab(/score: 70 \+ \(r\.pop - 70\) \* RIVAL_POP_PULL \+ rand\([^)]*\) \+ rivalResAdj\(roundRes\[r\.club\]\),/);
 if (!scoreExpr) { console.log("❌ 라이벌 점수식을 못 찾았어요"); process.exit(1); }
 const rivalScore = new Function(
   "r", "roundRes", "rand",
   `${parts.adj}
+   ${parts.pull}
    const o = { ${scoreExpr} };
    return o.score;`
 );
@@ -77,7 +79,7 @@ const avg = (pop, res) => {
 };
 const win = avg(70, "W"), draw = avg(70, "D"), loss = avg(70, "L");
 console.log(`   명성 70 라이벌 평균 점수 — 승 ${win.toFixed(1)} · 무 ${draw.toFixed(1)} · 패 ${loss.toFixed(1)}`);
-check(win - loss > 6, `승리 클럽 선수가 패배 클럽 선수보다 6점 넘게 높다 (${(win - loss).toFixed(1)}점)`);
+check(win - loss > 14, `승리 클럽 선수가 패배 클럽 선수보다 14점 넘게 높다 (${(win - loss).toFixed(1)}점)`);
 check(Math.abs(draw - 70) < 1, `무승부는 명성 그대로다 (${draw.toFixed(1)})`);
 
 /* 흔들림이 너무 크면 결과가 묻히고, 너무 작으면 라이벌 순위가 매 라운드 똑같아진다.
@@ -85,22 +87,29 @@ check(Math.abs(draw - 70) < 1, `무승부는 명성 그대로다 (${draw.toFixed
 const noise = Number((scoreExpr.match(/rand\(-([\d.]+),/) || [])[1]);
 check(noise > 0 && noise <= 6.5, `순수 흔들림이 ±${noise}로 억제돼 있다 (결과가 묻히지 않게)`);
 
-/* ② 결과가 명성을 완전히 덮어쓰면 안 된다 — 명성 15 차이는 결과 한 판으로 안 뒤집힌다.
- * 뒤집히면 순위표가 매 라운드 통째로 흔들려 "라이벌"이라는 말이 무의미해진다. */
-const strongLost = avg(85, "L"), weakWon = avg(70, "W");
-check(strongLost > weakWon,
-  `명성 15 차이는 결과 한 판으로 안 뒤집힌다 (85패 ${strongLost.toFixed(1)} > 70승 ${weakWon.toFixed(1)})`);
-
-/* 다만 명성 5 차이(인접 라이벌)는 결과로 뒤집혀야 한다 — 그래야 순위가 실제로 움직인다.
- * 개별 표본으로 몇 번이나 뒤집히는지 센다. 평균만 보면 흔들림이 안 보인다. */
-let flips = 0;
-for (let i = 0; i < N; i++) {
-  const a = rivalScore({ pop: 75, club: "A" }, { A: "L" }, rand);   // 명성 높은데 짐
-  const b = rivalScore({ pop: 70, club: "B" }, { B: "W" }, rand);   // 명성 낮은데 이김
-  if (b > a) flips++;
-}
-const flipPct = flips / N * 100;
-check(flipPct > 60, `명성 5 차이는 결과로 자주 뒤집힌다 (${flipPct.toFixed(1)}%)`);
+/* ② 결과가 명성을 어디까지 이기는지 — 개별 표본으로 몇 번 뒤집히는지 센다.
+ * 평균만 보면 흔들림이 안 보인다.
+ *
+ * 예전에는 "명성 15 차이는 한 판으로 안 뒤집힌다"를 지켰는데, 그게 화면에서
+ * **5:2로 이긴 경기의 상위 5명 중 4명이 진 팀 선수**로 나오는 원인이었다.
+ * 축구 평점은 그날 경기를 재는 값이라 결과가 그만큼 무거워야 한다.
+ * 다만 명성 폭 전체(52 ↔ 88)까지 뒤집히면 라이벌이라는 말이 무의미해진다 —
+ * 거기가 경계다. */
+const flipRate = (popA, resA, popB, resB) => {
+  let f = 0;
+  for (let i = 0; i < N; i++) {
+    if (rivalScore({ pop: popB, club: "B" }, { B: resB }, rand)
+      > rivalScore({ pop: popA, club: "A" }, { A: resA }, rand)) f++;
+  }
+  return f / N * 100;
+};
+const near = flipRate(75, "L", 70, "W");     // 명성 5 차이 — 붙어 있는 라이벌
+const mid = flipRate(85, "L", 70, "W");      // 명성 15 차이
+const far = flipRate(88, "L", 52, "W");      // 명성 폭 전체
+console.log(`   결과로 뒤집히는 비율 — 명성 5차 ${near.toFixed(1)}% · 15차 ${mid.toFixed(1)}% · 최대차 ${far.toFixed(1)}%`);
+check(near > 70, `붙어 있는 라이벌(명성 5차)은 결과로 거의 뒤집힌다 (${near.toFixed(1)}%)`);
+check(mid > 40, `명성 15 차이도 결과로 자주 뒤집힌다 (${mid.toFixed(1)}%)`);
+check(far < 30, `명성 폭 전체(52↔88)까지는 한 판으로 안 뒤집힌다 (${far.toFixed(1)}%)`);
 
 /* ── 변이 검증 — 결과 보정을 빼면 ①이 무너져야 한다.
  * 안 잡히면 위의 초록불은 아무것도 안 지키고 있는 것이다. */
@@ -113,7 +122,8 @@ check(flatGap < 8, `변이 검증 — 결과 보정을 빼면 승패 차이가 $
 // ── 순위 행이 res를 실제로 들고 다니는지 (화면의 승/무/패 딱지 근거) ──
 const buildRows = new Function(
   "S", "act", "myRankScore", "info", "roundRes", "rand", "rivalResAdj",
-  `${parts.rows}
+  `${parts.pull}
+   ${parts.rows}
    return rows;`
 );
 // rand는 인자로 넘겨야 해요 — 안 그러면 rivalResAdj 안에서 바깥 rand를 못 봐요

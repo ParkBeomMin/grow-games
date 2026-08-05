@@ -250,7 +250,14 @@ window.WingerCareer = (() => {
    *
    * MOM은 수상 판정에 안 쓰여요(수상은 hype 기준). 팬 증가(wins × 3)와
    * 명예의 전당 점수(wins × 6)에만 들어가서, 이 정도 차이는 영향이 작아요. */
-  const rivalResAdj = (r) => (r === "W" ? rand(1.5, 6) : r === "L" ? -rand(1.5, 6) : r === "D" ? rand(-1.5, 1.5) : 0);
+  const rivalResAdj = (r) => (r === "W" ? rand(4, 14) : r === "L" ? -rand(4, 14) : r === "D" ? rand(-3, 3) : 0);
+  /* 명성을 그대로 점수로 쓰지 않고 평균(70) 쪽으로 당겨요.
+   * 라이벌 점수는 명성(52~88)이고 내 점수는 능력치×10 + 그 경기 활약이었어요.
+   * 같은 표에 **다른 자로 잰 숫자**를 나란히 놓은 셈이라, 능력치 평점 6.0인
+   * 선수는 라이벌 평균(7.06)보다 1.2점 아래에서 시작했습니다. 2골 2도움을 해도
+   * 7위가 나온 게 그래서예요.
+   * 0.75로 당기면 명성 폭이 36 → 27이 되고, 그 자리를 결과(폭 18)가 채웁니다. */
+  const RIVAL_POP_PULL = 0.75;
   const RES_KO = { W: "승", D: "무", L: "패" };
 
   const tableRows = () => (S.table ? S.table.rows : [])
@@ -291,10 +298,23 @@ window.WingerCareer = (() => {
    * 그건 "내가 좋은 제안을 받아 클럽을 옮기는 것", 이건 "내 클럽이 리그를 오르내리는 것".
    * 둘이 섞이면 사다리가 두 번 작동해서 한 시즌에 두 단계를 뛰어넘어요.
    *
-   * 국내 3부(K리그3 · K리그2 · K리그1)에서만 돌아요. 유로파·챔피언스리그는
-   * 승강제가 있는 리그가 아니라 개인 성적으로 초청받는 무대라, 그쪽은 기존
-   * 이적 사다리에 그대로 맡깁니다. */
+   * 사다리가 **둘**이에요. 국내(K리그3 → K리그2 → K리그1)와 유럽(유로파 → 챔스).
+   * 유럽 무대는 실제로는 리그가 아니라 컵 대회지만, 이 게임은 이미 '소속 리그'로
+   * 모델링해 놨어요 — 클럽 목록도 순위표도 국내 리그와 똑같이 굴러갑니다.
+   * 그래서 승강제만 없으면 유럽에 간 순간 팀 성적이 아무 데도 안 닿았어요.
+   *
+   * 둘을 **한 사다리로 잇지는 않아요.** K리그1 1위는 올라가는 게 아니라 우승이에요.
+   * 유럽은 국내 리그를 이겨서 가는 곳이 아니라 개인 성적으로 초청받는 무대라,
+   * 올라가는 길은 이적 사다리(PROMOTE_HYPE)에 그대로 맡깁니다.
+   *
+   * 내려오는 길만 이어요 — 유로파 최하위는 **K리그1로** 떨어져요(유럽 출전권 상실).
+   * 유럽 사다리 맨 아래에서 갈 데가 없으면 강등이 아예 안 일어나는데, 그러면
+   * 유로파는 "떨어질 걱정 없는 리그"가 돼서 순위표를 볼 이유가 사라집니다. */
   const DOMESTIC_TIERS = [5, 4, 1];          // K리그3 → K리그2 → K리그1 (tier 오름차순)
+  const EURO_TIERS = [2, 3];                 // 유로파리그 → 챔피언스리그
+  const EURO_DROP = 1;                       // 유로파 최하위가 떨어지는 곳 — K리그1
+  const ladderOf = (id) => (DOMESTIC_TIERS.includes(id) ? DOMESTIC_TIERS
+    : EURO_TIERS.includes(id) ? EURO_TIERS : null);
   /* 승격 문턱. 순위만 보면 사다리가 죽어요 — 실측하니 내 승률 60%에서 시즌의 91.5%가
    * 1위였습니다. 팀 성적이 사실상 내 성적이라(내 골이 곧 팀 득점) 잘하는 선수는
    * 매 시즌 1위를 해요. 승점 차를 걸어도 75% 승률에서 98.8%라 소용이 없었어요.
@@ -311,8 +331,9 @@ window.WingerCareer = (() => {
     const rows = tableRows();
     if (rows.length < 3) return null;
     const rank = myTableRank();
-    const at = DOMESTIC_TIERS.indexOf(leagueOf(S).id);
-    if (at < 0) return null;                 // 유럽 무대는 승강제 밖이에요
+    const ladder = ladderOf(leagueOf(S).id);
+    if (!ladder) return null;                // 사다리에 없는 리그는 그대로 둬요
+    const at = ladder.indexOf(leagueOf(S).id);
 
     /* 정착 기간은 승격·강등 **둘 다**에 걸어요. 승격에만 걸면 데뷔 시즌에 강등당하는데,
      * 갓 입단한 선수의 첫 시즌이 그렇게 끝나는 건 이상하고, 지난 시즌 기록의 리그가
@@ -320,20 +341,25 @@ window.WingerCareer = (() => {
     const settled = S.leagueSince == null || (S.proYear - S.leagueSince) >= PROMO_SETTLE;
     if (!settled) return null;
 
-    /* 국내 최상위(K리그1)에서 1위면 올라갈 데가 없어요. 승격 대신 **리그 우승**이에요.
-     * 아무 일도 안 일어나면 1위를 해도 화면에 남는 게 없습니다. */
-    if (rank === 1 && at === DOMESTIC_TIERS.length - 1) {
+    /* 사다리 맨 위(K리그1 · 챔피언스리그)에서 1위면 올라갈 데가 없어요.
+     * 승격 대신 **리그 우승**이에요. 아무 일도 안 일어나면 1위를 해도 화면에 남는 게 없습니다. */
+    if (rank === 1 && at === ladder.length - 1) {
       S.trophies = S.trophies || [];
       const title = `${S.proYear}시즌 ${leagueOf(S).name} 우승`;
       if (!S.trophies.includes(title)) S.trophies.push(title);
       return { kind: "title", from: leagueOf(S).name, to: leagueOf(S).name, rank };
     }
 
-    let to = null, kind = null;
-    if (rank === 1 && at < DOMESTIC_TIERS.length - 1) {
+    let to = null, kind = null, euroExit = false;
+    if (rank === 1 && at < ladder.length - 1) {
       const me = rows[0], second = rows[1];
-      if (me.pts - (second ? second.pts : 0) >= PROMO_GAP) { to = DOMESTIC_TIERS[at + 1]; kind = "up"; }
-    } else if (rank === rows.length && at > 0) { to = DOMESTIC_TIERS[at - 1]; kind = "down"; }
+      if (me.pts - (second ? second.pts : 0) >= PROMO_GAP) { to = ladder[at + 1]; kind = "up"; }
+    } else if (rank === rows.length) {
+      /* 사다리 안에 아래 칸이 있으면 거기로. 없으면 유럽 사다리만 국내로 떨어져요 —
+       * K리그3(국내 맨 아래)은 갈 데가 없어 강등이 안 일어나요. */
+      if (at > 0) { to = ladder[at - 1]; kind = "down"; }
+      else if (ladder === EURO_TIERS) { to = EURO_DROP; kind = "down"; euroExit = true; }
+    }
     if (to == null) return null;
 
     const from = leagueOf(S).name;
@@ -347,7 +373,7 @@ window.WingerCareer = (() => {
     }
     S.table = null;                          // 새 리그에서 표를 다시 만들어요
     S.leagueSince = S.proYear;               // 이 리그에 들어온 시즌 — 연속 승격을 막아요
-    return { kind, from, to: leagueOf(S).name, rank };
+    return { kind, from, to: leagueOf(S).name, rank, euroExit };
   }
 
   function initActivity() {
@@ -577,7 +603,18 @@ window.WingerCareer = (() => {
      * 기대치도 평점을 따라 움직여야 실력 좋은 선수가 이중으로 이득 보지 않아요. */
     const perfNow = clamp((rating - 5) / 4 + 0.6, 0.15, 1.6);
     const axisNow = posAxis({ goals: info.myGoals, assists: info.assists, defense: info.defense }, S.pos);
-    const doneBonus = (axisNow - 2.05 * perfNow) * 8;
+    /* 기대치를 넘은 쪽이 못 넘은 쪽보다 무겁게 실려요(AXIS_UP > AXIS_DOWN).
+     * 예전에는 배수가 8 하나라, 2골 2도움을 하고도 평점이 7.6밖에 안 올라
+     * "잘한 경기"가 화면에서 티가 안 났어요. 반대로 배수만 올리면 조용한 경기가
+     * 지나치게 깎여서(0골 4.73 → 4.07) 평범한 날이 재앙처럼 보입니다.
+     *
+     * 실측(공격수 능력치 75, 6만 경기):
+     *              0골     1골    2골2도움   평점평균
+     *   이전(×8)   4.73   5.54    7.57      5.91
+     *   지금       4.90   5.60    8.30      6.12   ← 못한 경기는 오히려 덜 가혹해요 */
+    const AXIS_UP = 12, AXIS_DOWN = 7;
+    const axisGap = axisNow - 2.05 * perfNow;
+    const doneBonus = axisGap >= 0 ? axisGap * AXIS_UP : axisGap * AXIS_DOWN;
     const resultBonus = info.res === "W" ? 3 : info.res === "L" ? -3 : 0;
     const myRankScore = rating * 10 + momAdj + doneBonus + resultBonus + rand(-4, 4);
     /* ⚠️ 순위표를 **먼저** 굴려요. 그래야 그 라운드에 각 클럽이 뭘 했는지가 나오고,
@@ -592,7 +629,7 @@ window.WingerCareer = (() => {
        * res는 그 라운드 소속 클럽의 결과예요. 내가 이긴 상대 팀의 라이벌은 같이 떨어져요. */
       ...act.rivals.map((r) => ({
         name: r.name, club: r.club, role: r.role, res: roundRes[r.club] || null,
-        score: r.pop + rand(-6, 6) + rivalResAdj(roundRes[r.club]),
+        score: 70 + (r.pop - 70) * RIVAL_POP_PULL + rand(-6, 6) + rivalResAdj(roundRes[r.club]),
       })),
     ].sort((a, b) => b.score - a.score);
     const rank = rows.findIndex((r) => r.me) + 1;
@@ -789,6 +826,8 @@ window.WingerCareer = (() => {
     if (move) {
       proLog(move.kind === "title" ? `🏆 ${move.from} 우승!! 리그 정상에 섰어요`
         : move.kind === "up" ? `🔺 리그 우승! ${move.from} → ${move.to} 승격!!`
+        // 유럽 무대에서 국내로 떨어지는 건 '강등'보다 '출전권 상실'이 맞는 말이에요
+        : move.euroExit ? `🔻 최하위… 유럽 출전권을 잃었어요. ${move.from} → ${move.to}`
         : `🔻 최하위… ${move.from} → ${move.to} 강등`);
       if (move.kind === "title" && window.Fx) Fx.celebrate("champion", `🏆 ${move.from} 우승!`);
     }
@@ -941,6 +980,9 @@ window.WingerCareer = (() => {
       ${y.promo ? `<div class="hint">${
         y.promo === "title" ? `🏆 <b>${y.promoTo} 우승!</b> 리그 정상에 섰어요`
         : y.promo === "up" ? `🔺 <b>리그 우승!</b> ${(y.y || 0) + 1}시즌부터 <b>${y.promoTo}</b>에서 뜁니다`
+        /* 유럽 무대에서 떨어진 시즌은 '강등'이 아니라 '출전권 상실'로 읽혀야 해요.
+         * 치른 리그(y.league)로 가려요 — promoTo만 봐서는 어디서 떨어졌는지 알 수 없어요. */
+        : EURO_TIERS.includes(y.league) ? `🔻 최하위… <b>유럽 출전권을 잃었어요.</b> ${(y.y || 0) + 1}시즌부터 <b>${y.promoTo}</b>에서 다시 시작해요`
         : `🔻 최하위로 강등… ${(y.y || 0) + 1}시즌부터 <b>${y.promoTo}</b>에서 다시 시작해요`}</div>` : ""}
       ${y.club && y.club !== S.group ? `<div class="hint">🔁 <b>${S.group}</b>로 이적했어요 — ${(y.y || 0) + 1}시즌부터 새 팀에서 뜁니다</div>` : ""}
       <table class="season-table season-soccer"><thead><tr><th>시즌</th><th>소속</th><th>성적</th><th>평점</th><th>수상</th></tr></thead><tbody>${rows}</tbody></table>
