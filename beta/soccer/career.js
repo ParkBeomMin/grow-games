@@ -303,16 +303,14 @@ window.WingerCareer = (() => {
    * 모델링해 놨어요 — 클럽 목록도 순위표도 국내 리그와 똑같이 굴러갑니다.
    * 그래서 승강제만 없으면 유럽에 간 순간 팀 성적이 아무 데도 안 닿았어요.
    *
-   * 둘을 **한 사다리로 잇지는 않아요.** K리그1 1위는 올라가는 게 아니라 우승이에요.
-   * 유럽은 국내 리그를 이겨서 가는 곳이 아니라 개인 성적으로 초청받는 무대라,
-   * 올라가는 길은 이적 사다리(PROMOTE_HYPE)에 그대로 맡깁니다.
+   * 두 사다리는 **완전히 따로 돌아요. 오르는 길도 내려오는 길도 안 이어집니다.**
+   * K리그1 1위는 올라가는 게 아니라 우승이고, 유로파 최하위도 국내로 안 내려와요.
+   * 유럽은 국내 리그를 이겨서 가는 곳이 아니라 개인 성적으로 초청받는 무대예요 —
+   * 두 무대를 오가는 건 오직 이적 사다리(PROMOTE_HYPE)뿐입니다.
    *
-   * 내려오는 길만 이어요 — 유로파 최하위는 **K리그1로** 떨어져요(유럽 출전권 상실).
-   * 유럽 사다리 맨 아래에서 갈 데가 없으면 강등이 아예 안 일어나는데, 그러면
-   * 유로파는 "떨어질 걱정 없는 리그"가 돼서 순위표를 볼 이유가 사라집니다. */
+   * 그래서 각 사다리의 맨 아래(K리그3 · 유로파)는 갈 데가 없어 강등이 안 일어나요. */
   const DOMESTIC_TIERS = [5, 4, 1];          // K리그3 → K리그2 → K리그1 (tier 오름차순)
   const EURO_TIERS = [2, 3];                 // 유로파리그 → 챔피언스리그
-  const EURO_DROP = 1;                       // 유로파 최하위가 떨어지는 곳 — K리그1
   const ladderOf = (id) => (DOMESTIC_TIERS.includes(id) ? DOMESTIC_TIERS
     : EURO_TIERS.includes(id) ? EURO_TIERS : null);
   /* 승격 문턱. 순위만 보면 사다리가 죽어요 — 실측하니 내 승률 60%에서 시즌의 91.5%가
@@ -350,15 +348,13 @@ window.WingerCareer = (() => {
       return { kind: "title", from: leagueOf(S).name, to: leagueOf(S).name, rank };
     }
 
-    let to = null, kind = null, euroExit = false;
+    let to = null, kind = null;
     if (rank === 1 && at < ladder.length - 1) {
       const me = rows[0], second = rows[1];
       if (me.pts - (second ? second.pts : 0) >= PROMO_GAP) { to = ladder[at + 1]; kind = "up"; }
-    } else if (rank === rows.length) {
-      /* 사다리 안에 아래 칸이 있으면 거기로. 없으면 유럽 사다리만 국내로 떨어져요 —
-       * K리그3(국내 맨 아래)은 갈 데가 없어 강등이 안 일어나요. */
-      if (at > 0) { to = ladder[at - 1]; kind = "down"; }
-      else if (ladder === EURO_TIERS) { to = EURO_DROP; kind = "down"; euroExit = true; }
+    } else if (rank === rows.length && at > 0) {
+      // 사다리 안에서만 내려가요. 맨 아래(K리그3 · 유로파)는 갈 데가 없어요.
+      to = ladder[at - 1]; kind = "down";
     }
     if (to == null) return null;
 
@@ -373,7 +369,7 @@ window.WingerCareer = (() => {
     }
     S.table = null;                          // 새 리그에서 표를 다시 만들어요
     S.leagueSince = S.proYear;               // 이 리그에 들어온 시즌 — 연속 승격을 막아요
-    return { kind, from, to: leagueOf(S).name, rank, euroExit };
+    return { kind, from, to: leagueOf(S).name, rank };
   }
 
   function initActivity() {
@@ -826,8 +822,6 @@ window.WingerCareer = (() => {
     if (move) {
       proLog(move.kind === "title" ? `🏆 ${move.from} 우승!! 리그 정상에 섰어요`
         : move.kind === "up" ? `🔺 리그 우승! ${move.from} → ${move.to} 승격!!`
-        // 유럽 무대에서 국내로 떨어지는 건 '강등'보다 '출전권 상실'이 맞는 말이에요
-        : move.euroExit ? `🔻 최하위… 유럽 출전권을 잃었어요. ${move.from} → ${move.to}`
         : `🔻 최하위… ${move.from} → ${move.to} 강등`);
       if (move.kind === "title" && window.Fx) Fx.celebrate("champion", `🏆 ${move.from} 우승!`);
     }
@@ -980,9 +974,6 @@ window.WingerCareer = (() => {
       ${y.promo ? `<div class="hint">${
         y.promo === "title" ? `🏆 <b>${y.promoTo} 우승!</b> 리그 정상에 섰어요`
         : y.promo === "up" ? `🔺 <b>리그 우승!</b> ${(y.y || 0) + 1}시즌부터 <b>${y.promoTo}</b>에서 뜁니다`
-        /* 유럽 무대에서 떨어진 시즌은 '강등'이 아니라 '출전권 상실'로 읽혀야 해요.
-         * 치른 리그(y.league)로 가려요 — promoTo만 봐서는 어디서 떨어졌는지 알 수 없어요. */
-        : EURO_TIERS.includes(y.league) ? `🔻 최하위… <b>유럽 출전권을 잃었어요.</b> ${(y.y || 0) + 1}시즌부터 <b>${y.promoTo}</b>에서 다시 시작해요`
         : `🔻 최하위로 강등… ${(y.y || 0) + 1}시즌부터 <b>${y.promoTo}</b>에서 다시 시작해요`}</div>` : ""}
       ${y.club && y.club !== S.group ? `<div class="hint">🔁 <b>${S.group}</b>로 이적했어요 — ${(y.y || 0) + 1}시즌부터 새 팀에서 뜁니다</div>` : ""}
       <table class="season-table season-soccer"><thead><tr><th>시즌</th><th>소속</th><th>성적</th><th>평점</th><th>수상</th></tr></thead><tbody>${rows}</tbody></table>
