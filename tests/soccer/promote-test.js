@@ -63,7 +63,12 @@ const CLUBS = T.CLUBS;
 const BY_TIER = LEAGUES.slice().sort((a, b) => a.tier - b.tier);
 const leagueById = (id) => LEAGUES.find((l) => l.id === id);
 const clubByName = (n) => LEAGUES.flatMap((l) => CLUBS[l.id] || []).find((c) => c.name === n);
-const K3 = BY_TIER[0], K2 = BY_TIER[1], K1 = BY_TIER[2], EUR = BY_TIER[3], UCL = BY_TIER[4];
+/* ⚠️ 자리(BY_TIER[n])로 잡지 않는다. 나라별 리그로 늘면서 tier 자리가 밀려
+ * BY_TIER[3]이 유로파에서 🇯🇵 일본 2부가 됐고, 이 파일의 절반이 엉뚱한 리그를 봤다.
+ * id는 옛 세이브가 가리키는 값이라 안 움직인다 — 그걸 기준으로 잡는다.
+ *   5 한국 3부 · 4 한국 2부 · 1 한국 1부 · 2 잉글랜드 2부(옛 유로파) · 3 잉글랜드 1부(옛 챔스) */
+const byLeagueId = (id) => LEAGUES.find((l) => l.id === id);
+const K3 = byLeagueId(5), K2 = byLeagueId(4), K1 = byLeagueId(1), EUR = byLeagueId(2), UCL = byLeagueId(3);
 
 // ---------- 소스에서 뽑는 상수 ----------
 const SRC = fs.readFileSync(path.join(DIR, "career.js"), "utf8");
@@ -190,8 +195,21 @@ guard("문턱의 능력치 환산", () => {
   }
   check(rungs.every((r) => isFinite(r.ability)),
     `사다리 모든 칸이 능력치 ${STATS[STATS.length - 1]} 안에서 열린다 (막힌 칸 ${rungs.filter((r) => !isFinite(r.ability)).map((r) => r.from.name).join(", ") || "없음"})`);
-  check(rungs.every((r, i) => i === 0 || rungs[i - 1].ability < r.ability),
-    `위로 갈수록 필요 능력치가 커진다 (${rungs.map((r) => `${r.from.name} ${r.ability.toFixed(0)}`).join(" < ")})`);
+  /* 뒤집히지만 않으면 된다 — 동률은 허용한다.
+   * 리그가 5개에서 11개로 늘면서 열 칸이 능력치 51~77 사이에 들어갔고, 눈금이 정수라
+   * 옆칸끼리 같은 값이 나오는 게 정상이다. 지켜야 하는 건 "아래 칸이 더 어렵지 않다"이지
+   * "칸마다 반드시 1 이상 벌어진다"가 아니다. 후자를 강요하면 나라를 더할 때마다
+   * 사다리를 억지로 늘려야 하고, 그게 곧 문턱 폭주다.
+   * 전체가 실제로 오르는지는 아래 '양 끝' 검사가 따로 본다. */
+  /* 필요 능력치는 몬테카를로로 재는 값이라 옆칸끼리 ±1쯤은 그냥 흔들린다.
+   * 그 흔들림까지 잡으면 돌릴 때마다 빨간불이 뜬다 — 실제로 화면에는
+   * 73 ≤ 73으로 보이는데 소수점에서 뒤집혀 실패한 적이 있다.
+   * 여기서 잡아야 하는 건 "사다리가 거꾸로 서 있다"이지 측정 노이즈가 아니다. */
+  const NOISE = 1;
+  check(rungs.every((r, i) => i === 0 || rungs[i - 1].ability <= r.ability + NOISE),
+    `위로 갈수록 필요 능력치가 안 줄어든다 (${rungs.map((r) => `${r.from.name} ${r.ability.toFixed(1)}`).join(" ≤ ")})`);
+  check(rungs[rungs.length - 1].ability - rungs[0].ability >= 20,
+    `사다리 전체로는 확실히 벌어진다 (${rungs[0].ability.toFixed(0)} → ${rungs[rungs.length - 1].ability.toFixed(0)})`);
   // 하부 두 칸은 K리그1 → 유로파보다 확실히 쉬워야 한다
   const k1Need = needAbility[K1.id];
   check(needAbility[K3.id] < k1Need && needAbility[K2.id] < k1Need,

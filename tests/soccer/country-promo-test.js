@@ -1,13 +1,13 @@
-/* 🇪🇺 유럽 무대 승강제 — 유로파 ↔ 챔피언스리그, 그리고 유로파 최하위의 국내 복귀.
+/* 🌍 나라별 승강 사다리 — 나라마다 하나씩 돌고, 서로 안 이어진다.
  *
  * 예전에는 유럽에 가면 팀 성적이 아무 데도 안 닿았다(applyPromotion이 바로 null).
  * 순위표는 그려지는데 1위를 해도 꼴찌를 해도 아무 일이 없었다.
  *
  * 여기서 지키는 것:
- *   ① 유로파 1위(+승점차) → 챔스 승격 / 챔스 최하위 → 유로파 강등
- *   ② 챔스 1위 → 승격이 아니라 **우승 트로피** (사다리 맨 위)
+ *   ① 잉글랜드 2부 1위(+승점차) → 잉글랜드 1부 승격 / 잉글랜드 1부 최하위 → 잉글랜드 2부 강등
+ *   ② 잉글랜드 1부 1위 → 승격이 아니라 **우승 트로피** (사다리 맨 위)
  *   ③ 두 사다리가 **완전히 따로 돈다** — 오르는 길도 내려오는 길도 안 이어진다
- *   ④ 그래서 각 사다리 맨 아래(K리그3 · 유로파)는 갈 데가 없어 아무 일도 안 일어난다
+ *   ④ 그래서 각 사다리 맨 아래(한국 3부 · 유로파)는 갈 데가 없어 아무 일도 안 일어난다
  *
  * applyPromotion을 소스에서 통째로 떼어 굴린다. 값을 옮겨 적지 않는다.
  */
@@ -19,9 +19,8 @@ const GAME = fs.readFileSync(`${BASE}/game.js`, "utf8");
 const grab = (src, re) => { const m = src.match(re); return m ? m[0] : null; };
 
 const parts = {
-  domestic: grab(SRC, /const DOMESTIC_TIERS = \[[^\]]*\];/),
-  euro: grab(SRC, /const EURO_TIERS = \[[^\]]*\];/),
-  ladderOf: grab(SRC, /const ladderOf = \(id\) => [\s\S]*?: null\);/),
+  tiers: grab(SRC, /const COUNTRY_TIERS = \{[\s\S]*?\n  \};/),
+  ladderOf: grab(SRC, /const ladderOf = \(id\) => \{[\s\S]*?\n  \};/),
   gap: grab(SRC, /const PROMO_GAP = [^;]+;/),
   settle: grab(SRC, /const PROMO_SETTLE = [^;]+;/),
   apply: grab(SRC, /function applyPromotion\(\) \{[\s\S]*?\n  \}/),
@@ -41,8 +40,7 @@ const makeApply = () => new Function(
    const tableReady = () => true;
    const tableRows = () => rowsIn;
    const myTableRank = () => rankIn;
-   ${parts.domestic}
-   ${parts.euro}
+   ${parts.tiers}
    ${parts.ladderOf}
    ${parts.gap}
    ${parts.settle}
@@ -52,7 +50,8 @@ const makeApply = () => new Function(
 );
 const apply = makeApply();
 
-const LEAGUE_NAME = { 5: "K리그3", 4: "K리그2", 1: "K리그1", 2: "유로파리그", 3: "챔피언스리그" };
+const LEAGUE_NAME = { 5: "한국 3부", 4: "한국 2부", 1: "한국 1부", 6: "일본 2부", 7: "일본 1부",
+  8: "브라질 2부", 9: "브라질 1부", 10: "이탈리아 2부", 11: "이탈리아 1부", 2: "잉글랜드 2부", 3: "잉글랜드 1부" };
 /* 6팀 순위표. gap을 주면 1위가 2위보다 그만큼 앞선다. */
 const table = (gap) => [
   { name: "나", pts: 60 }, { name: "B", pts: 60 - gap },
@@ -69,40 +68,40 @@ const run = (league, rank, gap) => apply(state(league), table(gap == null ? 12 :
 // ── ① 유럽 사다리 안에서 오르내린다
 const up = run(2, 1);
 check(up.move && up.move.kind === "up" && up.league === 3,
-  `유로파 1위 → 챔피언스리그 승격 (${up.move ? up.move.to : "안 일어남"})`);
+  `잉글랜드 2부 1위 → 1부 승격 (${up.move ? up.move.to : "안 일어남"})`);
 
 const chDown = run(3, 6);
 check(chDown.move && chDown.move.kind === "down" && chDown.league === 2,
-  `챔스 최하위 → 유로파리그 강등 (${chDown.move ? chDown.move.to : "안 일어남"})`);
+  `잉글랜드 1부 최하위 → 잉글랜드 2부 강등 (${chDown.move ? chDown.move.to : "안 일어남"})`);
 
 // 승점 차가 모자라면 승격 안 됨 — 국내와 같은 문턱을 쓴다
 const narrow = run(2, 1, 3);
-check(!narrow.move && narrow.league === 2, "승점 차가 모자라면 유로파 1위여도 승격 안 된다");
+check(!narrow.move && narrow.league === 2, "승점 차가 모자라면 잉글랜드 2부 1위여도 승격 안 된다");
 
-// ── ② 챔스 1위는 우승이지 승격이 아니다
+// ── ② 잉글랜드 1부 1위는 우승이지 승격이 아니다
 const champ = run(3, 1);
 check(champ.move && champ.move.kind === "title" && champ.league === 3,
-  `챔스 1위 → 우승 트로피 (리그 그대로: ${LEAGUE_NAME[champ.league]})`);
+  `잉글랜드 1부 1위 → 우승 트로피 (리그 그대로: ${LEAGUE_NAME[champ.league]})`);
 
 /* ── ③ 두 사다리는 완전히 따로 돈다.
- * 한때 "유로파 최하위 → K리그1"로 이어 뒀는데, 유럽은 국내 리그를 이겨서 가는
+ * 한때 "잉글랜드 2부 최하위 → 한국 1부"로 이어 뒀는데, 유럽은 국내 리그를 이겨서 가는
  * 곳이 아니라 개인 성적으로 초청받는 무대라 그 통로를 없앴다.
  * 두 무대를 오가는 건 오직 이적 사다리(PROMOTE_HYPE)뿐이다. */
 const exit = run(2, 6);
 check(!exit.move && exit.league === 2,
-  `유로파 최하위는 국내로 안 내려온다 (리그 ${LEAGUE_NAME[exit.league]})`);
+  `잉글랜드 2부 최하위는 국내로 안 내려온다 (리그 ${LEAGUE_NAME[exit.league]})`);
 
 const k1top = run(1, 1);
 check(k1top.move && k1top.move.kind === "title" && k1top.league === 1,
-  `K리그1 1위 → 우승 트로피, 유로파로 안 올라간다 (리그 ${LEAGUE_NAME[k1top.league]})`);
+  `한국 1부 1위 → 우승 트로피, 다른 나라로 안 올라간다 (리그 ${LEAGUE_NAME[k1top.league]})`);
 
-// K리그1 최하위는 국내 사다리 안에서 내려간다 (유럽과 무관)
+// 한국 1부 최하위는 국내 사다리 안에서 내려간다 (유럽과 무관)
 const k1down = run(1, 6);
-check(k1down.move && k1down.league === 4, `K리그1 최하위 → K리그2 (${LEAGUE_NAME[k1down.league]})`);
+check(k1down.move && k1down.league === 4, `한국 1부 최하위 → 한국 2부 (${LEAGUE_NAME[k1down.league]})`);
 
 // ── ④ 각 사다리 맨 아래는 갈 데가 없다
 const bottom = run(5, 6);
-check(!bottom.move && bottom.league === 5, "K리그3 최하위도 아무 일도 안 일어난다");
+check(!bottom.move && bottom.league === 5, "한국 3부 최하위도 아무 일도 안 일어난다");
 
 // ── 전력도 함께 움직인다 (승격하면 새 리그 하위권, 강등되면 새 리그 상위권)
 check(up.move && apply(state(2), table(12), 1).league === 3, "승격 뒤 리그가 실제로 바뀐다");
@@ -112,33 +111,33 @@ const strFor = (league, rank) => {
     `${parts.leagues}\n${parts.clubs}\n` +
     `const leagueOf = (st) => LEAGUES.find((l) => l.id === ((st && st.league) || 1)) || LEAGUES[0];\n` +
     `const tableReady = () => true; const tableRows = () => rowsIn; const myTableRank = () => rankIn;\n` +
-    `${parts.domestic}\n${parts.euro}\n${parts.ladderOf}\n${parts.gap}\n${parts.settle}\n${parts.apply}\n` +
+    `${parts.tiers}\n${parts.ladderOf}\n${parts.gap}\n${parts.settle}\n${parts.apply}\n` +
     `applyPromotion(); return S.clubStr;`);
   return A(S, table(12), rank);
 };
 /* ⚠️ 승격 후와 강등 후를 그냥 비교하면 안 된다 — 도착하는 리그가 서로 달라서
- * 값이 우연히 같아질 수 있다(실제로 챔스 최약체와 K리그1 최강이 둘 다 78이었다).
+ * 값이 우연히 같아질 수 있다(실제로 잉글랜드 1부 최약체와 한국 1부 최강이 둘 다 78이었다).
  * **같은 리그 안에서** 어느 자리에 놓이는지를 본다. */
 const clubStrOf = new Function(parts.clubs + " return (id) => CLUBS[id].map((c) => c.str);");
 const chStrs = clubStrOf()(3), eurStrs = clubStrOf()(2);
 const upStr = strFor(2, 1), downStr = strFor(3, 6);
-console.log(`   전력 — 챔스 승격 후 ${upStr} (챔스 ${Math.min(...chStrs)}~${Math.max(...chStrs)})`
-  + ` · 유로파 강등 후 ${downStr} (유로파 ${Math.min(...eurStrs)}~${Math.max(...eurStrs)})`);
+console.log(`   전력 — 잉글랜드 1부 승격 후 ${upStr} (잉글랜드 1부 ${Math.min(...chStrs)}~${Math.max(...chStrs)})`
+  + ` · 잉글랜드 2부 강등 후 ${downStr} (유로파 ${Math.min(...eurStrs)}~${Math.max(...eurStrs)})`);
 check(upStr === Math.min(...chStrs), `승격하면 새 리그의 최약체로 들어간다 (${upStr})`);
 check(downStr === Math.max(...eurStrs), `내려가면 그 리그의 최강으로 들어간다 (${downStr})`);
 
 /* ── 변이 검증 — 유럽 사다리를 없애면 ①③이 무너져야 한다.
  * 안 잡히면 위의 초록불은 아무것도 안 지키고 있는 것이다. */
-const brokenEuro = parts.euro.replace(/\[[^\]]*\]/, "[]");
-if (brokenEuro === parts.euro) { console.log("❌ 변이 치환이 안 됐어요"); process.exit(1); }
+const brokenTiers = parts.tiers.replace(/en: \[[^\]]*\]/, "en: []");
+if (brokenTiers === parts.tiers) { console.log("❌ 변이 치환이 안 됐어요"); process.exit(1); }
 const brokenApply = new Function("S", "rowsIn", "rankIn",
   `${parts.leagues}\n${parts.clubs}\n` +
   `const leagueOf = (st) => LEAGUES.find((l) => l.id === ((st && st.league) || 1)) || LEAGUES[0];\n` +
   `const tableReady = () => true; const tableRows = () => rowsIn; const myTableRank = () => rankIn;\n` +
-  `${parts.domestic}\n${brokenEuro}\n${parts.ladderOf}\n${parts.gap}\n${parts.settle}\n${parts.apply}\n` +
+  `${brokenTiers}\n${parts.ladderOf}\n${parts.gap}\n${parts.settle}\n${parts.apply}\n` +
   `return applyPromotion();`);
 check(brokenApply(state(2), table(12), 1) === null,
-  "변이 검증 — 유럽 사다리를 비우면 유로파 1위에 아무 일도 안 일어난다");
+  "변이 검증 — 잉글랜드 사다리를 비우면 잉글랜드 2부 1위에 아무 일도 안 일어난다");
 
 console.log(bad ? `\n❌ ${bad}개 실패` : "\n✅ 통과");
 process.exit(bad ? 1 : 0);

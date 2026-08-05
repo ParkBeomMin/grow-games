@@ -76,6 +76,9 @@ check(!!Career, "WingerCareer 모듈이 페이지에서 로드된다");
 if (!Career || !Career._t || typeof Career._t.state !== "function") { console.log("\n❌ 실패"); process.exit(1); }
 const T = Career._t;
 const LEAGUES = T.LEAGUES;
+/* 리그 약칭은 소스에서 읽는다. 여기 옮겨 적으면 리그 이름이 바뀌어도 안 들킨다 —
+ * 실제로 K리그3 → 🇰🇷 한국 3부로 바뀌며 "3부"가 "한3"이 됐다. */
+const SHORT = (id) => (LEAGUES.find((l) => l.id === id) || {}).short;
 const CLUBS = T.CLUBS;
 
 // ---------- 시즌을 실제 버튼 클릭만으로 소화 (promote-test.js와 같은 헬퍼) ----------
@@ -239,7 +242,10 @@ guard("⑦ 칼럼 압축", () => {
   check(rows.length === years.length, `표 행 수(${rows.length})가 최근 기록 수(${years.length})와 같다`);
   rows.forEach((row, i) => {
     const y = years[i];
-    const text = row.textContent;
+    /* ⚠️ 행 전체가 아니라 **성적 칸만** 읽는다. 소속 칸의 리그 약칭이 숫자로 끝나면
+     * (🇰🇷 한국 3부 → "한3") textContent가 이어 붙어 "한3" + "33골"이 "333골"로 읽힌다.
+     * 화면은 멀쩡하다 — .yr-lg가 display:block이라 줄이 갈린다. 읽는 쪽 문제다. */
+    const text = (row.children[2] || row).textContent;
     const m = text.match(/(-|\d+)골\s*(-|\d+)도움\s*(-|\d+)수비/);
     check(!!m, `${i}번째 행에서 골·도움·수비 숫자를 표에서 읽을 수 있다 (${text.trim()})`);
     if (m) {
@@ -349,7 +355,7 @@ console.log("=== ⑧ 확인 페이지 세이브의 6시즌 소속 표 ===");
 const EXPECT = [
   { y: 1, club: "블랙이글스", moved: false, lg: null },
   { y: 2, club: "블랙이글스", moved: false, lg: null },
-  { y: 3, club: "머드독스",   moved: true,  lg: "3부" },  // K리그1 → K리그3
+  { y: 3, club: "머드독스",   moved: true,  lg: SHORT(5) },  // 한국 1부 → 한국 3부
   { y: 4, club: "파인힐스",   moved: true,  lg: null },
   { y: 5, club: "머드독스",   moved: true,  lg: null },
   { y: 6, club: "스톤워커스", moved: true,  lg: null },
@@ -426,14 +432,14 @@ guard("⑪ 기록 우선", () => {
   const WRONG = "어긋난클럽";
   const d = resumeInto(reportSave((s) => {
     s.career.years[2].club = WRONG;      // 역산이라면 '머드독스'가 나올 자리
-    s.career.years[2].league = 3;        // 리그도 어긋나게 (챔피언스리그)
+    s.career.years[2].league = 3;        // 리그도 어긋나게 (id 3 = 사다리 꼭대기)
   }));
   try {
     const ww = d.window;
     const col = clubColumn(ww);
     check(col[2].full === WRONG, `club이 적힌 3시즌은 적힌 값(${WRONG})을 쓴다 (${col[2].full})`);
     check(col[2].text.startsWith("어긋난"), `줄인 이름도 적힌 값에서 나온다 (${col[2].text})`);
-    check(col[2].lg === "빅클럽", `적힌 league(3)로 리그 태그가 붙는다 (${col[2].lg})`);
+    check(col[2].lg === SHORT(3), `적힌 league(3)로 리그 태그가 붙는다 (${col[2].lg} · 기대 ${SHORT(3)})`);
     // 나머지 줄은 그대로 역산된다 — 한 칸이 적혀 있어도 다른 칸은 계속 메워야 한다.
     check(col[0].full === "블랙이글스" && col[1].full === "블랙이글스",
       `앞 두 시즌은 여전히 역산된다 (${col[0].full} · ${col[1].full})`);

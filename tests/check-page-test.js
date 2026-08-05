@@ -350,7 +350,16 @@ reach("soccer-report", (P, first) => {
     `이적한 시즌만 강조된다 (${moved.map((m, i) => `${i + 1}:${m}`).join(" ")})`);
   // 3시즌은 K리그1 → K리그3 이동이라 리그 태그가 붙어요. 나머지는 같은 리그예요.
   const tags = cells.map((c) => { const t = c.querySelector(".yr-lg"); return t ? t.textContent.trim() : ""; });
-  check(tags.join("·") === "··3부···", `리그를 옮긴 3시즌에만 리그 태그가 붙는다 (${tags.join("·")})`);
+  /* 약칭은 소스에서 읽어요 — 여기 옮겨 적으면 리그 이름이 바뀌어도 안 들켜요.
+   * 실제로 K리그3 → 🇰🇷 한국 3부로 바뀌며 "3부"가 "한3"이 됐습니다. */
+  const K3_SHORT = (() => {
+    const src = fs.readFileSync(path.join(BETA, "soccer/game.js"), "utf8");
+    const tbl = src.match(/const LEAGUES = \[[\s\S]*?\n\];/);
+    const list = tbl ? new Function(`${tbl[0]} return LEAGUES;`)() : [];
+    return (list.find((l) => l.id === 5) || {}).short || "3부";
+  })();
+  check(tags.join("·") === `··${K3_SHORT}···`,
+    `리그를 옮긴 3시즌에만 리그 태그가 붙는다 (${tags.join("·")} · 기대 ··${K3_SHORT}···)`);
 });
 
 // ⚽ 유스 엔딩 두 종 — 도전 버튼까지만 확인해요 (엔딩은 판정 결과라 세이브에 안 남아요)

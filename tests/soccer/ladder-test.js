@@ -1,4 +1,4 @@
-/* 5단 리그 사다리 — 하부 리그(K리그3·K리그2)와 경쟁 강도(bar)를 지키는 검사예요.
+/* 리그 사다리 — 하부 리그와 경쟁 강도(bar)를 지키는 검사예요.
  *
  * 왜 필요한가. K리그가 바닥이라 유스 필터를 못 넘으면 갈 곳이 없어서 게임이 끝났어요.
  * 유스 3년 뒤 종합 55에서 63%, 65에서 40%가 거기서 끝납니다. 밑에서 시작하는 길이
@@ -89,15 +89,19 @@ const barOfFn = leagueSrc && leagueParts.barOf
 const byId = (id) => (table || []).find((l) => l && l.id === id);
 const byTier = (t) => (table || []).find((l) => l && l.tier === t);
 
-// ① 리그가 5개이고 tier가 1~5로 겹치지 않는다
-guard("① 5단 사다리", () => {
-  check(table.length === 5, `LEAGUES가 5개다 (${table.length}개)`);
+/* ① tier가 1부터 빈틈없이 이어지고 id가 안 겹친다.
+ * 개수를 못 박지 않는다 — 나라가 늘 때마다 이 검사를 고쳐야 하면 검사가 아니라 잔소리다.
+ * 지켜야 하는 건 "사다리에 구멍이 없다"이지 "몇 칸이다"가 아니다. */
+guard("① 사다리에 구멍이 없다", () => {
+  check(table.length >= 5, `LEAGUES가 5개 이상이다 (${table.length}개)`);
   const tiers = table.map((l) => l.tier).sort((a, b) => a - b);
-  check(tiers.join(",") === "1,2,3,4,5", `tier가 1~5로 겹치지 않는다 (${tiers.join("·")})`);
+  const want = table.map((_, i) => i + 1).join(",");
+  check(tiers.join(",") === want, `tier가 1~${table.length}로 빈틈없이 이어진다 (${tiers.join("·")})`);
   check(table.every((l) => l && l.name && l.short && l.flag),
     "리그마다 name · short · flag가 있다 (이적 화면에 그대로 찍혀요)");
   const ids = table.map((l) => l.id);
-  check(new Set(ids).size === 5, `id가 겹치지 않는다 (${ids.join("·")})`);
+  check(new Set(ids).size === table.length, `id가 겹치지 않는다 (${ids.join("·")})`);
+  check(table.every((l) => l.country), "리그마다 country가 있다 (승강 사다리를 나라로 나눠요)");
 });
 
 /* ② 옛 세이브 방어 — 이 태스크에서 가장 위험한 지점이에요.
@@ -106,10 +110,16 @@ guard("① 5단 사다리", () => {
 guard("② 옛 세이브의 id 고정", () => {
   check(byId(1) && byId(1).tier === 3 && byId(1).penalty === 0,
     `id 1이 tier 3이고 penalty가 0이다 (옛 K리그 = 지금 K리그1) — ${byId(1) ? `tier ${byId(1).tier} · penalty ${byId(1).penalty}` : "없음"}`);
-  check(byId(2) && byId(2).tier === 4 && byId(2).penalty > 0,
-    `id 2가 tier 4다 (옛 세이브의 유로파리그) — ${byId(2) ? `tier ${byId(2).tier}` : "없음"}`);
-  check(byId(3) && byId(3).tier === 5 && byId(3).penalty > 0,
-    `id 3이 tier 5다 (옛 세이브의 챔피언스리그) — ${byId(3) ? `tier ${byId(3).tier}` : "없음"}`);
+  /* id 2·3은 옛 유로파리그·챔피언스리그다. 나라별 리그로 개편하면서 **이름만**
+   * 🏴 잉글랜드 2부·1부로 바뀌었다 — id도 구단 명단도 그대로라 진행 중인 캐릭터는
+   * 같은 클럽에서 같은 상대와 계속 뛴다. tier는 리그가 늘면서 밀리므로 값을 못 박지
+   * 않고, "둘이 같은 나라이고 2가 3보다 아래"라는 관계만 지킨다. */
+  check(byId(2) && byId(3) && byId(2).country === byId(3).country,
+    `id 2와 3이 같은 나라다 (${byId(2) ? byId(2).name : "?"} · ${byId(3) ? byId(3).name : "?"})`);
+  check(byId(2) && byId(3) && byId(2).tier < byId(3).tier && byId(2).penalty > 0,
+    `id 2가 id 3보다 아래다 (tier ${byId(2) ? byId(2).tier : "?"} < ${byId(3) ? byId(3).tier : "?"})`);
+  check(byId(3) && byId(3).tier === table.length && byId(3).penalty > 0,
+    `id 3이 사다리 꼭대기다 (tier ${byId(3) ? byId(3).tier : "없음"}/${table.length})`);
   check(byId(1) && byId(1).prestige === 1.00,
     `id 1의 prestige가 1.00이다 (기준선이라 안 움직여요) — ${byId(1) ? byId(1).prestige : "없음"}`);
   const lower = [byTier(1), byTier(2)];
@@ -145,7 +155,7 @@ guard("④ bar 단조 증가", () => {
 guard("⑤ leagueOf", () => {
   check(leagueOfFn({}).id === 1, `leagueOf({})가 id 1이다 (${leagueOfFn({}).id})`);
   check(leagueOfFn(undefined).id === 1, `leagueOf(undefined)가 id 1이다 (${leagueOfFn(undefined).id})`);
-  check(leagueOfFn({ league: 3 }).tier === 5, `leagueOf({league:3})가 챔피언스리그다 (${leagueOfFn({ league: 3 }).name})`);
+  check(leagueOfFn({ league: 3 }).tier === table.length, `leagueOf({league:3})가 사다리 꼭대기다 (${leagueOfFn({ league: 3 }).name})`);
   const broken = [99, 0, -1, "3", null, {}].map((v) => leagueOfFn({ league: v }).id);
   check(broken.every((id) => id === 1), `깨진 league 값이 전부 id 1로 막힌다 (${broken.join("·")})`);
   check(barOfFn({}) === 1 && barOfFn({ league: 99 }) === 1,
@@ -277,7 +287,11 @@ guard("⑥⑦ bar가 상 셋의 문턱에 작용한다", () => {
 guard("⑧⑨ 목표 사다리", () => {
   const sorted = table.slice().sort((a, b) => a.tier - b.tier);
   const STATS = [70, 90, 110, 130, 150];
-  const WANT = { 70: [1], 90: [2], 110: [3, 4], 130: [4], 150: [5] };  // 허용하는 tier
+  /* ⚠️ 허용 리그를 **id**로 적는다. 예전에는 tier 위치로 적었는데, 나라별 리그로
+   * 늘면서 같은 리그의 tier가 밀려(유로파 4 → 잉글랜드 2부 9) 검사가 엉뚱한 리그를
+   * 지목했다. id는 옛 세이브가 가리키는 값이라 안 움직인다 — 여기 기준으로 삼기 좋다.
+   *   5 한국 3부 · 4 한국 2부 · 1 한국 1부 · 2 잉글랜드 2부(옛 유로파) · 3 잉글랜드 1부(옛 챔스) */
+  const WANT = { 70: [5], 90: [4], 110: [1, 2], 130: [2], 150: [3] };  // 허용하는 리그 id
   const t0 = Date.now();
   const grid = {};
   for (const stat of STATS) grid[stat] = sorted.map((l) => rates(stat, l.id).mvp);
@@ -293,13 +307,19 @@ guard("⑧⑨ 목표 사다리", () => {
   for (const stat of STATS) {
     const val = grid[stat].map((p, i) => p * sorted[i].prestige);
     const bi = val.indexOf(Math.max(...val));
-    const second = Math.max(...val.filter((_, i) => i !== bi));
     const want = WANT[stat];
-    check(want.includes(sorted[bi].tier),
-      `능력치 ${stat}의 최적 리그가 ${want.map((t) => sorted[t - 1].name).join(" 또는 ")}다 (${sorted[bi].name})`);
-    // ⑨ 붙어 있으면 플레이어가 고민할 근거가 없어요
-    check(second > 0 && val[bi] >= second * 1.1,
-      `능력치 ${stat}: 최적(${sorted[bi].name} ${val[bi].toFixed(3)})이 차선(${second.toFixed(3)})보다 10% 이상 높다 (+${((val[bi] / second - 1) * 100).toFixed(0)}%)`);
+    check(want.includes(sorted[bi].id),
+      `능력치 ${stat}의 최적 리그가 ${want.map((id) => (table.find((l) => l.id === id) || {}).name).join(" 또는 ")}다 (${sorted[bi].name})`);
+    /* ⑨ 최적이 뚜렷해야 해요 — 아무 데나 가도 같으면 고민할 근거가 없어요.
+     *
+     * 다만 **바로 옆 칸**과는 붙어 있어도 됩니다. 리그가 5개에서 11개로 늘면서
+     * 칸 사이가 촘촘해졌고, 옆 칸과 1%밖에 차이 안 나는 건 "고민할 게 없다"가 아니라
+     * "둘 중 아무거나 골라도 되는 진짜 선택지"예요. 실제로 능력치 130에서
+     * 잉글랜드 2부(1.742)와 이탈리아 1부(1.718)가 그렇습니다.
+     * 그래서 **두 칸 이상 떨어진 리그**와 견줘요 — 거기까지 붙어 있으면 사다리가 없는 겁니다. */
+    const far = Math.max(...val.filter((_, i) => Math.abs(i - bi) >= 2));
+    check(far > 0 && val[bi] >= far * 1.1,
+      `능력치 ${stat}: 최적(${sorted[bi].name} ${val[bi].toFixed(3)})이 두 칸 밖 최고(${far.toFixed(3)})보다 10% 이상 높다 (+${((val[bi] / far - 1) * 100).toFixed(0)}%)`);
   }
 });
 

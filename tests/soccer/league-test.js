@@ -86,13 +86,19 @@ check(leagueMissing.length === 0,
  * tier가 순서고 id는 옛 세이브가 가리키는 값이에요. 하부 리그(tier 1·2)가 나중에
  * 붙으면서 id 4·5를 새로 받았어요 — 사다리는 tests/soccer/ladder-test.js가 봐요. */
 const SPEC = [
-  { id: 5, tier: 1, penalty: 0, prestige: 0.55, bar: 0.50 },
-  { id: 4, tier: 2, penalty: 0, prestige: 0.85, bar: 0.75 },
-  { id: 1, tier: 3, penalty: 0, prestige: 1.00, bar: 1.00 },
-  { id: 2, tier: 4, penalty: 1.6, prestige: 1.75, bar: 1.12 },
-  { id: 3, tier: 5, penalty: 2.8, prestige: 2.40, bar: 1.30 },
+  { id: 5,  tier: 1,  penalty: 0,    prestige: 0.55, bar: 0.50 },   // 🇰🇷 한국 3부
+  { id: 4,  tier: 2,  penalty: 0,    prestige: 0.85, bar: 0.75 },   // 🇰🇷 한국 2부
+  { id: 1,  tier: 3,  penalty: 0,    prestige: 1.00, bar: 1.00 },   // 🇰🇷 한국 1부 — 기준선
+  { id: 6,  tier: 4,  penalty: 0.35, prestige: 1.08, bar: 1.03 },   // 🇯🇵 일본 2부
+  { id: 8,  tier: 5,  penalty: 0.6,  prestige: 1.18, bar: 1.06 },   // 🇧🇷 브라질 2부
+  { id: 7,  tier: 6,  penalty: 0.85, prestige: 1.32, bar: 1.08 },   // 🇯🇵 일본 1부
+  { id: 9,  tier: 7,  penalty: 1.1,  prestige: 1.48, bar: 1.10 },   // 🇧🇷 브라질 1부
+  { id: 10, tier: 8,  penalty: 1.35, prestige: 1.60, bar: 1.11 },   // 🇮🇹 이탈리아 2부
+  { id: 2,  tier: 9,  penalty: 1.6,  prestige: 1.75, bar: 1.12 },   // 🏴 잉글랜드 2부 (옛 유로파리그)
+  { id: 11, tier: 10, penalty: 2.1,  prestige: 2.05, bar: 1.22 },   // 🇮🇹 이탈리아 1부
+  { id: 3,  tier: 11, penalty: 2.8,  prestige: 2.40, bar: 1.30 },   // 🏴 잉글랜드 1부 (옛 챔피언스리그)
 ];
-/* ④⑤⑦은 원래 리그 셋(K리그1 · 유로파 · 챔피언스)을 봐요. 이 파일이 지키는 건
+/* ④⑤⑦은 옛 리그 셋(id 1·2·3 = 지금 한국 1부 · 잉글랜드 2부 · 잉글랜드 1부)을 봐요. 이 파일이 지키는 건
  * '위로 갈수록 평점이 깎이고 수상 가치가 커지는가'라, 하부 리그가 붙어도 그대로예요. */
 const UP = SPEC.filter((s) => s.id <= 3).sort((a, b) => a.tier - b.tier);
 

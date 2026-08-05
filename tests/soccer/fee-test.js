@@ -169,11 +169,18 @@ guard("③ 하위 리그 이적", () => {
   const dest = D;                        // 1부 선더볼트 — 아직 떠난 적 없는 클럽
   const same = findCard(dest.name, { league: 1, group: A.name, clubStr: A.str, proYear: 3, moves: [], hype: 0 });
   const feeSame = feeOf(same);
-  const down1 = findCard(dest.name, { league: 2, group: CLUBS[2][0].name, clubStr: CLUBS[2][0].str, proYear: 3, moves: [], hype: 0 });
+  /* ⚠️ 출발 리그를 id로 못 박지 않는다. 리그가 5개에서 11개로 늘면서 id 2·3이
+   * 바로 위 두 칸이 아니게 됐다(잉글랜드 2부 t9 · 1부 t11). 그대로 두면 낙폭이
+   * 6·8이 되어 상한(DOWNGRADE_MAX)에 걸려 둘이 같은 값이 나온다.
+   * 지금 리그의 **한 칸 위·두 칸 위**를 tier로 찾는다. */
+  const baseTier = LEAGUES.find((l) => l.id === 1).tier;
+  const up1 = LEAGUES.find((l) => l.tier === baseTier + 1);
+  const up2 = LEAGUES.find((l) => l.tier === baseTier + 2);
+  const down1 = findCard(dest.name, { league: up1.id, group: CLUBS[up1.id][0].name, clubStr: CLUBS[up1.id][0].str, proYear: 3, moves: [], hype: 0 });
   const feeDown1 = feeOf(down1);
-  const down2 = findCard(dest.name, { league: 3, group: CLUBS[3][0].name, clubStr: CLUBS[3][0].str, proYear: 3, moves: [], hype: 0 });
+  const down2 = findCard(dest.name, { league: up2.id, group: CLUBS[up2.id][0].name, clubStr: CLUBS[up2.id][0].str, proYear: 3, moves: [], hype: 0 });
   const feeDown2 = feeOf(down2);
-  console.log(`=== ③ ${dest.name}(1부)로 가는 계약금 — 1부에서 ${feeSame} · 2부에서 ${feeDown1} · 3부에서 ${feeDown2} ===`);
+  console.log(`=== ③ ${dest.name}(한국 1부)로 가는 계약금 — 같은 리그 ${feeSame} · ${up1.name} ${feeDown1} · ${up2.name} ${feeDown2} ===`);
   check(feeDown1 < feeSame,
     `한 단계 내려가는 이적의 계약금이 같은 리그 이적보다 작다 (${feeDown1} < ${feeSame})`);
   check(feeDown2 < feeDown1,

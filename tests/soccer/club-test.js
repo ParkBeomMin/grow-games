@@ -107,9 +107,9 @@ const clubStrFn = clubSrc && clubParts.clubStrOf
   : null;
 
 guard("클럽 표", () => {
-  check(BY_TIER.length === 5, `리그가 5단이다 (${BY_TIER.map((l) => l.name).join(" < ")})`);
+  check(BY_TIER.length >= 5, `리그가 5단 이상이다 (${BY_TIER.map((l) => l.name).join(" < ")})`);
   check(LEAGUE_IDS.every((id) => Array.isArray(table[id]) && table[id].length >= 6),
-    `CLUBS에 5단 전부가 있고 각각 6개 이상이다 (${LEAGUE_IDS.map((id) => `${nameOf(id)} ${(table[id] || []).length}개`).join(" · ")})`);
+    `CLUBS에 리그 전부가 있고 각각 6개 이상이다 (${LEAGUE_IDS.map((id) => `${nameOf(id)} ${(table[id] || []).length}개`).join(" · ")})`);
   const all = LEAGUE_IDS.flatMap((id) => table[id] || []);
   check(all.every((c) => c && typeof c.name === "string" && c.name.length > 0),
     `모든 클럽에 name이 있다 (${all.length}개)`);

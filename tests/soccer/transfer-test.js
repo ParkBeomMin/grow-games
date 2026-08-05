@@ -80,6 +80,10 @@ const leagueById = (id) => LEAGUES.find((l) => l.id === id);
  * 하부 리그(K리그3·K리그2)가 생겨서 "2부"라고 읽으면 정반대 리그를 떠올리게 된다.
  * 이 파일이 재는 대상은 그대로고, 부르는 이름만 실제 이름으로 바꾼다. */
 const NM = (id) => (leagueById(id) || {}).name || `id ${id}`;
+/* 한국 1부(id 1) **바로 한 칸 위** 리그. 예전에는 그게 유로파(id 2)라 id를 그대로 썼는데,
+ * 나라별 리그가 붙으면서 id 2(🏴 잉글랜드 2부)가 여섯 칸 위로 밀렸다. 능력치 70이
+ * 못 여는 게 당연해진 자리라, "실제로 열리는 사다리"는 tier로 찾는다. */
+const UP1 = LEAGUES.find((l) => l.tier === (leagueById(1) || {}).tier + 1) || leagueById(2);
 // 리그 목록에서 훑는다 — 하부 리그가 늘어도 여기를 다시 안 고치게.
 const clubByName = (n) => LEAGUES.flatMap((l) => CLUBS[l.id] || []).find((c) => c.name === n);
 
@@ -371,7 +375,7 @@ guard("능력치 70의 챔피언스리그 차단", () => {
   const POS_NAME = { fw: "공격수", wg: "윙어", mf: "미드필더", df: "수비수" };
   const pctl = (sorted, p) => sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * p))];
   console.log(`=== ⑪ 능력치 70의 5년차 시즌 hype (포지션당 ${N}시즌) ===`);
-  console.log(`  포지션 |   평균 | 중앙값 | 상위5% |   최대 | ${NM(2)} 문턱 ${PROMOTE_HYPE[2]} 이상 | ${NM(3)} 문턱 ${PROMOTE_HYPE[3]} 이상`);
+  console.log(`  포지션 |   평균 | 중앙값 | 상위5% |   최대 | ${UP1.name} 문턱 ${PROMOTE_HYPE[UP1.id]} 이상 | ${NM(3)} 문턱 ${PROMOTE_HYPE[3]} 이상`);
   const all = [];
   for (const pos of POS) {
     const hs = [];
@@ -379,24 +383,24 @@ guard("능력치 70의 챔피언스리그 차단", () => {
     all.push(...hs);
     hs.sort((a, b) => a - b);
     const avg = hs.reduce((a, b) => a + b, 0) / hs.length;
-    const p2 = hs.filter((h) => h >= PROMOTE_HYPE[2]).length / hs.length;
+    const p2 = hs.filter((h) => h >= PROMOTE_HYPE[UP1.id]).length / hs.length;
     const p3 = hs.filter((h) => h >= PROMOTE_HYPE[3]).length / hs.length;
     console.log(`  ${POS_NAME[pos].padStart(5)} | ${avg.toFixed(2).padStart(6)} | ${pctl(hs, 0.5).toFixed(2).padStart(6)} | ${pctl(hs, 0.95).toFixed(2).padStart(6)} | ${hs[hs.length - 1].toFixed(2).padStart(6)} | ${`${(p2 * 100).toFixed(1)}%`.padStart(17)} | ${`${(p3 * 100).toFixed(1)}%`.padStart(17)}`);
   }
   all.sort((a, b) => a - b);
   const mean = all.reduce((a, b) => a + b, 0) / all.length;
   const rate3 = all.filter((h) => h >= PROMOTE_HYPE[3]).length / all.length;
-  const rate2 = all.filter((h) => h >= PROMOTE_HYPE[2]).length / all.length;
+  const rateUp1 = all.filter((h) => h >= PROMOTE_HYPE[UP1.id]).length / all.length;
   const p50 = pctl(all, 0.5), p95 = pctl(all, 0.95), max = all[all.length - 1];
 
   check(p95 < PROMOTE_HYPE[3],
     `능력치 70은 상위 5% 시즌으로도 ${NM(3)} 문턱을 못 넘는다 (상위 5% ${p95.toFixed(2)} vs 문턱 ${PROMOTE_HYPE[3]})`);
-  check(PROMOTE_HYPE[3] - mean > Math.abs(mean - PROMOTE_HYPE[2]),
-    `평균 시즌은 ${NM(2)} 문턱 근처지 ${NM(3)} 문턱 근처가 아니다 (평균 ${mean.toFixed(2)} — ${NM(2)}까지 ${(mean - PROMOTE_HYPE[2]).toFixed(2)} · ${NM(3)}까지 ${(PROMOTE_HYPE[3] - mean).toFixed(2)})`);
+  check(PROMOTE_HYPE[3] - mean > Math.abs(mean - PROMOTE_HYPE[UP1.id]),
+    `평균 시즌은 ${UP1.name} 문턱 근처지 ${NM(3)} 문턱 근처가 아니다 (평균 ${mean.toFixed(2)} — ${UP1.name}까지 ${(mean - PROMOTE_HYPE[UP1.id]).toFixed(2)} · ${NM(3)}까지 ${(PROMOTE_HYPE[3] - mean).toFixed(2)})`);
   check(rate3 < 0.05,
     `${NM(3)} 문턱을 넘는 건 커리어 하이 시즌 5% 미만이다 (${POS.length}포지션 × ${N}시즌 중 ${(rate3 * 100).toFixed(2)}%)`);
-  check(rate2 > 0.2 && rate2 < 0.8,
-    `${NM(2)}는 그와 달리 실제로 열리는 사다리다 (${(rate2 * 100).toFixed(1)}%가 ${NM(2)} 문턱을 넘는다)`);
+  check(rateUp1 > 0.2 && rateUp1 < 0.8,
+    `${UP1.name}는 그와 달리 실제로 열리는 사다리다 (${(rateUp1 * 100).toFixed(1)}%가 ${UP1.name} 문턱을 넘는다)`);
 
   /* 화면에서도 막히는지 — 중앙값 시즌과 상위 5% 시즌을 hype로 박고 실제로 버튼을 눌러
    * 챔피언스리그 카드 수를 센다. 0장이어야 "평범한 능력치 70은 빅클럽 문을 못 연다"가 된다. */

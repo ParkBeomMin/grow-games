@@ -3,29 +3,38 @@
 
 // ---------- 데이터 ----------
 // 유스 배경 선택 — 야구의 '지역'·아이돌의 '소속사' 대응
+/* 유스 — `home`은 🌟 프로 계약 성공으로 데뷔하는 리그예요.
+ * 나라를 고르게 해놓고 리그에는 나라가 없어서, 국적이 debut·growth·spot 수치에만
+ * 쓰이고 데뷔하는 순간 사라졌어요. 이제 국적이 어느 리그에서 출발하는지를 정합니다.
+ * 성장이 빠른 유스일수록 어려운 리그에서 시작해요 — 위험과 보상을 같은 축에 둡니다.
+ *   🇰🇷 성장 0.98 → 한국 1부(평점 벌점 0)      🇯🇵 1.04 → 일본 1부(0.85)
+ *   🇧🇷 1.08 → 브라질 1부(1.1)                 🌍 1.18 → 이탈리아 2부(1.35)
+ *   🇪🇺 1.15 → 이탈리아 1부(2.1)
+ * 🇪🇺·🌍는 나라가 아니라 권역이라 유럽 리그에 붙였어요.
+ * 리그 이름(K리그·J리그)은 실제 상표라 유스 이름에서도 뺐어요. */
 const MARKETS = [
   {
-    id: "k", name: "K리그 유스", emoji: "🇰🇷", tier: "국내 명문",
+    id: "k", name: "국내 유스", emoji: "🇰🇷", tier: "국내 명문", home: 1,
     debut: 0.66, growth: 0.98, spot: 1.0,
     desc: "체계적인 국내 유스. 안정적으로 크지만 세계무대는 멀어요",
   },
   {
-    id: "eu", name: "유럽 아카데미", emoji: "🇪🇺", tier: "빅클럽 유스",
+    id: "eu", name: "유럽 아카데미", emoji: "🇪🇺", tier: "빅클럽 유스", home: 11,
     debut: 0.6, growth: 1.15, spot: 1.15,
     desc: "세계 최고의 유스. 성장은 빠르지만 경쟁이 살벌해요",
   },
   {
-    id: "br", name: "남미 유스", emoji: "🇧🇷", tier: "삼바 축구",
+    id: "br", name: "남미 유스", emoji: "🇧🇷", tier: "삼바 축구", home: 9,
     debut: 0.62, growth: 1.08, spot: 1.05,
     desc: "길거리 축구로 다져진 개인기. 화려하게 성장해요",
   },
   {
-    id: "jp", name: "일본 J리그 유스", emoji: "🇯🇵", tier: "정교한 시스템",
+    id: "jp", name: "일본 유스", emoji: "🇯🇵", tier: "정교한 시스템", home: 7,
     debut: 0.65, growth: 1.04, spot: 1.03,
     desc: "정교한 패스 축구를 가르쳐요. 전술 이해와 기본기가 빠르게 자라요",
   },
   {
-    id: "af", name: "아프리카 유망주", emoji: "🌍", tier: "피지컬 몬스터",
+    id: "af", name: "아프리카 유망주", emoji: "🌍", tier: "피지컬 몬스터", home: 10,
     debut: 0.57, growth: 1.18, spot: 1.08,
     desc: "타고난 신체 능력으로 폭발 성장. 대신 기복이 크고 경쟁이 치열해요",
   },
@@ -75,13 +84,36 @@ const POS_INFO = {
  *
  * career.js가 아니라 여기 두는 건 career.js가 IIFE라 그 안의 선언이 밖으로 안 새기
  * 때문이에요. 클럽 전력·동료 득점처럼 game.js 쪽에서도 리그를 읽어야 해요. */
+/* 리그 — 나라마다 1부·2부를 둬요 (한국만 3부까지).
+ *
+ * 예전에는 K리그3 → K리그2 → K리그1 → 유로파리그 → 챔피언스리그 다섯 칸이었어요.
+ * 유스는 나라별로 고르게 해놓고(🇰🇷🇪🇺🇧🇷🇯🇵🌍) 정작 리그에는 나라가 없어서,
+ * 국적이 debut·growth·spot 수치에만 쓰이고 데뷔하는 순간 사라졌습니다.
+ *
+ * ⚠️ **id는 옛 세이브가 가리키는 값이라 안 바꿔요.** 그래서 기존 다섯 리그는
+ * id와 구단 명단을 그대로 두고 **이름만** 나라로 바꿨어요 —
+ * 유로파리그 → 🏴 잉글랜드 2부, 챔피언스리그 → 🏴 잉글랜드 1부.
+ * 진행 중이던 캐릭터는 같은 클럽에서 같은 상대와 계속 뜁니다. 이름만 바뀌어요.
+ * 새로 더한 여섯 리그는 새 id(6~11)를 씁니다.
+ *
+ * tier는 **전역 난이도 순서**예요(1~11). 나라 안 순서가 아니라 사다리 전체의 순서라,
+ * 잉글랜드 2부(t9)가 이탈리아 1부(t10)보다 아래에 있는 것도 자연스러워요.
+ * 승강제는 나라 안에서만 돌아요 — career.js의 COUNTRY_TIERS를 보세요. */
 const LEAGUES = [
-  { id: 5, tier: 1, name: "K리그3",      short: "3부",    flag: "🇰🇷", penalty: 0,   prestige: 0.55, bar: 0.50 },
-  { id: 4, tier: 2, name: "K리그2",      short: "2부",    flag: "🇰🇷", penalty: 0,   prestige: 0.85, bar: 0.75 },
-  { id: 1, tier: 3, name: "K리그1",      short: "1부",    flag: "🇰🇷", penalty: 0,   prestige: 1.00, bar: 1.00 },
-  { id: 2, tier: 4, name: "유로파리그",   short: "유럽",   flag: "🇪🇺", penalty: 1.6, prestige: 1.75, bar: 1.12 },
-  { id: 3, tier: 5, name: "챔피언스리그", short: "빅클럽", flag: "🏆", penalty: 2.8, prestige: 2.40, bar: 1.30 },
+  { id: 5,  tier: 1,  country: "kr", name: "한국 3부",     short: "한3", flag: "🇰🇷", penalty: 0,    prestige: 0.55, bar: 0.50 },
+  { id: 4,  tier: 2,  country: "kr", name: "한국 2부",     short: "한2", flag: "🇰🇷", penalty: 0,    prestige: 0.85, bar: 0.75 },
+  { id: 1,  tier: 3,  country: "kr", name: "한국 1부",     short: "한1", flag: "🇰🇷", penalty: 0,    prestige: 1.00, bar: 1.00 },
+  { id: 6,  tier: 4,  country: "jp", name: "일본 2부",     short: "일2", flag: "🇯🇵", penalty: 0.35, prestige: 1.08, bar: 1.03 },
+  { id: 8,  tier: 5,  country: "br", name: "브라질 2부",   short: "브2", flag: "🇧🇷", penalty: 0.6,  prestige: 1.18, bar: 1.06 },
+  { id: 7,  tier: 6,  country: "jp", name: "일본 1부",     short: "일1", flag: "🇯🇵", penalty: 0.85, prestige: 1.32, bar: 1.08 },
+  { id: 9,  tier: 7,  country: "br", name: "브라질 1부",   short: "브1", flag: "🇧🇷", penalty: 1.1,  prestige: 1.48, bar: 1.10 },
+  { id: 10, tier: 8,  country: "it", name: "이탈리아 2부", short: "이2", flag: "🇮🇹", penalty: 1.35, prestige: 1.60, bar: 1.11 },
+  { id: 2,  tier: 9,  country: "en", name: "잉글랜드 2부", short: "잉2", flag: "🏴", penalty: 1.6,  prestige: 1.75, bar: 1.12 },
+  { id: 11, tier: 10, country: "it", name: "이탈리아 1부", short: "이1", flag: "🇮🇹", penalty: 2.1,  prestige: 2.05, bar: 1.22 },
+  { id: 3,  tier: 11, country: "en", name: "잉글랜드 1부", short: "잉1", flag: "🏴", penalty: 2.8,  prestige: 2.40, bar: 1.30 },
 ];
+const BIG_CLUB_LEAGUE = 2;   // 👑 유럽 빅클럽 입단이 데뷔하는 곳 — 🏴 잉글랜드 2부
+const COUNTRY_NAME = { kr: "🇰🇷 한국", jp: "🇯🇵 일본", br: "🇧🇷 브라질", it: "🇮🇹 이탈리아", en: "🏴 잉글랜드" };
 
 /* 옛 세이브에는 S.league가 없어요. 마이그레이션하지 않고 없으면 K리그1로 봐요.
  * 깨진 값도 K리그1로 막아요 — 표의 첫 줄이 이제 K리그3라 LEAGUES[0]으로 막으면
@@ -142,7 +174,43 @@ const CLUBS = {
     { name: "로열 알비온", str: 87 }, { name: "파리 셀레스트", str: 84 },
     { name: "밀란 코로나", str: 81 }, { name: "이베리아 솔", str: 78 },
   ],
-};
+  /* 🇯🇵 일본 2부 (t4) — 한국 1부보다 살짝 위. 실제 구단명은 안 써요, 전부 가상입니다. */
+  6: [
+    { name: "사쿠라 유나이티드", str: 74 }, { name: "미도리 FC", str: 70 },
+    { name: "아오바 윙스", str: 66 }, { name: "하야테 클럽", str: 63 },
+    { name: "코가네 SC", str: 60 }, { name: "시오카제 FC", str: 57 },
+  ],
+  // 🇧🇷 브라질 2부 (t5)
+  8: [
+    { name: "베르지 FC", str: 75 }, { name: "마르 아줄", str: 71 },
+    { name: "세하도 SC", str: 68 }, { name: "아마조나 FC", str: 65 },
+    { name: "카에테 유나이티드", str: 62 }, { name: "솔 나센치", str: 59 },
+  ],
+  // 🇯🇵 일본 1부 (t6)
+  7: [
+    { name: "텐류 FC", str: 77 }, { name: "스이세이 클럽", str: 73 },
+    { name: "아카츠키 FC", str: 70 }, { name: "시라유키 SC", str: 67 },
+    { name: "라이진 유나이티드", str: 64 }, { name: "미나토 FC", str: 61 },
+  ],
+  // 🇧🇷 브라질 1부 (t7)
+  9: [
+    { name: "도라도 FC", str: 79 }, { name: "코리엔치 SC", str: 75 },
+    { name: "삼바 리오", str: 72 }, { name: "아틀란치코", str: 69 },
+    { name: "에스트렐라 두 술", str: 66 }, { name: "카파오 FC", str: 63 },
+  ],
+  // 🇮🇹 이탈리아 2부 (t8)
+  10: [
+    { name: "스페란차 FC", str: 80 }, { name: "몬테로소 칼초", str: 76 },
+    { name: "라바로 SC", str: 73 }, { name: "코스타 도라", str: 70 },
+    { name: "벤토 노르드", str: 67 }, { name: "알바트로 FC", str: 64 },
+  ],
+  // 🇮🇹 이탈리아 1부 (t10) — 잉글랜드 2부보다 위, 잉글랜드 1부보다 아래
+  11: [
+    { name: "아우렐리아 FC", str: 88 }, { name: "임페리오", str: 84 },
+    { name: "세렌티나", str: 80 }, { name: "콜로세오 SC", str: 76 },
+    { name: "벨라 코스타", str: 73 }, { name: "티레노 FC", str: 70 },
+  ],
+};;
 
 // 옛 세이브에는 S.clubStr이 없어요. 마이그레이션하지 않고 없으면 70으로 봐요.
 function clubStrOf(st) {
@@ -1558,14 +1626,18 @@ function showEnding(survivedFinal, lastRound) {
    * 📹 세미프로 입단(semiPro)도 같은 방식이에요 — 사다리 맨 아래에서 프로가 시작돼요. */
   let emoji, title, teamLine, msg, canExtend = false, scoutPro = false, semiPro = false, bigClub = false;
   const bottom = bottomLeague();
+  // 유스 국적이 정하는 데뷔 리그. 모르는 값이면 한국 1부로 막아요.
+  const homeLeague = leagueOf({ league: (m && m.home) || 1 });
   /* 👑는 이름 그대로 유럽에서 시작해요. 유스 최상위 엔딩인데 K리그1에서 출발하면
    * 🌟 프로 계약 성공과 첫 시즌이 똑같아서 "빅클럽"이 말뿐이었어요.
    * 실측(유스 직후 능력치 85 · 이적 없음 · 첫 시즌): 유로파 팀 승률 50% · hype 6.63으로
    * K리그1(78% · 6.17)보다 팀은 덜 이기지만 개인 평가는 오히려 높아요.
    * 평점 -1.6을 감당할 수 있는 능력치라서, 도전이 되되 무너지지는 않아요. */
-  // 이름이 아니라 tier로 찾아요 — 기본 리그(K리그1) 바로 한 칸 위가 유로파리그예요.
-  const base = leagueOf({});
-  const europa = LEAGUES.find((l) => l.tier === base.tier + 1) || base;
+  /* 👑가 데뷔하는 리그는 못 박아요. 예전에는 "기본 리그 바로 한 칸 위"로 찾았는데,
+   * 리그가 5개에서 11개로 늘면서 그 한 칸이 🇯🇵 일본 2부(벌점 0.35)가 됐어요 —
+   * 빅클럽 엔딩인데 난이도가 1/5로 떨어집니다. id로 고정합니다(id는 안 바뀌어요).
+   * 유스 국적과 무관해요 — 유럽 빅클럽은 어느 나라 유망주든 데려갑니다. */
+  const europa = LEAGUES.find((l) => l.id === BIG_CLUB_LEAGUE) || leagueOf({});
   if (survivedFinal && score >= 520) {
     emoji = "👑"; title = "유럽 빅클럽 입단!";
     teamLine = `${m.name} 출신 — ${europa.name} 직행`;
@@ -1574,8 +1646,10 @@ function showEnding(survivedFinal, lastRound) {
       + `${europa.name}에서 곧바로 프로가 시작돼요 — 평점 -${europa.penalty.toFixed(1)}을 안고 뛰는 무대예요.`;
   } else if (survivedFinal) {
     emoji = "🌟"; title = "프로 계약 성공!";
-    teamLine = `프로 1군 계약 확정`;
-    msg = "프로 데뷔 성공! 3년의 땀이 드디어 결실을 맺었어요.";
+    // 데뷔 리그는 유스 국적이 정해요 (MARKETS[].home)
+    teamLine = `${homeLeague.flag} ${homeLeague.name} 1군 계약 확정`;
+    msg = `프로 데뷔 성공! 3년의 땀이 드디어 결실을 맺었어요. ${homeLeague.name}에서 시작해요`
+      + `${homeLeague.penalty > 0 ? ` — 평점 -${homeLeague.penalty.toFixed(2)}을 안고 뛰는 무대예요.` : "."}`;
   } else if (lastRound === 3) {
     emoji = "💜"; title = "1군 콜업 대기";
     teamLine = "2군 계약 → 콜업 약속";
@@ -1648,7 +1722,12 @@ function showEnding(survivedFinal, lastRound) {
     window.WingerCareer.onEnding(
       survivedFinal || lastRound === 3 || scoutPro || semiPro,
       bigClub,
-      { keepSave: canExtend, weakestClub: scoutPro, startLeague: semiPro ? bottom.id : bigClub ? europa.id : null }
+      {
+        keepSave: canExtend, weakestClub: scoutPro,
+        /* 📹 세미프로는 사다리 맨 아래, 👑는 잉글랜드 2부, 그 밖에는 유스 국적의 리그예요.
+         * 📞 타 구단 스카우트도 같은 리그의 최약체로 가요. */
+        startLeague: semiPro ? bottom.id : bigClub ? europa.id : homeLeague.id,
+      }
     );
   } else if (!canExtend) {
     clearSave();

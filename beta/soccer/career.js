@@ -303,16 +303,26 @@ window.WingerCareer = (() => {
    * 모델링해 놨어요 — 클럽 목록도 순위표도 국내 리그와 똑같이 굴러갑니다.
    * 그래서 승강제만 없으면 유럽에 간 순간 팀 성적이 아무 데도 안 닿았어요.
    *
-   * 두 사다리는 **완전히 따로 돌아요. 오르는 길도 내려오는 길도 안 이어집니다.**
-   * K리그1 1위는 올라가는 게 아니라 우승이고, 유로파 최하위도 국내로 안 내려와요.
-   * 유럽은 국내 리그를 이겨서 가는 곳이 아니라 개인 성적으로 초청받는 무대예요 —
-   * 두 무대를 오가는 건 오직 이적 사다리(PROMOTE_HYPE)뿐입니다.
+   * **사다리는 나라마다 하나씩이고 서로 안 이어져요.** 잉글랜드 최하위가 이탈리아로
+   * 가지 않아요 — 실제로도 강등은 그 나라 리그 안에서만 일어납니다.
+   * 나라를 옮기는 건 오직 이적 사다리(PROMOTE_HYPE)뿐이에요.
    *
-   * 그래서 각 사다리의 맨 아래(K리그3 · 유로파)는 갈 데가 없어 강등이 안 일어나요. */
-  const DOMESTIC_TIERS = [5, 4, 1];          // K리그3 → K리그2 → K리그1 (tier 오름차순)
-  const EURO_TIERS = [2, 3];                 // 유로파리그 → 챔피언스리그
-  const ladderOf = (id) => (DOMESTIC_TIERS.includes(id) ? DOMESTIC_TIERS
-    : EURO_TIERS.includes(id) ? EURO_TIERS : null);
+   * 각 나라의 맨 위에서 1위면 올라갈 데가 없으니 **리그 우승**이고,
+   * 맨 아래에서 꼴찌면 내려갈 데가 없어 아무 일도 안 일어나요.
+   *
+   * ⚠️ id는 옛 세이브가 가리키는 값이라 순서와 무관해요. 여기 배열의 **순서**가
+   * 그 나라 안의 오름차순이에요(아래 → 위). 전역 난이도는 LEAGUES의 tier가 따로 봅니다. */
+  const COUNTRY_TIERS = {
+    kr: [5, 4, 1],    // 🇰🇷 한국 3부 → 2부 → 1부
+    jp: [6, 7],       // 🇯🇵 일본 2부 → 1부
+    br: [8, 9],       // 🇧🇷 브라질 2부 → 1부
+    it: [10, 11],     // 🇮🇹 이탈리아 2부 → 1부
+    en: [2, 3],       // 🏴 잉글랜드 2부 → 1부 (옛 유로파·챔피언스리그 자리)
+  };
+  const ladderOf = (id) => {
+    for (const k of Object.keys(COUNTRY_TIERS)) if (COUNTRY_TIERS[k].includes(id)) return COUNTRY_TIERS[k];
+    return null;
+  };
   /* 승격 문턱. 순위만 보면 사다리가 죽어요 — 실측하니 내 승률 60%에서 시즌의 91.5%가
    * 1위였습니다. 팀 성적이 사실상 내 성적이라(내 골이 곧 팀 득점) 잘하는 선수는
    * 매 시즌 1위를 해요. 승점 차를 걸어도 75% 승률에서 98.8%라 소용이 없었어요.
@@ -1051,7 +1061,10 @@ window.WingerCareer = (() => {
    * 능력치로 환산하면 51 → 61 → 69 → 88로 단조 증가해요. 하부에서 위로 가는 게
    * K리그1에서 유로파로 가는 것보다 확실히 쉽다는 뜻이고, tests/soccer/promote-test.js가
    * 이 순서를 지킵니다. 위쪽 둘(5.5·6.5)은 이적 작업에서 잡은 값 그대로예요. */
-  const PROMOTE_HYPE = { 5: 0, 4: 2.5, 1: 4.5, 2: 5.5, 3: 6.5 };
+  /* 리그 11개로 늘면서 칸을 촘촘히 나눴어요. tier 순으로 단조 증가해야 하고,
+   * 양 끝(한국 3부 0 · 잉글랜드 1부 6.5)은 예전 값 그대로 둡니다 —
+   * 사다리 전체의 길이가 안 변해야 지금까지 잡아 둔 곡선이 안 흔들려요. */
+  const PROMOTE_HYPE = { 5: 0, 4: 2.5, 1: 4.5, 6: 5.45, 8: 5.6, 7: 5.75, 9: 5.9, 10: 6.05, 2: 6.2, 11: 6.35, 3: 6.5 };
   const OFFERS_PER_LEAGUE = 2;               // 리그마다 제안 수
 
   /* 계약금 — 리그 격과 클럽 전력에서 뽑아요. 격은 거듭제곱(FEE_PRESTIGE_POW)으로 실어요.
@@ -1068,6 +1081,11 @@ window.WingerCareer = (() => {
    * 이 셋이 다 있어야 막혀요. 돌아가는 이적만 0으로 하면 6개 클럽을 한 바퀴 도는
    * 우회로가 남고, 감가만 걸면 왕복이 여전히 조금씩 벌어요. */
   const DOWNGRADE_FEE = 0.3;   // 리그를 한 단계 내려갈 때마다 곱해요
+  /* 낙폭에 상한을 둬요. 리그가 5개에서 11개로 늘면서 tier 차가 최대 10이 됐고,
+   * 0.3^10은 0.0000059라 계약금이 통째로 0원이 됩니다("계약금 없음"으로 찍혀요).
+   * 한 단계 0.3은 그대로 두되(하향 이적은 확실히 손해여야 해요), 세 단계에서 멈춰요 —
+   * 0.3^3 = 0.027이면 이미 충분히 아프고, 그 아래는 0과 구별이 안 돼요. */
+  const DOWNGRADE_MAX = 3;
   const LOYALTY_FEE = 0.75;    // 지금까지 한 이적 횟수만큼 거듭제곱으로 곱해요
 
   /* 리그격을 몇 제곱으로 실을지예요. 원래 세제곱이었는데 제곱으로 낮췄어요.
@@ -1099,7 +1117,7 @@ window.WingerCareer = (() => {
     /* 낙폭은 tier로 봐요. id는 옛 세이브가 가리키는 값이라 순서와 무관해요 —
      * id로 빼면 K리그1(id 1)에서 K리그3(id 5)으로 내려가는 게 drop 0이 돼서
      * 하향 이적인데도 계약금이 한 푼도 안 깎여요. */
-    const drop = Math.max(0, leagueOf(state).tier - league.tier);
+    const drop = Math.min(DOWNGRADE_MAX, Math.max(0, leagueOf(state).tier - league.tier));
     const base = club.str * club.str * FEE_BASE * Math.pow(league.prestige, FEE_PRESTIGE_POW);
     return Math.round(
       (base * Math.pow(DOWNGRADE_FEE, drop) * Math.pow(LOYALTY_FEE, moves.length)) / 10

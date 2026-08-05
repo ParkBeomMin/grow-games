@@ -58,7 +58,10 @@ const SURVIVAL_ROUNDS = new Function(`${rawRounds} return SURVIVAL_ROUNDS;`)();
  * 순서와 무관하다 — 새 하부 리그가 id 4·5를 받았다. */
 const byTier = LEAGUES.slice().sort((a, b) => a.tier - b.tier);
 const BOTTOM = byTier[0];
-const K1 = LEAGUES.find((l) => l.name === "K리그1") || {};
+/* ⚠️ 이름으로 찾지 않는다. 나라별 리그로 개편하며 K리그1 → 🇰🇷 한국 1부로 바뀌어
+ * 이 줄이 통째로 undefined가 됐고, 이 파일의 절반이 조용히 무너졌다.
+ * id는 옛 세이브가 가리키는 값이라 안 움직인다 — id 1이 기준 리그다. */
+const K1 = LEAGUES.find((l) => l.id === 1) || {};
 const avgStr = (id) => mean((CLUBS[id] || [{ str: 0 }]).map((c) => c.str));
 console.log(`  사다리 맨 아래: ${BOTTOM.name}(id ${BOTTOM.id}) · 기본 리그: ${K1.name}(id ${K1.id})`);
 
@@ -364,9 +367,17 @@ console.log("=== ⑦ 배선 ===");
     "enterCareer가 시작 리그를 인자로 받는다");
   // 리그 계수와 데뷔 풀은 손대지 않았다
   check(/const DEBUT_POOL = 3;/.test(SRC_CAREER), "DEBUT_POOL은 3 그대로다");
-  const coef = LEAGUES.map((l) => `${l.tier}:${l.penalty}/${l.prestige}/${l.bar}`).join(" ");
-  check(coef === "1:0/0.55/0.5 2:0/0.85/0.75 3:0/1/1 4:1.6/1.75/1.12 5:2.8/2.4/1.3",
-    `리그 계수(penalty·prestige·bar)가 그대로다 (${coef})`);
+  /* ⚠️ tier가 아니라 **id**로 못 박는다. 나라별 리그가 붙으면서 tier가 밀리는데,
+   * 여기서 지키려는 건 "나라를 더하면서 옛 다섯 리그의 계수를 건드리지 않았나"다.
+   * 그 다섯은 진행 중인 세이브가 직접 가리키는 리그라 값이 움직이면 캐릭터가 흔들린다.
+   * 새로 붙는 나라 리그는 이 검사 밖이다 — league-test.js의 SPEC 표가 따로 본다. */
+  const PINNED = { 5: "0/0.55/0.5", 4: "0/0.85/0.75", 1: "0/1/1", 2: "1.6/1.75/1.12", 3: "2.8/2.4/1.3" };
+  const coef = Object.keys(PINNED).map((id) => {
+    const l = LEAGUES.find((x) => x.id === Number(id));
+    return `${id}:${l ? `${l.penalty}/${l.prestige}/${l.bar}` : "없음"}`;
+  }).join(" ");
+  const want = Object.keys(PINNED).map((id) => `${id}:${PINNED[id]}`).join(" ");
+  check(coef === want, `옛 다섯 리그의 계수(penalty·prestige·bar)가 그대로다 (${coef})`);
 }
 
 Semi.dom.window.close();
