@@ -99,6 +99,28 @@ check(noRace.top === true && noRace.rank.length === 1,
 check(/Array\.isArray\(act\.race\) && act\.race\.length/.test(parts.awardBlk),
   "명단이 없는 옛 세이브에는 부문상을 안 준다 — 없는 경쟁을 이겼다고 할 수 없다");
 
+/* ── ⑥ 화면에 실제로 뜨는가 — 시즌 중에도, 시즌 준비 중에도
+ *
+ * 진행 중이던 세이브는 명단이 없어서(시즌 시작에만 만들어져요) 표가 통째로 안 떴고,
+ * 시즌 준비 중에는 S.activity가 아예 없어서 또 안 떴다.
+ * 그리고 그 준비 중 분기가 `S.phase === "pro"`를 보고 있었는데 실제 값은
+ * **"soccer-pro"**라 한 번도 안 돌았다 — 2.28.0에 넣은 "준비 중에도 리그 순위표를
+ * 보여준다"까지 내내 죽어 있었다. 문자열을 손으로 비교하는 자리의 전형적인 사고다. */
+const RENDER = grab(C, /const race = \$\("pro-race"\);[\s\S]*?\n    \}/);
+check(!!RENDER, "준비 화면의 개인 순위 렌더 블록을 찾았다");
+check(!!RENDER && /ensureRace\(\)/.test(RENDER),
+  "그릴 때 명단이 비어 있으면 채운다 (진행 중이던 세이브)");
+check(!!RENDER && !/S\.phase === "pro"/.test(RENDER),
+  '준비 중 분기가 `S.phase === "pro"`를 안 본다 — 실제 값은 "soccer-pro"라 안 걸려요');
+const PHASE_SET = grab(C, /S\.phase = "[^"]+";/);
+const IS_PRO = grab(C, /const isPro = \(\) => S\.phase === "[^"]+";/);
+check(!!PHASE_SET && !!IS_PRO && PHASE_SET.split('"')[1] === IS_PRO.split('"')[1],
+  `넣는 값과 비교하는 값이 같다 (${PHASE_SET} ↔ ${IS_PRO})`);
+
+const ENSURE = grab(C, /function ensureRace\(\) \{[\s\S]*?\n  \}/);
+check(!!ENSURE && /act\.apps/.test(ENSURE),
+  "옛 세이브를 채울 때 **이미 치른 경기 수만큼** 미리 굴린다 — 0골에서 시작하면 경쟁이 안 돼요");
+
 /* ── 변이 검증 — 수상을 다시 랜덤 문턱으로 되돌리면 ①이 무너져야 한다. */
 const brokenAward = 'if (act.goals >= 50) awards.push("골든부츠");';
 check(!/raceTop/.test(brokenAward), "변이 검증 — 랜덤 문턱 판정에는 raceTop이 없다 (①이 그걸 잡는다)");

@@ -199,6 +199,8 @@ window.WingerCareer = (() => {
     }
     S.table = { y: S.proYear, league: leagueOf(S).id, rows };
   }
+  // 프로 단계인가. 값은 "soccer-pro"예요 — 한 곳에서만 적어 두고 여기를 씁니다.
+  const isPro = () => S.phase === "soccer-pro";
   const tableReady = () => S.table && S.table.y === S.proYear && S.table.league === leagueOf(S).id;
 
   /* 한 라운드 결과를 표에 반영해요. 내 경기 결과를 먼저 넣고, 남은 팀들을 짝지어
@@ -511,7 +513,11 @@ window.WingerCareer = (() => {
     /* 시즌 준비 중에도 보여줘요. 표는 원래 시즌이 시작될 때 만들어져서, 승격 직후
      * 준비 화면에서는 "내가 어느 리그에 왔는지"를 볼 방법이 없었어요.
      * 아직 없으면 새 리그의 표를 미리 만들어 둡니다 (전부 0경기로 시작해요). */
-    if (S.phase === "pro" && !tableReady()) { initTable(); save(); }
+    /* ⚠️ 값은 "soccer-pro"예요 (career.js:127에서 그렇게 넣습니다).
+     * 여기서 "pro"와 비교하고 있어서 **이 줄이 한 번도 안 돌았어요** —
+     * 2.28.0에 넣은 "시즌 준비 중에도 순위표를 보여준다"가 내내 죽어 있었습니다.
+     * 개인 순위를 붙이면서 같은 자리에 걸려 드러났어요. */
+    if (isPro() && !tableReady()) { initTable(); save(); }
     if (tableReady()) {
       tbl.hidden = false;
       const rows = tableRows();
@@ -535,6 +541,16 @@ window.WingerCareer = (() => {
       $("pro-race-sum").textContent = `🥇 개인 순위 — 득점 ${mine}위 (${(S.activity.goals || 0)}골)`
         + `${g && !g.me ? ` · 1위 ${g.name} ${g.v}골` : " · 내가 1위!"}`;
       $("pro-race-body").innerHTML = raceHTML();
+    } else if (isPro()) {
+      /* 🥇 시즌 준비 중에는 S.activity가 아예 없어요 — 시즌이 시작될 때 만들어지거든요.
+       * 그대로 두면 준비 화면 내내 개인 순위가 **통째로 사라져** "왜 안 보이지"가 됩니다.
+       * 리그 순위표도 같은 이유로 준비 중 표시를 따로 넣었어요(개막 전 6팀).
+       * 여기서는 무엇을 겨루게 되는지만 알려 줍니다. */
+      race.hidden = false;
+      $("pro-race-sum").textContent = "🥇 개인 순위 — 개막 전";
+      $("pro-race-body").innerHTML = `<p class="race-title">시즌이 시작되면 리그의 다른 8명과 `
+        + `득점·도움을 겨뤄요.<br/>골든부츠·플레이메이커·철벽상·공격포인트왕은 `
+        + `<b>이 표에서 1위</b>면 받습니다.</p>`;
     } else {
       race.hidden = true;
     }
