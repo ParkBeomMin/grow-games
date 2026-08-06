@@ -317,7 +317,7 @@ window.WingerCareer = (() => {
     jp: [6, 7],       // 🇯🇵 일본 2부 → 1부
     br: [8, 9],       // 🇧🇷 브라질 2부 → 1부
     it: [10, 11],     // 🇮🇹 이탈리아 2부 → 1부
-    en: [2, 3],       // 🏴 잉글랜드 2부 → 1부 (옛 유로파·챔피언스리그 자리)
+    en: [2, 3],       // 🇬🇧 챔피언십 → 프리미어리그 (옛 유로파·챔피언스리그 자리)
   };
   const ladderOf = (id) => {
     for (const k of Object.keys(COUNTRY_TIERS)) if (COUNTRY_TIERS[k].includes(id)) return COUNTRY_TIERS[k];
@@ -671,7 +671,7 @@ window.WingerCareer = (() => {
       dFan = randInt(-3, 3);
     }
     S.fandom = Math.max(0, (S.fandom || 0) + dFan);
-    // 🌍 나라 특색 — 🏴 잉글랜드는 돈이 도는 리그예요 (계약금에도 같은 배수가 붙어요)
+    // 🌍 나라 특색 — 🇬🇧 잉글랜드는 돈이 도는 리그예요 (계약금에도 같은 배수가 붙어요)
     pay = Math.round(pay * traitMul(S, "money"));
     S.money = (S.money || 0) + pay;
     /* ⚡ 실전 성장 — 낮은 확률로 경기에서 뭔가를 깨쳐요.
@@ -1301,11 +1301,11 @@ window.WingerCareer = (() => {
      * id로 빼면 K리그1(id 1)에서 K리그3(id 5)으로 내려가는 게 drop 0이 돼서
      * 하향 이적인데도 계약금이 한 푼도 안 깎여요. */
     const drop = Math.min(DOWNGRADE_MAX, Math.max(0, leagueOf(state).tier - league.tier));
-    /* ⚠️ 나라 특색(🏴 수입 +35%)은 여기 안 겁니다. 계약금은 낙폭·재이적·감가
+    /* ⚠️ 나라 특색(🇬🇧 수입 +35%)은 여기 안 겁니다. 계약금은 낙폭·재이적·감가
      * 세 브레이크로 조심스럽게 잡아 둔 자리고, tests/soccer/fee-test.js가
      * "리그격을 정확히 2제곱으로 싣는가"로 폭주를 막고 있어요. 여기에 곱셈을
      * 하나 더 얹으면 그 측정이 2.34제곱으로 읽혀 가드가 흐려집니다.
-     * 🏴의 수입 특색은 매 경기 수당에만 붙어요 — 그쪽이 브레이크가 없는 자리예요. */
+     * 🇬🇧의 수입 특색은 매 경기 수당에만 붙어요 — 그쪽이 브레이크가 없는 자리예요. */
     const base = club.str * club.str * FEE_BASE * Math.pow(league.prestige, FEE_PRESTIGE_POW);
     return Math.round(
       (base * Math.pow(DOWNGRADE_FEE, drop) * Math.pow(LOYALTY_FEE, moves.length)) / 10

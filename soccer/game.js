@@ -92,7 +92,7 @@ const POS_INFO = {
  *
  * ⚠️ **id는 옛 세이브가 가리키는 값이라 안 바꿔요.** 그래서 기존 다섯 리그는
  * id와 구단 명단을 그대로 두고 **이름만** 나라로 바꿨어요 —
- * 유로파리그 → 🏴 잉글랜드 2부, 챔피언스리그 → 🏴 잉글랜드 1부.
+ * 유로파리그 → 🇬🇧 챔피언십, 챔피언스리그 → 🇬🇧 프리미어리그.
  * 진행 중이던 캐릭터는 같은 클럽에서 같은 상대와 계속 뜁니다. 이름만 바뀌어요.
  * 새로 더한 여섯 리그는 새 id(6~11)를 씁니다.
  *
@@ -108,12 +108,11 @@ const LEAGUES = [
   { id: 7,  tier: 6,  country: "jp", name: "J1리그",     short: "J1", flag: "🇯🇵", penalty: 0.85, prestige: 1.32, bar: 1.08 },
   { id: 9,  tier: 7,  country: "br", name: "브라질 세리에A",   short: "브A", flag: "🇧🇷", penalty: 1.1,  prestige: 1.48, bar: 1.10 },
   { id: 10, tier: 8,  country: "it", name: "세리에B", short: "세B", flag: "🇮🇹", penalty: 1.35, prestige: 1.60, bar: 1.11 },
-  { id: 2,  tier: 9,  country: "en", name: "챔피언십", short: "챔십", flag: "🏴", penalty: 1.6,  prestige: 1.75, bar: 1.12 },
+  { id: 2,  tier: 9,  country: "en", name: "챔피언십", short: "챔십", flag: "🇬🇧", penalty: 1.6,  prestige: 1.75, bar: 1.12 },
   { id: 11, tier: 10, country: "it", name: "세리에A", short: "세A", flag: "🇮🇹", penalty: 2.1,  prestige: 2.05, bar: 1.22 },
-  { id: 3,  tier: 11, country: "en", name: "프리미어리그", short: "PL", flag: "🏴", penalty: 2.8,  prestige: 2.40, bar: 1.30 },
+  { id: 3,  tier: 11, country: "en", name: "프리미어리그", short: "PL", flag: "🇬🇧", penalty: 2.8,  prestige: 2.40, bar: 1.30 },
 ];
-const BIG_CLUB_LEAGUE = 2;   // 👑 유럽 빅클럽 입단이 데뷔하는 곳 — 🏴 잉글랜드 2부
-const COUNTRY_NAME = { kr: "🇰🇷 한국", jp: "🇯🇵 일본", br: "🇧🇷 브라질", it: "🇮🇹 이탈리아", en: "🏴 잉글랜드" };
+const BIG_CLUB_LEAGUE = 2;   // 👑 유럽 빅클럽 입단이 데뷔하는 곳 — 🇬🇧 챔피언십
 
 /* 🌍 나라 특색 — 리그를 고를 이유를 **수상 값어치 말고 다른 축**에 둬요.
  *
