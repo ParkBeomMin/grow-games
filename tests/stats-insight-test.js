@@ -162,6 +162,42 @@ check(/이탈리아 유스 38%/.test(foldedHtml),
   `옛 이름과 새 이름이 합쳐진다 (유럽 64 + 이탈리아 2 = 66/174 = 38%)`);
 check(!/유럽 아카데미|아프리카 유망주|남미 유스/.test(foldedHtml), "옛 이름은 화면에 안 남는다");
 
+/* ── ⑧ 게임이 남기는 이벤트가 통계 표에 전부 등록돼 있는가
+ *
+ * EVENT_LABEL에 없으면 화면에 **영문 그대로** 뜨고, FUNNEL_ORDER에도 없으면
+ * indexOf가 -1이라 **맨 앞으로** 밀린다. 둘 다 조용히 일어나서 새 이벤트를
+ * 남긴 사람은 눈치채기 어렵다 — 실제로 transfer·rebirth·tour가 오래 빠져 있었고,
+ * youth_round·cup·promo도 추가하자마자 같은 자리에 떨어졌다.
+ * 게임 소스를 훑어서 실제로 남기는 이벤트를 모으고, 표와 대조한다. */
+const path = require("path");
+const ROOT = "/workspace/grow-games";
+const logged = new Set();
+for (const g of Object.keys(new Function(`${parts.games} return GAMES;`)())) {
+  for (const f of ["game.js", "career.js"]) {
+    const fp = path.join(ROOT, g, f);
+    if (!fs.existsSync(fp)) continue;
+    for (const m of fs.readFileSync(fp, "utf8").matchAll(/Stats\.log\("([a-z_]+)"/g)) logged.add(m[1]);
+  }
+}
+/* 공통 파일도 훑어요 — help.js처럼 게임 폴더 밖에서 남기는 이벤트가 있어요.
+ * 처음엔 게임 폴더와 stats.js만 봐서 "help가 표에만 있고 안 쓰인다"고 잘못 짚었어요. */
+for (const f of ["stats.js", "help.js", "cloud.js", "match.js", "timing.js", "ads.js"]) {
+  const fp = path.join(ROOT, f);
+  if (!fs.existsSync(fp)) continue;
+  for (const m of fs.readFileSync(fp, "utf8").matchAll(/(?:Stats\.)?log\("([a-z_]+)"/g)) logged.add(m[1]);
+}
+
+const ORDER = new Function(`${grab(/const FUNNEL_ORDER = \[[\s\S]*?\];/)} return FUNNEL_ORDER;`)();
+const LABEL = new Function(`${grab(/const EVENT_LABEL = \{[\s\S]*?\n    \};/)} return EVENT_LABEL;`)();
+const noLabel = [...logged].filter((e) => !LABEL[e]);
+const noOrder = [...logged].filter((e) => !ORDER.includes(e));
+console.log(`   게임이 남기는 이벤트 ${logged.size}종`);
+check(noLabel.length === 0, `이벤트마다 한글 이름이 있다 (빠진 것: ${noLabel.join(" · ") || "없음"})`);
+check(noOrder.length === 0, `이벤트마다 표시 순서가 있다 (빠진 것: ${noOrder.join(" · ") || "없음"})`);
+// 순서에만 있고 실제로는 안 남기는 것도 짚어 준다 (지운 기능의 잔재)
+const stale = ORDER.filter((e) => !logged.has(e));
+check(stale.length === 0, `쓰지 않는 이벤트가 표에 남아 있지 않다 (${stale.join(" · ") || "없음"})`);
+
 /* ── 변이 검증 — 표본 문턱을 0으로 내리면 ①이 무너져야 한다.
  * 안 잡히면 위의 초록불은 아무것도 안 지키고 있는 것이다. */
 const brokenBuild = new Function("state", "game", `

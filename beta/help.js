@@ -14,6 +14,17 @@
   function open(title, sections) {
     // 이미 열려 있으면 겹쳐 열지 않아요.
     if (document.querySelector(".help-overlay")) return;
+    /* ❓ 도움말을 여는지 남겨요. "설명이 부족하다"는 제보가 있었는데, 정작
+     * **어느 게임에서 도움말을 찾는지** 데이터가 없었어요 — 많이 열리는 게임이
+     * 곧 화면만으로 안 읽히는 게임입니다. 하루 1회만 세서 로그를 아껴요. */
+    try {
+      const key = "grow-help-log";
+      const today = new Date().toISOString().slice(0, 10);
+      if (window.Stats && localStorage.getItem(key) !== today) {
+        localStorage.setItem(key, today);
+        Stats.log("help");
+      }
+    } catch { /* 사파리 프라이빗 등 — 도움말은 그대로 열려야 해요 */ }
 
     const ov = document.createElement("div");
     ov.className = "av-overlay help-overlay";

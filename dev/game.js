@@ -300,7 +300,12 @@ function awakenTalent(key, logFn) {
     `· 성공하든 실패하든 ${d.name} 수치는 크게 낮아져서 다시 키워야 해요\n\n진행할까요?`
   );
   if (!ok) return false;
-  if (Math.random() < p) {
+  /* 🔮 각성은 엔드게임인데 로그가 없어서 **몇 명이 여기까지 오는지** 몰랐어요.
+   * CS에 "각성해도 별이 안 오른다"가 대기 중인데 실제 시도 수를 못 봤습니다.
+   * 시도 자체를 남겨요 — 성공률은 확률이지만 "얼마나 시도하나"가 진짜 물음이에요. */
+  const awakenOk = Math.random() < p;
+  if (window.Stats) Stats.log("awaken", { key, lv: Math.round(S.talents[key] * 100) / 100, ok: awakenOk });
+  if (awakenOk) {
     S.talents[key] = Math.min(S.talents[key] + rand(0.15, 0.3), TALENT_MAX);
     S.stats[key] = randInt(45, 60);
     logFn(`🔮✨ ${d.name} 재능 각성 성공!! 잠재력이 한 단계 피어났어요 (수치 ${Math.round(S.stats[key])}부터 재도전)`);

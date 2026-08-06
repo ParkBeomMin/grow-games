@@ -147,12 +147,18 @@
       "국내 유스": "K리그 유스",
     };
     const normChoice = (c) => CHOICE_ALIAS[c] || c;
+    /* ⚠️ 여기에 없는 이벤트는 **영문 그대로** 뜨고, FUNNEL_ORDER에도 없으면
+     * indexOf가 -1이라 **맨 앞으로** 밀려요. 새 이벤트를 남길 때 둘 다 채워야 합니다.
+     * 실제로 transfer·rebirth·tour가 오래 빠져 있었어요. */
     const EVENT_LABEL = {
       visit: "방문", new_player: "새 캐릭터", draft: "드래프트", ending: "서바이벌 결과",
       pro_enter: "프로 입단", debut: "데뷔", season_end: "시즌 결산", year_end: "연말 결산",
       retire: "은퇴", battle: "배틀", bonus: "보너스",
       pwa_install: "📲 앱 설치", pwa_launch: "📲 앱 실행",
       exit: "🚀 Exit(재창업)", decacorn: "👑 데카콘 달성",
+      youth_round: "🎓 유스 라운드", cup: "🏆 컵 대회", promo: "🔺 승격·강등",
+      awaken: "🔮 재능 각성", help: "❓ 도움말 열기", error: "💥 오류",
+      transfer: "💼 이적", tour: "🌏 월드투어", rebirth: "♻️ 환생",
     };
 
     async function getView(name) {
@@ -188,7 +194,11 @@
     }
 
     // 퍼널 막대의 표시 순서예요.
-    const FUNNEL_ORDER = ["visit", "pwa_install", "pwa_launch", "new_player", "draft", "debut", "ending", "pro_enter", "season_end", "year_end", "exit", "decacorn", "retire", "battle", "bonus"];
+    /* 커리어가 흘러가는 순서예요 — 방문 → 시작 → 유스 → 데뷔 → 시즌 → 은퇴.
+     * 여기 없는 이벤트는 맨 앞으로 밀리니 새로 남길 때 꼭 끼워 넣어요. */
+    const FUNNEL_ORDER = ["visit", "pwa_install", "pwa_launch", "new_player", "draft", "youth_round",
+      "ending", "debut", "pro_enter", "season_end", "year_end", "cup", "promo", "transfer", "tour",
+      "exit", "decacorn", "retire", "rebirth", "battle", "bonus", "awaken", "help", "error"];
 
     /* ─────────────────────────────────────────────────────────────
      * 💡 자동 코멘트

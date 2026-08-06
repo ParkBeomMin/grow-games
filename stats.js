@@ -94,10 +94,44 @@ window.Stats = (() => {
     } catch { /* noop */ }
   }
 
+  /* 💥 자바스크립트 오류 — 조용히 죽는 버그를 잡아요.
+   *
+   * 지금까지는 화면이 멈춰도 제보가 없으면 몰랐어요. 실제로 `decodeURIComponent("%")`
+   * 하나가 통계 페이지를 얼려 놓은 적이 있고, 그건 눈으로 보다 우연히 찾았습니다.
+   *
+   * ⚠️ **폭주를 막는 게 반이에요.** 렌더 루프 안에서 터지면 초당 수십 건이 나가요.
+   *  · 한 번 실행(페이지 한 번 열기)에 최대 3건
+   *  · 같은 메시지는 한 번만
+   *  · 브라우저 확장·광고 스크립트가 던지는 건 우리 코드가 아니라 걸러요
+   *    (파일 경로에 우리 도메인/상대경로가 없으면 남의 것이에요) */
+  const ERR_MAX = 3;
+  let errSent = 0;
+  const errSeen = new Set();
+  function reportError(msg, src, line) {
+    if (errSent >= ERR_MAX) return;
+    const m = String(msg || "").slice(0, 160);
+    if (!m || errSeen.has(m)) return;
+    // 남의 스크립트에서 온 건 안 남겨요 — 확장 프로그램 오류로 로그가 덮여요
+    const from = String(src || "");
+    if (from && !/parkbeommin|localhost|127\.0\.0\.1|^\/|^$/.test(from)) return;
+    errSeen.add(m);
+    errSent += 1;
+    log("error", { msg: m, at: from.split("/").pop().slice(0, 40) || null, line: line || null });
+  }
+
   // 게임별 초기화 — 하루 1회만 방문(visit) 기록해 로그 낭비를 막아요
   function init(name) {
     gameName = name;
     loadVersion();
+    /* 이미 붙어 있으면 다시 안 붙여요 — 한 페이지에서 init이 두 번 불릴 수 있어요. */
+    if (!window.__growErrHooked) {
+      window.__growErrHooked = true;
+      window.addEventListener("error", (e) => reportError(e && e.message, e && e.filename, e && e.lineno));
+      window.addEventListener("unhandledrejection", (e) => {
+        const r = e && e.reason;
+        reportError(r && (r.message || r), (r && r.stack) || "", null);
+      });
+    }
     const key = "grow-visit-" + name;
     const today = new Date().toISOString().slice(0, 10);
     if (localStorage.getItem(key) !== today) {
