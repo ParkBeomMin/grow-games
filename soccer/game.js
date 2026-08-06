@@ -1512,10 +1512,21 @@ const MatchSim = (() => {
     const rmin = () => randInt(6, 82);
     for (let i = 0; i < goals; i++) evs.push({ min: rmin(), side: "atk", h: 1, cls: "good", text: `⚽ 골!! ${myName} 득점!` });
     for (let i = 0; i < assists; i++) evs.push({ min: rmin(), side: "atk", h: 1, cls: "good", text: `🅰️ ${myName}의 도움! 팀 추가골` });
-    /* 동료 골이에요. 평점을 안 넘겨준 호출부(유스 등)에서는 0이 되도록 막아뒀어요. */
+    /* 동료 골이에요. 평점을 안 넘겨준 호출부(유스 등)에서는 0이 되도록 막아뒀어요.
+     *
+     * ⚠️ 예전에는 "⚽ 동료의 골!"이라고만 떴어요. 이름이 없으니 그 골이 개인
+     * 순위 어디에도 안 남았고, **경기에서 팀원이 두 골 넣는 걸 봤는데 득점 순위에
+     * 그 선수가 없는** 일이 생겼습니다(제보). 이제 우리 팀 선수 이름으로 넣고,
+     * 누가 넣었는지 mateGoals로 돌려줘서 career.js가 시즌 기록에 올려요. */
+    const mateNames = Array.isArray(cfg.mates) ? cfg.mates.filter(Boolean) : [];
     const mates = cfg.rating != null ? teammateGoals(cfg.rating) : 0;
-    for (let i = 0; i < mates; i++)
-      evs.push({ min: rmin(), side: "atk", h: 1, cls: "good", text: `⚽ 동료의 골! 팀이 추가점을 뽑아냅니다` });
+    const mateGoals = [];
+    for (let i = 0; i < mates; i++) {
+      const who = mateNames.length ? mateNames[randInt(0, mateNames.length - 1)] : null;
+      if (who) mateGoals.push(who);
+      evs.push({ min: rmin(), side: "atk", h: 1, cls: "good",
+        text: who ? `⚽ ${who}의 골! 팀이 추가점을 뽑아냅니다` : `⚽ 동료의 골! 팀이 추가점을 뽑아냅니다` });
+    }
     for (let i = 0; i < oppGoals; i++) evs.push({ min: rmin(), side: "def", a: 1, cls: "bad", text: `😣 ${away}에 실점…` });
     if (defense >= 2) evs.push({ min: rmin(), side: "def", text: `🛡️ ${myName}, 결정적 태클로 위기를 끊어요!` });
     evs.push({ min: rmin(), side: "mid", text: pick(["중원 싸움이 뜨거워요", "빠른 템포로 오가는 공방", "관중석이 들썩입니다", "양 팀 압박이 매섭습니다"]) });
@@ -1572,6 +1583,7 @@ const MatchSim = (() => {
         myGoals: goals + (momentRes === "perfect" ? 1 : 0),
         assists, defense,
         teamGoals: h, oppGoals: a, res, momentRes,
+        mateGoals,     // 이 경기에서 골을 넣은 우리 팀 선수 이름 (개인 순위에 올라가요)
       };
       const out = cfg.finalize(info);
       $("stage-result").innerHTML = out.resultHTML;
