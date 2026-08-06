@@ -1664,6 +1664,14 @@ function playSurvivalRound() {
       0.12, 0.93
     );
     const pass = Math.random() < p;
+    /* 어느 라운드가 벽인지 보려고 남겨요. 통과율을 크게 바꿨는데(2.33.1)
+     * 4라운드 중 어디서 떨어지는지 데이터가 없어서 실측 검증이 안 됐어요. */
+    if (window.Stats) {
+      Stats.log("youth_round", {
+        round: ev.round, name: roundName, pass, grade: fg.g, res: info.res,
+        p: Math.round(p * 100), ovr: Math.round(overall()),
+      });
+    }
     S.youth = S.youth || { g: 0, a: 0, def: 0 };
     S.youth.g += info.myGoals; S.youth.a += info.assists; S.youth.def += info.defense;
     save();

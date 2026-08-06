@@ -30,6 +30,33 @@ window.Stats = (() => {
 
   let gameName = "unknown";
 
+  /* 📦 배포 버전 — 모든 이벤트에 자동으로 붙여요.
+   *
+   * 하루에도 몇 번씩 배포하는데 이벤트에 버전이 없어서, 지표가 움직여도
+   * **어느 배포 때문인지 가릴 수가 없었어요.** 밸런스를 바꾼 뒤 "좋아졌나"를
+   * 물으려면 전후를 갈라야 합니다.
+   *
+   * localStorage를 먼저 읽어요 — fetch는 비동기라, 페이지를 열자마자 나가는
+   * 이벤트(visit·new_player)는 응답을 못 기다려요. 지난 방문 때 받아 둔 값을
+   * 바로 쓰고, fetch가 끝나면 그 다음 이벤트부터 새 값이 붙습니다.
+   * 첫 방문 한 번만 버전이 비어요. */
+  const VER_KEY = "grow-app-version";
+  let appVer = null;
+  try { appVer = localStorage.getItem(VER_KEY) || null; } catch { /* 사파리 프라이빗 */ }
+  function loadVersion() {
+    /* 게임은 /<게임>/ 아래, 통계는 /stats/ 아래라 한 칸 위가 항상 루트예요.
+     * 실패해도 조용히 넘어가요 — 통계는 게임에 영향을 주면 안 됩니다. */
+    fetch("../VERSION", { cache: "no-store" })
+      .then((r) => (r.ok ? r.text() : Promise.reject()))
+      .then((t) => {
+        const v = String(t).trim();
+        if (!v) return;
+        appVer = v;
+        try { localStorage.setItem(VER_KEY, v); } catch { /* noop */ }
+      })
+      .catch(() => {});
+  }
+
   function pid() {
     let id = localStorage.getItem("grow-player-id");
     if (!id) {
@@ -45,7 +72,7 @@ window.Stats = (() => {
     if (window.GROW_ENV && window.GROW_ENV.beta) return;
     // GA4에도 같은 이벤트 전달 (gtag 스니펫이 있는 페이지에서만)
     try {
-      if (typeof window.gtag === "function") window.gtag("event", event, { game: gameName, ...(data || {}) });
+      if (typeof window.gtag === "function") window.gtag("event", event, { game: gameName, ...(data || {}), ...(appVer ? { v: appVer } : {}) });
     } catch { /* noop */ }
     if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return;
     try {
@@ -58,7 +85,11 @@ window.Stats = (() => {
           "Content-Type": "application/json",
           Prefer: "return=minimal",
         },
-        body: JSON.stringify([{ game: gameName, player: pid(), event, data: data || null }]),
+        // 버전은 data 안에 넣어요 — events 테이블 스키마를 안 건드리려고요
+        body: JSON.stringify([{
+          game: gameName, player: pid(), event,
+          data: appVer ? { ...(data || {}), v: appVer } : (data || null),
+        }]),
       }).catch(() => {});
     } catch { /* noop */ }
   }
@@ -66,6 +97,7 @@ window.Stats = (() => {
   // 게임별 초기화 — 하루 1회만 방문(visit) 기록해 로그 낭비를 막아요
   function init(name) {
     gameName = name;
+    loadVersion();
     const key = "grow-visit-" + name;
     const today = new Date().toISOString().slice(0, 10);
     if (localStorage.getItem(key) !== today) {

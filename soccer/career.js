@@ -810,6 +810,8 @@ window.WingerCareer = (() => {
   function startCup() {
     S.cup = { round: 0, name: cupName(), field: cupField().map((c) => ({ name: c.name, str: c.str, lg: c.lg.short })) };
     save();
+    // 신규 기능이라 참가율부터 봐야 해요 — 리그 4위 안이 얼마나 자주 나오나
+    if (window.Stats) Stats.log("cup", { act: "enter", y: S.proYear, lg: S.league, name: S.cup.name });
     cupMatch();
   }
 
@@ -894,6 +896,7 @@ window.WingerCareer = (() => {
     if (!win) {
       const money = 60 * (S.cup.round + 1);
       S.money = (S.money || 0) + money;
+      if (window.Stats) Stats.log("cup", { act: "out", y: S.proYear, round: label, pk: !!viaPk, name: S.cup.name });
       S.cup = null;
       save();
       return {
@@ -919,6 +922,7 @@ window.WingerCareer = (() => {
     const title = `${S.proYear}시즌 ${S.cup.name} 우승`;
     if (!S.trophies.includes(title)) S.trophies.push(title);
     const name = S.cup.name;
+    if (window.Stats) Stats.log("cup", { act: "win", y: S.proYear, pk: !!pk, name });
     S.cup = null;
     save();
     if (window.Fx) Fx.celebrate("champion", `🏆 ${name} 우승!`);
@@ -1012,6 +1016,9 @@ window.WingerCareer = (() => {
      * 지난 시즌 화면이 새 리그로 바뀌지 않아요 — 이적 표시에서 겪은 것과 같은 함정이에요. */
     const leaguePlayed = S.league;
     const move = applyPromotion();
+    if (move && window.Stats) {
+      Stats.log("promo", { y: S.proYear, kind: move.kind, from: leaguePlayed, to: S.league });
+    }
     if (move) {
       proLog(move.kind === "title" ? `🏆 ${move.from} 우승!! 리그 정상에 섰어요`
         : move.kind === "up" ? `🔺 리그 우승! ${move.from} → ${move.to} 승격!!`
@@ -1038,7 +1045,14 @@ window.WingerCareer = (() => {
     // 평균 평점 — 골·도움만으로는 안 드러나는 '꾸준함'을 보여줘요
     const avgRating = apps ? Math.round(((act.ratingSum || 0) / apps) * 10) / 10 : null;
     S.career.years.push({ y: S.proYear, hype: Math.round(hype * 10) / 10, wins, sales, dFan, awards, goals: gg, assists: ga, defense: gd, apps, avg: avgRating, club: S.group, league: leaguePlayed, promo: move ? move.kind : null, promoTo: move ? move.to : null });
-    if (window.Stats) Stats.log("year_end", { y: S.proYear, wins, sales, goals: gg, assists: ga });
+    /* 리그·나라·순위를 함께 남겨요. 나라별 리그를 11개 만들어 놓고 **어느 리그에서
+     * 몇 시즌을 뛰는지** 데이터가 없었어요 — "새 리그가 실제로 쓰이나"를 물을 수가
+     * 없었습니다. 지금은 시뮬레이션으로만 판단하고 있어요. */
+    if (window.Stats) Stats.log("year_end", {
+      y: S.proYear, wins, sales, goals: gg, assists: ga,
+      lg: leaguePlayed, ctry: leagueOf({ league: leaguePlayed }).country,
+      rank: tableReady() ? myTableRank() : null, hype: Math.round(hype * 10) / 10,
+    });
     for (const d of STAT_DEFS) {
       if (S.proYear <= 3) S.stats[d.key] = clamp(S.stats[d.key] + rand(0, 1) * S.talents[d.key], 0, statCap(d.key));
       else if (S.proYear >= 8) S.stats[d.key] = clamp(S.stats[d.key] - rand(0.6, 1.8), 0, statCap(d.key));
@@ -1568,7 +1582,11 @@ window.WingerCareer = (() => {
     hof.push(entry);
     saveHof(hof);
     if (window.Match) window.Match.submitHof("soccer", entry);
-    if (window.Stats) Stats.log("retire", { years: entry.seasons, wins: entry.wins, score: entry.score });
+    if (window.Stats) Stats.log("retire", {
+      years: entry.seasons, wins: entry.wins, score: entry.score,
+      // "어디까지 갔나" 분포를 보려면 마지막 리그와 트로피 수가 있어야 해요
+      lg: S.league, ctry: leagueOf(S).country, trophies: (S.trophies || []).length, pos: S.pos,
+    });
     clearSave();
     if (window.Cloud) Cloud.mark();
 
