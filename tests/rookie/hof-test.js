@@ -181,6 +181,9 @@ const CAREER_CONSTS = [
   ["metricName", /  const metricName = [^;]+;/],
   // 🏛️ 이 태스크가 더한 것 — 읽는 쪽이에요
   ["awardW", /  const awardW = [^;]+;/],
+  // 🏛️ 통산 마일스톤 — finishSeason·careerScore가 이걸 부르니 스텁으로 새면 안 돼요
+  ["MILESTONES", /  const MILESTONES = \[[\s\S]*?\n  \];/],
+  ["MILE_PV", /  const MILE_PV = [^;]+;/],
 ];
 const CAREER_FNS = [
   "  function proLog(msg) {",
@@ -202,6 +205,11 @@ const CAREER_FNS = [
   "  function postStatLine() {",
   // 🏛️ 이 태스크가 더한 것 — 쓰는 쪽이에요. 스텁이 받아버리면 12시즌이 가중 없이 지나가요
   "  function addAwardWeight(awards, pre) {",
+  // 🏛️ 통산 마일스톤 — finishSeason(careerCounts·newMilestones)·careerScore(mileScore)·seasonReport(milestoneHTML)가 부름
+  "  function careerCounts(seasons) {",
+  "  function mileScore(c) {",
+  "  function newMilestones(prev, now, year) {",
+  "  function milestoneHTML() {",
   "  function finishSeason() {",
   "  function teamOfYear(y, st) {",
   "  function leagueOfYear(y, st) {",

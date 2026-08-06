@@ -1052,6 +1052,61 @@ window.Career = (() => {
     return `🍂 가을야구 ${t.g}경기 ${t.ip}이닝 ${t.k}탈삼진 ${t.er}자책`;
   }
 
+  /* 🏛️ 통산 마일스톤 — 커리어가 쌓아 온 누적 기록의 고비들. 야구는 기록의 스포츠라
+   * 통산 3000안타·500홈런 같은 숫자가 곧 전설의 증표예요. 넘는 순간 결산에서 축하하고
+   * 명예의 전당 가치에 얹어요. 별도 필드에 저장하지 않고 seasons[]의 raw를 더해 구해요
+   * — 마이그레이션이 없어요. 옛 세이브도 그 자리에서 통산이 계산돼요. */
+  const MILESTONES = [
+    { key: "hits", name: "통산 안타", emoji: "🏏", pos: "batter", marks: [1000, 1500, 2000, 2500, 3000] },
+    { key: "hr", name: "통산 홈런", emoji: "💣", pos: "batter", marks: [100, 200, 300, 400, 500] },
+    { key: "sb", name: "통산 도루", emoji: "👟", pos: "batter", marks: [200, 400, 600, 800] },
+    { key: "k", name: "통산 탈삼진", emoji: "🔥", pos: "pitcher", marks: [1500, 2500, 3500, 4500, 5000] },
+    { key: "wins", name: "통산 다승", emoji: "🏆", pos: "pitcher", marks: [50, 100, 150, 200] },
+    { key: "saves", name: "통산 세이브", emoji: "🚪", pos: "pitcher", marks: [100, 200, 300, 400] },
+  ];
+  /* seasons[]의 raw를 전부 더해 통산 카운팅 스탯을 구해요. 타자·투수 시즌이 섞여 있어도
+   * 각 시즌 raw에 있는 필드만 더하니 안전해요. */
+  function careerCounts(seasons) {
+    const c = { hits: 0, hr: 0, sb: 0, ab: 0, k: 0, wins: 0, saves: 0, ip: 0 };
+    for (const s of (seasons || [])) {
+      const r = (s && s.raw) || {};
+      for (const key in c) c[key] += (+r[key] || 0);
+    }
+    return c;
+  }
+  /* 마일스톤 하나의 명예의 전당 가치 — 뒤 고비일수록 가팔라요(3000안타는 전설이니까요). */
+  const MILE_PV = [8, 12, 18, 26, 36];
+  function mileScore(c) {
+    return (((c || {}).miles) || []).reduce((sum, m) => sum + (MILE_PV[m.i] || 10), 0);
+  }
+  /* prev(이번 시즌 전 통산)와 now(이번 시즌 포함) 사이에 새로 넘은 고비들을 돌려줘요. */
+  function newMilestones(prev, now, year) {
+    const out = [];
+    for (const m of MILESTONES) {
+      m.marks.forEach((mk, i) => {
+        if ((prev[m.key] || 0) < mk && (now[m.key] || 0) >= mk) out.push({ key: m.key, n: mk, y: year, i });
+      });
+    }
+    return out;
+  }
+  /* 🏛️ 결산·전당에 그릴 통산 기록 블록 — 시점(타자/투수)에 맞는 카운팅 스탯과
+   * 다음 고비까지 남은 수, 이미 넘은 고비 배지를 보여줘요. */
+  function milestoneHTML() {
+    const c = careerCounts(S.career.seasons);
+    const mine = MILESTONES.filter((m) => m.pos === S.pos);
+    const rows = mine.map((m) => {
+      const cur = c[m.key] || 0;
+      const next = m.marks.find((mk) => cur < mk);
+      const badges = m.marks.filter((mk) => cur >= mk)
+        .map((mk) => `<span class="mile-badge">${m.emoji}${mk}</span>`).join("");
+      const tail = next
+        ? `<span class="mile-next">다음 ${next}까지 <b>${next - cur}</b></span>`
+        : `<span class="mile-next mile-max">👑 최고 기록 달성</span>`;
+      return `<div class="mile-row"><span class="mile-name">${m.emoji} ${m.name} <b>${cur}</b></span>${tail}${badges ? `<div class="mile-badges">${badges}</div>` : ""}</div>`;
+    }).join("");
+    return `<div class="mile-box"><div class="mile-title">🏛️ 통산 기록</div>${rows}</div>`;
+  }
+
   function finishSeason() {
     if (!S.season) return;
     const sn = S.season;
@@ -1145,7 +1200,10 @@ window.Career = (() => {
     /* team·league — **그 시즌에 뛴 소속**을 결산 시점에 그냥 적어요. 여기 적힌 값이 정본이에요.
      * league는 나중에 생긴 필드라 옛 기록에는 없어요. 그건 읽는 쪽(playedAt)이 S.moves에서
      * 역산해 메워요 — 세이브는 고치지 않아요(클라우드 동기화와 부딪혀요). */
+    const mileBefore = careerCounts(S.career.seasons);   // 이번 시즌을 더하기 전 통산
     S.career.seasons.push({ y: S.proYear, age: S.age, war, line, rank, champ, awards, role: S.role, team: S.team, league: S.league, raw });
+    const gotMiles = newMilestones(mileBefore, careerCounts(S.career.seasons), S.proYear);
+    if (gotMiles.length) S.career.miles = (S.career.miles || []).concat(gotMiles);
     if (window.Stats) Stats.log("season_end", { y: S.proYear, war, rank, champ });
 
     for (const d of STAT_DEFS[S.pos]) {
@@ -1184,6 +1242,14 @@ window.Career = (() => {
     // 수상은 하나씩 따로 띄워요 — 합쳐 놓으면 무엇을 받았는지 눈에 안 들어와요
     for (const a of awards) {
       feeds.push({ text: `🎖️ ${a} 수상!`, cls: "good", fx: () => Fx.celebrate("award", `🎖️ ${a} 수상!`) });
+    }
+    // 🏛️ 통산 고비를 넘겼으면 하나씩 크게 띄워요 — 커리어의 이정표예요
+    for (const nm of gotMiles) {
+      const def = MILESTONES.find((x) => x.key === nm.key);
+      feeds.push({
+        text: `${def.emoji} 대기록 — ${def.name} ${nm.n} 돌파!`, cls: "good",
+        fx: () => Fx.celebrate("award", `${def.emoji} ${def.name} ${nm.n}!`),
+      });
     }
     feeds.push({ text: `💰 시즌 연봉 정산 +${fmtMoney(salary)}`, cls: "good" });
     playFeeds(`📺 ${S.proYear}년차 시즌 결산`, feeds, seasonReport);
@@ -1273,6 +1339,7 @@ window.Career = (() => {
       ${S.lastStandings ? `<div class="hint">📊 최종 순위</div>${S.lastStandings}` : ""}
       <table class="season-table season-career"><thead><tr><th>시즌</th><th>나이</th><th>성적</th><th>WAR</th></tr></thead><tbody>${rows}</tbody></table>
       ${moreHint}
+      ${milestoneHTML()}
       <div class="draft-summary">
         통산 ${S.career.seasons.length}시즌 · WAR ${S.career.warSum.toFixed(1)} · 🏆 우승 ${S.career.rings}회 · MVP ${S.career.mvp} · GG ${S.career.gg}${S.career.roy ? " · 신인왕" : ""}<br/>
         ${forcedRetire ? "구단에서 은퇴식을 준비하고 있어요…" : overall() < 42 ? "⚠️ 기량 하락이 눈에 띄어요. 은퇴를 고민할 때일지도." : "다음 시즌도 달릴 수 있어요!"}
@@ -2052,7 +2119,8 @@ window.Career = (() => {
     return Math.round(
       c.warSum * 10 + c.rings * 25 + awardW(c, "mvp") * 40 + awardW(c, "gg") * 15 + awardW(c, "roy") * 20 +
       (S.trophies ? S.trophies.length : 0) * 8 + S.scout * 0.05 +
-      transTotal() * 25   // ✨ 초월 단계 보너스
+      transTotal() * 25 +   // ✨ 초월 단계 보너스
+      mileScore(c)          // 🏛️ 통산 마일스톤 — 뒤 고비일수록 크게
     );
   }
 

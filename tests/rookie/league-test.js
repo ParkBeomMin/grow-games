@@ -705,11 +705,15 @@ guard("점수로 다시 잰 사다리", () => {
   if (!batRows || !pitRows) throw new Error("앞의 곡선 검사가 값을 못 만들었어요");
   const awardWSrc = grab(SRC, /  const awardW = [^;]+;/);
   const scoreSrc = grab(SRC, /  function careerScore\(\) \{[\s\S]*?\n {2}\}/);
-  if (!awardWSrc || !scoreSrc) throw new Error("careerScore·awardW를 소스에서 못 찾았어요");
+  // 🏛️ careerScore가 이제 mileScore(마일스톤 가치)도 읽어요. 아래 픽스처엔 miles가 없어
+  // 0을 더하니 상 배점 검사는 그대로지만, 함수가 정의돼 있어야 안 터져요.
+  const mileSrc = grab(SRC, /  const MILE_PV = [^;]+;/) + "\n" + grab(SRC, /  function mileScore\(c\) \{[\s\S]*?\n {2}\}/);
+  if (!awardWSrc || !scoreSrc || !mileSrc.trim()) throw new Error("careerScore·awardW·mileScore를 소스에서 못 찾았어요");
   const scoreOf = new Function("career", `
     const S = { career, trophies: [], scout: 0 };
     const transTotal = () => 0;
     ${awardWSrc}
+    ${mileSrc}
     ${scoreSrc}
     return careerScore();`);
   const ZERO = { seasons: [], warSum: 0, rings: 0, mvp: 0, gg: 0, roy: 0 };

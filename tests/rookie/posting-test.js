@@ -197,6 +197,9 @@ const CAREER_CONSTS = [
   ["metricUnit", /  const metricUnit = [^;]+;/],
   ["metricTxt", /  const metricTxt = [^;]+;/],
   ["metricName", /  const metricName = [^;]+;/],
+  // 🏛️ 통산 마일스톤 — finishSeason·careerScore가 부르니 스텁으로 새면 안 돼요
+  ["MILESTONES", /  const MILESTONES = \[[\s\S]*?\n  \];/],
+  ["MILE_PV", /  const MILE_PV = [^;]+;/],
 ];
 const CAREER_FNS = [
   "  function proLog(msg) {",
@@ -222,6 +225,11 @@ const CAREER_FNS = [
   /* 🌏 finishSeason이 부르는 리그 가중이에요. 안 넣으면 스텁이 조용히 받아버려서
    * 여기서 굴리는 12시즌이 가중 없이 지나가요 — 없는 걸 있다고 믿는 초록이 돼요. */
   "  function addAwardWeight(awards, pre) {",
+  // 🏛️ 통산 마일스톤 — finishSeason이 careerCounts·newMilestones를, seasonReport가 milestoneHTML을 부름
+  "  function careerCounts(seasons) {",
+  "  function mileScore(c) {",
+  "  function newMilestones(prev, now, year) {",
+  "  function milestoneHTML() {",
   "  function finishSeason() {",
   "  function teamOfYear(y, st) {",
   "  function leagueOfYear(y, st) {",

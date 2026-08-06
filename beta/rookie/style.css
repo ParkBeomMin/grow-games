@@ -262,3 +262,26 @@
 }
 .mg-ready-key > span { color: var(--dim); font-size: .74rem; line-height: 1.45; }
 .mg-ready .mg-go { width: 100%; }
+
+/* 🏛️ 통산 마일스톤 — 결산 화면의 통산 기록 블록 (../career.js의 milestoneHTML).
+ * 색은 전부 테마 변수예요. */
+.mile-box {
+  margin: 12px 0; padding: 12px 14px;
+  border: 1px solid var(--line); border-radius: 12px;
+  background: rgba(255, 255, 255, .03);
+}
+.mile-title { color: var(--accent); font-weight: 700; font-size: .92rem; margin-bottom: 6px; }
+.mile-row {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px;
+  padding: 6px 0; border-top: 1px solid var(--line);
+}
+.mile-name { color: var(--text); font-size: .84rem; }
+.mile-name b { color: var(--cream); font-size: .95rem; }
+.mile-next { color: var(--dim); font-size: .76rem; margin-left: auto; }
+.mile-next b { color: var(--sky); }
+.mile-next.mile-max { color: var(--accent); }
+.mile-badges { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; }
+.mile-badge {
+  font-size: .72rem; padding: 1px 7px; border-radius: 999px;
+  border: 1px solid var(--accent); color: var(--accent); white-space: nowrap;
+}
