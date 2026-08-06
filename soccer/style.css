@@ -261,3 +261,16 @@ body {
 .ch-res.r-w { color: var(--accent); }
 .ch-res.r-l { color: var(--accent2); }
 .ch-res.r-d { color: var(--dim); }
+
+/* 🏆 승부차기 — 컵 단판에서 비겼을 때만 나와요 */
+.pk-head { font-size: .95rem; color: var(--cream); margin-bottom: .4rem; }
+.pk-score { font-size: 1.9rem; font-weight: 800; letter-spacing: .06em; margin: .2rem 0 .5rem; }
+.pk-score b { color: var(--dim); }
+.pk-score b.win { color: var(--accent); }
+.pk-board { max-height: 8.4rem; overflow-y: auto; text-align: left; margin: 0 auto .5rem; max-width: 22rem; }
+.pk-line { font-size: .82rem; padding: .12rem 0; color: var(--dim); }
+.pk-line.ok { color: var(--cream); }
+.pk-line.no { color: var(--accent2); }
+.pk-hint { font-size: .9rem; color: var(--text); margin: .35rem 0 .5rem; min-height: 1.2rem; }
+.pk-btns { display: flex; gap: .4rem; justify-content: center; flex-wrap: wrap; }
+.pk-side { flex: 1 1 5.5rem; max-width: 8rem; }

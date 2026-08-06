@@ -250,7 +250,14 @@ window.WingerCareer = (() => {
    *
    * MOM은 수상 판정에 안 쓰여요(수상은 hype 기준). 팬 증가(wins × 3)와
    * 명예의 전당 점수(wins × 6)에만 들어가서, 이 정도 차이는 영향이 작아요. */
-  const rivalResAdj = (r) => (r === "W" ? rand(1.5, 6) : r === "L" ? -rand(1.5, 6) : r === "D" ? rand(-1.5, 1.5) : 0);
+  const rivalResAdj = (r) => (r === "W" ? rand(4, 14) : r === "L" ? -rand(4, 14) : r === "D" ? rand(-3, 3) : 0);
+  /* 명성을 그대로 점수로 쓰지 않고 평균(70) 쪽으로 당겨요.
+   * 라이벌 점수는 명성(52~88)이고 내 점수는 능력치×10 + 그 경기 활약이었어요.
+   * 같은 표에 **다른 자로 잰 숫자**를 나란히 놓은 셈이라, 능력치 평점 6.0인
+   * 선수는 라이벌 평균(7.06)보다 1.2점 아래에서 시작했습니다. 2골 2도움을 해도
+   * 7위가 나온 게 그래서예요.
+   * 0.75로 당기면 명성 폭이 36 → 27이 되고, 그 자리를 결과(폭 18)가 채웁니다. */
+  const RIVAL_POP_PULL = 0.75;
   const RES_KO = { W: "승", D: "무", L: "패" };
 
   const tableRows = () => (S.table ? S.table.rows : [])
@@ -291,10 +298,31 @@ window.WingerCareer = (() => {
    * 그건 "내가 좋은 제안을 받아 클럽을 옮기는 것", 이건 "내 클럽이 리그를 오르내리는 것".
    * 둘이 섞이면 사다리가 두 번 작동해서 한 시즌에 두 단계를 뛰어넘어요.
    *
-   * 국내 3부(K리그3 · K리그2 · K리그1)에서만 돌아요. 유로파·챔피언스리그는
-   * 승강제가 있는 리그가 아니라 개인 성적으로 초청받는 무대라, 그쪽은 기존
-   * 이적 사다리에 그대로 맡깁니다. */
-  const DOMESTIC_TIERS = [5, 4, 1];          // K리그3 → K리그2 → K리그1 (tier 오름차순)
+   * 사다리가 **둘**이에요. 국내(K리그3 → K리그2 → K리그1)와 유럽(유로파 → 챔스).
+   * 유럽 무대는 실제로는 리그가 아니라 컵 대회지만, 이 게임은 이미 '소속 리그'로
+   * 모델링해 놨어요 — 클럽 목록도 순위표도 국내 리그와 똑같이 굴러갑니다.
+   * 그래서 승강제만 없으면 유럽에 간 순간 팀 성적이 아무 데도 안 닿았어요.
+   *
+   * **사다리는 나라마다 하나씩이고 서로 안 이어져요.** 잉글랜드 최하위가 이탈리아로
+   * 가지 않아요 — 실제로도 강등은 그 나라 리그 안에서만 일어납니다.
+   * 나라를 옮기는 건 오직 이적 사다리(PROMOTE_HYPE)뿐이에요.
+   *
+   * 각 나라의 맨 위에서 1위면 올라갈 데가 없으니 **리그 우승**이고,
+   * 맨 아래에서 꼴찌면 내려갈 데가 없어 아무 일도 안 일어나요.
+   *
+   * ⚠️ id는 옛 세이브가 가리키는 값이라 순서와 무관해요. 여기 배열의 **순서**가
+   * 그 나라 안의 오름차순이에요(아래 → 위). 전역 난이도는 LEAGUES의 tier가 따로 봅니다. */
+  const COUNTRY_TIERS = {
+    kr: [5, 4, 1],    // 🇰🇷 한국 3부 → 2부 → 1부
+    jp: [6, 7],       // 🇯🇵 일본 2부 → 1부
+    br: [8, 9],       // 🇧🇷 브라질 2부 → 1부
+    it: [10, 11],     // 🇮🇹 이탈리아 2부 → 1부
+    en: [2, 3],       // 🏴 잉글랜드 2부 → 1부 (옛 유로파·챔피언스리그 자리)
+  };
+  const ladderOf = (id) => {
+    for (const k of Object.keys(COUNTRY_TIERS)) if (COUNTRY_TIERS[k].includes(id)) return COUNTRY_TIERS[k];
+    return null;
+  };
   /* 승격 문턱. 순위만 보면 사다리가 죽어요 — 실측하니 내 승률 60%에서 시즌의 91.5%가
    * 1위였습니다. 팀 성적이 사실상 내 성적이라(내 골이 곧 팀 득점) 잘하는 선수는
    * 매 시즌 1위를 해요. 승점 차를 걸어도 75% 승률에서 98.8%라 소용이 없었어요.
@@ -311,8 +339,9 @@ window.WingerCareer = (() => {
     const rows = tableRows();
     if (rows.length < 3) return null;
     const rank = myTableRank();
-    const at = DOMESTIC_TIERS.indexOf(leagueOf(S).id);
-    if (at < 0) return null;                 // 유럽 무대는 승강제 밖이에요
+    const ladder = ladderOf(leagueOf(S).id);
+    if (!ladder) return null;                // 사다리에 없는 리그는 그대로 둬요
+    const at = ladder.indexOf(leagueOf(S).id);
 
     /* 정착 기간은 승격·강등 **둘 다**에 걸어요. 승격에만 걸면 데뷔 시즌에 강등당하는데,
      * 갓 입단한 선수의 첫 시즌이 그렇게 끝나는 건 이상하고, 지난 시즌 기록의 리그가
@@ -320,9 +349,9 @@ window.WingerCareer = (() => {
     const settled = S.leagueSince == null || (S.proYear - S.leagueSince) >= PROMO_SETTLE;
     if (!settled) return null;
 
-    /* 국내 최상위(K리그1)에서 1위면 올라갈 데가 없어요. 승격 대신 **리그 우승**이에요.
-     * 아무 일도 안 일어나면 1위를 해도 화면에 남는 게 없습니다. */
-    if (rank === 1 && at === DOMESTIC_TIERS.length - 1) {
+    /* 사다리 맨 위(K리그1 · 챔피언스리그)에서 1위면 올라갈 데가 없어요.
+     * 승격 대신 **리그 우승**이에요. 아무 일도 안 일어나면 1위를 해도 화면에 남는 게 없습니다. */
+    if (rank === 1 && at === ladder.length - 1) {
       S.trophies = S.trophies || [];
       const title = `${S.proYear}시즌 ${leagueOf(S).name} 우승`;
       if (!S.trophies.includes(title)) S.trophies.push(title);
@@ -330,10 +359,13 @@ window.WingerCareer = (() => {
     }
 
     let to = null, kind = null;
-    if (rank === 1 && at < DOMESTIC_TIERS.length - 1) {
+    if (rank === 1 && at < ladder.length - 1) {
       const me = rows[0], second = rows[1];
-      if (me.pts - (second ? second.pts : 0) >= PROMO_GAP) { to = DOMESTIC_TIERS[at + 1]; kind = "up"; }
-    } else if (rank === rows.length && at > 0) { to = DOMESTIC_TIERS[at - 1]; kind = "down"; }
+      if (me.pts - (second ? second.pts : 0) >= PROMO_GAP) { to = ladder[at + 1]; kind = "up"; }
+    } else if (rank === rows.length && at > 0) {
+      // 사다리 안에서만 내려가요. 맨 아래(K리그3 · 유로파)는 갈 데가 없어요.
+      to = ladder[at - 1]; kind = "down";
+    }
     if (to == null) return null;
 
     const from = leagueOf(S).name;
@@ -382,7 +414,8 @@ window.WingerCareer = (() => {
     $("pro-name").textContent = `${S.name} (${POS_INFO[S.pos].name})`;
     // 리그 이름을 함께 보여줘요 — 승격·강등하면 여기가 바뀌는 게 제일 먼저 눈에 띄어야 해요
     $("pro-team").textContent =
-      `${leagueOf(S).flag} ${S.group}${S.center ? " · 주장" : ""} · ${leagueOf(S).name} · ${S.proYear}시즌 · 종합 ${Math.round(overall())}`;
+      `${leagueOf(S).flag} ${S.group}${S.center ? " · 주장" : ""} · ${leagueOf(S).name}`
+      + `${traitOf(S).tag ? ` · ${traitOf(S).tag}` : ""} · ${S.proYear}시즌 · 종합 ${Math.round(overall())}`;
     $("pro-turn").textContent = S.activity
       ? `${cbLabel(S.activity.cb)} · R${S.activity.week}/${S.activity.weekTotal} · MOM ${S.activity.wins}회`
       : `시즌 준비 ${3 - S.camp}/3`;
@@ -504,16 +537,21 @@ window.WingerCareer = (() => {
         return;
       }
       const condMod = S.condition >= 70 ? 1.1 : S.condition >= 40 ? 1.0 : 0.6;
-      let gain = rand(1.8, 3.6) * S.talents[def.key] * yearMod * condMod;
+      /* 🌍 지금 뛰는 나라가 훈련에 얹혀요 — 🇯🇵는 전반적으로, 🇧🇷·🇮🇹는 잘 가르치는
+       * 능력치 하나에만. 어느 리그에 머물지가 수상 값어치만의 문제가 아니게 됩니다. */
+      const natMul = traitMul(S, "train") * traitFocusMul(S, def.key);
+      let gain = rand(1.8, 3.6) * S.talents[def.key] * yearMod * condMod * natMul;
       if (S.stats[def.key] >= 100) gain *= 0.5;
       gain = Math.round(gain * 10) / 10;
       S.stats[def.key] = clamp(S.stats[def.key] + gain, 0, statCap(def.key));
       S.condition = clamp(S.condition - randInt(10, 16), 0, 100);
-      proLog(`${def.emoji} ${def.name} 훈련 +${gain.toFixed(1)} (${Math.round(S.stats[def.key])})`);
+      const natTag = natMul > 1.01 ? ` ${leagueOf(S).flag}` : "";
+      proLog(`${def.emoji} ${def.name} 훈련 +${gain.toFixed(1)}${natTag} (${Math.round(S.stats[def.key])})`);
       actFx(def.key, "+" + gain.toFixed(1));
     } else {
-      S.condition = clamp(S.condition + randInt(25, 40), 0, 100);
-      proLog(`🛌 컨디션 회복 (${Math.round(S.condition)})`);
+      const heal = Math.round(randInt(25, 40) * traitMul(S, "rest"));
+      S.condition = clamp(S.condition + heal, 0, 100);
+      proLog(`🛌 컨디션 회복 +${heal}${traitMul(S, "rest") > 1.01 ? ` ${leagueOf(S).flag}` : ""} (${Math.round(S.condition)})`);
     }
     S.camp -= 1;
     save();
@@ -577,7 +615,18 @@ window.WingerCareer = (() => {
      * 기대치도 평점을 따라 움직여야 실력 좋은 선수가 이중으로 이득 보지 않아요. */
     const perfNow = clamp((rating - 5) / 4 + 0.6, 0.15, 1.6);
     const axisNow = posAxis({ goals: info.myGoals, assists: info.assists, defense: info.defense }, S.pos);
-    const doneBonus = (axisNow - 2.05 * perfNow) * 8;
+    /* 기대치를 넘은 쪽이 못 넘은 쪽보다 무겁게 실려요(AXIS_UP > AXIS_DOWN).
+     * 예전에는 배수가 8 하나라, 2골 2도움을 하고도 평점이 7.6밖에 안 올라
+     * "잘한 경기"가 화면에서 티가 안 났어요. 반대로 배수만 올리면 조용한 경기가
+     * 지나치게 깎여서(0골 4.73 → 4.07) 평범한 날이 재앙처럼 보입니다.
+     *
+     * 실측(공격수 능력치 75, 6만 경기):
+     *              0골     1골    2골2도움   평점평균
+     *   이전(×8)   4.73   5.54    7.57      5.91
+     *   지금       4.90   5.60    8.30      6.12   ← 못한 경기는 오히려 덜 가혹해요 */
+    const AXIS_UP = 12, AXIS_DOWN = 7;
+    const axisGap = axisNow - 2.05 * perfNow;
+    const doneBonus = axisGap >= 0 ? axisGap * AXIS_UP : axisGap * AXIS_DOWN;
     const resultBonus = info.res === "W" ? 3 : info.res === "L" ? -3 : 0;
     const myRankScore = rating * 10 + momAdj + doneBonus + resultBonus + rand(-4, 4);
     /* ⚠️ 순위표를 **먼저** 굴려요. 그래야 그 라운드에 각 클럽이 뭘 했는지가 나오고,
@@ -592,7 +641,7 @@ window.WingerCareer = (() => {
        * res는 그 라운드 소속 클럽의 결과예요. 내가 이긴 상대 팀의 라이벌은 같이 떨어져요. */
       ...act.rivals.map((r) => ({
         name: r.name, club: r.club, role: r.role, res: roundRes[r.club] || null,
-        score: r.pop + rand(-6, 6) + rivalResAdj(roundRes[r.club]),
+        score: 70 + (r.pop - 70) * RIVAL_POP_PULL + rand(-6, 6) + rivalResAdj(roundRes[r.club]),
       })),
     ].sort((a, b) => b.score - a.score);
     const rank = rows.findIndex((r) => r.me) + 1;
@@ -622,6 +671,8 @@ window.WingerCareer = (() => {
       dFan = randInt(-3, 3);
     }
     S.fandom = Math.max(0, (S.fandom || 0) + dFan);
+    // 🌍 나라 특색 — 🏴 잉글랜드는 돈이 도는 리그예요 (계약금에도 같은 배수가 붙어요)
+    pay = Math.round(pay * traitMul(S, "money"));
     S.money = (S.money || 0) + pay;
     /* ⚡ 실전 성장 — 낮은 확률로 경기에서 뭔가를 깨쳐요.
      * 훈련만으로 크는 게 아니라 경기가 선수를 키운다는 감각을 주려는 거예요.
@@ -705,11 +756,186 @@ window.WingerCareer = (() => {
     } else if (act.cb < act.cbTotal) {
       nextLabel = `⚽ ${cbLabel(act.cb + 1)} 준비하기`;
       nextFn = () => { S.camp = 3; save(); renderPrep(); show("screen-pro"); };
+    } else if (cupEntry()) {
+      /* 🏆 리그가 끝나면 컵이에요. 4위 안에 들어야 나갈 수 있어요 —
+       * 그래야 마지막 라운드가 5월의 평범한 경기와 달라집니다. */
+      nextLabel = `🏆 ${cupName()} 8강 진출!`;
+      nextFn = startCup;
     } else {
       nextLabel = "🏁 시즌 결산";
       nextFn = finishYear;
     }
     return { resultHTML, nextLabel, nextFn };
+  }
+
+  /* ---------- 🏆 컵 대회 ----------
+   *
+   * 리그 38라운드가 끝나면 바로 결산이라 시즌에 절정이 없었어요. 야구는 가을야구가
+   * 정규시즌 내내 목표가 되어 주는데, 축구는 리그 순위가 곧 끝이었습니다.
+   *
+   * 리그와 다른 점 둘:
+   *  · **1부와 2부가 같은 대진**이에요. 리그에서는 절대 안 만나는 조합이 나와요.
+   *  · **단판**이에요. 38경기에서는 묻히는 한 판 운이 여기서는 안 묻혀요.
+   *
+   * 참가는 **리그 4위 안**이에요. 전 팀이 나가면 리그 순위가 컵에 아무 영향을 안 줘서
+   * 시즌 중 긴장이 사라집니다. 못 들면 그냥 결산이에요 — 아쉬움도 같이 남겨요.
+   *
+   * 승부차기 실행은 cup.js(window.SoccerCup)에 있어요. 여기는 대진과 세이브만 봐요 —
+   * 세이브를 만지는 코드는 한곳에 모읍니다. */
+  const CUP_SPOTS = 4;                        // 리그마다 몇 위까지 나가나
+  const cupName = () => (window.SoccerCup ? SoccerCup.nameOf(leagueOf(S).country) : "컵 대회");
+  const cupRounds = () => (window.SoccerCup ? SoccerCup.ROUNDS : ["8강", "4강", "결승"]);
+
+  // 컵에 나갈 수 있나 — 리그 표가 있고 내 순위가 CUP_SPOTS 안이어야 해요
+  function cupEntry() {
+    if (!window.SoccerCup || !tableReady()) return false;
+    return myTableRank() <= CUP_SPOTS;
+  }
+
+  /* 대진 상대 — 내 나라의 **다른 리그**에서도 데려와요. 같은 리그 팀만 모으면
+   * 리그 경기와 상대가 똑같아서 컵이 그냥 3경기 더가 됩니다.
+   * 같은 나라 리그가 하나뿐이면(있을 수 있어요) 내 리그에서만 채워요. */
+  function cupField() {
+    const myLg = leagueOf(S);
+    const mates = (CLUBS[myLg.id] || []).filter((c) => c.name !== S.group);
+    const others = LEAGUES.filter((l) => l.country === myLg.country && l.id !== myLg.id);
+    const pool = others.flatMap((l) => (CLUBS[l.id] || []).map((c) => ({ ...c, lg: l })));
+    // 다른 리그에서는 전력 상위 CUP_SPOTS개 (그 리그의 상위권이 올라온다는 뜻이에요)
+    const up = pool.sort((a, b) => b.str - a.str).slice(0, CUP_SPOTS);
+    const mine = mates.sort((a, b) => b.str - a.str).slice(0, CUP_SPOTS - 1)
+      .map((c) => ({ ...c, lg: myLg }));
+    return shuffle(mine.concat(up));
+  }
+
+  function startCup() {
+    S.cup = { round: 0, name: cupName(), field: cupField().map((c) => ({ name: c.name, str: c.str, lg: c.lg.short })) };
+    save();
+    cupMatch();
+  }
+
+  // 이번 라운드 상대 하나를 뽑아요 (뽑힌 팀은 대진에서 빠져요)
+  function cupDraw() {
+    const f = S.cup.field;
+    if (!f.length) return null;
+    const i = Math.floor(Math.random() * f.length);
+    return f.splice(i, 1)[0];
+  }
+
+  function cupMatch() {
+    const rounds = cupRounds();
+    const opp = cupDraw();
+    if (!opp) { cupFinish(false); return; }
+    S.cup.opp = opp;
+    save();
+    $("stage-title").textContent = `🏆 ${S.cup.name} ${rounds[S.cup.round]}`;
+    $("stage-round").textContent = `${S.group} vs ${opp.name} (${opp.lg}) · 단판`;
+    show("screen-stage");
+
+    const rating = ratingOf(S.stats, S.pos, S.condition, S.fandom);
+    const c = matchContribution(rating);
+    /* 컵 상대는 그 팀 전력으로 실점을 잡아요. 리그 경기의 deriveOppGoals는
+     * 내 리그 평균을 기준으로 삼는데, 컵에서는 2부 팀도 1부 팀도 오니까요. */
+    const oppGoals = deriveOppGoals(rating, S.stats.defense) + (opp.str > clubStrOf(S) ? 1 : 0);
+    MatchSim.run({
+      home: S.group, away: opp.name, myName: S.name,
+      goals: c.g, assists: c.a, defense: c.def, oppGoals, rating,
+      finalize: (info) => cupFinalize(info, rating),
+    });
+  }
+
+  /* ⚠️ MatchSim.run의 finalize는 **{resultHTML, nextLabel, nextFn}을 돌려줘야** 해요.
+   * 처음엔 여기서 DOM을 직접 그리고 아무것도 안 돌려줬는데, MatchSim이
+   * out.resultHTML을 읽다가 그 자리에서 죽어 결과 화면이 통째로 안 나왔습니다.
+   * 리그 경기(proMatchFinalize)와 같은 모양을 지켜요. */
+  function cupFinalize(info, rating) {
+    const rounds = cupRounds();
+    const label = rounds[S.cup.round];
+    S.condition = clamp(S.condition - randInt(3, 6), 0, 100);
+    /* 컵 경기도 시즌 기록에 넣어요 — 안 넣으면 결승까지 가서 넣은 골이
+     * 연도별 표에서 사라져요. 평점 평균에도 같이 들어갑니다. */
+    const act = S.activity;
+    if (act) {
+      act.goals = (act.goals || 0) + info.myGoals;
+      act.assists = (act.assists || 0) + info.assists;
+      act.defense = (act.defense || 0) + info.defense;
+      act.apps = (act.apps || 0) + 1;
+      act.ratingSum = (act.ratingSum || 0) + clamp(rating, 1, 10);
+    }
+    save();
+    const head = `<div class="ms-final ${info.res === "W" ? "win" : info.res === "L" ? "lose" : ""}">`
+      + `${info.home} ${info.teamGoals} : ${info.oppGoals} ${info.away} · ${S.cup.name} ${label}</div>`
+      + `<div class="tour-vs"><span>${S.name}</span> · ⚽${info.myGoals} 🅰️${info.assists} 🛡️${info.defense}</div>`;
+
+    // 비기면 승부차기 — 컵은 단판이라 무승부가 없어요
+    if (info.res === "D") {
+      return {
+        resultHTML: head + `<div class="tour-line">비겼어요 — 승부차기로 갑니다</div><div id="pk-box"></div>`,
+        nextLabel: "⚽ 승부차기 시작",
+        nextFn: () => {
+          const btn = $("btn-stage-next");
+          if (btn) btn.hidden = true;
+          SoccerCup.shootout(document.getElementById("pk-box"), {
+            myName: S.group, oppName: S.cup.opp.name,
+            shoot: S.stats.shoot, oppStr: S.cup.opp.str,
+            onDone: (win) => { if (btn) btn.hidden = false; cupAdvance(win, head, true); },
+          });
+        },
+      };
+    }
+    return cupNext(info.res === "W", head, false);
+  }
+
+  /* 다음 화면을 정해요. 경기 직후에는 MatchSim에 돌려주고(cupFinalize),
+   * 승부차기 뒤에는 직접 그려요(cupAdvance) — 같은 계산을 두 군데서 안 하려고 나눴어요. */
+  function cupNext(win, head, viaPk) {
+    const rounds = cupRounds();
+    const label = rounds[S.cup.round];
+    const pk = viaPk ? " (승부차기)" : "";
+    if (!win) {
+      const money = 60 * (S.cup.round + 1);
+      S.money = (S.money || 0) + money;
+      S.cup = null;
+      save();
+      return {
+        resultHTML: head + `<div class="tour-line">💧 ${label}에서 탈락${pk}…</div>`
+          + `<div class="tour-pts">💰 대회 수당 +${money}만</div>`,
+        nextLabel: "🏁 시즌 결산", nextFn: finishYear,
+      };
+    }
+    S.cup.round += 1;
+    if (S.cup.round >= rounds.length) return cupWin(head, pk);
+    save();
+    return {
+      resultHTML: head + `<div class="tour-line">🎉 ${label} 통과${pk}!</div>`,
+      nextLabel: `🏆 ${rounds[S.cup.round]} 진출`, nextFn: cupMatch,
+    };
+  }
+
+  function cupWin(head, pk) {
+    const money = 900, fan = randInt(25, 45);
+    S.money = (S.money || 0) + money;
+    S.fandom = Math.max(0, (S.fandom || 0) + fan);
+    S.trophies = S.trophies || [];
+    const title = `${S.proYear}시즌 ${S.cup.name} 우승`;
+    if (!S.trophies.includes(title)) S.trophies.push(title);
+    const name = S.cup.name;
+    S.cup = null;
+    save();
+    if (window.Fx) Fx.celebrate("champion", `🏆 ${name} 우승!`);
+    return {
+      resultHTML: (head || "") + `<div class="tour-line">🏆 <b>${name} 우승!!</b>${pk || ""}</div>`
+        + `<div class="tour-pts">💰 우승 상금 +${money}만 · ⭐ 명성 +${fan}</div>`,
+      nextLabel: "🏁 시즌 결산", nextFn: finishYear,
+    };
+  }
+
+  // 승부차기가 끝난 뒤 — 직접 그려요 (MatchSim은 이미 끝났어요)
+  function cupAdvance(win, head, viaPk) {
+    const out = cupNext(win, head, viaPk);
+    const box = document.getElementById("stage-result") || $("stage-card");
+    box.innerHTML = out.resultHTML;
+    const btn = $("btn-stage-next");
+    if (btn) { btn.hidden = false; btn.disabled = false; btn.textContent = out.nextLabel; btn.onclick = out.nextFn; }
   }
 
   // ---------- 시즌 결산 ----------
@@ -1018,7 +1244,10 @@ window.WingerCareer = (() => {
    * 능력치로 환산하면 51 → 61 → 69 → 88로 단조 증가해요. 하부에서 위로 가는 게
    * K리그1에서 유로파로 가는 것보다 확실히 쉽다는 뜻이고, tests/soccer/promote-test.js가
    * 이 순서를 지킵니다. 위쪽 둘(5.5·6.5)은 이적 작업에서 잡은 값 그대로예요. */
-  const PROMOTE_HYPE = { 5: 0, 4: 2.5, 1: 4.5, 2: 5.5, 3: 6.5 };
+  /* 리그 11개로 늘면서 칸을 촘촘히 나눴어요. tier 순으로 단조 증가해야 하고,
+   * 양 끝(한국 3부 0 · 잉글랜드 1부 6.5)은 예전 값 그대로 둡니다 —
+   * 사다리 전체의 길이가 안 변해야 지금까지 잡아 둔 곡선이 안 흔들려요. */
+  const PROMOTE_HYPE = { 5: 0, 4: 2.5, 1: 4.5, 6: 5.45, 8: 5.6, 7: 5.75, 9: 5.9, 10: 6.05, 2: 6.2, 11: 6.35, 3: 6.5 };
   const OFFERS_PER_LEAGUE = 2;               // 리그마다 제안 수
 
   /* 계약금 — 리그 격과 클럽 전력에서 뽑아요. 격은 거듭제곱(FEE_PRESTIGE_POW)으로 실어요.
@@ -1035,6 +1264,11 @@ window.WingerCareer = (() => {
    * 이 셋이 다 있어야 막혀요. 돌아가는 이적만 0으로 하면 6개 클럽을 한 바퀴 도는
    * 우회로가 남고, 감가만 걸면 왕복이 여전히 조금씩 벌어요. */
   const DOWNGRADE_FEE = 0.3;   // 리그를 한 단계 내려갈 때마다 곱해요
+  /* 낙폭에 상한을 둬요. 리그가 5개에서 11개로 늘면서 tier 차가 최대 10이 됐고,
+   * 0.3^10은 0.0000059라 계약금이 통째로 0원이 됩니다("계약금 없음"으로 찍혀요).
+   * 한 단계 0.3은 그대로 두되(하향 이적은 확실히 손해여야 해요), 세 단계에서 멈춰요 —
+   * 0.3^3 = 0.027이면 이미 충분히 아프고, 그 아래는 0과 구별이 안 돼요. */
+  const DOWNGRADE_MAX = 3;
   const LOYALTY_FEE = 0.75;    // 지금까지 한 이적 횟수만큼 거듭제곱으로 곱해요
 
   /* 리그격을 몇 제곱으로 실을지예요. 원래 세제곱이었는데 제곱으로 낮췄어요.
@@ -1066,7 +1300,12 @@ window.WingerCareer = (() => {
     /* 낙폭은 tier로 봐요. id는 옛 세이브가 가리키는 값이라 순서와 무관해요 —
      * id로 빼면 K리그1(id 1)에서 K리그3(id 5)으로 내려가는 게 drop 0이 돼서
      * 하향 이적인데도 계약금이 한 푼도 안 깎여요. */
-    const drop = Math.max(0, leagueOf(state).tier - league.tier);
+    const drop = Math.min(DOWNGRADE_MAX, Math.max(0, leagueOf(state).tier - league.tier));
+    /* ⚠️ 나라 특색(🏴 수입 +35%)은 여기 안 겁니다. 계약금은 낙폭·재이적·감가
+     * 세 브레이크로 조심스럽게 잡아 둔 자리고, tests/soccer/fee-test.js가
+     * "리그격을 정확히 2제곱으로 싣는가"로 폭주를 막고 있어요. 여기에 곱셈을
+     * 하나 더 얹으면 그 측정이 2.34제곱으로 읽혀 가드가 흐려집니다.
+     * 🏴의 수입 특색은 매 경기 수당에만 붙어요 — 그쪽이 브레이크가 없는 자리예요. */
     const base = club.str * club.str * FEE_BASE * Math.pow(league.prestige, FEE_PRESTIGE_POW);
     return Math.round(
       (base * Math.pow(DOWNGRADE_FEE, drop) * Math.pow(LOYALTY_FEE, moves.length)) / 10
@@ -1120,7 +1359,11 @@ window.WingerCareer = (() => {
     const pen = lg.penalty > 0 ? `평점 -${lg.penalty.toFixed(1)}` : "평점 그대로";
     const note = lg.penalty > 0 ? " · 버티면 값어치가 커요"
       : lg.prestige < 1 ? " · 상은 쉬워도 값어치가 작아요" : "";
-    return `${pen} · 수상 가치 ×${lg.prestige.toFixed(2)}${note}`;
+    /* 🌍 나라 특색도 카드에 적어요. 안 적으면 "왜 이 리그에 머물지"를 화면에서
+     * 알 방법이 없어서, 결국 수상 값어치 하나만 보고 고르게 됩니다. */
+    const t = COUNTRY_TRAIT[lg.country];
+    const nat = t && t.tag ? ` · ${t.tag}` : "";
+    return `${pen} · 수상 가치 ×${lg.prestige.toFixed(2)}${note}${nat}`;
   };
 
   // 리그는 언제나 tier 순으로 늘어놔요 — 화면이 곧 사다리라야 위아래가 읽혀요.
@@ -1621,6 +1864,10 @@ window.WingerCareer = (() => {
     showHof,
     showBattle,
     showActivity: () => {
+      /* 🏆 컵을 치르던 중에 앱을 닫았으면 거기서 이어요. 이 줄이 없으면
+       * 남은 라운드가 통째로 사라지고 트로피도 못 받아요 — 컵은 시즌 끝의
+       * 세 판이라 중간에 끊기면 그 시즌이 그냥 없어진 것처럼 보입니다. */
+      if (S.cup && window.SoccerCup) { cupMatch(); return; }
       if (S.camp > 0 || S.activity || S.pendingShow) { renderPrep(); show("screen-pro"); }
       else if (S.career && S.career.years.length) yearReport();
       else { renderPrep(); show("screen-pro"); }
@@ -1630,6 +1877,7 @@ window.WingerCareer = (() => {
     _t: {
       ratingOf, FAN_CAP, RATING_DIV, POS_AXIS, posAxis, AXIS_K, AXIS_OFF,
       LEAGUES, leagueOf, barOf, CLUBS, clubStrOf, debutClubs, DEBUT_POOL, weakestClub,
+      cupEntry, cupName, CUP_SPOTS, myTableRank,
       TRANSFER_MIN_YEAR, PROMOTE_HYPE, OFFERS_PER_LEAGUE, transferFee, transferOffers, canTransfer,
       DOWNGRADE_FEE, LOYALTY_FEE, leftBefore, moveLog, careerScore, shortClub, clubCell,
       clubOfYear, fillClubs,
