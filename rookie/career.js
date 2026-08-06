@@ -1146,7 +1146,9 @@ window.Career = (() => {
      * league는 나중에 생긴 필드라 옛 기록에는 없어요. 그건 읽는 쪽(playedAt)이 S.moves에서
      * 역산해 메워요 — 세이브는 고치지 않아요(클라우드 동기화와 부딪혀요). */
     S.career.seasons.push({ y: S.proYear, age: S.age, war, line, rank, champ, awards, role: S.role, team: S.team, league: S.league, raw });
-    if (window.Stats) Stats.log("season_end", { y: S.proYear, war, rank, champ });
+    /* 어느 리그에서 뛴 시즌인지 남겨요 — 해외 진출(열도·대륙)이 실제로 쓰이는지
+     * 데이터가 없었어요. 축구도 같은 이유로 year_end에 lg를 붙였습니다. */
+    if (window.Stats) Stats.log("season_end", { y: S.proYear, war, rank, champ, lg: leagueOf(S).id });
 
     for (const d of STAT_DEFS[S.pos]) {
       if (S.age <= 25) S.stats[d.key] = clamp(S.stats[d.key] + rand(0, 1.2) * S.talents[d.key], 0, statCap(d.key));
@@ -2157,7 +2159,8 @@ window.Career = (() => {
     hof.push(entry);
     saveHof(hof);
     if (window.Match) window.Match.submitHof("rookie", entry);
-    if (window.Stats) Stats.log("retire", { seasons: entry.seasons, war: entry.warSum, score: entry.score });
+    // 마지막 리그를 남겨요 — "어디까지 갔나" 분포를 보려면 이게 있어야 해요
+    if (window.Stats) Stats.log("retire", { seasons: entry.seasons, war: entry.warSum, score: entry.score, lg: leagueOf(S).id });
     clearSave();
     if (window.Cloud) Cloud.mark();
 

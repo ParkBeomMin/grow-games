@@ -327,26 +327,32 @@ window.Career = (() => {
       others: leagueTeams().filter((t) => t !== S.team).map((name) => ({ name, w: 0, l: 0, str: teamStrOf(name) })),
       stats: S.pos === "batter" ? { ab: 0, hits: 0, hr: 0, sb: 0 } : { ip: 0, k: 0, er: 0, wins: 0, saves: 0, g: 0 },
     };
-    S.season.titleBar = makeTitleBar();   // 🏅 올해 1등 기준선 — 시즌 내내 이 선과 겨뤄요
+    S.season.titleBar = makeTitleBar();       // 🏅 올해 1등 기준선 — 시즌 내내 이 선과 겨뤄요
+    S.season.titleLead = makeTitleLeaders();  // 각 타이틀의 라이벌 이름 (현재 1위 표시용)
     save();
   }
 
-  /* 🏅 타이틀 레이스 — 프로 화면 순위표 아래에 붙어요. 현재 기록과, 이 페이스로 갔을 때의
-   * 시즌 끝 예상, 1등 기준선을 나란히 놓아 "지금 몇 등 싸움인지"를 보여줘요. */
+  /* 🏅 타이틀 레이스 — 프로 화면 순위표 아래에 붙어요. 내 현재 기록과 **현재 1위가
+   * 누구고 수치가 얼마인지**를 나란히 놓아, 사람 대 사람의 경쟁으로 보여줘요.
+   * 라이벌의 '지금 수치'는 그 종목 1등선을 향한 페이스로 잡아요(누적은 경기 비례, 비율은
+   * 시즌 내내 일정). 내가 라이벌의 지금 수치를 앞서면 🥇 — 그 순간 1위가 나예요. */
   function titleRaceHTML() {
     const bar = S.season && S.season.titleBar;
+    const lead = (S.season && S.season.titleLead) || {};
     const mine = myTitles();
     if (!bar || !mine.length) return "";
     const g = S.season.game || 0, tot = S.season.total || 144;
     const fmt = (m, x) => (m === "avg" ? x.toFixed(3) : m === "era" ? x.toFixed(2) : Math.round(x));
     const rows = mine.map(([, t]) => {
-      const v = titleMetric(S.season.stats, t.metric), b = bar[t.metric];
-      // 누적 스탯은 남은 경기만큼 투영, 비율은 그대로
-      const proj = (t.metric === "avg" || t.metric === "era") ? v : (g > 0 ? v / g * tot : 0);
-      const lead = t.higher ? proj >= b : (proj <= b && proj > 0);
-      return `<tr class="${lead ? "title-lead" : ""}"><td>${t.emoji} ${t.name}</td><td>${fmt(t.metric, v)}</td><td>${g > 0 ? fmt(t.metric, proj) : "-"}</td><td>${fmt(t.metric, b)}</td><td>${lead ? "🥇" : ""}</td></tr>`;
+      const my = titleMetric(S.season.stats, t.metric), b = bar[t.metric];
+      const rate = (t.metric === "avg" || t.metric === "era");
+      const rivalNow = rate ? b : (g > 0 ? b * g / tot : 0);   // 라이벌의 '지금' 수치
+      const iLead = t.higher ? my >= rivalNow : (my <= rivalNow && my > 0);
+      const who = iLead ? "나" : (lead[t.metric] || "리그 선두");
+      const val = iLead ? my : rivalNow;
+      return `<tr class="${iLead ? "title-lead" : ""}"><td>${t.emoji} ${t.name}</td><td>${fmt(t.metric, my)}</td><td>${iLead ? "🥇 " : ""}${who} ${fmt(t.metric, val)}</td><td>${fmt(t.metric, b)}</td></tr>`;
     }).join("");
-    return `<table class="rank-table title-race"><thead><tr><th>🏅 타이틀</th><th>현재</th><th>예상</th><th>1등선</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
+    return `<table class="rank-table title-race"><thead><tr><th>🏅 타이틀</th><th>내 기록</th><th>현재 1위</th><th>1등선</th></tr></thead><tbody>${rows}</tbody></table>`;
   }
 
   function standingsHTML() {
@@ -1128,6 +1134,15 @@ window.Career = (() => {
       era: +minOf(2.3, 3.1).toFixed(2), saves: Math.round(maxOf(34, 44) * k),
     };
   }
+  /* 각 타이틀의 '현재 1위' 라이벌 이름. 시즌마다·종목마다 하나씩 붙여 레이스가 사람
+   * 대 사람으로 보이게 해요. **난수를 안 써요**(연차·종목으로 정해요) — 시즌 초 난수
+   * 소비를 바꾸면 밸런스 시뮬이 흔들리니까요. 자기 완결이라 game.js 이름표에 안 기대요. */
+  const RIVAL_NAMES = ["강태풍", "이대포", "박홈런", "최강속", "정교타", "김일발", "윤노히", "장수호", "임쾌속", "조폭투", "한방망", "서수문"];
+  function makeTitleLeaders() {
+    const out = {}; const y = S.proYear || 1;
+    Object.keys(TITLES).forEach((m, i) => { out[m] = RIVAL_NAMES[(y * 5 + i * 7) % RIVAL_NAMES.length]; });
+    return out;
+  }
   const titleMetric = (st, m) => (m === "avg" ? (st.hits || 0) / Math.max(st.ab || 0, 1)
     : m === "era" ? ((st.er || 0) * 9) / Math.max(st.ip || 0, 1) : (st[m] || 0));
   const myTitles = () => Object.entries(TITLES).filter(([, t]) => t.pos === S.pos && (!t.role || t.role === S.role));
@@ -1332,7 +1347,9 @@ window.Career = (() => {
     S.career.seasons.push({ y: S.proYear, age: S.age, war, line, rank, champ, awards, titles: wonTitles.map((w) => w.id), role: S.role, team: S.team, league: S.league, raw });
     const gotMiles = newMilestones(mileBefore, careerCounts(S.career.seasons), S.proYear);
     if (gotMiles.length) S.career.miles = (S.career.miles || []).concat(gotMiles);
-    if (window.Stats) Stats.log("season_end", { y: S.proYear, war, rank, champ });
+    /* 어느 리그에서 뛴 시즌인지 남겨요 — 해외 진출(열도·대륙)이 실제로 쓰이는지
+     * 데이터가 없었어요. 축구도 같은 이유로 year_end에 lg를 붙였습니다. */
+    if (window.Stats) Stats.log("season_end", { y: S.proYear, war, rank, champ, lg: leagueOf(S).id });
 
     for (const d of STAT_DEFS[S.pos]) {
       if (S.age <= 25) S.stats[d.key] = clamp(S.stats[d.key] + rand(0, 1.2) * S.talents[d.key], 0, statCap(d.key));
@@ -2359,7 +2376,8 @@ window.Career = (() => {
     hof.push(entry);
     saveHof(hof);
     if (window.Match) window.Match.submitHof("rookie", entry);
-    if (window.Stats) Stats.log("retire", { seasons: entry.seasons, war: entry.warSum, score: entry.score });
+    // 마지막 리그를 남겨요 — "어디까지 갔나" 분포를 보려면 이게 있어야 해요
+    if (window.Stats) Stats.log("retire", { seasons: entry.seasons, war: entry.warSum, score: entry.score, lg: leagueOf(S).id });
     clearSave();
     if (window.Cloud) Cloud.mark();
 
@@ -2652,6 +2670,8 @@ window.Career = (() => {
     // renderPro로 고정돼 있으면 경기 시작 버튼이 사라지고 훈련 버튼이 살아나요.
     refreshPro: () => (inPost() ? renderPost() : renderPro()),
     showSeasonReport: seasonReport,
+    // 🏛️ 통산 기록 블록 — 결산뿐 아니라 상시 접근하는 📊 기록 화면(game.js)에서도 그려요
+    milestoneHTML,
     // 테스트에서 내부 계산을 들여다보기 위한 창구예요 (게임 로직은 이걸 쓰지 않아요)
     _internals: { marketValue, teamWinP, teamStrOf, faOffers },
     /* 리그 관련 창구예요. 시리즈의 다른 게임(⚽ 축구)이 `_t`로 통일돼 있어서

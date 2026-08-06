@@ -35,6 +35,13 @@ const parts = {
   alias: grab(/const CHOICE_ALIAS = \{[\s\S]*?\n    \};/),
   norm: grab(/const normChoice = [^;]+;/),
   pos: grab(/const POS = \{[^}]*\};/),
+  lgName: grab(/const LEAGUE_NAME = \{[\s\S]*?\n    \};/),
+  lgOrder: grab(/const LEAGUE_ORDER = \{[\s\S]*?\n    \};/),
+  lgSec: grab(/function leagueSection\(rows, game\) \{[\s\S]*?\n    \}/),
+  bar: grab(/const bar = \(label, val, max, cls = ""\) =>[\s\S]*?<\/div>`;/),
+  /* ⚠️ `[^;]+;`로 자르면 안 돼요 — "&amp;" 안의 세미콜론에서 끊깁니다.
+   * 문자열 안에 구분자가 들어 있는 흔한 자리예요. 끝나는 모양으로 잡습니다. */
+  esc: grab(/const esc = \(s\) => String\(s\)[\s\S]*?\}\[c\]\)\);/),
 };
 const missing = Object.entries(parts).filter(([, v]) => !v).map(([k]) => k);
 if (missing.length) { console.log(`❌ 소스에서 못 찾았어요: ${missing.join(", ")}`); process.exit(1); }
@@ -197,6 +204,38 @@ check(noOrder.length === 0, `이벤트마다 표시 순서가 있다 (빠진 것
 // 순서에만 있고 실제로는 안 남기는 것도 짚어 준다 (지운 기능의 잔재)
 const stale = ORDER.filter((e) => !logged.has(e));
 check(stale.length === 0, `쓰지 않는 이벤트가 표에 남아 있지 않다 (${stale.join(" · ") || "없음"})`);
+
+/* ── ⑨ 리그 분포 — "어디까지 갔나"가 사다리 순서로 읽히는가
+ *
+ * 많은 순으로 그리면 사다리가 안 보인다. 아래에서 위로 놓아야
+ * "어디서 막혔나"가 한눈에 읽힌다.
+ * 그리고 리그를 **id로** 잡아야 한다 — 이름을 키로 쓰면 리그명을 바꿀 때마다
+ * 통계가 갈라진다(유스에서 이미 겪었다). */
+const leagueHtml = new Function("rows", "game", `
+  ${parts.pct} ${parts.fmt} ${parts.esc} ${parts.bar}
+  ${parts.lgName} ${parts.lgOrder} ${parts.lgSec}
+  return leagueSection(rows, game);`);
+const LG_NAME = new Function(`${parts.lgName} return LEAGUE_NAME;`)();
+const LG_ORDER = new Function(`${parts.lgOrder} return LEAGUE_ORDER;`)();
+
+for (const g of Object.keys(LG_ORDER)) {
+  const ids = LG_ORDER[g], named = Object.keys(LG_NAME[g] || {}).map(Number);
+  check(ids.every((id) => LG_NAME[g][id]), `${g}: 사다리의 모든 리그에 이름이 있다`);
+  check(named.every((id) => ids.includes(id)), `${g}: 이름 있는 리그가 모두 사다리에 있다`);
+  check(new Set(ids).size === ids.length, `${g}: 사다리에 중복이 없다`);
+}
+// 사다리 순서대로 그려지는가 — 많은 순이 아니라
+const lgRows = [[5, 40], [1, 180], [3, 12]].flatMap(([lg, n]) =>
+  [{ game: "soccer", event: "year_end", lg, n }, { game: "soccer", event: "retire", lg, n: Math.ceil(n / 10) }]);
+const lgOut = strip(leagueHtml(lgRows, "soccer"));
+const iK3 = lgOut.indexOf("K리그3"), iK1 = lgOut.indexOf("K리그1"), iPL = lgOut.indexOf("프리미어리그");
+check(iK3 < iK1 && iK1 < iPL,
+  `많은 순이 아니라 사다리 순으로 그린다 (K리그3 → K리그1 → 프리미어리그, K리그1이 가장 많은데도)`);
+check(/가장 높이 간 리그는 .*프리미어리그/.test(lgOut), "가장 높이 간 리그를 짚어 준다");
+// 뷰가 아직 없어도 화면이 안 깨진다
+check(leagueHtml([], "soccer") === "" && leagueHtml(null, "soccer") === "",
+  "리그 뷰가 없으면 조용히 아무것도 안 그린다 (SQL을 아직 안 돌렸을 수 있어요)");
+check(leagueHtml(lgRows, "idol") === "", "리그가 없는 게임에서는 안 그린다");
 
 /* ── 변이 검증 — 표본 문턱을 0으로 내리면 ①이 무너져야 한다.
  * 안 잡히면 위의 초록불은 아무것도 안 지키고 있는 것이다. */

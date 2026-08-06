@@ -193,6 +193,64 @@
       return html;
     }
 
+    /* 🌍 리그 이름 — 게임 소스의 LEAGUES와 **id로** 맞춰요.
+     * 이름을 키로 쓰면 리그 이름을 바꿀 때마다 통계가 갈라져요(유스에서 겪었어요).
+     * id는 옛 세이브가 가리키는 값이라 안 바뀝니다. */
+    const LEAGUE_NAME = {
+      soccer: {
+        5: "🇰🇷 K리그3", 4: "🇰🇷 K리그2", 1: "🇰🇷 K리그1",
+        6: "🇯🇵 J2리그", 7: "🇯🇵 J1리그",
+        8: "🇧🇷 브라질 세리에B", 9: "🇧🇷 브라질 세리에A",
+        10: "🇮🇹 세리에B", 11: "🇮🇹 세리에A",
+        2: "🇬🇧 챔피언십", 3: "🇬🇧 프리미어리그",
+      },
+      rookie: { 1: "🇰🇷 KBO", 2: "🇯🇵 열도 리그", 3: "🗽 대륙 리그" },
+    };
+    /* 사다리 순서 — 위로 갈수록 어려운 리그예요. 표를 이 순서로 그려야
+     * "어디까지 올라갔나"가 한눈에 읽혀요(많은 순으로 그리면 사다리가 안 보여요). */
+    const LEAGUE_ORDER = {
+      soccer: [5, 4, 1, 6, 8, 7, 9, 10, 2, 11, 3],
+      rookie: [1, 2, 3],
+    };
+
+    /* 어느 리그에서 뛰었나(시즌 수) · 어디까지 갔나(은퇴 시점 리그).
+     * 뷰가 없으면 아무것도 안 그려요 — 설정 안내는 전체 화면이 맡아요. */
+    function leagueSection(rows, game) {
+      const names = LEAGUE_NAME[game];
+      if (!rows || !names) return "";
+      const mine = rows.filter((r) => r.game === game && names[r.lg]);
+      if (!mine.length) return "";
+      const order = LEAGUE_ORDER[game] || Object.keys(names).map(Number);
+
+      const pickBy = (evs) => {
+        const agg = {};
+        for (const r of mine) if (evs.includes(r.event)) agg[r.lg] = (agg[r.lg] || 0) + r.n;
+        return agg;
+      };
+      const seasons = pickBy(["year_end", "season_end"]);
+      const ends = pickBy(["retire"]);
+
+      let html = "";
+      const sTotal = Object.values(seasons).reduce((a, b) => a + b, 0);
+      if (sTotal) {
+        const max = Math.max(...Object.values(seasons));
+        html += `<section><h2>🌍 어느 리그에서 뛰었나</h2>${
+          order.filter((id) => seasons[id]).map((id) =>
+            bar(`${names[id]} ${fmtPct(pct(seasons[id], sTotal))}`, seasons[id], max)).join("")
+        }<p class="ins-note">치른 시즌 수예요. 사다리 아래에서 위 순서로 놓았어요 — 총 ${sTotal.toLocaleString()}시즌</p></section>`;
+      }
+      const eTotal = Object.values(ends).reduce((a, b) => a + b, 0);
+      if (eTotal) {
+        const max = Math.max(...Object.values(ends));
+        const top = order.filter((id) => ends[id]);
+        const highest = top[top.length - 1];
+        html += `<section><h2>🏁 어디까지 갔나 (은퇴 시점)</h2>${
+          top.map((id) => bar(`${names[id]} ${fmtPct(pct(ends[id], eTotal))}`, ends[id], max)).join("")
+        }<p class="ins-note">은퇴한 ${eTotal.toLocaleString()}명 기준. 가장 높이 간 리그는 <b>${names[highest]}</b>예요.</p></section>`;
+      }
+      return html;
+    }
+
     // 퍼널 막대의 표시 순서예요.
     /* 커리어가 흘러가는 순서예요 — 방문 → 시작 → 유스 → 데뷔 → 시즌 → 은퇴.
      * 여기 없는 이벤트는 맨 앞으로 밀리니 새로 남길 때 꼭 끼워 넣어요. */
@@ -470,7 +528,15 @@ create or replace view public.stats_daily as
     count(*) filter (where event = 'new_player') as new_players
   from public.events group by 1, 2;
 
-grant select on public.stats_summary, public.stats_choices, public.stats_daily to anon;`;
+-- 🌍 리그 분포 — 어느 리그에서 몇 시즌을 뛰었고, 어디까지 갔나
+create or replace view public.stats_league as
+  select game, event, (data->>'lg')::int lg,
+    count(*)::int n, count(distinct player)::int players
+  from public.events
+  where event in ('year_end', 'season_end', 'retire') and data ? 'lg'
+  group by 1, 2, 3;
+
+grant select on public.stats_summary, public.stats_choices, public.stats_daily, public.stats_league to anon;`;
 
     function setupCard(msg) {
       return `<section class="setup"><h2>⚙️ 통계 뷰 설정이 필요해요</h2>
@@ -547,6 +613,7 @@ grant select on public.stats_summary, public.stats_choices, public.stats_daily t
       const game = activeGame;
       const parts = [
         insightSection(STATE, game),
+        leagueSection(STATE.league, game),
         dailySection(STATE.daily, game),
         choiceSection(STATE.choices, game),
         game === "unicorn" ? unicornSection(STATE.hofRows) : "",
@@ -566,6 +633,10 @@ grant select on public.stats_summary, public.stats_choices, public.stats_daily t
       try { summary = await getView("stats_summary"); } catch { failed = true; }
       try { choices = await getView("stats_choices"); } catch { failed = true; }
       try { daily = await getView("stats_daily"); } catch { failed = true; }
+      /* 🌍 리그 뷰는 **없어도 넘어가요.** 나중에 붙인 뷰라 SQL을 아직 안 돌렸을 수
+       * 있어요 — 여기서 failed로 잡으면 멀쩡한 화면 전체가 "설정이 필요해요"로 덮여요. */
+      let league = [];
+      try { league = await getView("stats_league"); } catch { league = []; }
       const hofRows = await getHof();
       let hofTotal = null, hofByGame = null;
       if (hofRows) {
@@ -587,7 +658,7 @@ grant select on public.stats_summary, public.stats_choices, public.stats_daily t
         return;
       }
 
-      STATE = { summary, choices: choices || [], daily: daily || [], hofRows, hofByGame, hofTotal };
+      STATE = { summary, choices: choices || [], daily: daily || [], league: league || [], hofRows, hofByGame, hofTotal };
       // 새로고침일 땐 보던 탭을 유지하고, 첫 진입이면 해시에서 읽어요.
       activeGame = activeGame || gameFromHash();
 
