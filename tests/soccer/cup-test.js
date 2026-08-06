@@ -91,9 +91,17 @@ function resume(P) {
 
 /* 컵을 끝까지 누른다. 어떤 경로로 끝나든 결산(screen-career)에 닿아야 한다. */
 function runCup(P) {
-  const seen = { pk: 0, rounds: [], reachedCareer: false };
+  const seen = { pk: 0, rounds: [], reachedCareer: false, prepTurns: 0 };
   for (let g = 0; g < 400; g++) {
     if (P.active() === "screen-career") { seen.reachedCareer = true; break; }
+    /* 🏆 8강 전 준비 화면. 예전에는 리그 마지막 경기에서 버튼 하나로 바로 8강이라
+     * 컨디션이 바닥인 채로 단판 토너먼트에 들어갔어요. 준비 턴을 다 쓰면 컵이 시작돼요. */
+    if (P.active() === "screen-pro") {
+      const acts = Array.from(P.w.document.querySelectorAll("#pro-actions .action-btn"))
+        .filter((b) => !b.disabled && b.dataset.key && !b.classList.contains("awaken-act"));
+      if (!acts.length) break;
+      acts[0].click(); seen.prepTurns += 1; continue;
+    }
     if (P.active() !== "screen-stage") break;
     // 승부차기가 떠 있으면 버튼을 눌러 진행한다 (auto-mini라 방향은 자동으로 골라져요)
     const pkBox = P.w.document.getElementById("pk-box");
@@ -104,6 +112,7 @@ function runCup(P) {
     const t = (btn.textContent || "").trim();
 
     if (/진출|결산|받아들이기|다음 라운드/.test(t)) seen.rounds.push(t);
+    if (!seen.field) { const st = P.state(); if (st.cup && st.cup.field) seen.field = st.cup.field.slice(); }
     btn.click();
   }
   return seen;
@@ -115,18 +124,13 @@ const first = resume(P);
 /* 컵을 치르던 중에 앱을 닫았다가 다시 연 상황이다. 이어하기로 들어가면
  * 바로 그 라운드 경기가 이어져야 한다 — 이 배선이 없으면 남은 라운드가 통째로
  * 사라지고 트로피도 못 받는다(리그 종료 전환은 버튼에만 걸려 있고 세이브엔 안 남는다). */
-check(first === "screen-stage", `이어하기로 들어가면 컵 경기가 이어진다 (${first})`);
+check(first === "screen-pro", `이어하기로 들어가면 컵 준비 화면이다 (${first})`);
 
 const S0 = P.state();
-check(!!S0.cup, "세이브에 진행 중인 컵이 남아 있다");
-check(!!S0.cup && Array.isArray(S0.cup.field), `대진이 뽑혀 있다 (남은 상대 ${S0.cup ? S0.cup.field.length : "?"}팀)`);
-
-/* 대진에 **다른 리그** 팀이 섞여 있어야 한다 — 같은 리그만 모으면 컵이
- * 그냥 3경기 더가 된다. 자이언트 킬링이 컵의 전부다. */
-const myShort = P.w.__get("leagueOf")(S0).short;
-const others = (S0.cup.field || []).filter((c) => c.lg !== myShort);
-check(others.length > 0,
-  `대진에 다른 리그 팀이 섞여 있다 (${(S0.cup.field || []).map((c) => `${c.name}(${c.lg})`).join(" · ")})`);
+check(!!S0.cupPrep, "컵 준비 중이라는 표시가 세이브에 남아 있다");
+check((S0.camp || 0) > 0, `8강 전에 훈련·휴식 턴이 있다 (${S0.camp}회) — 리그 마지막 경기 직후라 컨디션이 바닥이에요`);
+const title = (P.$("pro-camp-title") || {}).textContent || "";
+check(/컵|8강/.test(title), `준비 화면이 무엇을 앞두고 있는지 말한다 (${title.trim()})`);
 
 /* ⚠️ P.state()는 **살아 있는 S**를 돌려줘요. S0을 들고 있어도 컵을 굴리면 같이 바뀝니다 —
  * 처음엔 S0.money와 S1.money를 비교했는데 둘이 같은 값이라 늘 통과했어요. 값으로 떠 둡니다. */
@@ -136,7 +140,18 @@ const fandomBefore = S0.fandom || 0;
 const run = runCup(P);
 const S1 = P.state();
 
-console.log(`   눌러 간 버튼: ${run.rounds.join(" → ")}`);
+console.log(`   준비 ${run.prepTurns}턴 → 눌러 간 버튼: ${run.rounds.join(" → ")}`);
+check(run.prepTurns > 0, `준비 턴을 실제로 쓴다 (${run.prepTurns}회)`);
+
+/* 대진에 **다른 리그** 팀이 섞여 있어야 한다 — 같은 리그만 모으면 컵이
+ * 그냥 3경기 더가 된다. 자이언트 킬링이 컵의 전부다.
+ * 그리고 한 리그로 쏠리면 안 된다 — 하부에 있을수록 최상위 강팀만 만나면 벽이다. */
+const drawn = run.field || [];
+if (drawn.length) {
+  const lgs = [...new Set(drawn.map((c) => c.lg))];
+  console.log(`   대진: ${drawn.map((c) => `${c.name}(${c.lg})`).join(" · ")}`);
+  check(lgs.length >= 2, `대진에 여러 리그가 섞인다 (${lgs.join(" · ")})`);
+}
 check(run.rounds.length > 0, `컵 경기를 실제로 치렀다 (${run.rounds.length}단계)`);
 check(run.reachedCareer, "어떤 경로로 끝나든 결산 화면에 닿는다 (게임이 안 멈춘다)");
 check(!S1.cup, "끝나면 진행 중인 컵이 세이브에서 치워진다");

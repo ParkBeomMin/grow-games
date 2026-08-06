@@ -527,6 +527,59 @@ function makeSoccerCup() {
   log("  ❌ 조건에 맞는 상태를 못 만들었어요 (컵 대회)");
 }
 
+/* 🎓 유스 라운드 판정 근거 — "왜 떨어졌는지"를 보는 자리.
+ *
+ * 5:3으로 이기고 평점 A에 4골 1도움인데 탈락한 제보가 있었어요. 확률 판정이라
+ * 일어날 수 있는 일인데(그 경기는 75%였어요) 화면에 근거가 없어 버그로 읽혔습니다.
+ * 이제 결과 아래에 📊 통과 확률과 가장 크게 민 것/깎은 것이 붙어요.
+ *
+ * **프로 도전 직전**에서 멈춥니다 — 도전을 누르면 4라운드가 이어지고, 라운드마다
+ * 그 줄이 뜹니다. 판정이 확률이라 통과도 탈락도 다 볼 수 있게 능력치를 중간에
+ * 두고, 그 상태에서 1라운드 확률이 얼마인지 실제로 재서 적어 둬요. */
+function makeSoccerJudge() {
+  log("🎓 ⑩ 유스 라운드 판정 근거 — 프로 도전 직전");
+  for (const seed of seeds(14)) {
+    let P;
+    try {
+      P = makePage("soccer", seed);
+      newPlayer(P, 0, "fw", "판정확인");
+      youthUntilSurvival(P, "pos", true);
+      const st = P.state();
+      const ovr = P.overall();
+      /* 능력치가 너무 높으면 늘 통과라 "왜 떨어졌는지"를 못 봐요.
+       * 중간 구간(45~70)이라야 통과와 탈락이 둘 다 나옵니다. */
+      if (ovr < 45 || ovr > 70) { P.close(); continue; }
+      // 1라운드 통과 확률을 그 상태 그대로 계산해요 (화면에 뜰 값과 같은 식)
+      const m = P.get("marketOf")();
+      const base = 0.51 + (ovr - 50) / 90 + m.debut * 0.35 - 0.21
+        + st.fandom / 1500 + (st.condition - 50) / 900;
+      const lo = Math.round(Math.max(0.12, base - 0.32) * 100);
+      const hi = Math.round(Math.min(0.93, base + 0.25) * 100);
+      add({
+        id: "soccer-judge",
+        game: "soccer", url: "soccer/", emoji: "📊",
+        title: "유스 라운드 판정 — 왜 떨어졌나",
+        state: `${st.year}년차 · 종합 ${Math.round(ovr)} · 명성 ${Math.round(st.fandom)} — `
+          + `1라운드 통과 확률 ${lo}~${hi}% (경기 내용에 따라)`,
+        check: "결과 아래 <b>📊 줄</b>을 봐주세요. 통과 확률과 그걸 가장 크게 민 것/깎은 것이 적혀요. "
+          + "잘하고도 떨어지면 '운이 나빴어요', 확률 자체가 낮았으면 무엇이 깎았는지 나옵니다",
+        steps: [
+          "게임이 열리면 <b>이어하기</b> → 선수 카드",
+          "<b>🔥 프로 도전</b>을 눌러요",
+          "라운드마다 결과 아래에 📊 줄이 붙어요 — 4라운드까지 이어져요",
+        ],
+        keys: snapshot(P),
+      });
+      P.close();
+      return;
+    } catch (e) {
+      if (P) P.close();
+      log(`  · 시드 ${seed}: ${e.message}`);
+    }
+  }
+  log("  ❌ 조건에 맞는 상태를 못 만들었어요 (유스 판정)");
+}
+
 /* 🌍 나라 특색 — 유스 국적이 데뷔 리그를 정하고, 그 나라가 훈련·회복·수입에 얹혀요.
  *
  * 리그의 가치가 prestige 하나뿐일 때는 "어디서 상을 받아야 명예의 전당 점수가 큰가"로
@@ -1455,6 +1508,7 @@ if (want("soccer-semipro", "soccer")) makeSoccerEnding("semi");
 if (want("soccer-report", "soccer")) makeSoccerReport();
 if (want("soccer-chart", "soccer")) makeSoccerChart();
 if (want("soccer-cup", "soccer")) makeSoccerCup();
+if (want("soccer-judge", "soccer")) makeSoccerJudge();
 if (want("soccer-nation-kr", "soccer")) makeSoccerNation(0, {
   country: "kr", emoji: "🇰🇷", title: "K리그 유스 → K리그1 · 회복 +30%",
   trait: "🛌 회복 +30%",

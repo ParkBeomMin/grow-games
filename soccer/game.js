@@ -388,6 +388,7 @@ function newState(market, pos, name, roll) {
     buff: false,
     trophies: [],
     cup: null,          // 🏆 진행 중인 컵 대회 (없으면 null)
+    cupPrep: false,     // 🏆 컵 8강 전 준비 중인가
     stages: 0, // 출전 경기 수
     youth: { g: 0, a: 0, def: 0 }, // 유스 통산 골·도움·수비
     log: [],
@@ -1715,17 +1716,24 @@ function playSurvivalRound() {
     const sorted = factors.filter((f) => Math.abs(f.v) >= 0.01).sort((a, b) => b.v - a.v);
     const best = sorted[0], worst = sorted[sorted.length - 1];
     const fp = (v) => `${v > 0 ? "+" : ""}${Math.round(v * 100)}%p`;
+    /* 조사(이/가)는 앞 글자의 받침을 봐야 해요 — 안 그러면 "명성가"가 나와요.
+     * 한글 음절 코드에서 (코드 - 0xAC00) % 28 이 0이면 받침이 없어요. */
+    const ga = (word) => {
+      const c = String(word).charCodeAt(String(word).length - 1);
+      const hasJong = c >= 0xac00 && c <= 0xd7a3 && (c - 0xac00) % 28 !== 0;
+      return hasJong ? "이" : "가";
+    };
     let why;
     if (pass) {
       why = best && best.v > 0
-        ? `📊 통과 확률 <b>${pp}%</b> — <b>${best.label}</b>가 ${fp(best.v)}로 가장 크게 밀었어요 (${best.tip})`
+        ? `📊 통과 확률 <b>${pp}%</b> — <b>${best.label}</b>${ga(best.label)} ${fp(best.v)}로 가장 크게 밀었어요 (${best.tip})`
         : `📊 통과 확률 <b>${pp}%</b>`;
     } else if (pp >= 60) {
       why = `📊 통과 확률이 <b>${pp}%</b>였는데 못 넘었어요 — 운이 나빴어요.`
         + `${best && best.v > 0 ? ` 이 경기 자체는 ${best.label} ${fp(best.v)}로 좋았습니다.` : ""}`;
     } else {
       why = `📊 통과 확률 <b>${pp}%</b>`
-        + `${worst && worst.v < 0 ? ` — <b>${worst.label}</b>가 ${fp(worst.v)}로 가장 크게 깎았어요 (${worst.tip})` : ""}`;
+        + `${worst && worst.v < 0 ? ` — <b>${worst.label}</b>${ga(worst.label)} ${fp(worst.v)}로 가장 크게 깎았어요 (${worst.tip})` : ""}`;
     }
     const resultHTML = `
       <div class="ms-final ${scoreClass}">${info.home} ${info.teamGoals} : ${info.oppGoals} ${info.away} · ${RES_LABEL[info.res]}</div>

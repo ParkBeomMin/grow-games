@@ -57,6 +57,8 @@ window.SoccerCup = (() => {
   };
   const auto = () => localStorage.getItem("grow-auto-mini") === "1";
   const pick = (xs) => xs[Math.floor(Math.random() * xs.length)];
+  // 자동이면 곧바로, 아니면 한 박자 쉬고 — 화면에서는 차례가 넘어가는 게 보여야 해요
+  const next = (fn) => { if (auto()) fn(); else setTimeout(fn, 420); };
 
   /* 상대 키커의 성공 여부. 팀 전력(0~100)이 높을수록 잘 넣어요.
    * 내 쪽과 달리 판정이 없으니 확률만 굴립니다 — 화면에는 결과만 나와요. */
@@ -124,7 +126,9 @@ window.SoccerCup = (() => {
       turn += 1;
       draw();
       if (decided()) { finish(); return; }
-      setTimeout(myTurn, auto() ? 0 : 420);
+      /* 자동 진행일 때는 타이머를 안 써요 — setTimeout(…, 0)이라도 이벤트 루프가
+       * 돌아야 이어져서, 검사·시나리오 생성기의 동기 루프에서 그대로 멈춰요. */
+      next(myTurn);
     };
 
     // 내 차례 — 키퍼가 먼저 몸을 틀고, 반대쪽을 고르면 골이에요
@@ -150,7 +154,7 @@ window.SoccerCup = (() => {
         turn += 1;
         draw();
         if (decided()) { finish(); return; }
-        setTimeout(oppTurn, auto() ? 0 : 420);
+        next(oppTurn);
       };
 
       if (auto()) { kick(pick(SIDES)); return; }

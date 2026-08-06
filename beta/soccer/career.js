@@ -396,6 +396,9 @@ window.WingerCareer = (() => {
 
   function afterPrep() {
     if (S.camp > 0) { renderPrep(); return; }
+    /* 🏆 컵 준비 중이었으면 리그가 아니라 컵으로 가요. 이 갈림이 없으면
+     * 준비가 끝나는 순간 리그 경기가 한 판 더 열려요 — 시즌은 이미 끝났는데도요. */
+    if (S.cupPrep) { S.cupPrep = false; save(); startCup(); return; }
     if (!S.activity) initActivity();
     else if (S.activity.week >= S.activity.weekTotal) {
       S.activity.cb += 1;
@@ -470,9 +473,12 @@ window.WingerCareer = (() => {
       ? (S.activity.week === 0
         ? `⚽ ${cbLabel(S.activity.cb)} 리그 준비 완료 — 경기를 시작하세요!`
         : `🔔 킥오프! R${S.activity.week + 1} 경기를 시작하세요`)
-      : (S.activity
-        ? `시즌 중 — 다음 경기 전 훈련 ${S.camp}회 남음`
-        : `시즌 준비 — 남은 훈련 ${S.camp}회, 끝나면 리그 개막!`);
+      : (S.cupPrep
+        // 🏆 컵 준비는 리그와 다른 자리예요 — 뭘 앞두고 훈련하는지 알려줘야 해요
+        ? `🏆 ${cupName()} 8강 준비 — 남은 훈련 ${S.camp}회, 끝나면 단판 토너먼트!`
+        : S.activity
+          ? `시즌 중 — 다음 경기 전 훈련 ${S.camp}회 남음`
+          : `시즌 준비 — 남은 훈련 ${S.camp}회, 끝나면 리그 개막!`);
     const box = $("pro-actions");
     box.innerHTML = "";
     for (const d of STAT_DEFS) {
@@ -758,9 +764,14 @@ window.WingerCareer = (() => {
       nextFn = () => { S.camp = 3; save(); renderPrep(); show("screen-pro"); };
     } else if (cupEntry()) {
       /* 🏆 리그가 끝나면 컵이에요. 4위 안에 들어야 나갈 수 있어요 —
-       * 그래야 마지막 라운드가 5월의 평범한 경기와 달라집니다. */
-      nextLabel = `🏆 ${cupName()} 8강 진출!`;
-      nextFn = startCup;
+       * 그래야 마지막 라운드가 5월의 평범한 경기와 달라집니다.
+       *
+       * ⚠️ **대회 준비 턴을 줘요.** 예전에는 리그 마지막 경기 결과에서 버튼 하나로
+       * 바로 8강이었어요 — 반기가 바뀔 때는 3턴을 주는데 컵에는 0턴이었고,
+       * 컨디션도 리그 마지막 경기 직후라 바닥이었습니다. 시즌의 절정인데
+       * 준비할 틈이 없었어요. */
+      nextLabel = `🏆 ${cupName()} 준비하기`;
+      nextFn = () => { S.camp = CUP_CAMP; S.cupPrep = true; save(); renderPrep(); show("screen-pro"); };
     } else {
       nextLabel = "🏁 시즌 결산";
       nextFn = finishYear;
@@ -783,6 +794,7 @@ window.WingerCareer = (() => {
    * 승부차기 실행은 cup.js(window.SoccerCup)에 있어요. 여기는 대진과 세이브만 봐요 —
    * 세이브를 만지는 코드는 한곳에 모읍니다. */
   const CUP_SPOTS = 4;                        // 리그마다 몇 위까지 나가나
+  const CUP_CAMP = 2;                         // 컵 8강 전에 주는 훈련·휴식 턴
   const cupName = () => (window.SoccerCup ? SoccerCup.nameOf(leagueOf(S).country) : "컵 대회");
   const cupRounds = () => (window.SoccerCup ? SoccerCup.ROUNDS : ["8강", "4강", "결승"]);
 
@@ -799,12 +811,25 @@ window.WingerCareer = (() => {
     const myLg = leagueOf(S);
     const mates = (CLUBS[myLg.id] || []).filter((c) => c.name !== S.group);
     const others = LEAGUES.filter((l) => l.country === myLg.country && l.id !== myLg.id);
-    const pool = others.flatMap((l) => (CLUBS[l.id] || []).map((c) => ({ ...c, lg: l })));
-    // 다른 리그에서는 전력 상위 CUP_SPOTS개 (그 리그의 상위권이 올라온다는 뜻이에요)
-    const up = pool.sort((a, b) => b.str - a.str).slice(0, CUP_SPOTS);
+    /* ⚠️ 예전에는 다른 리그 클럽을 **전부 모아 전력 상위 4팀**을 뽑았어요.
+     * 그러면 하부에 있을수록 최상위 리그 강팀만 만납니다 — K리그3 소속이면
+     * 8강 상대 넷이 전부 K리그1(78·71·66·62)이었어요. 자이언트 킬링이 아니라 벽이고,
+     * 반대로 K리그1은 하부 팀만 만나 너무 쉬웠습니다.
+     *
+     * 이제 **리그마다 골고루** 뽑아요. 실제 FA컵 8강도 1부·2부가 섞이지
+     * 한쪽으로 쏠리지 않아요. 자리가 남으면 위 리그부터 한 팀씩 더 채웁니다. */
+    const perLeague = Math.max(1, Math.floor(CUP_SPOTS / Math.max(1, others.length)));
+    const byLeague = others.map((l) => (CLUBS[l.id] || []).slice()
+      .sort((a, b) => b.str - a.str).slice(0, perLeague).map((c) => ({ ...c, lg: l })));
+    const up = byLeague.flat();
+    // 남는 자리는 위 리그(tier 큰 쪽)부터 다음 순위 팀으로 채워요
+    const rest = others.slice().sort((a, b) => b.tier - a.tier)
+      .flatMap((l) => (CLUBS[l.id] || []).slice().sort((a, b) => b.str - a.str)
+        .slice(perLeague).map((c) => ({ ...c, lg: l })));
+    while (up.length < CUP_SPOTS && rest.length) up.push(rest.shift());
     const mine = mates.sort((a, b) => b.str - a.str).slice(0, CUP_SPOTS - 1)
       .map((c) => ({ ...c, lg: myLg }));
-    return shuffle(mine.concat(up));
+    return shuffle(mine.concat(up.slice(0, CUP_SPOTS)));
   }
 
   function startCup() {
@@ -1156,6 +1181,23 @@ window.WingerCareer = (() => {
     return `<td class="yr-stat">${g}골 ${a}도움 ${d}수비</td><td class="yr-avg">${x.avg != null ? x.avg.toFixed(1) : "-"}</td>`;
   }
 
+  /* 그 시즌이 어땠는지 한마디. **리그 안 기준**이에요.
+   *
+   * inLeague = hype - K·ln(리그 격) — 리그 격이 곱해지기 전의 값이에요.
+   * K리그1(격 1.00)에서는 hype와 같아서, 그때 잡아 둔 문턱이 그대로 살아 있어요.
+   *   5년차 실측(K리그1): 능력치 50→3.8 · 70→5.3 · 90→6.4 · 110→7.4 · 130→7.9
+   *
+   * 수상 개수도 봐요. 상을 셋 넘게 받은 시즌이 "아쉽다"고 뜨면 화면이 자기모순이에요. */
+  function seasonTitle(y) {
+    const lg = leagueOf({ league: y.league || S.league });
+    const inLeague = (y.hype || 0) - AXIS_K * Math.log(lg.prestige || 1);
+    const awards = (y.awards || []).length;
+    if (inLeague >= 7.6 || awards >= 4) return "리그를 지배한 시즌!";
+    if (inLeague >= 6.0 || awards >= 2) return "제 몫을 해낸 시즌";
+    if (inLeague >= 3.5 || awards >= 1) return "아쉬움이 남는 시즌";
+    return "혹독한 시즌…";
+  }
+
   function yearReport() {
     const y = S.career.years[S.career.years.length - 1];
     // 그릴 때만 소속을 메운 사본을 써요 — 세이브(S.career.years)는 그대로 둬요.
@@ -1169,13 +1211,18 @@ window.WingerCareer = (() => {
     $("career-card").innerHTML = `
       <div class="draft-emoji">⚽</div>
       <div class="draft-title">${
-        /* 문턱은 새 hype 눈금(축 기반)에 맞춘 값이에요.
-         * 5년차 실측: 능력치 50→3.8 · 70→5.3 · 90→6.4 · 110→7.4 · 130→7.9.
-         * 옛 눈금(순위 기반) 문턱 6/3.5/1을 그대로 두면 능력치 90부터
-         * 매 시즌 "리그를 지배한 시즌!"이 떴어요. */
-        y.hype >= 7.6 ? "리그를 지배한 시즌!" :
-        y.hype >= 6.0 ? "제 몫을 해낸 시즌" :
-        y.hype >= 3.5 ? "아쉬움이 남는 시즌" : "혹독한 시즌…"
+        /* ⚠️ 시즌 문구는 **그 리그 안에서 얼마나 잘했나**로 봐요.
+         *
+         * 예전에는 hype를 그대로 썼는데, hype는 명예의 전당 가치라 리그 격이
+         * 곱해져 있어요. 그래서 K리그3에서 "리그를 지배한 시즌"을 보려면 299골이
+         * 필요했습니다(프리미어리그는 69골). 실제로 75골 16도움에 신인왕·리그MVP·
+         * 베스트11·골든부츠·공격포인트왕 5관왕인데 "아쉬움이 남는 시즌"이 떴어요 —
+         * 수상 문턱은 bar로 리그 안 기준인데 문구만 절대 기준이라 생긴 모순이에요.
+         *
+         * 리그 격을 도로 나눠서(= K·ln(prestige)를 빼서) 리그 안 눈금으로 되돌려요.
+         * 문턱은 K리그1(prestige 1.00) 기준이라 그때 값이 그대로 유지됩니다.
+         * 수상도 함께 봐요 — 상을 쓸어 담은 시즌이 "아쉽다"고 뜨면 안 돼요. */
+        seasonTitle(y)
       }</div>
       <div class="draft-team">${leagueOf({ league: y.league || S.league }).flag} ${y.club || S.group} · ${leagueOf({ league: y.league || S.league }).name} · 전력 ${clubStrOf(S)} · ${y.apps || 0}경기 ⚽${y.goals || 0}골 🅰️${y.assists || 0}도움 🛡️${y.defense || 0} · MOM ${y.wins}회${y.avg != null ? ` · 평균 평점 ${y.avg.toFixed(1)}` : ""}</div>
       ${y.promo ? `<div class="hint">${
