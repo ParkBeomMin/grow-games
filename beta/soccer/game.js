@@ -581,17 +581,19 @@ function transcend(key, d, v, logFn) {
     `🌠 ${d.name} 초월 각성 (현재 ✨${lv})\n\n` +
     `성공 확률 ${Math.round(p * 100)}% — 단계가 오를수록 낮아져요\n` +
     `· 성공: ✨${lv + 1} 달성, 상한 ${cap} → ${cap + TRANS_CAP_STEP}, 명예의 전당 +25점\n` +
-    `· 실패: ${d.name} 수치만 초기화 (재능은 이미 MAX라 잃지 않아요)\n\n도전할까요?`
+    `· 실패: ${d.name} 수치만 초기화 (재능은 이미 MAX라 잃지 않아요)` +
+    (gearBonus(key) ? `\n· 🛍️ 장비 +${gearBonus(key)}는 그대로 남아요` : "") +
+    `\n\n도전할까요?`
   )) return false;
 
   S.trans = S.trans || {};
   if (Math.random() < p) {
     S.trans[key] = lv + 1;
-    S.stats[key] = randInt(45, 60);
+    S.stats[key] = resetStat(key, 45, 60);
     logFn(`🌠✨ ${d.name} 초월 ${lv + 1}단계 달성!! 상한이 ${statCap(key)}까지 열렸어요`);
     if (window.Fx) Fx.celebrate("transcend", `🌠 초월 ${lv + 1}단계!`, ".awaken-btn");
   } else {
-    S.stats[key] = randInt(45, 60);
+    S.stats[key] = resetStat(key, 45, 60);
     logFn(`🌠💦 초월 실패… ${d.name} ${Math.round(S.stats[key])}부터 다시 (✨${lv} 유지)`);
     if (window.Fx) { Fx.burst(".awaken-btn", "💦", 8); Fx.flash(`💦 ${d.name} 초월 실패…`); }
   }
@@ -613,7 +615,9 @@ function awakenTalent(key, logFn) {
     `성공 확률 ${Math.round(p * 100)}% (돌파가 깊을수록 올라가요)\n` +
     `· 성공: 재능(⭐)이 영구히 상승 — 훈련 효율이 평균 ${Math.round(0.225 / S.talents[key] * 100)}% 빨라져요\n` +
     `· 실패: 낮은 확률로 재능이 살짝 하락\n` +
-    `· 성공하든 실패하든 ${d.name} 수치는 크게 낮아져서 다시 키워야 해요\n\n진행할까요?`
+    `· 성공하든 실패하든 ${d.name} 수치는 크게 낮아져서 다시 키워야 해요` +
+    (gearBonus(key) ? `\n· 🛍️ 장비 +${gearBonus(key)}는 그대로 남아요` : "") +
+    `\n\n진행할까요?`
   );
   if (!ok) return false;
   /* 🔮 각성은 엔드게임인데 로그가 없어서 **몇 명이 여기까지 오는지** 몰랐어요.
@@ -623,17 +627,17 @@ function awakenTalent(key, logFn) {
   if (window.Stats) Stats.log("awaken", { key, lv: Math.round(S.talents[key] * 100) / 100, ok: awakenOk });
   if (awakenOk) {
     S.talents[key] = Math.min(S.talents[key] + rand(0.15, 0.3), TALENT_MAX);
-    S.stats[key] = randInt(45, 60);
+    S.stats[key] = resetStat(key, 45, 60);
     logFn(`🔮✨ ${d.name} 재능 각성 성공!! 잠재력이 한 단계 피어났어요 (수치 ${Math.round(S.stats[key])}부터 재도전)`);
     if (window.Fx) Fx.celebrate("awaken", `⭐ ${d.name} 각성 성공!`, ".awaken-btn");
   } else if (Math.random() < 0.1) {
     S.talents[key] = Math.max(S.talents[key] - 0.1, 0.8);
-    S.stats[key] = randInt(30, 50);
+    S.stats[key] = resetStat(key, 30, 50);
     logFn(`🔮💧 각성 실패… 무리한 시도에 재능까지 살짝 잃었어요 (${Math.round(S.stats[key])})`);
     // 실패에 연출이 없어서 "아무 일도 안 일어났다 = 오류"로 읽혔어요 (플레이어 제보)
     if (window.Fx) { Fx.burst(".awaken-btn", "💧", 10); Fx.flash(`💧 ${d.name} 각성 실패… 재능도 잃었어요`); }
   } else {
-    S.stats[key] = randInt(30, 50);
+    S.stats[key] = resetStat(key, 30, 50);
     logFn(`🔮💦 각성 실패… ${d.name} ${Math.round(S.stats[key])}부터 다시 담금질!`);
     if (window.Fx) { Fx.burst(".awaken-btn", "💦", 8); Fx.flash(`💦 ${d.name} 각성 실패…`); }
   }
@@ -736,6 +740,22 @@ const GEAR_TIERS = [
   { n: "IV", bonus: 12, price: 30000 },
   { n: "V", bonus: 16, price: 75000 },
 ];
+/* 보유한 장비가 그 능력치에 얹어 주는 총합.
+ *
+ * ⚠️ 장비는 살 때 S.stats에 한 번 더하고 끝이에요 — 따로 저장되는 '효과 층'이
+ * 없습니다. 그런데 각성·초월은 S.stats[key]를 30~60으로 **덮어쓰기** 때문에
+ * 장비로 올린 몫이 같이 사라졌어요. S.gear에는 소유 기록이 남아 다시 살 수도
+ * 없으니 돈만 날린 셈이었습니다(풀장비 한 칸이면 3+5+8+12+16 = 44 손실).
+ * 각성은 반복하는 엔드게임이라 할수록 손해가 쌓였어요.
+ *
+ * 그래서 덮어쓴 뒤에 이 값을 다시 얹어 줘요. 장비는 산 사람에게 계속 남습니다. */
+function gearBonus(key) {
+  if (!S || !S.gear) return 0;
+  return GEAR_TIERS.reduce((sum, t) => sum + (S.gear[`${key}-${t.n}`] ? t.bonus : 0), 0);
+}
+/* 각성·초월로 능력치를 되돌릴 때 쓰는 값. 장비 몫을 얹고 상한을 넘지 않게 잘라요. */
+const resetStat = (key, lo, hi) => clamp(randInt(lo, hi) + gearBonus(key), 0, statCap(key));
+
 let shopReturn = "screen-main";
 function statDefs() { return Array.isArray(STAT_DEFS) ? STAT_DEFS : STAT_DEFS[S.pos]; }
 function openShop(returnTo) {
@@ -761,6 +781,16 @@ function renderShop() {
         if ((S.money || 0) < tier.price) {
           alert("자금이 부족해요! 경기 수당이나 보너스로 모아봐요 💰");
           return;
+        }
+        /* 상한에 닿아 있으면 지금은 수치가 안 올라요. 예전에는 돈만 빠져나가고
+         * 아무 일도 안 일어났습니다 — 각성 뒤에는 얹히니 사는 것 자체는 손해가
+         * 아니지만, 모르고 사면 버그로 읽혀요. */
+        if (atCap(d.key)) {
+          if (!confirm(
+            `⚠️ ${d.name}이(가) 이미 상한(${statCap(d.key)})이에요.\n\n` +
+            `지금은 수치가 안 올라요. 다만 🔮 각성·🌠 초월로 수치가 내려간 뒤에는\n` +
+            `장비 몫이 그대로 얹혀요.\n\n그래도 구매할까요?`
+          )) return;
         }
         S.money -= tier.price;
         S.gear = S.gear || {};
