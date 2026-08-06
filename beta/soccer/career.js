@@ -556,8 +556,7 @@ window.WingerCareer = (() => {
       const v = k === "r" ? (r.avg || 0).toFixed(2) : (k === "m" ? (r.m != null ? r.m : r.mom || 0) : r[k] || 0);
       return `<td>${leader[k] === r.name ? "👑" : ""}${v}</td>`;
     };
-    const line = (r, i) => `<tr class="${r.me ? "me" : (r.club && r.club === S.group ? "mate" : "")}">`
-      + `<td>${i + 1}</td>`
+    const line = (r, i) => `<tr class="${r.me ? "me" : ""}"><td>${i + 1}</td>`
       + `<td>${r.name}<span class="ch-club">${r.club || "-"}${r.role ? ` · ${r.role}` : ""}</span></td>`
       + RACE_COLS.map(([k]) => cell(r, k)).join("") + `</tr>`;
     const myIdx = ranked.findIndex((x) => x.me);
@@ -815,9 +814,7 @@ window.WingerCareer = (() => {
     /* 소속 옆의 승·무·패는 **그 라운드 그 클럽의 결과**예요. 라이벌 점수가 이걸 보고
      * 오르내리니 근거가 화면에 있어야 해요 — 없으면 순위가 왜 뒤집혔는지 알 수가 없어요.
      * 한 글자 inline이라 줄을 새로 만들지 않아요. */
-    // 우리 팀 선수는 표시해 줘요 — 같은 경기를 뛴 사람이라는 게 보여야 해요
-    const line = (r, i) => `<tr class="${r.me ? "me" : (r.club && r.club === S.group ? "mate" : "")}">`
-      + `<td>${i + 1}</td><td>${r.name}</td>`
+    const line = (r, i) => `<tr class="${r.me ? "me" : ""}"><td>${i + 1}</td><td>${r.name}</td>`
       + `<td class="ch-club">${r.club || (r.me ? S.group : "-")}`
       + `${r.res ? `<span class="ch-res r-${r.res.toLowerCase()}">${RES_KO[r.res] || ""}</span>` : ""}`
       + `${r.role ? `<span class="ch-role">${r.role}</span>` : ""}</td>`
