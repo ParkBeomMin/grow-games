@@ -83,6 +83,8 @@ body {
 /* 이적한 시즌은 눈에 띄게 — 표를 훑으며 언제 소속이 바뀌었는지 바로 보이게 */
 .season-soccer .yr-club.moved { color: var(--accent); }
 .season-soccer .yr-lg { display: block; font-size: 0.62rem; opacity: .65; }
+/* 그 시즌 팀 최종 순위 — 어느 해에 팀이 무너졌는지 표만 훑어도 보이게 */
+.season-soccer .yr-rank { display: block; font-size: 0.62rem; opacity: .55; }
 .season-soccer .yr-stat { white-space: nowrap; }
 
 /* FM식 경기 스코어보드 */
@@ -230,6 +232,8 @@ body {
 /* 카드만 보고 눌러도 어느 리그인지 알 수 있어야 해요 */
 .tf-card .tf-lg { font-size: 0.8rem; color: var(--sky); }
 .tf-card.down .tf-lg, .tf-card.down .tf-risk { color: var(--dim); }
+/* 🏟️ 그 클럽이 리그 안에서 어디쯤인지 — 전력 숫자만으로는 감이 안 와요 */
+.tf-card .tf-rank { font-size: 0.78rem; color: var(--dim); }
 
 @media (max-width: 380px) {
   .card-grid.three { grid-template-columns: 1fr; }
@@ -288,7 +292,6 @@ body {
 .rw-body { display: flex; flex-wrap: wrap; gap: .25rem .5rem; margin-top: .35rem; }
 .rw-item { font-size: .8rem; color: var(--dim); white-space: nowrap; }
 .rw-item b { color: var(--cream); font-weight: 600; }
-.rw-note { font-size: .76rem; color: var(--sky); margin-top: .3rem; }
 
 /* 🥇 개인 순위 — 득점·도움·수비·평점·MOM을 한 표에 */
 .race-title { font-size: .82rem; color: var(--accent); margin-bottom: 4px; }
@@ -297,3 +300,17 @@ body {
 .race-table td:first-child, .race-table th:first-child { width: 1.4rem; }
 .race-table .ch-club { display: block; font-size: .68rem; color: var(--dim); }
 .race-note { font-size: .72rem; color: var(--dim); margin-top: .3rem; }
+/* 부문 탭 — 정렬만 바꿔요. 좁은 화면에서는 가로로 넘겨서 봐요 */
+.race-tabs {
+  display: flex; gap: .25rem; overflow-x: auto; padding-bottom: .3rem;
+  margin-bottom: .35rem; -webkit-overflow-scrolling: touch;
+}
+.race-tab {
+  flex: 0 0 auto; font-family: inherit; font-size: .74rem; white-space: nowrap;
+  padding: .28rem .55rem; border-radius: 999px; cursor: pointer;
+  background: var(--bg2); border: 1px solid var(--line); color: var(--dim);
+}
+.race-tab.on { background: var(--field); border-color: var(--accent); color: var(--accent); font-weight: 700; }
+/* 지금 줄 세운 칸을 표에서도 짚어 줘요 — 어느 기준으로 정렬됐는지 보이게 */
+.race-table th.rc-on { color: var(--accent); }
+.race-table td.rc-on { color: var(--text); font-weight: 700; }

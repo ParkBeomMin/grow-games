@@ -35,6 +35,8 @@ const parts = {
   matchContribution: grab(GAME, /function matchContribution\(rating\) \{[\s\S]*?\n\}/),
   autoRes: grab(GAME, /function autoRes\(stat\) \{[\s\S]*?\n\}/),
   // MatchSim.finish의 info 블록 — 승부처 극장골이 내 골에 얹히는 규칙이 여기 있어요
+  /* ⚠️ info 블록은 바깥 스코프의 mateGoals(중계에서 골 넣은 우리 팀 선수 이름)를 봐요.
+   * 여기서는 경기 화면을 안 그리니 빈 배열을 미리 깔아 둡니다. */
   infoBlock: grab(GAME, /const info = \{[\s\S]*?\n {6}\};/),
   fanCap: grab(SRC, /const FAN_CAP = [^;]+;/),
   ratingDiv: grab(SRC, /const RATING_DIV = [^;]+;/),
@@ -202,6 +204,7 @@ const seasonFn = new Function("S", "clamp", "rand", "condition", "fandom", `
     const c = matchContribution(rating);
     const goals = c.g, assists = c.a, defense = c.def;
     const momentRes = autoRes(stats[posStat]);
+    const mateGoals = [];
     ${parts.infoBlock}
     act.goals += info.myGoals;
     act.assists += info.assists;

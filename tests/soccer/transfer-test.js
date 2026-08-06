@@ -437,6 +437,42 @@ guard("능력치 70의 챔피언스리그 차단", () => {
     `그 카드에도 평점 -${leagueById(3).penalty.toFixed(1)}이 그대로 적혀 있다 (도박의 크기를 감추지 않는다)`);
 });
 
+/* ── 🏟️ 이적 제안 카드에 그 클럽의 리그 내 자리
+ *
+ * 전력 숫자(예: 78)만 보고는 "3부의 최강"과 "1부의 최약체"를 구분할 수 없었다.
+ * 다른 리그는 시즌을 굴리지 않으니 전력 순서로 매기고, 표기도 "전력 N위"로 정직하게 쓴다.
+ * 내가 뛰는 리그는 실제 순위표가 있으니 "지난 시즌 N위"다. */
+const STAND = grab(SRC, /function clubStanding\(club, leagueId\) \{[\s\S]*?\n  \}/);
+const STAND_TXT = grab(SRC, /const standingText = \(st\) => st[\s\S]*?;\n/);
+check(!!STAND && !!STAND_TXT, "clubStanding·standingText를 소스에서 찾았다");
+if (STAND && STAND_TXT) {
+  const CL = T.CLUBS;
+  const lgId = Number(Object.keys(CL)[0]);
+  const list = CL[lgId];
+  const mk = (league, ready, rows) => new Function("CLUBS", "club", "leagueId",
+    `const S = { league: ${league} };
+     const tableReady = () => ${ready};
+     const tableRows = () => ${JSON.stringify(rows || [])};
+     ${STAND}
+     ${STAND_TXT}
+     const st = clubStanding(club, leagueId);
+     return { st, txt: standingText(st) };`);
+  const strongest = list.slice().sort((a, b) => b.str - a.str)[0];
+  const weakest = list.slice().sort((a, b) => a.str - b.str)[0];
+  const away = mk(-1, false, null);
+  const s1 = away(CL, strongest, lgId), s2 = away(CL, weakest, lgId);
+  console.log(`   ${strongest.name}(전력 ${strongest.str}) ${s1.txt} · ${weakest.name}(전력 ${weakest.str}) ${s2.txt}`);
+  check(!!s1.st && s1.st.rank === 1, `가장 센 팀이 1위로 나온다 (${s1.txt})`);
+  check(!!s2.st && s2.st.rank === list.length, `가장 약한 팀이 꼴찌로 나온다 (${s2.txt})`);
+  check(/전력/.test(s1.txt), "다른 리그는 '전력' 순위라고 정직하게 적는다");
+  // 내가 뛰는 리그는 진짜 순위표를 쓴다 — 전력이 꼴찌여도 1위로 마쳤으면 1위다
+  const real = mk(lgId, true, [{ name: weakest.name }, { name: strongest.name }])(CL, weakest, lgId);
+  check(!!real.st && real.st.rank === 1 && /지난 시즌/.test(real.txt),
+    `내 리그는 실제 순위표를 쓴다 (전력은 꼴찌인데 ${real.txt})`);
+  check(/tf-rank/.test(SRC) && /standingText\(clubStanding\(o\.club, lg\.id\)\)/.test(SRC),
+    "이적 카드가 실제로 이 값을 그린다");
+}
+
 console.log(fail ? `\n❌ ${fail}건 실패` : "\n✅ 통과");
 w.close();
 process.exit(fail ? 1 : 0);

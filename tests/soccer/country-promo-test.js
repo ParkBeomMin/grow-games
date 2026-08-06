@@ -62,7 +62,8 @@ const table = (gap) => [
 ];
 /* 정착 기간을 넘긴 상태로 둔다 — 여기서 보려는 건 사다리지 정착 규칙이 아니다.
  * (정착 규칙 자체는 promote-test.js가 본다) */
-const state = (league) => ({ league, proYear: 9, leagueSince: 0, group: "레알 몬테", clubStr: 70, trophies: [] });
+const state = (league) => ({ league, proYear: 9, leagueSince: 0, group: "레알 몬테", clubStr: 70,
+  trophies: [], career: { years: [{ y: 8 }] } });
 
 let bad = 0;
 const check = (ok, msg) => { console.log(`${ok ? "✅" : "❌"} ${msg}`); if (!ok) bad++; };
@@ -141,6 +142,75 @@ const brokenApply = new Function("S", "rowsIn", "rankIn",
   `return applyPromotion();`);
 check(brokenApply(state(2), table(12), 1) === null,
   `변이 검증 — 잉글랜드 사다리를 비우면 ${NM(2)} 1위에 아무 일도 안 일어난다`);
+
+/* ── 정착 기간이 강등을 막지 않는가
+ *
+ * 제보: "프리미어리그 와서 팀이 꼴찌했던 것 같은데 강등을 안 한 것 같다."
+ * PROMO_SETTLE(2시즌)이 승격과 강등 **둘 다**에 걸려 있었고, leagueSince는
+ * 이적으로 리그가 바뀔 때도 새로 선다(moveToClub). 그래서 상위 리그로 이적하면
+ * 꼴찌를 해도 두 시즌 동안 안 내려갔다.
+ *
+ * 소스 주석에는 처음부터 "강등에는 안 걸어요"라고 적혀 있었다 —
+ * 문서와 코드가 어긋난 채로 남아 있던 자리다. */
+const SETTLE = new Function(`${parts.settle} return PROMO_SETTLE;`)();
+const justMoved = () => {
+  const S = state(3);
+  S.leagueSince = S.proYear;          // 방금 이적해 왔어요 (정착 0시즌)
+  return S;
+};
+const movedDown = apply(justMoved(), table(0), 6);
+check(movedDown.move && movedDown.move.kind === "down",
+  `이적 직후 시즌이라도 꼴찌면 강등된다 (정착 0/${SETTLE}시즌 · ${movedDown.move ? movedDown.move.to : "안 일어남"})`);
+// 반대로 승격은 여전히 정착 기간을 지킨다 — 연속 승격을 막는 게 이 상수의 목적이에요
+const movedUp = apply((() => { const S = state(2); S.leagueSince = S.proYear; return S; })(), table(20), 1);
+check(!movedUp.move,
+  `이적 직후에는 1위여도 승격은 안 된다 (연속 승격 방지 · ${movedUp.move ? movedUp.move.to : "안 일어남"})`);
+// 데뷔 시즌은 한 번만 면제된다
+const rookie = state(3); rookie.career = { years: [] };
+const rookieDown = apply(rookie, table(0), 6);
+check(!rookieDown.move, `프로 데뷔 시즌은 꼴찌여도 면제된다 (${rookieDown.move ? rookieDown.move.to : "안 일어남"})`);
+
+/* 변이 검증 — 강등에도 정착 기간을 다시 걸면 위 검사가 무너져야 한다. */
+const settleBack = parts.apply.replace(
+  "if (debutSeason) return null;",
+  "if (sinceHere < PROMO_SETTLE) return null;"
+);
+if (settleBack === parts.apply) { console.log("❌ 변이 치환이 안 됐어요"); process.exit(1); }
+const settleBackRun = new Function(
+  "S", "rowsIn", "rankIn",
+  `${parts.leagues}
+   ${parts.clubs}
+   const leagueOf = (st) => LEAGUES.find((l) => l.id === ((st && st.league) || 1)) || LEAGUES[0];
+   const tableReady = () => true;
+   const tableRows = () => rowsIn;
+   const myTableRank = () => rankIn;
+   ${parts.tiers}
+   ${parts.ladderOf}
+   ${parts.gap}
+   ${parts.settle}
+   ${settleBack}
+   return applyPromotion();`
+);
+check(!settleBackRun(justMoved(), table(0), 6),
+  "변이 검증 — 강등에 정착 기간을 다시 걸면 이적 직후 꼴찌가 안 내려간다");
+
+/* ── 최종 순위를 승강 판정 **전에** 읽는가
+ *
+ * applyPromotion은 승격·강등이 나면 S.table을 null로 지운다. 그 뒤에 순위를
+ * 읽으면 늘 null이라, 결산 화면과 통계 로그가 **승격한 시즌의 순위를 통째로
+ * 잃는다.** 순서가 곧 값인 자리라 소스 순서로 지킨다. */
+const FINISH = grab(SRC, /const leaguePlayed = S\.league;[\s\S]*?S\.career\.years\.push\([^;]*;/);
+check(!!FINISH, "결산의 승강 처리 블록을 찾았다");
+if (FINISH) {
+  const iRank = FINISH.indexOf("const finalRank =");
+  const iMove = FINISH.indexOf("applyPromotion()");
+  check(iRank >= 0 && iMove >= 0 && iRank < iMove,
+    "최종 순위를 applyPromotion보다 먼저 읽는다 (표가 지워지기 전에)");
+  check(/rank: finalRank, teams: finalTeams/.test(FINISH),
+    "시즌 기록에 팀 최종 순위와 팀 수가 남는다");
+  check(/rank: finalRank, hype:/.test(SRC),
+    "통계 로그도 같은 값을 쓴다 — 승격한 시즌의 순위가 null로 안 남아요");
+}
 
 console.log(bad ? `\n❌ ${bad}개 실패` : "\n✅ 통과");
 process.exit(bad ? 1 : 0);

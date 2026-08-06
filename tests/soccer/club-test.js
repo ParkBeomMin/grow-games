@@ -47,6 +47,7 @@ const parts = {
   cfgPick: grab(GAME, /const \{ home, away[^;]*\} = cfg;/),
   evsBlock: grab(GAME, /const evs = \[\];[\s\S]*?evs\.sort\([^;]*\);/),
   resLine: grab(GAME, /const res = h > a \? [^;]+;/),
+  /* info 블록은 mateGoals를 보는데, 이 파일은 evsBlock을 함께 넣어서 거기서 선언돼요. */
   infoBlock: grab(GAME, /const info = \{[\s\S]*?\n {6}\};/),
   fanCap: grab(SRC, /const FAN_CAP = [^;]+;/),
   ratingDiv: grab(SRC, /const RATING_DIV = [^;]+;/),

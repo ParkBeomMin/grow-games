@@ -344,8 +344,11 @@ function clubColumn(ww) {
   return rows.map((r) => {
     const c = r.children[idx];
     const tag = c.querySelector(".yr-lg");
+    // 순위 칸(.yr-rank)은 나중에 붙은 별개 줄이라 이름 검사에서 떼어 낸다
+    const rankTag = c.querySelector(".yr-rank");
     return {
       full: c.getAttribute("title"),
+      rank: rankTag ? rankTag.textContent.trim() : "",
       text: c.textContent.trim(),
       moved: c.classList.contains("moved"),
       lg: tag ? tag.textContent.trim() : null,
@@ -407,8 +410,9 @@ guard("⑧ 실제 세이브 6시즌", () => {
   EXPECT.forEach((e, i) => {
     const got = col[i] || {};
     check(got.full === e.club, `${e.y}시즌 소속이 ${e.club}다 (${got.full})`);
-    check(!!got.text && e.club.startsWith(got.text.replace(got.lg || "", "")),
-      `${e.y}시즌 칸에 줄인 이름이 보인다 (${got.text})`);
+    const shortName = (got.text || "").replace(got.lg || "", "").replace(got.rank || "", "");
+    check(!!shortName && e.club.startsWith(shortName),
+      `${e.y}시즌 칸에 줄인 이름이 보인다 (${shortName})`);
   });
 });
 

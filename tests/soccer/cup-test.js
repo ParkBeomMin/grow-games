@@ -167,10 +167,21 @@ check(!S1.cup, "끝나면 진행 중인 컵이 세이브에서 치워진다");
 const advances = run.rounds.filter((t) => /진출|다음 라운드/.test(t)).length;
 check(advances <= 3, `라운드가 셋을 안 넘는다 (${advances}번 통과)`);
 
-const gained = (S1.trophies || []).length - trophiesBefore;
-const cupTrophy = (S1.trophies || []).some((t) => /컵|배|코파|FA/.test(t));
-console.log(`   트로피 ${trophiesBefore} → ${(S1.trophies || []).length}${cupTrophy ? " (컵 우승 포함)" : ""}`);
-check(gained === 0 || cupTrophy, "트로피가 늘었다면 그건 컵 우승이다");
+const after = S1.trophies || [];
+const gained = after.length - trophiesBefore;
+const cupTrophy = after.some((t) => /컵|배|코파|FA/.test(t));
+/* ⚠️ 컵 결승은 시즌의 마지막이라 곧바로 결산이 돌아요. 사다리 맨 위에서 1위면
+ * **리그 우승 트로피**도 같이 붙습니다 — 그건 컵과 무관한 정상 동작이에요.
+ * 그래서 "늘었으면 무조건 컵"이 아니라 "늘었으면 컵 또는 리그 우승"을 지켜요.
+ * (예전 문구는 리그 우승이 붙는 순간 빨간불이 떠서 흔들렸어요) */
+const known = (t) => /컵|배|코파|FA/.test(t) || /시즌 .* 우승$/.test(t);
+console.log(`   트로피 ${trophiesBefore} → ${after.length}${cupTrophy ? " (컵 우승 포함)" : ""}`
+  + `${gained ? ` — ${after.slice(trophiesBefore).join(" · ")}` : ""}`);
+check(gained === 0 || after.slice(trophiesBefore).every(known),
+  "트로피가 늘었다면 컵 우승이거나 리그 우승이다 (정체불명 트로피가 안 붙는다)");
+// 결승까지 이겼으면 컵 트로피가 반드시 있어야 해요
+const wonFinal = run.rounds.some((t) => /다음 라운드/.test(t)) && run.rounds.length >= 3;
+if (wonFinal) check(cupTrophy, "결승까지 올라가 이겼으면 컵 트로피가 붙는다");
 /* ⚠️ `>=`로는 아무것도 안 지켜요 — 돈이 한 푼도 안 들어와도 통과합니다.
  * 탈락이든 우승이든 대회 수당은 **반드시** 붙어야 해요. */
 check(S1.money > moneyBefore, `대회 수당이 실제로 들어온다 (${moneyBefore} → ${S1.money})`);

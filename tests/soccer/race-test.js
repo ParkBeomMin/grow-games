@@ -128,8 +128,8 @@ check(!!ENSURE && /act\.apps/.test(ENSURE),
  * 8명)가 아예 다른 사람들이라, 득점 1위가 평점표에 없는 게 정상 동작이었다.
  * 지금은 act.race 하나만 쓴다. */
 const FINAL = grab(C, /const roundRes = recordRound\(act\.opp, info\.res\);[\s\S]*?\.sort\([^;]*\);/);
-check(!!FINAL && /raceRate\(roundRes, raceAdvance\(\)\)/.test(FINAL),
-  "경기 후 평점표가 경쟁자 명단의 그 라운드 기록을 그대로 쓴다");
+check(!!FINAL && /raceRate\(roundRes, applyMateGoals\(raceAdvance\(\), info\.mateGoals\)\)/.test(FINAL),
+  "경기 후 평점표가 경쟁자 명단의 그 라운드 기록을 그대로 쓴다 (동료 골 반영 포함)");
 check(!!FINAL && /\.\.\.scored\.map/.test(FINAL) && !/act\.rivals/.test(FINAL),
   "평점표 행이 act.rivals(옛 별도 명단)를 안 본다");
 // 주석에는 옛 이름이 설명으로 남아 있어요 — **호출·접근**만 봅니다
@@ -175,6 +175,103 @@ for (let t = 0; t < 200; t++) {
   if (mine < worst) worst = mine;
 }
 check(worst >= 1, `${ROLES_N}명을 ${names.length}클럽에 돌리면 우리 팀이 최소 ${worst}명은 들어간다`);
+
+/* ── ⑨ 부문 탭 — 눌렀을 때 실제로 줄이 바뀌는가
+ *
+ * 탭은 화면만 다시 그리는 코드라 "버튼은 있는데 정렬은 안 바뀐다"가 나기 쉽다.
+ * 그래서 raceHTML을 진짜로 실행해서 **1등 이름이 부문마다 달라지는지** 본다.
+ * (탭 이름만 문자열로 확인하면 배선이 죽어도 초록이 뜬다) */
+const HTMLFN = grab(C, /function raceHTML\(\) \{[\s\S]*?\n  \}/);
+const TABS = grab(C, /const RACE_TABS = \[[\s\S]*?\n  \];/);
+/* ⚠️ `\[[^\]]*\]`로 자르면 안 돼요 — 중첩 배열이라 **첫 `["g", "⚽"]`의 닫는 괄호**에서
+ * 끊깁니다. 이 저장소에서 `[^;]+;`로 화살표 함수 본문을 자르다 겪은 것과 같은 자리예요. */
+const COLS = grab(C, /const RACE_COLS = \[\[[\s\S]*?\]\];/);
+const VALUE = grab(C, /const raceValue = \(r, k\) =>[\s\S]*?: r\[k\] \|\| 0;/);
+check(!!HTMLFN && !!TABS && !!COLS && !!VALUE, "탭·표 렌더 조각을 소스에서 찾았다");
+
+/* 명단은 부문마다 1등이 다르도록 일부러 어긋나게 짠다. */
+const RACE_FIX = [
+  { name: "득점왕", club: "A", g: 30, a: 2, d: 3, rate: 40, mom: 0 },
+  { name: "도움왕", club: "B", g: 2, a: 25, d: 4, rate: 45, mom: 1 },
+  { name: "수비왕", club: "C", g: 0, a: 1, d: 90, rate: 50, mom: 0 },
+  { name: "평점왕", club: "D", g: 8, a: 8, d: 20, rate: 95, mom: 2 },
+  { name: "MOM왕", club: "E", g: 9, a: 7, d: 15, rate: 60, mom: 9 },
+];
+const mkHTML = new Function(
+  "S", "key", "$",
+  `${COLS}
+   ${TABS}
+   let raceKey = key;
+   const raceValue = ${VALUE.replace(/^const raceValue = /, "")}
+   ${parts.rank}
+   ${HTMLFN}
+   return raceHTML();`
+);
+const FIX_S = { name: "나", group: "Z",
+  activity: { apps: 10, goals: 5, assists: 5, defense: 5, ratingSum: 55, wins: 0, race: RACE_FIX } };
+const firstRow = (html) => {
+  const m = html.match(/<tbody>[\s\S]*?<td>1<\/td><td>([^<]*)/);
+  return m ? m[1] : null;
+};
+const EXPECT = { g: "득점왕", a: "도움왕", d: "수비왕", r: "평점왕", m: "MOM왕" };
+for (const [k, who] of Object.entries(EXPECT)) {
+  const html = mkHTML(FIX_S, k, () => null);
+  check(firstRow(html) === who, `${k} 탭으로 줄을 세우면 1위가 ${who}다 (실제 ${firstRow(html)})`);
+}
+// 공격포인트(p)는 골+도움 — 어느 한 부문 1위가 그대로 오면 안 된다
+const pTop = firstRow(mkHTML(FIX_S, "p", () => null));
+check(pTop === "득점왕", `공격P 탭은 골+도움으로 잰다 (득점왕 32 · 도움왕 27 · 실제 ${pTop})`);
+// 고른 탭이 화면에도 표시된다
+const gHTML = mkHTML(FIX_S, "g", () => null);
+check(/class="race-tab on" data-k="g"/.test(gHTML), "고른 탭에 on 표시가 붙는다");
+check(/data-k="a"/.test(gHTML) && /data-k="m"/.test(gHTML), "다른 부문 탭도 함께 그려진다");
+// 탭을 바꿔도 다른 기록은 안 사라진다 — 한 표에 담는 이유예요
+check(RACE_COLS_ALL().every((k) => new RegExp(`<th[^>]*>${k}`).test(gHTML)),
+  "어느 탭이든 ⚽🅰️🛡️⭐🏅 칸이 다 보인다");
+function RACE_COLS_ALL() { return ["⚽", "🅰️", "🛡️", "⭐", "🏅"]; }
+
+// 배선 — 탭 클릭이 다시 그리는 함수를 부른다
+const RENDER_RACE = grab(C, /function renderRace\(\) \{[\s\S]*?\n  \}/);
+check(!!RENDER_RACE && /raceKey = b\.dataset\.k;\s*renderRace\(\)/.test(RENDER_RACE),
+  "탭을 누르면 정렬 기준을 바꾸고 다시 그린다");
+check(!!RENDER_RACE && !/renderPrep\(\)/.test(RENDER_RACE),
+  "탭 클릭이 renderPrep을 안 부른다 — 부르면 <details>가 접혀서 표가 사라져요");
+
+/* ── ⑩ 동료가 넣은 골이 개인 순위에 올라가는가
+ *
+ * 제보: "좀 전 경기에서 우리 팀원이 2골을 넣었는데 득점 순위에 안 보인다."
+ * 중계는 `⚽ 동료의 골!`이라고만 떴다 — **이름이 없으니 그 골이 어디에도 안 남았다.**
+ * 이제 우리 팀 선수 이름으로 넣고, 그 골을 시즌 기록으로 옮긴다.
+ *
+ * 우리 팀 선수는 나와 같은 경기를 뛴 사람이라, 굴린 값 대신 **중계에 뜬 골**을 쓴다.
+ * 안 그러면 같은 라운드를 두 번 세게 된다. */
+const MATE_FN = grab(C, /function applyMateGoals\(deltas, names\) \{[\s\S]*?\n  \}/);
+check(!!MATE_FN, "applyMateGoals를 소스에서 찾았다");
+const applyMate = new Function("S", "deltas", "names", `${MATE_FN} return applyMateGoals(deltas, names);`);
+const mkDelta = (name, club, g0, dg) => ({ r: { name, club, g: g0 + dg }, dg, da: 0, dd: 0 });
+{
+  const S2 = { group: "우리팀" };
+  const ds = [
+    mkDelta("동료A", "우리팀", 5, 1),     // 굴려서 1골 — 중계에는 2골로 떴다
+    mkDelta("동료B", "우리팀", 3, 2),     // 굴려서 2골 — 중계에는 0골
+    mkDelta("남의팀선수", "상대팀", 7, 3), // 다른 클럽 — 굴린 값 그대로여야 한다
+  ];
+  applyMate(S2, ds, ["동료A", "동료A"]);
+  const byName = Object.fromEntries(ds.map((d) => [d.r.name, d]));
+  check(byName["동료A"].r.g === 7 && byName["동료A"].dg === 2,
+    `중계에 2골 뜬 동료가 시즌 7골이 된다 (5 + 2 · 실제 ${byName["동료A"].r.g}골 / 이번 라운드 ${byName["동료A"].dg})`);
+  check(byName["동료B"].r.g === 3 && byName["동료B"].dg === 0,
+    `중계에 안 나온 동료는 굴린 골이 물려진다 (3골 유지 · 실제 ${byName["동료B"].r.g}골)`);
+  check(byName["남의팀선수"].r.g === 10 && byName["남의팀선수"].dg === 3,
+    `다른 클럽 선수는 굴린 값 그대로다 (10골 · 실제 ${byName["남의팀선수"].r.g}골)`);
+}
+// 배선 — 라운드 반영이 실제로 이 함수를 통과한다
+check(/applyMateGoals\(raceAdvance\(\), info\.mateGoals\)/.test(C),
+  "라운드 반영이 중계의 동료 골을 통과시킨다");
+// 중계가 이름을 붙이고 돌려주는가
+check(/text: who \? `⚽ \$\{who\}의 골!/.test(G), "중계가 동료 이름으로 골을 알린다");
+check(/mateGoals,\s*\/\/ 이 경기에서 골을 넣은/.test(G), "중계가 누가 넣었는지 info로 돌려준다");
+check(/mates: mateNames\(\)/.test(C), "경기를 시작할 때 우리 팀 명단을 넘긴다");
 
 /* ── 변이 검증 — 수상을 다시 랜덤 문턱으로 되돌리면 ①이 무너져야 한다. */
 const brokenAward = 'if (act.goals >= 50) awards.push("골든부츠");';
