@@ -276,6 +276,18 @@ function oppClubs(st) {
   return names.length ? names : list.map((c) => c.name);
 }
 
+/* 리그의 **모든** 클럽 — 내 클럽까지 넣어요.
+ * 경쟁자 명단을 oppClubs로 뽑았더니 우리 팀 선수가 개인 순위에도 평점표에도
+ * 한 번도 안 나왔어요. 리그 득점왕 표에 우리 팀 선수가 없는 건 이상하죠.
+ * 승격·이적 직후에는 내 클럽이 CLUBS 목록에 없을 수 있어서 따로 넣어 줍니다. */
+function leagueClubs(st) {
+  const list = CLUBS[leagueOf(st).id] || CLUBS[1];
+  const names = list.map((c) => c.name);
+  const mine = st && st.group;
+  if (mine && !names.includes(mine)) names.push(mine);
+  return names;
+}
+
 /* 선수 이름 — 예전에는 홑이름 12개뿐이라 "도현" 같은 이름만 나왔어요.
  * 성을 붙여 실제 선수 이름처럼 보이게 하고, 유스 시장에 따라 계열을 바꿔요.
  *

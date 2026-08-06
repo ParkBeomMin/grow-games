@@ -439,7 +439,9 @@ window.WingerCareer = (() => {
   const RACE_POS = { st: "fw", st2: "fw", wg: "wg", am: "mf", mf: "mf", cb: "df", cb2: "df", ut: "mf" };
 
   function rollRace() {
-    const clubs = shuffle(oppClubs(S));
+    /* ⚠️ oppClubs가 아니라 leagueClubs예요 — 내 클럽을 빼고 뽑으면
+     * **우리 팀 선수가 순위표에 한 번도 안 나와요.** 실제로 그랬습니다. */
+    const clubs = shuffle(leagueClubs(S));
     return RACE_ROLES.map((r, i) => ({
       name: randomPlayerName(Math.random() < 0.5 ? null : MARKETS.find((m) => m.id === "eu")),
       role: r.name, key: r.key, pos: RACE_POS[r.key] || "mf", pop: rand(52, 88),
@@ -554,7 +556,8 @@ window.WingerCareer = (() => {
       const v = k === "r" ? (r.avg || 0).toFixed(2) : (k === "m" ? (r.m != null ? r.m : r.mom || 0) : r[k] || 0);
       return `<td>${leader[k] === r.name ? "👑" : ""}${v}</td>`;
     };
-    const line = (r, i) => `<tr class="${r.me ? "me" : ""}"><td>${i + 1}</td>`
+    const line = (r, i) => `<tr class="${r.me ? "me" : (r.club && r.club === S.group ? "mate" : "")}">`
+      + `<td>${i + 1}</td>`
       + `<td>${r.name}<span class="ch-club">${r.club || "-"}${r.role ? ` · ${r.role}` : ""}</span></td>`
       + RACE_COLS.map(([k]) => cell(r, k)).join("") + `</tr>`;
     const myIdx = ranked.findIndex((x) => x.me);
@@ -812,7 +815,9 @@ window.WingerCareer = (() => {
     /* 소속 옆의 승·무·패는 **그 라운드 그 클럽의 결과**예요. 라이벌 점수가 이걸 보고
      * 오르내리니 근거가 화면에 있어야 해요 — 없으면 순위가 왜 뒤집혔는지 알 수가 없어요.
      * 한 글자 inline이라 줄을 새로 만들지 않아요. */
-    const line = (r, i) => `<tr class="${r.me ? "me" : ""}"><td>${i + 1}</td><td>${r.name}</td>`
+    // 우리 팀 선수는 표시해 줘요 — 같은 경기를 뛴 사람이라는 게 보여야 해요
+    const line = (r, i) => `<tr class="${r.me ? "me" : (r.club && r.club === S.group ? "mate" : "")}">`
+      + `<td>${i + 1}</td><td>${r.name}</td>`
       + `<td class="ch-club">${r.club || (r.me ? S.group : "-")}`
       + `${r.res ? `<span class="ch-res r-${r.res.toLowerCase()}">${RES_KO[r.res] || ""}</span>` : ""}`
       + `${r.role ? `<span class="ch-role">${r.role}</span>` : ""}</td>`

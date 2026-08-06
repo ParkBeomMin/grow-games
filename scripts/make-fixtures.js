@@ -629,11 +629,12 @@ function makeSoccerNation(marketIdx, tag) {
   log(`  ❌ 조건에 맞는 상태를 못 만들었어요 (${tag.title})`);
 }
 
-/* ⚽ 경기 결과의 평점 순위표 — 라이벌 '소속' 칸.
+/* ⚽ 경기 결과의 평점 순위표 + 🥇 개인 순위.
  *
- * 순위 행을 만드는 map이 name·score만 옮겨서, 라이벌 소속이 전부 "-"로 보였어요.
- * 함께 버려졌던 역할 딱지(에이스 스트라이커 …)도 이제 같이 나와요 —
- * CSS가 display:block이라 소속 아래로 한 줄이 더 붙습니다. 그 모양을 봐야 해요.
+ * 둘이 **같은 8명**인지 보는 자리예요. 예전에는 명단이 둘(act.rivals · act.race)로
+ * 갈려 있어서 득점 1위가 평점표에 아예 없었고, 소속도 전부 "-"였어요.
+ * 그리고 명단을 oppClubs(내 클럽을 빼는 함수)로 뽑아서 **우리 팀 선수가 한 번도
+ * 안 나왔어요.** 지금은 리그 전체에서 뽑아 동료가 파란 글씨로 섞여 있어야 해요.
  *
  * 결과 화면 자체는 세이브에 안 남아요(경기 도중 상태예요). 그래서 **다음 경기가
  * 대기 중인 상태**를 심어요. 열고 '경기하러 가기'를 한 번 누르면 그 화면이 나옵니다.
@@ -659,22 +660,27 @@ function makeSoccerChart() {
         if (!doAct(P, "#pro-actions .action-btn", "pos")) break;
       }
       const st = P.state();
-      const rivals = (st.activity && st.activity.rivals) || [];
+      const race = (st.activity && st.activity.race) || [];
       const ready = P.active() === "screen-pro" && !!P.w.document.querySelector("#pro-actions .go-game");
-      // 라이벌에 소속이 실제로 박혀 있어야 확인이 의미가 있어요
-      const clubsOK = rivals.length >= 5 && rivals.every((r) => r.club && r.name);
-      if (played >= MATCHES && ready && clubsOK) {
+      // 명단에 소속·평점이 실제로 박혀 있어야 확인이 의미가 있어요
+      const rosterOK = race.length >= 5 && race.every((r) => r.club && r.name && r.rate > 0);
+      // 그리고 **우리 팀 선수가 최소 한 명** 있어야 해요 — 이게 이번에 고친 것이에요
+      const mates = race.filter((r) => r.club === st.group);
+      if (played >= MATCHES && ready && rosterOK && mates.length) {
+        const topG = race.slice().sort((x, y) => y.g - x.g)[0];
         add({
           id: "soccer-chart",
           game: "soccer", url: "soccer/", emoji: "⭐",
-          title: "경기 결과 평점 순위표 — 라이벌 소속",
-          state: `${st.group} · ${st.proYear}시즌 · ${played}경기 소화 · 라이벌 ${rivals.length}명`,
-          check: "순위표 소속 칸에 라이벌 클럽이 나오는지 봐주세요 (예전엔 전부 \"-\"였어요). "
-            + "소속 아래 작은 글씨로 역할 딱지가 한 줄 더 붙는데, 표가 너무 길어 보이면 말씀해 주세요",
+          title: "평점 순위표 · 개인 순위 — 같은 8명인가",
+          state: `${st.group} · ${st.proYear}시즌 · ${played}경기 · 우리 팀 동료 ${mates.length}명`
+            + ` · 현재 득점 1위 ${topG.name}(${topG.club}) ${topG.g}골`,
+          check: "① 준비 화면의 <b>🥇 개인 순위</b>와 경기 후 <b>평점 순위표</b>에 나오는 이름이 같은지, "
+            + `② <b>우리 팀(${st.group}) 선수</b>가 파란 글씨로 섞여 있는지, `
+            + "③ 평점 숫자를 누르면 <b>⭐ 어떻게 나왔나</b>가 펼쳐지는지 봐주세요",
           steps: [
             "게임이 열리면 <b>이어하기</b> → 선수 카드",
-            "<b>⚽ 경기하러 가기</b>를 눌러요",
-            "경기가 끝나면 아래에 평점 순위표가 나와요",
+            "준비 화면의 <b>🥇 개인 순위</b>를 펼쳐 이름을 봐 두세요 (⚽🅰️🛡️⭐🏅 · 👑이 부문 1위)",
+            "<b>⚽ 경기하러 가기</b> → 경기가 끝나면 아래 평점 순위표에 같은 이름들이 나와요",
           ],
           keys: snapshot(P),
         });

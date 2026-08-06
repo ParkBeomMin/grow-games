@@ -297,3 +297,5 @@ body {
 .race-table td:first-child, .race-table th:first-child { width: 1.4rem; }
 .race-table .ch-club { display: block; font-size: .68rem; color: var(--dim); }
 .race-note { font-size: .72rem; color: var(--dim); margin-top: .3rem; }
+/* 우리 팀 동료 — 나(.me)만큼은 아니지만 같은 경기를 뛴 사람이라는 게 보이게 */
+.season-standings .mate td { color: var(--sky); }

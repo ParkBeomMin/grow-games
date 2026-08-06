@@ -143,6 +143,39 @@ const RANKFN = grab(C, /function raceRank\(key\) \{[\s\S]*?\n  \}/);
 check(!!RANKFN && /key === "r" \? avg\(x\)/.test(RANKFN) && /key === "m"/.test(RANKFN),
   "순위표가 평균 평점(r)과 MOM(m) 부문을 안다");
 
+/* ── ⑧ 우리 팀 선수가 명단에 들어가는가
+ *
+ * 제보: "개인순위나 평점순위에 우리팀 다른 선수들은 한번도 안 보인다."
+ * 맞았다 — rollRace가 oppClubs(내 클럽을 **빼고** 돌려주는 함수)로 소속을
+ * 나눠 줬다. 리그 득점왕 표에 우리 팀 선수가 한 명도 없는 게 정상 동작이었다. */
+const ROLL = grab(C, /function rollRace\(\) \{[\s\S]*?\n  \}/);
+check(!!ROLL && /leagueClubs\(S\)/.test(ROLL) && !/oppClubs\(S\)/.test(ROLL),
+  "경쟁자 소속을 리그 전체 클럽에서 나눈다 (oppClubs는 내 클럽을 빼요)");
+
+const LEAGUE_CLUBS = grab(G, /function leagueClubs\(st\) \{[\s\S]*?\n\}/);
+const CLUBS_SRC = grab(G, /const CLUBS = \{[\s\S]*?\n\};/);
+check(!!LEAGUE_CLUBS && !!CLUBS_SRC, "leagueClubs를 소스에서 찾았다");
+const clubsOf = new Function("st", `${CLUBS_SRC}\n${parts.leagues}\n`
+  + grab(G, /function leagueOf\(st\) \{[\s\S]*?\n\}/) + `\n${LEAGUE_CLUBS}\n return leagueClubs(st);`);
+const MY = clubsOf({ league: 1 })[0];
+const names = clubsOf({ league: 1, group: MY });
+check(names.includes(MY), `내 클럽 "${MY}"이 목록에 들어 있다`);
+// 승격·이적 직후처럼 목록에 없는 클럽이어도 빠지지 않아야 한다
+check(clubsOf({ league: 1, group: "이상한 FC" }).includes("이상한 FC"),
+  "목록에 없는 클럽(승격·이적 직후)도 넣어 준다");
+
+/* 8명을 6클럽에 `i % clubs.length`로 돌리면 내 클럽은 반드시 1~2명 몫을 받는다.
+ * 실제로 굴려서 확인한다 — "적어도 한 명은 우리 팀"이 이 수정의 약속이다. */
+const ROLES_N = ROLES.length;
+let worst = 99;
+for (let t = 0; t < 200; t++) {
+  const shuffled = names.slice().sort(() => Math.random() - 0.5);
+  let mine = 0;
+  for (let i = 0; i < ROLES_N; i++) if (shuffled[i % shuffled.length] === MY) mine++;
+  if (mine < worst) worst = mine;
+}
+check(worst >= 1, `${ROLES_N}명을 ${names.length}클럽에 돌리면 우리 팀이 최소 ${worst}명은 들어간다`);
+
 /* ── 변이 검증 — 수상을 다시 랜덤 문턱으로 되돌리면 ①이 무너져야 한다. */
 const brokenAward = 'if (act.goals >= 50) awards.push("골든부츠");';
 check(!/raceTop/.test(brokenAward), "변이 검증 — 랜덤 문턱 판정에는 raceTop이 없다 (①이 그걸 잡는다)");
