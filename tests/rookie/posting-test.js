@@ -201,6 +201,9 @@ const CAREER_CONSTS = [
   ["MILESTONES", /  const MILESTONES = \[[\s\S]*?\n  \];/],
   ["MILE_PV", /  const MILE_PV = [^;]+;/],
   ["FEATS", /  const FEATS = \{[\s\S]*?\n  \};/],
+  ["TITLES", /  const TITLES = \{[\s\S]*?\n  \};/],
+  ["titleMetric", /  const titleMetric = [^;]+;/],
+  ["myTitles", /  const myTitles = [^;]+;/],
 ];
 const CAREER_FNS = [
   "  function proLog(msg) {",
@@ -228,6 +231,9 @@ const CAREER_FNS = [
   "  function addAwardWeight(awards, pre) {",
   // 🏛️ 통산 마일스톤 — finishSeason이 careerCounts·newMilestones를, seasonReport가 milestoneHTML을 부름
   "  function careerCounts(seasons) {",
+  "  function makeTitleBar() {",
+  "  function titlesWon(stats, bar) {",
+  "  function titleRaceHTML() {",
   "  function mileScore(c) {",
   "  function newMilestones(prev, now, year) {",
   "  function milestoneHTML() {",

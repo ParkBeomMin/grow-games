@@ -707,7 +707,7 @@ guard("점수로 다시 잰 사다리", () => {
   const scoreSrc = grab(SRC, /  function careerScore\(\) \{[\s\S]*?\n {2}\}/);
   // 🏛️ careerScore가 이제 mileScore(마일스톤 가치)도 읽어요. 아래 픽스처엔 miles가 없어
   // 0을 더하니 상 배점 검사는 그대로지만, 함수가 정의돼 있어야 안 터져요.
-  const mileSrc = grab(SRC, /  const MILE_PV = [^;]+;/) + "\n" + grab(SRC, /  const FEATS = \{[\s\S]*?\n  \};/) + "\n" + grab(SRC, /  function mileScore\(c\) \{[\s\S]*?\n {2}\}/);
+  const mileSrc = grab(SRC, /  const MILE_PV = [^;]+;/) + "\n" + grab(SRC, /  const FEATS = \{[\s\S]*?\n  \};/) + "\n" + grab(SRC, /  const TITLES = \{[\s\S]*?\n  \};/) + "\n" + grab(SRC, /  function mileScore\(c\) \{[\s\S]*?\n {2}\}/);
   if (!awardWSrc || !scoreSrc || !mileSrc.trim()) throw new Error("careerScore·awardW·mileScore를 소스에서 못 찾았어요");
   const scoreOf = new Function("career", `
     const S = { career, trophies: [], scout: 0 };

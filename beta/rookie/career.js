@@ -327,7 +327,26 @@ window.Career = (() => {
       others: leagueTeams().filter((t) => t !== S.team).map((name) => ({ name, w: 0, l: 0, str: teamStrOf(name) })),
       stats: S.pos === "batter" ? { ab: 0, hits: 0, hr: 0, sb: 0 } : { ip: 0, k: 0, er: 0, wins: 0, saves: 0, g: 0 },
     };
+    S.season.titleBar = makeTitleBar();   // 🏅 올해 1등 기준선 — 시즌 내내 이 선과 겨뤄요
     save();
+  }
+
+  /* 🏅 타이틀 레이스 — 프로 화면 순위표 아래에 붙어요. 현재 기록과, 이 페이스로 갔을 때의
+   * 시즌 끝 예상, 1등 기준선을 나란히 놓아 "지금 몇 등 싸움인지"를 보여줘요. */
+  function titleRaceHTML() {
+    const bar = S.season && S.season.titleBar;
+    const mine = myTitles();
+    if (!bar || !mine.length) return "";
+    const g = S.season.game || 0, tot = S.season.total || 144;
+    const fmt = (m, x) => (m === "avg" ? x.toFixed(3) : m === "era" ? x.toFixed(2) : Math.round(x));
+    const rows = mine.map(([, t]) => {
+      const v = titleMetric(S.season.stats, t.metric), b = bar[t.metric];
+      // 누적 스탯은 남은 경기만큼 투영, 비율은 그대로
+      const proj = (t.metric === "avg" || t.metric === "era") ? v : (g > 0 ? v / g * tot : 0);
+      const lead = t.higher ? proj >= b : (proj <= b && proj > 0);
+      return `<tr class="${lead ? "title-lead" : ""}"><td>${t.emoji} ${t.name}</td><td>${fmt(t.metric, v)}</td><td>${g > 0 ? fmt(t.metric, proj) : "-"}</td><td>${fmt(t.metric, b)}</td><td>${lead ? "🥇" : ""}</td></tr>`;
+    }).join("");
+    return `<table class="rank-table title-race"><thead><tr><th>🏅 타이틀</th><th>현재</th><th>예상</th><th>1등선</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
   }
 
   function standingsHTML() {
@@ -361,7 +380,7 @@ window.Career = (() => {
     const l = leagueOf(S);
     $("pro-standings-sum").textContent =
       `📊 ${l.id === 1 ? "" : `${l.flag} ${l.name} · `}${myRank()}위 · ${S.season.teamW}승 ${S.season.teamL}패`;
-    $("pro-standings-body").innerHTML = standingsHTML();
+    $("pro-standings-body").innerHTML = standingsHTML() + titleRaceHTML();
   }
 
   function nextOpp() {
@@ -1085,14 +1104,57 @@ window.Career = (() => {
     cycle: { name: "사이클링히트", emoji: "🔄", pv: 20, pos: "batter" },
     multihr: { name: "멀티홈런 쇼", emoji: "💥", pv: 12, pos: "batter" },
   };
+  /* 🏅 시즌 타이틀 — 홈런왕·다승왕처럼 리그 1등에게 주는 상. 시즌이 열릴 때 '올해 1등이
+   * 될 기준선'을 한 번 뽑아 두고(S.season.titleBar), 시즌 내내 그 선과 경쟁해요. 끝에
+   * 내 성적이 그 선을 넘으면 타이틀을 따요 — 시즌 중 레이스 표시와 결과가 안 어긋나요. */
+  const TITLES = {
+    hr: { name: "홈런왕", emoji: "💣", pos: "batter", metric: "hr", higher: true, pv: 18 },
+    avg: { name: "수위타자", emoji: "🏏", pos: "batter", metric: "avg", higher: true, pv: 18 },
+    sb: { name: "도루왕", emoji: "👟", pos: "batter", metric: "sb", higher: true, pv: 14 },
+    wins: { name: "다승왕", emoji: "🏆", pos: "pitcher", metric: "wins", higher: true, pv: 18, role: "선발 투수" },
+    k: { name: "탈삼진왕", emoji: "🔥", pos: "pitcher", metric: "k", higher: true, pv: 16, role: "선발 투수" },
+    era: { name: "평균자책왕", emoji: "🎯", pos: "pitcher", metric: "era", higher: false, pv: 18, role: "선발 투수" },
+    saves: { name: "세이브왕", emoji: "🚪", pos: "pitcher", metric: "saves", higher: true, pv: 16, role: "마무리 투수" },
+  };
+  /* 이번 시즌 '1등 기준선'. 시즌 길이(경기 수)에 맞춰 누적 스탯은 늘리고 비율(타율·자책)은
+   * 그대로 둬요. 주사위는 **늘 21번**(7종 × 3) 굴려요 — 소비를 일정하게 (밸런스 시뮬 보호). */
+  function makeTitleBar() {
+    const k = ((S.season && S.season.total) || 144) / 144;
+    const maxOf = (lo, hi) => Math.max(rand(lo, hi), rand(lo, hi), rand(lo, hi));
+    const minOf = (lo, hi) => Math.min(rand(lo, hi), rand(lo, hi), rand(lo, hi));
+    return {
+      hr: Math.round(maxOf(38, 54) * k), avg: +maxOf(0.312, 0.342).toFixed(3), sb: Math.round(maxOf(56, 80) * k),
+      wins: Math.round(maxOf(10, 16) * k), k: Math.round(maxOf(360, 440) * k),
+      era: +minOf(2.3, 3.1).toFixed(2), saves: Math.round(maxOf(34, 44) * k),
+    };
+  }
+  const titleMetric = (st, m) => (m === "avg" ? (st.hits || 0) / Math.max(st.ab || 0, 1)
+    : m === "era" ? ((st.er || 0) * 9) / Math.max(st.ip || 0, 1) : (st[m] || 0));
+  const myTitles = () => Object.entries(TITLES).filter(([, t]) => t.pos === S.pos && (!t.role || t.role === S.role));
+  /* 내 성적이 기준선을 넘긴 타이틀들. era는 낮을수록 좋아요. 비율 타이틀은 최소 출장을 요구해요. */
+  function titlesWon(stats, bar) {
+    if (!bar) return [];
+    const tot = (S.season && S.season.total) || 144;
+    const out = [];
+    for (const [id, t] of myTitles()) {
+      const b = bar[t.metric]; if (b == null) continue;
+      if (t.metric === "avg" && (stats.ab || 0) < tot * 2) continue;
+      if (t.metric === "era" && (stats.ip || 0) < tot * 0.9) continue;
+      const v = titleMetric(stats, t.metric);
+      if (t.higher ? v >= b : (v <= b && v > 0)) out.push({ id, v });
+    }
+    return out;
+  }
+
   /* 마일스톤 하나의 명예의 전당 가치 — 뒤 고비일수록 가팔라요(3000안타는 전설이니까요). */
   const MILE_PV = [8, 12, 18, 26, 36];
-  /* 통산 마일스톤 + 한 경기 대기록을 합친 전당 가치예요. careerScore가 이 하나만 부르면
-   * 되도록 묶어 뒀어요(테스트가 careerScore를 떼어 갈 때 의존 함수를 하나만 알면 돼요). */
+  /* 통산 마일스톤 + 한 경기 대기록 + 시즌 타이틀을 합친 전당 가치예요. careerScore가 이 하나만
+   * 부르면 되도록 묶어 뒀어요(테스트가 careerScore를 떼어 갈 때 의존 함수를 하나만 알면 돼요). */
   function mileScore(c) {
     const miles = (((c || {}).miles) || []).reduce((sum, m) => sum + (MILE_PV[m.i] || 10), 0);
     const feats = (((c || {}).feats) || []).reduce((sum, f) => sum + ((FEATS[f.t] || {}).pv || 10), 0);
-    return miles + feats;
+    const titles = (((c || {}).titles) || []).reduce((sum, tt) => sum + ((TITLES[tt.id] || {}).pv || 10), 0);
+    return miles + feats + titles;
   }
   /* 경기 한 판의 대기록을 굴려요 (한 경기에 많아야 하나). 터지면 S.career.feats에 담고
    * 문구를 돌려줘요 — 부르는 쪽(결과 카드)이 크게 띄워요. */
@@ -1160,7 +1222,15 @@ window.Career = (() => {
       ? `<div class="mile-row mile-feats"><span class="mile-name">🎇 통산 대기록</span><span class="mile-feat-list">${
         Object.keys(FEATS).filter((t) => cnt[t]).map((t) => `${FEATS[t].emoji} ${FEATS[t].name} <b>${cnt[t]}</b>`).join(" · ")}</span></div>`
       : "";
-    return `<div class="mile-box"><div class="mile-title">🏛️ 통산 기록</div>${rows}${featRow}</div>`;
+    // 🏅 통산 타이틀 — 홈런왕·다승왕 등을 몇 번 땄는지
+    const titles = S.career.titles || [];
+    const tc = {};
+    for (const tt of titles) tc[tt.id] = (tc[tt.id] || 0) + 1;
+    const titleRow = titles.length
+      ? `<div class="mile-row mile-feats"><span class="mile-name">🏅 통산 타이틀</span><span class="mile-feat-list">${
+        Object.keys(TITLES).filter((id) => tc[id]).map((id) => `${TITLES[id].emoji} ${TITLES[id].name} <b>${tc[id]}</b>`).join(" · ")}</span></div>`
+      : "";
+    return `<div class="mile-box"><div class="mile-title">🏛️ 통산 기록</div>${rows}${titleRow}${featRow}</div>`;
   }
 
   function finishSeason() {
@@ -1256,8 +1326,10 @@ window.Career = (() => {
     /* team·league — **그 시즌에 뛴 소속**을 결산 시점에 그냥 적어요. 여기 적힌 값이 정본이에요.
      * league는 나중에 생긴 필드라 옛 기록에는 없어요. 그건 읽는 쪽(playedAt)이 S.moves에서
      * 역산해 메워요 — 세이브는 고치지 않아요(클라우드 동기화와 부딪혀요). */
+    const wonTitles = titlesWon(raw, S.season && S.season.titleBar);   // 🏅 이번 시즌 딴 타이틀
+    if (wonTitles.length) S.career.titles = (S.career.titles || []).concat(wonTitles.map((w) => ({ id: w.id, y: S.proYear })));
     const mileBefore = careerCounts(S.career.seasons);   // 이번 시즌을 더하기 전 통산
-    S.career.seasons.push({ y: S.proYear, age: S.age, war, line, rank, champ, awards, role: S.role, team: S.team, league: S.league, raw });
+    S.career.seasons.push({ y: S.proYear, age: S.age, war, line, rank, champ, awards, titles: wonTitles.map((w) => w.id), role: S.role, team: S.team, league: S.league, raw });
     const gotMiles = newMilestones(mileBefore, careerCounts(S.career.seasons), S.proYear);
     if (gotMiles.length) S.career.miles = (S.career.miles || []).concat(gotMiles);
     if (window.Stats) Stats.log("season_end", { y: S.proYear, war, rank, champ });
@@ -1298,6 +1370,11 @@ window.Career = (() => {
     // 수상은 하나씩 따로 띄워요 — 합쳐 놓으면 무엇을 받았는지 눈에 안 들어와요
     for (const a of awards) {
       feeds.push({ text: `🎖️ ${a} 수상!`, cls: "good", fx: () => Fx.celebrate("award", `🎖️ ${a} 수상!`) });
+    }
+    // 🏅 시즌 타이틀 — 리그 1등에 오르면 하나씩 크게 띄워요
+    for (const w of wonTitles) {
+      const t = TITLES[w.id];
+      feeds.push({ text: `🏅 ${t.emoji} ${t.name} 등극!`, cls: "good", fx: () => Fx.celebrate("award", `🏅 ${t.name}!`) });
     }
     // 🏛️ 통산 고비를 넘겼으면 하나씩 크게 띄워요 — 커리어의 이정표예요
     for (const nm of gotMiles) {
@@ -1373,7 +1450,8 @@ window.Career = (() => {
     const rows = S.career.seasons.slice(-8).map((x) => {
       const badges =
         (x.champ ? `<span class="sn-tag champ">🏆우승</span>` : "") +
-        (x.awards || []).map((a) => `<span class="sn-tag award">🎖️${AWARD_TAG[a] || a}</span>`).join("");
+        (x.awards || []).map((a) => `<span class="sn-tag award">🎖️${AWARD_TAG[a] || a}</span>`).join("") +
+        (x.titles || []).map((id) => `<span class="sn-tag title">${TITLES[id] ? TITLES[id].emoji + TITLES[id].name : id}</span>`).join("");
       return `<tr><td>${x.y}년차</td><td>${x.age}세</td><td class="sn-line">${x.line}${badges ? `<span class="sn-tags">${badges}</span>` : ""}</td><td class="sn-war">${x.war.toFixed(1)}</td></tr>`;
     }).join("");
     // 8시즌을 넘기면 표가 잘리니 전체를 어디서 보는지 알려줘요

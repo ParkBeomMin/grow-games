@@ -290,3 +290,10 @@
 .mile-feat-list { color: var(--text); font-size: .8rem; margin-left: auto; text-align: right; }
 .mile-feat-list b { color: var(--cream); }
 .feat-line { color: var(--accent); font-weight: 700; }
+
+/* 🏅 시즌 타이틀 레이스 — 프로 화면 순위표 아래에 붙는 표 + 결산의 시즌 배지 */
+.title-race { margin-top: 8px; }
+.title-race th, .title-race td { text-align: right; }
+.title-race th:first-child, .title-race td:first-child { text-align: left; }
+.title-race tr.title-lead td { color: var(--accent); }
+.sn-tag.title { border-color: var(--accent); color: var(--accent); }

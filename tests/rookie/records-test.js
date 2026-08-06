@@ -175,5 +175,79 @@ guard("한 경기 대기록", () => {
   check(/mile-feats/.test(SRC) && /통산 대기록/.test(SRC), "통산 기록 블록에 대기록 줄(🎇 통산 대기록)이 그려진다");
 });
 
+// ── ⑥ 시즌 타이틀 (홈런왕·다승왕…) ────────────────────────────
+guard("시즌 타이틀", () => {
+  const ta = SRC.indexOf("const TITLES = {");
+  const tblock = SRC.slice(ta, SRC.indexOf("\n  }", SRC.indexOf("function titlesWon")) + 4);
+  const gauss = (rnd, m, sd) => { const u = Math.max(1e-9, rnd()), v = rnd(); return m + sd * Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); };
+  const mkT = (S, seed) => {
+    const M = Object.assign(Object.create(Math), { random: mulberry32(seed) });
+    const rand = (a, b) => a + M.random() * (b - a);
+    return new Function("S", "rand", "Math", tblock + "\n return { TITLES, makeTitleBar, titlesWon, titleMetric, myTitles };")(S, rand, M);
+  };
+  const T0 = mkT({ pos: "batter", season: { total: 144 } }, 1).TITLES;
+  for (const id in T0) check(["batter", "pitcher"].includes(T0[id].pos) && T0[id].pv > 0 && typeof T0[id].higher === "boolean", `${T0[id].name} — 구조가 맞다`);
+  check(T0.era.higher === false, "평균자책왕은 낮을수록 좋다 (higher=false)");
+
+  // 시즌 길이에 따라 누적 기준선은 늘고(162>144), 비율(타율)은 안 는다
+  let sHi = 0, sLo = 0, aHi = 0, aLo = 0; const N0 = 300;
+  for (let i = 0; i < N0; i++) {
+    const b144 = mkT({ pos: "batter", season: { total: 144 } }, 500 + i).makeTitleBar();
+    const b162 = mkT({ pos: "batter", season: { total: 162 } }, 500 + i).makeTitleBar();
+    sLo += b144.hr; sHi += b162.hr; aLo += b144.avg; aHi += b162.avg;
+  }
+  check(sHi > sLo, `162경기 리그는 홈런왕 기준선이 더 높다 (${(sLo / N0).toFixed(0)} → ${(sHi / N0).toFixed(0)})`);
+  check(Math.abs(aHi - aLo) / N0 < 0.005, "타율 기준선은 경기 수와 무관하다 (비율이니까요)");
+
+  // 게이팅 — 타율은 최소 타석을 요구하고, 시점에 안 맞는 타이틀은 안 겨룬다
+  const bat = mkT({ pos: "batter", role: "4번 타자", season: { total: 144 } }, 7);
+  const bar = { hr: 40, avg: 0.300, sb: 50, wins: 15, k: 400, era: 2.5, saves: 40 };
+  check(bat.titlesWon({ ab: 50, hits: 25, hr: 45, sb: 0 }, bar).some((w) => w.id === "avg") === false,
+    "타율왕은 타석이 모자라면 자격이 없다 (50타수 5할이어도)");
+  check(bat.titlesWon({ ab: 600, hits: 200, hr: 45, sb: 0 }, bar).some((w) => w.id === "avg"),
+    "타석이 충분하고 기준선을 넘으면 타율왕을 딴다");
+  check(bat.titlesWon({ ab: 600, hits: 180, hr: 45, sb: 60 }, bar).every((w) => T0[w.id].pos === "batter"),
+    "타자는 투수 타이틀을 안 겨룬다");
+  const pit = mkT({ pos: "pitcher", role: "선발 투수", season: { total: 144 } }, 8);
+  check(pit.titlesWon({ ip: 180, k: 420, wins: 18, er: 40 }, bar).some((w) => w.id === "era"),
+    "자책이 기준선보다 낮으면 평균자책왕을 딴다");
+  check(pit.titlesWon({ ip: 180, k: 420, wins: 18, er: 70 }, bar).some((w) => w.id === "era") === false,
+    "자책이 기준선보다 높으면 평균자책왕이 아니다");
+
+  // win rate 실측 — 엘리트는 시즌당 몇 번, 평범하면 거의 없다 (드물어야 특별)
+  const seasonTitles = (pos, prof, seed) => {
+    const rnd = mulberry32(seed);
+    const S = { pos, role: pos === "pitcher" ? "선발 투수" : "4번 타자", season: { total: 144 } };
+    const api = mkT(S, seed + 11);
+    let n = 0;
+    for (let i = 0; i < 60; i++) {
+      S.season.stats = prof(rnd);
+      S.season.titleBar = api.makeTitleBar();
+      n += api.titlesWon(S.season.stats, S.season.titleBar).length;
+    }
+    return n / 60;
+  };
+  const PROF = {
+    batElite: (r) => ({ ab: 615, hits: Math.round(gauss(r, 196, 14)), hr: Math.round(gauss(r, 45, 7)), sb: Math.round(gauss(r, 67, 11)) }),
+    batLow: (r) => ({ ab: 590, hits: Math.round(gauss(r, 148, 12)), hr: Math.round(gauss(r, 23, 5)), sb: Math.round(gauss(r, 39, 8)) }),
+    pitElite: (r) => { const ip = gauss(r, 232, 15); return { ip, k: Math.round(gauss(r, 403, 30)), wins: Math.round(gauss(r, 12, 3)), er: ip * Math.max(1.5, gauss(r, 2.8, 0.4)) / 9 }; },
+    pitLow: (r) => { const ip = gauss(r, 222, 15); return { ip, k: Math.round(gauss(r, 302, 25)), wins: Math.round(gauss(r, 8, 3)), er: ip * Math.max(1.5, gauss(r, 3.4, 0.4)) / 9 }; },
+  };
+  for (const [pos, hiP, loP] of [["batter", PROF.batElite, PROF.batLow], ["pitcher", PROF.pitElite, PROF.pitLow]]) {
+    let hi = 0, lo = 0; for (let i = 0; i < 30; i++) { hi += seasonTitles(pos, hiP, 3000 + i); lo += seasonTitles(pos, loP, 6000 + i); }
+    hi /= 30; lo /= 30;
+    console.log(`   ${pos === "batter" ? "타자" : "선발"} 시즌당 타이틀 | 엘리트 ${hi.toFixed(2)} · 평범 ${lo.toFixed(2)}`);
+    check(hi >= 0.4 && hi <= 1.8, `${pos} 엘리트는 시즌당 타이틀이 0.4~1.8개다 (${hi.toFixed(2)}) — 특별하되 매 시즌은 아니게`);
+    check(lo < 0.25, `${pos} 평범한 성적은 타이틀이 거의 없다 (${lo.toFixed(2)})`);
+    check(hi > lo + 0.3, `${pos} 능력치가 타이틀을 가른다 (${lo.toFixed(2)} → ${hi.toFixed(2)})`);
+  }
+
+  // 배선
+  check(/S\.season\.titleBar = makeTitleBar\(\)/.test(SRC), "initSeason이 올해 타이틀 기준선을 뽑는다");
+  check(/titlesWon\(raw, S\.season && S\.season\.titleBar\)/.test(SRC), "finishSeason이 최종 성적으로 타이틀을 판정한다");
+  check(/standingsHTML\(\) \+ titleRaceHTML\(\)/.test(SRC), "프로 화면 순위표 아래에 타이틀 레이스가 붙는다");
+  check(/TITLES\[tt\.id\]/.test(SRC), "mileScore가 통산 타이틀 가치를 얹는다");
+});
+
 console.log(fail ? `\n❌ ${fail}개 실패` : "\n✅ 통과");
 process.exit(fail ? 1 : 0);
