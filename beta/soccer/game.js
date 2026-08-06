@@ -1702,39 +1702,68 @@ function playSurvivalRound() {
     S.youth.g += info.myGoals; S.youth.a += info.assists; S.youth.def += info.defense;
     save();
     const scoreClass = info.res === "W" ? "win" : info.res === "L" ? "lose" : "";
-    /* 📊 왜 통과했는지·왜 떨어졌는지를 적어요.
+    /* 🗣️ 왜 통과했는지·왜 떨어졌는지를 **감독의 말**로 적어요.
      *
      * 확률 판정이라 잘하고도 떨어질 수 있는데, 화면에 아무 근거가 없으면 그게
      * 버그로 읽혀요 — 실제로 5:3 승리에 평점 A, 4골 1도움으로 탈락한 제보가
      * 왔습니다(그 경기는 75%였어요).
      *
-     * 확률과 **가장 크게 민 것 / 가장 크게 깎은 것**을 같이 보여줘요.
-     * 여섯 조각을 다 늘어놓으면 못 읽으니 위아래 하나씩만 뽑습니다.
+     * 여섯 조각 중 **가장 크게 민 것 / 가장 크게 깎은 것** 하나씩만 말에 담아요.
+     * 다 늘어놓으면 대사가 아니라 명세서가 됩니다.
      * 떨어졌을 때는 확률이 높았는지 낮았는지로 말이 갈려요 —
-     * 높았는데 떨어졌으면 운이고, 낮았으면 뭘 올려야 하는지 알려줘야 해요. */
+     * 높았는데 떨어졌으면 "운이 없었다", 낮았으면 뭐가 모자랐는지 짚어 줘요. */
     const pp = Math.round(p * 100);
     const sorted = factors.filter((f) => Math.abs(f.v) >= 0.01).sort((a, b) => b.v - a.v);
     const best = sorted[0], worst = sorted[sorted.length - 1];
-    const fp = (v) => `${v > 0 ? "+" : ""}${Math.round(v * 100)}%p`;
-    /* 조사(이/가)는 앞 글자의 받침을 봐야 해요 — 안 그러면 "명성가"가 나와요.
-     * 한글 음절 코드에서 (코드 - 0xAC00) % 28 이 0이면 받침이 없어요. */
-    const ga = (word) => {
-      const c = String(word).charCodeAt(String(word).length - 1);
-      const hasJong = c >= 0xac00 && c <= 0xd7a3 && (c - 0xac00) % 28 !== 0;
-      return hasJong ? "이" : "가";
+
+    /* 감독이 한마디 하는 걸로 적어요.
+     *
+     * 처음엔 "통과 확률 75% — 이 경기가 +19%p로…"처럼 수치로 적었는데, 그건
+     * 판정식을 그대로 읽어 주는 것이지 **감독이 선수를 보는 말**이 아니에요.
+     * 확률은 '얼마나 아슬아슬했나'로, 조각은 '무엇이 눈에 들었나/걸렸나'로 옮깁니다.
+     *
+     * 조각마다 밀어줄 때와 깎을 때의 말이 달라요 — "기본기가 탄탄하더군"과
+     * "기본기가 아직 모자라"는 같은 축이지만 하는 말이 반대예요. */
+    const PUSH = {
+      "이 경기": "오늘 그라운드에서 보여준 게 컸어",
+      "능력치": "기본기가 탄탄하더군",
+      "유스 배경": "좋은 데서 배웠더군",
+      "명성": "자네 이름이 이미 들리더군",
+      "컨디션": "몸이 잘 올라와 있었어",
+      "라운드": "여기까지 올라온 것부터가 실력이지",
     };
-    let why;
+    const CUT = {
+      "이 경기": "오늘 경기가 아쉬웠네",
+      "능력치": "기본기가 아직 모자라",
+      "유스 배경": "어디서 배웠는지가 눈에 덜 띄더군",
+      "명성": "자네 이름을 아는 사람이 없어",
+      "컨디션": "몸이 덜 올라왔더군",
+      "라운드": "위로 올라올수록 보는 눈이 높아지거든",
+    };
+    // 선수가 지금부터 바꿀 수 있는 축 (유스 배경·라운드는 이제 와서 못 바꿔요)
+    const FIXABLE = { "이 경기": 1, "능력치": 1, "명성": 1, "컨디션": 1 };
+    const push = best && best.v > 0 ? PUSH[best.label] : null;
+    const cut = worst && worst.v < 0 ? CUT[worst.label] : null;
+
+    let line;
     if (pass) {
-      why = best && best.v > 0
-        ? `📊 통과 확률 <b>${pp}%</b> — <b>${best.label}</b>${ga(best.label)} ${fp(best.v)}로 가장 크게 밀었어요 (${best.tip})`
-        : `📊 통과 확률 <b>${pp}%</b>`;
-    } else if (pp >= 60) {
-      why = `📊 통과 확률이 <b>${pp}%</b>였는데 못 넘었어요 — 운이 나빴어요.`
-        + `${best && best.v > 0 ? ` 이 경기 자체는 ${best.label} ${fp(best.v)}로 좋았습니다.` : ""}`;
+      if (pp >= 78) line = `자네는 처음부터 눈에 들어왔네.${push ? ` ${push}.` : ""} 다음 단계로 가지.`;
+      else if (pp >= 55) line = `고민이 없진 않았네.${push ? ` 그래도 ${push}.` : ""} 한번 더 보고 싶군.`;
+      else line = `솔직히 반신반의했네.${push ? ` ${push}.` : ""} 오늘은 자네 운도 따랐어 — 다음엔 실력으로 보여주게.`;
+    } else if (pp >= 70) {
+      line = `자네가 못해서가 아니야.${push ? ` ${push}.` : ""} 오늘은 자리가 없었을 뿐이네. 운이 없었어.`;
+    } else if (pp >= 45) {
+      /* "거기만 조금 더 됐어도"는 **선수가 바꿀 수 있는 것**에만 붙여요.
+       * 라운드·유스 배경은 이제 와서 어쩔 수 없는 자리라, 거기에 붙이면
+       * 감독이 못 할 일을 시키는 말이 됩니다. */
+      const fixable = worst && FIXABLE[worst.label];
+      line = cut
+        ? `종이 한 장 차이였네. ${cut}.${fixable ? " 거기만 조금 더 됐어도." : " 위는 원래 좁아."}`
+        : "종이 한 장 차이였네.";
     } else {
-      why = `📊 통과 확률 <b>${pp}%</b>`
-        + `${worst && worst.v < 0 ? ` — <b>${worst.label}</b>${ga(worst.label)} ${fp(worst.v)}로 가장 크게 깎았어요 (${worst.tip})` : ""}`;
+      line = `아직이야.${cut ? ` ${cut}.` : ""} 다시 오게.`;
     }
+    const why = `🗣️ 감독 — “${line}”`;
     const resultHTML = `
       <div class="ms-final ${scoreClass}">${info.home} ${info.teamGoals} : ${info.oppGoals} ${info.away} · ${RES_LABEL[info.res]}</div>
       <div class="tour-vs">경기 평점 ${fg.g} · ⚽${info.myGoals} 🅰️${info.assists} 🛡️${info.defense} — <span class="${pass ? "win" : "lose"}">${pass ? "통과! 🎉" : "탈락… 💧"}</span></div>
