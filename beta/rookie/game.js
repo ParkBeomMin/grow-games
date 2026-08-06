@@ -706,7 +706,8 @@ function renderRecord() {
       ${curHtml}
       ${proHtml ? `<br/><b>⚾ 연도별 통산 기록</b>${proHtml}<br/>` : ""}
       ${gearList ? `<br/><b>🛍️ 보유 장비</b> ${gearList}` : ""}
-    </div>`;
+    </div>
+    ${S.phase === "pro" && window.Career && window.Career.milestoneHTML ? window.Career.milestoneHTML() : ""}`;
 }
 $("btn-record-main")?.addEventListener("click", () => openRecord("screen-main"));
 $("btn-record-pro")?.addEventListener("click", () => openRecord("screen-pro"));

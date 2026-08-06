@@ -13,6 +13,7 @@
 const fs = require("fs");
 const BASE = "/workspace/grow-games/beta/rookie";
 const SRC = fs.readFileSync(`${BASE}/career.js`, "utf8");
+const GAME = fs.readFileSync(`${BASE}/game.js`, "utf8");
 const CSS = fs.readFileSync(`${BASE}/style.css`, "utf8");
 
 let fail = 0;
@@ -247,6 +248,12 @@ guard("시즌 타이틀", () => {
   check(/titlesWon\(raw, S\.season && S\.season\.titleBar\)/.test(SRC), "finishSeason이 최종 성적으로 타이틀을 판정한다");
   check(/standingsHTML\(\) \+ titleRaceHTML\(\)/.test(SRC), "프로 화면 순위표 아래에 타이틀 레이스가 붙는다");
   check(/TITLES\[tt\.id\]/.test(SRC), "mileScore가 통산 타이틀 가치를 얹는다");
+  check(/S\.season\.titleLead = makeTitleLeaders\(\)/.test(SRC) && !/Math\.random/.test(SRC.slice(SRC.indexOf("function makeTitleLeaders"), SRC.indexOf("function makeTitleLeaders") + 300)),
+    "initSeason이 라이벌(현재 1위) 이름을 뽑되 난수는 안 쓴다 (밸런스 시뮬 보호)");
+  check(/현재 1위/.test(SRC) && /iLead \? "나"/.test(SRC), "타이틀 레이스가 현재 1위(라이벌 이름·수치)를 보여준다");
+  // 🏛️ 통산 기록 블록이 결산뿐 아니라 상시 접근하는 📊 기록 화면(game.js)에도 뜬다
+  check(/^\s*milestoneHTML,/m.test(SRC), "Career가 통산 기록 블록을 공개한다");
+  check(/window\.Career && window\.Career\.milestoneHTML/.test(GAME), "📊 기록 화면(game.js)이 통산 기록 블록을 그린다");
 });
 
 console.log(fail ? `\n❌ ${fail}개 실패` : "\n✅ 통과");
