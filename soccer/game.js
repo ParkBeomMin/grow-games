@@ -427,6 +427,7 @@ function newState(market, pos, name, roll) {
     trophies: [],
     cup: null,          // 🏆 진행 중인 컵 대회 (없으면 null)
     cupPrep: false,     // 🏆 컵 8강 전 준비 중인가
+    cupReady: false,    // 🏆 준비가 끝나 시작 버튼만 남은 상태
     stages: 0, // 출전 경기 수
     youth: { g: 0, a: 0, def: 0 }, // 유스 통산 골·도움·수비
     log: [],

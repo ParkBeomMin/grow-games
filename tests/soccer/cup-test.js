@@ -97,6 +97,10 @@ function runCup(P) {
     /* 🏆 8강 전 준비 화면. 예전에는 리그 마지막 경기에서 버튼 하나로 바로 8강이라
      * 컨디션이 바닥인 채로 단판 토너먼트에 들어갔어요. 준비 턴을 다 쓰면 컵이 시작돼요. */
     if (P.active() === "screen-pro") {
+      /* 준비가 끝나면 **시작 버튼**이 떠요. 예전에는 마지막 훈련을 누르는 순간
+       * 그대로 8강으로 넘어갔어요 — 훈련하려던 손이 경기 시작이 됐습니다. */
+      const go = P.w.document.querySelector("#pro-actions .go-game");
+      if (go) { seen.startBtn = go.textContent.trim(); go.click(); continue; }
       const acts = Array.from(P.w.document.querySelectorAll("#pro-actions .action-btn"))
         .filter((b) => !b.disabled && b.dataset.key && !b.classList.contains("awaken-act"));
       if (!acts.length) break;
@@ -142,6 +146,9 @@ const S1 = P.state();
 
 console.log(`   준비 ${run.prepTurns}턴 → 눌러 간 버튼: ${run.rounds.join(" → ")}`);
 check(run.prepTurns > 0, `준비 턴을 실제로 쓴다 (${run.prepTurns}회)`);
+check(!!run.startBtn && /8강 시작/.test(run.startBtn),
+  `준비가 끝나면 시작 버튼을 눌러야 경기가 열린다 (${run.startBtn || "버튼 없음"}) — `
+  + "마지막 훈련이 그대로 경기 시작이 되면 안 돼요");
 
 /* 대진에 **다른 리그** 팀이 섞여 있어야 한다 — 같은 리그만 모으면 컵이
  * 그냥 3경기 더가 된다. 자이언트 킬링이 컵의 전부다.

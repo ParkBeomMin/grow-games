@@ -396,6 +396,22 @@ window.WingerCareer = (() => {
     }));
   }
 
+  /* 진행 중이던 세이브에는 경쟁자 명단이 없어요 — 시즌 시작(initActivity)에만
+   * 만들어지거든요. 그대로 두면 순위표가 아예 안 뜨고, 시즌이 끝날 때까지
+   * 부문상도 못 받아요.
+   *
+   * 그릴 때 비어 있으면 채워 넣되, **이미 치른 경기 수만큼 미리 굴려 둬요.**
+   * 0골에서 시작하면 내가 20골인데 1위가 0골인 표가 나와서 경쟁이 안 됩니다.
+   * (라이벌 이름·소속을 나중에 메우는 fillRivals와 같은 방식이에요) */
+  function ensureRace() {
+    const act = S.activity;
+    if (!act || Array.isArray(act.race)) return;
+    act.race = rollRace();
+    const played = act.apps || 0;
+    for (let i = 0; i < played; i++) raceAdvance();
+    save();
+  }
+
   // 한 경기치를 경쟁자들에게 쌓아요. 리그 격이 생산량에 실려요.
   function raceAdvance() {
     const race = S.activity && S.activity.race;
@@ -457,9 +473,11 @@ window.WingerCareer = (() => {
 
   function afterPrep() {
     if (S.camp > 0) { renderPrep(); return; }
-    /* 🏆 컵 준비 중이었으면 리그가 아니라 컵으로 가요. 이 갈림이 없으면
-     * 준비가 끝나는 순간 리그 경기가 한 판 더 열려요 — 시즌은 이미 끝났는데도요. */
-    if (S.cupPrep) { S.cupPrep = false; save(); startCup(); return; }
+    /* 🏆 컵 준비가 끝나면 **시작 버튼**을 띄워요. 리그 경기도 준비가 끝나면
+     * "경기하러 가기"를 누르는데, 컵만 마지막 훈련을 누르는 순간 그대로 8강으로
+     * 넘어갔어요 — 훈련하려던 손이 그대로 경기 시작이 됩니다.
+     * 이 갈림이 없으면 리그 경기가 한 판 더 열려요(시즌은 이미 끝났는데도요). */
+    if (S.cupPrep) { S.cupReady = true; save(); renderPrep(); show("screen-pro"); return; }
     if (!S.activity) initActivity();
     else if (S.activity.week >= S.activity.weekTotal) {
       S.activity.cb += 1;
@@ -510,6 +528,7 @@ window.WingerCareer = (() => {
     /* 🥇 개인 순위 — 시즌 중에만 보여줘요. 득점왕 경쟁이 눈에 보여야
      * "한 골 더"에 이유가 생겨요. 부문상이 이 표 1위한테 갑니다. */
     const race = $("pro-race");
+    ensureRace();                     // 옛 세이브에도 명단을 채워요
     if (S.activity && Array.isArray(S.activity.race)) {
       race.hidden = false;
       const g = raceRank("g")[0], mine = raceRank("g").findIndex((x) => x.me) + 1;
@@ -547,7 +566,9 @@ window.WingerCareer = (() => {
       ? (S.activity.week === 0
         ? `⚽ ${cbLabel(S.activity.cb)} 리그 준비 완료 — 경기를 시작하세요!`
         : `🔔 킥오프! R${S.activity.week + 1} 경기를 시작하세요`)
-      : (S.cupPrep
+      : (S.cupReady
+        ? `🏆 ${cupName()} 8강 준비 완료 — 경기를 시작하세요!`
+        : S.cupPrep
         // 🏆 컵 준비는 리그와 다른 자리예요 — 뭘 앞두고 훈련하는지 알려줘야 해요
         ? `🏆 ${cupName()} 8강 준비 — 남은 훈련 ${S.camp}회, 끝나면 단판 토너먼트!`
         : S.activity
@@ -580,6 +601,20 @@ window.WingerCareer = (() => {
     rest.innerHTML = `<span class="a-emoji">🛌</span>휴식 <span class="a-sub">컨디션 회복</span>`;
     rest.onclick = () => prepAction(null);
     box.appendChild(rest);
+
+    /* 🏆 컵 준비가 끝났으면 훈련을 잠그고 시작 버튼만 남겨요.
+     * 리그의 "경기하러 가기"와 같은 자리·같은 모양이에요. */
+    if (S.cupReady) {
+      box.querySelectorAll(".action-btn").forEach((b) => {
+        if (!b.classList.contains("ad-slot")) b.disabled = true;
+      });
+      const cupGo = document.createElement("button");
+      cupGo.className = "action-btn rest go-game";
+      cupGo.innerHTML = `<span class="a-emoji">🏆</span>${cupName()} 8강 시작`
+        + `<span class="a-sub">단판 토너먼트 — 지면 끝이에요</span>`;
+      cupGo.onclick = () => { S.cupPrep = false; S.cupReady = false; save(); startCup(); };
+      box.appendChild(cupGo);
+    }
 
     if (S.pendingShow) {
       box.querySelectorAll(".action-btn").forEach((b) => {
@@ -713,6 +748,7 @@ window.WingerCareer = (() => {
      * 라이벌 점수가 그걸 볼 수 있어요. 예전에는 순위 행을 다 만든 뒤에 굴려서
      * 둘이 같은 라운드를 보면서도 서로 모르는 사이였습니다. */
     const roundRes = recordRound(act.opp, info.res);
+    ensureRace();    // 옛 세이브면 여기서 먼저 채워요
     raceAdvance();   // 🥇 경쟁자들도 그 라운드 몫을 쌓아요
     const rows = [
       { name: S.name, score: myRankScore, me: true, res: info.res },
