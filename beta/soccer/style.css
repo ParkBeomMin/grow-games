@@ -279,6 +279,21 @@ body {
 .pass-why { color: var(--sky); font-size: .84rem; margin-top: 2px; }
 .pass-why b { color: var(--cream); }
 
-/* 🥇 개인 순위 — 득점·도움 두 표를 한 칸에 */
-.race-block + .race-block { margin-top: 12px; }
+/* ⭐ 경기 평점 내역 — 접어 두고, 궁금할 때만 펼쳐요 */
+.rate-why { margin: .4rem auto; max-width: 24rem; text-align: left; }
+.rate-why > summary { cursor: pointer; font-size: .86rem; color: var(--accent); list-style: none; text-align: center; }
+.rate-why > summary::-webkit-details-marker { display: none; }
+.rate-why > summary::after { content: " ▾"; color: var(--dim); }
+.rate-why[open] > summary::after { content: " ▴"; }
+.rw-body { display: flex; flex-wrap: wrap; gap: .25rem .5rem; margin-top: .35rem; }
+.rw-item { font-size: .8rem; color: var(--dim); white-space: nowrap; }
+.rw-item b { color: var(--cream); font-weight: 600; }
+.rw-note { font-size: .76rem; color: var(--sky); margin-top: .3rem; }
+
+/* 🥇 개인 순위 — 득점·도움·수비·평점·MOM을 한 표에 */
 .race-title { font-size: .82rem; color: var(--accent); margin-bottom: 4px; }
+.race-table { font-size: .78rem; }
+.race-table th, .race-table td { padding: .2rem .18rem; }
+.race-table td:first-child, .race-table th:first-child { width: 1.4rem; }
+.race-table .ch-club { display: block; font-size: .68rem; color: var(--dim); }
+.race-note { font-size: .72rem; color: var(--dim); margin-top: .3rem; }

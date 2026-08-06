@@ -335,8 +335,15 @@ const RACE_ROLES = [
  * 상위 리그(챔피언십·프리미어리그)는 능력치 100으로는 거의 못 받아요 —
  * 평점 페널티로 내 생산량이 먼저 깎이기 때문이에요. 거기 상은 값어치(prestige)가
  * 큰 만큼 능력치 130 이상을 요구합니다. "쉬운 상 vs 값진 상" 축 그대로예요. */
+/* 경쟁자 한 경기 생산량. **리그 격이 세게 실려요.**
+ * 예전 계수(1.35 + 격×0.40)는 최하위와 최상위의 차이가 1.47배뿐이라,
+ * K리그3의 경쟁자와 프리미어리그의 경쟁자가 사실상 같은 선수였어요.
+ * 지금은 1.35배 → 2.68배로 두 배 가까이 벌어집니다.
+ *
+ * 실측(경쟁자 8명 평균 평점) — K리그3 7.11 · K리그1 7.49 · J1 7.76 ·
+ * 세리에A 8.29 · 프리미어리그 8.53. 리그를 옮기면 표의 눈높이가 눈에 띄게 달라져요. */
 const raceLam = (base, pop, prestige) =>
-  base * ((pop || 70) / 70) * (1.35 + (prestige || 1) * 0.40);
+  base * ((pop || 70) / 70) * (0.95 + (prestige || 1) * 0.72);
 
 // 평가 경기 종목: 주 스탯 / 보조 스탯 가중치
 const STAGE_TYPES = [
@@ -1267,9 +1274,16 @@ function matchContribution(rating) {
   const isWg = S.pos === "wg";
   const gStat = isWg ? (S.stats.shoot || 40) * 0.6 + (S.stats.dribble || 40) * 0.4 : (S.stats.shoot || 40);
   const aStat = isWg ? (S.stats.pass || 40) * 0.6 + (S.stats.dribble || 40) * 0.4 : (S.stats.pass || 40);
-  const shootF = gStat / 100;
-  const passF = aStat / 100;
-  const defF = (S.stats.defense || 40) / 100;
+  /* 축마다 자기 스탯이 주인공이지만, 종합도 조금 섞어요(AXIS_MIX).
+   * 한 칸만 200이고 나머지가 40인 선수는 그 한 장면 말고는 경기에 관여를 못 해요.
+   * 이 항이 없으면 "골 넣는 기계"가 도움·수비까지 평범 이상으로 하게 됩니다. */
+  const AXIS_MIX = 0.2;
+  const allStat = ((S.stats.shoot || 40) + (S.stats.pass || 40) + (S.stats.dribble || 40)
+    + (S.stats.defense || 40) + (S.stats.stamina || 40)) / 5;
+  const mix = (v) => v * (1 - AXIS_MIX) + allStat * AXIS_MIX;
+  const shootF = mix(gStat) / 100;
+  const passF = mix(aStat) / 100;
+  const defF = mix(S.stats.defense || 40) / 100;
   const G = { fw: 1.05, wg: 0.75, mf: 0.5, df: 0.14 };
   const A = { mf: 0.95, wg: 0.85, fw: 0.55, df: 0.28 };
   const D = { df: 2.3, mf: 1.2, wg: 0.5, fw: 0.45 };

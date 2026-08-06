@@ -28,6 +28,12 @@ const parts = {
   clutchScale: grab(GAME, /const CLUTCH_SCALE = [^;]+;/),
   transLv: grab(GAME, /const transLv = [^;]+;/),
   clutch: grab(GAME, /function clutch\(key\) \{[\s\S]*?\n\}/),
+  /* ⚠️ myScore만 뽑으면 안 돼요 — 산식이 같은 함수 안의 all·low·weak를 봅니다.
+   * ratingOf 본문을 통째로 가져와서 그 안의 계산을 그대로 굴려요. */
+  ratingBody: (() => {
+    const fn = grab(SRC, /function ratingOf\(stats, pos, condition, fandom\) \{[\s\S]*?\n  \}/);
+    return fn ? fn.replace(/^\s*function ratingOf\([^)]*\) \{/, "").replace(/\n  \}$/, "") : null;
+  })(),
   myScore: grab(SRC, /const myScore =[\s\S]*?;\n/),
   rating: grab(SRC, /const rating = clamp\(myScore[^;]+;/),
 };
@@ -54,9 +60,7 @@ const ratingFn = new Function("S", "stats", "pos", "condition", "fandom", "clamp
   ${parts.posInfo} ${parts.clutchScale} ${parts.transLv} ${parts.clutch}
   ${leagueSrc}
   ${consts}
-  ${parts.myScore}
-  ${parts.rating}
-  return rating;
+  ${parts.ratingBody}
 `);
 
 const POS = ["fw", "mf", "df", "wg"];

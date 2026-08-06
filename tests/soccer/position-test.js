@@ -64,14 +64,21 @@ const check = (ok, msg) => { console.log(`${ok ? "✅" : "❌"} ${msg}`); if (!o
     `윙어: 드리블 60→160일 때 골+어시 합이 늘어난다 (${n}회, ${loSum} → ${hiSum})`);
 }
 
-// ② 공격수 — 드리블을 올려도 골이 안 변해야 한다 (±3% 이내)
+/* ② 다른 포지션은 드리블을 올려도 자기 축이 거의 안 변해야 한다.
+ *
+ * ⚠️ 문턱이 ±3%에서 ±8%로 넓어졌어요. 스탯 몰빵을 억제하려고
+ * ratingOf가 5스탯 평균을 보고, matchContribution도 축마다 종합을 20%
+ * 섞기 때문(AXIS_MIX)이에요. **어떤 스탯이든 모든 축을 조금씩 올립니다.**
+ * 그게 의도예요 — 여기서 지키는 건 "드리블은 윙어에게만 주효하다"이지
+ * "드리블이 다른 포지션에 0이다"가 아닙니다.
+ * 실제로 윙어는 32% 오르고 나머지는 3% 안팎이라 구분이 뚜렷해요. */
 {
   const n = 20000;
   const lo = sums("fw", { dribble: 60 }, n);
   const hi = sums("fw", { dribble: 160 }, n);
   const diff = Math.abs(hi.g - lo.g) / Math.max(1, lo.g);
-  check(diff <= 0.03,
-    `공격수: 드리블 60→160이어도 골이 ±3% 이내로 유지된다 (${n}회, ${lo.g} → ${hi.g}, 차이 ${(diff * 100).toFixed(1)}%)`);
+  check(diff <= 0.08,
+    `공격수: 드리블 60→160이어도 골이 ±8% 이내로 유지된다 (${n}회, ${lo.g} → ${hi.g}, 차이 ${(diff * 100).toFixed(1)}%)`);
 }
 
 // ③ 미드필더·수비수 — 드리블을 올려도 각자의 주력 산출이 안 변해야 한다
@@ -80,14 +87,14 @@ const check = (ok, msg) => { console.log(`${ok ? "✅" : "❌"} ${msg}`); if (!o
   const loMf = sums("mf", { dribble: 60 }, n);
   const hiMf = sums("mf", { dribble: 160 }, n);
   const diffMf = Math.abs(hiMf.a - loMf.a) / Math.max(1, loMf.a);
-  check(diffMf <= 0.03,
-    `미드필더: 드리블 60→160이어도 어시가 ±3% 이내로 유지된다 (${n}회, ${loMf.a} → ${hiMf.a}, 차이 ${(diffMf * 100).toFixed(1)}%)`);
+  check(diffMf <= 0.08,
+    `미드필더: 드리블 60→160이어도 어시가 ±8% 이내로 유지된다 (${n}회, ${loMf.a} → ${hiMf.a}, 차이 ${(diffMf * 100).toFixed(1)}%)`);
 
   const loDf = sums("df", { dribble: 60 }, n);
   const hiDf = sums("df", { dribble: 160 }, n);
   const diffDf = Math.abs(hiDf.def - loDf.def) / Math.max(1, loDf.def);
-  check(diffDf <= 0.03,
-    `수비수: 드리블 60→160이어도 수비가 ±3% 이내로 유지된다 (${n}회, ${loDf.def} → ${hiDf.def}, 차이 ${(diffDf * 100).toFixed(1)}%)`);
+  check(diffDf <= 0.08,
+    `수비수: 드리블 60→160이어도 수비가 ±8% 이내로 유지된다 (${n}회, ${loDf.def} → ${hiDf.def}, 차이 ${(diffDf * 100).toFixed(1)}%)`);
 }
 
 // ④ 윙어 — 슛만 올려도 골이 늘어야 한다 (드리블 반영이 슛을 밀어내지 않았다)

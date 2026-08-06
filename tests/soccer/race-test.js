@@ -49,9 +49,9 @@ check(!/rand\(\s*\d+\s*,\s*\d+\s*\)\s*\*\s*bar/.test(parts.awardBlk),
 
 // ── ② 시즌 내내 같은 명단 (반기 갱신 자리에 race가 없어야 한다)
 check(/race: rollRace\(\)/.test(parts.initAct), "시즌 시작에 경쟁자 명단을 뽑는다");
-const halfReset = grab(C, /S\.activity\.cb \+= 1;[\s\S]*?rollRivals\(\);/);
+const halfReset = grab(C, /S\.activity\.cb \+= 1;[\s\S]*?cbWins = 0;/);
 check(!!halfReset && !/race/.test(halfReset),
-  "반기가 바뀌어도 경쟁자 기록은 안 지운다 (라이벌만 다시 뽑아요)");
+  "반기가 바뀌어도 경쟁자 기록은 안 지운다 (시즌 내내 같은 8명이에요)");
 
 // ── ③ 순위 계산 — 내가 1위면 raceTop이 참
 const rankOf = new Function("S", "key", `${parts.rank}${parts.top} return { rank: raceRank(key), top: raceTop(key) };`);
@@ -120,6 +120,28 @@ check(!!PHASE_SET && !!IS_PRO && PHASE_SET.split('"')[1] === IS_PRO.split('"')[1
 const ENSURE = grab(C, /function ensureRace\(\) \{[\s\S]*?\n  \}/);
 check(!!ENSURE && /act\.apps/.test(ENSURE),
   "옛 세이브를 채울 때 **이미 치른 경기 수만큼** 미리 굴린다 — 0골에서 시작하면 경쟁이 안 돼요");
+
+/* ── ⑦ 개인 순위와 경기 후 평점표가 **같은 명단**인가
+ *
+ * 제보: "개인 순위 상위에 있는 선수가 평점 순위에서는 잘 안 보인다."
+ * 맞는 관찰이었다 — 명단이 둘이었다. act.rivals(평점표 8명)와 act.race(개인 순위
+ * 8명)가 아예 다른 사람들이라, 득점 1위가 평점표에 없는 게 정상 동작이었다.
+ * 지금은 act.race 하나만 쓴다. */
+const FINAL = grab(C, /const roundRes = recordRound\(act\.opp, info\.res\);[\s\S]*?\.sort\([^;]*\);/);
+check(!!FINAL && /raceRate\(roundRes, raceAdvance\(\)\)/.test(FINAL),
+  "경기 후 평점표가 경쟁자 명단의 그 라운드 기록을 그대로 쓴다");
+check(!!FINAL && /\.\.\.scored\.map/.test(FINAL) && !/act\.rivals/.test(FINAL),
+  "평점표 행이 act.rivals(옛 별도 명단)를 안 본다");
+// 주석에는 옛 이름이 설명으로 남아 있어요 — **호출·접근**만 봅니다
+check(!/rollRivals\(|fillRivals\(|act\.rivals\.|act\.rivals =/.test(C),
+  "소스에 옛 라이벌 명단을 쓰는 코드가 없다 — 남아 있으면 명단이 다시 갈라져요");
+/* 평점·MOM이 명단에 쌓이는지 — 개인 순위의 ⭐/🏅 칸 근거다 */
+const RATEFN = grab(C, /function raceRate\(roundRes, deltas\) \{[\s\S]*?\n  \}/);
+check(!!RATEFN && /r\.rate = \(r\.rate \|\| 0\) \+ clamp/.test(RATEFN), "경쟁자에게 평점이 누적된다 (⭐ 평균 평점)");
+check(/top\.r\.mom = \(top\.r\.mom \|\| 0\) \+ 1/.test(C), "그 라운드 1위 경쟁자에게 MOM이 쌓인다 (🏅)");
+const RANKFN = grab(C, /function raceRank\(key\) \{[\s\S]*?\n  \}/);
+check(!!RANKFN && /key === "r" \? avg\(x\)/.test(RANKFN) && /key === "m"/.test(RANKFN),
+  "순위표가 평균 평점(r)과 MOM(m) 부문을 안다");
 
 /* ── 변이 검증 — 수상을 다시 랜덤 문턱으로 되돌리면 ①이 무너져야 한다. */
 const brokenAward = 'if (act.goals >= 50) awards.push("골든부츠");';

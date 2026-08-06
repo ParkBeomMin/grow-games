@@ -38,8 +38,12 @@ const parts = {
   infoBlock: grab(GAME, /const info = \{[\s\S]*?\n {6}\};/),
   fanCap: grab(SRC, /const FAN_CAP = [^;]+;/),
   ratingDiv: grab(SRC, /const RATING_DIV = [^;]+;/),
-  myScore: grab(SRC, /const myScore =[\s\S]*?;\n/),
-  rating: grab(SRC, /const rating = clamp\(myScore[^;]+;/),
+  /* ⚠️ myScore 한 줄만 뽑으면 안 돼요 — 산식이 같은 함수 안의 all·low·weak를 봅니다.
+   * ratingOf 본문을 통째로 가져와요(rating 선언과 return이 그 안에 있어요). */
+  ratingBody: (() => {
+    const fn = grab(SRC, /function ratingOf\(stats, pos, condition, fandom\) \{[\s\S]*?\n {2}\}/);
+    return fn ? fn.replace(/^\s*function ratingOf\([^)]*\) \{/, "").replace(/\n {2}\}$/, "") : null;
+  })(),
   cbPerYear: grab(SRC, /const CB_PER_YEAR = [^;]+;/),
   weeksPerCb: grab(SRC, /const WEEKS_PER_CB = [^;]+;/),
   agePen: grab(SRC, /const agePen = [^;]+;/),
@@ -194,8 +198,7 @@ const seasonFn = new Function("S", "clamp", "rand", "condition", "fandom", `
   const act = { goals: 0, assists: 0, defense: 0 };
   const games = CB_PER_YEAR * WEEKS_PER_CB;
   for (let i = 0; i < games; i++) {
-    ${parts.myScore}
-    ${parts.rating}
+    const rating = (() => { ${parts.ratingBody} })();
     const c = matchContribution(rating);
     const goals = c.g, assists = c.a, defense = c.def;
     const momentRes = autoRes(stats[posStat]);

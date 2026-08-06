@@ -1,36 +1,38 @@
-/* 그 경기에 한 일이 평점을 실제로 움직이는지 본다.
+/* 경기 평점이 **실제 축구 평점처럼** 계산되는지 본다.
  *
- * 제보: **5:2로 이긴 경기에서 2골 2도움을 넣었는데 평점 7.4에 7위.**
- * 재 보니 두 가지가 겹쳐 있었다.
- *   ① 눈금이 달랐다 — 내 점수는 능력치×10 + 활약(평균 59), 라이벌은 명성 그대로(평균 70).
- *      같은 표에 다른 자로 잰 숫자를 나란히 놓았다.
- *   ② 활약이 평점을 움직이는 폭이 작았다 — 2골 2도움이 +1.1점뿐.
+ * 지금까지의 산식은 `능력치 평점 × 10`이 뼈대였고, 그 경기는 위에 얹는
+ * 보정이었다. 그래서 화면에 뜨는 건 "그날 누가 잘했나"가 아니라
+ * "누가 센 선수인가"였다 — 능력치 130이 0골 0도움으로 6.9를 받고,
+ * 능력치 50이 두 골을 넣고 6.5를 받았다.
  *
- * 그래서 여기서 지키는 건 "잘한 경기와 조용한 경기가 화면에서 갈리는가"다.
- * 절대값 하나를 고정하지 않는다 — 산식이 조금 움직여도 되지만 **차이는 남아야** 한다.
+ * 실제 평점 업체는 그 경기에 일어난 일만 본다. 그래서 여기서 지키는 건:
+ *   ⓪ **능력치·컨디션·명성이 평점에 아예 안 들어간다** (이게 핵심)
+ *   ① 잘한 경기와 조용한 경기가 화면에서 확실히 갈린다
+ *   ② 조용한 경기가 재앙처럼 보이지는 않는다
+ *   ③ 승패·무실점도 남는다
+ *   ④ 포지션이 손해 보지 않는다 (수비수의 몸싸움도 쳐준다)
+ *   ⑤ 내 눈금과 라이벌 눈금이 같은 자리에 있다 (순위가 뒤집히지 않게)
  *
+ * 절대값 하나를 고정하지 않는다 — 산식이 조금 움직여도 되지만 관계는 남아야 한다.
  * 산식은 소스에서 정규식으로 뽑아 그대로 실행한다. 직접 eval은 쓰지 않는다.
  */
 "use strict";
 const fs = require("fs");
 const BASE = "/workspace/grow-games/beta/soccer";
 const SRC = fs.readFileSync(`${BASE}/career.js`, "utf8");
-const GAME = fs.readFileSync(`${BASE}/game.js`, "utf8");
 const grab = (src, re) => { const m = src.match(re); return m ? m[0] : null; };
 
 const parts = {
-  posAxisTbl: grab(SRC, /const POS_AXIS = \{[\s\S]*?\n  \};/),
-  posAxisFn: grab(SRC, /function posAxis\(act, pos\) \{[\s\S]*?\n  \}/),
-  perfNow: grab(SRC, /const perfNow = clamp\([^;]+;/),
-  axisNow: grab(SRC, /const axisNow = posAxis\([^;]+;/),
-  axisK: grab(SRC, /const AXIS_UP = [^;]+;/),
-  axisGap: grab(SRC, /const axisGap = [^;]+;/),
-  done: grab(SRC, /const doneBonus = axisGap[^;]+;/),
-  result: grab(SRC, /const resultBonus = [^;]+;/),
-  score: grab(SRC, /const myRankScore = [^;]+;/),
-  pull: grab(SRC, /const RIVAL_POP_PULL = [^;]+;/),
-  adj: grab(SRC, /const rivalResAdj = [^;]+;/),
-  rows: grab(SRC, /const rows = \[\s*\{ name: S\.name[\s\S]*?\]\.sort\([^;]*\);/),
+  rateTbl: grab(SRC, /const RATE = \{[\s\S]*?\n  \};/),
+  rateRes: grab(SRC, /const RATE_RESULT = [^;]+;/),
+  rateCon: grab(SRC, /const RATE_CONCEDE = [^;]+;/),
+  ratePartsFn: grab(SRC, /function ratingParts\(info, pos, momAdj\) \{[\s\S]*?\n  \}/),
+  rateFn: grab(SRC, /function matchRating\(info, pos, momAdj\) \{[\s\S]*?\n  \}/),
+  score: grab(SRC, /const myRankScore = matchRating\([^;]+;/),
+  conceded: grab(SRC, /const raceConceded = [^;]+;/),
+  racePos: grab(SRC, /const RACE_POS = \{[^}]*\};/),
+  roles: grab(fs.readFileSync(`${BASE}/game.js`, "utf8"), /const RACE_ROLES = \[[\s\S]*?\n\];/),
+  lam: grab(fs.readFileSync(`${BASE}/game.js`, "utf8"), /const raceLam = \([\s\S]*?;\n/),
 };
 const missing = Object.entries(parts).filter(([, v]) => !v).map(([k]) => k);
 if (missing.length) { console.log(`❌ 소스에서 못 찾았어요: ${missing.join(", ")}`); process.exit(1); }
@@ -38,114 +40,156 @@ if (missing.length) { console.log(`❌ 소스에서 못 찾았어요: ${missing.
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 const rand = (a, b) => a + Math.random() * (b - a);
 
-/* 표시 평점 하나를 뽑는다. 흔들림(rand(-4,4))이 섞이므로 여러 번 돌려 평균을 본다. */
-const showRating = new Function(
-  "S", "info", "rating", "momAdj", "clamp", "rand",
-  `${parts.posAxisTbl}
-   ${parts.posAxisFn}
-   ${parts.perfNow}
-   ${parts.axisNow}
-   ${parts.axisK}
-   ${parts.axisGap}
-   ${parts.done}
-   ${parts.result}
-   ${parts.score}
-   return clamp(myRankScore / 10, 1, 10);`
+/* 산식을 뽑아 실행한다. **S를 인자로 넘긴다** — 산식이 능력치를 몰래 다시
+ * 읽기 시작하면 ⓪에서 잡히도록 하려는 것이다. */
+const rateOnce = new Function(
+  "S", "info", "pos", "momAdj", "clamp", "rand",
+  `${parts.rateTbl}
+   ${parts.rateRes}
+   ${parts.rateCon}
+   ${parts.ratePartsFn}
+   ${parts.rateFn}
+   return clamp(matchRating(info, pos, momAdj) / 10, 1, 10);`
 );
 const N = 20000;
-const avgRating = (info, rating, pos) => {
+const WEAK = { stats: { shoot: 20, pass: 20, dribble: 20, defense: 20, stamina: 20 }, condition: 25, fandom: 0 };
+const STRONG = { stats: { shoot: 200, pass: 200, dribble: 200, defense: 200, stamina: 200 }, condition: 100, fandom: 9000 };
+const avgRating = (info, pos, S = WEAK) => {
   let s = 0;
-  for (let i = 0; i < N; i++) s += showRating({ pos }, info, rating, 0, clamp, rand);
+  for (let i = 0; i < N; i++) s += rateOnce(S, info, pos, 0, clamp, rand);
   return s / N;
 };
 
 let bad = 0;
 const check = (ok, msg) => { console.log(`${ok ? "✅" : "❌"} ${msg}`); if (!ok) bad++; };
 
-// ── ① 제보 그 경기 — 능력치 평점 6.0 공격수가 2골 2도움을 넣고 이겼다
-const big = avgRating({ myGoals: 2, assists: 2, defense: 1, res: "W" }, 6.0, "fw");
-const quiet = avgRating({ myGoals: 0, assists: 0, defense: 0, res: "W" }, 6.0, "fw");
-const one = avgRating({ myGoals: 1, assists: 0, defense: 0, res: "W" }, 6.0, "fw");
-console.log(`   능력치 평점 6.0 공격수 — 0골 ${quiet.toFixed(2)} · 1골 ${one.toFixed(2)} · 2골2도움 ${big.toFixed(2)}`);
-check(big >= 7.8, `2골 2도움 승리는 8점 가까이 나온다 (${big.toFixed(2)}) — 제보 당시엔 7.4였어요`);
-check(big - quiet >= 2.6, `잘한 경기와 조용한 경기가 2.6점 넘게 벌어진다 (${(big - quiet).toFixed(2)}점)`);
-check(one > quiet, `1골이라도 넣으면 조용한 경기보다는 높다 (${one.toFixed(2)} > ${quiet.toFixed(2)})`);
+// ── ⓪ 능력치가 평점에 안 들어간다 — 이 파일에서 제일 중요한 검사
+const same = { myGoals: 1, assists: 1, defense: 1, res: "W", oppGoals: 1 };
+const weakRate = avgRating(same, "fw", WEAK);
+const strongRate = avgRating(same, "fw", STRONG);
+console.log(`   같은 경기 내용 — 능력치 20/컨디션 25 ${weakRate.toFixed(2)} · 능력치 200/컨디션 100 ${strongRate.toFixed(2)}`);
+check(Math.abs(weakRate - strongRate) < 0.06,
+  `능력치·컨디션·명성이 열 배 달라도 같은 경기면 같은 평점이다 (차이 ${Math.abs(weakRate - strongRate).toFixed(3)})`);
 
-/* 제보의 핵심은 숫자가 아니라 **순위**였다("2골 2도움인데 7위").
- * 평점 하나만 보면 라이벌 쪽이 어떻게 움직였는지가 안 보이므로, 실제 표를 만들어
- * 그 경기가 몇 위에 앉는지 센다. 예전 산식으로는 평균 4.2위 · 3위 안 33%였다. */
-const rivalScoreFor = new Function(
-  "r", "roundRes", "rand",
-  `${parts.pull}
-   ${parts.adj}
-   return 70 + (r.pop - 70) * RIVAL_POP_PULL + rand(-6, 6) + rivalResAdj(roundRes[r.club]);`
-);
-let rankSum = 0, top3 = 0;
-for (let i = 0; i < N; i++) {
-  const my = showRating({ pos: "fw" }, { myGoals: 2, assists: 2, defense: 1, res: "W" }, 6.0, 0, clamp, rand) * 10;
-  let above = 0;
-  for (let k = 0; k < 8; k++) {
-    const res = Math.random() < 0.4 ? "W" : Math.random() < 0.6 ? "D" : "L";
-    if (rivalScoreFor({ pop: rand(52, 88), club: "X" }, { X: res }, rand) > my) above++;
-  }
-  rankSum += above + 1;
-  if (above < 3) top3++;
-}
-const avgRank = rankSum / N, top3Pct = top3 / N * 100;
-console.log(`   그 경기의 순위 — 평균 ${avgRank.toFixed(2)}위 · 3위 안 ${top3Pct.toFixed(1)}%`);
-check(avgRank < 3.6, `2골 2도움 경기가 평균 3위권에 앉는다 (${avgRank.toFixed(2)}위) — 예전엔 4.2위`);
-check(top3Pct > 55, `3위 안에 드는 경우가 절반을 넘는다 (${top3Pct.toFixed(1)}%) — 예전엔 33%`);
+// ── ① 잘한 경기와 조용한 경기가 갈린다
+const big = avgRating({ myGoals: 2, assists: 2, defense: 1, res: "W", oppGoals: 1 }, "fw");
+const quiet = avgRating({ myGoals: 0, assists: 0, defense: 0, res: "W", oppGoals: 1 }, "fw");
+const one = avgRating({ myGoals: 1, assists: 0, defense: 0, res: "W", oppGoals: 1 }, "fw");
+const hat = avgRating({ myGoals: 3, assists: 0, defense: 0, res: "W", oppGoals: 1 }, "fw");
+console.log(`   공격수 — 0골 ${quiet.toFixed(2)} · 1골 ${one.toFixed(2)} · 해트트릭 ${hat.toFixed(2)} · 2골2도움 ${big.toFixed(2)}`);
+check(big >= 8.5, `2골 2도움 승리는 8.5를 넘는다 (${big.toFixed(2)})`);
+check(big - quiet >= 2.8, `잘한 경기와 조용한 경기가 2.8점 넘게 벌어진다 (${(big - quiet).toFixed(2)}점)`);
+check(hat - one >= 1.8, `골이 쌓일수록 계속 오른다 — 1골과 해트트릭이 ${(hat - one).toFixed(2)}점 차이`);
 
-/* ② 조용한 경기가 지나치게 깎이면 안 된다. 배수를 그냥 올리면 여기가 무너진다 —
- * 실제로 대칭 배수(×12)로 재 보니 0골이 4.73 → 4.07까지 떨어졌다. */
-check(quiet >= 4.6, `조용한 경기가 재앙처럼 보이지 않는다 (${quiet.toFixed(2)} ≥ 4.6)`);
+/* 골 하나의 값이 실제 축구 평점의 눈금(+1.0)과 맞는지. 이 눈금이 있어야
+ * 화면의 숫자를 사람이 읽을 수 있다 ("한 골 넣었으니 1점 오르는구나"). */
+const goalStep = one - quiet;
+check(Math.abs(goalStep - 1.0) < 0.25, `골 하나가 평점 +1.0 근처다 (${goalStep.toFixed(2)})`);
 
-// ── ③ 승패도 평점에 남는다
-const won = avgRating({ myGoals: 1, assists: 1, defense: 0, res: "W" }, 6.0, "fw");
-const lost = avgRating({ myGoals: 1, assists: 1, defense: 0, res: "L" }, 6.0, "fw");
+// ── ② 조용한 경기가 재앙처럼 보이지 않는다
+check(quiet >= 5.2, `아무것도 못 한 경기도 5점대는 준다 (${quiet.toFixed(2)})`);
+
+// ── ③ 승패와 무실점이 남는다
+const won = avgRating({ myGoals: 1, assists: 1, defense: 0, res: "W", oppGoals: 1 }, "fw");
+const lost = avgRating({ myGoals: 1, assists: 1, defense: 0, res: "L", oppGoals: 2 }, "fw");
 check(won > lost, `같은 활약이면 이긴 경기가 높다 (${won.toFixed(2)} > ${lost.toFixed(2)})`);
+const dfClean = avgRating({ myGoals: 0, assists: 0, defense: 3, res: "W", oppGoals: 0 }, "df");
+const dfLeak = avgRating({ myGoals: 0, assists: 0, defense: 3, res: "W", oppGoals: 3 }, "df");
+console.log(`   수비수 3수비 승리 — 무실점 ${dfClean.toFixed(2)} · 3실점 ${dfLeak.toFixed(2)}`);
+check(dfClean - dfLeak >= 0.6, `수비수는 무실점과 대량 실점이 갈린다 (${(dfClean - dfLeak).toFixed(2)}점)`);
 
-// ── ④ 포지션이 손해 보지 않는다 — 수비수의 수비 4회가 공격수의 1골에 밀리지 않아야
-const dfWork = avgRating({ myGoals: 0, assists: 0, defense: 5, res: "W" }, 6.0, "df");
+// ── ④ 포지션이 손해 보지 않는다
+const dfWork = avgRating({ myGoals: 0, assists: 0, defense: 5, res: "W", oppGoals: 1 }, "df");
 console.log(`   수비수 5수비 ${dfWork.toFixed(2)} · 공격수 1골 ${one.toFixed(2)}`);
 check(dfWork > one, `수비수가 몸으로 막은 경기도 제대로 쳐준다 (${dfWork.toFixed(2)} > ${one.toFixed(2)})`);
+/* 골은 누가 넣어도 골이다 — 예전 posAxis 가중치를 쓰면 미드필더의 골이
+ * 공격수의 골보다 반값이라 "미드필더 해트트릭 6.6"이 나왔다. */
+const mfHat = avgRating({ myGoals: 3, assists: 0, defense: 0, res: "W", oppGoals: 1 }, "mf");
+check(mfHat >= hat - 0.3, `미드필더의 해트트릭도 공격수만큼 쳐준다 (${mfHat.toFixed(2)} vs ${hat.toFixed(2)})`);
 
-// ── ⑤ 내 눈금과 라이벌 눈금이 같은 자리에 있다
-const rivalScore = new Function(
-  "r", "roundRes", "rand",
-  `${parts.pull}
-   ${parts.adj}
-   return 70 + (r.pop - 70) * RIVAL_POP_PULL + rand(-6, 6) + rivalResAdj(roundRes[r.club]);`
-);
-let rvSum = 0, rvTop = 0;
-for (let i = 0; i < N; i++) {
-  let best = -1e9;
-  for (let k = 0; k < 8; k++) {
-    const res = Math.random() < 0.4 ? "W" : Math.random() < 0.6 ? "D" : "L";
-    const s = rivalScore({ pop: rand(52, 88), club: "X" }, { X: res }, rand);
-    rvSum += s; if (s > best) best = s;
-  }
-  rvTop += best;
-}
-const rvAvg = rvSum / N / 8 / 10, rvMax = rvTop / N / 10;
-const myAvgOk = avgRating({ myGoals: 1, assists: 1, defense: 1, res: "D" }, 6.0, "fw");
-console.log(`   라이벌 8명 평균 ${rvAvg.toFixed(2)} · 최고 ${rvMax.toFixed(2)} · 내 평범한 경기 ${myAvgOk.toFixed(2)}`);
-check(Math.abs(rvAvg - 7.0) < 0.6, `라이벌 평균이 7점 언저리다 (${rvAvg.toFixed(2)}) — 명성을 평균 쪽으로 당겨요`);
-check(big > rvAvg, `2골 2도움이면 라이벌 평균은 넘는다 (${big.toFixed(2)} > ${rvAvg.toFixed(2)})`);
-check(big < rvMax + 1.0, `그래도 라이벌 최고를 항상 이기지는 않는다 (${big.toFixed(2)} vs 최고 ${rvMax.toFixed(2)})`);
+/* ── ⑤ 내 눈금과 경쟁자 눈금이 같은 자리에 있다
+ * 경쟁자도 이제 나와 **같은 matchRating**을 쓴다. 그래도 생산량이 다른 자에서
+ * 나오므로(raceLam) 두 분포가 겹치는지 실제로 굴려 확인한다. */
+const ROLES = new Function(`${parts.roles} return RACE_ROLES;`)();
+const RACE_POS = new Function(`${parts.racePos} return RACE_POS;`)();
+const raceLam = new Function(`${parts.lam} return raceLam;`)();
+const conceded = new Function("randInt", `${parts.conceded} return raceConceded;`)(
+  (a, b) => Math.floor(a + Math.random() * (b - a + 1)));
+function pois(l) { let n = 0, L = Math.exp(-Math.max(0, l)), p = 1; do { p *= Math.random(); n++; } while (p > L && n < 12); return n - 1; }
+const rivalRate = (pres) => {
+  const def = ROLES[Math.floor(Math.random() * ROLES.length)];
+  const pop = rand(52, 88), res = ["W", "D", "L"][Math.floor(Math.random() * 3)];
+  return rateOnce(WEAK, {
+    myGoals: pois(raceLam(def.g, pop, pres)), assists: pois(raceLam(def.a, pop, pres)),
+    defense: pois(raceLam(def.d, pop, pres)), res, oppGoals: conceded(res),
+  }, RACE_POS[def.key] || "mf", 0, clamp, rand);
+};
+const rivalAvgAt = (pres) => { let s = 0; for (let i = 0; i < N; i++) s += rivalRate(pres); return s / N; };
+const lowAvg = rivalAvgAt(0.55), topAvg = rivalAvgAt(2.40);
+console.log(`   경쟁자 평균 평점 — K리그3 ${lowAvg.toFixed(2)} · 프리미어리그 ${topAvg.toFixed(2)} · 내 2골2도움 ${big.toFixed(2)}`);
+check(big > lowAvg && big > topAvg, `2골 2도움이면 어느 리그 경쟁자 평균도 넘는다 (${big.toFixed(2)})`);
+check(quiet < lowAvg - 1.0, `조용한 경기는 경쟁자 평균에 한참 못 미친다 (${quiet.toFixed(2)} vs ${lowAvg.toFixed(2)})`);
+/* 리그 격이 경쟁자 실력에 실제로 실리는지 — 예전 계수는 최하위와 최상위가
+ * 사실상 같은 선수였다("K리그3 경쟁자나 PL 경쟁자나 똑같다"는 제보). */
+check(topAvg - lowAvg > 0.8,
+  `리그가 오르면 경쟁자 눈높이가 확실히 올라간다 (${lowAvg.toFixed(2)} → ${topAvg.toFixed(2)})`);
 
-/* ── 변이 검증 — 배수를 옛 대칭(×8)으로 되돌리면 ①이 무너져야 한다.
+/* ── 변이 검증 — 골·도움·수비 항을 빼면 ①이 무너져야 한다.
  * 안 잡히면 위의 초록불은 아무것도 안 지키고 있는 것이다. */
-const brokenDone = "const doneBonus = axisGap * 8;";
-const brokenRating = new Function(
-  "S", "info", "rating", "momAdj", "clamp", "rand",
-  `${parts.posAxisTbl}\n${parts.posAxisFn}\n${parts.perfNow}\n${parts.axisNow}\n${parts.axisGap}\n` +
-  `${brokenDone}\n${parts.result}\n${parts.score}\n return clamp(myRankScore / 10, 1, 10);`
+const brokenFn = parts.ratePartsFn
+  .replace(/if \(info\.myGoals\)[^\n]*\n/, "")
+  .replace(/if \(info\.assists\)[^\n]*\n/, "")
+  .replace(/if \(info\.defense\)[^\n]*\n/, "");
+if (brokenFn === parts.ratePartsFn) { console.log("❌ 변이 치환이 안 됐어요"); process.exit(1); }
+const brokenRate = new Function(
+  "S", "info", "pos", "momAdj", "clamp", "rand",
+  `${parts.rateTbl}\n${parts.rateRes}\n${parts.rateCon}\n${brokenFn}\n${parts.rateFn}\n` +
+  `return clamp(matchRating(info, pos, momAdj) / 10, 1, 10);`
 );
-let bs = 0;
-for (let i = 0; i < N; i++) bs += brokenRating({ pos: "fw" }, { myGoals: 2, assists: 2, defense: 1, res: "W" }, 6.0, 0, clamp, rand);
-const brokenBig = bs / N;
-check(brokenBig < 8.0, `변이 검증 — 옛 배수(×8)로 되돌리면 2골 2도움이 ${brokenBig.toFixed(2)}로 떨어진다`);
+let bs = 0, bq = 0;
+for (let i = 0; i < N; i++) {
+  bs += brokenRate(WEAK, { myGoals: 2, assists: 2, defense: 1, res: "W", oppGoals: 1 }, "fw", 0, clamp, rand);
+  bq += brokenRate(WEAK, { myGoals: 0, assists: 0, defense: 0, res: "W", oppGoals: 1 }, "fw", 0, clamp, rand);
+}
+const gapBroken = (bs - bq) / N;
+check(gapBroken < 2.8,
+  `변이 검증 — 골·도움·수비 항을 빼면 잘한 경기와 조용한 경기 차가 ${gapBroken.toFixed(2)}점으로 무너진다`);
+
+/* ── 화면 내역이 화면 숫자와 맞는지 ────────────────────────────────
+ * "골 +2.0, 도움 +0.7, 승리 +0.25"를 늘어놨는데 다 더해도 표시 평점이 안 나오면
+ * 설명이 오히려 의심을 부른다. 항목 합 + 그날의 흐름 = 표시 평점이어야 한다. */
+const whyHTML = grab(SRC, /function ratingWhyHTML\(score, info, pos, momAdj\) \{[\s\S]*?\n  \}/);
+if (!whyHTML) { console.log("❌ ratingWhyHTML을 못 찾았어요"); process.exit(1); }
+const renderWhy = new Function(
+  "score", "info", "pos", "momAdj", "clamp",
+  `${parts.rateTbl}\n${parts.rateRes}\n${parts.rateCon}\n${parts.ratePartsFn}\n${whyHTML}\n` +
+  `return ratingWhyHTML(score, info, pos, momAdj);`
+);
+let sumOK = true, shownOK = true;
+for (let i = 0; i < 400; i++) {
+  const info = {
+    myGoals: Math.floor(Math.random() * 4), assists: Math.floor(Math.random() * 3),
+    defense: Math.floor(Math.random() * 5), oppGoals: Math.floor(Math.random() * 4),
+    res: ["W", "D", "L"][Math.floor(Math.random() * 3)],
+  };
+  const momAdj = [0, 8, -8][Math.floor(Math.random() * 3)];
+  const score = 40 + Math.random() * 60;
+  const html = renderWhy(score, info, "fw", momAdj, clamp);
+  // 항목 값들을 화면 문자열에서 도로 읽는다 (렌더 결과를 본다 — 산식을 다시 계산하지 않는다)
+  const nums = [...html.matchAll(/<b>[^<]*<\/b>\s*([+−]?)([\d.]+)<\/span>/g)]
+    .map(([, sign, v]) => (sign === "−" ? -Number(v) : Number(v)));
+  const total = nums.reduce((a, b) => a + b, 0);
+  if (Math.abs(total - clamp(score / 10, 1, 10)) > 0.02) sumOK = false;
+  const shown = Number((html.match(/평점 ([\d.]+) —/) || [])[1]);
+  if (Math.abs(shown - clamp(score / 10, 1, 10)) > 0.06) shownOK = false;
+}
+check(sumOK, "화면에 늘어놓은 항목을 다 더하면 그 경기 평점이 나온다 (400개 무작위 경기)");
+check(shownOK, "요약에 뜨는 평점이 실제 점수와 같다");
+
+/* 순위 점수가 실제로 이 산식을 쓰는지 — 산식만 고치고 배선을 안 바꾸면
+ * 위의 초록불이 전부 허공을 지키게 된다. */
+check(/matchRating\(info, S\.pos, momAdj\)/.test(parts.score),
+  "경기 결과 화면의 순위 점수가 이 산식을 그대로 쓴다");
 
 console.log(bad ? `\n❌ ${bad}개 실패` : "\n✅ 통과");
 process.exit(bad ? 1 : 0);

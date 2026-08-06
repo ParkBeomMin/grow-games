@@ -16,11 +16,33 @@ window.WingerCareer = (() => {
 
   /* 경기 평점(1~10). clutch()는 전역 S의 재능·초월을 읽어요.
    * 리그 페널티는 clamp **안쪽**에서 빼요 — 밖에서 빼면 하한 1이 안 지켜져요. */
+  /* 경기력 — "오늘 이 선수가 얼마나 좋은 상태인가". 골·도움·수비 **셋 다**에
+   * 곱해지는 값이라, 여기에 한 스탯이 무겁게 실리면 그 스탯만 올려도 나머지
+   * 축까지 같이 올라가요. 실제로 그랬습니다:
+   *
+   *   예전 (주스탯 0.32 · 체력 0.22 · 공격3종평균 0.20)
+   *     공격수 총 스탯 400을 슛에 몰면 시즌 188골 · 도움 32 · 수비 26
+   *     고르게 나누면                    51골 · 도움 26 · 수비 22
+   *   → **몰빵이 모든 축에서 이겼어요.** 수비 스탯은 아예 식에 없었고요.
+   *
+   * 지금은 종합(5스탯 평균)이 뼈대예요. 어느 축이 세냐는 아래 matchContribution이
+   * 정합니다 — 경기력과 축을 분리해야 "슛만 올렸는데 수비도 는다"가 안 생겨요.
+   *
+   * 약점 페널티: 가장 낮은 칸이 평균의 75%에 못 미치면 그만큼 깎아요.
+   * 상대는 제일 약한 곳을 파고듭니다. 이게 없으면 한 칸만 키우는 게 언제나 정답이에요.
+   *
+   *   지금 (종합 0.50 · 주스탯 0.14 · 체력 0.10 · 약점 페널티)
+   *     몰빵 117골 · 도움 24 · 수비 20   |   균형 51골 · 도움 27 · 수비 22
+   *   → 전문화는 여전히 골에서 크게 이기지만, 도움·수비는 균형이 가져가요. */
   function ratingOf(stats, pos, condition, fandom) {
+    const WEAK_BAR = 0.75;   // 평균의 이만큼에 못 미치는 칸이 약점이에요
+    const WEAK_PEN = 0.45;
+    const main = POS_INFO[pos].stat;
+    const all = (stats.shoot + stats.pass + stats.dribble + stats.defense + stats.stamina) / 5;
+    const low = Math.min(stats.shoot, stats.pass, stats.dribble, stats.defense, stats.stamina);
+    const weak = Math.max(0, all * WEAK_BAR - low) * WEAK_PEN;
     const myScore =
-      (stats[POS_INFO[pos].stat] * 0.32 +
-      stats.stamina * 0.22 +
-      ((stats.shoot + stats.pass + stats.dribble) / 3) * 0.2) * clutch(POS_INFO[pos].stat) +
+      (all * 0.50 + stats[main] * 0.14 + stats.stamina * 0.10 - weak) * clutch(main) +
       condition / 8 + Math.min((fandom || 0) / 45, FAN_CAP) + rand(-5, 5) + 20;
     const rating = clamp(myScore / RATING_DIV - leagueOf(S).penalty, 1, 10);
     return rating;
@@ -41,6 +63,84 @@ window.WingerCareer = (() => {
    * 곱해지므로 hype가 3.52 올라갑니다 — 그만큼 offset을 올려 수상 문턱
    * (MVP 5.5 · 베스트11 4.5 · 신인왕 3)의 의미를 그대로 지켜요. */
   const AXIS_OFF = 7.71;
+
+  /* ---------- ⭐ 경기 평점 — 실제 축구 평점처럼 ----------
+   *
+   * 실제 평점 업체는 **그 경기에 일어난 일**만 봅니다. 선수가 얼마나 잘하는
+   * 선수인지는 안 봐요 — 능력치 130짜리가 아무것도 못 하면 5점대고, 무명이
+   * 두 골 넣으면 8점대입니다. 여기 값도 그 관행을 그대로 옮긴 거예요.
+   *
+   *   골 +1.0 · 도움 +0.7 · 수비 성공 +0.2 · 승리 +0.25 · 무실점 +0.1~0.45
+   *
+   * 예전에는 `능력치 평점 × 10`이 뼈대였고 경기는 그 위에 얹는 보정이었어요.
+   * 그래서 능력치 130이 0골 0도움으로 6.9를, 능력치 50이 2골 넣고 6.5를
+   * 받았습니다 — 화면에는 "그날 누가 잘했나"가 아니라 "누가 센 선수인가"가
+   * 떠 있었던 거예요. 능력치는 이제 **골이 더 많이 들어가게 하는 것**으로만
+   * 평점에 닿아요. 실제 축구와 같은 경로입니다.
+   *
+   * b는 아무 일도 없던 90분의 평점이에요. 골·도움 값은 포지션이 달라도
+   * 거의 같아야 해요 — 실제로도 미드필더의 골이 공격수의 골보다 싸지 않아요.
+   * 수비 성공(d)과 무실점(cs)만 포지션을 크게 탑니다.
+   *
+   * ⚠️ 이 게임은 한 경기 득점이 실제 축구보다 훨씬 많아요(공격수 평균 1.8골).
+   * 그래서 시즌 평균이 6.4(하위 리그) ~ 8.1(최상위)로 실제보다 높게 나옵니다.
+   * 값을 낮춰 평균을 맞추면 "1골 = +1.0"이라는 알아볼 수 있는 눈금이 깨져요.
+   * 눈금을 지키고 득점 빈도는 백로그(경기당 골 과다)에서 따로 다룹니다.
+   *
+   * 실측(각 4만 경기, 리그를 능력치에 맞춰 세움) — 평균 순위와 MOM 비율은
+   * 바꾸기 전과 거의 같아요. 명성·승격 사다리가 안 흔들린다는 뜻이에요:
+   *   K3 공격수  평균순위 8.19 → 7.64 · MOM  1% →  1% · 평균평점 6.42
+   *   K1 공격수            6.60 → 6.48 ·      6% →  6% ·          7.13
+   *   PL 공격수            4.68 → 4.74 ·     22% → 21% ·          8.09
+   *   PL 수비수            5.19 → 5.57 ·     14% →  9% ·          7.69 */
+  const RATE = {
+    fw: { b: 54, g: 10, a: 7.0, d: 2.0, cs: 1.0, cc: 0.5 },
+    wg: { b: 54, g: 10, a: 7.5, d: 2.4, cs: 1.5, cc: 0.8 },
+    mf: { b: 54, g: 10, a: 7.5, d: 2.8, cs: 2.5, cc: 1.5 },
+    df: { b: 55, g: 12, a: 8.0, d: 3.6, cs: 4.5, cc: 3.5 },
+  };
+  const RATE_RESULT = 2.5;   // 승 +0.25 / 패 −0.25
+  const RATE_CONCEDE = 3;    // 이만큼 실점하면 수비 쪽에 감점이 붙어요
+
+  /* 평점을 만든 항목들(×10). 화면에 그대로 펼쳐 보여줘요 —
+   * 숫자만 던지면 "왜 이 평점이야?"에 답할 수가 없어요. */
+  function ratingParts(info, pos, momAdj) {
+    const r = RATE[pos] || RATE.fw;
+    const conceded = info.oppGoals || 0;
+    const out = [{ label: "기본", v: r.b }];
+    if (info.myGoals) out.push({ label: `⚽ 골 ${info.myGoals}`, v: info.myGoals * r.g });
+    if (info.assists) out.push({ label: `🅰️ 도움 ${info.assists}`, v: info.assists * r.a });
+    if (info.defense) out.push({ label: `🛡️ 수비 ${info.defense}`, v: info.defense * r.d });
+    if (info.res === "W") out.push({ label: "팀 승리", v: RATE_RESULT });
+    else if (info.res === "L") out.push({ label: "팀 패배", v: -RATE_RESULT });
+    if (conceded === 0) out.push({ label: "무실점", v: r.cs });
+    else if (conceded >= RATE_CONCEDE) out.push({ label: `${conceded}실점`, v: -r.cc });
+    if (momAdj) out.push({ label: momAdj > 0 ? "결정적 순간 성공" : "결정적 순간 실패", v: momAdj });
+    return out;
+  }
+
+  /* 한 경기 평점(×10). 능력치도 컨디션도 명성도 안 봅니다 — info만 봐요.
+   * 마지막 흔들림은 심판·해설의 눈이라고 보면 돼요(실제 평점도 업체마다 갈려요). */
+  function matchRating(info, pos, momAdj) {
+    return ratingParts(info, pos, momAdj).reduce((a, p) => a + p.v, 0) + rand(-4, 4);
+  }
+
+  /* 평점 내역 한 줄. 흔들림은 합에서 역산해 남김없이 보여줘요 —
+   * 항목을 다 더해도 화면 숫자와 안 맞으면 그게 더 이상해 보입니다. */
+  function ratingWhyHTML(score, info, pos, momAdj) {
+    const parts = ratingParts(info, pos, momAdj);
+    const sum = parts.reduce((a, p) => a + p.v, 0);
+    // 10점 상한에 걸린 경기도 항목 합이 화면 숫자와 맞아야 해요 — 상한 뒤의 값으로 역산해요
+    const shown = clamp(score / 10, 1, 10);
+    const flow = shown * 10 - sum;
+    const one = (label, v, first) =>
+      `<span class="rw-item"><b>${label}</b> ${first ? "" : v >= 0 ? "+" : "−"}${Math.abs(v / 10).toFixed(2)}</span>`;
+    const body = parts.map((p, i) => one(p.label, p.v, i === 0)).join("")
+      + one("그날의 흐름", flow, false);
+    return `<details class="rate-why"><summary>⭐ 평점 ${shown.toFixed(1)} — 어떻게 나왔나</summary>`
+      + `<div class="rw-body">${body}</div>`
+      + `<div class="rw-note">능력치는 안 봐요. 실제 축구 평점처럼 <b>이 경기에 한 일</b>만 셉니다.</div></details>`;
+  }
 
   // 시즌 축 점수. 옛 세이브에는 집계 필드가 없을 수 있어서 전부 || 0으로 받아요.
   function posAxis(act, pos) {
@@ -174,18 +274,6 @@ window.WingerCareer = (() => {
   const WEEKS_PER_CB = 19;
   const CB_LABELS = ["전반기", "후반기"];
   const cbLabel = (n) => CB_LABELS[n - 1] || `${n}차`;
-  const RIVAL_GROUPS = ["에이스 스트라이커", "월드클래스 MF", "철벽 수비수", "득점왕 후보", "라이벌 윙어", "베테랑 캡틴", "괴물 신인", "국대 주전"];
-
-  function rollRivals() {
-    /* 이름은 실제 선수 이름처럼 짓고, 역할은 소속 옆 딱지로 남겨요.
-     * 예전에는 "에이스 스트라이커" 같은 역할 딱지가 이름 자리에 있어서
-     * 순위표가 선수 명단이 아니라 설명문처럼 보였어요. */
-    const clubs = shuffle(oppClubs(S));
-    return RIVAL_GROUPS.map((role, i) => ({
-      name: randomPlayerName((Math.random() < 0.5 ? null : MARKETS.find((m) => m.id === "eu"))),
-      role, pop: rand(52, 88), club: clubs[i % clubs.length],
-    }));
-  }
 
   /* 🏆 리그 순위표 — 예전에는 내 팀 성적(teamW/D/L)만 쌓고 다른 팀 기록이 없어서
    * 순위표를 만들 수가 없었어요. 리그의 6팀을 시즌 내내 함께 굴립니다.
@@ -234,32 +322,6 @@ window.WingerCareer = (() => {
     return out;
   }
 
-  /* 라이벌 점수에 얹는 그 라운드 클럽 성적.
-   *
-   * 내 결과 보정(±3)보다 폭이 큰 이유가 있어요. 내 점수에는 골·도움·수비를 재는
-   * doneBonus가 이미 들어 있는데, 라이벌에 대해 아는 건 **소속 클럽의 결과뿐**이에요.
-   * 그 하나가 그들의 '그날 활약' 전부를 대신하니 무게가 더 실려야 맞아요.
-   * 명성(pop 52~88)의 인접 간격이 5 안팎이라, 이 폭이면 순위가 실제로 뒤집혀요.
-   *
-   * ⚠️ 이걸 **더하기만 하면 안 돼요.** 라이벌 8명 중 최고점의 분포가 넓어져서
-   * MOM이 조용히 어려워집니다 — 실측하니 능력치 90에서 77.6% → 63.3%로 떨어졌어요.
-   * 그래서 순수 흔들림을 ±8 → ±6으로 **줄여서 그 자리를 결과가 대신하게** 했어요.
-   * 흔드는 양은 비슷한데, 흔드는 이유가 랜덤에서 경기 결과로 바뀐 거예요.
-   *
-   *   기준 (±8, 보정 없음)  MOM 13.4% / 40.9% / 77.6%   (능력치 80 / 85 / 90)
-   *   지금 (±6, 보정 1.5~6) MOM 11.1% / 37.0% / 74.5%
-   *   명성 5 차이는 결과로 67.6% 뒤집혀요 (예전엔 결과를 아예 안 봤어요)
-   *
-   * MOM은 수상 판정에 안 쓰여요(수상은 hype 기준). 팬 증가(wins × 3)와
-   * 명예의 전당 점수(wins × 6)에만 들어가서, 이 정도 차이는 영향이 작아요. */
-  const rivalResAdj = (r) => (r === "W" ? rand(4, 14) : r === "L" ? -rand(4, 14) : r === "D" ? rand(-3, 3) : 0);
-  /* 명성을 그대로 점수로 쓰지 않고 평균(70) 쪽으로 당겨요.
-   * 라이벌 점수는 명성(52~88)이고 내 점수는 능력치×10 + 그 경기 활약이었어요.
-   * 같은 표에 **다른 자로 잰 숫자**를 나란히 놓은 셈이라, 능력치 평점 6.0인
-   * 선수는 라이벌 평균(7.06)보다 1.2점 아래에서 시작했습니다. 2골 2도움을 해도
-   * 7위가 나온 게 그래서예요.
-   * 0.75로 당기면 명성 폭이 36 → 27이 되고, 그 자리를 결과(폭 18)가 채웁니다. */
-  const RIVAL_POP_PULL = 0.75;
   const RES_KO = { W: "승", D: "무", L: "패" };
 
   const tableRows = () => (S.table ? S.table.rows : [])
@@ -276,23 +338,6 @@ window.WingerCareer = (() => {
     const i = rows.findIndex((r) => r.name === S.group);
     return i < 0 ? rows.length : i + 1;
   };
-
-  /* 진행 중이던 세이브의 라이벌에는 이름·소속이 없어요 — 예전에는 역할 딱지가
-   * 이름 자리에 있었고 클럽은 아예 없었습니다. 라이벌은 반기마다 다시 뽑히므로
-   * 시즌 도중에는 갱신되지 않아 "소속이 비어 있음"으로 보였어요.
-   * 그릴 때 비어 있는 것만 채워 넣습니다(이미 있는 값은 안 건드려요). */
-  function fillRivals(act) {
-    if (!act || !Array.isArray(act.rivals) || !act.rivals.length) return;
-    let changed = false;
-    const clubs = shuffle(oppClubs(S));
-    act.rivals.forEach((r, i) => {
-      if (!r.role && RIVAL_GROUPS.includes(r.name)) { r.role = r.name; r.name = null; changed = true; }
-      if (!r.name) { r.name = randomPlayerName((Math.random() < 0.5 ? null : MARKETS.find((m) => m.id === "eu"))); changed = true; }
-      if (!r.role) { r.role = RIVAL_GROUPS[i % RIVAL_GROUPS.length]; changed = true; }
-      if (!r.club) { r.club = clubs[i % clubs.length]; changed = true; }
-    });
-    if (changed) save();
-  }
 
   /* 🔺🔻 팀 승강제 — 리그 순위표 1위면 위로, 꼴찌면 아래로 내 팀이 통째로 움직여요.
    *
@@ -389,12 +434,16 @@ window.WingerCareer = (() => {
    * 시즌 내내 같은 8명이 함께 쌓아요. 부문상은 이 표의 1위에게 갑니다 —
    * 화면에 보이는 경쟁이 곧 수상 판정이에요. 예전에는 랜덤 문턱이라
    * 표와 수상이 서로 모르는 사이였습니다. */
+  /* 경쟁자의 포지션 — 평점을 나와 **같은 산식**으로 매기려면 필요해요.
+   * (수비수의 수비 성공과 공격수의 골이 같은 표에서 공정하게 겨루도록) */
+  const RACE_POS = { st: "fw", st2: "fw", wg: "wg", am: "mf", mf: "mf", cb: "df", cb2: "df", ut: "mf" };
+
   function rollRace() {
     const clubs = shuffle(oppClubs(S));
     return RACE_ROLES.map((r, i) => ({
       name: randomPlayerName(Math.random() < 0.5 ? null : MARKETS.find((m) => m.id === "eu")),
-      role: r.name, key: r.key, pop: rand(52, 88),
-      club: clubs[i % clubs.length], g: 0, a: 0, d: 0,
+      role: r.name, key: r.key, pos: RACE_POS[r.key] || "mf", pop: rand(52, 88),
+      club: clubs[i % clubs.length], g: 0, a: 0, d: 0, rate: 0, mom: 0,
     }));
   }
 
@@ -404,59 +453,119 @@ window.WingerCareer = (() => {
    *
    * 그릴 때 비어 있으면 채워 넣되, **이미 치른 경기 수만큼 미리 굴려 둬요.**
    * 0골에서 시작하면 내가 20골인데 1위가 0골인 표가 나와서 경쟁이 안 됩니다.
-   * (라이벌 이름·소속을 나중에 메우는 fillRivals와 같은 방식이에요) */
+   * (평점 칸도 같은 방식으로 메워요) */
   function ensureRace() {
     const act = S.activity;
-    if (!act || Array.isArray(act.race)) return;
+    if (!act) return;
+    if (Array.isArray(act.race)) {
+      /* 명단은 있는데 새 칸(포지션·평점·MOM)이 없는 세이브. 마이그레이션은 안 하지만
+       * 읽는 쪽에서 기본값을 줘요 — 안 그러면 평점 칸이 전부 0.00으로 뜹니다.
+       * 평점은 이미 치른 경기 수만큼 굴려서 메워요(g/a/d를 메우던 방식 그대로). */
+      if (act.race.length && act.race[0].rate == null) {
+        for (const r of act.race) {
+          r.pos = r.pos || RACE_POS[r.key] || "mf";
+          r.rate = 0; r.mom = 0;
+        }
+        for (let i = 0; i < (act.apps || 0); i++) raceRate(null);
+        save();
+      }
+      return;
+    }
     act.race = rollRace();
     const played = act.apps || 0;
-    for (let i = 0; i < played; i++) raceAdvance();
+    for (let i = 0; i < played; i++) { raceAdvance(); raceRate(null); }
     save();
   }
 
-  // 한 경기치를 경쟁자들에게 쌓아요. 리그 격이 생산량에 실려요.
+  /* 한 경기치를 경쟁자들에게 쌓아요. 리그 격이 생산량에 실려요.
+   * **그 라운드 몫을 돌려줍니다** — 평점을 나와 같은 산식으로 매기려면
+   * 시즌 누계가 아니라 그 경기에 한 일이 필요해요. */
   function raceAdvance() {
     const race = S.activity && S.activity.race;
-    if (!Array.isArray(race)) return;
+    if (!Array.isArray(race)) return [];
     const pres = leagueOf(S).prestige;
-    for (const r of race) {
+    return race.map((r) => {
       const def = RACE_ROLES.find((x) => x.key === r.key) || RACE_ROLES[0];
-      r.g += poissonish(raceLam(def.g, r.pop, pres));
-      r.a += poissonish(raceLam(def.a, r.pop, pres));
-      r.d += poissonish(raceLam(def.d, r.pop, pres));
-    }
+      const dg = poissonish(raceLam(def.g, r.pop, pres));
+      const da = poissonish(raceLam(def.a, r.pop, pres));
+      const dd = poissonish(raceLam(def.d, r.pop, pres));
+      r.g += dg; r.a += da; r.d += dd;
+      return { r, dg, da, dd };
+    });
   }
 
-  /* 나를 끼워 정렬한 순위. key는 "g"(득점) · "a"(도움) · "d"(수비) · "p"(공격P). */
+  /* 경쟁자 실점 — 소속 클럽의 그 라운드 결과에서 짐작해요. 실제로 굴리지는
+   * 않으니(순위표는 승패만 굴려요) 결과에 어울리는 값을 뽑습니다. */
+  const raceConceded = (res) => (res === "W" ? randInt(0, 1) : res === "L" ? randInt(1, 3) : randInt(1, 2));
+
+  /* 경쟁자들의 그 라운드 평점. **나와 똑같은 matchRating을 씁니다** —
+   * 예전에는 개인 순위 명단(act.race)과 평점표 명단(act.rivals)이 아예 다른
+   * 8명이었어요. 득점 1위가 평점표에 안 보이는 게 당연했습니다.
+   * roundRes가 없으면(옛 세이브 메우기) 결과를 무작위로 굴려요. */
+  function raceRate(roundRes, deltas) {
+    const race = S.activity && S.activity.race;
+    if (!Array.isArray(race)) return [];
+    const ds = deltas || race.map((r) => ({ r, dg: 0, da: 0, dd: 0 }));
+    return ds.map(({ r, dg, da, dd }) => {
+      const res = (roundRes && roundRes[r.club]) || pick(["W", "D", "L"]);
+      const info = { myGoals: dg, assists: da, defense: dd, res, oppGoals: raceConceded(res) };
+      const score = matchRating(info, r.pos || "mf", 0);
+      r.rate = (r.rate || 0) + clamp(score / 10, 1, 10);
+      return { r, score, res };
+    });
+  }
+
+  /* 나를 끼워 정렬한 순위.
+   * key — "g" 득점 · "a" 도움 · "d" 수비 · "p" 공격포인트 · "r" 평균평점 · "m" MOM */
   function raceRank(key) {
     const act = S.activity;
     const race = (act && act.race) || [];
-    const val = (x) => (key === "p" ? (x.g || 0) + (x.a || 0) : x[key] || 0);
+    const apps = (act && act.apps) || 0;
+    const avg = (x) => (apps ? (x.rate || 0) / apps : 0);
+    const val = (x) => key === "p" ? (x.g || 0) + (x.a || 0)
+      : key === "r" ? avg(x)
+      // MOM은 내 줄이 act.wins, 경쟁자는 r.mom에 쌓여요 — 같은 이름으로 읽어요
+      : key === "m" ? (x.m != null ? x.m : x.mom || 0)
+      : x[key] || 0;
     const me = { name: S.name, club: S.group, role: null, me: true,
-      g: (act && act.goals) || 0, a: (act && act.assists) || 0, d: (act && act.defense) || 0 };
-    return race.concat([me]).map((x) => ({ ...x, v: val(x) }))
+      g: (act && act.goals) || 0, a: (act && act.assists) || 0, d: (act && act.defense) || 0,
+      rate: (act && act.ratingSum) || 0, m: (act && act.wins) || 0 };
+    return race.concat([me]).map((x) => ({ ...x, avg: avg(x), v: val(x) }))
       // 동점이면 내 줄을 앞에 둬요 — 실제로도 공동 득점왕은 둘 다 받아요
       .sort((x, y) => y.v - x.v || (x.me ? -1 : 1));
   }
   // 내가 그 부문 1위인가 — 부문상 판정이 이걸 봐요
   const raceTop = (key) => { const r = raceRank(key)[0]; return !!(r && r.me); };
 
+  /* 🥇 개인 순위표 — 한 표에 다 담아요.
+   * 예전에는 득점·도움 두 표로 나눠 그렸는데, 칸이 늘어날수록(수비·평균평점·MOM)
+   * 같은 명단을 다섯 번 그리게 돼요. 실제 리그 기록실처럼 한 표에 늘어놓고
+   * **각 부문 1위에만 왕관**을 붙입니다 — 부문상이 어디로 가는지가 바로 보여요.
+   * 정렬은 평균 평점이에요. 득점으로 정렬하면 수비수가 늘 맨 아래에 깔려요. */
+  const RACE_COLS = [["g", "⚽"], ["a", "🅰️"], ["d", "🛡️"], ["r", "⭐"], ["m", "🏅"]];
+
   function raceHTML() {
-    const KEYS = [["g", "⚽ 득점"], ["a", "🅰️ 도움"]];
-    return KEYS.map(([k, label]) => {
-      const rows = raceRank(k).slice(0, 5);
-      const myIdx = raceRank(k).findIndex((x) => x.me);
-      const line = (r, i) => `<tr class="${r.me ? "me" : ""}"><td>${i + 1}</td><td>${r.name}</td>`
-        + `<td class="ch-club">${r.club || "-"}${r.role ? `<span class="ch-role">${r.role}</span>` : ""}</td>`
-        + `<td>${r.v}</td></tr>`;
-      // 5위 밖이면 내 줄을 아래에 붙여요 — 안 보이면 순위표를 볼 이유가 없어요
-      const pinned = myIdx >= 5
-        ? `<tr class="hof-gap-row"><td colspan="4">⋯</td></tr>` + line(raceRank(k)[myIdx], myIdx)
-        : "";
-      return `<div class="race-block"><div class="race-title">${label}</div>`
-        + `<table class="rank-table season-standings"><thead><tr><th>#</th><th>선수</th><th>소속</th><th>${label.slice(2)}</th></tr></thead>`
-        + `<tbody>${rows.map(line).join("")}${pinned}</tbody></table></div>`;
-    }).join("");
+    const ranked = raceRank("r");
+    if (!ranked.length) return "";
+    // 부문별 1위를 미리 찾아 둬요 (동점이면 내 줄이 앞이라 나에게 붙어요)
+    const leader = {};
+    for (const [k] of RACE_COLS) { const t = raceRank(k)[0]; leader[k] = t && t.v > 0 ? t.name : null; }
+    const cell = (r, k) => {
+      const v = k === "r" ? (r.avg || 0).toFixed(2) : (k === "m" ? (r.m != null ? r.m : r.mom || 0) : r[k] || 0);
+      return `<td>${leader[k] === r.name ? "👑" : ""}${v}</td>`;
+    };
+    const line = (r, i) => `<tr class="${r.me ? "me" : ""}"><td>${i + 1}</td>`
+      + `<td>${r.name}<span class="ch-club">${r.club || "-"}${r.role ? ` · ${r.role}` : ""}</span></td>`
+      + RACE_COLS.map(([k]) => cell(r, k)).join("") + `</tr>`;
+    const myIdx = ranked.findIndex((x) => x.me);
+    const shown = ranked.slice(0, 5);
+    const pinned = myIdx >= 5
+      ? `<tr class="hof-gap-row"><td colspan="${RACE_COLS.length + 2}">⋯</td></tr>` + line(ranked[myIdx], myIdx)
+      : "";
+    return `<table class="rank-table season-standings race-table">`
+      + `<thead><tr><th>#</th><th>선수</th>${RACE_COLS.map(([, l]) => `<th>${l}</th>`).join("")}</tr></thead>`
+      + `<tbody>${shown.map(line).join("")}${pinned}</tbody></table>`
+      + `<div class="race-note">⭐ 평균 평점 · 🏅 MOM 횟수 · 👑 부문 1위(수상자)</div>`;
   }
 
   function initActivity() {
@@ -467,8 +576,8 @@ window.WingerCareer = (() => {
       wins: 0, sales: 0, hypeSum: 0, cbHype: 0, cbWins: 0,
       goals: 0, assists: 0, defense: 0, apps: 0, teamW: 0, teamD: 0, teamL: 0,
       opp: pick(oppClubs(S)),
-      rivals: rollRivals(),
-      // 🥇 득점·도움 경쟁 — 시즌 내내 같은 8명이에요 (라이벌과 다른 명단)
+      /* 🥇 경쟁자 8명 — 개인 순위도, 경기 후 평점표도 이 명단 하나를 써요.
+       * 예전에는 명단이 둘(rivals · race)로 갈려 있어서 득점왕이 평점표에 없었어요. */
       race: rollRace(),
     };
   }
@@ -486,7 +595,6 @@ window.WingerCareer = (() => {
       S.activity.week = 0;
       S.activity.cbHype = 0;
       S.activity.cbWins = 0;
-      S.activity.rivals = rollRivals();
     }
     S.pendingShow = true;
     save();
@@ -729,57 +837,39 @@ window.WingerCareer = (() => {
     MatchSim.run({
       home: S.group, away: act.opp, myName: S.name,
       goals: c.g, assists: c.a, defense: c.def, oppGoals, rating,
-      finalize: (info) => proMatchFinalize(act, info, rating),
+      finalize: (info) => proMatchFinalize(act, info),
     });
   }
 
   // 프로 경기 결과 반영 (MOM 평점 순위 + 보상 + 다음 진행)
-  function proMatchFinalize(act, info, rating) {
-    fillRivals(act);                    // 옛 세이브의 라이벌에 이름·소속을 채워요
+  function proMatchFinalize(act, info) {
     const momAdj = info.momentRes === "perfect" ? 8 : info.momentRes === "miss" ? -8 : 0;
-    /* 그 경기에서 실제로 한 일을 평점에 반영해요.
-     * 예전에는 rating(스탯·컨디션·명성)과 랜덤만 봐서, 4:2로 이긴 경기에 3골을
-     * 넣고도 7위가 나올 수 있었어요 — 골·도움·수비도 승패도 식에 없었거든요.
-     *
-     * posAxis로 재면 포지션이 자동으로 보정돼요 (수비 3.5회 ≈ 골 1.6개).
-     * 기대치(그 평점이면 보통 이만큼)와 견줘서 잘했으면 +, 못했으면 −.
-     * 기대치도 평점을 따라 움직여야 실력 좋은 선수가 이중으로 이득 보지 않아요. */
-    const perfNow = clamp((rating - 5) / 4 + 0.6, 0.15, 1.6);
-    const axisNow = posAxis({ goals: info.myGoals, assists: info.assists, defense: info.defense }, S.pos);
-    /* 기대치를 넘은 쪽이 못 넘은 쪽보다 무겁게 실려요(AXIS_UP > AXIS_DOWN).
-     * 예전에는 배수가 8 하나라, 2골 2도움을 하고도 평점이 7.6밖에 안 올라
-     * "잘한 경기"가 화면에서 티가 안 났어요. 반대로 배수만 올리면 조용한 경기가
-     * 지나치게 깎여서(0골 4.73 → 4.07) 평범한 날이 재앙처럼 보입니다.
-     *
-     * 실측(공격수 능력치 75, 6만 경기):
-     *              0골     1골    2골2도움   평점평균
-     *   이전(×8)   4.73   5.54    7.57      5.91
-     *   지금       4.90   5.60    8.30      6.12   ← 못한 경기는 오히려 덜 가혹해요 */
-    const AXIS_UP = 12, AXIS_DOWN = 7;
-    const axisGap = axisNow - 2.05 * perfNow;
-    const doneBonus = axisGap >= 0 ? axisGap * AXIS_UP : axisGap * AXIS_DOWN;
-    const resultBonus = info.res === "W" ? 3 : info.res === "L" ? -3 : 0;
-    const myRankScore = rating * 10 + momAdj + doneBonus + resultBonus + rand(-4, 4);
+    /* 실제 축구 평점과 같은 자로 잽니다 — 능력치는 안 보고 그 경기에 일어난
+     * 일만 봐요. 값의 근거와 실측은 matchRating(위쪽)에 적어 뒀어요. */
+    const myRankScore = matchRating(info, S.pos, momAdj);
     /* ⚠️ 순위표를 **먼저** 굴려요. 그래야 그 라운드에 각 클럽이 뭘 했는지가 나오고,
      * 라이벌 점수가 그걸 볼 수 있어요. 예전에는 순위 행을 다 만든 뒤에 굴려서
      * 둘이 같은 라운드를 보면서도 서로 모르는 사이였습니다. */
     const roundRes = recordRound(act.opp, info.res);
-    ensureRace();    // 옛 세이브면 여기서 먼저 채워요
-    raceAdvance();   // 🥇 경쟁자들도 그 라운드 몫을 쌓아요
+    ensureRace();                       // 옛 세이브면 여기서 먼저 채워요
+    const scored = raceRate(roundRes, raceAdvance());   // 🥇 경쟁자들도 그 라운드를 치러요
     const rows = [
-      { name: S.name, score: myRankScore, me: true, res: info.res },
-      /* club·role도 함께 옮겨요. 예전에는 name과 score만 옮겨서, fillRivals가
-       * 소속을 제대로 채워 놔도 이 자리에서 버려졌어요 — 표에는 내 줄만 클럽이
-       * 나오고 상위 5명은 전부 "-"로 보였습니다.
-       * res는 그 라운드 소속 클럽의 결과예요. 내가 이긴 상대 팀의 라이벌은 같이 떨어져요. */
-      ...act.rivals.map((r) => ({
-        name: r.name, club: r.club, role: r.role, res: roundRes[r.club] || null,
-        score: 70 + (r.pop - 70) * RIVAL_POP_PULL + rand(-6, 6) + rivalResAdj(roundRes[r.club]),
+      { name: S.name, club: S.group, score: myRankScore, me: true, res: info.res },
+      /* 라이벌 줄이 개인 순위와 **같은 8명**이에요. 예전에는 명단이 둘로 갈려 있어서
+       * 득점 1위가 경기 후 평점표에 아예 안 나왔습니다.
+       * res는 그 라운드 소속 클럽의 결과예요 — 내가 이긴 팀 선수는 같이 떨어져요. */
+      ...scored.map(({ r, score, res }) => ({
+        name: r.name, club: r.club, role: r.role, res, score,
       })),
     ].sort((a, b) => b.score - a.score);
     const rank = rows.findIndex((r) => r.me) + 1;
     const won = rank === 1;
-    const hypeDelta = (5 - rank) * 0.35 + (info.momentRes === "perfect" ? 0.5 : info.momentRes === "miss" ? -0.5 : 0);
+    // 🏅 MOM 횟수도 명단에 쌓아요 — 개인 순위에서 "이 선수가 몇 번 최고였나"를 봐요
+    if (!won) { const top = scored.find(({ score }) => score === rows[0].score); if (top) top.r.mom = (top.r.mom || 0) + 1; }
+    /* 기준점이 5위가 아니라 5.5위인 이유: 경쟁자 8명이 리그 격을 타면서
+     * 내 평균 순위가 5.4~6.5위가 됐어요. 5위를 기준으로 두면 반기 내내
+     * 마이너스만 쌓여서 반기 공격포인트가 늘 바닥을 칩니다. */
+    const hypeDelta = (5.5 - rank) * 0.35 + (info.momentRes === "perfect" ? 0.5 : info.momentRes === "miss" ? -0.5 : 0);
 
     act.apps = (act.apps || 0) + 1;
     // 시즌 평균 평점 — 기록 화면에 보여줘요
@@ -878,6 +968,7 @@ window.WingerCareer = (() => {
     const resultHTML = `
       <div class="ms-final ${scoreClass}">${info.home} ${info.teamGoals} : ${info.oppGoals} ${info.away} · ${RES_LABEL[info.res]}</div>
       <div class="tour-vs">${won ? "🏅 MOM!" : `평점 ${rank}위`} <span class="${won ? "win" : ""}">${S.name}</span> · ⚽${info.myGoals} 🅰️${info.assists} 🛡️${info.defense}</div>
+      ${ratingWhyHTML(myRankScore, info, S.pos, momAdj)}
       ${chartHTML(rows)}
       <div class="tour-pts">💰 경기 수당 +${pay}만 · ${dFan >= 0 ? `⭐ 명성 +${dFan}` : `📉 명성 ${dFan}`}</div>
       ${extraLine}`;
@@ -993,7 +1084,7 @@ window.WingerCareer = (() => {
     MatchSim.run({
       home: S.group, away: opp.name, myName: S.name,
       goals: c.g, assists: c.a, defense: c.def, oppGoals, rating,
-      finalize: (info) => cupFinalize(info, rating),
+      finalize: (info) => cupFinalize(info),
     });
   }
 
@@ -1001,24 +1092,29 @@ window.WingerCareer = (() => {
    * 처음엔 여기서 DOM을 직접 그리고 아무것도 안 돌려줬는데, MatchSim이
    * out.resultHTML을 읽다가 그 자리에서 죽어 결과 화면이 통째로 안 나왔습니다.
    * 리그 경기(proMatchFinalize)와 같은 모양을 지켜요. */
-  function cupFinalize(info, rating) {
+  function cupFinalize(info) {
     const rounds = cupRounds();
     const label = rounds[S.cup.round];
     S.condition = clamp(S.condition - randInt(3, 6), 0, 100);
     /* 컵 경기도 시즌 기록에 넣어요 — 안 넣으면 결승까지 가서 넣은 골이
-     * 연도별 표에서 사라져요. 평점 평균에도 같이 들어갑니다. */
+     * 연도별 표에서 사라져요. 평점 평균에도 같이 들어갑니다.
+     * ⚠️ 평점은 리그 경기와 **같은 자**로 재요. 예전에는 여기만 능력치 평점을
+     * 그대로 넣어서, 컵에서 해트트릭을 해도 시즌 평균이 안 움직였습니다. */
+    const rateScore = matchRating(info, S.pos, 0);
+    const rateShown = clamp(rateScore / 10, 1, 10);
     const act = S.activity;
     if (act) {
       act.goals = (act.goals || 0) + info.myGoals;
       act.assists = (act.assists || 0) + info.assists;
       act.defense = (act.defense || 0) + info.defense;
       act.apps = (act.apps || 0) + 1;
-      act.ratingSum = (act.ratingSum || 0) + clamp(rating, 1, 10);
+      act.ratingSum = (act.ratingSum || 0) + rateShown;
     }
     save();
     const head = `<div class="ms-final ${info.res === "W" ? "win" : info.res === "L" ? "lose" : ""}">`
       + `${info.home} ${info.teamGoals} : ${info.oppGoals} ${info.away} · ${S.cup.name} ${label}</div>`
-      + `<div class="tour-vs"><span>${S.name}</span> · ⚽${info.myGoals} 🅰️${info.assists} 🛡️${info.defense}</div>`;
+      + `<div class="tour-vs"><span>${S.name}</span> · ⚽${info.myGoals} 🅰️${info.assists} 🛡️${info.defense}</div>`
+      + ratingWhyHTML(rateScore, info, S.pos, 0);
 
     // 비기면 승부차기 — 컵은 단판이라 무승부가 없어요
     if (info.res === "D") {
@@ -2082,6 +2178,8 @@ window.WingerCareer = (() => {
     moveToClub,
     _t: {
       ratingOf, FAN_CAP, RATING_DIV, POS_AXIS, posAxis, AXIS_K, AXIS_OFF,
+      RATE, RATE_RESULT, RATE_CONCEDE, ratingParts, matchRating, ratingWhyHTML,
+      RACE_POS, rollRace, raceAdvance, raceRate, raceConceded,
       LEAGUES, leagueOf, barOf, CLUBS, clubStrOf, debutClubs, DEBUT_POOL, weakestClub,
       cupEntry, cupName, CUP_SPOTS, myTableRank,
       TRANSFER_MIN_YEAR, PROMOTE_HYPE, OFFERS_PER_LEAGUE, transferFee, transferOffers, canTransfer,
