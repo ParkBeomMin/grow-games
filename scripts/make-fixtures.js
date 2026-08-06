@@ -1095,6 +1095,26 @@ function rookieSeason(P, onScreen) {
   return false;
 }
 
+/* 시즌을 stopAtGame 경기까지만 굴리고 프로 화면(시즌 도중)에서 멈춰요 — 순위표·🏅 타이틀
+ * 레이스처럼 '시즌 중에만' 보이는 자리를 뜨려면 결산 전에 멈춰야 해요. */
+function playPartial(P, stopAtGame) {
+  for (let g = 0; g < 40000; g++) {
+    const id = P.active();
+    const sn = P.state().season;
+    if (id === "screen-pro" && sn && sn.game >= stopAtGame) return true;
+    if (id === "screen-career") return false;      // 시즌이 끝나 버렸어요
+    if (id === "screen-tournament") { P.$("btn-tour-next").click(); continue; }
+    if (id === "screen-pro") {
+      const go = P.w.document.querySelector("#pro-actions .go-game");
+      if (go) { go.click(); continue; }
+      if (!rookieAct(P, "#pro-actions .action-btn")) return false;
+      continue;
+    }
+    return false;
+  }
+  return false;
+}
+
 const campBtn = (P) => Array.from(P.w.document.querySelectorAll("#career-actions .btn"))
   .find((b) => /캠프 시작/.test(b.textContent));
 const rookieGates = (P) => P.w.Career._t.postingGates();
@@ -1344,8 +1364,38 @@ function makeRookieAll() {
     done.add("rookie-retire");
   }
 
+  // 🏅 타이틀 레이스 — 시즌 도중 순위표 아래 레이스 패널을 보여줘요.
+  // 능력치를 올려 경쟁권에 들게 한 뒤, 다음 시즌을 절반쯤 굴리다 프로 화면에서 멈춰 떠요.
+  log("🏅 타이틀 레이스 — 시즌 도중 순위 경쟁");
+  for (const seed of seeds(6)) {
+    let P;
+    try {
+      P = makePage("rookie", seed);
+      rookieDebut(P, 0, "batter", "확인용");
+      const st = P.state();
+      for (const key in st.stats) st.stats[key] = 128;   // 타이틀 경쟁권에 들도록 능력치를 올려요
+      if (!rookieSeason(P)) { P.close(); continue; }       // 한 시즌 온전히 — 통산 기록을 쌓아요
+      const cb = campBtn(P); if (!cb) { P.close(); continue; }
+      cb.click();
+      // 캠프(S.season 아직 null)를 지나 시즌을 절반쯤(KBO 144경기 중 70경기) 굴리다 멈춰요.
+      if (!playPartial(P, 70) || !P.state().season) { P.close(); continue; }
+      const s2 = P.state();
+      add({
+        id: "rookie-titlerace", game: "rookie", url: "rookie/", emoji: "🏅",
+        title: "타이틀 레이스 — 시즌 도중 순위 경쟁",
+        state: `${s2.team} · 🇰🇷 KBO · ${s2.proYear}년차 · ${s2.season.game}/${s2.season.total}경기`,
+        check: "프로 화면에서 📊 순위표를 펼치면 아래 <b>🏅 타이틀 레이스</b>(현재·예상·1등선)가 뜨는지, 앞서는 종목에 🥇가 붙는지",
+        steps: [...ROOKIE_STEP1, "프로 화면에서 <b>📊 순위표</b>를 펼치면 아래에 🏅 타이틀 레이스"],
+        keys: snapshot(P),
+      });
+      done.add("rookie-titlerace");
+      P.close();
+      break;
+    } catch (e) { log(`  ⚠️ 타이틀 레이스 ${seed}: ${e.message}`); if (P) P.close(); }
+  }
+
   for (const id of ["rookie-posting", "rookie-posting-locked", "rookie-abroad-report",
-    "rookie-cont-series", "rookie-retire"]) {
+    "rookie-cont-series", "rookie-retire", "rookie-titlerace"]) {
     if (!done.has(id)) log(`  ❌ ${id} — 조건에 맞는 상태를 못 만들었어요`);
   }
 }
