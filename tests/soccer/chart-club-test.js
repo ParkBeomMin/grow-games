@@ -20,7 +20,15 @@ const grab = (src, re) => { const m = src.match(re); return m ? m[0] : null; };
 
 const parts = {
   rows: grab(SRC, /const rows = \[\s*\{ name: S\.name[\s\S]*?\]\.sort\([^;]*\);/),
-  line: grab(SRC, /const line = \(r, i\) =>[\s\S]*?<\/tr>`;/),
+  /* ⚠️ `const line = (r, i) =>`를 파일 전체에서 찾으면 안 돼요 — 개인 순위표
+   * (raceHTML)에도 같은 이름의 화살표가 있고 그게 파일 앞쪽이라 **그쪽이 먼저
+   * 잡힙니다.** 실제로 내 줄이 "-"에 점수 undefined로 나왔고, 표식으로 좁히니
+   * 이번엔 두 함수를 걸쳐 잡아 구문이 깨졌어요.
+   * **chartHTML 안에서만** 찾습니다 — 범위를 먼저 좁히는 게 정답이에요. */
+  line: (() => {
+    const fn = grab(SRC, /function chartHTML\(rows, top\) \{[\s\S]*?\n  \}/);
+    return fn ? grab(fn, /const line = \(r, i\) =>[\s\S]*?<\/tr>`;/) : null;
+  })(),
   adj: grab(SRC, /const rivalResAdj = [^;]+;/),
   pull: grab(SRC, /const RIVAL_POP_PULL = [^;]+;/),
   resKo: grab(SRC, /const RES_KO = \{[^}]*\};/),

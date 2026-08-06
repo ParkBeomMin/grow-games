@@ -278,3 +278,7 @@ body {
 /* 유스 라운드 판정 근거 — 확률과 가장 크게 작용한 조각 */
 .pass-why { color: var(--sky); font-size: .84rem; margin-top: 2px; }
 .pass-why b { color: var(--cream); }
+
+/* 🥇 개인 순위 — 득점·도움 두 표를 한 칸에 */
+.race-block + .race-block { margin-top: 12px; }
+.race-title { font-size: .82rem; color: var(--accent); margin-bottom: 4px; }

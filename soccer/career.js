@@ -382,6 +382,65 @@ window.WingerCareer = (() => {
     return { kind, from, to: leagueOf(S).name, rank };
   }
 
+  /* ---------- 🥇 개인 순위 (득점·도움·수비) ----------
+   *
+   * 시즌 내내 같은 8명이 함께 쌓아요. 부문상은 이 표의 1위에게 갑니다 —
+   * 화면에 보이는 경쟁이 곧 수상 판정이에요. 예전에는 랜덤 문턱이라
+   * 표와 수상이 서로 모르는 사이였습니다. */
+  function rollRace() {
+    const clubs = shuffle(oppClubs(S));
+    return RACE_ROLES.map((r, i) => ({
+      name: randomPlayerName(Math.random() < 0.5 ? null : MARKETS.find((m) => m.id === "eu")),
+      role: r.name, key: r.key, pop: rand(52, 88),
+      club: clubs[i % clubs.length], g: 0, a: 0, d: 0,
+    }));
+  }
+
+  // 한 경기치를 경쟁자들에게 쌓아요. 리그 격이 생산량에 실려요.
+  function raceAdvance() {
+    const race = S.activity && S.activity.race;
+    if (!Array.isArray(race)) return;
+    const pres = leagueOf(S).prestige;
+    for (const r of race) {
+      const def = RACE_ROLES.find((x) => x.key === r.key) || RACE_ROLES[0];
+      r.g += poissonish(raceLam(def.g, r.pop, pres));
+      r.a += poissonish(raceLam(def.a, r.pop, pres));
+      r.d += poissonish(raceLam(def.d, r.pop, pres));
+    }
+  }
+
+  /* 나를 끼워 정렬한 순위. key는 "g"(득점) · "a"(도움) · "d"(수비) · "p"(공격P). */
+  function raceRank(key) {
+    const act = S.activity;
+    const race = (act && act.race) || [];
+    const val = (x) => (key === "p" ? (x.g || 0) + (x.a || 0) : x[key] || 0);
+    const me = { name: S.name, club: S.group, role: null, me: true,
+      g: (act && act.goals) || 0, a: (act && act.assists) || 0, d: (act && act.defense) || 0 };
+    return race.concat([me]).map((x) => ({ ...x, v: val(x) }))
+      // 동점이면 내 줄을 앞에 둬요 — 실제로도 공동 득점왕은 둘 다 받아요
+      .sort((x, y) => y.v - x.v || (x.me ? -1 : 1));
+  }
+  // 내가 그 부문 1위인가 — 부문상 판정이 이걸 봐요
+  const raceTop = (key) => { const r = raceRank(key)[0]; return !!(r && r.me); };
+
+  function raceHTML() {
+    const KEYS = [["g", "⚽ 득점"], ["a", "🅰️ 도움"]];
+    return KEYS.map(([k, label]) => {
+      const rows = raceRank(k).slice(0, 5);
+      const myIdx = raceRank(k).findIndex((x) => x.me);
+      const line = (r, i) => `<tr class="${r.me ? "me" : ""}"><td>${i + 1}</td><td>${r.name}</td>`
+        + `<td class="ch-club">${r.club || "-"}${r.role ? `<span class="ch-role">${r.role}</span>` : ""}</td>`
+        + `<td>${r.v}</td></tr>`;
+      // 5위 밖이면 내 줄을 아래에 붙여요 — 안 보이면 순위표를 볼 이유가 없어요
+      const pinned = myIdx >= 5
+        ? `<tr class="hof-gap-row"><td colspan="4">⋯</td></tr>` + line(raceRank(k)[myIdx], myIdx)
+        : "";
+      return `<div class="race-block"><div class="race-title">${label}</div>`
+        + `<table class="rank-table season-standings"><thead><tr><th>#</th><th>선수</th><th>소속</th><th>${label.slice(2)}</th></tr></thead>`
+        + `<tbody>${rows.map(line).join("")}${pinned}</tbody></table></div>`;
+    }).join("");
+  }
+
   function initActivity() {
     initTable();
     S.activity = {
@@ -391,6 +450,8 @@ window.WingerCareer = (() => {
       goals: 0, assists: 0, defense: 0, apps: 0, teamW: 0, teamD: 0, teamL: 0,
       opp: pick(oppClubs(S)),
       rivals: rollRivals(),
+      // 🥇 득점·도움 경쟁 — 시즌 내내 같은 8명이에요 (라이벌과 다른 명단)
+      race: rollRace(),
     };
   }
 
@@ -444,6 +505,19 @@ window.WingerCareer = (() => {
       $("pro-table-body").innerHTML = tableHTML();
     } else {
       tbl.hidden = true;
+    }
+
+    /* 🥇 개인 순위 — 시즌 중에만 보여줘요. 득점왕 경쟁이 눈에 보여야
+     * "한 골 더"에 이유가 생겨요. 부문상이 이 표 1위한테 갑니다. */
+    const race = $("pro-race");
+    if (S.activity && Array.isArray(S.activity.race)) {
+      race.hidden = false;
+      const g = raceRank("g")[0], mine = raceRank("g").findIndex((x) => x.me) + 1;
+      $("pro-race-sum").textContent = `🥇 개인 순위 — 득점 ${mine}위 (${(S.activity.goals || 0)}골)`
+        + `${g && !g.me ? ` · 1위 ${g.name} ${g.v}골` : " · 내가 1위!"}`;
+      $("pro-race-body").innerHTML = raceHTML();
+    } else {
+      race.hidden = true;
     }
 
     const stats = $("pro-stats");
@@ -639,6 +713,7 @@ window.WingerCareer = (() => {
      * 라이벌 점수가 그걸 볼 수 있어요. 예전에는 순위 행을 다 만든 뒤에 굴려서
      * 둘이 같은 라운드를 보면서도 서로 모르는 사이였습니다. */
     const roundRes = recordRound(act.opp, info.res);
+    raceAdvance();   // 🥇 경쟁자들도 그 라운드 몫을 쌓아요
     const rows = [
       { name: S.name, score: myRankScore, me: true, res: info.res },
       /* club·role도 함께 옮겨요. 예전에는 name과 score만 옮겨서, fillRivals가
@@ -1024,11 +1099,25 @@ window.WingerCareer = (() => {
      * 문턱은 12경기 시즌의 실측 생산량으로 잡았어요 (능력치 100·평점 6.5 기준):
      *   공격수 골 60.6 · 미드필더 도움 53.8 · 수비수 수비 132.1 · 윙어 공격P 91.8 (38경기)
      * 좋은 시즌이면 닿고 평범하면 안 닿는 자리예요. bar를 곱해 리그 경쟁 강도를 반영해요. */
-    const G_ = act.goals || 0, A_ = act.assists || 0, D_ = act.defense || 0;
-    if (G_ >= rand(51, 72) * bar) awards.push("골든부츠");
-    if (A_ >= rand(46, 65) * bar) awards.push("플레이메이커");
-    if (D_ >= rand(112, 157) * bar) awards.push("철벽상");
-    if (G_ + A_ >= rand(78, 110) * bar) awards.push("공격포인트왕");
+    /* ⚽ 부문상 — **개인 순위 1위**면 받아요.
+     *
+     * 예전에는 `if (골 >= rand(51,72) * bar)`처럼 랜덤 문턱이었어요. 리그에 몇 골을
+     * 넣은 선수가 있는지 게임이 몰라서, 화면에 뜨는 득점 순위와 수상이 서로 모르는
+     * 사이가 됩니다 — 이 게임에서 여러 번 반복된 병이에요.
+     * 이제 시즌 내내 보던 그 경쟁의 결과가 그대로 상이 돼요.
+     *
+     * 리그 격은 경쟁자 생산량(raceLam)에 이미 실려 있어요. 하부 리그에서는
+     * 상을 쓸어 담지만 값어치(prestige)가 작고, 상위 리그에서는 하나도 어렵습니다 —
+     * bar를 따로 곱하면 같은 축을 두 번 거는 셈이라 여기서는 안 씁니다.
+     *
+     * 옛 세이브에는 race가 없어요(시즌 중에 갱신됐을 수 있어요). 그때는
+     * 부문상을 건너뜁니다 — 없는 경쟁을 이겼다고 할 수는 없어요. */
+    if (Array.isArray(act.race) && act.race.length) {
+      if (raceTop("g")) awards.push("골든부츠");
+      if (raceTop("a")) awards.push("플레이메이커");
+      if (raceTop("d")) awards.push("철벽상");
+      if (raceTop("p")) awards.push("공격포인트왕");
+    }
     /* 🏅 발롱도르 — 리그 최고를 넘어 세계 최고예요.
      * 리그MVP를 받은 시즌 중에서도, 리그격(prestige)을 곱한 값이 문턱을 넘어야 해요.
      * 하부 리그에서 아무리 잘해도 안 되고, 빅클럽에서 압도해야 닿습니다. */
