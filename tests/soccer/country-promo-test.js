@@ -50,8 +50,11 @@ const makeApply = () => new Function(
 );
 const apply = makeApply();
 
-const LEAGUE_NAME = { 5: "한국 3부", 4: "한국 2부", 1: "한국 1부", 6: "일본 2부", 7: "일본 1부",
-  8: "브라질 2부", 9: "브라질 1부", 10: "이탈리아 2부", 11: "이탈리아 1부", 2: "잉글랜드 2부", 3: "잉글랜드 1부" };
+/* 리그 이름은 소스에서 읽는다 — 여기 옮겨 적으면 이름이 바뀌어도 안 들킨다.
+ * 실제로 K리그1 → 한국 1부 → 다시 K리그1로 두 번 바뀌었다. */
+const LEAGUE_TBL = new Function(`${parts.leagues} return LEAGUES;`)();
+const NM = (id) => (LEAGUE_TBL.find((l) => l.id === id) || {}).name || `id ${id}`;
+const LEAGUE_NAME = Object.fromEntries(LEAGUE_TBL.map((l) => [l.id, l.name]));
 /* 6팀 순위표. gap을 주면 1위가 2위보다 그만큼 앞선다. */
 const table = (gap) => [
   { name: "나", pts: 60 }, { name: "B", pts: 60 - gap },
@@ -68,20 +71,20 @@ const run = (league, rank, gap) => apply(state(league), table(gap == null ? 12 :
 // ── ① 유럽 사다리 안에서 오르내린다
 const up = run(2, 1);
 check(up.move && up.move.kind === "up" && up.league === 3,
-  `잉글랜드 2부 1위 → 1부 승격 (${up.move ? up.move.to : "안 일어남"})`);
+  `${NM(2)} 1위 → ${NM(3)} 승격 (${up.move ? up.move.to : "안 일어남"})`);
 
 const chDown = run(3, 6);
 check(chDown.move && chDown.move.kind === "down" && chDown.league === 2,
-  `잉글랜드 1부 최하위 → 잉글랜드 2부 강등 (${chDown.move ? chDown.move.to : "안 일어남"})`);
+  `${NM(3)} 최하위 → ${NM(2)} 강등 (${chDown.move ? chDown.move.to : "안 일어남"})`);
 
 // 승점 차가 모자라면 승격 안 됨 — 국내와 같은 문턱을 쓴다
 const narrow = run(2, 1, 3);
-check(!narrow.move && narrow.league === 2, "승점 차가 모자라면 잉글랜드 2부 1위여도 승격 안 된다");
+check(!narrow.move && narrow.league === 2, `승점 차가 모자라면 ${NM(2)} 1위여도 승격 안 된다`);
 
 // ── ② 잉글랜드 1부 1위는 우승이지 승격이 아니다
 const champ = run(3, 1);
 check(champ.move && champ.move.kind === "title" && champ.league === 3,
-  `잉글랜드 1부 1위 → 우승 트로피 (리그 그대로: ${LEAGUE_NAME[champ.league]})`);
+  `${NM(3)} 1위 → 우승 트로피 (리그 그대로: ${LEAGUE_NAME[champ.league]})`);
 
 /* ── ③ 두 사다리는 완전히 따로 돈다.
  * 한때 "잉글랜드 2부 최하위 → 한국 1부"로 이어 뒀는데, 유럽은 국내 리그를 이겨서 가는
@@ -89,19 +92,19 @@ check(champ.move && champ.move.kind === "title" && champ.league === 3,
  * 두 무대를 오가는 건 오직 이적 사다리(PROMOTE_HYPE)뿐이다. */
 const exit = run(2, 6);
 check(!exit.move && exit.league === 2,
-  `잉글랜드 2부 최하위는 국내로 안 내려온다 (리그 ${LEAGUE_NAME[exit.league]})`);
+  `${NM(2)} 최하위는 다른 나라로 안 내려온다 (리그 ${LEAGUE_NAME[exit.league]})`);
 
 const k1top = run(1, 1);
 check(k1top.move && k1top.move.kind === "title" && k1top.league === 1,
-  `한국 1부 1위 → 우승 트로피, 다른 나라로 안 올라간다 (리그 ${LEAGUE_NAME[k1top.league]})`);
+  `${NM(1)} 1위 → 우승 트로피, 다른 나라로 안 올라간다 (리그 ${LEAGUE_NAME[k1top.league]})`);
 
 // 한국 1부 최하위는 국내 사다리 안에서 내려간다 (유럽과 무관)
 const k1down = run(1, 6);
-check(k1down.move && k1down.league === 4, `한국 1부 최하위 → 한국 2부 (${LEAGUE_NAME[k1down.league]})`);
+check(k1down.move && k1down.league === 4, `${NM(1)} 최하위 → ${NM(4)} (${LEAGUE_NAME[k1down.league]})`);
 
 // ── ④ 각 사다리 맨 아래는 갈 데가 없다
 const bottom = run(5, 6);
-check(!bottom.move && bottom.league === 5, "한국 3부 최하위도 아무 일도 안 일어난다");
+check(!bottom.move && bottom.league === 5, `${NM(5)} 최하위도 아무 일도 안 일어난다`);
 
 // ── 전력도 함께 움직인다 (승격하면 새 리그 하위권, 강등되면 새 리그 상위권)
 check(up.move && apply(state(2), table(12), 1).league === 3, "승격 뒤 리그가 실제로 바뀐다");
@@ -116,13 +119,13 @@ const strFor = (league, rank) => {
   return A(S, table(12), rank);
 };
 /* ⚠️ 승격 후와 강등 후를 그냥 비교하면 안 된다 — 도착하는 리그가 서로 달라서
- * 값이 우연히 같아질 수 있다(실제로 잉글랜드 1부 최약체와 한국 1부 최강이 둘 다 78이었다).
+ * 값이 우연히 같아질 수 있다(실제로 최상위 최약체와 한국 1부 최강이 둘 다 78이었다).
  * **같은 리그 안에서** 어느 자리에 놓이는지를 본다. */
 const clubStrOf = new Function(parts.clubs + " return (id) => CLUBS[id].map((c) => c.str);");
 const chStrs = clubStrOf()(3), eurStrs = clubStrOf()(2);
 const upStr = strFor(2, 1), downStr = strFor(3, 6);
-console.log(`   전력 — 잉글랜드 1부 승격 후 ${upStr} (잉글랜드 1부 ${Math.min(...chStrs)}~${Math.max(...chStrs)})`
-  + ` · 잉글랜드 2부 강등 후 ${downStr} (유로파 ${Math.min(...eurStrs)}~${Math.max(...eurStrs)})`);
+console.log(`   전력 — ${NM(3)} 승격 후 ${upStr} (${NM(3)} ${Math.min(...chStrs)}~${Math.max(...chStrs)})`
+  + ` · ${NM(2)} 강등 후 ${downStr} (${NM(2)} ${Math.min(...eurStrs)}~${Math.max(...eurStrs)})`);
 check(upStr === Math.min(...chStrs), `승격하면 새 리그의 최약체로 들어간다 (${upStr})`);
 check(downStr === Math.max(...eurStrs), `내려가면 그 리그의 최강으로 들어간다 (${downStr})`);
 
@@ -137,7 +140,7 @@ const brokenApply = new Function("S", "rowsIn", "rankIn",
   `${brokenTiers}\n${parts.ladderOf}\n${parts.gap}\n${parts.settle}\n${parts.apply}\n` +
   `return applyPromotion();`);
 check(brokenApply(state(2), table(12), 1) === null,
-  "변이 검증 — 잉글랜드 사다리를 비우면 잉글랜드 2부 1위에 아무 일도 안 일어난다");
+  `변이 검증 — 잉글랜드 사다리를 비우면 ${NM(2)} 1위에 아무 일도 안 일어난다`);
 
 console.log(bad ? `\n❌ ${bad}개 실패` : "\n✅ 통과");
 process.exit(bad ? 1 : 0);

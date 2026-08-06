@@ -11,10 +11,10 @@
  *   🇧🇷 1.08 → 브라질 1부(1.1)                 🌍 1.18 → 이탈리아 2부(1.35)
  *   🇪🇺 1.15 → 이탈리아 1부(2.1)
  * 🇪🇺·🌍는 나라가 아니라 권역이라 유럽 리그에 붙였어요.
- * 리그 이름(K리그·J리그)은 실제 상표라 유스 이름에서도 뺐어요. */
+ */
 const MARKETS = [
   {
-    id: "k", name: "국내 유스", emoji: "🇰🇷", tier: "국내 명문", home: 1,
+    id: "k", name: "K리그 유스", emoji: "🇰🇷", tier: "국내 명문", home: 1,
     debut: 0.66, growth: 0.98, spot: 1.0,
     desc: "체계적인 국내 유스. 안정적으로 크지만 세계무대는 멀어요",
   },
@@ -29,7 +29,7 @@ const MARKETS = [
     desc: "길거리 축구로 다져진 개인기. 화려하게 성장해요",
   },
   {
-    id: "jp", name: "일본 유스", emoji: "🇯🇵", tier: "정교한 시스템", home: 7,
+    id: "jp", name: "J리그 유스", emoji: "🇯🇵", tier: "정교한 시스템", home: 7,
     debut: 0.65, growth: 1.04, spot: 1.03,
     desc: "정교한 패스 축구를 가르쳐요. 전술 이해와 기본기가 빠르게 자라요",
   },
@@ -100,17 +100,17 @@ const POS_INFO = {
  * 잉글랜드 2부(t9)가 이탈리아 1부(t10)보다 아래에 있는 것도 자연스러워요.
  * 승강제는 나라 안에서만 돌아요 — career.js의 COUNTRY_TIERS를 보세요. */
 const LEAGUES = [
-  { id: 5,  tier: 1,  country: "kr", name: "한국 3부",     short: "한3", flag: "🇰🇷", penalty: 0,    prestige: 0.55, bar: 0.50 },
-  { id: 4,  tier: 2,  country: "kr", name: "한국 2부",     short: "한2", flag: "🇰🇷", penalty: 0,    prestige: 0.85, bar: 0.75 },
-  { id: 1,  tier: 3,  country: "kr", name: "한국 1부",     short: "한1", flag: "🇰🇷", penalty: 0,    prestige: 1.00, bar: 1.00 },
-  { id: 6,  tier: 4,  country: "jp", name: "일본 2부",     short: "일2", flag: "🇯🇵", penalty: 0.35, prestige: 1.08, bar: 1.03 },
-  { id: 8,  tier: 5,  country: "br", name: "브라질 2부",   short: "브2", flag: "🇧🇷", penalty: 0.6,  prestige: 1.18, bar: 1.06 },
-  { id: 7,  tier: 6,  country: "jp", name: "일본 1부",     short: "일1", flag: "🇯🇵", penalty: 0.85, prestige: 1.32, bar: 1.08 },
-  { id: 9,  tier: 7,  country: "br", name: "브라질 1부",   short: "브1", flag: "🇧🇷", penalty: 1.1,  prestige: 1.48, bar: 1.10 },
-  { id: 10, tier: 8,  country: "it", name: "이탈리아 2부", short: "이2", flag: "🇮🇹", penalty: 1.35, prestige: 1.60, bar: 1.11 },
-  { id: 2,  tier: 9,  country: "en", name: "잉글랜드 2부", short: "잉2", flag: "🏴", penalty: 1.6,  prestige: 1.75, bar: 1.12 },
-  { id: 11, tier: 10, country: "it", name: "이탈리아 1부", short: "이1", flag: "🇮🇹", penalty: 2.1,  prestige: 2.05, bar: 1.22 },
-  { id: 3,  tier: 11, country: "en", name: "잉글랜드 1부", short: "잉1", flag: "🏴", penalty: 2.8,  prestige: 2.40, bar: 1.30 },
+  { id: 5,  tier: 1,  country: "kr", name: "K리그3",     short: "K3", flag: "🇰🇷", penalty: 0,    prestige: 0.55, bar: 0.50 },
+  { id: 4,  tier: 2,  country: "kr", name: "K리그2",     short: "K2", flag: "🇰🇷", penalty: 0,    prestige: 0.85, bar: 0.75 },
+  { id: 1,  tier: 3,  country: "kr", name: "K리그1",     short: "K1", flag: "🇰🇷", penalty: 0,    prestige: 1.00, bar: 1.00 },
+  { id: 6,  tier: 4,  country: "jp", name: "J2리그",     short: "J2", flag: "🇯🇵", penalty: 0.35, prestige: 1.08, bar: 1.03 },
+  { id: 8,  tier: 5,  country: "br", name: "브라질 세리에B",   short: "브B", flag: "🇧🇷", penalty: 0.6,  prestige: 1.18, bar: 1.06 },
+  { id: 7,  tier: 6,  country: "jp", name: "J1리그",     short: "J1", flag: "🇯🇵", penalty: 0.85, prestige: 1.32, bar: 1.08 },
+  { id: 9,  tier: 7,  country: "br", name: "브라질 세리에A",   short: "브A", flag: "🇧🇷", penalty: 1.1,  prestige: 1.48, bar: 1.10 },
+  { id: 10, tier: 8,  country: "it", name: "세리에B", short: "세B", flag: "🇮🇹", penalty: 1.35, prestige: 1.60, bar: 1.11 },
+  { id: 2,  tier: 9,  country: "en", name: "챔피언십", short: "챔십", flag: "🏴", penalty: 1.6,  prestige: 1.75, bar: 1.12 },
+  { id: 11, tier: 10, country: "it", name: "세리에A", short: "세A", flag: "🇮🇹", penalty: 2.1,  prestige: 2.05, bar: 1.22 },
+  { id: 3,  tier: 11, country: "en", name: "프리미어리그", short: "PL", flag: "🏴", penalty: 2.8,  prestige: 2.40, bar: 1.30 },
 ];
 const BIG_CLUB_LEAGUE = 2;   // 👑 유럽 빅클럽 입단이 데뷔하는 곳 — 🏴 잉글랜드 2부
 const COUNTRY_NAME = { kr: "🇰🇷 한국", jp: "🇯🇵 일본", br: "🇧🇷 브라질", it: "🇮🇹 이탈리아", en: "🏴 잉글랜드" };

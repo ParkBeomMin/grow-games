@@ -341,7 +341,7 @@ const add = (f) => { fixtures.push(f); log(`  ✅ ${f.id} — ${f.title}`); writ
  * 3시즌 오프시즌에 유로파리그 제안이 오려면 직전 시즌 평가가 5.5 이상이어야 해요.
  * 시즌 성적은 판정이 섞여서 시드마다 달라요 — 조건에 맞는 시드를 찾을 때까지 굴립니다. */
 function makeSoccerTransfer() {
-  log("⚽ ① 이적 화면 — 🇰🇷 한국 1부 3시즌 오프시즌, 상위 리그 제안");
+  log("⚽ ① 이적 화면 — 🇰🇷 K리그1 3시즌 오프시즌, 상위 리그 제안");
   const YEARS = 3;
   for (const seed of seeds(40)) {
     let P;
@@ -349,7 +349,7 @@ function makeSoccerTransfer() {
       P = makePage("soccer", seed);
       /* 🇰🇷 국내 유스로 시작해요 — 유스 국적이 데뷔 리그를 정하게 되면서
        * 기본값(🇪🇺 유럽 아카데미)은 이탈리아 1부에서 출발합니다. 이 시나리오가
-       * 보려는 건 "한국 1부에서 위 리그 제안이 어떻게 보이나"예요. */
+       * 보려는 건 "K리그1에서 위 리그 제안이 어떻게 보이나"예요. */
       soccerDebut(P, "pro", "pos", 0);
       let ok = false;
       for (let y = 1; y <= YEARS; y++) {
@@ -383,7 +383,7 @@ function makeSoccerTransfer() {
 
 /* ⚽ ② 하부 리그 이적 — K리그3에서 승격(K리그2) 제안 */
 function makeSoccerPromote() {
-  log("⚽ ② 하부 리그 이적 — 🇰🇷 한국 3부에서 승격 제안");
+  log("⚽ ② 하부 리그 이적 — 🇰🇷 K리그3에서 승격 제안");
   const bottom = null;
   for (const seed of seeds(40)) {
     let P;
@@ -1335,22 +1335,22 @@ if (want("soccer-semipro", "soccer")) makeSoccerEnding("semi");
 if (want("soccer-report", "soccer")) makeSoccerReport();
 if (want("soccer-chart", "soccer")) makeSoccerChart();
 if (want("soccer-nation-kr", "soccer")) makeSoccerNation(0, {
-  country: "kr", emoji: "🇰🇷", title: "국내 유스 → 한국 1부 · 회복 +30%",
+  country: "kr", emoji: "🇰🇷", title: "K리그 유스 → K리그1 · 회복 +30%",
   trait: "🛌 회복 +30%",
   check: "휴식을 누르면 컨디션이 평소보다 많이 차는지 봐주세요 (+25~40의 1.3배). 훈련을 더 자주 돌릴 수 있어요",
 });
 if (want("soccer-nation-br", "soccer")) makeSoccerNation(2, {
-  country: "br", emoji: "🇧🇷", title: "남미 유스 → 브라질 1부 · 드리블 +45%",
+  country: "br", emoji: "🇧🇷", title: "남미 유스 → 브라질 세리에A · 드리블 +45%",
   trait: "🏃 드리블 +45%",
   check: "드리블 훈련만 유난히 많이 오르는지, 다른 능력치는 그대로인지 봐주세요",
 });
 if (want("soccer-nation-it", "soccer")) makeSoccerNation(4, {
-  country: "it", emoji: "🇮🇹", title: "아프리카 유망주 → 이탈리아 2부 · 수비 +45%",
+  country: "it", emoji: "🇮🇹", title: "아프리카 유망주 → 세리에B · 수비 +45%",
   trait: "🛡️ 수비 +45%",
-  check: "수비 훈련만 유난히 많이 오르는지 봐주세요. 같은 나라라 1부로 올라가도 특색은 그대로예요",
+  check: "수비 훈련만 유난히 많이 오르는지 봐주세요. 같은 나라라 세리에A로 올라가도 특색은 그대로예요",
 });
 if (want("soccer-nation-jp", "soccer")) makeSoccerNation(3, {
-  country: "jp", emoji: "🇯🇵", title: "일본 유스 → 일본 1부 · 훈련 +15%",
+  country: "jp", emoji: "🇯🇵", title: "J리그 유스 → J1리그 · 훈련 +15%",
   trait: "🎓 훈련 +15%",
   check: "어느 능력치를 훈련해도 조금씩 더 오르는지 봐주세요 (한 가지만 빠른 🇧🇷·🇮🇹와 다른 결이에요)",
 });
