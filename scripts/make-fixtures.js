@@ -297,8 +297,12 @@ const nextSeasonBtn = (P) => Array.from(P.w.document.querySelectorAll("#career-a
  * 엔딩 분기는 score = S.fandom + overall() * 2 를 보는데, 봇이 클릭만으로 얻는 score는
  * 330 문턱에 못 닿아요. 그래서 프로 도전 화면에 닿은 직후에 살아 있는 S.fandom만 심고,
  * 엔딩 제목을 화면에서 다시 읽어 실제로 📹가 떴는지 확인합니다. */
-function soccerDebut(P, mode, plan) {
-  newPlayer(P, mode === "semi" ? 0 : 1, "fw", mode === "semi" ? "밑바닥" : "윙어");
+function soccerDebut(P, mode, plan, marketIdx) {
+  /* marketIdx — 유스 국적(MARKETS의 자리). 안 넘기면 예전과 같아요.
+   * 국적이 🌟 프로 계약 데뷔 리그를 정하므로, 나라별 시나리오는 여기를 바꿔서 만들어요.
+   *   0 🇰🇷 국내 · 1 🇪🇺 유럽 · 2 🇧🇷 남미 · 3 🇯🇵 일본 · 4 🌍 아프리카 */
+  const agency = marketIdx != null ? marketIdx : (mode === "semi" ? 0 : 1);
+  newPlayer(P, agency, "fw", mode === "semi" ? "밑바닥" : "윙어");
   youthUntilSurvival(P, plan);
   if (mode === "semi") {
     P.state().fandom = 400;
@@ -337,13 +341,16 @@ const add = (f) => { fixtures.push(f); log(`  ✅ ${f.id} — ${f.title}`); writ
  * 3시즌 오프시즌에 유로파리그 제안이 오려면 직전 시즌 평가가 5.5 이상이어야 해요.
  * 시즌 성적은 판정이 섞여서 시드마다 달라요 — 조건에 맞는 시드를 찾을 때까지 굴립니다. */
 function makeSoccerTransfer() {
-  log("⚽ ① 이적 화면 — K리그1 3시즌 오프시즌, 상위 리그 제안");
+  log("⚽ ① 이적 화면 — 🇰🇷 한국 1부 3시즌 오프시즌, 상위 리그 제안");
   const YEARS = 3;
   for (const seed of seeds(40)) {
     let P;
     try {
       P = makePage("soccer", seed);
-      soccerDebut(P, "pro", "pos");
+      /* 🇰🇷 국내 유스로 시작해요 — 유스 국적이 데뷔 리그를 정하게 되면서
+       * 기본값(🇪🇺 유럽 아카데미)은 이탈리아 1부에서 출발합니다. 이 시나리오가
+       * 보려는 건 "한국 1부에서 위 리그 제안이 어떻게 보이나"예요. */
+      soccerDebut(P, "pro", "pos", 0);
       let ok = false;
       for (let y = 1; y <= YEARS; y++) {
         if (!playSeason(P, "pos")) break;
@@ -357,8 +364,8 @@ function makeSoccerTransfer() {
           id: "soccer-transfer",
           game: "soccer", url: "soccer/", emoji: "💼",
           title: "이적 화면 — 상위 리그 제안",
-          state: `${st.group} · K리그1 · ${st.proYear}시즌 오프시즌 · 직전 평가 ${lastHype(P).toFixed(1)}`,
-          check: "리그 5개 묶음과 카드가 좁은 화면에서 안 겹치고, 카드마다 리그·계약금·평점 페널티가 다 읽히는지",
+          state: `${st.group} · ${P.get("leagueOf")(st).name} · ${st.proYear}시즌 오프시즌 · 직전 평가 ${lastHype(P).toFixed(1)}`,
+          check: "리그 11개 묶음과 카드가 좁은 화면에서 안 겹치고, 카드마다 리그·계약금·평점 페널티·나라 특색이 다 읽히는지",
           steps: ["게임이 열리면 <b>이어하기</b> → 선수 카드", "결산 화면에서 <b>💼 이적 제안 보기</b>"],
           keys: snapshot(P),
         });
@@ -376,14 +383,13 @@ function makeSoccerTransfer() {
 
 /* ⚽ ② 하부 리그 이적 — K리그3에서 승격(K리그2) 제안 */
 function makeSoccerPromote() {
-  log("⚽ ② 하부 리그 이적 — K리그3에서 승격 제안");
+  log("⚽ ② 하부 리그 이적 — 🇰🇷 한국 3부에서 승격 제안");
   const bottom = null;
   for (const seed of seeds(40)) {
     let P;
     try {
       P = makePage("soccer", seed);
       soccerDebut(P, "semi", "pos");
-      const start = P.state().league;
       let ok = false;
       for (let y = 1; y <= 3; y++) {
         if (!playSeason(P, "pos")) break;
@@ -391,7 +397,11 @@ function makeSoccerPromote() {
         const b = nextSeasonBtn(P); if (!b) break; b.click();
       }
       const st = P.state();
-      if (ok && st.league === start) {
+      /* ⚠️ "떠나온 리그 그대로"를 요구하면 안 돼요. 팀 승강제가 생기면서 하부 리그
+       * 1위 팀이 시즌 끝에 통째로 승격해 버립니다 — 실제로 시드 40개가 전부
+       * 그렇게 빠져나갔어요. 보려는 건 "하부 리그에서 위 제안이 어떻게 보이나"라
+       * 어느 하부 리그인지는 상관없어요. */
+      if (ok && P.get("leagueOf")(st).tier <= 2) {
         const up = upOffers(P);
         const names = [...new Set(up.map((o) => o.league.name))].join(" · ");
         add({
@@ -459,6 +469,55 @@ function makeSoccerReport() {
     }
   }
   log("  ❌ 조건에 맞는 상태를 못 만들었어요 (연말 결산)");
+}
+
+/* 🌍 나라 특색 — 유스 국적이 데뷔 리그를 정하고, 그 나라가 훈련·회복·수입에 얹혀요.
+ *
+ * 리그의 가치가 prestige 하나뿐일 때는 "어디서 상을 받아야 명예의 전당 점수가 큰가"로
+ * 수렴했어요. 실측하니 능력치 62~150 어디에서도 최적이 네 리그뿐이었습니다.
+ * 그래서 나라마다 다른 축에 곱셈을 하나씩 걸었어요 — 그게 화면에서 읽히는지 봐야 해요.
+ *
+ * 프로 준비 화면에서 멈춥니다. 소속 줄에 특색 딱지가 붙고, 훈련을 누르면 로그에
+ * 국기가 찍혀요(배수가 걸린 훈련이라는 표시). 훈련을 몇 번 눌러 로그를 만들어 둡니다. */
+function makeSoccerNation(marketIdx, tag) {
+  log(`🌍 ${tag.emoji} ${tag.title}`);
+  for (const seed of seeds(10)) {
+    let P;
+    try {
+      P = makePage("soccer", seed);
+      soccerDebut(P, "pro", "pos", marketIdx);
+      // 준비 화면에서 몇 턴 눌러 훈련·휴식 로그를 남겨요 (경기로는 안 넘어가요)
+      for (let i = 0; i < 6; i++) {
+        if (P.active() !== "screen-pro") break;
+        if (P.w.document.querySelector("#pro-actions .go-game")) break;
+        if (!doAct(P, "#pro-actions .action-btn", "pos")) break;
+      }
+      const st = P.state();
+      const lg = P.get("leagueOf")(st);
+      if (P.active() === "screen-pro" && lg.country === tag.country) {
+        add({
+          id: `soccer-nation-${tag.country}`,
+          game: "soccer", url: "soccer/", emoji: tag.emoji,
+          title: tag.title,
+          state: `${st.group} · ${lg.flag} ${lg.name} · ${tag.trait}`,
+          check: tag.check,
+          steps: [
+            "게임이 열리면 <b>이어하기</b> → 선수 카드",
+            "소속 줄에 <b>나라 특색 딱지</b>가 붙어 있어요",
+            "아래 훈련 로그에 국기가 찍힌 줄이 그 배수가 걸린 훈련이에요",
+          ],
+          keys: snapshot(P),
+        });
+        P.close();
+        return;
+      }
+      P.close();
+    } catch (e) {
+      if (P) P.close();
+      log(`  · 시드 ${seed}: ${e.message}`);
+    }
+  }
+  log(`  ❌ 조건에 맞는 상태를 못 만들었어요 (${tag.title})`);
 }
 
 /* ⚽ 경기 결과의 평점 순위표 — 라이벌 '소속' 칸.
@@ -1275,6 +1334,26 @@ if (want("soccer-youth-ext", "soccer")) makeSoccerEnding("youth");
 if (want("soccer-semipro", "soccer")) makeSoccerEnding("semi");
 if (want("soccer-report", "soccer")) makeSoccerReport();
 if (want("soccer-chart", "soccer")) makeSoccerChart();
+if (want("soccer-nation-kr", "soccer")) makeSoccerNation(0, {
+  country: "kr", emoji: "🇰🇷", title: "국내 유스 → 한국 1부 · 회복 +30%",
+  trait: "🛌 회복 +30%",
+  check: "휴식을 누르면 컨디션이 평소보다 많이 차는지 봐주세요 (+25~40의 1.3배). 훈련을 더 자주 돌릴 수 있어요",
+});
+if (want("soccer-nation-br", "soccer")) makeSoccerNation(2, {
+  country: "br", emoji: "🇧🇷", title: "남미 유스 → 브라질 1부 · 드리블 +45%",
+  trait: "🏃 드리블 +45%",
+  check: "드리블 훈련만 유난히 많이 오르는지, 다른 능력치는 그대로인지 봐주세요",
+});
+if (want("soccer-nation-it", "soccer")) makeSoccerNation(4, {
+  country: "it", emoji: "🇮🇹", title: "아프리카 유망주 → 이탈리아 2부 · 수비 +45%",
+  trait: "🛡️ 수비 +45%",
+  check: "수비 훈련만 유난히 많이 오르는지 봐주세요. 같은 나라라 1부로 올라가도 특색은 그대로예요",
+});
+if (want("soccer-nation-jp", "soccer")) makeSoccerNation(3, {
+  country: "jp", emoji: "🇯🇵", title: "일본 유스 → 일본 1부 · 훈련 +15%",
+  trait: "🎓 훈련 +15%",
+  check: "어느 능력치를 훈련해도 조금씩 더 오르는지 봐주세요 (한 가지만 빠른 🇧🇷·🇮🇹와 다른 결이에요)",
+});
 if (want("soccer-promo", "soccer")) makeSoccerPromoRelegation("up");
 if (want("soccer-releg", "soccer")) makeSoccerPromoRelegation("down");
 if (want("idol-concept", "idol")) {

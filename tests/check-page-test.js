@@ -299,7 +299,7 @@ reach("soccer-transfer", (P, first) => {
 });
 
 // ⚽ 하부 리그 이적 — K리그3에서 승격 제안
-reach("soccer-promote", (P, first) => {
+reach("soccer-promote", (P, first, it) => {
   check(first === "screen-career", `결산 화면이 뜬다 (${first})`);
   const tf = P.$("btn-transfer");
   check(!!tf, "'💼 이적 제안 보기' 버튼이 있다");
@@ -308,8 +308,20 @@ reach("soccer-promote", (P, first) => {
   check(P.active() === "screen-transfer", `이적 화면이 뜬다 (${P.active()})`);
   const ups = P.w.document.querySelectorAll("#transfer-list .tf-group.up");
   check(ups.length > 0, `승격(▲ 위 리그) 묶음이 있다 (${ups.length}개)`);
+  /* 아래 리그 묶음 수는 **지금 리그가 사다리 어디인가**로 정해져요.
+   * 예전에는 "맨 아래라 0개"로 못 박아 뒀는데, 팀 승강제가 생기면서 이 시나리오의
+   * 선수가 한국 3부에서 1위로 승격해 버려 시나리오를 다시 뽑을 때마다 깨졌어요.
+   * 지금 리그보다 tier가 낮은 리그 수와 맞는지 봅니다. */
   const downs = P.w.document.querySelectorAll("#transfer-list .tf-group.down");
-  check(downs.length === 0, `사다리 맨 아래라 아래 리그 묶음은 없다 (${downs.length}개)`);
+  const src = fs.readFileSync(path.join(BETA, "soccer/game.js"), "utf8");
+  const tbl = src.match(/const LEAGUES = \[[\s\S]*?\n\];/);
+  const list = tbl ? new Function(`${tbl[0]} return LEAGUES;`)() : [];
+  const pSlots = JSON.parse(it.keys["winger-save-v1-slots"] || "{}");
+  const pSave = pSlots[Object.keys(pSlots)[0]] || {};
+  const here = list.find((l) => l.id === pSave.league) || {};
+  const belowN = list.filter((l) => l.tier < (here.tier || 1)).length;
+  check(downs.length === belowN,
+    `아래 리그 묶음이 사다리와 맞는다 (${here.name || "?"} 아래 ${belowN}개 · 화면 ${downs.length}개)`);
 });
 
 /* ⚽ 연말 결산 — 소속 칼럼
@@ -327,7 +339,7 @@ reach("soccer-promote", (P, first) => {
  * 4시즌 파인힐스→머드독스 · 5시즌 머드독스→스톤워커스. 이적은 시즌이 끝난
  * 오프시즌에 일어나니 시즌 y의 소속은 y보다 앞선 마지막 이적의 도착 클럽이에요.
  * (칸이 좁아 이름을 4자로 줄이니 title 속성의 전체 이름으로 대조해요.) */
-reach("soccer-report", (P, first) => {
+reach("soccer-report", (P, first, it) => {
   check(first === "screen-career", `결산 화면이 뜬다 (${first})`);
   const card = P.w.document.querySelector("#career-card");
   check(!card.querySelector(".move-log") && !/이적 이력/.test(card.textContent),
@@ -341,9 +353,20 @@ reach("soccer-report", (P, first) => {
   const names = cells.map((c) => (c.getAttribute ? c.getAttribute("title") : null));
   check(cells.every((c) => (c.textContent || "").trim() !== "-"),
     `소속 칸에 '-'가 한 줄도 없다 — 역산이 실제로 채웠다 (${names.join("·")})`);
-  const WANT = ["블랙이글스", "블랙이글스", "머드독스", "파인힐스", "머드독스", "스톤워커스"];
+  /* 기대값을 손으로 적어 두면 시나리오를 다시 뽑을 때마다 깨져요. 이적 이력에서
+   * 직접 세웁니다 — **시즌 y의 소속은 y보다 앞선 마지막 이적의 도착 클럽**이고,
+   * 그런 이적이 없으면 첫 이적의 출발 클럽이에요. 규칙이 세 줄이라 소스를 안 봐도
+   * 독립적으로 세울 수 있어요 (소스에서 뽑아 오면 자기 자신과 비교하는 꼴이 돼요). */
+  const slots = JSON.parse(it.keys["winger-save-v1-slots"] || "{}");
+  const save = slots[Object.keys(slots)[0]] || {};
+  const mv = (save.moves || []).slice().sort((a, b) => a.y - b.y);
+  const firstClub = mv.length ? mv[0].from : names[0];
+  const WANT = (save.career.years || []).map((yr) => {
+    const past = mv.filter((m) => m.y < yr.y);
+    return past.length ? past[past.length - 1].to : firstClub;
+  });
   check(names.join("·") === WANT.join("·"),
-    `여섯 시즌 소속이 이적 이력과 정확히 맞는다 (${names.join("·")})`);
+    `여섯 시즌 소속이 이적 이력과 정확히 맞는다 (${names.join("·")} · 기대 ${WANT.join("·")})`);
   // 이적한 시즌(3·4·5·6)만 강조돼야 해요 — 역산 행에서도 이 표시가 살아야 합니다.
   const moved = cells.map((c) => c.classList.contains("moved"));
   check(moved.join(",") === "false,false,true,true,true,true",

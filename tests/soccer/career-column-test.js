@@ -311,9 +311,16 @@ check(!!REPORT, "beta/_fixtures.js에 soccer-report 시나리오가 있다");
 
 const SLOT_KEY = "winger-save-v1-slots";
 // 세이브 한 덩이(슬롯 하나)를 꺼내서 고친 뒤 다시 슬롯 묶음으로 싸는 헬퍼.
+/* ⚠️ **club을 직접 지워서** 옛 세이브를 만든다.
+ * 이 파일이 지키는 건 "club이 없는 세이브에서 소속을 이적 이력으로 역산하는가"다.
+ * 예전에는 픽스처가 club을 기록하기 전 버전이라 그냥 쓸 수 있었는데, 2.26.0부터
+ * 결산에서 club을 적기 시작했다. 픽스처를 다시 뽑는 순간 club이 채워진 세이브가
+ * 되어 역산 경로를 아예 안 타게 된다 — 검사가 조용히 다른 걸 보게 되는 자리다.
+ * 그러니 픽스처가 무엇을 담고 있든 여기서 지우고 시작한다. */
 function reportSave(mutate) {
   const slots = JSON.parse(REPORT.keys[SLOT_KEY]);
   const id = Object.keys(slots)[0];
+  for (const y of (slots[id].career || {}).years || []) { delete y.club; delete y.league; }
   if (mutate) mutate(slots[id]);
   return { [SLOT_KEY]: JSON.stringify(slots) };
 }
@@ -347,19 +354,39 @@ function clubColumn(ww) {
 }
 
 // ---------- ⑧ 실제 세이브 — 6시즌 소속이 이적 이력과 정확히 맞는가 ----------
-/* 세이브의 이적 이력: 2시즌 블랙이글스→머드독스 · 3시즌 머드독스→파인힐스 ·
- * 4시즌 파인힐스→머드독스 · 5시즌 머드독스→스톤워커스. 현재 소속은 스톤워커스.
+/* 세이브의 이적 이력은 픽스처에서 읽는다 — 클럽 이름을 여기 적어 두면 시나리오를
+ * 다시 뽑을 때마다 깨진다(실제로 리그 개편 뒤 전부 어긋났다). NOW는 현재 소속.
  * 이적은 **시즌이 끝난 오프시즌**에 일어나니 시즌 y의 소속은 y보다 앞선 마지막 이적의
  * 도착 클럽이다. 이 표를 그대로 못 박는다 — 한 칸이라도 밀리면 실패다. */
 console.log("=== ⑧ 확인 페이지 세이브의 6시즌 소속 표 ===");
-const EXPECT = [
-  { y: 1, club: "블랙이글스", moved: false, lg: null },
-  { y: 2, club: "블랙이글스", moved: false, lg: null },
-  { y: 3, club: "머드독스",   moved: true,  lg: SHORT(5) },  // 한국 1부 → 한국 3부
-  { y: 4, club: "파인힐스",   moved: true,  lg: null },
-  { y: 5, club: "머드독스",   moved: true,  lg: null },
-  { y: 6, club: "스톤워커스", moved: true,  lg: null },
-];
+/* 기대값도 픽스처의 이적 이력에서 세운다 — 손으로 적어 두면 시나리오를 다시 뽑을
+ * 때마다 깨진다. 규칙은 세 줄이다: **시즌 y의 소속은 y보다 앞선 마지막 이적의
+ * 도착 클럽**, 그런 이적이 없으면 첫 이적의 출발 클럽. 리그가 바뀐 시즌만 태그가 붙는다.
+ * (소스에서 뽑아 오면 자기 자신과 비교하는 꼴이 되므로 여기서 독립적으로 세운다) */
+const NOW = (() => {
+  const slots = JSON.parse(REPORT.keys[SLOT_KEY]);
+  return slots[Object.keys(slots)[0]].group;
+})();
+const EXPECT = (() => {
+  const slots = JSON.parse(REPORT.keys[SLOT_KEY]);
+  const st = slots[Object.keys(slots)[0]];
+  const mv = (st.moves || []).slice().sort((a, b) => a.y - b.y);
+  const firstClub = mv.length ? mv[0].from : st.group;
+  const lgOf = (name) => {
+    const m = mv.find((x) => x.to === name);
+    return m ? m.toLg : st.league;
+  };
+  let prevLg = mv.length ? mv[0].fromLg : st.league;
+  return (st.career.years || []).map((yr) => {
+    const past = mv.filter((x) => x.y < yr.y);
+    const club = past.length ? past[past.length - 1].to : firstClub;
+    const lgId = past.length ? lgOf(club) : prevLg;
+    const moved = past.length > 0;
+    const tag = lgId !== prevLg ? SHORT(lgId) : null;
+    prevLg = lgId;
+    return { y: yr.y, club, moved, lg: tag };
+  });
+})();
 let reportDom = null;
 guard("⑧ 실제 세이브 6시즌", () => {
   reportDom = resumeInto(reportSave(null));
@@ -371,7 +398,7 @@ guard("⑧ 실제 세이브 6시즌", () => {
   check(St.career.years.length === 6, `6시즌치 기록이다 (${St.career.years.length}시즌)`);
   check(St.career.years.every((x) => x.club == null),
     "세이브의 시즌 기록에는 club이 하나도 없다 — 역산이 필요한 상태다");
-  check(St.group === "스톤워커스", `현재 소속이 스톤워커스다 (${St.group})`);
+  check(St.group === NOW, `현재 소속이 세이브의 소속과 같다 (${St.group} · 기대 ${NOW})`);
   check((St.moves || []).length === 4, `이적 이력이 4건이다 (${(St.moves || []).length}건)`);
 
   const col = clubColumn(ww);
@@ -417,8 +444,8 @@ for (const [label, mutate] of [
         `${label} — 던지지 않고 결산 화면이 뜬다`);
       const col = clubColumn(ww);
       check(col.length === 6, `${label} — 여섯 줄이 그려진다 (${col.length}줄)`);
-      check(col.every((c) => c.full === "스톤워커스"),
-        `${label} — 모든 시즌이 현재 소속(스톤워커스)이다 (${col.map((c) => c.full).join(" · ")})`);
+      check(col.every((c) => c.full === NOW),
+        `${label} — 모든 시즌이 현재 소속(${NOW})이다 (${col.map((c) => c.full).join(" · ")})`);
       check(col.every((c) => !c.moved), `${label} — 이적이 없으니 강조도 없다`);
     } finally { d.window.close(); }
   });
@@ -431,7 +458,7 @@ console.log("=== ⑪ 적힌 club은 역산이 덮지 않는다 ===");
 guard("⑪ 기록 우선", () => {
   const WRONG = "어긋난클럽";
   const d = resumeInto(reportSave((s) => {
-    s.career.years[2].club = WRONG;      // 역산이라면 '머드독스'가 나올 자리
+    s.career.years[2].club = WRONG;      // 역산이라면 EXPECT[2].club이 나올 자리
     s.career.years[2].league = 3;        // 리그도 어긋나게 (id 3 = 사다리 꼭대기)
   }));
   try {
@@ -441,9 +468,9 @@ guard("⑪ 기록 우선", () => {
     check(col[2].text.startsWith("어긋난"), `줄인 이름도 적힌 값에서 나온다 (${col[2].text})`);
     check(col[2].lg === SHORT(3), `적힌 league(3)로 리그 태그가 붙는다 (${col[2].lg} · 기대 ${SHORT(3)})`);
     // 나머지 줄은 그대로 역산된다 — 한 칸이 적혀 있어도 다른 칸은 계속 메워야 한다.
-    check(col[0].full === "블랙이글스" && col[1].full === "블랙이글스",
+    check(col[0].full === EXPECT[0].club && col[1].full === EXPECT[1].club,
       `앞 두 시즌은 여전히 역산된다 (${col[0].full} · ${col[1].full})`);
-    check(col[3].full === "파인힐스" && col[5].full === "스톤워커스",
+    check(col[3].full === EXPECT[3].club && col[5].full === EXPECT[5].club,
       `뒤 시즌도 여전히 역산된다 (${col[3].full} · ${col[5].full})`);
   } finally { d.window.close(); }
 });
