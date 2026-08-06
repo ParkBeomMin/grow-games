@@ -285,3 +285,8 @@
   font-size: .72rem; padding: 1px 7px; border-radius: 999px;
   border: 1px solid var(--accent); color: var(--accent); white-space: nowrap;
 }
+/* 🎇 한 경기 대기록 — 통산 기록 블록의 한 줄 + 경기 결과 카드의 축하 줄 */
+.mile-feats .mile-name { color: var(--accent); }
+.mile-feat-list { color: var(--text); font-size: .8rem; margin-left: auto; text-align: right; }
+.mile-feat-list b { color: var(--cream); }
+.feat-line { color: var(--accent); font-weight: 700; }

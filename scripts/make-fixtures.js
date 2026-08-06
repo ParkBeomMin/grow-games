@@ -300,7 +300,8 @@ const nextSeasonBtn = (P) => Array.from(P.w.document.querySelectorAll("#career-a
 function soccerDebut(P, mode, plan, marketIdx) {
   /* marketIdx — 유스 국적(MARKETS의 자리). 안 넘기면 예전과 같아요.
    * 국적이 🌟 프로 계약 데뷔 리그를 정하므로, 나라별 시나리오는 여기를 바꿔서 만들어요.
-   *   0 🇰🇷 국내 · 1 🇪🇺 유럽 · 2 🇧🇷 남미 · 3 🇯🇵 일본 · 4 🌍 아프리카 */
+   *   0 🇰🇷 K리그 · 1 🇯🇵 J리그 · 2 🇧🇷 브라질 · 3 🇬🇧 잉글랜드 · 4 🇮🇹 이탈리아
+   * (난이도 순으로 놓여 있어요 — 뒤로 갈수록 데뷔 리그가 험해요) */
   const agency = marketIdx != null ? marketIdx : (mode === "semi" ? 0 : 1);
   newPlayer(P, agency, "fw", mode === "semi" ? "밑바닥" : "윙어");
   youthUntilSurvival(P, plan);
@@ -1184,6 +1185,20 @@ function makeRookieAll() {
             keys: snapshot(P),
           });
         }
+        /* 🏛️ 통산 마일스톤 — 몇 시즌 쌓이면 통산 고비를 넘겨요. 결산 화면의
+         * '🏛️ 통산 기록' 블록과 넘은 고비 배지를 확인용으로 보여줘요.
+         * 손으로 심지 않고 실제로 굴린 커리어의 결산을 그대로 떠요. */
+        if (!done.has("rookie-milestone") && (st.career.miles || []).length >= 3 && P.active() === "screen-career") {
+          done.add("rookie-milestone");
+          add({
+            id: "rookie-milestone", game: "rookie", url: "rookie/", emoji: "🏛️",
+            title: "통산 마일스톤 — 대기록을 넘긴 결산",
+            state: `${st.team} · 🇰🇷 KBO · ${st.proYear}년차 · 통산 마일스톤 ${(st.career.miles || []).length}개`,
+            check: "결산 아래 <b>🏛️ 통산 기록</b> 블록이 뜨는지 — 통산 안타·홈런·도루와 다음 고비까지 남은 수, 넘은 고비 배지(🏏1000 등)가 보이는지",
+            steps: [...ROOKIE_STEP1, "결산 화면 아래 <b>🏛️ 통산 기록</b> 블록을 확인"],
+            keys: snapshot(P),
+          });
+        }
         if (y < KBO_YEARS) {
           const b = campBtn(P);
           if (!b) throw new Error(`${y}년차 결산에 캠프 버튼이 없어요`);
@@ -1396,16 +1411,21 @@ if (want("soccer-nation-kr", "soccer")) makeSoccerNation(0, {
   check: "휴식을 누르면 컨디션이 평소보다 많이 차는지 봐주세요 (+25~40의 1.3배). 훈련을 더 자주 돌릴 수 있어요",
 });
 if (want("soccer-nation-br", "soccer")) makeSoccerNation(2, {
-  country: "br", emoji: "🇧🇷", title: "남미 유스 → 브라질 세리에A · 드리블 +45%",
+  country: "br", emoji: "🇧🇷", title: "브라질 유스 → 브라질 세리에A · 드리블 +45%",
   trait: "🏃 드리블 +45%",
   check: "드리블 훈련만 유난히 많이 오르는지, 다른 능력치는 그대로인지 봐주세요",
 });
 if (want("soccer-nation-it", "soccer")) makeSoccerNation(4, {
-  country: "it", emoji: "🇮🇹", title: "아프리카 유망주 → 세리에B · 수비 +45%",
+  country: "it", emoji: "🇮🇹", title: "이탈리아 유스 → 세리에A · 수비 +45%",
   trait: "🛡️ 수비 +45%",
-  check: "수비 훈련만 유난히 많이 오르는지 봐주세요. 같은 나라라 세리에A로 올라가도 특색은 그대로예요",
+  check: "수비 훈련만 유난히 많이 오르는지 봐주세요. 같은 나라라 세리에B로 내려가도 특색은 그대로예요",
 });
-if (want("soccer-nation-jp", "soccer")) makeSoccerNation(3, {
+if (want("soccer-nation-en", "soccer")) makeSoccerNation(3, {
+  country: "en", emoji: "🇬🇧", title: "잉글랜드 아카데미 → 챔피언십 · 수입 +35%",
+  trait: "💰 수입 +35%",
+  check: "경기 수당이 다른 나라보다 큰지 봐주세요 (30만·130만의 1.35배). 성장은 기본이고 대신 돈이 도는 리그예요",
+});
+if (want("soccer-nation-jp", "soccer")) makeSoccerNation(1, {
   country: "jp", emoji: "🇯🇵", title: "J리그 유스 → J1리그 · 훈련 +15%",
   trait: "🎓 훈련 +15%",
   check: "어느 능력치를 훈련해도 조금씩 더 오르는지 봐주세요 (한 가지만 빠른 🇧🇷·🇮🇹와 다른 결이에요)",

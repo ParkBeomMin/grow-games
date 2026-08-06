@@ -18,6 +18,7 @@ const CSS = fs.readFileSync(`${BASE}/style.css`, "utf8");
 let fail = 0;
 const check = (ok, msg) => { console.log(`${ok ? "✅" : "❌"} ${msg}`); if (!ok) fail++; };
 const guard = (label, fn) => { try { fn(); } catch (e) { check(false, `${label} — ${e.message}`); } };
+const mulberry32 = (a) => () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
 
 // ── 진짜 산식을 소스에서 떼어 와요 (MILESTONES ~ newMilestones, milestoneHTML은 S/DOM이 필요해 제외) ──
 const a = SRC.indexOf("const MILESTONES = [");
@@ -101,6 +102,77 @@ guard("배선", () => {
   const mileCss = CSS.split("\n").filter((l) => /^\.mile-/.test(l.trim())).join("\n");
   const hex = mileCss.match(/#[0-9a-fA-F]{3,8}\b/g) || [];
   check(mileCss.length > 100 && hex.length === 0 && /var\(--/.test(mileCss), `🏛️ 통산 기록 CSS가 테마 변수만 쓴다 (절대색 ${hex.join(",") || "없음"})`);
+});
+
+// ── ⑤ 한 경기 대기록 (feats) — 드물어야 특별하다 ────────────────
+guard("한 경기 대기록", () => {
+  const fa = SRC.indexOf("const FEATS = {");
+  const featBlock = SRC.slice(fa, SRC.indexOf("\n  }", SRC.indexOf("function rollFeats")) + 4);
+  const FEATS = new Function(SRC.slice(fa, SRC.indexOf("const MILE_PV")) + "\n return FEATS;")();
+  for (const t in FEATS) check(["batter", "pitcher"].includes(FEATS[t].pos) && FEATS[t].pv > 0, `${FEATS[t].name} — 시점·전당 가치가 있다`);
+  check(FEATS.perfect.pv > FEATS.nohit.pv, "퍼펙트게임이 노히터보다 전당 가치가 크다");
+
+  const clampF = (v, a, b) => Math.min(b, Math.max(a, v));
+  const mkRoll = (S, seed) => {
+    const M = Object.assign(Object.create(Math), { random: mulberry32(seed) });
+    return new Function("S", "clamp", "proLog", "window", "Math", featBlock + "\n return rollFeats;")(S, clampF, () => {}, {}, M);
+  };
+  const HI = { velocity: 140, control: 140, breaking: 140, contact: 140, power: 140, run: 140, defense: 140, stamina: 140 };
+  const pit = (role) => ({ pos: "pitcher", role: role || "선발 투수", stats: { ...HI }, career: { feats: [] }, proYear: 5 });
+  const bat = () => ({ pos: "batter", role: "4번 타자", stats: { ...HI }, career: { feats: [] }, proYear: 5 });
+
+  // 게이팅 — 노히터는 완봉(무실점) 선발 등판에만
+  let S = pit(); let roll = mkRoll(S, 1);
+  for (let i = 0; i < 300; i++) roll({ ip: 7, k: 10, runs: 1 }, true);       // 실점 있음
+  check(S.career.feats.length === 0, "노히터는 실점이 있으면 안 터진다 (실점 경기 300판)");
+  S = pit(); roll = mkRoll(S, 2);
+  for (let i = 0; i < 300; i++) roll({ ip: 7, k: 10, runs: 0 }, true);       // 완봉
+  check(S.career.feats.length > 0 && S.career.feats.every((f) => f.t === "nohit" || f.t === "perfect"),
+    `완봉 선발이면 노히터/퍼펙트가 터진다 (${S.career.feats.length}/300판)`);
+  S = pit("마무리 투수"); roll = mkRoll(S, 3);
+  for (let i = 0; i < 300; i++) roll({ ip: 1, k: 2, runs: 0 }, true);
+  check(S.career.feats.length === 0, "선발이 아니면 노히터가 안 터진다 (마무리 300판)");
+  // 타자 — 3홈런은 멀티홈런 쇼, 저활약은 대기록 없음
+  S = bat(); roll = mkRoll(S, 4);
+  check(roll({ ab: 5, hits: 4, hr: 3 }, true) !== null && S.career.feats[0].t === "multihr", "한 경기 3홈런이면 멀티홈런 쇼가 남는다");
+  S = bat(); roll = mkRoll(S, 5);
+  for (let i = 0; i < 300; i++) roll({ ab: 4, hits: 1, hr: 0 }, true);
+  check(S.career.feats.length === 0, "안타 하나짜리 경기로는 대기록이 안 나온다");
+
+  // 빈도 실측 — 커리어당 드물게, 능력치를 따라 늘되 과하지 않게
+  const pois = (rnd, lam) => { const L = Math.exp(-lam); let k = 0, p = 1; do { k++; p *= rnd(); } while (p > L); return k - 1; };
+  const careerFeats = (pos, stat, seed) => {
+    const keys = pos === "pitcher" ? ["velocity", "control", "breaking"] : ["contact", "power", "run"];
+    const st = {}; for (const k of ["velocity", "control", "breaking", "contact", "power", "run", "defense", "stamina"]) st[k] = stat;
+    const S2 = { pos, role: pos === "pitcher" ? "선발 투수" : "4번 타자", stats: st, career: { feats: [] }, proYear: 1 };
+    const rnd = mulberry32(seed);
+    const r = mkRoll(S2, seed + 7);
+    const era = stat >= 130 ? 2.8 : stat >= 100 ? 3.4 : 4.2;
+    for (let y = 1; y <= 14; y++) {
+      S2.proYear = y;
+      if (pos === "pitcher") for (let g = 0; g < 29; g++) { const ip = 5 + Math.floor(rnd() * 4); r({ ip, k: 8, runs: pois(rnd, era * ip / 9) }, true); }
+      else for (let g = 0; g < 144; g++) {
+        const ab = 4; let hits = 0, hr = 0; const ph = clampF(0.24 + (stat - 90) / 100 * 0.10, 0.15, 0.42);
+        for (let i = 0; i < ab; i++) if (rnd() < ph) { hits++; if (rnd() < clampF(0.10 + (stat - 90) / 100 * 0.12, 0.05, 0.32)) hr++; }
+        r({ ab, hits, hr, sb: 0 }, true);
+      }
+    }
+    return S2.career.feats.length;
+  };
+  for (const pos of ["pitcher", "batter"]) {
+    const avg = (stat) => { let s = 0; for (let i = 0; i < 200; i++) s += careerFeats(pos, stat, 2000 + i); return s / 200; };
+    const lo = avg(95), hi = avg(145);
+    console.log(`   ${pos === "pitcher" ? "투수" : "타자"} 14시즌 대기록 | 능력치95 ${lo.toFixed(2)}개 · 145 ${hi.toFixed(2)}개`);
+    check(hi > lo + 0.5, `${pos} — 능력치가 높을수록 대기록이 는다 (${lo.toFixed(2)} → ${hi.toFixed(2)})`);
+    check(hi <= 5, `${pos} — 엘리트도 커리어당 5개 미만이다 (${hi.toFixed(2)}) — 흔하면 특별하지 않아요`);
+    check(lo < 1, `${pos} — 평범한 능력치는 커리어에 한 번 볼까 말까다 (${lo.toFixed(2)})`);
+  }
+
+  // 배선 — 정규시즌·가을야구 결과가 rollFeats를 부르고, 통산 기록 블록이 대기록을 그린다
+  const proSeg = SRC.slice(SRC.indexOf("function finishProGame"), SRC.indexOf("function finishPostGame"));
+  const postSeg = SRC.slice(SRC.indexOf("function finishPostGame"), SRC.indexOf("function playFeeds"));
+  check(/rollFeats\(perf, win\)/.test(proSeg) && /rollFeats\(perf, win\)/.test(postSeg), "정규시즌·가을야구 종료가 rollFeats를 부른다");
+  check(/mile-feats/.test(SRC) && /통산 대기록/.test(SRC), "통산 기록 블록에 대기록 줄(🎇 통산 대기록)이 그려진다");
 });
 
 console.log(fail ? `\n❌ ${fail}개 실패` : "\n✅ 통과");

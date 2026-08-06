@@ -184,6 +184,7 @@ const CAREER_CONSTS = [
   // 🏛️ 통산 마일스톤 — finishSeason·careerScore가 이걸 부르니 스텁으로 새면 안 돼요
   ["MILESTONES", /  const MILESTONES = \[[\s\S]*?\n  \];/],
   ["MILE_PV", /  const MILE_PV = [^;]+;/],
+  ["FEATS", /  const FEATS = \{[\s\S]*?\n  \};/],
 ];
 const CAREER_FNS = [
   "  function proLog(msg) {",

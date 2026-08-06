@@ -747,12 +747,13 @@ window.Career = (() => {
       }
     }
     matchGrowth(perf, win);          // ⚡ 실전 성장 — 낮은 확률로 경기에서 한 단계 깨쳐요
+    const featLine = rollFeats(perf, win);   // 🎇 한 경기 대기록 — 인생 경기
     const pay = win ? 40 : 20;
     S.money = (S.money || 0) + pay;
     S.condition = clamp(S.condition - randInt(3, 6), 0, 100);
     S.pendingGame = false;
     save();
-    const extra = `<div class="tour-pts">💰 수당 +${pay}만 · ${S.team} ${sn.teamW}승 ${sn.teamL}패 · 현재 ${myRank()}위</div>`;
+    const extra = `${featLine || ""}<div class="tour-pts">💰 수당 +${pay}만 · ${S.team} ${sn.teamW}승 ${sn.teamL}패 · 현재 ${myRank()}위</div>`;
     if (sn.game >= sn.total) {
       return { extra, nextLabel: "🍂 정규시즌 종료", nextFn: enterPostseason };
     }
@@ -791,12 +792,13 @@ window.Career = (() => {
       }
     }
     matchGrowth(perf, win);          // ⚡ 실전 성장 — 가을야구에서도 한 단계 깨쳐요
+    const featLine = rollFeats(perf, win);   // 🎇 한 경기 대기록 — 가을야구의 인생 경기
     const pay = win ? 80 : 40;              // 가을야구 수당은 정규시즌의 두 배예요
     S.money = (S.money || 0) + pay;
     S.condition = clamp(S.condition - randInt(3, 6), 0, 100);
 
     const myW = iAmA ? s.aw : s.bw, opW = iAmA ? s.bw : s.aw;
-    const extra = `<div class="tour-pts">💰 수당 +${pay}만 · 시리즈 ${myW}-${opW}</div>`;
+    const extra = `${featLine || ""}<div class="tour-pts">💰 수당 +${pay}만 · 시리즈 ${myW}-${opW}</div>`;
 
     if (!s.done) {
       P.gameNo += 1;
@@ -1074,10 +1076,56 @@ window.Career = (() => {
     }
     return c;
   }
+  /* 🎇 한 경기 대기록 — 낮은 확률로 터지는 '인생 경기'. perf에 안타 허용 수가 없어서
+   * 노히터는 **완봉(무실점) 선발 등판**에만 걸어요(노히터는 언제나 완봉이니까요).
+   * 사이클링히트도 실제 2·3루타를 셀 수 없어, 멀티안타+홈런 경기에 능력치로 확률을 걸어요. */
+  const FEATS = {
+    perfect: { name: "퍼펙트게임", emoji: "💎", pv: 40, pos: "pitcher" },
+    nohit: { name: "노히터", emoji: "🙅", pv: 22, pos: "pitcher" },
+    cycle: { name: "사이클링히트", emoji: "🔄", pv: 20, pos: "batter" },
+    multihr: { name: "멀티홈런 쇼", emoji: "💥", pv: 12, pos: "batter" },
+  };
   /* 마일스톤 하나의 명예의 전당 가치 — 뒤 고비일수록 가팔라요(3000안타는 전설이니까요). */
   const MILE_PV = [8, 12, 18, 26, 36];
+  /* 통산 마일스톤 + 한 경기 대기록을 합친 전당 가치예요. careerScore가 이 하나만 부르면
+   * 되도록 묶어 뒀어요(테스트가 careerScore를 떼어 갈 때 의존 함수를 하나만 알면 돼요). */
   function mileScore(c) {
-    return (((c || {}).miles) || []).reduce((sum, m) => sum + (MILE_PV[m.i] || 10), 0);
+    const miles = (((c || {}).miles) || []).reduce((sum, m) => sum + (MILE_PV[m.i] || 10), 0);
+    const feats = (((c || {}).feats) || []).reduce((sum, f) => sum + ((FEATS[f.t] || {}).pv || 10), 0);
+    return miles + feats;
+  }
+  /* 경기 한 판의 대기록을 굴려요 (한 경기에 많아야 하나). 터지면 S.career.feats에 담고
+   * 문구를 돌려줘요 — 부르는 쪽(결과 카드)이 크게 띄워요. */
+  function rollFeats(perf, win) {
+    /* 🎲 주사위를 **경기마다 딱 두 번** 먼저 굴려 둬요. 굴리는 횟수가 성적·능력치에
+     * 따라 들쭉날쭉하면, 같은 씨앗으로 도는 밸런스 시뮬(post-mech ⑤)의 난수 줄기가
+     * 능력치별로 다르게 어긋나 우승 곡선이 뒤틀려요. 늘 두 번이면 흔들림이 균일해요. */
+    const r1 = Math.random(), r2 = Math.random();
+    if (!perf) return null;
+    const p = perf;
+    let t = null;
+    if (S.pos === "pitcher") {
+      // 노히터 — 완봉(무실점) 선발 등판에서, 구위·제구가 좋을수록
+      if (S.role === "선발 투수" && (p.ip || 0) >= 6 && (p.runs || 0) === 0) {
+        const stuff = (S.stats.velocity + S.stats.breaking + S.stats.control) / 3;
+        if (r1 < clamp(0.02 + (stuff - 90) / 100 * 0.10, 0.02, 0.14)) {
+          // 퍼펙트게임 — 노히터 중에서도 제구가 완벽할 때
+          t = r2 < clamp((S.stats.control - 100) / 100 * 0.4, 0.05, 0.35) ? "perfect" : "nohit";
+        }
+      }
+    } else {
+      if ((p.hr || 0) >= 3) t = "multihr";                    // 한 경기 3홈런+ (자연 발생)
+      else if ((p.hits || 0) >= 3 && (p.hr || 0) >= 1) {      // 사이클링히트 — 능력치로 확률
+        const all = (S.stats.contact + S.stats.power + S.stats.run) / 3;
+        if (r1 < clamp((all - 90) / 100 * 0.04, 0.005, 0.04)) t = "cycle";   // 드물어야 특별해요
+      }
+    }
+    if (!t) return null;
+    const def = FEATS[t];
+    (S.career.feats = S.career.feats || []).push({ t, y: S.proYear });
+    proLog(`🎇 대기록! ${def.emoji} ${def.name}${win ? "" : " (팀은 졌지만 개인 대기록)"}`);
+    if (window.Fx) { if (Fx.confetti) Fx.confetti({ emojis: ["🎇", "⚾", "✨"], count: 40 }); Fx.flash(`🎇 ${def.name}!`); }
+    return `<div class="tour-pts feat-line">🎇 대기록 — ${def.emoji} <b>${def.name}</b>!</div>`;
   }
   /* prev(이번 시즌 전 통산)와 now(이번 시즌 포함) 사이에 새로 넘은 고비들을 돌려줘요. */
   function newMilestones(prev, now, year) {
@@ -1104,7 +1152,15 @@ window.Career = (() => {
         : `<span class="mile-next mile-max">👑 최고 기록 달성</span>`;
       return `<div class="mile-row"><span class="mile-name">${m.emoji} ${m.name} <b>${cur}</b></span>${tail}${badges ? `<div class="mile-badges">${badges}</div>` : ""}</div>`;
     }).join("");
-    return `<div class="mile-box"><div class="mile-title">🏛️ 통산 기록</div>${rows}</div>`;
+    // 🎇 한 경기 대기록 — 터진 적 있으면 종류별로 세어 한 줄 얹어요
+    const feats = S.career.feats || [];
+    const cnt = {};
+    for (const f of feats) cnt[f.t] = (cnt[f.t] || 0) + 1;
+    const featRow = feats.length
+      ? `<div class="mile-row mile-feats"><span class="mile-name">🎇 통산 대기록</span><span class="mile-feat-list">${
+        Object.keys(FEATS).filter((t) => cnt[t]).map((t) => `${FEATS[t].emoji} ${FEATS[t].name} <b>${cnt[t]}</b>`).join(" · ")}</span></div>`
+      : "";
+    return `<div class="mile-box"><div class="mile-title">🏛️ 통산 기록</div>${rows}${featRow}</div>`;
   }
 
   function finishSeason() {
