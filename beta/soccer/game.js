@@ -190,35 +190,40 @@ function bottomLeague() {
  *
  * 실제 구단명은 쓰지 않아요 — 이 저장소는 상표를 전부 가상 명칭으로 바꿨어요.
  *
+ * ⚠️ **구단 이름은 그 리그의 나라를 따라가요.** 나라별 리그가 생기기 전에 지은
+ * 이름이라 K리그3에 '하버라이트·머드독스·스톤워커스'가 있었고, 🇬🇧 챔피언십에는
+ * '레알 몬테·아틀레티코 델'(스페인·이탈리아풍)이 있었어요. 리그 이름과 구단
+ * 이름이 어긋나면 그 리그가 어느 나라인지가 안 읽혀요.
+ *
  * 표는 사다리 아래(K리그3)부터 적어요. 키는 리그 id고, id는 옛 세이브가 가리키는 값이라
  * 순서와 무관해요 — 순서는 LEAGUES의 tier예요.
  * 전력은 clubStrOf가 40~95로 막으니 하부 클럽도 40 아래로는 안 내려가요.
  * 그 아래를 적으면 화면에 보이는 전력과 실제로 쓰이는 전력이 어긋나요. */
 const CLUBS = {
   5: [
-    { name: "스톤워커스", str: 45 }, { name: "레드브릭 FC", str: 44 },
-    { name: "파인힐스", str: 43 }, { name: "하버라이트", str: 42 },
-    { name: "머드독스", str: 41 }, { name: "올드타운 FC", str: 40 },
+    { name: "한터 FC", str: 45 }, { name: "솔뫼 시티", str: 44 },
+    { name: "아라 유나이티드", str: 43 }, { name: "새벌 FC", str: 42 },
+    { name: "달구벌 워리어스", str: 41 }, { name: "노들 FC", str: 40 },
   ],
   4: [
-    { name: "하이랜더스", str: 51 }, { name: "리버사이드", str: 49 },
-    { name: "코스모스 FC", str: 47 }, { name: "그린웨이브", str: 45 },
-    { name: "아이언벨", str: 43 }, { name: "노스브리지", str: 41 },
+    { name: "낙동 FC", str: 51 }, { name: "서라벌 유나이티드", str: 49 },
+    { name: "관악 시티", str: 47 }, { name: "영산 FC", str: 45 },
+    { name: "두류 워리어스", str: 43 }, { name: "미르내 FC", str: 41 },
   ],
   1: [
-    { name: "FC 노바", str: 78 }, { name: "레인저스", str: 71 },
-    { name: "선더볼트", str: 66 }, { name: "블랙이글스", str: 62 },
-    { name: "시티즌", str: 57 }, { name: "포레스트 FC", str: 52 },
+    { name: "한강 FC", str: 78 }, { name: "태백 타이거즈", str: 71 },
+    { name: "금강 유나이티드", str: 66 }, { name: "백두 시티", str: 62 },
+    { name: "청해 FC", str: 57 }, { name: "소백 그린", str: 52 },
   ],
   2: [
-    { name: "레알 몬테", str: 84 }, { name: "아틀레티코 델", str: 79 },
-    { name: "노르드 위니온", str: 74 }, { name: "올림피코 베라", str: 70 },
-    { name: "스타디온 루체", str: 65 }, { name: "AC 리베라", str: 61 },
+    { name: "노스우드 유나이티드", str: 84 }, { name: "스톤브리지 FC", str: 79 },
+    { name: "밀턴 시티", str: 74 }, { name: "킹스랜드 FC", str: 70 },
+    { name: "오크데일 유나이티드", str: 65 }, { name: "하버셔 FC", str: 61 },
   ],
   3: [
-    { name: "인터 아우로라", str: 93 }, { name: "바이언 슈타트", str: 90 },
-    { name: "로열 알비온", str: 87 }, { name: "파리 셀레스트", str: 84 },
-    { name: "밀란 코로나", str: 81 }, { name: "이베리아 솔", str: 78 },
+    { name: "로열 알비온", str: 93 }, { name: "킹스포드 유나이티드", str: 90 },
+    { name: "브리지포트 FC", str: 87 }, { name: "웨스트게이트", str: 84 },
+    { name: "크라운 시티", str: 81 }, { name: "아이언브리지 FC", str: 78 },
   ],
   /* 🇯🇵 일본 2부 (t4) — 한국 1부보다 살짝 위. 실제 구단명은 안 써요, 전부 가상입니다. */
   6: [
@@ -1666,12 +1671,23 @@ function playSurvivalRound() {
     const resultP = info.res === "W" ? 0.06 : info.res === "L" ? -0.06 : 0;
     // 활약은 상한을 둬요 — 한 경기 대박이 라운드를 통째로 건너뛰게 하면 안 돼요
     const doneP = Math.min(DONE_PASS_CAP, info.myGoals * 0.04 + info.assists * 0.03 + info.defense * 0.015);
-    const p = clamp(
-      0.30 + m.debut * 0.35 + (overall() - 50) / 90 + S.fandom / 1500 +
-      (S.condition - 50) / 900 - ev.round * 0.05 + momentBonus +
-      gradeP + resultP + doneP,
-      0.12, 0.93
-    );
+    /* 판정에 들어간 조각을 그대로 남겨요 — 화면에 근거를 적으려면 이게 필요해요.
+     *
+     * 5:3으로 이기고 평점 A에 4골 1도움인데 탈락한 제보가 있었어요. 확률 판정이라
+     * 일어날 수 있는 일인데(그 경기는 75%였어요), **왜 떨어졌는지 화면에 아무것도
+     * 없어서** 버그로 읽혔습니다. 확률과 그걸 만든 조각을 같이 보여줘요.
+     *
+     * ⚠️ 계산 결과는 예전과 **한 톨도 안 달라요.** 유스 배경 항을 기준선(0.21 =
+     * 평균 debut 0.6 × 0.35)에서 뺀 만큼만 상수로 옮겼어요 — 0.30 + 0.21 = 0.51. */
+    const factors = [
+      { label: "이 경기", v: gradeP + resultP + doneP + momentBonus, tip: "평점·승패·골·도움" },
+      { label: "능력치", v: (overall() - 50) / 90, tip: `종합 ${Math.round(overall())}` },
+      { label: "유스 배경", v: m.debut * 0.35 - 0.21, tip: m.name },
+      { label: "명성", v: S.fandom / 1500, tip: `${Math.round(S.fandom)}` },
+      { label: "컨디션", v: (S.condition - 50) / 900, tip: `${Math.round(S.condition)}` },
+      { label: "라운드", v: -ev.round * 0.05, tip: `${ev.round + 1}번째` },
+    ];
+    const p = clamp(0.51 + factors.reduce((a, f) => a + f.v, 0), 0.12, 0.93);
     const pass = Math.random() < p;
     /* 어느 라운드가 벽인지 보려고 남겨요. 통과율을 크게 바꿨는데(2.33.1)
      * 4라운드 중 어디서 떨어지는지 데이터가 없어서 실측 검증이 안 됐어요. */
@@ -1685,10 +1701,37 @@ function playSurvivalRound() {
     S.youth.g += info.myGoals; S.youth.a += info.assists; S.youth.def += info.defense;
     save();
     const scoreClass = info.res === "W" ? "win" : info.res === "L" ? "lose" : "";
+    /* 📊 왜 통과했는지·왜 떨어졌는지를 적어요.
+     *
+     * 확률 판정이라 잘하고도 떨어질 수 있는데, 화면에 아무 근거가 없으면 그게
+     * 버그로 읽혀요 — 실제로 5:3 승리에 평점 A, 4골 1도움으로 탈락한 제보가
+     * 왔습니다(그 경기는 75%였어요).
+     *
+     * 확률과 **가장 크게 민 것 / 가장 크게 깎은 것**을 같이 보여줘요.
+     * 여섯 조각을 다 늘어놓으면 못 읽으니 위아래 하나씩만 뽑습니다.
+     * 떨어졌을 때는 확률이 높았는지 낮았는지로 말이 갈려요 —
+     * 높았는데 떨어졌으면 운이고, 낮았으면 뭘 올려야 하는지 알려줘야 해요. */
+    const pp = Math.round(p * 100);
+    const sorted = factors.filter((f) => Math.abs(f.v) >= 0.01).sort((a, b) => b.v - a.v);
+    const best = sorted[0], worst = sorted[sorted.length - 1];
+    const fp = (v) => `${v > 0 ? "+" : ""}${Math.round(v * 100)}%p`;
+    let why;
+    if (pass) {
+      why = best && best.v > 0
+        ? `📊 통과 확률 <b>${pp}%</b> — <b>${best.label}</b>가 ${fp(best.v)}로 가장 크게 밀었어요 (${best.tip})`
+        : `📊 통과 확률 <b>${pp}%</b>`;
+    } else if (pp >= 60) {
+      why = `📊 통과 확률이 <b>${pp}%</b>였는데 못 넘었어요 — 운이 나빴어요.`
+        + `${best && best.v > 0 ? ` 이 경기 자체는 ${best.label} ${fp(best.v)}로 좋았습니다.` : ""}`;
+    } else {
+      why = `📊 통과 확률 <b>${pp}%</b>`
+        + `${worst && worst.v < 0 ? ` — <b>${worst.label}</b>가 ${fp(worst.v)}로 가장 크게 깎았어요 (${worst.tip})` : ""}`;
+    }
     const resultHTML = `
       <div class="ms-final ${scoreClass}">${info.home} ${info.teamGoals} : ${info.oppGoals} ${info.away} · ${RES_LABEL[info.res]}</div>
       <div class="tour-vs">경기 평점 ${fg.g} · ⚽${info.myGoals} 🅰️${info.assists} 🛡️${info.defense} — <span class="${pass ? "win" : "lose"}">${pass ? "통과! 🎉" : "탈락… 💧"}</span></div>
       <div class="tour-line">${fg.txt}</div>
+      <div class="tour-line pass-why">${why}</div>
       <div class="tour-pts">${pts >= 0 ? `⭐ 명성 +${pts}` : `📉 명성 ${pts}`}</div>`;
     if (pass && ev.round < SURVIVAL_ROUNDS.length - 1) {
       ev.round += 1;

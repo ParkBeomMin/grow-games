@@ -274,3 +274,7 @@ body {
 .pk-hint { font-size: .9rem; color: var(--text); margin: .35rem 0 .5rem; min-height: 1.2rem; }
 .pk-btns { display: flex; gap: .4rem; justify-content: center; flex-wrap: wrap; }
 .pk-side { flex: 1 1 5.5rem; max-width: 8rem; }
+
+/* 유스 라운드 판정 근거 — 확률과 가장 크게 작용한 조각 */
+.pass-why { color: var(--sky); font-size: .84rem; margin-top: 2px; }
+.pass-why b { color: var(--cream); }

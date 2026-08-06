@@ -27,7 +27,8 @@ const parts = {
   gradeP: grab(/const gradeP = GRADE_PASS\[fg\.g\] \|\| 0;/),
   resultP: grab(/const resultP = info\.res === "W"[^;]+;/),
   doneP: grab(/const doneP = Math\.min\(DONE_PASS_CAP[^;]+;/),
-  p: grab(/const p = clamp\(\s*0\.30 \+ m\.debut[\s\S]*?0\.12, 0\.93\s*\);/),
+  factors: grab(/const factors = \[[\s\S]*?\n    \];/),
+  p: grab(/const p = clamp\(0\.51 \+ factors[^;]+;/),
 };
 const missing = Object.entries(parts).filter(([, v]) => !v).map(([k]) => k);
 if (missing.length) { console.log(`❌ 소스에서 못 찾았어요: ${missing.join(", ")}`); process.exit(1); }
@@ -42,6 +43,7 @@ const passP = new Function(
    ${parts.gradeP}
    ${parts.resultP}
    ${parts.doneP}
+   ${parts.factors}
    ${parts.p}
    return p;`
 );
@@ -87,11 +89,12 @@ check(huge - modest <= cap + 1e-9,
 
 /* ── 변이 검증 — 그 경기 항을 전부 빼면 ①이 무너져야 한다.
  * 안 잡히면 위의 초록불은 아무것도 안 지키고 있는 것이다. */
-const brokenP = parts.p.replace(/\+\s*\n?\s*gradeP \+ resultP \+ doneP/, "");
+/* 그 경기 항(첫 조각)을 0으로 만들면 ①이 무너져야 한다. */
+const brokenP = parts.p.replace("0.51 + factors", "0.51 + factors.slice(1)");
 if (brokenP === parts.p) { console.log("❌ 변이 치환이 안 됐어요"); process.exit(1); }
 const brokenPass = new Function(
   "m", "fg", "info", "overall", "S", "ev", "momentBonus", "clamp",
-  `${parts.gradePass}\n${parts.doneCap}\n${parts.gradeP}\n${parts.resultP}\n${parts.doneP}\n${brokenP}\n return p;`
+  `${parts.gradePass}\n${parts.doneCap}\n${parts.gradeP}\n${parts.resultP}\n${parts.doneP}\n${parts.factors}\n${brokenP}\n return p;`
 );
 const brokenReported = brokenPass(KR, { g: "D" }, { res: "L", myGoals: 0, assists: 0, defense: 0 },
   () => 45, { fandom: 0, condition: 80 }, { round: 0 }, 0, clamp);
