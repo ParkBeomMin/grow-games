@@ -471,6 +471,61 @@ function makeSoccerReport() {
   log("  ❌ 조건에 맞는 상태를 못 만들었어요 (연말 결산)");
 }
 
+/* 🏆 컵 대회 — 리그 4위 안에 들면 시즌이 끝난 뒤 8강부터 단판 토너먼트예요.
+ * 리그 마지막 경기 결과 화면에서 멈춥니다 — 거기 '컵 8강 진출' 버튼이 있어요.
+ * 그 버튼을 눌러야 대진이 뽑히니(startCup) 세이브에는 아직 컵이 없어요. */
+function makeSoccerCup() {
+  log("🏆 ⑨ 컵 대회 — 리그 4위 안, 8강 진출 직전");
+  for (const seed of seeds(20)) {
+    let P;
+    try {
+      P = makePage("soccer", seed);
+      soccerDebut(P, "pro", "pos", 0);
+      let hit = false;
+      for (let g = 0; g < 6000; g++) {
+        const id = P.active();
+        if (id === "screen-stage") {
+          const btn = P.$("btn-stage-next");
+          /* 컵 진출 버튼을 **눌러서** 대진까지 뽑고 멈춰요. 누르기 전 상태를 뜨면
+           * S.cup이 없어서, 이어하기로 들어갔을 때 컵이 통째로 사라집니다 —
+           * 리그 종료 전환은 이 버튼에만 걸려 있고 세이브에는 안 남거든요. */
+          if (btn && /컵|8강/.test(btn.textContent)) { btn.click(); hit = true; break; }
+          btn.click(); continue;
+        }
+        if (id !== "screen-pro") break;
+        const go = P.w.document.querySelector("#pro-actions .go-game");
+        if (go) { go.click(); continue; }
+        if (!doAct(P, "#pro-actions .action-btn", "pos")) break;
+      }
+      const st = P.state();
+      if (hit) {
+        const cup = P.get("SoccerCup").nameOf(P.get("leagueOf")(st).name && P.get("leagueOf")(st).country);
+        add({
+          id: "soccer-cup",
+          game: "soccer", url: "soccer/", emoji: "🏆",
+          title: `컵 대회 — ${cup} 8강`,
+          state: `${st.group} · ${P.get("leagueOf")(st).name} · ${st.proYear}시즌 · ${cup} 8강 대진 완료`,
+          check: "8강 → 4강 → 결승 단판 세 경기예요. 2부 팀이 대진에 섞여 나오는지, "
+            + "비겼을 때 승부차기가 뜨는지(키퍼가 튼 반대쪽을 고르면 골) 봐주세요",
+          steps: [
+            "게임이 열리면 <b>이어하기</b> → 선수 카드",
+            "바로 <b>8강</b> 경기가 시작돼요 (대진은 이미 뽑혀 있어요)",
+            "이기면 다음 라운드, 지면 거기서 끝이에요",
+          ],
+          keys: snapshot(P),
+        });
+        P.close();
+        return;
+      }
+      P.close();
+    } catch (e) {
+      if (P) P.close();
+      log(`  · 시드 ${seed}: ${e.message}`);
+    }
+  }
+  log("  ❌ 조건에 맞는 상태를 못 만들었어요 (컵 대회)");
+}
+
 /* 🌍 나라 특색 — 유스 국적이 데뷔 리그를 정하고, 그 나라가 훈련·회복·수입에 얹혀요.
  *
  * 리그의 가치가 prestige 하나뿐일 때는 "어디서 상을 받아야 명예의 전당 점수가 큰가"로
@@ -1334,6 +1389,7 @@ if (want("soccer-youth-ext", "soccer")) makeSoccerEnding("youth");
 if (want("soccer-semipro", "soccer")) makeSoccerEnding("semi");
 if (want("soccer-report", "soccer")) makeSoccerReport();
 if (want("soccer-chart", "soccer")) makeSoccerChart();
+if (want("soccer-cup", "soccer")) makeSoccerCup();
 if (want("soccer-nation-kr", "soccer")) makeSoccerNation(0, {
   country: "kr", emoji: "🇰🇷", title: "K리그 유스 → K리그1 · 회복 +30%",
   trait: "🛌 회복 +30%",

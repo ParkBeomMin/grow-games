@@ -756,11 +756,186 @@ window.WingerCareer = (() => {
     } else if (act.cb < act.cbTotal) {
       nextLabel = `⚽ ${cbLabel(act.cb + 1)} 준비하기`;
       nextFn = () => { S.camp = 3; save(); renderPrep(); show("screen-pro"); };
+    } else if (cupEntry()) {
+      /* 🏆 리그가 끝나면 컵이에요. 4위 안에 들어야 나갈 수 있어요 —
+       * 그래야 마지막 라운드가 5월의 평범한 경기와 달라집니다. */
+      nextLabel = `🏆 ${cupName()} 8강 진출!`;
+      nextFn = startCup;
     } else {
       nextLabel = "🏁 시즌 결산";
       nextFn = finishYear;
     }
     return { resultHTML, nextLabel, nextFn };
+  }
+
+  /* ---------- 🏆 컵 대회 ----------
+   *
+   * 리그 38라운드가 끝나면 바로 결산이라 시즌에 절정이 없었어요. 야구는 가을야구가
+   * 정규시즌 내내 목표가 되어 주는데, 축구는 리그 순위가 곧 끝이었습니다.
+   *
+   * 리그와 다른 점 둘:
+   *  · **1부와 2부가 같은 대진**이에요. 리그에서는 절대 안 만나는 조합이 나와요.
+   *  · **단판**이에요. 38경기에서는 묻히는 한 판 운이 여기서는 안 묻혀요.
+   *
+   * 참가는 **리그 4위 안**이에요. 전 팀이 나가면 리그 순위가 컵에 아무 영향을 안 줘서
+   * 시즌 중 긴장이 사라집니다. 못 들면 그냥 결산이에요 — 아쉬움도 같이 남겨요.
+   *
+   * 승부차기 실행은 cup.js(window.SoccerCup)에 있어요. 여기는 대진과 세이브만 봐요 —
+   * 세이브를 만지는 코드는 한곳에 모읍니다. */
+  const CUP_SPOTS = 4;                        // 리그마다 몇 위까지 나가나
+  const cupName = () => (window.SoccerCup ? SoccerCup.nameOf(leagueOf(S).country) : "컵 대회");
+  const cupRounds = () => (window.SoccerCup ? SoccerCup.ROUNDS : ["8강", "4강", "결승"]);
+
+  // 컵에 나갈 수 있나 — 리그 표가 있고 내 순위가 CUP_SPOTS 안이어야 해요
+  function cupEntry() {
+    if (!window.SoccerCup || !tableReady()) return false;
+    return myTableRank() <= CUP_SPOTS;
+  }
+
+  /* 대진 상대 — 내 나라의 **다른 리그**에서도 데려와요. 같은 리그 팀만 모으면
+   * 리그 경기와 상대가 똑같아서 컵이 그냥 3경기 더가 됩니다.
+   * 같은 나라 리그가 하나뿐이면(있을 수 있어요) 내 리그에서만 채워요. */
+  function cupField() {
+    const myLg = leagueOf(S);
+    const mates = (CLUBS[myLg.id] || []).filter((c) => c.name !== S.group);
+    const others = LEAGUES.filter((l) => l.country === myLg.country && l.id !== myLg.id);
+    const pool = others.flatMap((l) => (CLUBS[l.id] || []).map((c) => ({ ...c, lg: l })));
+    // 다른 리그에서는 전력 상위 CUP_SPOTS개 (그 리그의 상위권이 올라온다는 뜻이에요)
+    const up = pool.sort((a, b) => b.str - a.str).slice(0, CUP_SPOTS);
+    const mine = mates.sort((a, b) => b.str - a.str).slice(0, CUP_SPOTS - 1)
+      .map((c) => ({ ...c, lg: myLg }));
+    return shuffle(mine.concat(up));
+  }
+
+  function startCup() {
+    S.cup = { round: 0, name: cupName(), field: cupField().map((c) => ({ name: c.name, str: c.str, lg: c.lg.short })) };
+    save();
+    cupMatch();
+  }
+
+  // 이번 라운드 상대 하나를 뽑아요 (뽑힌 팀은 대진에서 빠져요)
+  function cupDraw() {
+    const f = S.cup.field;
+    if (!f.length) return null;
+    const i = Math.floor(Math.random() * f.length);
+    return f.splice(i, 1)[0];
+  }
+
+  function cupMatch() {
+    const rounds = cupRounds();
+    const opp = cupDraw();
+    if (!opp) { cupFinish(false); return; }
+    S.cup.opp = opp;
+    save();
+    $("stage-title").textContent = `🏆 ${S.cup.name} ${rounds[S.cup.round]}`;
+    $("stage-round").textContent = `${S.group} vs ${opp.name} (${opp.lg}) · 단판`;
+    show("screen-stage");
+
+    const rating = ratingOf(S.stats, S.pos, S.condition, S.fandom);
+    const c = matchContribution(rating);
+    /* 컵 상대는 그 팀 전력으로 실점을 잡아요. 리그 경기의 deriveOppGoals는
+     * 내 리그 평균을 기준으로 삼는데, 컵에서는 2부 팀도 1부 팀도 오니까요. */
+    const oppGoals = deriveOppGoals(rating, S.stats.defense) + (opp.str > clubStrOf(S) ? 1 : 0);
+    MatchSim.run({
+      home: S.group, away: opp.name, myName: S.name,
+      goals: c.g, assists: c.a, defense: c.def, oppGoals, rating,
+      finalize: (info) => cupFinalize(info, rating),
+    });
+  }
+
+  /* ⚠️ MatchSim.run의 finalize는 **{resultHTML, nextLabel, nextFn}을 돌려줘야** 해요.
+   * 처음엔 여기서 DOM을 직접 그리고 아무것도 안 돌려줬는데, MatchSim이
+   * out.resultHTML을 읽다가 그 자리에서 죽어 결과 화면이 통째로 안 나왔습니다.
+   * 리그 경기(proMatchFinalize)와 같은 모양을 지켜요. */
+  function cupFinalize(info, rating) {
+    const rounds = cupRounds();
+    const label = rounds[S.cup.round];
+    S.condition = clamp(S.condition - randInt(3, 6), 0, 100);
+    /* 컵 경기도 시즌 기록에 넣어요 — 안 넣으면 결승까지 가서 넣은 골이
+     * 연도별 표에서 사라져요. 평점 평균에도 같이 들어갑니다. */
+    const act = S.activity;
+    if (act) {
+      act.goals = (act.goals || 0) + info.myGoals;
+      act.assists = (act.assists || 0) + info.assists;
+      act.defense = (act.defense || 0) + info.defense;
+      act.apps = (act.apps || 0) + 1;
+      act.ratingSum = (act.ratingSum || 0) + clamp(rating, 1, 10);
+    }
+    save();
+    const head = `<div class="ms-final ${info.res === "W" ? "win" : info.res === "L" ? "lose" : ""}">`
+      + `${info.home} ${info.teamGoals} : ${info.oppGoals} ${info.away} · ${S.cup.name} ${label}</div>`
+      + `<div class="tour-vs"><span>${S.name}</span> · ⚽${info.myGoals} 🅰️${info.assists} 🛡️${info.defense}</div>`;
+
+    // 비기면 승부차기 — 컵은 단판이라 무승부가 없어요
+    if (info.res === "D") {
+      return {
+        resultHTML: head + `<div class="tour-line">비겼어요 — 승부차기로 갑니다</div><div id="pk-box"></div>`,
+        nextLabel: "⚽ 승부차기 시작",
+        nextFn: () => {
+          const btn = $("btn-stage-next");
+          if (btn) btn.hidden = true;
+          SoccerCup.shootout(document.getElementById("pk-box"), {
+            myName: S.group, oppName: S.cup.opp.name,
+            shoot: S.stats.shoot, oppStr: S.cup.opp.str,
+            onDone: (win) => { if (btn) btn.hidden = false; cupAdvance(win, head, true); },
+          });
+        },
+      };
+    }
+    return cupNext(info.res === "W", head, false);
+  }
+
+  /* 다음 화면을 정해요. 경기 직후에는 MatchSim에 돌려주고(cupFinalize),
+   * 승부차기 뒤에는 직접 그려요(cupAdvance) — 같은 계산을 두 군데서 안 하려고 나눴어요. */
+  function cupNext(win, head, viaPk) {
+    const rounds = cupRounds();
+    const label = rounds[S.cup.round];
+    const pk = viaPk ? " (승부차기)" : "";
+    if (!win) {
+      const money = 60 * (S.cup.round + 1);
+      S.money = (S.money || 0) + money;
+      S.cup = null;
+      save();
+      return {
+        resultHTML: head + `<div class="tour-line">💧 ${label}에서 탈락${pk}…</div>`
+          + `<div class="tour-pts">💰 대회 수당 +${money}만</div>`,
+        nextLabel: "🏁 시즌 결산", nextFn: finishYear,
+      };
+    }
+    S.cup.round += 1;
+    if (S.cup.round >= rounds.length) return cupWin(head, pk);
+    save();
+    return {
+      resultHTML: head + `<div class="tour-line">🎉 ${label} 통과${pk}!</div>`,
+      nextLabel: `🏆 ${rounds[S.cup.round]} 진출`, nextFn: cupMatch,
+    };
+  }
+
+  function cupWin(head, pk) {
+    const money = 900, fan = randInt(25, 45);
+    S.money = (S.money || 0) + money;
+    S.fandom = Math.max(0, (S.fandom || 0) + fan);
+    S.trophies = S.trophies || [];
+    const title = `${S.proYear}시즌 ${S.cup.name} 우승`;
+    if (!S.trophies.includes(title)) S.trophies.push(title);
+    const name = S.cup.name;
+    S.cup = null;
+    save();
+    if (window.Fx) Fx.celebrate("champion", `🏆 ${name} 우승!`);
+    return {
+      resultHTML: (head || "") + `<div class="tour-line">🏆 <b>${name} 우승!!</b>${pk || ""}</div>`
+        + `<div class="tour-pts">💰 우승 상금 +${money}만 · ⭐ 명성 +${fan}</div>`,
+      nextLabel: "🏁 시즌 결산", nextFn: finishYear,
+    };
+  }
+
+  // 승부차기가 끝난 뒤 — 직접 그려요 (MatchSim은 이미 끝났어요)
+  function cupAdvance(win, head, viaPk) {
+    const out = cupNext(win, head, viaPk);
+    const box = document.getElementById("stage-result") || $("stage-card");
+    box.innerHTML = out.resultHTML;
+    const btn = $("btn-stage-next");
+    if (btn) { btn.hidden = false; btn.disabled = false; btn.textContent = out.nextLabel; btn.onclick = out.nextFn; }
   }
 
   // ---------- 시즌 결산 ----------
@@ -1689,6 +1864,10 @@ window.WingerCareer = (() => {
     showHof,
     showBattle,
     showActivity: () => {
+      /* 🏆 컵을 치르던 중에 앱을 닫았으면 거기서 이어요. 이 줄이 없으면
+       * 남은 라운드가 통째로 사라지고 트로피도 못 받아요 — 컵은 시즌 끝의
+       * 세 판이라 중간에 끊기면 그 시즌이 그냥 없어진 것처럼 보입니다. */
+      if (S.cup && window.SoccerCup) { cupMatch(); return; }
       if (S.camp > 0 || S.activity || S.pendingShow) { renderPrep(); show("screen-pro"); }
       else if (S.career && S.career.years.length) yearReport();
       else { renderPrep(); show("screen-pro"); }
@@ -1698,6 +1877,7 @@ window.WingerCareer = (() => {
     _t: {
       ratingOf, FAN_CAP, RATING_DIV, POS_AXIS, posAxis, AXIS_K, AXIS_OFF,
       LEAGUES, leagueOf, barOf, CLUBS, clubStrOf, debutClubs, DEBUT_POOL, weakestClub,
+      cupEntry, cupName, CUP_SPOTS, myTableRank,
       TRANSFER_MIN_YEAR, PROMOTE_HYPE, OFFERS_PER_LEAGUE, transferFee, transferOffers, canTransfer,
       DOWNGRADE_FEE, LOYALTY_FEE, leftBefore, moveLog, careerScore, shortClub, clubCell,
       clubOfYear, fillClubs,
