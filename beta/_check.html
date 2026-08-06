@@ -594,6 +594,26 @@
     render();
     mgInit();
     $("ck-restore").onclick = restore;
+
+    /* 🔗 주소 뒤에 #시나리오id를 붙이면 그 시나리오로 바로 들어가요.
+     *   .../beta/_check.html#soccer-nation-br
+     * 시나리오가 22개라 "어느 카드요?"를 매번 설명하기가 번거로웠어요.
+     * 없는 id면 아무 일도 안 해요 — 목록 화면 그대로예요.
+     * ⚠️ 자동 실행이라 세이브를 덮어씁니다. go()가 먼저 백업을 뜨니 복구는 됩니다. */
+    function fromHash() {
+      const id = decodeURIComponent((location.hash || "").replace(/^#/, "")).trim();
+      if (!id) return;
+      const it = F.items.find((x) => x.id === id);
+      if (!it) return;
+      /* CSS.escape는 안 써요 — 없는 환경이 있어요(jsdom에서 바로 터졌습니다).
+       * 카드 수가 스물 몇 개라 훑어도 값싸요. */
+      const card = Array.prototype.find.call(
+        document.querySelectorAll(".ck-card"), (c) => c.dataset.id === id);
+      if (card && card.scrollIntoView) card.scrollIntoView({ block: "center" });
+      go(id);
+    }
+    fromHash();
+    window.addEventListener("hashchange", fromHash);
     return api;
   })();
   </script>

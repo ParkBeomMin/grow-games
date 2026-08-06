@@ -76,7 +76,7 @@ for (const it of FIXTURES.items) {
 
 // ---------- 확인 페이지 부트스트랩 ----------
 /* <script src>를 인라인해서 로드 순서를 살려요. env.js가 반드시 _fixtures.js보다 먼저예요. */
-function makeCheckPage(preSeed) {
+function makeCheckPage(preSeed, hash) {
   let html = fs.readFileSync(path.join(BETA, "_check.html"), "utf8")
     .replace(/<link[^>]*>/g, "")
     .replace(/<script src="([^"]+)"><\/script>/g, (m0, src) => {
@@ -96,14 +96,40 @@ function makeCheckPage(preSeed) {
    * (tests/rookie/post-mech-test.js의 PRELUDE가 같은 이유로 같은 모양이에요). */
   const dom = new JSDOM(html.replace("<head>",
     `<head><script>window.fetch = () => Promise.reject(new Error("net off"));</script>`), {
-    runScripts: "dangerously", pretendToBeVisual: true, url: "https://x.test/beta/_check.html",
+    runScripts: "dangerously", pretendToBeVisual: true,
+    url: `https://x.test/beta/_check.html${hash ? `#${hash}` : ""}`,
   });
   return dom;
 }
 
+
+
+const OLD_SAVE = { "winger-save-v1-slots": JSON.stringify({ sOld: { name: "진행중인선수", proYear: 4 } }) };
+/* ---------- 🔗 주소 뒤 #시나리오id로 바로 들어가기 ----------
+ * 시나리오가 스물 몇 개라 "어느 카드요?"를 매번 설명해야 했어요. 링크 하나로
+ * 그 상태에 바로 들어갈 수 있어야 해요. 자동 실행이라 **백업이 먼저 떠야** 합니다. */
+console.log("=== 🔗 해시로 바로 들어가기 ===");
+{
+  const target = FIXTURES.items[0];
+  const hd = makeCheckPage(OLD_SAVE, target.id);
+  const hw = hd.window;
+  /* jsdom의 localStorage는 Object.keys로 안 훑어져요 — length/key(i)로 읽습니다. */
+  const lsKeys = (w2) => { const out = []; for (let i = 0; i < w2.localStorage.length; i++) out.push(w2.localStorage.key(i)); return out; };
+  const want = Object.keys(target.keys)[0];
+  const planted = lsKeys(hw).filter((k) => k.indexOf(want) >= 0);
+  check(planted.length > 0,
+    `#${target.id}로 열면 그 시나리오 세이브가 심긴다 (${planted.join(", ") || "안 심김"})`);
+  check(lsKeys(hw).some((k) => /backup/i.test(k)),
+    "자동 실행이어도 백업이 먼저 떠 있다 (되돌릴 수 있어야 해요)");
+  const bad = makeCheckPage(OLD_SAVE, "없는-시나리오-id");
+  const bw = bad.window;
+  check(!!bw.document.querySelector(".ck-card"),
+    "없는 id면 아무 일도 안 하고 목록 화면 그대로다");
+  hd.window.close(); bad.window.close();
+}
+
 // ---------- ② 버튼 렌더 ----------
 console.log("=== ② 화면 ===");
-const OLD_SAVE = { "winger-save-v1-slots": JSON.stringify({ sOld: { name: "진행중인선수", proYear: 4 } }) };
 const dom = makeCheckPage(OLD_SAVE);
 const w = dom.window;
 const doc = w.document;
