@@ -250,7 +250,8 @@ guard("시즌 타이틀", () => {
   check(/TITLES\[tt\.id\]/.test(SRC), "mileScore가 통산 타이틀 가치를 얹는다");
   check(/S\.season\.titleLead = makeTitleLeaders\(\)/.test(SRC) && !/Math\.random/.test(SRC.slice(SRC.indexOf("function makeTitleLeaders"), SRC.indexOf("function makeTitleLeaders") + 300)),
     "initSeason이 라이벌(현재 1위) 이름을 뽑되 난수는 안 쓴다 (밸런스 시뮬 보호)");
-  check(/현재 1위/.test(SRC) && /iLead \? "나"/.test(SRC), "타이틀 레이스가 현재 1위(라이벌 이름·수치)를 보여준다");
+  check(/개인 기록 순위/.test(SRC) && /myRank/.test(SRC) && !/<th>1등선<\/th>/.test(SRC),
+    "타이틀 레이스가 개인 기록 순위(라이벌+나)로 뜨고 헷갈리던 1등선 칸을 없앴다");
   // 🏛️ 통산 기록 블록이 결산뿐 아니라 상시 접근하는 📊 기록 화면(game.js)에도 뜬다
   check(/^\s*milestoneHTML,/m.test(SRC), "Career가 통산 기록 블록을 공개한다");
   check(/window\.Career && window\.Career\.milestoneHTML/.test(GAME), "📊 기록 화면(game.js)이 통산 기록 블록을 그린다");

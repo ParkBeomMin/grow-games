@@ -343,16 +343,27 @@ window.Career = (() => {
     if (!bar || !mine.length) return "";
     const g = S.season.game || 0, tot = S.season.total || 144;
     const fmt = (m, x) => (m === "avg" ? x.toFixed(3) : m === "era" ? x.toFixed(2) : Math.round(x));
+    // 1위 아래로 완만히 벌어지는 라이벌들 (1위의 최종치 = titleBar). 난수 없이 배수로 만들어요.
+    const FACTORS = [1, 0.9, 0.81, 0.72];
     const rows = mine.map(([, t]) => {
-      const my = titleMetric(S.season.stats, t.metric), b = bar[t.metric];
-      const rate = (t.metric === "avg" || t.metric === "era");
-      const rivalNow = rate ? b : (g > 0 ? b * g / tot : 0);   // 라이벌의 '지금' 수치
-      const iLead = t.higher ? my >= rivalNow : (my <= rivalNow && my > 0);
-      const who = iLead ? "나" : (lead[t.metric] || "리그 선두");
-      const val = iLead ? my : rivalNow;
-      return `<tr class="${iLead ? "title-lead" : ""}"><td>${t.emoji} ${t.name}</td><td>${fmt(t.metric, my)}</td><td>${iLead ? "🥇 " : ""}${who} ${fmt(t.metric, val)}</td><td>${fmt(t.metric, b)}</td></tr>`;
+      const m = t.metric, rate = (m === "avg" || m === "era");
+      const my = titleMetric(S.season.stats, m);
+      const names = Array.isArray(lead[m]) ? lead[m] : [lead[m] || "리그 선두"];
+      // 경쟁자 필드 — 각자의 '지금' 수치(누적은 페이스, 비율은 시즌 내내 일정) + 나
+      const field = FACTORS.map((f, r) => {
+        const final = t.higher ? bar[m] * f : bar[m] / f;      // era는 낮을수록 위 → 아래 순위일수록 값이 커져요
+        const now = rate ? final : (g > 0 ? final * g / tot : 0);
+        return { name: names[r] || `라이벌${r + 1}`, now, me: false };
+      });
+      field.push({ name: "나", now: my, me: true });
+      field.sort((a, b2) => (t.higher ? b2.now - a.now : a.now - b2.now));   // higher: 큰 게 위 / era: 작은 게 위
+      const myRank = field.findIndex((x) => x.me) + 1;
+      const board = field.slice(0, 3).map((x, i) =>
+        `<span class="${x.me ? "tr-me" : ""}">${i + 1}.${x.me ? "나" : x.name} ${fmt(m, x.now)}</span>`).join(" · ")
+        + (myRank > 3 ? ` <span class="tr-me">… ${myRank}.나 ${fmt(m, my)}</span>` : "");
+      return `<tr class="${myRank === 1 ? "title-lead" : ""}"><td>${t.emoji} ${t.name}</td><td class="tr-board">${board}</td></tr>`;
     }).join("");
-    return `<table class="rank-table title-race"><thead><tr><th>🏅 타이틀</th><th>내 기록</th><th>현재 1위</th><th>1등선</th></tr></thead><tbody>${rows}</tbody></table>`;
+    return `<table class="rank-table title-race"><thead><tr><th>🏅 개인 기록 순위</th><th>1위 → 내 순위</th></tr></thead><tbody>${rows}</tbody></table>`;
   }
 
   function standingsHTML() {
@@ -1139,8 +1150,9 @@ window.Career = (() => {
    * 소비를 바꾸면 밸런스 시뮬이 흔들리니까요. 자기 완결이라 game.js 이름표에 안 기대요. */
   const RIVAL_NAMES = ["강태풍", "이대포", "박홈런", "최강속", "정교타", "김일발", "윤노히", "장수호", "임쾌속", "조폭투", "한방망", "서수문"];
   function makeTitleLeaders() {
-    const out = {}; const y = S.proYear || 1;
-    Object.keys(TITLES).forEach((m, i) => { out[m] = RIVAL_NAMES[(y * 5 + i * 7) % RIVAL_NAMES.length]; });
+    const out = {}; const y = S.proYear || 1, L = RIVAL_NAMES.length;
+    // 종목마다 라이벌 4명 — 색인을 3씩 벌려 한 종목 안에서 안 겹쳐요. 난수는 안 써요.
+    Object.keys(TITLES).forEach((m, i) => { out[m] = [0, 1, 2, 3].map((r) => RIVAL_NAMES[(y * 5 + i * 7 + r * 3) % L]); });
     return out;
   }
   const titleMetric = (st, m) => (m === "avg" ? (st.hits || 0) / Math.max(st.ab || 0, 1)

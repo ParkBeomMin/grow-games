@@ -296,4 +296,6 @@
 .title-race th, .title-race td { text-align: right; }
 .title-race th:first-child, .title-race td:first-child { text-align: left; }
 .title-race tr.title-lead td { color: var(--accent); }
+.title-race .tr-board { font-size: .74rem; line-height: 1.5; }
+.title-race .tr-board .tr-me { color: var(--accent); font-weight: 700; }
 .sn-tag.title { border-color: var(--accent); color: var(--accent); }
