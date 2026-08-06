@@ -1175,6 +1175,11 @@ function stageScore(type) {
 }
 
 const GRADE_ORDER = ["D", "C", "B", "A", "S"];
+/* 유스 라운드 통과 판정에 얹는 그 경기 성적. playSurvivalRound가 써요.
+ * 등급은 능력치와 상관이 커서 이것만으로는 "오늘 어땠나"가 안 남아요 —
+ * 승패(±0.06)와 활약(최대 +0.08)을 함께 봅니다. */
+const GRADE_PASS = { S: 0.10, A: 0.05, B: 0, C: -0.10, D: -0.26 };
+const DONE_PASS_CAP = 0.08;
 const GRADE_INFO = {
   S: { pts: 30, txt: "🌟 완벽한 경기! 그라운드를 완전히 지배했어요." },
   A: { pts: 22, txt: "🔥 인상적인 활약! 관중석이 들썩였어요." },
@@ -1632,9 +1637,30 @@ function playSurvivalRound() {
     S.fandom = Math.max(0, S.fandom + pts);
     S.stages += 1;
     const momentBonus = fg.pts > grade.pts ? 0.06 : fg.pts < grade.pts ? -0.06 : 0;
+    /* ⚠️ **그 경기가 판정에 들어가야 해요.**
+     *
+     * 예전에는 능력치·유스 국적·명성·컨디션·라운드만 봤어요. 골도 도움도 승패도
+     * 경기 평점도 식에 없어서, 0:3으로 지고 평점 D에 무공에도 '통과!'가 떴습니다.
+     * 경기와 닿은 건 결정적 순간 미니게임(±0.06)뿐이었어요 —
+     * 2.26.0에서 고친 프로 경기 평점과 **같은 계열**입니다(결과가 원인을 안 봄).
+     *
+     * 셋을 넣어요. 등급은 능력치와 상관이 크니 승패·활약을 함께 넣어야
+     * "오늘 어땠나"가 남아요. 기본값을 0.40 → 0.30으로 내려 전체 통과율을 맞춥니다.
+     *
+     * 실측 (4라운드 전부 통과 · 4만 회):
+     *   종합    40   50   60   70   80   90
+     *   이전     6%  13%  25%  44%  66%  74%
+     *   지금     1%   5%  21%  48%  70%  75%   ← 상위는 그대로, 하위만 엄격
+     *   평점 D인데 통과   52% → 18%
+     *   0골 패배인데 통과 55% → 27% */
+    const gradeP = GRADE_PASS[fg.g] || 0;
+    const resultP = info.res === "W" ? 0.06 : info.res === "L" ? -0.06 : 0;
+    // 활약은 상한을 둬요 — 한 경기 대박이 라운드를 통째로 건너뛰게 하면 안 돼요
+    const doneP = Math.min(DONE_PASS_CAP, info.myGoals * 0.04 + info.assists * 0.03 + info.defense * 0.015);
     const p = clamp(
-      0.40 + m.debut * 0.35 + (overall() - 50) / 90 + S.fandom / 1500 +
-      (S.condition - 50) / 900 - ev.round * 0.05 + momentBonus,
+      0.30 + m.debut * 0.35 + (overall() - 50) / 90 + S.fandom / 1500 +
+      (S.condition - 50) / 900 - ev.round * 0.05 + momentBonus +
+      gradeP + resultP + doneP,
       0.12, 0.93
     );
     const pass = Math.random() < p;
