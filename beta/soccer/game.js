@@ -115,6 +115,46 @@ const LEAGUES = [
 const BIG_CLUB_LEAGUE = 2;   // 👑 유럽 빅클럽 입단이 데뷔하는 곳 — 🏴 잉글랜드 2부
 const COUNTRY_NAME = { kr: "🇰🇷 한국", jp: "🇯🇵 일본", br: "🇧🇷 브라질", it: "🇮🇹 이탈리아", en: "🏴 잉글랜드" };
 
+/* 🌍 나라 특색 — 리그를 고를 이유를 **수상 값어치 말고 다른 축**에 둬요.
+ *
+ * 예전에는 리그의 가치가 prestige 하나뿐이었어요. 그래서 "어느 리그에 머물까"가
+ * 곧 "어디서 상을 받아야 명예의 전당 점수가 큰가" 하나로 수렴했고,
+ * 실측하니 능력치 62~150 어디에서도 최적은 한국 3부 · 한국 2부 · 잉글랜드 2부 ·
+ * 잉글랜드 1부 넷뿐이었습니다 — 나머지 일곱 리그는 거쳐만 가는 계단이었어요.
+ *
+ * 그렇다고 수상 문턱(bar)으로 잡을 수는 없어요. bar는 문턱과 경쟁자 분포를
+ * 동시에 움직여서, 0.07만 올려도 최적이 통째로 하부 리그로 뒤집힙니다(실측).
+ * 그런 값에 밸런스를 걸면 리그를 하나 더할 때마다 전부 다시 재야 해요.
+ *
+ * 그래서 곱셈 하나씩만 겁니다. 서로 다른 축이라 knife-edge가 안 생기고,
+ * 유스 국적이 이미 growth·spot을 갖고 있는 것과 같은 결이에요.
+ *   train    훈련으로 오르는 양
+ *   rest     휴식으로 도는 컨디션
+ *   money    경기 수당·계약금
+ *   focus    특정 능력치만 더 오르는 자리 (그 나라가 잘 가르치는 것) */
+const COUNTRY_TRAIT = {
+  kr: { rest: 1.30, desc: "회복이 빨라 훈련을 더 자주 돌릴 수 있어요", tag: "🛌 회복 +30%" },
+  jp: { train: 1.15, desc: "정교한 시스템 — 훈련 효율이 높아요", tag: "🎓 훈련 +15%" },
+  br: { focus: "dribble", focusMul: 1.45, desc: "길거리 축구의 나라 — 드리블이 유난히 빨리 늘어요", tag: "🏃 드리블 +45%" },
+  it: { focus: "defense", focusMul: 1.45, desc: "빗장수비의 나라 — 수비가 유난히 빨리 늘어요", tag: "🛡️ 수비 +45%" },
+  en: { money: 1.35, desc: "돈이 도는 리그 — 수당과 계약금이 커요", tag: "💰 수입 +35%" },
+};
+/* 지금 소속 리그의 나라 특색. 모르는 값이면 아무 효과 없는 빈 객체예요 —
+ * 옛 세이브나 깨진 값에서도 곱셈이 1로 떨어집니다. */
+function traitOf(st) {
+  const c = leagueOf(st).country;
+  return COUNTRY_TRAIT[c] || {};
+}
+const traitMul = (st, key) => {
+  const v = traitOf(st)[key];
+  return typeof v === "number" && isFinite(v) ? v : 1;
+};
+// 그 능력치가 이 나라의 '잘 가르치는 것'이면 배수를, 아니면 1을 돌려줘요.
+function traitFocusMul(st, statKey) {
+  const t = traitOf(st);
+  return t.focus === statKey ? (t.focusMul || 1) : 1;
+}
+
 /* 옛 세이브에는 S.league가 없어요. 마이그레이션하지 않고 없으면 K리그1로 봐요.
  * 깨진 값도 K리그1로 막아요 — 표의 첫 줄이 이제 K리그3라 LEAGUES[0]으로 막으면
  * 손상된 세이브가 하부 리그로 떨어집니다. */

@@ -414,7 +414,8 @@ window.WingerCareer = (() => {
     $("pro-name").textContent = `${S.name} (${POS_INFO[S.pos].name})`;
     // 리그 이름을 함께 보여줘요 — 승격·강등하면 여기가 바뀌는 게 제일 먼저 눈에 띄어야 해요
     $("pro-team").textContent =
-      `${leagueOf(S).flag} ${S.group}${S.center ? " · 주장" : ""} · ${leagueOf(S).name} · ${S.proYear}시즌 · 종합 ${Math.round(overall())}`;
+      `${leagueOf(S).flag} ${S.group}${S.center ? " · 주장" : ""} · ${leagueOf(S).name}`
+      + `${traitOf(S).tag ? ` · ${traitOf(S).tag}` : ""} · ${S.proYear}시즌 · 종합 ${Math.round(overall())}`;
     $("pro-turn").textContent = S.activity
       ? `${cbLabel(S.activity.cb)} · R${S.activity.week}/${S.activity.weekTotal} · MOM ${S.activity.wins}회`
       : `시즌 준비 ${3 - S.camp}/3`;
@@ -536,16 +537,21 @@ window.WingerCareer = (() => {
         return;
       }
       const condMod = S.condition >= 70 ? 1.1 : S.condition >= 40 ? 1.0 : 0.6;
-      let gain = rand(1.8, 3.6) * S.talents[def.key] * yearMod * condMod;
+      /* 🌍 지금 뛰는 나라가 훈련에 얹혀요 — 🇯🇵는 전반적으로, 🇧🇷·🇮🇹는 잘 가르치는
+       * 능력치 하나에만. 어느 리그에 머물지가 수상 값어치만의 문제가 아니게 됩니다. */
+      const natMul = traitMul(S, "train") * traitFocusMul(S, def.key);
+      let gain = rand(1.8, 3.6) * S.talents[def.key] * yearMod * condMod * natMul;
       if (S.stats[def.key] >= 100) gain *= 0.5;
       gain = Math.round(gain * 10) / 10;
       S.stats[def.key] = clamp(S.stats[def.key] + gain, 0, statCap(def.key));
       S.condition = clamp(S.condition - randInt(10, 16), 0, 100);
-      proLog(`${def.emoji} ${def.name} 훈련 +${gain.toFixed(1)} (${Math.round(S.stats[def.key])})`);
+      const natTag = natMul > 1.01 ? ` ${leagueOf(S).flag}` : "";
+      proLog(`${def.emoji} ${def.name} 훈련 +${gain.toFixed(1)}${natTag} (${Math.round(S.stats[def.key])})`);
       actFx(def.key, "+" + gain.toFixed(1));
     } else {
-      S.condition = clamp(S.condition + randInt(25, 40), 0, 100);
-      proLog(`🛌 컨디션 회복 (${Math.round(S.condition)})`);
+      const heal = Math.round(randInt(25, 40) * traitMul(S, "rest"));
+      S.condition = clamp(S.condition + heal, 0, 100);
+      proLog(`🛌 컨디션 회복 +${heal}${traitMul(S, "rest") > 1.01 ? ` ${leagueOf(S).flag}` : ""} (${Math.round(S.condition)})`);
     }
     S.camp -= 1;
     save();
@@ -665,6 +671,8 @@ window.WingerCareer = (() => {
       dFan = randInt(-3, 3);
     }
     S.fandom = Math.max(0, (S.fandom || 0) + dFan);
+    // 🌍 나라 특색 — 🏴 잉글랜드는 돈이 도는 리그예요 (계약금에도 같은 배수가 붙어요)
+    pay = Math.round(pay * traitMul(S, "money"));
     S.money = (S.money || 0) + pay;
     /* ⚡ 실전 성장 — 낮은 확률로 경기에서 뭔가를 깨쳐요.
      * 훈련만으로 크는 게 아니라 경기가 선수를 키운다는 감각을 주려는 거예요.
@@ -1118,6 +1126,11 @@ window.WingerCareer = (() => {
      * id로 빼면 K리그1(id 1)에서 K리그3(id 5)으로 내려가는 게 drop 0이 돼서
      * 하향 이적인데도 계약금이 한 푼도 안 깎여요. */
     const drop = Math.min(DOWNGRADE_MAX, Math.max(0, leagueOf(state).tier - league.tier));
+    /* ⚠️ 나라 특색(🏴 수입 +35%)은 여기 안 겁니다. 계약금은 낙폭·재이적·감가
+     * 세 브레이크로 조심스럽게 잡아 둔 자리고, tests/soccer/fee-test.js가
+     * "리그격을 정확히 2제곱으로 싣는가"로 폭주를 막고 있어요. 여기에 곱셈을
+     * 하나 더 얹으면 그 측정이 2.34제곱으로 읽혀 가드가 흐려집니다.
+     * 🏴의 수입 특색은 매 경기 수당에만 붙어요 — 그쪽이 브레이크가 없는 자리예요. */
     const base = club.str * club.str * FEE_BASE * Math.pow(league.prestige, FEE_PRESTIGE_POW);
     return Math.round(
       (base * Math.pow(DOWNGRADE_FEE, drop) * Math.pow(LOYALTY_FEE, moves.length)) / 10
@@ -1171,7 +1184,11 @@ window.WingerCareer = (() => {
     const pen = lg.penalty > 0 ? `평점 -${lg.penalty.toFixed(1)}` : "평점 그대로";
     const note = lg.penalty > 0 ? " · 버티면 값어치가 커요"
       : lg.prestige < 1 ? " · 상은 쉬워도 값어치가 작아요" : "";
-    return `${pen} · 수상 가치 ×${lg.prestige.toFixed(2)}${note}`;
+    /* 🌍 나라 특색도 카드에 적어요. 안 적으면 "왜 이 리그에 머물지"를 화면에서
+     * 알 방법이 없어서, 결국 수상 값어치 하나만 보고 고르게 됩니다. */
+    const t = COUNTRY_TRAIT[lg.country];
+    const nat = t && t.tag ? ` · ${t.tag}` : "";
+    return `${pen} · 수상 가치 ×${lg.prestige.toFixed(2)}${note}${nat}`;
   };
 
   // 리그는 언제나 tier 순으로 늘어놔요 — 화면이 곧 사다리라야 위아래가 읽혀요.
