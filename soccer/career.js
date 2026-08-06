@@ -182,7 +182,7 @@ window.WingerCareer = (() => {
      * 순위표가 선수 명단이 아니라 설명문처럼 보였어요. */
     const clubs = shuffle(oppClubs(S));
     return RIVAL_GROUPS.map((role, i) => ({
-      name: randomPlayerName(MARKETS[Math.random() < 0.5 ? 0 : 1]),
+      name: randomPlayerName((Math.random() < 0.5 ? null : MARKETS.find((m) => m.id === "eu"))),
       role, pop: rand(52, 88), club: clubs[i % clubs.length],
     }));
   }
@@ -285,7 +285,7 @@ window.WingerCareer = (() => {
     const clubs = shuffle(oppClubs(S));
     act.rivals.forEach((r, i) => {
       if (!r.role && RIVAL_GROUPS.includes(r.name)) { r.role = r.name; r.name = null; changed = true; }
-      if (!r.name) { r.name = randomPlayerName(MARKETS[Math.random() < 0.5 ? 0 : 1]); changed = true; }
+      if (!r.name) { r.name = randomPlayerName((Math.random() < 0.5 ? null : MARKETS.find((m) => m.id === "eu"))); changed = true; }
       if (!r.role) { r.role = RIVAL_GROUPS[i % RIVAL_GROUPS.length]; changed = true; }
       if (!r.club) { r.club = clubs[i % clubs.length]; changed = true; }
     });
