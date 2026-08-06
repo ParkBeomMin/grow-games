@@ -682,7 +682,11 @@ $("btn-random-name").addEventListener("click", () => {
 $("btn-start").addEventListener("click", () => {
   const name = $("input-name").value.trim() || pick(STAGE_NAMES);
   curSlot = null; // 새 연습생은 새 슬롯에 — 기존 저장은 그대로 남아요
-  if (window.Stats) Stats.log("new_player", { pos: chosenPos, agency: chosenAgency.name });
+  /* ⚠️ 이름 말고 **id**를 함께 남겨요. 예전에는 표시 이름만 남겨서, 선택지 이름을
+   * 바꾸는 순간 통계에서 같은 항목이 옛 이름·새 이름으로 쪼개졌어요 —
+   * 축구 유스를 나라에 맞추자 배경 분포가 9줄로 갈라졌습니다.
+   * id는 세이브가 가리키는 값이라 안 바뀌어요. 이름은 사람이 읽으라고 같이 둡니다. */
+  if (window.Stats) Stats.log("new_player", { pos: chosenPos, agency: chosenAgency.name, mk: chosenAgency.id });
   if (window.Match) Match.register("idol", name);
   S = newState(chosenAgency, chosenPos, name, pendingRoll);
   addLog(`🎤 ${chosenAgency.name} 연습생 계약! ${name}의 연습실 생활이 시작됐어요.`);

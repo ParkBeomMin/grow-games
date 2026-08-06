@@ -949,7 +949,11 @@ $("btn-random-name").addEventListener("click", () => {
 $("btn-start").addEventListener("click", () => {
   const name = $("input-name").value.trim() || pick(SURNAMES) + pick(GIVEN);
   curSlot = null; // 새 선수는 새 슬롯에 — 기존 선수 저장은 그대로 남아요
-  if (window.Stats) Stats.log("new_player", { pos: chosenPos, region: chosenRegion.name });
+  /* ⚠️ 이름 말고 **id**를 함께 남겨요. 예전에는 표시 이름만 남겨서, 선택지 이름을
+   * 바꾸는 순간 통계에서 같은 항목이 옛 이름·새 이름으로 쪼개졌어요 —
+   * 축구 유스를 나라에 맞추자 배경 분포가 9줄로 갈라졌습니다.
+   * id는 세이브가 가리키는 값이라 안 바뀌어요. 이름은 사람이 읽으라고 같이 둡니다. */
+  if (window.Stats) Stats.log("new_player", { pos: chosenPos, region: chosenRegion.name, mk: chosenRegion.id });
   if (window.Match) Match.register("rookie", name);
   S = newState(chosenRegion, chosenPos, name, pendingRoll);
   addLog(`⚾ ${chosenRegion.school} 입학! ${name}의 야구 인생이 시작됐어요.`);
