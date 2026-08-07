@@ -31,6 +31,11 @@ const parts = {
   transLv: grab(GAME, /const transLv = [^;]+;/),
   clutch: grab(GAME, /function clutch\(key\) \{[\s\S]*?\n\}/),
   poissonish: grab(GAME, /function poissonish\(lam\) \{[\s\S]*?\n\}/),
+  /* 🎖️ 시즌 칭호 — matchContribution·ratingOf·autoRes가 buffMul/buffSum을 봐요.
+   * 같이 안 떼어 오면 ReferenceError로 죽습니다(조용히 통과하지는 않아요).
+   * 이 검사들은 칭호가 없는 상태(S.buffs 없음)를 보니 배수는 전부 1이 나와요 —
+   * 칭호가 붙었을 때의 동작은 tests/soccer/buff-test.js가 봅니다. */
+  buffFns: grab(GAME, /const HOT_FORM_BAR = [\s\S]*?const buffMul = [^;]+;/),
   matchContribution: grab(GAME, /function matchContribution\(rating\) \{[\s\S]*?\n\}/),
   deriveOppGoals: grab(GAME, /function deriveOppGoals\(rating, defStat\) \{[\s\S]*?\n\}/),
   autoRes: grab(GAME, /function autoRes\(stat\) \{[\s\S]*?\n\}/),
@@ -92,6 +97,7 @@ const simFn = new Function("S", "clamp", "rand", "randInt", "pick", `
   ${leagueSrc}
   ${clubSrc}
   ${consts}
+  ${parts.buffFns}
   ${parts.ratingOf}
   ${parts.poissonish}
   ${mateSrc}

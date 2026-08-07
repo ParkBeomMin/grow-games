@@ -478,7 +478,74 @@ const overall = () => {
   return vals.reduce((a, b) => a + b, 0) / vals.length;
 };
 
-/* 🏷️ 칭호 — "지금 이 선수가 어느 급인가".
+/* 🎖️ 시즌 칭호 — **지난 시즌에 해낸 일로 받아서, 이번 시즌 경기에만 붙는 효과**예요.
+ *
+ * 아래 PLAYER_TITLES(클래스)와는 완전히 다른 물건입니다. 클래스는 능력치에서
+ * 자동으로 나오는 라벨이라 "받는" 게 아니고, 경기에도 관여하지 않아요.
+ * 여기 있는 건 시즌이 끝날 때 성적을 보고 주는 것이고, 다음 시즌 한 해만 갑니다.
+ *
+ * 효과가 붙는 자리 — 전부 경기 안입니다.
+ *   g·a·d  matchContribution의 골·도움·수비 기댓값 (리그·컵 둘 다 이 함수를 씁니다)
+ *   rate   ratingOf의 경기 평점
+ *   moment autoRes의 승부처 성공 확률
+ *   train  훈련 상승폭
+ *
+ * 여러 개를 동시에 달 수 있어요 — 한 시즌을 지배하면 그만큼 다음 시즌이 편해야죠.
+ * 대신 종류별 합계에 상한(BUFF_CAP)을 둡니다. 안 그러면 한 번 앞서간 커리어가
+ * 영원히 앞서가요.
+ *
+ * 시즌이 끝나면 조건을 다시 보고 새로 정해요. 지난 시즌 것은 그냥 사라집니다 —
+ * 유지하려면 그 성적을 또 내야 해요. 그게 이 장치의 재미입니다. */
+const HOT_FORM_BAR = 7.5;   // 🔥 물오른 폼 문턱 — 시즌 평균 평점
+const SEASON_TITLES = [
+  { id: "boot", name: "🥇 골든부츠 위너", need: "득점 1위",
+    eff: { g: 0.15 }, desc: "골 +15%" },
+  { id: "maker", name: "🎯 리그 최고 도우미", need: "도움 1위",
+    eff: { a: 0.15 }, desc: "도움 +15%" },
+  { id: "wall", name: "🛡️ 리그 최고 수비수", need: "수비 1위",
+    eff: { d: 0.15 }, desc: "수비 +15%" },
+  { id: "point", name: "📈 공격포인트왕", need: "공격포인트 1위",
+    eff: { g: 0.06, a: 0.06 }, desc: "골·도움 +6%" },
+  { id: "ruler", name: "👑 리그의 지배자", need: "리그MVP 수상",
+    eff: { rate: 0.35 }, desc: "경기 평점 +0.35" },
+  { id: "ballon", name: "🏅 발롱도르 위너", need: "발롱도르 수상",
+    eff: { g: 0.08, a: 0.08, d: 0.08, rate: 0.25 }, desc: "모든 기여 +8% · 평점 +0.25" },
+  { id: "hot", name: "🔥 물오른 폼", need: `시즌 평균 평점 ${HOT_FORM_BAR} 이상`,
+    eff: { moment: 0.08 }, desc: "승부처 성공 확률 +8%p" },
+  { id: "champ", name: "🏆 챔피언", need: "리그 우승 또는 승격",
+    eff: { rate: 0.2, moment: 0.04 }, desc: "평점 +0.2 · 승부처 +4%p" },
+  /* 강등에도 하나 붙여요. 최악의 시즌 다음에 아무것도 없으면 그 커리어는 그냥
+   * 아래로만 굴러갑니다 — 되돌아올 손잡이가 하나는 있어야 해요. */
+  { id: "revenge", name: "🕯️ 설욕의 각오", need: "강등",
+    eff: { g: 0.12, a: 0.12 }, desc: "골·도움 +12%" },
+  { id: "rookie", name: "🌟 신인왕", need: "신인왕 수상",
+    eff: { train: 0.15 }, desc: "훈련 상승폭 +15%" },
+];
+const BUFF_CAP = { g: 0.4, a: 0.4, d: 0.4, rate: 0.6, moment: 0.12, train: 0.3 };
+/* 수상 이름 → 칭호. 조건을 따로 계산하지 않고 **화면에 뜬 수상 목록을 그대로**
+ * 읽어요 — 따로 세면 결산에 뜬 상과 칭호가 어긋납니다. 이 게임에서 여러 번
+ * 반복된 병이에요("표시와 판정이 서로 다른 것을 본다"). */
+const AWARD_BUFF = {
+  "골든부츠": "boot", "플레이메이커": "maker", "철벽상": "wall", "공격포인트왕": "point",
+  "리그MVP": "ruler", "발롱도르": "ballon", "신인왕": "rookie",
+};
+const seasonTitleOf = (id) => SEASON_TITLES.find((t) => t.id === id) || null;
+
+/* 이번 시즌에 살아 있는 칭호. buffY가 지금 시즌과 같을 때만 들어요 —
+ * 지난 시즌 것이 그대로 남으면 "한 번 잘하면 평생 간다"가 됩니다. */
+function activeBuffs(st) {
+  const S0 = st || (typeof S !== "undefined" ? S : null);
+  if (!S0 || !Array.isArray(S0.buffs) || S0.buffY !== S0.proYear) return [];
+  return S0.buffs.map(seasonTitleOf).filter(Boolean);
+}
+/* 종류별 합계. g·a·d·train은 배수(1 + 합), rate·moment는 그대로 더해요. */
+function buffSum(kind, st) {
+  const sum = activeBuffs(st).reduce((a, t) => a + (t.eff[kind] || 0), 0);
+  return Math.min(sum, BUFF_CAP[kind] != null ? BUFF_CAP[kind] : 1);
+}
+const buffMul = (kind, st) => 1 + buffSum(kind, st);
+
+/* 🏷️ 클래스 — "지금 이 선수가 어느 급인가".
  *
  * 은퇴할 때 붙는 커리어 등급(gradeOfScore)과는 **다른 축**이에요.
  * 등급은 평생 쌓은 업적이라 안 줄어들지만, 칭호는 지금 실력이라 노쇠하면 내려가요.
@@ -1437,9 +1504,11 @@ function matchContribution(rating) {
   const G = { fw: 1.05, wg: 0.75, mf: 0.5, df: 0.14 };
   const A = { mf: 0.95, wg: 0.85, fw: 0.55, df: 0.28 };
   const D = { df: 2.3, mf: 1.2, wg: 0.5, fw: 0.45 };
-  const gLam = (G[S.pos] ?? 0.4) * perf * (0.55 + shootF);
-  const aLam = (A[S.pos] ?? 0.4) * perf * (0.55 + passF);
-  const dLam = (D[S.pos] ?? 0.6) * perf * (0.55 + defF);
+  /* 🎖️ 시즌 칭호가 여기서 경기에 들어와요 — 리그도 컵도 이 함수를 통해 골·도움·
+   * 수비를 뽑으니, 한 자리에 얹으면 모든 경기에 같은 규칙으로 붙습니다. */
+  const gLam = (G[S.pos] ?? 0.4) * perf * (0.55 + shootF) * buffMul("g");
+  const aLam = (A[S.pos] ?? 0.4) * perf * (0.55 + passF) * buffMul("a");
+  const dLam = (D[S.pos] ?? 0.6) * perf * (0.55 + defF) * buffMul("d");
   return { g: poissonish(gLam), a: poissonish(aLam), def: poissonish(dLam) };
 }
 /* 동료 득점 — 예전에는 팀 득점이 내 골 + 내 도움뿐이라 동료가 넣는 골이 없었어요.
@@ -1519,7 +1588,12 @@ const miniZone = (stat) => clamp(13 + stat * 0.22 + (S.condition - 50) * 0.08, 1
 
 const autoMiniOn = () => localStorage.getItem("grow-auto-mini") === "1";
 function autoRes(stat) {
-  const pPerfect = clamp(0.12 + stat * 0.003 + (S.condition - 50) * 0.001, 0.08, 0.5);
+  /* 🔥 물오른 폼·🏆 챔피언이 승부처 성공률을 밀어 올려요.
+   * ⚠️ 칭호는 **상한(0.5)을 씌운 뒤에** 더해요. 안쪽에 넣으면 칭호가 없을 때도
+   * 상한이 0.5에서 0.62로 올라가서, 능력치 130짜리 선수의 승부처 확률이
+   * 0.50 → 0.54로 조용히 바뀝니다 (실제로 ladder-test가 그걸 잡았어요). */
+  const base = clamp(0.12 + stat * 0.003 + (S.condition - 50) * 0.001, 0.08, 0.5);
+  const pPerfect = clamp(base + buffSum("moment"), 0.08, 0.62);
   const pMiss = clamp(0.4 - stat * 0.002, 0.08, 0.4);
   const r = Math.random();
   return r < pPerfect ? "perfect" : r < pPerfect + pMiss ? "miss" : "good";
@@ -2170,8 +2244,27 @@ const HELP_SECTIONS = [
     "3년이 끝나면 그동안의 성과로 프로 계약이 갈려요.\n" +
     "계약하면 리그 커리어를 이어가고, 아니면 유스에서 커리어가 끝나요.\n" +
     "🌱유스 재계약으로 끝났다면 딱 한 번, 능력치를 그대로 안고 3년차를 다시 뛸 수 있어요." },
-  { emoji: "🏷️", title: "칭호", body:
-    "지금 이 선수가 어느 급인지 보여주는 이름이에요. 11단계가 있어요.\n" +
+  { emoji: "🎖️", title: "시즌 칭호", body:
+    "지난 시즌에 해낸 일로 받아서, 이번 시즌 경기에만 붙는 효과예요.\n" +
+    "시즌이 끝나면 다시 정해져요 — 유지하려면 그 성적을 또 내야 해요.\n" +
+    "\n" +
+    "🥇골든부츠 위너(득점 1위) 골 +15%\n" +
+    "🎯리그 최고 도우미(도움 1위) 도움 +15%\n" +
+    "🛡️리그 최고 수비수(수비 1위) 수비 +15%\n" +
+    "📈공격포인트왕(공격P 1위) 골·도움 +6%\n" +
+    "👑리그의 지배자(리그MVP) 경기 평점 +0.35\n" +
+    "🏅발롱도르 위너(발롱도르) 모든 기여 +8% · 평점 +0.25\n" +
+    "🔥물오른 폼(시즌 평균 평점 7.5 이상) 승부처 성공 +8%p\n" +
+    "🏆챔피언(리그 우승·승격) 평점 +0.2 · 승부처 +4%p\n" +
+    "🕯️설욕의 각오(강등) 골·도움 +12%\n" +
+    "🌟신인왕(신인왕) 훈련 상승폭 +15%\n" +
+    "\n" +
+    "여러 개를 동시에 달 수 있어요. 다만 종류별 합계에 상한이 있어요\n" +
+    "(골·도움·수비 각 +40% · 평점 +0.6 · 승부처 +12%p · 훈련 +30%).\n" +
+    "시즌 결산에서 다음 시즌 칭호를 알려주고, 준비/시즌 화면 위에 늘 떠 있어요." },
+  { emoji: "🏷️", title: "선수 클래스", body:
+    "시즌 칭호와 달리 이건 **받는 게 아니라 지금 실력에서 자동으로 나오는 이름**이에요.\n" +
+    "경기에는 관여하지 않아요. 11단계가 있어요.\n" +
     "🪑벤치 자원 → 🔄로테이션 자원 → 🧢리그 주전 → 💪리그 정상급 →\n" +
     "🎖️국가대표 후보 → 🏅국가대표 주전 → 🌟월드클래스 → ⭐슈퍼스타 →\n" +
     "👑세계 최고 → 🐐살아있는 전설 → 🏆축구의 신\n" +
@@ -2181,8 +2274,9 @@ const HELP_SECTIONS = [
     "👑세계 최고(130)가 능력치 상한이고, 그 위 둘은 🌠초월로 상한을 올려야 닿아요.\n" +
     "\n" +
     "효과 — 경기 수당이 한 단계마다 +25%씩 붙어요 (🪑 ×1.00 … 🏆 ×3.50).\n" +
-    "능력치에 배수를 걸지 않은 건, 골·평점·수상·명성이 이미 전부 종합으로 굴러가서\n" +
-    "거기에 또 곱하면 같은 걸 두 번 세기 때문이에요. 수당은 여태 고정이라 여기가 빈자리였어요.\n" +
+    "클래스에 능력치 배수를 걸지 않은 건, 골·평점·수상·명성이 이미 전부 종합으로\n" +
+    "굴러가서 거기에 또 곱하면 같은 걸 두 번 세기 때문이에요. 경기에 직접 붙는 효과는\n" +
+    "🎖️시즌 칭호가 맡아요 — 그건 성적으로 받아 오는 거라 축이 겹치지 않아요.\n" +
     "올라선 순간 명성도 한 번 크게 붙어요.\n" +
     "\n" +
     "🥇개인 순위표에는 다른 팀 선수들의 칭호도 함께 나와요. 리그가 높을수록 위 칭호가\n" +

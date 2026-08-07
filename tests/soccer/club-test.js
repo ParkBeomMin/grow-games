@@ -38,6 +38,11 @@ const parts = {
   transLv: grab(GAME, /const transLv = [^;]+;/),
   clutch: grab(GAME, /function clutch\(key\) \{[\s\S]*?\n\}/),
   poissonish: grab(GAME, /function poissonish\(lam\) \{[\s\S]*?\n\}/),
+  /* 🎖️ 시즌 칭호 — matchContribution·ratingOf·autoRes가 buffMul/buffSum을 봐요.
+   * 같이 안 떼어 오면 ReferenceError로 죽습니다(조용히 통과하지는 않아요).
+   * 이 검사들은 칭호가 없는 상태(S.buffs 없음)를 보니 배수는 전부 1이 나와요 —
+   * 칭호가 붙었을 때의 동작은 tests/soccer/buff-test.js가 봅니다. */
+  buffFns: grab(GAME, /const HOT_FORM_BAR = [\s\S]*?const buffMul = [^;]+;/),
   matchContribution: grab(GAME, /function matchContribution\(rating\) \{[\s\S]*?\n\}/),
   deriveOppGoals: grab(GAME, /function deriveOppGoals\(rating, defStat\) \{[\s\S]*?\n\}/),
   autoRes: grab(GAME, /function autoRes\(stat\) \{[\s\S]*?\n\}/),
@@ -191,6 +196,7 @@ guard("실점", () => {
  *     poissonish가 Math.exp도 쓰니 Object.create(Math)로 나머지는 그대로 물려받아요.
  * (b) 평균을 ±3%로 대조해요 — 사람이 읽을 수 있는 눈금이에요. */
 const contribFn = new Function("S", "clamp", "Math", `
+  ${parts.buffFns}
   ${parts.poissonish}
   ${leagueSrc}
   ${clubSrc}
@@ -243,6 +249,7 @@ guard("전력이 내 기록에 안 닿는다", () => {
  * league-test·team-test와 같은 방식을 여기에도 한 벌 둬요. */
 const seasonFn = new Function("S", "clamp", "rand", "randInt", "pick", `
   ${parts.posInfo} ${parts.clutchScale} ${parts.transLv} ${parts.clutch}
+  ${parts.buffFns}
   ${parts.poissonish} ${parts.matchContribution} ${parts.autoRes}
   ${leagueSrc}
   ${clubSrc}

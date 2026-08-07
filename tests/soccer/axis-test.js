@@ -32,6 +32,11 @@ const parts = {
   transLv: grab(GAME, /const transLv = [^;]+;/),
   clutch: grab(GAME, /function clutch\(key\) \{[\s\S]*?\n\}/),
   poissonish: grab(GAME, /function poissonish\(lam\) \{[\s\S]*?\n\}/),
+  /* 🎖️ 시즌 칭호 — matchContribution·ratingOf·autoRes가 buffMul/buffSum을 봐요.
+   * 같이 안 떼어 오면 ReferenceError로 죽습니다(조용히 통과하지는 않아요).
+   * 이 검사들은 칭호가 없는 상태(S.buffs 없음)를 보니 배수는 전부 1이 나와요 —
+   * 칭호가 붙었을 때의 동작은 tests/soccer/buff-test.js가 봅니다. */
+  buffFns: grab(GAME, /const HOT_FORM_BAR = [\s\S]*?const buffMul = [^;]+;/),
   matchContribution: grab(GAME, /function matchContribution\(rating\) \{[\s\S]*?\n\}/),
   autoRes: grab(GAME, /function autoRes\(stat\) \{[\s\S]*?\n\}/),
   // MatchSim.finish의 info 블록 — 승부처 극장골이 내 골에 얹히는 규칙이 여기 있어요
@@ -195,6 +200,7 @@ check(/act\.hypeSum \+=/.test(SRC) && /act\.cbHype \+=/.test(SRC),
  * 팀 스코어(h·a·res)는 이 테스트가 안 보는 값이라 자리만 채운다. */
 const seasonFn = new Function("S", "clamp", "rand", "condition", "fandom", `
   ${parts.posInfo} ${parts.clutchScale} ${parts.transLv} ${parts.clutch}
+  ${parts.buffFns}
   ${parts.poissonish} ${parts.matchContribution} ${parts.autoRes}
   ${leagueSrc}
   ${parts.fanCap} ${parts.ratingDiv} ${parts.cbPerYear} ${parts.weeksPerCb}

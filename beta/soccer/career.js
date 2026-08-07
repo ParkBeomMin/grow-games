@@ -44,7 +44,9 @@ window.WingerCareer = (() => {
     const myScore =
       (all * 0.50 + stats[main] * 0.14 + stats.stamina * 0.10 - weak) * clutch(main) +
       condition / 8 + Math.min((fandom || 0) / 45, FAN_CAP) + rand(-5, 5) + 20;
-    const rating = clamp(myScore / RATING_DIV - leagueOf(S).penalty, 1, 10);
+    /* 🎖️ 시즌 칭호(👑 리그의 지배자·🏆 챔피언·🏅 발롱도르)가 평점에 붙어요.
+     * clamp **안쪽**에서 더해요 — 밖에서 더하면 상한 10이 안 지켜집니다. */
+    const rating = clamp(myScore / RATING_DIV - leagueOf(S).penalty + buffSum("rate"), 1, 10);
     return rating;
   }
 
@@ -873,6 +875,18 @@ window.WingerCareer = (() => {
   $("pro-cond-num").textContent = Math.round(S.condition);
     $("pro-cond-bar").style.width = `${S.condition}%`;
 
+    /* 🎖️ 이번 시즌 칭호 — 지난 시즌에 받아 온 거예요. 효과가 경기에 붙으니
+     * 경기 화면으로 가기 전에 항상 보여야 해요. 없으면 줄 자체를 감춰요. */
+    const buffs = activeBuffs(S);
+    const bbox = $("pro-buffs");
+    if (bbox) {
+      bbox.hidden = buffs.length === 0;
+      bbox.innerHTML = buffs.length
+        ? `<span class="buff-head">🎖️ ${S.proYear}시즌 칭호</span>`
+          + buffs.map((t) => `<span class="buff-chip" title="${t.need}">${t.name}<b>${t.desc}</b></span>`).join("")
+        : "";
+    }
+
     /* 🏆 리그 순위표 — 시즌 중에만 보여줘요. 접어둬서 훈련 화면이 길어지지 않게 합니다.
      * "리그 경기중인데 리그 팀 순위표를 볼 수가 없네"에서 나왔어요. */
     const tbl = $("pro-table");
@@ -1034,7 +1048,8 @@ window.WingerCareer = (() => {
       /* 🌍 지금 뛰는 나라가 훈련에 얹혀요 — 🇯🇵는 전반적으로, 🇧🇷·🇮🇹는 잘 가르치는
        * 능력치 하나에만. 어느 리그에 머물지가 수상 값어치만의 문제가 아니게 됩니다. */
       const natMul = traitMul(S, "train") * traitFocusMul(S, def.key);
-      let gain = rand(1.8, 3.6) * S.talents[def.key] * yearMod * condMod * natMul;
+      // 🌟 신인왕 칭호가 훈련 상승폭에 붙어요 (그 한 시즌만)
+      let gain = rand(1.8, 3.6) * S.talents[def.key] * yearMod * condMod * natMul * buffMul("train");
       if (S.stats[def.key] >= 100) gain *= 0.5;
       gain = Math.round(gain * 10) / 10;
       S.stats[def.key] = clamp(S.stats[def.key] + gain, 0, statCap(def.key));
@@ -1576,6 +1591,19 @@ window.WingerCareer = (() => {
      * S.moves에서 역산해 메워요 — 세이브는 고치지 않아요(클라우드 동기화와 부딪혀요). */
     // 평균 평점 — 골·도움만으로는 안 드러나는 '꾸준함'을 보여줘요
     const avgRating = apps ? Math.round(((act.ratingSum || 0) / apps) * 10) / 10 : null;
+    /* 🎖️ 다음 시즌 칭호 — 이 시즌에 해낸 일로 정해요.
+     * 판정은 **수상 목록과 승강 결과를 그대로** 읽습니다(AWARD_BUFF).
+     * 지난 시즌 것은 여기서 통째로 갈려요 — 유지하려면 그 성적을 또 내야 해요. */
+    const nextBuffs = [];
+    for (const a of awards) {
+      const id = AWARD_BUFF[a];
+      if (id && !nextBuffs.includes(id)) nextBuffs.push(id);
+    }
+    if (avgRating != null && avgRating >= HOT_FORM_BAR) nextBuffs.push("hot");
+    if (move && (move.kind === "title" || move.kind === "up")) nextBuffs.push("champ");
+    if (move && move.kind === "down") nextBuffs.push("revenge");
+    S.buffs = nextBuffs;
+    S.buffY = S.proYear + 1;
     S.career.years.push({ y: S.proYear, hype: Math.round(hype * 10) / 10, wins, sales, dFan, awards, goals: gg, assists: ga, defense: gd, apps, avg: avgRating, club: S.group, league: leaguePlayed, rank: finalRank, teams: finalTeams, promo: move ? move.kind : null, promoTo: move ? move.to : null, prize: move && move.prize ? move.prize : 0 });
     /* 리그·나라·순위를 함께 남겨요. 나라별 리그를 11개 만들어 놓고 **어느 리그에서
      * 몇 시즌을 뛰는지** 데이터가 없었어요 — "새 리그가 실제로 쓰이나"를 물을 수가
@@ -1763,6 +1791,13 @@ window.WingerCareer = (() => {
         : `🔻 최하위로 강등… ${(y.y || 0) + 1}시즌부터 <b>${y.promoTo}</b>에서 다시 시작해요`}</div>` : ""}
       ${y.club && y.club !== S.group ? `<div class="hint">🔁 <b>${S.group}</b>로 이적했어요 — ${(y.y || 0) + 1}시즌부터 새 팀에서 뜁니다</div>` : ""}
       ${moveNote ? `<div class="hint learn">${moveNote}</div>` : ""}
+      ${/* 🎖️ 이 시즌에 받은 칭호 — 다음 시즌 경기에 붙어요. 결산에서 보여줘야
+          "이번 시즌을 잘 치르면 다음 시즌이 편해진다"가 눈에 들어와요. */
+        (S.buffs || []).length
+          ? `<div class="hint buff-next">🎖️ <b>${(S.proYear || 0) + 1}시즌 칭호</b> — `
+            + S.buffs.map((id) => { const t = seasonTitleOf(id); return t ? `${t.name} <span class="bn-eff">${t.desc}</span>` : ""; })
+              .filter(Boolean).join(" · ") + `</div>`
+          : `<div class="hint buff-next dim">🎖️ 다음 시즌 칭호 없음 — 부문 1위·수상·우승·승격 중 하나를 해내면 다음 시즌 경기에 효과가 붙어요</div>`}
       <table class="season-table season-soccer"><thead><tr><th>시즌</th><th>소속</th><th>성적</th><th>평점</th><th>수상</th></tr></thead><tbody>${rows}</tbody></table>
       <div class="draft-summary">
         프로 통산 ${cr.years.length}시즌 · 출전 ${cr.apps || 0} · ⚽ ${cr.goals || 0}골 · 🅰️ ${cr.assists || 0}도움 · 🛡️ ${cr.defense || 0} · 🏅 MOM ${cr.wins}회<br/>

@@ -38,6 +38,11 @@ const parts = {
   fanCap: grab(SRC, /const FAN_CAP = [^;]+;/),
   ratingDiv: grab(SRC, /const RATING_DIV = [^;]+;/),
   ratingOf: grab(SRC, /function ratingOf\(stats, pos, condition, fandom\) \{[\s\S]*?\n {2}\}/),
+  /* 🎖️ 시즌 칭호 — matchContribution·ratingOf·autoRes가 buffMul/buffSum을 봐요.
+   * 같이 안 떼어 오면 ReferenceError로 죽습니다(조용히 통과하지는 않아요).
+   * 이 검사들은 칭호가 없는 상태(S.buffs 없음)를 보니 배수는 전부 1이 나와요 —
+   * 칭호가 붙었을 때의 동작은 tests/soccer/buff-test.js가 봅니다. */
+  buffFns: grab(GAME, /const HOT_FORM_BAR = [\s\S]*?const buffMul = [^;]+;/),
   contrib: grab(GAME, /function matchContribution\(rating\) \{[\s\S]*?\n\}/),
   poisson: grab(GAME, /function poissonish\(lam\) \{[\s\S]*?\n\}/),
 };
@@ -52,6 +57,7 @@ const mkEngine = (ratingSrc) => new Function(
   `${parts.posInfo} ${parts.clutchScale} ${parts.transLv} ${parts.clutch}
    ${parts.leagues} ${parts.leagueOf}
    ${parts.fanCap} ${parts.ratingDiv}
+   ${parts.buffFns}
    ${ratingSrc}
    ${parts.poisson}
    ${parts.contrib}
