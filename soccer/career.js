@@ -102,15 +102,34 @@ window.WingerCareer = (() => {
   const RATE_RESULT = 2.5;   // 승 +0.25 / 패 −0.25
   const RATE_CONCEDE = 3;    // 이만큼 실점하면 수비 쪽에 감점이 붙어요
 
+  /* 같은 종류가 쌓이면 값이 줄어요 — 네 번째 골은 첫 골만큼 평점을 못 올려요.
+   *
+   * ⚠️ 예전에는 골마다 +1.0씩 그대로 더했어요. 이 게임은 득점이 실제 축구보다
+   * 훨씬 많아서(공격수 경기당 1.8골) **만점이 흔해졌습니다.** 실측:
+   *   챔피언십 — 평점 10.0이 12.7% · 한 라운드에 10.0이 둘 이상 33.3%
+   *   프리미어리그 — 22.4% · 64.3%
+   * 실제 평점 업체에서 10.0은 리그 전체에서 시즌에 한두 번 나오는 값이에요.
+   *
+   * 화면에는 "⚽ 골 3 +2.39"처럼 **합쳐서** 뜨니까 내역이 안 지저분해요.
+   * 사후에 눌러 담는 방식(soft cap)은 "그날의 흐름 −1.5" 같은 정체불명 항목이
+   * 생겨서 안 썼어요 — 줄어드는 이유가 화면에 설명돼야 합니다. */
+  const RATE_DECAY = 0.78;
+  const credit = (n, unit) =>
+    n <= 0 ? 0 : unit * (1 - Math.pow(RATE_DECAY, n)) / (1 - RATE_DECAY);
+
+  /* 진 경기의 상한. 팀이 졌는데 만점은 실제로 거의 안 나와요 —
+   * 개인 퍼포먼스를 재는 값이라 최고 평점은 받을 수 있지만 10.0은 다릅니다. */
+  const RATE_LOSS_CAP = 95;
+
   /* 평점을 만든 항목들(×10). 화면에 그대로 펼쳐 보여줘요 —
    * 숫자만 던지면 "왜 이 평점이야?"에 답할 수가 없어요. */
   function ratingParts(info, pos, momAdj) {
     const r = RATE[pos] || RATE.fw;
     const conceded = info.oppGoals || 0;
     const out = [{ label: "기본", v: r.b }];
-    if (info.myGoals) out.push({ label: `⚽ 골 ${info.myGoals}`, v: info.myGoals * r.g });
-    if (info.assists) out.push({ label: `🅰️ 도움 ${info.assists}`, v: info.assists * r.a });
-    if (info.defense) out.push({ label: `🛡️ 수비 ${info.defense}`, v: info.defense * r.d });
+    if (info.myGoals) out.push({ label: `⚽ 골 ${info.myGoals}`, v: credit(info.myGoals, r.g) });
+    if (info.assists) out.push({ label: `🅰️ 도움 ${info.assists}`, v: credit(info.assists, r.a) });
+    if (info.defense) out.push({ label: `🛡️ 수비 ${info.defense}`, v: credit(info.defense, r.d) });
     if (info.res === "W") out.push({ label: "팀 승리", v: RATE_RESULT });
     else if (info.res === "L") out.push({ label: "팀 패배", v: -RATE_RESULT });
     if (conceded === 0) out.push({ label: "무실점", v: r.cs });
@@ -122,7 +141,8 @@ window.WingerCareer = (() => {
   /* 한 경기 평점(×10). 능력치도 컨디션도 명성도 안 봅니다 — info만 봐요.
    * 마지막 흔들림은 심판·해설의 눈이라고 보면 돼요(실제 평점도 업체마다 갈려요). */
   function matchRating(info, pos, momAdj) {
-    return ratingParts(info, pos, momAdj).reduce((a, p) => a + p.v, 0) + rand(-4, 4);
+    const v = ratingParts(info, pos, momAdj).reduce((a, p) => a + p.v, 0) + rand(-4, 4);
+    return info.res === "L" ? Math.min(v, RATE_LOSS_CAP) : v;
   }
 
   /* 평점 내역 한 줄. 흔들림은 합에서 역산해 남김없이 보여줘요 —
@@ -211,7 +231,7 @@ window.WingerCareer = (() => {
    * 신인이 우승 후보 클럽에서 시작하는 것도 어색했어요. 올라가는 건 이적으로 해요. */
   const DEBUT_POOL = 3;
   function debutClubs(id) {
-    const list = (CLUBS[id] || CLUBS[1]).slice().sort((a, b) => a.str - b.str);
+    const list = leagueRoster(id).slice().sort((a, b) => a.str - b.str);
     return list.slice(0, DEBUT_POOL);
   }
 
@@ -278,7 +298,7 @@ window.WingerCareer = (() => {
    * 순위표를 만들 수가 없었어요. 리그의 6팀을 시즌 내내 함께 굴립니다.
    * ⚠️ S.league은 이미 '리그 ID'라 이름이 겹쳐요. 표는 S.table에 둡니다. */
   function initTable() {
-    const list = CLUBS[leagueOf(S).id] || CLUBS[1];
+    const list = leagueRoster(leagueOf(S).id);
     const rows = list.map((c) => ({ name: c.name, str: c.str, w: 0, d: 0, l: 0 }));
     /* 승격·이적으로 내 클럽이 목록에 없을 수 있어요(applyPromotion은 리그만 바꾸고
      * 클럽 이름은 그대로 둬요). 그때 **덧붙이면 팀이 7개가 됩니다.**
@@ -406,6 +426,43 @@ window.WingerCareer = (() => {
   const PROMO_GAP = 8;                       // 2위와 벌려야 하는 승점 차
   const PROMO_SETTLE = 2;                    // 승격 뒤 머물러야 하는 시즌 수
 
+  /* 리그 명단을 세이브에서 읽어요 (game.js의 clubsIn). 이 파일 안에서는
+   * S가 전역이라 인자 없이 부릅니다. */
+  const leagueRoster = (id) => clubsIn(id, S);
+
+  /* 🌍 승강 — 내 클럽과 상대 리그의 한 팀이 자리를 맞바꿔요.
+   *
+   *   올라갈 때: 위 리그의 **최약체**가 내가 있던 리그로 내려와요
+   *   내려갈 때: 아래 리그의 **최강**이 내가 있던 리그로 올라가요
+   *
+   * 실제 승강과 같은 그림이고, 무엇보다 **양쪽 리그의 팀 수가 그대로**예요.
+   * 팀 수가 흔들리면 순위표가 홀수가 되고 매 라운드 한 팀이 쉽니다.
+   * 바뀐 명단만 S.world에 남겨요 — 안 건드린 리그는 CLUBS 그대로예요. */
+  function swapLeagues(fromId, toId, kind) {
+    const fromList = leagueRoster(fromId).slice();
+    const toList = leagueRoster(toId).slice();
+    const meIdx = fromList.findIndex((c) => c.name === S.group);
+    const me = meIdx >= 0
+      ? fromList[meIdx]
+      : { name: S.group, str: clubStrOf(S) };     // 옛 세이브 — 목록에 없던 유령 클럽
+    if (meIdx >= 0) fromList.splice(meIdx, 1);
+
+    // 자리를 내주는 팀 — 올라갈 때는 위 리그 최약체, 내려갈 때는 아래 리그 최강
+    let swapIdx = 0;
+    for (let i = 1; i < toList.length; i++) {
+      const better = kind === "up" ? toList[i].str < toList[swapIdx].str : toList[i].str > toList[swapIdx].str;
+      if (better) swapIdx = i;
+    }
+    const other = toList[swapIdx];
+    if (other) { toList.splice(swapIdx, 1); fromList.push(other); }
+    toList.push({ name: me.name, str: S.clubStr });
+
+    S.world = S.world || {};
+    S.world[fromId] = fromList.map((c) => ({ name: c.name, str: c.str }));
+    S.world[toId] = toList.map((c) => ({ name: c.name, str: c.str }));
+    if (other) proLog(`🔁 ${other.name}이(가) ${LEAGUES.find((l) => l.id === fromId).name}(으)로 자리를 바꿨어요`);
+  }
+
   function applyPromotion() {
     if (!tableReady()) return null;
     const rows = tableRows();
@@ -452,14 +509,19 @@ window.WingerCareer = (() => {
     if (to == null) return null;
 
     const from = leagueOf(S).name;
-    S.league = to;
+    const fromId = leagueOf(S).id;
     /* 클럽 전력도 함께 움직여요. 승격하면 상위 리그에서는 하위권, 강등되면
      * 하위 리그에서는 상위권이 되는 게 자연스러워요. */
-    const list = CLUBS[to] || [];
+    const list = clubsIn(to);
     if (list.length) {
       const ref = kind === "up" ? list[list.length - 1] : list[0];
       S.clubStr = ref ? ref.str : S.clubStr;
     }
+    /* 🌍 자리를 **맞바꿔요** — 내가 올라가면 그 리그의 한 팀이 내려옵니다.
+     * 예전에는 내 리그 값만 바꾸고 명단은 그대로라, 내 클럽이 새 리그 목록에
+     * 없는 유령 상태가 됐어요. */
+    swapLeagues(fromId, to, kind);
+    S.league = to;
     S.table = null;                          // 새 리그에서 표를 다시 만들어요
     S.leagueSince = S.proYear;               // 이 리그에 들어온 시즌 — 연속 승격을 막아요
     return { kind, from, to: leagueOf(S).name, rank };
@@ -1123,7 +1185,7 @@ window.WingerCareer = (() => {
    * 같은 나라 리그가 하나뿐이면(있을 수 있어요) 내 리그에서만 채워요. */
   function cupField() {
     const myLg = leagueOf(S);
-    const mates = (CLUBS[myLg.id] || []).filter((c) => c.name !== S.group);
+    const mates = leagueRoster(myLg.id).filter((c) => c.name !== S.group);
     const others = LEAGUES.filter((l) => l.country === myLg.country && l.id !== myLg.id);
     /* ⚠️ 예전에는 다른 리그 클럽을 **전부 모아 전력 상위 4팀**을 뽑았어요.
      * 그러면 하부에 있을수록 최상위 리그 강팀만 만납니다 — K리그3 소속이면
@@ -1133,12 +1195,12 @@ window.WingerCareer = (() => {
      * 이제 **리그마다 골고루** 뽑아요. 실제 FA컵 8강도 1부·2부가 섞이지
      * 한쪽으로 쏠리지 않아요. 자리가 남으면 위 리그부터 한 팀씩 더 채웁니다. */
     const perLeague = Math.max(1, Math.floor(CUP_SPOTS / Math.max(1, others.length)));
-    const byLeague = others.map((l) => (CLUBS[l.id] || []).slice()
+    const byLeague = others.map((l) => leagueRoster(l.id).slice()
       .sort((a, b) => b.str - a.str).slice(0, perLeague).map((c) => ({ ...c, lg: l })));
     const up = byLeague.flat();
     // 남는 자리는 위 리그(tier 큰 쪽)부터 다음 순위 팀으로 채워요
     const rest = others.slice().sort((a, b) => b.tier - a.tier)
-      .flatMap((l) => (CLUBS[l.id] || []).slice().sort((a, b) => b.str - a.str)
+      .flatMap((l) => leagueRoster(l.id).slice().sort((a, b) => b.str - a.str)
         .slice(perLeague).map((c) => ({ ...c, lg: l })));
     while (up.length < CUP_SPOTS && rest.length) up.push(rest.shift());
     const mine = mates.sort((a, b) => b.str - a.str).slice(0, CUP_SPOTS - 1)
@@ -1507,7 +1569,7 @@ window.WingerCareer = (() => {
    * 내가 지금 뛰는 리그는 실제 순위표가 있으니 그걸 그대로 씁니다.
    * 전력만 보고는 "3부의 최강"과 "1부의 최약체"를 구분하기 어려웠어요. */
   function clubStanding(club, leagueId) {
-    const list = CLUBS[leagueId] || [];
+    const list = leagueRoster(leagueId);
     if (!list.length) return null;
     if (leagueId === S.league && tableReady()) {
       const rows = tableRows();
@@ -1772,7 +1834,7 @@ window.WingerCareer = (() => {
        * 사라지면 그 리그가 막다른 길이 되는 걸 이 방어선이 조용히 대신 막아 줍니다. */
       const need = PROMOTE_HYPE[lg.id];
       if (lg.tier > cur.tier && hype < (need == null ? Infinity : need)) continue;
-      const pool = (CLUBS[lg.id] || []).filter((c) => c.name !== state.group);
+      const pool = clubsIn(lg.id, state).filter((c) => c.name !== state.group);
       for (const club of shuffle(pool.slice()).slice(0, OFFERS_PER_LEAGUE)) {
         list.push({ club, league: lg, fee: transferFee(club, lg, state), back: leftBefore(state, club.name) });
       }
