@@ -24,6 +24,13 @@ const parts = {
   gap: grab(SRC, /const PROMO_GAP = [^;]+;/),
   settle: grab(SRC, /const PROMO_SETTLE = [^;]+;/),
   apply: grab(SRC, /function applyPromotion\(\) \{[\s\S]*?\n  \}/),
+  /* 승강은 이제 리그 명단을 실제로 맞바꿔요 — 그 조각도 함께 떼어 와야 돌아갑니다. */
+  swap: grab(SRC, /function swapLeagues\(fromId, toId, kind\) \{[\s\S]*?\n  \}/),
+  roster: grab(SRC, /const leagueRoster = \(id\) => clubsIn\(id, S\);/),
+  clubsIn: grab(fs.readFileSync("/workspace/grow-games/beta/soccer/game.js", "utf8"),
+    /function clubsIn\(id, st\) \{[\s\S]*?\n\}/),
+  clubStrOf: grab(fs.readFileSync("/workspace/grow-games/beta/soccer/game.js", "utf8"),
+    /function clubStrOf\(st\) \{[\s\S]*?\n\}/),
   leagues: grab(GAME, /const LEAGUES = \[[\s\S]*?\n\];/),
   clubs: grab(GAME, /const CLUBS = \{[\s\S]*?\n\};/),
 };
@@ -32,8 +39,26 @@ if (missing.length) { console.log(`❌ 소스에서 못 찾았어요: ${missing.
 
 /* applyPromotion은 tableReady/tableRows/myTableRank/leagueOf/CLUBS/S를 본다.
  * 순위표는 테스트가 직접 만들어 넣는다 — 여기서 재는 건 '표를 보고 무엇을 정하나'다. */
+/* 세 곳이 같은 조각을 쌓아요. 한 곳만 빠뜨리면 그 검사만 조용히 죽으니 한데 모읍니다. */
+const PRE = (tiers, apply) => `${parts.leagues}
+   ${parts.clubs}
+   const leagueOf = (st) => LEAGUES.find((l) => l.id === ((st && st.league) || 1)) || LEAGUES[0];
+   const tableReady = () => true;
+   const tableRows = () => rowsIn;
+   const myTableRank = () => rankIn;
+   ${tiers}
+   ${parts.ladderOf}
+   ${parts.gap}
+   ${parts.settle}
+   ${parts.clubsIn}
+   ${parts.clubStrOf}
+   ${parts.roster}
+   const proLog = () => {};
+   ${parts.swap}
+   ${apply}`;
+
 const makeApply = () => new Function(
-  "S", "rowsIn", "rankIn",
+  "S", "rowsIn", "rankIn", "clamp",
   `${parts.leagues}
    ${parts.clubs}
    const leagueOf = (st) => LEAGUES.find((l) => l.id === ((st && st.league) || 1)) || LEAGUES[0];
@@ -44,11 +69,18 @@ const makeApply = () => new Function(
    ${parts.ladderOf}
    ${parts.gap}
    ${parts.settle}
+   ${parts.clubsIn}
+   ${parts.clubStrOf}
+   ${parts.roster}
+   const proLog = () => {};
+   ${parts.swap}
    ${parts.apply}
    const move = applyPromotion();
    return { move, league: S.league };`
 );
-const apply = makeApply();
+const clampFn = (v, a, b) => Math.min(b, Math.max(a, v));
+const applyRaw = makeApply();
+const apply = (S, rows, rank) => applyRaw(S, rows, rank, clampFn);
 
 /* 리그 이름은 소스에서 읽는다 — 여기 옮겨 적으면 이름이 바뀌어도 안 들킨다.
  * 실제로 K리그1 → 한국 1부 → 다시 K리그1로 두 번 바뀌었다. */
@@ -111,13 +143,9 @@ check(!bottom.move && bottom.league === 5, `${NM(5)} 최하위도 아무 일도 
 check(up.move && apply(state(2), table(12), 1).league === 3, "승격 뒤 리그가 실제로 바뀐다");
 const strFor = (league, rank) => {
   const S = state(league);
-  const A = new Function("S", "rowsIn", "rankIn",
-    `${parts.leagues}\n${parts.clubs}\n` +
-    `const leagueOf = (st) => LEAGUES.find((l) => l.id === ((st && st.league) || 1)) || LEAGUES[0];\n` +
-    `const tableReady = () => true; const tableRows = () => rowsIn; const myTableRank = () => rankIn;\n` +
-    `${parts.tiers}\n${parts.ladderOf}\n${parts.gap}\n${parts.settle}\n${parts.apply}\n` +
-    `applyPromotion(); return S.clubStr;`);
-  return A(S, table(12), rank);
+  const A = new Function("S", "rowsIn", "rankIn", "clamp",
+    PRE(parts.tiers, parts.apply) + `\n applyPromotion(); return S.clubStr;`);
+  return A(S, table(12), rank, clampFn);
 };
 /* ⚠️ 승격 후와 강등 후를 그냥 비교하면 안 된다 — 도착하는 리그가 서로 달라서
  * 값이 우연히 같아질 수 있다(실제로 최상위 최약체와 한국 1부 최강이 둘 다 78이었다).
@@ -134,13 +162,9 @@ check(downStr === Math.max(...eurStrs), `내려가면 그 리그의 최강으로
  * 안 잡히면 위의 초록불은 아무것도 안 지키고 있는 것이다. */
 const brokenTiers = parts.tiers.replace(/en: \[[^\]]*\]/, "en: []");
 if (brokenTiers === parts.tiers) { console.log("❌ 변이 치환이 안 됐어요"); process.exit(1); }
-const brokenApply = new Function("S", "rowsIn", "rankIn",
-  `${parts.leagues}\n${parts.clubs}\n` +
-  `const leagueOf = (st) => LEAGUES.find((l) => l.id === ((st && st.league) || 1)) || LEAGUES[0];\n` +
-  `const tableReady = () => true; const tableRows = () => rowsIn; const myTableRank = () => rankIn;\n` +
-  `${brokenTiers}\n${parts.ladderOf}\n${parts.gap}\n${parts.settle}\n${parts.apply}\n` +
-  `return applyPromotion();`);
-check(brokenApply(state(2), table(12), 1) === null,
+const brokenApply = new Function("S", "rowsIn", "rankIn", "clamp",
+  PRE(brokenTiers, parts.apply) + `\n return applyPromotion();`);
+check(brokenApply(state(2), table(12), 1, clampFn) === null,
   `변이 검증 — 잉글랜드 사다리를 비우면 ${NM(2)} 1위에 아무 일도 안 일어난다`);
 
 /* ── 정착 기간이 강등을 막지 않는가
@@ -177,7 +201,7 @@ const settleBack = parts.apply.replace(
 );
 if (settleBack === parts.apply) { console.log("❌ 변이 치환이 안 됐어요"); process.exit(1); }
 const settleBackRun = new Function(
-  "S", "rowsIn", "rankIn",
+  "S", "rowsIn", "rankIn", "clamp",
   `${parts.leagues}
    ${parts.clubs}
    const leagueOf = (st) => LEAGUES.find((l) => l.id === ((st && st.league) || 1)) || LEAGUES[0];
@@ -188,10 +212,15 @@ const settleBackRun = new Function(
    ${parts.ladderOf}
    ${parts.gap}
    ${parts.settle}
+   ${parts.clubsIn}
+   ${parts.clubStrOf}
+   ${parts.roster}
+   const proLog = () => {};
+   ${parts.swap}
    ${settleBack}
    return applyPromotion();`
 );
-check(!settleBackRun(justMoved(), table(0), 6),
+check(!settleBackRun(justMoved(), table(0), 6, clampFn),
   "변이 검증 — 강등에 정착 기간을 다시 걸면 이적 직후 꼴찌가 안 내려간다");
 
 /* ── 최종 순위를 승강 판정 **전에** 읽는가
@@ -210,6 +239,66 @@ if (FINISH) {
     "시즌 기록에 팀 최종 순위와 팀 수가 남는다");
   check(/rank: finalRank, hype:/.test(SRC),
     "통계 로그도 같은 값을 쓴다 — 승격한 시즌의 순위가 null로 안 남아요");
+}
+
+/* ── 🌍 내가 승격하면 실제로 한 팀이 내려오는가
+ *
+ * 제보: "내가 승격하면 다른 한 팀은 강등되었어야지.
+ *        경기·팀·선수·기록·점수 이런 건 전부 싱크가 잘 맞아야 해."
+ *
+ * 예전에는 S.league 값만 바꿨어요. 리그 명단(CLUBS)은 고정이라 내 클럽이 새 리그
+ * 목록에 없는 유령 상태가 됐고, 순위표가 7팀이 되면서 매 라운드 한 팀이 쉬었습니다.
+ * 지금은 자리를 맞바꿔요 — 양쪽 리그의 팀 수가 그대로여야 합니다. */
+const rosterOf = new Function("S", "id",
+  `${parts.clubs}\n${parts.clubsIn}\n return clubsIn(id, S);`);
+const worldCheck = (kind) => {
+  const fromId = kind === "up" ? 2 : 3;     // 챔피언십 ↔ 프리미어리그
+  const toId = kind === "up" ? 3 : 2;
+  const S = state(fromId);
+  S.group = rosterOf(S, fromId)[0].name;    // 그 리그의 실제 클럽으로 시작해요
+  S.clubStr = rosterOf(S, fromId)[0].str;
+  const beforeFrom = rosterOf(S, fromId).length, beforeTo = rosterOf(S, toId).length;
+  const beforeToNames = rosterOf(S, toId).map((c) => c.name);
+  // apply는 { move, league }를 돌려줘요 — 안쪽 move를 꺼내야 해요
+  const move = (kind === "up" ? apply(S, table(12), 1) : apply(S, table(0), 6)).move;
+  const afterFrom = rosterOf(S, fromId), afterTo = rosterOf(S, toId);
+  return { S, move, beforeFrom, beforeTo, afterFrom, afterTo, beforeToNames, fromId, toId };
+};
+for (const kind of ["up", "down"]) {
+  const r = worldCheck(kind);
+  const label = kind === "up" ? "승격" : "강등";
+  check(!!r.move && r.move.kind === kind, `${label}이 실제로 일어난다 (${r.move ? r.move.kind : "안 일어남"})`);
+  check(r.afterFrom.length === r.beforeFrom && r.afterTo.length === r.beforeTo,
+    `${label} 뒤에도 양쪽 리그 팀 수가 그대로다 (${r.beforeFrom}/${r.beforeTo} → ${r.afterFrom.length}/${r.afterTo.length})`);
+  check(r.afterTo.some((c) => c.name === r.S.group),
+    `${label}하면 내 클럽이 새 리그 명단에 들어간다 (${r.S.group})`);
+  check(!r.afterFrom.some((c) => c.name === r.S.group),
+    `${label}하면 내 클럽이 떠난 리그에서 빠진다`);
+  // 자리를 맞바꾼 팀이 실제로 반대쪽으로 갔는가
+  const swapped = r.beforeToNames.filter((n) => !r.afterTo.some((c) => c.name === n));
+  check(swapped.length === 1, `${label}하면 반대쪽에서 정확히 한 팀이 자리를 내준다 (${swapped.join(",") || "없음"})`);
+  check(swapped.length === 1 && r.afterFrom.some((c) => c.name === swapped[0]),
+    `그 팀이 내가 있던 리그에 실제로 들어간다 (${swapped[0]})`);
+}
+// 올라갈 때는 위 리그 최약체가, 내려갈 때는 아래 리그 최강이 자리를 바꿔요
+{
+  const up = worldCheck("up");
+  const before = rosterOf({}, up.toId);
+  const weakest = before.slice().sort((a, b) => a.str - b.str)[0];
+  check(!up.afterTo.some((c) => c.name === weakest.name),
+    `승격하면 위 리그 **최약체**(${weakest.name} ${weakest.str})가 내려온다`);
+  const down = worldCheck("down");
+  const lower = rosterOf({}, down.toId);
+  const best = lower.slice().sort((a, b) => b.str - a.str)[0];
+  check(!down.afterTo.some((c) => c.name === best.name),
+    `강등되면 아래 리그 **최강**(${best.name} ${best.str})이 올라간다`);
+}
+// 안 건드린 리그는 세이브에 안 남아요 — 세이브가 쓸데없이 커지지 않게
+{
+  const r = worldCheck("up");
+  const touched = Object.keys(r.S.world || {}).map(Number).sort((a, b) => a - b);
+  check(touched.length === 2 && touched.includes(r.fromId) && touched.includes(r.toId),
+    `승강이 일어난 두 리그만 세이브에 남는다 (${touched.join(",")})`);
 }
 
 console.log(bad ? `\n❌ ${bad}개 실패` : "\n✅ 통과");

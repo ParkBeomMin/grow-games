@@ -269,9 +269,28 @@ function clubStrOf(st) {
   return typeof v === "number" && isFinite(v) ? clamp(v, 40, 95) : 70;
 }
 
+/* 🌍 리그 명단 — **승강으로 실제로 오가는 세계**.
+ *
+ * CLUBS는 '시작 명단'이에요. 예전에는 이게 곧 세계라서, 내가 승격해도 다른 팀은
+ * 아무 데도 안 갔어요. 그래서 새 리그 목록에 내 클럽이 없었고, 순위표가 7팀이
+ * 되면서 매 라운드 한 팀이 쉬었습니다(경기 수가 26·22·19로 갈렸어요).
+ *
+ * 제보: "내가 승격하면 다른 한 팀은 강등되었어야지.
+ *        경기·팀·선수·기록·점수 이런 건 전부 싱크가 잘 맞아야 해."
+ *
+ * 그래서 승강이 일어난 리그만 세이브(S.world)에 남겨요. 한 번도 안 건드린
+ * 리그는 CLUBS 그대로라 세이브가 커지지 않고, 옛 세이브도 그냥 동작해요.
+ * 아래 oppClubs·leagueClubs·순위표·이적 제안·컵 대진이 전부 이걸 봅니다 —
+ * 한 곳이라도 CLUBS를 직접 보면 그 화면만 옛 세계를 보여주게 돼요. */
+function clubsIn(id, st) {
+  const S0 = st || (typeof S !== "undefined" ? S : null);
+  const w = S0 && S0.world && S0.world[id];
+  return Array.isArray(w) && w.length ? w : (CLUBS[id] || CLUBS[1] || []);
+}
+
 // 상대 팀은 같은 리그에서 뽑아요. 내 클럽은 빼고요.
 function oppClubs(st) {
-  const list = CLUBS[leagueOf(st).id] || CLUBS[1];
+  const list = clubsIn(leagueOf(st).id, st);
   const names = list.map((c) => c.name).filter((n) => n !== (st && st.group));
   return names.length ? names : list.map((c) => c.name);
 }
@@ -281,7 +300,7 @@ function oppClubs(st) {
  * 한 번도 안 나왔어요. 리그 득점왕 표에 우리 팀 선수가 없는 건 이상하죠.
  * 승격·이적 직후에는 내 클럽이 CLUBS 목록에 없을 수 있어서 따로 넣어 줍니다. */
 function leagueClubs(st) {
-  const list = CLUBS[leagueOf(st).id] || CLUBS[1];
+  const list = clubsIn(leagueOf(st).id, st);
   const names = list.map((c) => c.name);
   const mine = st && st.group;
   if (mine && !names.includes(mine)) names.push(mine);

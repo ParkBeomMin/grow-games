@@ -26,6 +26,9 @@ const parts = {
   rateTbl: grab(/const RATE = \{[\s\S]*?\n  \};/),
   rateRes: grab(/const RATE_RESULT = [^;]+;/),
   rateCon: grab(/const RATE_CONCEDE = [^;]+;/),
+  decay: grab(/const RATE_DECAY = [^;]+;/),
+  credit: grab(/const credit = \(n, unit\) =>[\s\S]*?;\n/),
+  lossCap: grab(/const RATE_LOSS_CAP = [^;]+;/),
   ratePartsFn: grab(/function ratingParts\(info, pos, momAdj\) \{[\s\S]*?\n  \}/),
   rateFn: grab(/function matchRating\(info, pos, momAdj\) \{[\s\S]*?\n  \}/),
   conceded: grab(/const raceConceded = [^;]+;/),
@@ -78,6 +81,9 @@ const rateOf = new Function(
   `${parts.rateTbl}
    ${parts.rateRes}
    ${parts.rateCon}
+   ${parts.decay}
+   ${parts.credit}
+   ${parts.lossCap}
    ${parts.ratePartsFn}
    ${parts.rateFn}
    return matchRating(info, pos, 0);`
@@ -120,7 +126,7 @@ check(winLeak === 0 && lossLeak > 0,
 const flatRes = parts.rateRes.replace(/= [\d.]+;/, "= 0;");
 const flatRate = new Function(
   "info", "pos", "clamp", "rand",
-  `${parts.rateTbl}\n${flatRes}\n${parts.rateCon}\n${parts.ratePartsFn}\n${parts.rateFn}\n` +
+  `${parts.rateTbl}\n${flatRes}\n${parts.rateCon}\n${parts.decay}\n${parts.credit}\n${parts.lossCap}\n${parts.ratePartsFn}\n${parts.rateFn}\n` +
   `return matchRating(info, pos, 0);`
 );
 let fw2 = 0, fl2 = 0;

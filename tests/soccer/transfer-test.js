@@ -449,8 +449,13 @@ if (STAND && STAND_TXT) {
   const CL = T.CLUBS;
   const lgId = Number(Object.keys(CL)[0]);
   const list = CL[lgId];
+  const CLUBS_IN = grab(fs.readFileSync(path.join(DIR, "game.js"), "utf8"),
+    /function clubsIn\(id, st\) \{[\s\S]*?\n\}/);
+  const ROSTER = grab(SRC, /const leagueRoster = \(id\) => clubsIn\(id, S\);/);
   const mk = (league, ready, rows) => new Function("CLUBS", "club", "leagueId",
     `const S = { league: ${league} };
+     ${CLUBS_IN}
+     ${ROSTER}
      const tableReady = () => ${ready};
      const tableRows = () => ${JSON.stringify(rows || [])};
      ${STAND}

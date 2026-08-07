@@ -26,6 +26,10 @@ const parts = {
   rateTbl: grab(SRC, /const RATE = \{[\s\S]*?\n  \};/),
   rateRes: grab(SRC, /const RATE_RESULT = [^;]+;/),
   rateCon: grab(SRC, /const RATE_CONCEDE = [^;]+;/),
+  /* 같은 종류가 쌓이면 값이 줄어요(credit) — 산식이 이걸 부르니 함께 떼어 와야 해요 */
+  decay: grab(SRC, /const RATE_DECAY = [^;]+;/),
+  credit: grab(SRC, /const credit = \(n, unit\) =>[\s\S]*?;\n/),
+  lossCap: grab(SRC, /const RATE_LOSS_CAP = [^;]+;/),
   ratePartsFn: grab(SRC, /function ratingParts\(info, pos, momAdj\) \{[\s\S]*?\n  \}/),
   rateFn: grab(SRC, /function matchRating\(info, pos, momAdj\) \{[\s\S]*?\n  \}/),
   score: grab(SRC, /const myRankScore = matchRating\([^;]+;/),
@@ -47,6 +51,9 @@ const rateOnce = new Function(
   `${parts.rateTbl}
    ${parts.rateRes}
    ${parts.rateCon}
+   ${parts.decay}
+   ${parts.credit}
+   ${parts.lossCap}
    ${parts.ratePartsFn}
    ${parts.rateFn}
    return clamp(matchRating(info, pos, momAdj) / 10, 1, 10);`
@@ -79,12 +86,17 @@ const hat = avgRating({ myGoals: 3, assists: 0, defense: 0, res: "W", oppGoals: 
 console.log(`   공격수 — 0골 ${quiet.toFixed(2)} · 1골 ${one.toFixed(2)} · 해트트릭 ${hat.toFixed(2)} · 2골2도움 ${big.toFixed(2)}`);
 check(big >= 8.5, `2골 2도움 승리는 8.5를 넘는다 (${big.toFixed(2)})`);
 check(big - quiet >= 2.8, `잘한 경기와 조용한 경기가 2.8점 넘게 벌어진다 (${(big - quiet).toFixed(2)}점)`);
-check(hat - one >= 1.8, `골이 쌓일수록 계속 오른다 — 1골과 해트트릭이 ${(hat - one).toFixed(2)}점 차이`);
 
 /* 골 하나의 값이 실제 축구 평점의 눈금(+1.0)과 맞는지. 이 눈금이 있어야
  * 화면의 숫자를 사람이 읽을 수 있다 ("한 골 넣었으니 1점 오르는구나"). */
 const goalStep = one - quiet;
 check(Math.abs(goalStep - 1.0) < 0.25, `골 하나가 평점 +1.0 근처다 (${goalStep.toFixed(2)})`);
+/* 골이 쌓일수록 계속 오르되, **덜 오릅니다**(credit의 체감).
+ * 예전에는 골마다 +1.0씩 그대로 더해서 만점이 흔했어요 —
+ * 챔피언십에서 평점 10.0이 12.7%, 한 라운드에 둘 이상이 33%였습니다. */
+check(hat > one, `해트트릭이 1골보다 높다 (${hat.toFixed(2)} > ${one.toFixed(2)})`);
+check(hat - one >= 1.0 && hat - one < goalStep * 2,
+  `골이 쌓일수록 오르지만 덜 오른다 — 1골→해트트릭 ${(hat - one).toFixed(2)}점 (골 하나 값 ${goalStep.toFixed(2)}의 두 배 미만)`);
 
 // ── ② 조용한 경기가 재앙처럼 보이지 않는다
 check(quiet >= 5.2, `아무것도 못 한 경기도 5점대는 준다 (${quiet.toFixed(2)})`);
@@ -143,7 +155,7 @@ const brokenFn = parts.ratePartsFn
 if (brokenFn === parts.ratePartsFn) { console.log("❌ 변이 치환이 안 됐어요"); process.exit(1); }
 const brokenRate = new Function(
   "S", "info", "pos", "momAdj", "clamp", "rand",
-  `${parts.rateTbl}\n${parts.rateRes}\n${parts.rateCon}\n${brokenFn}\n${parts.rateFn}\n` +
+  `${parts.rateTbl}\n${parts.rateRes}\n${parts.rateCon}\n${parts.decay}\n${parts.credit}\n${parts.lossCap}\n${brokenFn}\n${parts.rateFn}\n` +
   `return clamp(matchRating(info, pos, momAdj) / 10, 1, 10);`
 );
 let bs = 0, bq = 0;
@@ -155,6 +167,40 @@ const gapBroken = (bs - bq) / N;
 check(gapBroken < 2.8,
   `변이 검증 — 골·도움·수비 항을 빼면 잘한 경기와 조용한 경기 차가 ${gapBroken.toFixed(2)}점으로 무너진다`);
 
+/* ── ⑥ 만점(10.0)이 드문가, 진 경기에 만점이 나오는가
+ *
+ * 제보: "소속팀이 패했는데 평점 10점을 받을 수 있나?"
+ * 현실에서 **패배 팀 선수가 최고 평점을 받는 건 흔해요** — 평점은 팀 결과가 아니라
+ * 개인 퍼포먼스를 재니까요. 하지만 **10.0 만점은 리그 전체에서 시즌에 한두 번**이고,
+ * 진 경기의 10.0은 사실상 없습니다. 한 라운드에 둘이 만점인 것도 마찬가지고요.
+ *
+ * 우리 쪽 실측(고치기 전) — 챔피언십 10.0이 12.7%, 한 라운드에 둘 이상 33.3%.
+ * 이 게임은 득점이 실제보다 많은데 골마다 +1.0을 그대로 더해서 생긴 일이에요. */
+{
+  const bigGame = { myGoals: 4, assists: 2, defense: 2, oppGoals: 1 };
+  const won = avgRating({ ...bigGame, res: "W" }, "fw");
+  const lost = avgRating({ ...bigGame, res: "L", oppGoals: 5 }, "fw");
+  console.log(`   4골 2도움 — 이겼을 때 ${won.toFixed(2)} · 졌을 때 ${lost.toFixed(2)}`);
+  check(lost < 10, `진 경기는 만점이 안 나온다 (${lost.toFixed(2)})`);
+  const capVal = new Function(`${parts.lossCap} return RATE_LOSS_CAP;`)() / 10;
+  let maxLost = 0;
+  for (let i = 0; i < N; i++) {
+    const v = rateOnce(WEAK, { myGoals: 9, assists: 9, defense: 9, res: "L", oppGoals: 4 }, "fw", 8, clamp, rand);
+    if (v > maxLost) maxLost = v;
+  }
+  check(maxLost <= capVal + 1e-9,
+    `아무리 잘해도 진 경기의 상한은 ${capVal.toFixed(1)}이다 (실측 최고 ${maxLost.toFixed(2)})`);
+  // 이긴 경기에서는 만점이 가능해야 해요 — 아예 못 받으면 그것도 이상해요
+  let anyTen = false;
+  for (let i = 0; i < N; i++) {
+    if (rateOnce(WEAK, { myGoals: 9, assists: 9, defense: 9, res: "W", oppGoals: 0 }, "fw", 8, clamp, rand) >= 9.99) anyTen = true;
+  }
+  check(anyTen, "압도적인 경기를 이기면 10.0도 나온다 (만점 자체를 막지는 않아요)");
+  // 그리고 평범하게 잘한 경기로는 만점이 안 나와야 해요
+  const solid = avgRating({ myGoals: 2, assists: 1, defense: 1, res: "W", oppGoals: 1 }, "fw");
+  check(solid < 9.5, `2골 1도움 승리 정도로는 만점 근처가 아니다 (${solid.toFixed(2)})`);
+}
+
 /* ── 화면 내역이 화면 숫자와 맞는지 ────────────────────────────────
  * "골 +2.0, 도움 +0.7, 승리 +0.25"를 늘어놨는데 다 더해도 표시 평점이 안 나오면
  * 설명이 오히려 의심을 부른다. 항목 합 + 그날의 흐름 = 표시 평점이어야 한다. */
@@ -162,7 +208,7 @@ const whyHTML = grab(SRC, /function ratingWhyHTML\(score, info, pos, momAdj\) \{
 if (!whyHTML) { console.log("❌ ratingWhyHTML을 못 찾았어요"); process.exit(1); }
 const renderWhy = new Function(
   "score", "info", "pos", "momAdj", "clamp",
-  `${parts.rateTbl}\n${parts.rateRes}\n${parts.rateCon}\n${parts.ratePartsFn}\n${whyHTML}\n` +
+  `${parts.rateTbl}\n${parts.rateRes}\n${parts.rateCon}\n${parts.decay}\n${parts.credit}\n${parts.lossCap}\n${parts.ratePartsFn}\n${whyHTML}\n` +
   `return ratingWhyHTML(score, info, pos, momAdj);`
 );
 let sumOK = true, shownOK = true;

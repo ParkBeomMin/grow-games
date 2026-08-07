@@ -30,6 +30,8 @@ const parts = {
   clubs: grab(GAME, /const CLUBS = \{[\s\S]*?\n\};/),
   leagues: grab(GAME, /const LEAGUES = \[[\s\S]*?\n\];/),
   clubStrOf: grab(GAME, /function clubStrOf\(st\) \{[\s\S]*?\n\}/),
+  clubsIn: grab(GAME, /function clubsIn\(id, st\) \{[\s\S]*?\n\}/),
+  roster: grab(SRC, /const leagueRoster = \(id\) => clubsIn\(id, S\);/),
 };
 const missing = Object.entries(parts).filter(([, v]) => !v).map(([k]) => k);
 if (missing.length) { console.log(`❌ 소스에서 못 찾았어요: ${missing.join(", ")}`); process.exit(1); }
@@ -50,6 +52,8 @@ const buildTable = (S) => new Function(
    ${parts.leagues}
    const leagueOf = (st) => LEAGUES.find((l) => l.id === ((st && st.league) || 1)) || LEAGUES[0];
    ${parts.clubStrOf}
+   ${parts.clubsIn}
+   ${parts.roster}
    ${parts.initTable}
    initTable();
    return S.table;`
@@ -141,7 +145,7 @@ const gp = (r) => r.w + r.d + r.l;
     "S", "clamp",
     `${parts.clubs}\n${parts.leagues}
      const leagueOf = (st) => LEAGUES.find((l) => l.id === ((st && st.league) || 1)) || LEAGUES[0];
-     ${parts.clubStrOf}\n${brokenInit}\n initTable(); return S.table;`
+     ${parts.clubStrOf}\n${parts.clubsIn}\n${parts.roster}\n${brokenInit}\n initTable(); return S.table;`
   )({ league: anyLeague.id, group: "이름없는 승격팀", clubStr: 61 }, clamp);
   check(oldTable.rows.length % 2 === 1,
     `변이 검증 — 옛 방식(덧붙이기)이면 ${oldTable.rows.length}팀 홀수가 된다`);

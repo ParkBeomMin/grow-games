@@ -155,8 +155,9 @@ check(!!ROLL && /leagueClubs\(S\)/.test(ROLL) && !/oppClubs\(S\)/.test(ROLL),
 const LEAGUE_CLUBS = grab(G, /function leagueClubs\(st\) \{[\s\S]*?\n\}/);
 const CLUBS_SRC = grab(G, /const CLUBS = \{[\s\S]*?\n\};/);
 check(!!LEAGUE_CLUBS && !!CLUBS_SRC, "leagueClubs를 소스에서 찾았다");
+const CLUBS_IN = grab(G, /function clubsIn\(id, st\) \{[\s\S]*?\n\}/);
 const clubsOf = new Function("st", `${CLUBS_SRC}\n${parts.leagues}\n`
-  + grab(G, /function leagueOf\(st\) \{[\s\S]*?\n\}/) + `\n${LEAGUE_CLUBS}\n return leagueClubs(st);`);
+  + grab(G, /function leagueOf\(st\) \{[\s\S]*?\n\}/) + `\n${CLUBS_IN}\n${LEAGUE_CLUBS}\n return leagueClubs(st);`);
 const MY = clubsOf({ league: 1 })[0];
 const names = clubsOf({ league: 1, group: MY });
 check(names.includes(MY), `내 클럽 "${MY}"이 목록에 들어 있다`);
