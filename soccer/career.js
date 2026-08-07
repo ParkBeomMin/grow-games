@@ -423,6 +423,24 @@ window.WingerCareer = (() => {
    * K리그3에서 K리그1까지 최소 6시즌이 걸려, 개인 이적 사다리(PROMOTE_HYPE)가
    * 여전히 '빠른 길'로 남습니다. **강등에는 안 걸어요** — 위험은 바로 와야 무섭습니다.
    * (이 문장이 오래 주석에만 있었어요. 코드는 강등에도 걸고 있었습니다) */
+  /* 🏆 우승 상금 — **리그 격이 곱해져요.**
+   *
+   * 예전에는 리그 우승·승격에 상금이 아예 없었고(트로피만 남았어요), 컵 우승만
+   * 900만 정액이었어요. 그래서 K리그3 컵과 프리미어리그 컵이 같은 값이었습니다.
+   * 위로 갈수록 판이 커지는 게 이 게임의 사다리라, 상금도 같은 축을 타야 해요.
+   *
+   * 크기 기준: 한 시즌 총수입이 대략 3,000~5,000만이에요(경기 수당 + 결산 수입).
+   * 프리미어리그 우승 4,320만은 한 시즌치와 맞먹고, K리그3 승격 495만은
+   * 장비 한 티어 값에 못 미쳐요 — 위로 갈수록 값어치가 커지는 게 보입니다. */
+  const TITLE_PRIZE = 1800;   // 사다리 꼭대기에서 1위 (리그 우승)
+  const PROMO_PRIZE = 900;    // 승격 — 그 리그에서 1위를 했다는 뜻이에요
+  const CUP_PRIZE = 1500;     // 컵 우승
+  const CUP_ROUND_PRIZE = 90; // 컵 라운드마다 붙는 수당
+  const prizeOf = (base, lgId) => {
+    const lg = LEAGUES.find((l) => l.id === lgId);
+    return Math.round(base * (lg ? lg.prestige : 1));
+  };
+
   const PROMO_GAP = 8;                       // 2위와 벌려야 하는 승점 차
   const PROMO_SETTLE = 2;                    // 승격 뒤 머물러야 하는 시즌 수
 
@@ -493,7 +511,10 @@ window.WingerCareer = (() => {
       S.trophies = S.trophies || [];
       const title = `${S.proYear}시즌 ${leagueOf(S).name} 우승`;
       if (!S.trophies.includes(title)) S.trophies.push(title);
-      return { kind: "title", from: leagueOf(S).name, to: leagueOf(S).name, rank };
+      const prize = Math.round(prizeOf(TITLE_PRIZE, leagueOf(S).id) * traitMul(S, "money"));
+      S.money = (S.money || 0) + prize;
+      proLog(`🏆 ${leagueOf(S).name} 우승! 우승 상금 +${prize}만`);
+      return { kind: "title", from: leagueOf(S).name, to: leagueOf(S).name, rank, prize };
     }
 
     let to = null, kind = null;
@@ -524,7 +545,15 @@ window.WingerCareer = (() => {
     S.league = to;
     S.table = null;                          // 새 리그에서 표를 다시 만들어요
     S.leagueSince = S.proYear;               // 이 리그에 들어온 시즌 — 연속 승격을 막아요
-    return { kind, from, to: leagueOf(S).name, rank };
+    /* 승격은 **떠나는 리그에서 1위**를 했다는 뜻이라 그 리그 기준으로 줘요.
+     * 도착 리그 기준으로 주면 올라간 보상을 미리 당겨 받는 셈이 됩니다. */
+    let prize = 0;
+    if (kind === "up") {
+      prize = Math.round(prizeOf(PROMO_PRIZE, fromId) * traitMul(S, "money"));
+      S.money = (S.money || 0) + prize;
+      proLog(`🔺 ${from} 우승으로 승격! 우승 상금 +${prize}만`);
+    }
+    return { kind, from, to: leagueOf(S).name, rank, prize };
   }
 
   /* ---------- 🥇 개인 순위 (득점·도움·수비) ----------
@@ -1304,7 +1333,7 @@ window.WingerCareer = (() => {
     const label = rounds[S.cup.round];
     const pk = viaPk ? " (승부차기)" : "";
     if (!win) {
-      const money = 60 * (S.cup.round + 1);
+      const money = Math.round(prizeOf(CUP_ROUND_PRIZE * (S.cup.round + 1), S.league) * traitMul(S, "money"));
       S.money = (S.money || 0) + money;
       if (window.Stats) Stats.log("cup", { act: "out", y: S.proYear, round: label, pk: !!viaPk, name: S.cup.name });
       S.cup = null;
@@ -1325,7 +1354,8 @@ window.WingerCareer = (() => {
   }
 
   function cupWin(head, pk) {
-    const money = 900, fan = randInt(25, 45);
+    const money = Math.round(prizeOf(CUP_PRIZE, S.league) * traitMul(S, "money"));
+    const fan = randInt(25, 45);
     S.money = (S.money || 0) + money;
     S.fandom = Math.max(0, (S.fandom || 0) + fan);
     S.trophies = S.trophies || [];
@@ -1473,7 +1503,7 @@ window.WingerCareer = (() => {
      * S.moves에서 역산해 메워요 — 세이브는 고치지 않아요(클라우드 동기화와 부딪혀요). */
     // 평균 평점 — 골·도움만으로는 안 드러나는 '꾸준함'을 보여줘요
     const avgRating = apps ? Math.round(((act.ratingSum || 0) / apps) * 10) / 10 : null;
-    S.career.years.push({ y: S.proYear, hype: Math.round(hype * 10) / 10, wins, sales, dFan, awards, goals: gg, assists: ga, defense: gd, apps, avg: avgRating, club: S.group, league: leaguePlayed, rank: finalRank, teams: finalTeams, promo: move ? move.kind : null, promoTo: move ? move.to : null });
+    S.career.years.push({ y: S.proYear, hype: Math.round(hype * 10) / 10, wins, sales, dFan, awards, goals: gg, assists: ga, defense: gd, apps, avg: avgRating, club: S.group, league: leaguePlayed, rank: finalRank, teams: finalTeams, promo: move ? move.kind : null, promoTo: move ? move.to : null, prize: move && move.prize ? move.prize : 0 });
     /* 리그·나라·순위를 함께 남겨요. 나라별 리그를 11개 만들어 놓고 **어느 리그에서
      * 몇 시즌을 뛰는지** 데이터가 없었어요 — "새 리그가 실제로 쓰이나"를 물을 수가
      * 없었습니다. 지금은 시뮬레이션으로만 판단하고 있어요. */
@@ -1655,8 +1685,8 @@ window.WingerCareer = (() => {
       }</div>
       <div class="draft-team">${leagueOf({ league: y.league || S.league }).flag} ${y.club || S.group} · ${leagueOf({ league: y.league || S.league }).name} · 전력 ${clubStrOf(S)}${y.rank ? ` · 리그 <b>${y.rank}위</b>${y.teams ? `/${y.teams}팀` : ""}` : ""} · ${y.apps || 0}경기 ⚽${y.goals || 0}골 🅰️${y.assists || 0}도움 🛡️${y.defense || 0} · MOM ${y.wins}회${y.avg != null ? ` · 평균 평점 ${y.avg.toFixed(1)}` : ""}</div>
       ${y.promo ? `<div class="hint">${
-        y.promo === "title" ? `🏆 <b>${y.promoTo} 우승!</b> 리그 정상에 섰어요`
-        : y.promo === "up" ? `🔺 <b>리그 우승!</b> ${(y.y || 0) + 1}시즌부터 <b>${y.promoTo}</b>에서 뜁니다`
+        y.promo === "title" ? `🏆 <b>${y.promoTo} 우승!</b> 리그 정상에 섰어요${y.prize ? ` · 💰 우승 상금 +${y.prize}만` : ""}`
+        : y.promo === "up" ? `🔺 <b>리그 우승!</b> ${(y.y || 0) + 1}시즌부터 <b>${y.promoTo}</b>에서 뜁니다${y.prize ? ` · 💰 우승 상금 +${y.prize}만` : ""}`
         : `🔻 최하위로 강등… ${(y.y || 0) + 1}시즌부터 <b>${y.promoTo}</b>에서 다시 시작해요`}</div>` : ""}
       ${y.club && y.club !== S.group ? `<div class="hint">🔁 <b>${S.group}</b>로 이적했어요 — ${(y.y || 0) + 1}시즌부터 새 팀에서 뜁니다</div>` : ""}
       ${moveNote ? `<div class="hint learn">${moveNote}</div>` : ""}
