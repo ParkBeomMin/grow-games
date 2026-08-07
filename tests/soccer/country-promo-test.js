@@ -31,6 +31,19 @@ const parts = {
     /function clubsIn\(id, st\) \{[\s\S]*?\n\}/),
   clubStrOf: grab(fs.readFileSync("/workspace/grow-games/beta/soccer/game.js", "utf8"),
     /function clubStrOf\(st\) \{[\s\S]*?\n\}/),
+  /* 승격·우승에 상금이 붙어요 — 그 조각도 함께 떼어 와야 applyPromotion이 돌아갑니다. */
+  prizes: [
+    grab(SRC, /const TITLE_PRIZE = [^;]+;/),
+    grab(SRC, /const PROMO_PRIZE = [^;]+;/),
+    grab(SRC, /const CUP_PRIZE = [^;]+;/),
+    grab(SRC, /const CUP_ROUND_PRIZE = [^;]+;/),
+    grab(SRC, /const prizeOf = \(base, lgId\) => \{[\s\S]*?\n  \};/),
+  ].join("\n"),
+  traits: [
+    grab(fs.readFileSync("/workspace/grow-games/beta/soccer/game.js", "utf8"), /const COUNTRY_TRAIT = \{[\s\S]*?\n\};/),
+    grab(fs.readFileSync("/workspace/grow-games/beta/soccer/game.js", "utf8"), /function traitOf\(st\) \{[\s\S]*?\n\}/),
+    grab(fs.readFileSync("/workspace/grow-games/beta/soccer/game.js", "utf8"), /const traitMul = \(st, key\) => \{[\s\S]*?\n\};/),
+  ].join("\n"),
   leagues: grab(GAME, /const LEAGUES = \[[\s\S]*?\n\];/),
   clubs: grab(GAME, /const CLUBS = \{[\s\S]*?\n\};/),
 };
@@ -50,6 +63,8 @@ const PRE = (tiers, apply) => `${parts.leagues}
    ${parts.ladderOf}
    ${parts.gap}
    ${parts.settle}
+   ${parts.prizes}
+   ${parts.traits}
    ${parts.clubsIn}
    ${parts.clubStrOf}
    ${parts.roster}
@@ -69,6 +84,8 @@ const makeApply = () => new Function(
    ${parts.ladderOf}
    ${parts.gap}
    ${parts.settle}
+   ${parts.prizes}
+   ${parts.traits}
    ${parts.clubsIn}
    ${parts.clubStrOf}
    ${parts.roster}
@@ -212,6 +229,8 @@ const settleBackRun = new Function(
    ${parts.ladderOf}
    ${parts.gap}
    ${parts.settle}
+   ${parts.prizes}
+   ${parts.traits}
    ${parts.clubsIn}
    ${parts.clubStrOf}
    ${parts.roster}

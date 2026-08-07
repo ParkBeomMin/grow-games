@@ -84,8 +84,20 @@ const NM = (id) => (leagueById(id) || {}).name || `id ${id}`;
  * 나라별 리그가 붙으면서 id 2(🏴 잉글랜드 2부)가 여섯 칸 위로 밀렸다. 능력치 70이
  * 못 여는 게 당연해진 자리라, "실제로 열리는 사다리"는 tier로 찾는다. */
 const UP1 = LEAGUES.find((l) => l.tier === (leagueById(1) || {}).tier + 1) || leagueById(2);
-// 리그 목록에서 훑는다 — 하부 리그가 늘어도 여기를 다시 안 고치게.
-const clubByName = (n) => LEAGUES.flatMap((l) => CLUBS[l.id] || []).find((c) => c.name === n);
+/* 리그 목록에서 훑는다 — 하부 리그가 늘어도 여기를 다시 안 고치게.
+ *
+ * ⚠️ 승강이 일어나면 리그 명단이 세이브(S.world)로 옮겨 가요. 이적 카드는 그걸
+ * 보고 그리니, 여기서도 **같은 곳**을 봐야 합니다. CLUBS만 보면 자리를 바꾼 팀의
+ * 전력이 어긋나서, 화면은 맞는데 검사만 빨간불이 떠요. */
+const clubByName = (n) => {
+  const st = T.state ? T.state() : null;
+  const world = (st && st.world) || {};
+  for (const l of LEAGUES) {
+    const hit = (world[l.id] || CLUBS[l.id] || []).find((c) => c.name === n);
+    if (hit) return hit;
+  }
+  return LEAGUES.flatMap((l) => CLUBS[l.id] || []).find((c) => c.name === n);
+};
 
 // ---------- ① 데뷔 클럽은 기본 리그(K리그1) 하위 3개에서만 뽑힌다 ----------
 /* 지금까지는 K리그1 6개 중 무작위라 전력 52~78로 갈렸다. 첫 시즌 팀 성적이 운이고
