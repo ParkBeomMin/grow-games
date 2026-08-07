@@ -151,6 +151,36 @@
     </section>
 
     <!-- 엔딩 -->
+    <!-- 🔥 1년 특훈 — 프로 도전에 실패한 뒤 한 해를 더 쓰는 자리예요 -->
+    <section class="screen" id="screen-camp">
+      <header class="hud">
+        <div class="hud-id">
+          <div class="hud-left">
+            <div class="hud-name">🔥 1년 특훈</div>
+            <div class="hud-school" id="camp-left"></div>
+          </div>
+        </div>
+        <div class="hud-right">
+          <div class="hud-turn" id="camp-turn"></div>
+          <div class="hud-money" id="camp-cond"></div>
+        </div>
+      </header>
+      <div class="actions">
+        <p class="actions-title" id="camp-title"></p>
+        <div class="action-grid" id="camp-actions"></div>
+      </div>
+      <!-- 💪 노력 — 연타 -->
+      <div class="camp-tap" id="camp-tap" hidden>
+        <div class="ct-bar"><div class="ct-fill" id="camp-tap-bar"></div></div>
+        <button class="ct-btn" id="camp-tap-btn" type="button">
+          <span class="ct-emoji">👟</span>
+          <span class="ct-label">연타!</span>
+          <span class="ct-count" id="camp-tap-count">0</span>
+        </button>
+      </div>
+      <div class="log" id="camp-log"></div>
+    </section>
+
     <section class="screen" id="screen-ending">
       <h2>⚽ 프로 도전 최종 결과</h2>
       <div class="draft-card" id="ending-card"></div>
@@ -271,6 +301,7 @@
   <script src="../help.js"></script>
   <script src="game.js"></script>
   <script src="cup.js"></script>
+  <script src="camp.js"></script>
   <script src="career.js"></script>
 <script>if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");</script>
 </body>

@@ -123,6 +123,22 @@ const restBtn = (P) => Array.from(P.w.document.querySelectorAll("#action-list .a
 
 /* 육성 화면에서 휴식만 눌러 달을 넘기고, 유스 대회가 뜨면 끝까지 치른다.
  * 프로 도전(서바이벌) 화면에 닿으면 거기서 멈춘다 — 라운드 결과는 호출부가 정한다. */
+/* 🔥 특훈 화면을 여섯 회차 굴려 프로 재도전까지 간다.
+ * 회차마다 능력치 하나를 고르고 💪 노력을 누른다 (자동 미니게임이라 연타는 대신 굴러요). */
+function runCamp(P) {
+  const { w, $, active } = P;
+  for (let t = 0; t < 40 && active() === "screen-camp"; t++) {
+    const done = $("btn-camp-done");
+    if (done) { done.click(); return true; }
+    const stat = w.document.querySelector("#camp-actions .camp-stat");
+    if (stat) { stat.click(); continue; }
+    const effort = $("btn-camp-effort");
+    if (!effort) return false;
+    effort.click();
+  }
+  return active() !== "screen-camp";
+}
+
 function runYouthUntilSurvival(P) {
   const { w, $, active } = P;
   for (let g = 0; g < 4000; g++) {
@@ -180,9 +196,12 @@ guard("🌱 엔딩 도달", () => {
 
   // ── 검사 1: 버튼이 DOM에 실제로 있다
   const ext = P.$("btn-youth-ext");
-  check(!!ext, "엔딩 화면 DOM에 '한 시즌 더 뛰기' 버튼(#btn-youth-ext)이 있다");
-  check(!!ext && ext.textContent.includes("한 시즌 더"),
-    `버튼 문구가 '한 시즌 더 뛰기'다 (${ext ? ext.textContent : "없음"})`);
+  check(!!ext, "엔딩 화면 DOM에 연장 버튼(#btn-youth-ext)이 있다");
+  /* ⚠️ 문구가 '한 시즌 더 뛰기' → '🔥 1년 특훈 시작'으로 바뀌었어요.
+   * 예전 연장은 3년차를 통째로 다시 뛰게 했는데, 방금 한 걸 반복하는 거라
+   * 무엇을 바꿔야 하는지도 손에 안 잡혔습니다. 지금은 여섯 번의 선택이에요. */
+  check(!!ext && ext.textContent.includes("특훈"),
+    `버튼 문구가 '🔥 1년 특훈 시작'이다 (${ext ? ext.textContent : "없음"})`);
   check(!!ext && P.w.document.querySelector("#screen-ending .draft-actions").contains(ext),
     "버튼이 엔딩 화면의 선택지 영역 안에 붙어 있다");
 
@@ -198,16 +217,17 @@ guard("🌱 엔딩 도달", () => {
   snap = deep(P.state());
 });
 
-// ---------- ② 버튼을 누르면 3년차 1월, 능력치·명성은 그대로 ----------
-console.log("=== ② '한 시즌 더 뛰기'를 눌렀을 때 ===");
+// ---------- ② 버튼을 누르면 🔥 특훈 화면, 능력치·명성은 그대로 ----------
+console.log("=== ② '🔥 1년 특훈 시작'을 눌렀을 때 ===");
 guard("연장 실행", () => {
   if (!snap) throw new Error("① 단계가 실패해서 이어갈 수 없어요");
   P.$("btn-youth-ext").click();
 
   const S = P.state();
-  check(S.year === 3, `3년차로 되돌아간다 (${S.year}년차)`);
-  check(S.month === 1, `1월로 되돌아간다 (${S.month}월)`);
-  check(P.active() === "screen-main", `육성 화면으로 돌아간다 (${P.active()})`);
+  check(P.active() === "screen-camp", `🔥 특훈 화면으로 간다 (${P.active()})`);
+  check(S.campDone === true, "특훈을 시작했다는 표시가 선다");
+  /* 특훈은 **들어가는 순간에는** 아무것도 안 바꿔요 — 능력치를 움직이는 건
+   * 회차마다 고르는 노력/도박입니다. 아래 검사들이 그 출발선을 지켜요. */
 
   const same = Object.keys(snap.stats).filter((k) => S.stats[k] !== snap.stats[k]);
   check(same.length === 0,
@@ -225,8 +245,8 @@ guard("연장 실행", () => {
   const ids = Object.keys(slots);
   check(ids.length === 1, `저장 슬롯이 정확히 하나 남아 있다 (${ids.length}개)`);
   const saved = ids.length ? slots[ids[0]] : null;
-  check(!!saved && saved.year === 3 && saved.month === 1,
-    `디스크에 저장된 값도 3년차 1월이다 (${saved ? `${saved.year}년차 ${saved.month}월` : "없음"})`);
+  check(!!saved && saved.campDone === true,
+    `디스크에 저장된 값에도 특훈 표시가 남는다 (${saved ? saved.campDone : "없음"})`);
   check(!!saved && saved.youthExt === true, "저장된 상태에 연장 사용 표시(youthExt)가 남는다");
 });
 
@@ -239,7 +259,8 @@ guard("연장 실행", () => {
 console.log("=== ③ 연장한 시즌을 또 실패했을 때 ===");
 guard("두 번째 유스 재계약", () => {
   if (!snap) throw new Error("① 단계가 실패해서 이어갈 수 없어요");
-  check(runYouthUntilSurvival(P), "연장 시즌도 버튼 클릭만으로 프로 도전까지 간다");
+  /* 🔥 특훈은 유스 1년을 반복하지 않아요 — 여섯 회차를 마치면 곧바로 프로 재도전입니다. */
+  check(runCamp(P), "특훈 여섯 회차를 마치면 프로 재도전으로 이어진다");
   playSurvivalRound(P, true);
   playSurvivalRound(P, false);
   check(toEnding(P) === "screen-ending", `두 번째 엔딩 화면이 뜬다 (${P.active()})`);
@@ -294,18 +315,29 @@ const PROMISE_FORMS = [
 ];
 const CLOSING_END = /(었어요|았어요|였어요|했어요|네요|니까!?)[.!…]?$/;
 
+/* 그 엔딩 분기 안의 msg만 잘라 온다.
+ *
+ * ⚠️ 예전 추출기는 `msg\s*=\s*"…"`만 봤다. 📹 세미프로의 msg는 템플릿 리터럴로
+ * 시작해서 안 잡혔고, **다음 분기(🎒)의 문구를 대신 읽고** 있었다.
+ * 그런데도 초록이었다 — 🎒 문구가 마침 끝맺음 형태였기 때문이다.
+ * (그리고 📹는 이제 semiPro = true로 실제 프로로 이어져서, 앞을 보는 문구가 맞다.
+ *  정말 끝나는 엔딩은 🎒 하나뿐이고, 그것도 특훈을 다 썼을 때만이다.) */
 function endingMsg(emoji) {
   const at = SRC_GAME.indexOf(`emoji = "${emoji}"`);
   if (at < 0) return null;
-  const m = SRC_GAME.slice(at, at + 800).match(/msg\s*=\s*"([^"]*)"/);
-  return m ? m[1] : null;
+  const seg = SRC_GAME.slice(at, at + 900);
+  /* 분기의 끝에서 자른다. 🎒는 마지막 else라 뒤에 "} else"가 없으니
+   * 줄 시작의 닫는 중괄호를 경계로 쓴다 — 안 자르면 화면 HTML까지 읽는다. */
+  const end = seg.search(/\n  \}(?:\n| else)/);
+  const body = end > 0 ? seg.slice(0, end) : seg;
+  /* 마지막 문자열 조각을 가져온다 — 🎒는 `canExtend ? "…" : "…"` 꼴이라
+   * **끝나는 쪽(false 가지)**이 뒤에 온다. 거기가 진짜 끝맺음 문구다. */
+  const all = [...body.matchAll(/"([^"\n]{12,})"/g)].map((m) => m[1]);
+  return all.length ? all[all.length - 1] : null;
 }
 
-/* 여기서 보는 건 📹 세미프로 입단 하나뿐이다.
- * 📞 타 구단 스카우트는 이제 실제로 프로로 이어지므로 앞을 보는 문구가 **맞다**.
- * 그쪽 검증은 tests/soccer/scout-path-test.js가 맡는다. */
 console.log("=== ⑤ 끝맺음 엔딩의 문구 ===");
-for (const [emoji, name] of [["📹", "세미프로 입단"]]) {
+for (const [emoji, name] of [["🎒", "축구화를 잠시 벗다 (특훈까지 다 쓴 뒤)"]]) {
   const msg = endingMsg(emoji);
   check(!!msg, `${emoji} ${name}의 msg를 소스에서 뽑았다`);
   if (!msg) continue;

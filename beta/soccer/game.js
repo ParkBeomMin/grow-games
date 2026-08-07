@@ -1478,7 +1478,11 @@ const GRADE_INFO = {
   A: { pts: 22, txt: "🔥 인상적인 활약! 관중석이 들썩였어요." },
   B: { pts: 15, txt: "🙂 무난한 경기. 제 몫을 해냈어요." },
   C: { pts: 9, txt: "😬 아쉬운 장면이 몇 번 있었어요." },
-  D: { pts: -5, txt: "😢 부진한 경기… 전반에 교체되고 말았어요." },
+  /* ⚠️ D 문구에 "전반에 교체"라고 적혀 있었어요. 그런데 이 등급은 90분을 다 뛰고
+   * 78분 승부처 미니게임까지 치른 뒤에 나옵니다 — 중계는 종료 휘슬을 불었는데
+   * 문구만 전반에 나갔다고 하는, 화면끼리 어긋나는 자리였어요(제보).
+   * 등급 문구는 **경기 시간표를 건드리지 않는 말**로 둡니다. */
+  D: { pts: -5, txt: "😢 부진한 경기… 감독의 표정이 굳었어요." },
 };
 const makeGrade = (g) => ({ g, ...GRADE_INFO[g] });
 
@@ -2220,7 +2224,13 @@ function showEnding(survivedFinal, lastRound) {
   } else {
     emoji = "🎒"; title = "축구화를 잠시 벗다";
     teamLine = "평범한 일상으로 복귀";
-    msg = "꿈은 이루지 못했지만 3년의 땀은 사라지지 않아요. 공은 둥그니까!";
+    /* 🔥 여기에도 특훈을 열어요. 프로로 못 간 엔딩 중 **가장 아픈 자리**인데
+     * 예전에는 아무 손잡이도 없이 끝났습니다 — 그게 이탈 지점이에요.
+     * 특훈을 아직 안 썼으면 한 해를 더 쓸 수 있고, 그래서 세이브도 안 지웁니다. */
+    canExtend = !S.youthExt;
+    msg = canExtend
+      ? "1군 계약에는 닿지 못했어요. 하지만 아직 한 해가 남아 있어요 — 특훈으로 다시 도전할 수 있습니다."
+      : "꿈은 이루지 못했지만 3년의 땀은 사라지지 않아요. 공은 둥그니까!";
   }
 
   const statLines = STAT_DEFS
@@ -2291,13 +2301,18 @@ function renderYouthExtButton(canExtend) {
   const btn = document.createElement("button");
   btn.id = "btn-youth-ext";
   btn.className = "btn btn-primary";
-  btn.textContent = "🌱 한 시즌 더 뛰기";
-  btn.onclick = extendYouth;
+  btn.textContent = "🔥 1년 특훈 시작";
+  /* 🔥 특훈이 옛 "한 시즌 더 뛰기"를 대신해요. 예전에는 3년차를 통째로 다시
+   * 뛰게 했는데, 방금 한 걸 그대로 반복하는 거라 지루하고 무엇을 바꿔야 하는지도
+   * 손에 안 잡혔어요. 지금은 여섯 번의 선택(노력/도박)으로 그 1년을 씁니다.
+   * camp.js가 없는 옛 캐시라면 예전 연장으로 물러나요 — 버튼이 죽지 않게. */
+  btn.onclick = () => (window.WingerCamp ? WingerCamp.start() : extendYouth());
   actions.prepend(btn);
 }
 
 /* 능력치·명성·유스 기록은 그대로 두고 3년차 1월로만 되돌려요.
  * S.youthExt를 세워서 커리어당 한 번만 쓸 수 있게 막아요. */
+/* 옛 연장 경로 — camp.js를 못 읽은 경우의 대비책으로만 남겨 둬요. */
 function extendYouth() {
   if (S.youthExt) return;
   S.youthExt = true;

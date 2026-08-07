@@ -280,11 +280,13 @@ guard("연장 회귀", () => {
   runTo(Q, [true, false], null);   // 라운드 1 탈락 → 🌱 유스 재계약
   check(Q.$("ending-card").textContent.includes("유스 재계약"), "🌱 유스 재계약 엔딩에 닿는다");
   const ext = Q.$("btn-youth-ext");
-  check(!!ext, "'🌱 한 시즌 더 뛰기' 버튼이 그대로 있다");
+  check(!!ext, "'🔥 1년 특훈 시작' 버튼이 그대로 있다");
   ext.click();
   const S = Q.state();
-  check(S.year === 3 && S.month === 1, `누르면 3년차 1월로 돌아간다 (${S.year}년차 ${S.month}월)`);
-  check(Q.active() === "screen-main", `육성 화면으로 돌아간다 (${Q.active()})`);
+  /* ⚠️ 예전에는 3년차 1월로 되돌려 유스 1년을 통째로 반복했어요. 지금은 🔥 특훈
+   * 화면으로 갑니다 — 여섯 번의 선택(노력/도박)이 그 1년을 대신해요. */
+  check(S.youthExt === true, "누르면 연장을 썼다고 표시된다 (커리어당 한 번)");
+  check(Q.active() === "screen-camp", `🔥 특훈 화면으로 간다 (${Q.active()})`);
   check(S.youthExt === true, "연장 사용 표시(youthExt)가 남는다");
   Q.dom.window.close();
 });
