@@ -185,9 +185,9 @@ const HTMLFN = grab(C, /function raceHTML\(\) \{[\s\S]*?\n  \}/);
 const TABS = grab(C, /const RACE_TABS = \[[\s\S]*?\n  \];/);
 /* ⚠️ `\[[^\]]*\]`로 자르면 안 돼요 — 중첩 배열이라 **첫 `["g", "⚽"]`의 닫는 괄호**에서
  * 끊깁니다. 이 저장소에서 `[^;]+;`로 화살표 함수 본문을 자르다 겪은 것과 같은 자리예요. */
-const COLS = grab(C, /const RACE_COLS = \[\[[\s\S]*?\]\];/);
+
 const VALUE = grab(C, /const raceValue = \(r, k\) =>[\s\S]*?: r\[k\] \|\| 0;/);
-check(!!HTMLFN && !!TABS && !!COLS && !!VALUE, "탭·표 렌더 조각을 소스에서 찾았다");
+check(!!HTMLFN && !!TABS && !!VALUE, "탭·표 렌더 조각을 소스에서 찾았다");
 
 /* 명단은 부문마다 1등이 다르도록 일부러 어긋나게 짠다. */
 const RACE_FIX = [
@@ -199,9 +199,10 @@ const RACE_FIX = [
 ];
 const mkHTML = new Function(
   "S", "key", "$",
-  `${COLS}
-   ${TABS}
+  `${TABS}
    let raceKey = key;
+   const raceTab = (k) => RACE_TABS.find(([x]) => x === k) || RACE_TABS[4];
+   const raceUnit = (k) => raceTab(k)[2];
    const raceValue = ${VALUE.replace(/^const raceValue = /, "")}
    ${parts.rank}
    ${HTMLFN}
@@ -225,10 +226,23 @@ check(pTop === "득점왕", `공격P 탭은 골+도움으로 잰다 (득점왕 3
 const gHTML = mkHTML(FIX_S, "g", () => null);
 check(/class="race-tab on" data-k="g"/.test(gHTML), "고른 탭에 on 표시가 붙는다");
 check(/data-k="a"/.test(gHTML) && /data-k="m"/.test(gHTML), "다른 부문 탭도 함께 그려진다");
-// 탭을 바꿔도 다른 기록은 안 사라진다 — 한 표에 담는 이유예요
-check(RACE_COLS_ALL().every((k) => new RegExp(`<th[^>]*>${k}`).test(gHTML)),
-  "어느 탭이든 ⚽🅰️🛡️⭐🏅 칸이 다 보인다");
-function RACE_COLS_ALL() { return ["⚽", "🅰️", "🛡️", "⭐", "🏅"]; }
+/* 탭 하나에 숫자 하나 — 다섯 칸을 다 띄우면 탭을 만든 이유가 없어지고
+ * 폰에서는 7칸이 들어가느라 글자만 작아져요. */
+const cells = (html) => (html.match(/<tbody>[\s\S]*?<\/tbody>/)[0]
+  .match(/<tr[^>]*>[\s\S]*?<\/tr>/)[0].match(/<td/g) || []).length;
+check(cells(gHTML) === 3, `한 줄이 순위·선수·숫자 세 칸이다 (${cells(gHTML)}칸)`);
+// ⚠️ /<th/g는 `<thead`에도 걸려요 — 닫는 태그로 셉니다
+const heads = (html) => (html.match(/<thead>[\s\S]*?<\/thead>/)[0].match(/<\/th>/g) || []).length;
+check(heads(gHTML) === 3, `머리글도 세 칸이다 (${heads(gHTML)}칸)`);
+// 머리글이 그 부문 단위를 말한다
+const unitOf = (html) => (html.match(/<th>([^<]*)<\/th><\/tr>/) || [])[1];
+check(unitOf(gHTML) === "골", `⚽ 탭의 머리글이 "골"이다 (${unitOf(gHTML)})`);
+check(unitOf(mkHTML(FIX_S, "r", () => null)) === "평균 평점",
+  `⭐ 탭의 머리글이 "평균 평점"이다 (${unitOf(mkHTML(FIX_S, "r", () => null))})`);
+// 👑은 지금 보고 있는 부문의 1위에만 붙는다
+// 안내 문구에도 👑이 있어서 표 안(tbody)에서만 센다
+const crowns = (html) => ((html.match(/<tbody>[\s\S]*?<\/tbody>/) || [""])[0].match(/👑/g) || []).length;
+check(crowns(gHTML) === 1, `👑이 그 부문 1위 한 명에게만 붙는다 (${crowns(gHTML)}개)`);
 
 // 배선 — 탭 클릭이 다시 그리는 함수를 부른다
 const RENDER_RACE = grab(C, /function renderRace\(\) \{[\s\S]*?\n  \}/);

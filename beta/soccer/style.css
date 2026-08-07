@@ -295,9 +295,11 @@ body {
 
 /* 🥇 개인 순위 — 득점·도움·수비·평점·MOM을 한 표에 */
 .race-title { font-size: .82rem; color: var(--accent); margin-bottom: 4px; }
-.race-table { font-size: .78rem; }
-.race-table th, .race-table td { padding: .2rem .18rem; }
-.race-table td:first-child, .race-table th:first-child { width: 1.4rem; }
+.race-table { font-size: .82rem; }
+.race-table th, .race-table td { padding: .24rem .28rem; }
+.race-table td:first-child, .race-table th:first-child { width: 1.5rem; }
+/* 숫자 칸 — 한 부문만 보여주니 폭을 줄이고 이름·소속에 자리를 넘겨요 */
+.race-table .rc-v, .race-table th:last-child { width: 4.2rem; text-align: right; white-space: nowrap; }
 .race-table .ch-club { display: block; font-size: .68rem; color: var(--dim); }
 .race-note { font-size: .72rem; color: var(--dim); margin-top: .3rem; }
 /* 부문 탭 — 정렬만 바꿔요. 좁은 화면에서는 가로로 넘겨서 봐요 */
@@ -311,6 +313,6 @@ body {
   background: var(--bg2); border: 1px solid var(--line); color: var(--dim);
 }
 .race-tab.on { background: var(--field); border-color: var(--accent); color: var(--accent); font-weight: 700; }
-/* 지금 줄 세운 칸을 표에서도 짚어 줘요 — 어느 기준으로 정렬됐는지 보이게 */
-.race-table th.rc-on { color: var(--accent); }
-.race-table td.rc-on { color: var(--text); font-weight: 700; }
+/* 그 부문 숫자 — 표에서 제일 먼저 읽혀야 하는 값이에요 */
+.race-table th:last-child { color: var(--accent); }
+.race-table td.rc-v { color: var(--text); font-weight: 700; }

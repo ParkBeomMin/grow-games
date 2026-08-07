@@ -575,21 +575,25 @@ window.WingerCareer = (() => {
   // 내가 그 부문 1위인가 — 부문상 판정이 이걸 봐요
   const raceTop = (key) => { const r = raceRank(key)[0]; return !!(r && r.me); };
 
-  /* 🥇 개인 순위표 — 한 표에 다 담고, 탭으로 정렬을 바꿔요.
+  /* 🥇 개인 순위표 — 부문 탭 하나에 그 부문 숫자 하나.
    *
-   * 예전에는 득점·도움 두 표로 나눠 그렸는데, 칸이 늘어날수록(수비·평점·MOM)
-   * 같은 명단을 다섯 번 그리게 돼요. 실제 리그 기록실처럼 한 표에 늘어놓고
-   * **탭으로 줄을 세웁니다** — 탭을 눌러도 다른 기록은 그대로 보여요.
-   * 각 부문 1위에는 👑이 붙어요. 그게 곧 부문상 수상자예요. */
-  const RACE_COLS = [["g", "⚽"], ["a", "🅰️"], ["d", "🛡️"], ["r", "⭐"], ["m", "🏅"]];
+   * 처음엔 한 표에 다섯 칸(⚽🅰️🛡️⭐🏅)을 다 띄우고 탭으로 정렬만 바꿨어요.
+   * 그런데 그러면 **탭을 만든 이유가 없어져요** — 한 번에 하나를 묻는 장치인데
+   * 답이 다섯 개씩 딸려 나오고, 폰에서는 7칸이 들어가느라 글자만 작아집니다.
+   * 지금은 고른 부문 숫자 하나만 보여주고 그 폭을 이름·소속에 줘요.
+   * 다른 기록이 궁금하면 탭을 누르면 돼요.
+   *
+   * 1위에 붙는 👑은 그 부문 수상자예요 — 부문상 판정이 이 표의 1위를 봅니다. */
   const RACE_TABS = [
-    ["g", "⚽ 득점"], ["a", "🅰️ 도움"], ["d", "🛡️ 수비"],
-    ["p", "🎯 공격P"], ["r", "⭐ 평점"], ["m", "🏅 MOM"],
+    ["g", "⚽ 득점", "골"], ["a", "🅰️ 도움", "도움"], ["d", "🛡️ 수비", "수비"],
+    ["p", "🎯 공격P", "공격P"], ["r", "⭐ 평점", "평균 평점"], ["m", "🏅 MOM", "MOM"],
   ];
   /* 고른 탭은 세이브에 안 넣어요 — 화면 상태일 뿐이고, 세이브에 새 칸을 늘리면
    * 클라우드 동기화까지 건드리게 됩니다. 앱을 다시 열면 ⭐ 평점으로 돌아와요. */
   let raceKey = "r";
-  const raceLabel = (k) => (RACE_TABS.find(([x]) => x === k) || RACE_TABS[4])[1];
+  const raceTab = (k) => RACE_TABS.find(([x]) => x === k) || RACE_TABS[4];
+  const raceLabel = (k) => raceTab(k)[1];
+  const raceUnit = (k) => raceTab(k)[2];
   const raceValue = (r, k) => k === "r" ? (r.avg || 0).toFixed(2)
     : k === "m" ? (r.m != null ? r.m : r.mom || 0)
     : k === "p" ? (r.g || 0) + (r.a || 0)
@@ -598,28 +602,21 @@ window.WingerCareer = (() => {
   function raceHTML() {
     const ranked = raceRank(raceKey);
     if (!ranked.length) return "";
-    // 부문별 1위를 미리 찾아 둬요 (동점이면 내 줄이 앞이라 나에게 붙어요)
-    const leader = {};
-    for (const [k] of RACE_COLS) { const t = raceRank(k)[0]; leader[k] = t && t.v > 0 ? t.name : null; }
-    const cell = (r, k) => `<td class="${k === raceKey ? "rc-on" : ""}">`
-      + `${leader[k] === r.name ? "👑" : ""}${raceValue(r, k)}</td>`;
     const line = (r, i) => `<tr class="${r.me ? "me" : ""}"><td>${i + 1}</td>`
       + `<td>${r.name}<span class="ch-club">${r.club || "-"}${r.role ? ` · ${r.role}` : ""}</span></td>`
-      + RACE_COLS.map(([k]) => cell(r, k)).join("") + `</tr>`;
+      + `<td class="rc-v">${i === 0 ? "👑" : ""}${raceValue(r, raceKey)}</td></tr>`;
     const myIdx = ranked.findIndex((x) => x.me);
     const shown = ranked.slice(0, 5);
     const pinned = myIdx >= 5
-      ? `<tr class="hof-gap-row"><td colspan="${RACE_COLS.length + 2}">⋯</td></tr>` + line(ranked[myIdx], myIdx)
+      ? `<tr class="hof-gap-row"><td colspan="3">⋯</td></tr>` + line(ranked[myIdx], myIdx)
       : "";
     const tabs = RACE_TABS.map(([k, label]) =>
       `<button type="button" class="race-tab${k === raceKey ? " on" : ""}" data-k="${k}">${label}</button>`).join("");
     return `<div class="race-tabs">${tabs}</div>`
       + `<table class="rank-table season-standings race-table">`
-      + `<thead><tr><th>#</th><th>선수</th>`
-      + RACE_COLS.map(([k, l]) => `<th class="${k === raceKey ? "rc-on" : ""}">${l}</th>`).join("")
-      + `</tr></thead>`
+      + `<thead><tr><th>#</th><th>선수</th><th>${raceUnit(raceKey)}</th></tr></thead>`
       + `<tbody>${shown.map(line).join("")}${pinned}</tbody></table>`
-      + `<div class="race-note">👑 부문 1위(수상자) · ⭐ 평균 평점 · 🏅 MOM 횟수</div>`;
+      + `<div class="race-note">👑 이 부문 1위 — 시즌이 끝나면 부문상을 받아요</div>`;
   }
 
   /* 표를 그리고 탭을 배선해요. 탭을 누르면 정렬만 바꿔 다시 그립니다 —
