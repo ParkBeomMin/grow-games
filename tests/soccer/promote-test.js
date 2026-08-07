@@ -62,7 +62,17 @@ const LEAGUES = T.LEAGUES;
 const CLUBS = T.CLUBS;
 const BY_TIER = LEAGUES.slice().sort((a, b) => a.tier - b.tier);
 const leagueById = (id) => LEAGUES.find((l) => l.id === id);
-const clubByName = (n) => LEAGUES.flatMap((l) => CLUBS[l.id] || []).find((c) => c.name === n);
+/* ⚠️ CLUBS가 아니라 **세이브의 세계(S.world)**에서 찾아요.
+ * 승격·강등이 일어나면 내 클럽이 상대 리그의 자리를 물려받으면서 전력도 그 자리
+ * 값으로 바뀌어요(applyPromotion → swapLeagues). 그때부터 CLUBS는 그 클럽에
+ * 대해 낡은 값입니다 — 이적 카드도 moveToClub도 전부 world를 보는데 검사만
+ * CLUBS를 봐서, 여섯 번에 한 번쯤 "전력이 1 다르다"로 빨간불이 떴어요.
+ * (같은 병을 tests/soccer/transfer-test.js에서도 한 번 고쳤습니다.) */
+const clubByName = (n) => {
+  const w = (T.state() || {}).world || {};
+  return LEAGUES.flatMap((l) => (Array.isArray(w[l.id]) && w[l.id].length ? w[l.id] : (CLUBS[l.id] || [])))
+    .find((c) => c.name === n);
+};
 /* ⚠️ 자리(BY_TIER[n])로 잡지 않는다. 나라별 리그로 늘면서 tier 자리가 밀려
  * BY_TIER[3]이 유로파에서 🇯🇵 일본 2부가 됐고, 이 파일의 절반이 엉뚱한 리그를 봤다.
  * id는 옛 세이브가 가리키는 값이라 안 움직인다 — 그걸 기준으로 잡는다.

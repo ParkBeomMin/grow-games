@@ -43,7 +43,12 @@ const GAME = fs.readFileSync(path.join(DIR, "game.js"), "utf8");
 // ---------- 산식 추출 ----------
 const parts = {
   titles: grab(GAME, /const PLAYER_TITLES = \[[\s\S]*?\n\];/),
-  titleOf: grab(GAME, /const titleOf = \(power\) =>[\s\S]*?;\n/),
+  titleTop: grab(GAME, /const TITLE_TOP = [^;]+;/),
+  titleIdx: grab(GAME, /function titleIdx\(power\) \{[\s\S]*?\n\}/),
+  titleAt: grab(GAME, /const titleAt = \(idx\) =>[^;]+;/),
+  titleOf: grab(GAME, /const titleOf = \(power\) =>[^;]+;/),
+  payStep: grab(GAME, /const TITLE_PAY_STEP = [^;]+;/),
+  payMul: grab(GAME, /const titlePayMul = \(idx\) =>[^;]+;/),
   raceStr: grab(GAME, /const raceStr = \(pop, prestige\) =>[^;]+;/),
   leagues: grab(GAME, /const LEAGUES = \[[\s\S]*?\n\];/),
   scoreW: grab(SRC, /const SCORE_W = \{[\s\S]*?\n {2}\};/),
@@ -54,12 +59,15 @@ const parts = {
 const missing = Object.entries(parts).filter(([, v]) => !v).map(([k]) => k);
 if (missing.length) { console.log(`❌ 소스에서 못 찾았어요: ${missing.join(", ")}`); process.exit(1); }
 
-const TITLE = new Function(
-  `${parts.titles}\n${parts.titleOf}\n${parts.raceStr}\n${parts.leagues}
-   return { PLAYER_TITLES, titleOf, raceStr, LEAGUES };`)();
-const { titleOf, raceStr, PLAYER_TITLES, LEAGUES } = TITLE;
+const TITLE = new Function("clamp",
+  `${parts.titles}\n${parts.titleTop}\n${parts.titleIdx}\n${parts.titleAt}\n${parts.titleOf}
+   ${parts.payStep}\n${parts.payMul}\n${parts.raceStr}\n${parts.leagues}
+   return { PLAYER_TITLES, TITLE_TOP, titleIdx, titleAt, titleOf, titlePayMul, TITLE_PAY_STEP, raceStr, LEAGUES };`
+)((v, a, b) => Math.min(b, Math.max(a, v)));
+const { titleOf, titleIdx, titleAt, titlePayMul, TITLE_TOP, raceStr, PLAYER_TITLES, LEAGUES } = TITLE;
 const leagueById = (id) => LEAGUES.find((l) => l.id === id);
-const tierOf = (t) => PLAYER_TITLES.length - 1 - PLAYER_TITLES.findIndex(([, name]) => name === t);
+// 칭호 이름 → 단계 번호. 이름을 바꿔도 따라오도록 표에서 찾아요.
+const tierOf = (t) => titleIdx(PLAYER_TITLES.find(([, n]) => n === t)[0]);
 
 const scoreFn = new Function("S", "transTotal", `${parts.leagues}
   const leagueOf = (st) => LEAGUES.find((l) => l.id === ((st && st.league) || 1)) || LEAGUES[0];
@@ -80,6 +88,32 @@ guard("① 단조성", () => {
     `칭호 이름이 서로 다르다 (${PLAYER_TITLES.length}단계)`);
   check(titleOf(0) === PLAYER_TITLES[PLAYER_TITLES.length - 1][1],
     "실력 0이면 가장 낮은 칭호다 (구멍 없이 항상 하나가 나온다)");
+  check(PLAYER_TITLES.length >= 10, `단계가 10개 이상이다 (${PLAYER_TITLES.length}단계)`);
+  const names = PLAYER_TITLES.map(([, n]) => n).join(" ");
+  check(/국가대표/.test(names), `국가대표 칭호가 있다 (${names.match(/[^ ]*국가대표[^ ]*/g) || []})`);
+  // 번호는 낮은 칭호가 0, 가장 높은 칭호가 마지막이어야 해요 — 수당 배수가 이걸 씁니다
+  check(titleIdx(0) === 0 && titleIdx(9999) === TITLE_TOP,
+    `번호가 아래 0 → 위 ${TITLE_TOP}로 매겨진다 (${titleIdx(0)} … ${titleIdx(9999)})`);
+  check(PLAYER_TITLES.every((_, i) => titleAt(i) === PLAYER_TITLES[TITLE_TOP - i][1]),
+    "번호로 되찾은 칭호가 표와 일치한다");
+});
+
+/* ---------- ①-2 효과(경기 수당) ----------
+ * 칭호에 능력치 배수를 걸면 종합을 두 번 세는 셈이라(골·평점·수상·명성이 이미
+ * 종합으로 굴러가요) 여태 고정이던 경기 수당에 걸었다. 그 약속을 지킨다. */
+guard("①-2 수당 배수", () => {
+  const muls = Array.from({ length: TITLE_TOP + 1 }, (_, i) => titlePayMul(i));
+  console.log(`   수당 배수 — ${muls.map((m) => m.toFixed(2)).join(" ")}`);
+  check(muls[0] === 1, `가장 낮은 칭호의 수당 배수가 1.00이다 (${muls[0]}) — 초반 살림을 깎지 않아요`);
+  check(muls.every((m, i) => i === 0 || m > muls[i - 1]), "칭호가 오를수록 수당 배수가 커진다");
+  check(muls[TITLE_TOP] >= 2 && muls[TITLE_TOP] <= 5,
+    `최고 칭호의 배수가 2~5배 사이다 (${muls[TITLE_TOP].toFixed(2)})`);
+  check(titlePayMul(-5) === muls[0] && titlePayMul(999) === muls[TITLE_TOP],
+    "범위 밖 번호를 줘도 배수가 튀지 않는다");
+  // 한 시즌(38경기 · MOM 20회) 수당이 실제로 얼마나 벌어지나
+  const season = (i) => Math.round((38 * 30 + 20 * 100) * titlePayMul(i));
+  console.log(`   한 시즌 수당 — 🪑 ${season(0)}만 · 🌟 ${season(6)}만 · 최고 ${season(TITLE_TOP)}만`);
+  check(season(TITLE_TOP) > season(0) * 2, `최고 칭호의 시즌 수당이 바닥의 두 배를 넘는다 (${season(0)} → ${season(TITLE_TOP)})`);
 });
 
 // ---------- ② 경쟁자 눈금이 리그 격을 탄다 ----------
@@ -110,6 +144,13 @@ guard("③ 실측 대조", () => {
     if (err > worst) { worst = err; worstName = leagueById(id).name; }
   }
   check(worst <= 12, `경쟁자 눈금이 실측과 맞는다 (최대 오차 ${worst.toFixed(1)} · ${worstName})`);
+  /* 문턱을 이 실측 위에 얹었으니, 리그 중간 선수의 칭호가 리그 순서를 따라야 한다.
+   * 여기가 어긋나면 "K리그3 중간이 월드클래스" 같은 화면이 나온다. */
+  const mid = [5, 1, 2, 3].map((id) => ({ n: leagueById(id).name, t: titleOf(raceStr(70, leagueById(id).prestige)) }));
+  console.log(`   리그 중간 선수 — ${mid.map((m) => `${m.n} ${m.t}`).join(" · ")}`);
+  const idxs = mid.map((m) => tierOf(m.t));
+  check(idxs.every((v, i) => i === 0 || v > idxs[i - 1]),
+    `리그가 높을수록 중간 선수의 칭호가 높다 (${mid.map((m) => m.t).join(" < ")})`);
 });
 
 // ---------- ⑥ 칭호와 등급은 다른 축이다 ----------
@@ -247,6 +288,61 @@ guard("④⑤ 화면 표시", () => {
   check(rows.every((t) => PLAYER_TITLES.some(([, n]) => n === t)),
     "표에 찍힌 칭호가 전부 정의된 칭호다 — 빈 칸이나 undefined가 아니에요");
   check(!/undefined|NaN/.test(body), "표에 undefined·NaN이 없다");
+});
+
+/* ---------- ⑨ 획득과 효과가 화면에 드러나는가 ----------
+ * 칭호만 띄우고 끝내면 "그래서 뭐가 좋은데"가 남는다. 올라선 순간을 알려주고,
+ * 효과(수당 배수)를 돈 줄에 붙인다. 옛 세이브가 이어하기만 했는데 "승급!"이
+ * 뜨면 안 된다는 것도 여기서 지킨다. */
+guard("⑨ 승급과 효과", () => {
+  const S = Career._t.state();
+  const setOvr = (v) => { for (const k of Object.keys(S.stats)) S.stats[k] = v; };
+  const logs = () => ($("pro-log") ? $("pro-log").textContent.replace(/\s+/g, " ") : "");
+  const money = () => $("pro-money").textContent;
+
+  // 옛 세이브 — 칭호 번호가 없는 상태에서 처음 그릴 때는 조용해야 해요
+  delete S.titleIdx;
+  S.proLog = [];
+  setOvr(30);
+  Career.refreshPro();
+  check(!/칭호 승급/.test(logs()), `옛 세이브를 이어하기만 하면 승급 알림이 안 뜬다 ("${logs().slice(0, 40)}")`);
+  check(S.titleIdx === 0, `대신 지금 칭호로 조용히 맞춰 둔다 (${titleAt(S.titleIdx)})`);
+  check(!/수당 ×/.test(money()),
+    `배수가 ×1.00인 칭호에서는 수당 줄을 안 띄운다 ("${money()}") — 아무 일도 안 하는 숫자로 화면을 채우지 않아요`);
+
+  // 능력치를 올리면 승급 — 로그 · 명성 · 수당 배수
+  const beforeFan = S.fandom, beforeIdx = S.titleIdx;
+  setOvr(110);
+  Career.refreshPro();
+  const up = logs();
+  console.log(`=== ⑨ 승급 로그 — "${up.slice(0, 70)}" · ${money()} ===`);
+  check(S.titleIdx > beforeIdx, `능력치를 올리면 칭호가 올라간다 (${titleAt(beforeIdx)} → ${titleAt(S.titleIdx)})`);
+  check(/칭호 승급/.test(up), "올라선 순간을 알려준다");
+  check(up.includes(titleAt(S.titleIdx)), "그 알림에 새 칭호 이름이 있다");
+  check(S.fandom > beforeFan, `승급하면 명성이 붙는다 (${Math.round(beforeFan)} → ${Math.round(S.fandom)})`);
+  const mul = titlePayMul(S.titleIdx);
+  check(money().includes(`수당 ×${mul.toFixed(2)}`),
+    `돈 줄에 수당 배수가 붙는다 (×${mul.toFixed(2)} · "${money()}")`);
+  check(mul > 1, `그 배수가 1보다 크다 (×${mul.toFixed(2)}) — 칭호가 실제로 돈이 돼요`);
+
+  // 두 번 그려도 같은 알림이 또 뜨지 않아요
+  S.proLog = [];
+  Career.refreshPro();
+  check(!/칭호 승급/.test(logs()), "같은 칭호로 다시 그려도 알림이 두 번 뜨지 않는다");
+
+  // 노쇠 — 내려갈 때는 알려주되 명성을 깎지 않아요
+  const fanAtTop = S.fandom;
+  S.proLog = [];
+  setOvr(45);
+  Career.refreshPro();
+  const down = logs();
+  console.log(`=== ⑨ 강등 로그 — "${down.slice(0, 70)}" ===`);
+  check(/기량이 떨어졌어요/.test(down), "기량이 떨어지면 내려왔다고 알려준다");
+  check(S.fandom === fanAtTop, `내려갈 때 명성을 깎지 않는다 (${Math.round(fanAtTop)} → ${Math.round(S.fandom)})`);
+
+  // 커리어 최고 칭호는 남아요 — 은퇴식이 이걸 씁니다
+  check(S.career.bestTitle > S.titleIdx,
+    `커리어 최고 칭호가 따로 남는다 (최고 ${titleAt(S.career.bestTitle)} · 지금 ${titleAt(S.titleIdx)})`);
 });
 
 console.log(fail ? `\n❌ ${fail}건 실패` : "\n✅ 통과");

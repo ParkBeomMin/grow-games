@@ -824,7 +824,35 @@ window.WingerCareer = (() => {
     show("screen-pro");
   }
 
+  /* 🏷️ 칭호 승급·강등 — 종합은 훈련·장비·각성·노쇠 어디서든 움직여요. 자리마다
+   * 검사를 심으면 하나를 빠뜨리는 순간 "올랐는데 아무 말도 없는" 칭호가 됩니다.
+   * 그려질 때 한 번만 봐요.
+   *
+   * ⚠️ 옛 세이브에는 S.titleIdx가 없어요. 마이그레이션하지 않고, 처음 볼 때
+   * 조용히 지금 칭호로 맞춰 둡니다 — 안 그러면 이어하기만 했는데 "승급!"이 떠요. */
+  function checkTitle() {
+    const idx = titleIdx(overall());
+    const had = S.titleIdx;
+    S.titleIdx = idx;
+    S.career = S.career || {};
+    if (S.career.bestTitle == null || idx > S.career.bestTitle) S.career.bestTitle = idx;
+    if (had == null || idx === had) return;
+    if (idx > had) {
+      /* 승급 명성 보너스 — 위 칭호일수록 세상이 더 크게 알아봐요.
+       * 한 번뿐이라(같은 칭호로 두 번 못 올라와요) 명성 곡선을 흔들지 않아요. */
+      const fan = 25 * idx;
+      S.fandom = Math.max(0, (S.fandom || 0) + fan);
+      proLog(`🏷️ 칭호 승급 — ${titleAt(idx)}! 명성 +${fan} · 수당 ×${titlePayMul(idx).toFixed(2)}`);
+      if (window.Fx) Fx.celebrate("award", `🏷️ ${titleAt(idx)}!`);
+    } else {
+      // 내려갈 때는 명성을 깎지 않아요 — 이미 노쇠 벌점이 따로 걸려 있어요
+      proLog(`🕯️ 기량이 떨어졌어요 — ${titleAt(idx)} · 수당 ×${titlePayMul(idx).toFixed(2)}`);
+    }
+    save();
+  }
+
   function renderPrep() {
+    checkTitle();
     $("pro-name").textContent = `${S.name} (${POS_INFO[S.pos].name})`;
     // 리그 이름을 함께 보여줘요 — 승격·강등하면 여기가 바뀌는 게 제일 먼저 눈에 띄어야 해요
     $("pro-team").textContent =
@@ -836,7 +864,12 @@ window.WingerCareer = (() => {
     $("pro-turn").textContent = S.activity
       ? `${cbLabel(S.activity.cb)} · R${S.activity.week}/${S.activity.weekTotal} · MOM ${S.activity.wins}회`
       : `시즌 준비 ${3 - S.camp}/3`;
-    $("pro-money").textContent = `💰 ${fmtMoney(S.money || 0)}`;
+    /* 칭호의 효과를 돈 줄에 붙여요 — 칭호만 띄우면 "그래서 뭐가 좋은데"가 남아요.
+     * ×1.00(🪑 벤치 자원)일 때는 안 붙여요. 아무 일도 안 하는 배수를 늘 띄우면
+     * 화면만 시끄러워집니다. */
+    const payMul = titlePayMul(titleIdx(overall()));
+    $("pro-money").textContent = `💰 ${fmtMoney(S.money || 0)}`
+      + (payMul > 1 ? ` · 수당 ×${payMul.toFixed(2)}` : "");
   $("pro-cond-num").textContent = Math.round(S.condition);
     $("pro-cond-bar").style.width = `${S.condition}%`;
 
@@ -1119,6 +1152,10 @@ window.WingerCareer = (() => {
       dFan = randInt(-3, 3);
     }
     S.fandom = Math.max(0, (S.fandom || 0) + dFan);
+    /* 🏷️ 칭호가 곧 몸값이에요 — 수당은 여태 30만원 고정이라 실력과 아무 관계가
+     * 없던 자리였어요. 골·평점·수상·명성은 이미 종합이 굴리니 거기에 또 곱하면
+     * 같은 축을 두 번 세는 셈이라, 새 축인 돈에 걸었습니다. */
+    pay = Math.round(pay * titlePayMul(titleIdx(overall())));
     // 🌍 나라 특색 — 🇬🇧 잉글랜드는 돈이 도는 리그예요 (계약금에도 같은 배수가 붙어요)
     pay = Math.round(pay * traitMul(S, "money"));
     S.money = (S.money || 0) + pay;
@@ -2273,7 +2310,11 @@ window.WingerCareer = (() => {
       sv: SCORE_V,          // 점수 눈금 판 번호 — 없으면 옛 눈금으로 보고 환산해요
       teamSeasons: seasonsAtClub(S, S.group),
       trophies: (S.trophies || []).length,
-      title: titleOf(overall()),   // 그만둘 때의 실력 — 업적(grade)과는 다른 축이에요
+      /* 🏷️ 칭호는 두 개를 남겨요. 그만둘 때의 실력(title)과 커리어에서 가장 높이
+       * 올랐던 자리(bestTitle)예요. 노쇠하면 칭호가 내려가니 마지막 값만 남기면
+       * "전성기에 세계 최고였다"는 사실이 통째로 사라집니다. */
+      title: titleOf(overall()),
+      bestTitle: titleAt(c.bestTitle != null ? c.bestTitle : titleIdx(overall())),
       grade: gradeOfScore(score) + (transTotal() ? ` · ${transcendTitle(transTotal())}` : ""),
     };
     const hof = loadHof();
@@ -2299,7 +2340,7 @@ window.WingerCareer = (() => {
         ? `통산 <b>${entry.seasons}시즌</b>${entry.teamSeasons && entry.teamSeasons < entry.seasons
             ? ` · 마지막 ${entry.team}에서 ${entry.teamSeasons}시즌` : ` — ${entry.team} 원클럽맨`}`
         : "프로 무대 대신 다른 길을 택했어요."}</div>
-      <div class="hint">${entry.title} · 마지막 종합 ${entry.finalOvr}</div>
+      <div class="hint">🏷️ 최고 ${entry.bestTitle}${entry.bestTitle !== entry.title ? ` · 은퇴 시 ${entry.title}` : ""} · 마지막 종합 ${entry.finalOvr}</div>
       ${moves ? `<div class="hint move-log">🔁 이적 이력 — ${moves}</div>` : ""}
       <div class="draft-summary">
         통산 ${entry.apps}경기(유스 포함) ⚽ ${entry.goals}골 · 🅰️ ${entry.assists}도움<br/>
