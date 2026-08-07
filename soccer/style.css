@@ -244,10 +244,19 @@ body {
  * 칸을 나누면 폰 폭에서 헤더가 세로로 쪼개져요. 수상 칸만 유동 폭입니다. */
 .season-record { table-layout: fixed; }
 .season-record th, .season-record td { word-break: keep-all; }
-/* 폭 근거는 위 .season-soccer 주석과 같아요. 성적 칸은 112px 필요합니다. */
-.season-record th:nth-child(1), .season-record td:nth-child(1) { width: 44px; }
+/* 폭 근거는 위 .season-soccer 주석과 같아요. 성적 칸은 112px 필요합니다.
+ * 시즌 칸은 44 → 60px — 아래에 소속·리그를 작은 글씨로 붙였어요.
+ * ("3시즌 103골"이 어느 리그 기록인지 알 수가 없다는 제보) */
+.season-record th:nth-child(1), .season-record td:nth-child(1) { width: 60px; }
 .season-record th:nth-child(2), .season-record td:nth-child(2) { width: 112px; }
 .season-record .yr-stat { white-space: nowrap; }
+.season-record .rec-season { vertical-align: middle; line-height: 1.35; }
+/* 소속은 칸보다 길 수 있어서 넘치면 잘라요 (전체 이름은 title에 있어요) */
+.season-record .rec-club {
+  display: block; font-size: 0.66rem; color: var(--accent); opacity: .85;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.season-record .rec-lg { display: block; font-size: 0.62rem; opacity: .6; white-space: nowrap; }
 
 /* 🏆 리그 순위표 — 접이식. 루키의 같은 요소와 모양을 맞춰요 */
 .standings-box { margin: 0 0 10px; border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; }
@@ -295,9 +304,11 @@ body {
 
 /* 🥇 개인 순위 — 득점·도움·수비·평점·MOM을 한 표에 */
 .race-title { font-size: .82rem; color: var(--accent); margin-bottom: 4px; }
-.race-table { font-size: .78rem; }
-.race-table th, .race-table td { padding: .2rem .18rem; }
-.race-table td:first-child, .race-table th:first-child { width: 1.4rem; }
+.race-table { font-size: .82rem; }
+.race-table th, .race-table td { padding: .24rem .28rem; }
+.race-table td:first-child, .race-table th:first-child { width: 1.5rem; }
+/* 숫자 칸 — 한 부문만 보여주니 폭을 줄이고 이름·소속에 자리를 넘겨요 */
+.race-table .rc-v, .race-table th:last-child { width: 4.2rem; text-align: right; white-space: nowrap; }
 .race-table .ch-club { display: block; font-size: .68rem; color: var(--dim); }
 .race-note { font-size: .72rem; color: var(--dim); margin-top: .3rem; }
 /* 부문 탭 — 정렬만 바꿔요. 좁은 화면에서는 가로로 넘겨서 봐요 */
@@ -311,6 +322,6 @@ body {
   background: var(--bg2); border: 1px solid var(--line); color: var(--dim);
 }
 .race-tab.on { background: var(--field); border-color: var(--accent); color: var(--accent); font-weight: 700; }
-/* 지금 줄 세운 칸을 표에서도 짚어 줘요 — 어느 기준으로 정렬됐는지 보이게 */
-.race-table th.rc-on { color: var(--accent); }
-.race-table td.rc-on { color: var(--text); font-weight: 700; }
+/* 그 부문 숫자 — 표에서 제일 먼저 읽혀야 하는 값이에요 */
+.race-table th:last-child { color: var(--accent); }
+.race-table td.rc-v { color: var(--text); font-weight: 700; }
