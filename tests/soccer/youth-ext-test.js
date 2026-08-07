@@ -230,7 +230,12 @@ guard("연장 실행", () => {
   check(!!saved && saved.youthExt === true, "저장된 상태에 연장 사용 표시(youthExt)가 남는다");
 });
 
-// ---------- ③ 한 번 쓰면 다시 안 나온다 ----------
+/* ---------- ③ 한 번 쓰면 다시 안 나온다 — 대신 프로로 흘러요 ----------
+ *
+ * ⚠️ 예전에는 연장을 다 쓴 뒤에 또 떨어지면 **다시 🌱 유스 재계약**이 떴어요.
+ * 버튼은 없고 "구단과의 이야기가 모두 끝났어요"만 남는, 프로 무대를 한 번도
+ * 못 밟고 끝나는 자리였습니다. 실측으로 이 엔딩이 가장 흔했어요(38%).
+ * 지금은 연장을 다 쓰면 📹 세미프로로 흘러요 — 사다리 맨 아래라도 프로예요. */
 console.log("=== ③ 연장한 시즌을 또 실패했을 때 ===");
 guard("두 번째 유스 재계약", () => {
   if (!snap) throw new Error("① 단계가 실패해서 이어갈 수 없어요");
@@ -238,10 +243,19 @@ guard("두 번째 유스 재계약", () => {
   playSurvivalRound(P, true);
   playSurvivalRound(P, false);
   check(toEnding(P) === "screen-ending", `두 번째 엔딩 화면이 뜬다 (${P.active()})`);
-  check(P.$("ending-card").textContent.includes("유스 재계약"), "다시 🌱 유스 재계약 엔딩이다");
+  const title = P.$("ending-card").querySelector(".draft-title").textContent;
+  check(!P.$("ending-card").textContent.includes("유스 재계약"),
+    `연장을 다 썼으면 🌱 유스 재계약이 다시 뜨지 않는다 (${title})`);
   check(!P.$("btn-youth-ext"), "이미 연장을 썼으니 '한 시즌 더 뛰기' 버튼이 없다");
-  check(!!P.$("btn-idol-retire"), "대신 '🏛️ 기록 남기고 마무리'는 남아 있다");
-  check(P.curSlot() == null, "연장이 없으면 예전처럼 clearSave()가 돈다 (curSlot이 비었다)");
+  /* 성적이 아주 나쁘면 🎒로 끝날 수도 있어요. 그때는 마무리 버튼이 남고,
+   * 프로로 이어지면 '프로 커리어 시작'이 뜹니다 — 둘 중 하나는 반드시 있어야 해요. */
+  const goPro = !!P.$("btn-go-debut");
+  check(goPro || !!P.$("btn-idol-retire"),
+    `끝내는 길이든 프로로 가는 길이든 버튼이 하나는 있다 (${title})`);
+  check(!goPro || P.curSlot() != null,
+    `프로로 이어지면 세이브가 남는다 (${title})`);
+  check(goPro || P.curSlot() == null,
+    `정말 끝나는 엔딩이면 예전처럼 clearSave()가 돈다 (${title})`);
 });
 
 // ---------- ④ 프로로 가는 엔딩에는 연장 버튼이 없다 ----------

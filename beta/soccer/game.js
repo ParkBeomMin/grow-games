@@ -1877,14 +1877,20 @@ const MatchSim = (() => {
 })();
 
 // 유스 경기(평가전/트라이아웃) — MatchSim로 시뮬레이션
+const YOUTH_OPP_STR = 52;   // 유스 평가전 상대 전력 (기본 70보다 낮게 — 우리가 주최 측이에요)
 function renderStageSim(type, grade, onFinal) {
   const gradeRating = { S: 8.4, A: 7.2, B: 6.1, C: 4.9, D: 3.7 }[grade.g] || 6;
   const rating = clamp(gradeRating + rand(-0.5, 0.5), 1, 10);
   const c = matchContribution(rating);
-  /* 유스 경기는 클럽 전력이라는 개념이 없어요 — 상대 전력을 안 넘기면
-   * 대등한 경기로 봅니다(전력 차 0). */
-  const mates = teammateGoals(rating, null);
-  const oppGoals = deriveOppGoals(rating, S.stats.defense, null, c.g + c.a + mates);
+  /* 유스 경기는 클럽 전력이라는 개념이 없어요.
+   *
+   * ⚠️ 상대를 안 넘기면 "대등한 경기"가 되는데, 그러면 유스 승률이 92%에서 44%로
+   * 떨어져요. 유스 라운드 판정에 승패가 ±0.06으로 들어가 있어서 통과율이 통째로
+   * 내려갑니다(실측: 브라질·수비수 프로 진입 45% → 38%).
+   * 유스 평가전은 **우리가 주최 측이고 상대는 초청팀**이라, 조금 유리한 판으로
+   * 잡아요. 예전 산식(내 평점만 보던 시절)의 승률에 맞춘 값이에요. */
+  const mates = teammateGoals(rating, YOUTH_OPP_STR);
+  const oppGoals = deriveOppGoals(rating, S.stats.defense, YOUTH_OPP_STR, c.g + c.a + mates);
   MatchSim.run({
     home: "우리 유스",
     away: pick(oppClubs(S)),
@@ -2019,8 +2025,15 @@ function playSurvivalRound() {
      *   0골 패배인데 통과 55% → 27% */
     const gradeP = GRADE_PASS[fg.g] || 0;
     const resultP = info.res === "W" ? 0.06 : info.res === "L" ? -0.06 : 0;
-    // 활약은 상한을 둬요 — 한 경기 대박이 라운드를 통째로 건너뛰게 하면 안 돼요
-    const doneP = Math.min(DONE_PASS_CAP, info.myGoals * 0.04 + info.assists * 0.03 + info.defense * 0.015);
+    /* 활약은 상한을 둬요 — 한 경기 대박이 라운드를 통째로 건너뛰게 하면 안 돼요.
+     *
+     * ⚠️ 계수를 GOAL_SCALE로 나눠요. 이 항은 **골·도움·수비 개수에 비례**하는데,
+     * 득점 눈금을 0.33배로 줄이면서 여기를 같이 안 옮겨 활약 가점이 반토막
+     * (실측 평균 0.064 → 0.035)이 났어요. AXIS_OFF·POS_AXIS·PROMOTE_HYPE는
+     * 같이 옮겼는데 유스는 다른 파일·다른 함수라 재보정 목록에서 새어 나갔습니다.
+     * 나눠 두면 다음에 눈금을 또 건드려도 저절로 따라와요. */
+    const doneP = Math.min(DONE_PASS_CAP,
+      (info.myGoals * 0.04 + info.assists * 0.03 + info.defense * 0.015) / GOAL_SCALE);
     /* 판정에 들어간 조각을 그대로 남겨요 — 화면에 근거를 적으려면 이게 필요해요.
      *
      * 5:3으로 이기고 평점 A에 4골 1도움인데 탈락한 제보가 있었어요. 확률 판정이라
@@ -2134,6 +2147,15 @@ function playSurvivalRound() {
 }
 
 // ---------- 엔딩 ----------
+/* 유스 엔딩 문턱 — score = 명성 + 종합 × 2.
+ *
+ * ⚠️ 예전 값(📹 330 · 📞 420)은 **실제 분포 한가운데에 놓인 절벽**이었어요.
+ * 유스를 마친 선수의 실측 score가 320~350이라(명성 210~270 · 종합 50 언저리),
+ * 명성이 조금만 모자라면 그대로 🎒 은퇴로 떨어졌습니다 — 🇰🇷 K리그 유스는
+ * spot이 1.0으로 가장 낮아 프로 진입이 20%까지 내려갔어요.
+ * 문턱을 분포 아래로 내려 "밑바닥에서라도 프로를 시작한다"를 기본값으로 둡니다. */
+const SEMI_SCORE = 260;    // 📹 세미프로 입단
+const SCOUT_SCORE = 360;   // 📞 타 구단 스카우트
 function showEnding(survivedFinal, lastRound) {
   const m = marketOf();
   const score = S.fandom + overall() * 2;
@@ -2173,19 +2195,23 @@ function showEnding(survivedFinal, lastRound) {
     emoji = "💜"; title = "1군 콜업 대기";
     teamLine = "2군 계약 → 콜업 약속";
     msg = "아쉽게 1군 계약은 놓쳤지만, 구단이 곧 콜업을 약속했어요.";
-  } else if (lastRound === 2 && score >= 420) {
+  } else if (lastRound === 2 && score >= SCOUT_SCORE) {
     emoji = "📞"; title = "타 구단 스카우트!";
     teamLine = "K리그 최하위권 클럽 입단";
     scoutPro = true;
     msg = "테스트를 지켜본 다른 구단에서 러브콜이 왔어요. K리그 최하위권 팀이라 출발은 불리하지만, 여기서 프로 커리어가 시작돼요.";
-  } else if (lastRound >= 1) {
+  } else if (lastRound >= 1 && !S.youthExt) {
+    /* 🌱 유스 재계약은 **연장이 남아 있을 때만** 써요.
+     *
+     * 예전에는 연장을 이미 쓴 뒤에도 여기로 빠져서 "구단과의 이야기가 모두
+     * 끝났어요"로 커리어가 통째로 끝났습니다. 유스 4년을 보내고 프로 무대를
+     * 한 번도 못 밟는 자리였어요 — 실측으로 이 엔딩이 가장 흔했습니다(38%).
+     * 연장을 다 쓴 뒤에는 아래 📹 세미프로로 흘러요. 밑바닥이라도 프로예요. */
     emoji = "🌱"; title = "유스 재계약";
     teamLine = "유스팀 연장 계약";
-    canExtend = !S.youthExt;
-    msg = canExtend
-      ? "이번엔 여기까지. 하지만 구단은 아직 당신을 믿고 있어요 — 한 시즌을 더 뛸 수 있어요."
-      : "이번엔 여기까지. 연장 계약으로 얻은 한 시즌까지, 구단과의 이야기가 모두 끝났어요.";
-  } else if (score >= 330) {
+    canExtend = true;
+    msg = "이번엔 여기까지. 하지만 구단은 아직 당신을 믿고 있어요 — 한 시즌을 더 뛸 수 있어요.";
+  } else if (score >= SEMI_SCORE) {
     emoji = "📹"; title = "세미프로 입단";
     teamLine = `${bottom.name} 입단 — 사다리 맨 아래`;
     semiPro = true;
