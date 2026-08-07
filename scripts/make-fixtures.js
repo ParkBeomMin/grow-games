@@ -280,7 +280,16 @@ function playSeason(P, plan) {
       continue;
     }
     if (id === "screen-reveal") { P.$("btn-reveal-go").click(); continue; }
-    if (id === "screen-stage") { P.$("btn-stage-next").click(); continue; }
+    if (id === "screen-stage") {
+      /* 🏆 컵에서 비기면 승부차기가 뜨고 '다음' 버튼이 잠겨요. 팀 결과를 전력 대
+       * 전력으로 가른 뒤 무승부가 흔해져서 여기 자주 걸립니다 — 안 넘기면
+       * 시나리오가 통째로 "조건에 맞는 상태를 못 만들었어요"로 끝나요. */
+      const pkBtn = P.w.document.querySelector("#pk-box button");
+      if (pkBtn) { pkBtn.click(); continue; }
+      const n = P.$("btn-stage-next");
+      if (!n || n.hidden || n.disabled) return false;
+      n.click(); continue;
+    }
     return false;
   }
   return false;

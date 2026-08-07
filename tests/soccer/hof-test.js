@@ -396,6 +396,47 @@ guard("⑩ 등급 표시", () => {
     `은퇴식에도 다음 등급까지의 거리가 남는다 (${(card.match(/커리어 점수[^명]*/) || [""])[0].slice(0, 70)})`);
 });
 
-console.log(fail ? `\n❌ ${fail}건 실패` : "\n✅ 통과");
-w.close();
-process.exit(fail ? 1 : 0);
+/* ---------- ⑪ 🌍 밟아 온 리그 ----------
+ * "명예의 전당에 어떤 리그에서 뛰고 그랬는지도 보이면 좋겠다."
+ * 이름·시즌·점수만 있으면 K리그3 붙박이와 프리미어리그를 밟은 커리어가 똑같아 보인다. */
+guard("⑪ 밟아 온 리그", () => {
+  const mkYear = (y, lg) => ({ y, hype: 5, wins: 0, sales: 0, dFan: 0, awards: [],
+    goals: 0, assists: 0, defense: 0, apps: 30, league: lg, club: CLUBS[lg][0].name });
+  const years = [mkYear(1, 5), mkYear(2, 5), mkYear(3, 1), mkYear(4, 1), mkYear(5, 3)];
+  const st = stateWith({ years }, { league: 3, group: CLUBS[3][0].name, clubStr: CLUBS[3][0].str });
+  openReport(st);
+  retireBtn().click();
+  const card = $("career-card").textContent.replace(/\s+/g, " ");
+  const line = (card.match(/🌍[^🔁통]*/) || [""])[0].trim();
+  console.log(`=== ⑪ 은퇴식 리그 줄 — "${line}" ===`);
+  for (const id of [5, 1, 3]) {
+    const lg = leagueById(id);
+    check(line.includes(lg.short), `${lg.name}(${lg.short})이 적힌다`);
+  }
+  check((line.match(/→/g) || []).length === 2,
+    `연달아 같은 리그는 접어서 세 칸이 된다 (화살표 ${(line.match(/→/g) || []).length}개 — K리그3 K리그3 K리그1 K리그1 프리미어리그)`);
+  check(line.includes(leagueById(3).name), `가장 높이 오른 리그를 따로 적는다 (${leagueById(3).name})`);
+
+  // 한 리그만 뛴 커리어는 화살표가 없다 — 없는 이동을 지어내지 않아요
+  const solo = stateWith({ years: [mkYear(1, 1), mkYear(2, 1)] }, inLeague(1));
+  openReport(solo);
+  retireBtn().click();
+  const soloLine = ($("career-card").textContent.replace(/\s+/g, " ").match(/🌍[^🔁통]*/) || [""])[0];
+  console.log(`=== ⑪ 한 리그만 — "${soloLine.trim()}" ===`);
+  check(!soloLine.includes("→"), `한 리그만 뛰었으면 화살표가 없다 (${soloLine.trim()})`);
+});
+
+/* 명예의 전당 목록은 서버를 기다렸다가 그려요(showHof가 async).
+ * 기다리지 않고 읽으면 빈 상자를 보고 "리그 줄이 없다"는 거짓 빨간불이 떠요. */
+(async () => {
+  try {
+    await Career.showHof();
+    const card = w.document.querySelector("#hof-list .hof-card");
+    const txt = card ? card.textContent.replace(/\s+/g, " ") : "";
+    console.log(`=== ⑪ 명예의 전당 카드 — "${txt.slice(0, 120)}" ===`);
+    check(/🌍/.test(txt), `명예의 전당 카드에도 밟아 온 리그가 있다 (${txt.slice(0, 90)})`);
+  } catch (e) { check(false, `⑪ 명예의 전당 목록 — ${e.message}`); }
+  console.log(fail ? `\n❌ ${fail}건 실패` : "\n✅ 통과");
+  w.close();
+  process.exit(fail ? 1 : 0);
+})();

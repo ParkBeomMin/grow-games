@@ -23,6 +23,7 @@ const SRC = fs.readFileSync(`${BASE}/career.js`, "utf8");
 const grab = (src, re) => { const m = src.match(re); return m ? m[0] : null; };
 
 const parts = {
+  goalScale: grab(GAME, /const GOAL_SCALE = [^;]+;/),
   rateTbl: grab(SRC, /const RATE = \{[\s\S]*?\n  \};/),
   rateRes: grab(SRC, /const RATE_RESULT = [^;]+;/),
   rateCon: grab(SRC, /const RATE_CONCEDE = [^;]+;/),

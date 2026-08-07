@@ -145,7 +145,15 @@ function playSeason() {
       rest.click();
       continue;
     }
-    if (id === "screen-stage") { $("btn-stage-next").click(); continue; }
+    if (id === "screen-stage") {
+      /* 🏆 컵에서 비기면 승부차기가 뜨고 '다음' 버튼이 잠겨요. 팀 결과를
+       * 전력 대 전력으로 가른 뒤 무승부가 흔해져서 여기 자주 걸립니다. */
+      const pkBtn = w.document.querySelector("#pk-box button");
+      if (pkBtn) { pkBtn.click(); continue; }
+      const n = $("btn-stage-next");
+      if (!n || n.hidden || n.disabled) return false;
+      n.click(); continue;
+    }
     return false;
   }
   return false;

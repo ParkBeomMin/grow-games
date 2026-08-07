@@ -331,6 +331,9 @@ body {
   font-size: .72rem; color: var(--cream); line-height: 1.35;
 }
 .buff-chip b { font-weight: 600; color: var(--accent); font-size: .68rem; }
+/* 🌍 밟아 온 리그 — 명예의 전당 카드와 은퇴식에 한 줄 */
+.hof-lg { font-size: .72rem; color: var(--dim); margin-top: .12rem; }
+.lg-path { letter-spacing: .01em; }
 /* 결산의 '다음 시즌 칭호' 한 줄 */
 .buff-next .bn-eff { color: var(--accent); }
 .buff-next.dim { opacity: .72; }

@@ -19,6 +19,7 @@ const C = fs.readFileSync(`${BASE}/career.js`, "utf8");
 const grab = (s, re) => { const m = s.match(re); return m ? m[0] : null; };
 
 const parts = {
+  goalScale: grab(GAME, /const GOAL_SCALE = [^;]+;/),
   roles: grab(G, /const RACE_ROLES = \[[\s\S]*?\n\];/),
   lam: grab(G, /const raceLam = \([\s\S]*?;\n/),
   leagues: grab(G, /const LEAGUES = \[[\s\S]*?\n\];/),

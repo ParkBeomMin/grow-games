@@ -36,6 +36,7 @@ const parts = {
    * 같이 안 떼어 오면 ReferenceError로 죽습니다(조용히 통과하지는 않아요).
    * 이 검사들은 칭호가 없는 상태(S.buffs 없음)를 보니 배수는 전부 1이 나와요 —
    * 칭호가 붙었을 때의 동작은 tests/soccer/buff-test.js가 봅니다. */
+  goalScale: grab(GAME, /const GOAL_SCALE = [^;]+;/),
   buffFns: grab(GAME, /const HOT_FORM_BAR = [\s\S]*?const buffMul = [^;]+;/),
   matchContribution: grab(GAME, /function matchContribution\(rating\) \{[\s\S]*?\n\}/),
   autoRes: grab(GAME, /function autoRes\(stat\) \{[\s\S]*?\n\}/),
@@ -91,15 +92,19 @@ check(axisMissing.length === 0,
  * 소스에서 뽑아 오면 자기 자신과 비교하는 꼴이 돼요. 소스를 고쳤으면 문서와 이 표를
  * 같이 고쳐야 해요.
  *
- * 정규화 계수 n은 2026-07-29에 재보정했어요. 첫 캘리브레이션이 승부처 극장골
- * (MatchSim.finish가 myGoals에 얹는 perfect 한 골)을 시뮬레이션에서 빠뜨렸는데,
- * 그 골도 POS_AXIS의 골 가중치를 그대로 먹어요. 수비수는 골 가중치가 2.0이라
- * 시즌 5~6개의 극장골이 그대로 이득이 됐어요. */
+ * 정규화 계수 n은 두 번 재보정했어요.
+ * ① 2026-07-29 — 첫 캘리브레이션이 승부처 극장골(MatchSim.finish가 myGoals에 얹는
+ *    perfect 한 골)을 시뮬레이션에서 빠뜨렸어요. 그 골도 POS_AXIS의 골 가중치를
+ *    그대로 먹는데, 수비수는 골 가중치가 2.0이라 시즌 5~6개가 그대로 이득이 됐어요.
+ * ② ⚽ 득점 눈금(GOAL_SCALE 0.33)을 넣으면서 — 골·도움·수비는 0.33배가 됐는데
+ *    **극장골은 눈금을 안 타요.** 그래서 극장골의 상대 비중이 세 배가 됐고,
+ *    골 가중치가 큰 수비수가 다시 앞서 나갔습니다(hype 편차 0.71).
+ *    아래 값은 그 상태에서 다시 잰 거예요 — 편차 0.71 → 0.16. */
 const SPEC = {
-  fw: { g: 1.0, a: 0.5, d: 0.15, n: 1.00 },
-  wg: { g: 0.8, a: 0.8, d: 0.15, n: 1.05 },
-  mf: { g: 0.5, a: 1.0, d: 0.30, n: 0.96 },
-  df: { g: 2.0, a: 1.0, d: 0.55, n: 0.72 },
+  fw: { g: 1.0, a: 0.5, d: 0.15, n: 0.98 },
+  wg: { g: 0.8, a: 0.8, d: 0.15, n: 1.08 },
+  mf: { g: 0.5, a: 1.0, d: 0.30, n: 1.04 },
+  df: { g: 2.0, a: 1.0, d: 0.55, n: 0.655 },
 };
 
 const table = axisParts.POS_AXIS ? new Function(`${axisParts.POS_AXIS} return POS_AXIS;`)() : null;
@@ -200,6 +205,7 @@ check(/act\.hypeSum \+=/.test(SRC) && /act\.cbHype \+=/.test(SRC),
  * 팀 스코어(h·a·res)는 이 테스트가 안 보는 값이라 자리만 채운다. */
 const seasonFn = new Function("S", "clamp", "rand", "condition", "fandom", `
   ${parts.posInfo} ${parts.clutchScale} ${parts.transLv} ${parts.clutch}
+  ${parts.goalScale}
   ${parts.buffFns}
   ${parts.poissonish} ${parts.matchContribution} ${parts.autoRes}
   ${leagueSrc}

@@ -40,6 +40,7 @@ const SRC = fs.readFileSync(path.join(DIR, "career.js"), "utf8");
 const GAME = fs.readFileSync(path.join(DIR, "game.js"), "utf8");
 
 const parts = {
+  goalScale: grab(GAME, /const GOAL_SCALE = [^;]+;/),
   buffFns: grab(GAME, /const HOT_FORM_BAR = [\s\S]*?const buffMul = [^;]+;/),
   posInfo: grab(GAME, /const POS_INFO = \{[\s\S]*?\n\};/),
   clutchScale: grab(GAME, /const CLUTCH_SCALE = [^;]+;/),
@@ -59,7 +60,8 @@ const parts = {
 const missing = Object.entries(parts).filter(([, v]) => !v).map(([k]) => k);
 if (missing.length) { console.log(`❌ 소스에서 못 찾았어요: ${missing.join(", ")}`); process.exit(1); }
 
-const B = new Function(`${parts.buffFns}
+const B = new Function(`${parts.goalScale}
+  ${parts.buffFns}
   return { SEASON_TITLES, BUFF_CAP, AWARD_BUFF, HOT_FORM_BAR, seasonTitleOf, activeBuffs, buffSum, buffMul };`)();
 
 // ---------- ① 표가 성하다 ----------
@@ -150,6 +152,7 @@ guard("④ 수상 ↔ 칭호", () => {
 
 /* ---------- ⑤⑥⑦ 경기에 실제로 붙는가 ---------- */
 const engine = (extra) => new Function("S", "clamp", "rand", `
+  ${parts.goalScale}
   ${extra || parts.buffFns}
   ${parts.posInfo} ${parts.clutchScale} ${parts.transLv} ${parts.clutch}
   ${parts.leagues} ${parts.leagueOf}
@@ -176,7 +179,10 @@ function measure(api, buffs, n) {
   return { g: g / n, a: a / n, d: d / n, rate: rate / n, perfect: perfect / n };
 }
 
-const N = 40000;
+/* ⚽ 득점 눈금(GOAL_SCALE)이 들어가면서 한 경기 골이 2.2 → 0.7로 줄었어요.
+ * 같은 표본 수로는 상대 오차가 세 배가 돼서 ±3.5% 문턱을 그냥 스칩니다.
+ * 문턱을 넓히는 대신 표본을 늘려요 — 문턱을 넓히면 검사가 무뎌져요. */
+const N = 140000;
 guard("⑤ 경기 효과", () => {
   const api = engine();
   const base = measure(api, null, N);

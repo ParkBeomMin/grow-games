@@ -369,8 +369,12 @@ guard("사다리 분리", () => {
   $("btn-go-debut").click();
   const St = T.state();
   St.league = EUR.id;
-  St.group = CLUBS[EUR.id][0].name;
-  St.clubStr = CLUBS[EUR.id][0].str;
+  /* ⚠️ 그 리그의 **최약체** 클럽에 넣어요. 팀 성적이 내 활약에서 갈라진 뒤로는
+   * 강한 클럽에 넣으면 내가 아무것도 안 해도 팀이 우승해서 승격해 버립니다 —
+   * 여기서 보려는 건 "부진한 시즌에도 국내로 안 내려온다"예요. */
+  const weakest = CLUBS[EUR.id].slice().sort((a, b) => a.str - b.str)[0];
+  St.group = weakest.name;
+  St.clubStr = weakest.str;
   const SEASONS = 5;
   const seen = [];
   let hypes = [];

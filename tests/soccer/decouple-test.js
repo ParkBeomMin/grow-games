@@ -43,6 +43,7 @@ const check = (ok, msg) => { console.log(`${ok ? "✅" : "❌"} ${msg}`); if (!o
 const guard = (label, fn) => { try { fn(); } catch (e) { check(false, `${label} — ${e.message}`); } };
 
 const parts = {
+  goalScale: grab(GAME, /const GOAL_SCALE = [^;]+;/),
   buffFns: grab(GAME, /const HOT_FORM_BAR = [\s\S]*?const buffMul = [^;]+;/),
   posInfo: grab(GAME, /const POS_INFO = \{[\s\S]*?\n\};/),
   clutchScale: grab(GAME, /const CLUTCH_SCALE = [^;]+;/),
@@ -72,6 +73,7 @@ if (missing.length) { console.log(`❌ 소스에서 못 찾았어요: ${missing.
 const mkMatch = (mateSrc, concSrc) => new Function("S", "oppStr", "clamp", "rand", "randInt", "pick", `
   ${parts.posInfo} ${parts.clutchScale} ${parts.transLv} ${parts.clutch}
   ${parts.leagues} ${parts.leagueOf} ${parts.clubStrOf}
+  ${parts.goalScale}
   ${parts.buffFns} ${parts.poissonish} ${parts.contrib} ${parts.autoRes}
   ${parts.fanCap} ${parts.ratingDiv} ${parts.ratingOf}
   ${parts.tmTbl}
@@ -110,12 +112,15 @@ guard("① 클럽 전력", () => {
   console.log(`   종합 85 고정 · 상대 70 — 전력 45 ${(lo * 100).toFixed(0)}% → 전력 95 ${(hi * 100).toFixed(0)}%`);
   check(clubSpread >= 0.35,
     `클럽 전력이 팀 승률을 크게 움직인다 (${(clubSpread * 100).toFixed(0)}%p) — 예전엔 10%p였어요`);
+  check(clubSpread <= 0.7, `그렇다고 클럽이 전부를 정하지도 않는다 (${(clubSpread * 100).toFixed(0)}%p)`);
 });
 
 // ---------- ② 내 실력 ----------
+let abSpreadNow = 0;
 guard("② 내 실력", () => {
   const lo = wr(run(match, 45, 70, 70, N)), hi = wr(run(match, 125, 70, 70, N));
   const abSpread = hi - lo;
+  abSpreadNow = abSpread;
   console.log(`   전력 70 고정 · 상대 70 — 종합 45 ${(lo * 100).toFixed(0)}% → 종합 125 ${(hi * 100).toFixed(0)}%`);
   check(abSpread >= 0.25, `내 실력도 팀 승률을 움직인다 (${(abSpread * 100).toFixed(0)}%p) — 아예 무의미해지면 안 돼요`);
   check(abSpread <= clubSpread + 0.15,
@@ -151,6 +156,7 @@ guard("⑤ 상대 전력", () => {
 // ---------- ⑥ 동료 골의 반응 ----------
 guard("⑥ 동료 골", () => {
   const mateOnly = new Function("S", "rating", "oppStr", "clamp", `
+    ${parts.goalScale}
     ${parts.leagues} ${parts.leagueOf} ${parts.clubStrOf} ${parts.poissonish}
     ${parts.tmTbl} ${parts.mates}
     return teammateGoals(rating, oppStr);`);
@@ -201,10 +207,13 @@ guard("⑧ 변이 검증", () => {
   const star = rs.filter((r) => r.g + r.a >= 2);
   const starLoss = star.filter((r) => r.res === "L").length / star.length;
   console.log(`   옛 산식 — 클럽 폭 ${((clubHi - clubLo) * 100).toFixed(0)}%p · 내 실력 폭 ${((abHi - abLo) * 100).toFixed(0)}%p · 공격P 2+ 패배 ${(starLoss * 100).toFixed(0)}%`);
-  check(clubHi - clubLo < 0.2,
-    `옛 산식에서는 클럽 전력이 거의 작용하지 않았다 (${((clubHi - clubLo) * 100).toFixed(0)}%p)`);
-  check(abHi - abLo > (clubHi - clubLo) * 2,
-    `옛 산식에서는 내 실력이 클럽을 압도했다 (내 ${((abHi - abLo) * 100).toFixed(0)}%p vs 클럽 ${((clubHi - clubLo) * 100).toFixed(0)}%p)`);
+  /* ⚠️ 절대값이 아니라 **비율**을 본다. 득점 눈금(GOAL_SCALE)이 바뀌면 두 폭이
+   * 같이 움직여서, "옛 산식은 클럽 폭이 20%p 미만" 같은 절대 문턱은 눈금 한 번에
+   * 무너진다. 옛 산식의 병은 크기가 아니라 **한쪽이 다른 쪽을 압도한 것**이었다. */
+  check(abHi - abLo > (clubHi - clubLo) * 3,
+    `옛 산식에서는 내 실력이 클럽을 세 배 넘게 압도했다 (내 ${((abHi - abLo) * 100).toFixed(0)}%p vs 클럽 ${((clubHi - clubLo) * 100).toFixed(0)}%p)`);
+  check((abHi - abLo) / Math.max(0.01, clubHi - clubLo) > (abSpreadNow) / Math.max(0.01, clubSpread),
+    "지금 산식이 옛 산식보다 균형이 낫다 (내 실력 ÷ 클럽 비율이 더 작다)");
   check(starLoss < 0.05,
     `옛 산식에서는 내가 잘하면 팀이 거의 안 졌다 (${(starLoss * 100).toFixed(1)}%)`);
 });

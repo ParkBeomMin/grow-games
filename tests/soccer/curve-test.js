@@ -43,6 +43,7 @@ const parts = {
    * 같이 안 떼어 오면 ReferenceError로 죽습니다(조용히 통과하지는 않아요).
    * 이 검사들은 칭호가 없는 상태(S.buffs 없음)를 보니 배수는 전부 1이 나와요 —
    * 칭호가 붙었을 때의 동작은 tests/soccer/buff-test.js가 봅니다. */
+  goalScale: grab(GAME, /const GOAL_SCALE = [^;]+;/),
   buffFns: grab(GAME, /const HOT_FORM_BAR = [\s\S]*?const buffMul = [^;]+;/),
   matchContribution: grab(GAME, /function matchContribution\(rating\) \{[\s\S]*?\n\}/),
   autoRes: grab(GAME, /function autoRes\(stat\) \{[\s\S]*?\n\}/),
@@ -89,6 +90,7 @@ const POS_INFO = new Function(`${parts.posInfo} return POS_INFO;`)();
  * 팀 스코어(h·a·res)는 이 테스트가 안 보는 값이라 자리만 채워요. */
 const seasonFn = new Function("S", "clamp", "rand", `
   ${parts.posInfo} ${parts.clutchScale} ${parts.transLv} ${parts.clutch}
+  ${parts.goalScale}
   ${parts.buffFns}
   ${parts.poissonish} ${parts.matchContribution} ${parts.autoRes}
   ${leagueSrc}

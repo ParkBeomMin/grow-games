@@ -89,7 +89,14 @@ function playSeason() {
   while (g++ < 800) {
     const id = active();
     if (id === "screen-career") return true;
-    if (id === "screen-stage") { const n = $("btn-stage-next"); if (!n) return false; n.click(); continue; }
+    if (id === "screen-stage") {
+      // 🏆 컵 무승부 → 승부차기. 무승부가 흔해진 뒤로 여기 자주 걸려요.
+      const pkBtn = w.document.querySelector("#pk-box button");
+      if (pkBtn) { pkBtn.click(); continue; }
+      const n = $("btn-stage-next");
+      if (!n || n.hidden || n.disabled) return false;
+      n.click(); continue;
+    }
     if (id !== "screen-pro") return false;
     const go = w.document.querySelector("#pro-actions .go-game");
     if (go) { go.click(); continue; }

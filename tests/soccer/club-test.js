@@ -42,6 +42,7 @@ const parts = {
    * 같이 안 떼어 오면 ReferenceError로 죽습니다(조용히 통과하지는 않아요).
    * 이 검사들은 칭호가 없는 상태(S.buffs 없음)를 보니 배수는 전부 1이 나와요 —
    * 칭호가 붙었을 때의 동작은 tests/soccer/buff-test.js가 봅니다. */
+  goalScale: grab(GAME, /const GOAL_SCALE = [^;]+;/),
   buffFns: grab(GAME, /const HOT_FORM_BAR = [\s\S]*?const buffMul = [^;]+;/),
   matchContribution: grab(GAME, /function matchContribution\(rating\) \{[\s\S]*?\n\}/),
   deriveOppGoals: grab(GAME, /const CONC_BASE = [\s\S]*?function deriveOppGoals\(rating, defStat, oppStr, teamGoals\) \{[\s\S]*?\n\}/),
@@ -148,6 +149,7 @@ guard("기본 전력", () => {
  * 전역 S를 읽는 산식이라 new Function이 S를 파라미터로 받고 떼어 온 선언들이
  * 그 S를 클로저로 잡게 감쌌어요. */
 const mateFn = new Function("S", "rating", "clamp", "oppStr", `
+  ${parts.goalScale}
   ${parts.poissonish}
   ${leagueSrc}
   ${clubSrc}
@@ -158,6 +160,7 @@ const mateFn = new Function("S", "rating", "clamp", "oppStr", `
  * 늘 0으로 읽혀서 전력 차만 남습니다 — 여기서는 전력의 작용을 보는 게 목적이라
  * 팀 골을 고정값으로 두고 전력만 움직입니다. */
 const oppFn = new Function("S", "rating", "defStat", "clamp", "rand", "oppStr", "teamGoals", `
+  ${parts.goalScale}
   ${parts.poissonish}
   ${leagueSrc}
   ${clubSrc}
@@ -202,6 +205,7 @@ guard("실점", () => {
  *     poissonish가 Math.exp도 쓰니 Object.create(Math)로 나머지는 그대로 물려받아요.
  * (b) 평균을 ±3%로 대조해요 — 사람이 읽을 수 있는 눈금이에요. */
 const contribFn = new Function("S", "clamp", "Math", `
+  ${parts.goalScale}
   ${parts.buffFns}
   ${parts.poissonish}
   ${leagueSrc}
@@ -255,6 +259,7 @@ guard("전력이 내 기록에 안 닿는다", () => {
  * league-test·team-test와 같은 방식을 여기에도 한 벌 둬요. */
 const seasonFn = new Function("S", "clamp", "rand", "randInt", "pick", `
   ${parts.posInfo} ${parts.clutchScale} ${parts.transLv} ${parts.clutch}
+  ${parts.goalScale}
   ${parts.buffFns}
   ${parts.poissonish} ${parts.matchContribution} ${parts.autoRes}
   ${leagueSrc}

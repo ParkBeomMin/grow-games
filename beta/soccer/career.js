@@ -55,16 +55,28 @@ window.WingerCareer = (() => {
    * n은 정규화 계수예요. 수비수는 시즌 수비 성공이 68회인데 공격수는 골이 31개라,
    * 그대로 더하면 포지션이 곧 유불리가 됩니다. 시뮬레이션으로 잡은 값이에요. */
   const POS_AXIS = {
-    fw: { g: 1.0, a: 0.5, d: 0.15, n: 1.00 },
-    wg: { g: 0.8, a: 0.8, d: 0.15, n: 1.05 },
-    mf: { g: 0.5, a: 1.0, d: 0.30, n: 0.96 },
-    df: { g: 2.0, a: 1.0, d: 0.55, n: 0.72 },
+    fw: { g: 1.0, a: 0.5, d: 0.15, n: 0.98 },
+    wg: { g: 0.8, a: 0.8, d: 0.15, n: 1.08 },
+    mf: { g: 0.5, a: 1.0, d: 0.30, n: 1.04 },
+    df: { g: 2.0, a: 1.0, d: 0.55, n: 0.655 },
   };
   const AXIS_K = 3.00;
   /* 경기 수를 12 → 38로 올리면서 시즌 축이 3.23배가 됐어요. log가 AXIS_K(3.00)로
    * 곱해지므로 hype가 3.52 올라갑니다 — 그만큼 offset을 올려 수상 문턱
-   * (MVP 5.5 · 베스트11 4.5 · 신인왕 3)의 의미를 그대로 지켜요. */
-  const AXIS_OFF = 7.71;
+   * (MVP 5.5 · 베스트11 4.5 · 신인왕 3)의 의미를 그대로 지켜요.
+   *
+   * ⚽ 득점 눈금(GOAL_SCALE 0.33)을 넣으면서 한 번 더 내렸어요.
+   *
+   * ⚠️ 산술만 믿으면 틀립니다. 축이 0.33배면 -3.33이라고 계산했는데, **승부처
+   * 극장골(+1)은 눈금을 안 타요.** 실제 시즌 축은 0.33배가 아니라 0.44배쯤이
+   * 됩니다. 그래서 실측으로 잡았어요 — AXIS_OFF를 5.0·5.4·5.8로 놓고 15시즌
+   * 커리어를 굴려 리그MVP 횟수를 눈금 바꾸기 전과 맞춰 봤습니다.
+   * 최종값은 curve-test의 리그MVP 확률 밴드로 잡았어요 — 그게 이 게임의 계약이에요.
+   *   AXIS_OFF 4.4 → 능력치 90에서 MVP 45.5% (밴드 8~25%) · 너무 헐거움
+   *   AXIS_OFF 5.0 → 3.0 / 17.4 / 57.1 / 81.2 / 92.2% (능력치 70~150) ✔ 전부 밴드 안
+   *   AXIS_OFF 5.4 → 능력치 110에서 32.2% (밴드 45~72%) · 너무 빡빡함
+   * **생산량을 바꿀 때 이 값을 같이 안 옮기면 수상이 통째로 사라지거나 쏟아져요.** */
+  const AXIS_OFF = 5.0;
 
   /* ---------- ⭐ 경기 평점 — 실제 축구 평점처럼 ----------
    *
@@ -686,9 +698,10 @@ window.WingerCareer = (() => {
    * ⚠️ 폭이 **내 실점 분포와 같아야** 해요. 평점은 무실점 보너스와 대량 실점
    * 감점을 보는데, 경쟁자만 적게 먹는 걸로 잡으면 같은 표에서 내가 늘 손해를 봅니다.
    * 팀 결과를 전력 대 전력으로 바꾸면서 내 실점이 크게 늘었어요 —
-   * 실측(승/무/패 평균): 예전 0.5 / 1.5 / 2.0 → 지금 2.05 / 3.19 / 4.58.
-   * 아래 폭이 그 평균과 맞아요 (2.0 / 3.0 / 4.5). */
-  const raceConceded = (res) => (res === "W" ? randInt(0, 4) : res === "L" ? randInt(2, 7) : randInt(1, 5));
+   * 실측(승/무/패 평균) — 팀 결과를 전력으로 가르면서 2.05/3.19/4.58까지 올라갔다가,
+   * 득점 눈금(GOAL_SCALE)을 넣으면서 0.65 / 1.18 / 2.52로 돌아왔어요.
+   * 아래 폭이 그 평균과 맞아요 (0.5 / 1.0 / 2.5). */
+  const raceConceded = (res) => (res === "W" ? randInt(0, 1) : res === "L" ? randInt(1, 4) : randInt(0, 2));
 
   /* 경쟁자들의 그 라운드 평점. **나와 똑같은 matchRating을 씁니다** —
    * 예전에는 개인 순위 명단(act.race)과 평점표 명단(act.rivals)이 아예 다른
@@ -1895,10 +1908,19 @@ window.WingerCareer = (() => {
    * 능력치로 환산하면 51 → 61 → 69 → 88로 단조 증가해요. 하부에서 위로 가는 게
    * K리그1에서 유로파로 가는 것보다 확실히 쉽다는 뜻이고, tests/soccer/promote-test.js가
    * 이 순서를 지킵니다. 위쪽 둘(5.5·6.5)은 이적 작업에서 잡은 값 그대로예요. */
-  /* 리그 11개로 늘면서 칸을 촘촘히 나눴어요. tier 순으로 단조 증가해야 하고,
-   * 양 끝(한국 3부 0 · 잉글랜드 1부 6.5)은 예전 값 그대로 둡니다 —
-   * 사다리 전체의 길이가 안 변해야 지금까지 잡아 둔 곡선이 안 흔들려요. */
-  const PROMOTE_HYPE = { 5: 0, 4: 2.5, 1: 4.5, 6: 5.45, 8: 5.6, 7: 5.75, 9: 5.9, 10: 6.05, 2: 6.2, 11: 6.35, 3: 6.5 };
+  /* 리그 11개로 늘면서 칸을 나눴어요. tier 순으로 단조 증가해야 해요.
+   *
+   * ⚠️ 위쪽 칸 간격을 0.15에서 0.39로 넓혔어요. ⚽ 득점 눈금(GOAL_SCALE)을 넣으면서
+   * 골 수가 작아졌고, 포아송의 상대 분산이 커져서 **시즌 hype의 편차가 넓어졌습니다** —
+   * 능력치 70의 최고 시즌이 6.32 → 6.96으로 뛰었어요. 칸이 0.15씩이면 그 흔들림에
+   * 리그 서너 개가 통째로 묻혀서, "위로 갈수록 필요 능력치가 는다"가 깨집니다
+   * (실측: J1 67.5 < 브라질B 67.6처럼 뒤집혔어요).
+   *
+   * 지금 눈금(K리그1 기준 시즌 hype): 능력치 70 중앙 5.65 · 최고 6.96 /
+   * 능력치 90 중앙 6.60 · 상위1% 7.49 / 능력치 110 중앙 7.37 · 상위1% 8.03.
+   * 프리미어리그 7.60은 **능력치 110의 좋은 시즌**이라야 닿고, 능력치 70은
+   * 아무리 잘해도 못 닿아요 — tests/soccer/transfer-test.js가 그걸 지킵니다. */
+  const PROMOTE_HYPE = { 5: 0, 4: 2.5, 1: 4.5, 6: 5.45, 8: 5.76, 7: 6.07, 9: 6.37, 10: 6.68, 2: 6.99, 11: 7.29, 3: 7.60 };
   const OFFERS_PER_LEAGUE = 2;               // 리그마다 제안 수
 
   /* 계약금 — 리그 격과 클럽 전력에서 뽑아요. 격은 거듭제곱(FEE_PRESTIGE_POW)으로 실어요.
@@ -2331,6 +2353,24 @@ window.WingerCareer = (() => {
    * 예전 은퇴식은 "${마지막 클럽}에서 ${통산 시즌}시즌을 뛰었어요"였어요. 다섯 시즌
    * 만에 옮겨 온 클럽인데 10시즌을 뛴 것처럼 적혔습니다 — 화면이 이적 기록과
    * 서로 모르는 사이였어요. 시즌 기록에 남은 소속을 세서 맞춥니다. */
+  /* 🌍 밟아 온 리그 — 명예의 전당에서 "이 선수가 어디까지 갔나"를 볼 수 있어야 해요.
+   * 이름·시즌·점수만 있으면 K리그3 붙박이와 프리미어리그를 밟은 커리어가 똑같아 보입니다.
+   * 시즌 기록의 리그를 순서대로 훑되 **연달아 같은 리그는 접어요**
+   * (K3 K3 K3 K1 K1 → K리그3 → K리그1). 옛 항목은 소속을 fillClubs로 메웁니다. */
+  function leaguePath(st) {
+    const ys = fillClubs(((st && st.career && st.career.years) || []), st);
+    const out = [];
+    for (const y of ys) {
+      const lg = LEAGUES.find((l) => l.id === (y && y.league));
+      if (!lg || (out.length && out[out.length - 1].id === lg.id)) continue;
+      out.push(lg);
+    }
+    if (!out.length) out.push(leagueOf(st));
+    return out;
+  }
+  const leaguePathText = (st) => leaguePath(st).map((l) => `${l.flag} ${l.short}`).join(" → ");
+  const peakLeague = (st) => leaguePath(st).slice().sort((a, b) => b.prestige - a.prestige)[0];
+
   function seasonsAtClub(st, club) {
     const ys = fillClubs(((st && st.career && st.career.years) || []), st);
     return ys.filter((y) => y && y.club === club).length;
@@ -2382,6 +2422,9 @@ window.WingerCareer = (() => {
       sv: SCORE_V,          // 점수 눈금 판 번호 — 없으면 옛 눈금으로 보고 환산해요
       teamSeasons: seasonsAtClub(S, S.group),
       trophies: (S.trophies || []).length,
+      leagues: leaguePathText(S),                                  // 🌍 밟아 온 리그
+      peakLg: `${peakLeague(S).flag} ${peakLeague(S).name}`,        // 가장 높이 오른 리그
+      country: leagueOf(S).country,
       /* 🏷️ 칭호는 두 개를 남겨요. 그만둘 때의 실력(title)과 커리어에서 가장 높이
        * 올랐던 자리(bestTitle)예요. 노쇠하면 칭호가 내려가니 마지막 값만 남기면
        * "전성기에 세계 최고였다"는 사실이 통째로 사라집니다. */
@@ -2414,6 +2457,7 @@ window.WingerCareer = (() => {
             ? ` · 마지막 ${entry.team}에서 ${entry.teamSeasons}시즌` : ` — ${entry.team} 원클럽맨`}`
         : "프로 무대 대신 다른 길을 택했어요."}</div>
       <div class="hint">🏷️ 최고 ${entry.bestTitle}${entry.bestTitle !== entry.title ? ` · 은퇴 시 ${entry.title}` : ""} · 마지막 종합 ${entry.finalOvr}</div>
+      <div class="hint lg-path">🌍 ${entry.leagues}${entry.leagues.includes("→") ? ` · 최고 ${entry.peakLg}` : ""}</div>
       ${moves ? `<div class="hint move-log">🔁 이적 이력 — ${moves}</div>` : ""}
       <div class="draft-summary">
         통산 ${entry.apps}경기(유스 포함) ⚽ ${entry.goals}골 · 🅰️ ${entry.assists}도움<br/>
@@ -2480,6 +2524,8 @@ window.WingerCareer = (() => {
         <div class="hof-info">
           <div class="hof-name">${i + 1}. ${e.gen > 1 ? `<span class="hof-gen">${e.gen}세</span> ` : ""}${e.name} <span class="hof-grade">${e.grade}</span></div>
           ${e.team} · ${e.seasons}시즌${e.goals != null ? ` · ⚽${e.goals} 🅰️${e.assists || 0}` : ""} · 🏅MOM ${e.wins} · 🏆${e.daesang + e.bonsang} · 점수 ${hofScore(e)}
+          ${/* 🌍 밟아 온 리그 — 옛 항목에는 없어요(읽는 쪽에서 건너뜁니다). */
+            e.leagues ? `<div class="hof-lg">🌍 ${e.leagues}</div>` : ""}
         </div>`;
       box.appendChild(div);
     });

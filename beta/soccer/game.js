@@ -386,7 +386,7 @@ const RACE_ROLES = [
  * 실측(경쟁자 8명 평균 평점) — K리그3 7.11 · K리그1 7.49 · J1 7.76 ·
  * 세리에A 8.29 · 프리미어리그 8.53. 리그를 옮기면 표의 눈높이가 눈에 띄게 달라져요. */
 const raceLam = (base, pop, prestige) =>
-  base * ((pop || 70) / 70) * (0.95 + (prestige || 1) * 0.72);
+  base * ((pop || 70) / 70) * (0.95 + (prestige || 1) * 0.72) * GOAL_SCALE;
 
 // 평가 경기 종목: 주 스탯 / 보조 스탯 가중치
 const STAGE_TYPES = [
@@ -508,7 +508,10 @@ const overall = () => {
  *
  * 시즌이 끝나면 조건을 다시 보고 새로 정해요. 지난 시즌 것은 그냥 사라집니다 —
  * 유지하려면 그 성적을 또 내야 해요. 그게 이 장치의 재미입니다. */
-const HOT_FORM_BAR = 7.5;   // 🔥 물오른 폼 문턱 — 시즌 평균 평점
+/* 🔥 물오른 폼 문턱 — 시즌 평균 평점.
+ * 득점 눈금(GOAL_SCALE)을 넣으면서 평점 분포가 내려왔어요(종합 85 기준 8.1 → 6.8).
+ * 7.5로 두면 종합 115쯤 돼야 닿는 상이 됩니다. 실측에 맞춰 7.1로 내렸어요. */
+const HOT_FORM_BAR = 7.1;
 const SEASON_TITLES = [
   { id: "boot", name: "🥇 골든부츠 위너", need: "득점 1위",
     eff: { g: 0.15 }, desc: "골 +15%" },
@@ -1495,6 +1498,21 @@ function poissonish(lam) {
   return n - 1;
 }
 // rating(평점 0~10대) → 이번 경기 골·도움·수비 (포지션별 가중)
+/* ⚽ 득점 눈금 — 이 게임의 한 경기가 몇 골짜리인가.
+ *
+ * 1.0이던 시절에는 종합 85 선수가 경기당 2.2골(시즌 83골)을 넣었어요. 그러면
+ * 팀 스코어를 전력으로 갈라놓는 순간 4:3 같은 판이 됩니다 — 내 골이 곧 팀 골이라
+ * 실점도 그만큼 커져야 승패가 나에게서 떨어지거든요. "점수가 너무 잘 난다"는
+ * 제보가 그 자리예요.
+ *
+ * 그래서 **생산량 전체를 같은 배수로** 줄였어요. 나·경쟁자·동료·실점이 한 자로
+ * 움직이니 개인 순위 경쟁과 부문상은 그대로예요. 시즌 축(posAxis→hype)은
+ * 로그라서 AXIS_OFF 한 값으로 상쇄되고, 경기 평점은 RATE를 다시 잡았습니다.
+ *
+ * 이 상수를 건드리면 AXIS_OFF와 RATE도 같이 다시 잡아야 해요 —
+ * tests/soccer/goal-scale-test.js가 그 짝을 지킵니다. */
+const GOAL_SCALE = 0.33;
+
 function matchContribution(rating) {
   const perf = clamp((rating - 5) / 4 + 0.6, 0.15, 1.6);
   /* 윙어는 돌파로 기회를 만들어요. 골·도움 판정에 드리블이 함께 작용합니다.
@@ -1518,9 +1536,9 @@ function matchContribution(rating) {
   const D = { df: 2.3, mf: 1.2, wg: 0.5, fw: 0.45 };
   /* 🎖️ 시즌 칭호가 여기서 경기에 들어와요 — 리그도 컵도 이 함수를 통해 골·도움·
    * 수비를 뽑으니, 한 자리에 얹으면 모든 경기에 같은 규칙으로 붙습니다. */
-  const gLam = (G[S.pos] ?? 0.4) * perf * (0.55 + shootF) * buffMul("g");
-  const aLam = (A[S.pos] ?? 0.4) * perf * (0.55 + passF) * buffMul("a");
-  const dLam = (D[S.pos] ?? 0.6) * perf * (0.55 + defF) * buffMul("d");
+  const gLam = (G[S.pos] ?? 0.4) * perf * (0.55 + shootF) * buffMul("g") * GOAL_SCALE;
+  const aLam = (A[S.pos] ?? 0.4) * perf * (0.55 + passF) * buffMul("a") * GOAL_SCALE;
+  const dLam = (D[S.pos] ?? 0.6) * perf * (0.55 + defF) * buffMul("d") * GOAL_SCALE;
   return { g: poissonish(gLam), a: poissonish(aLam), def: poissonish(dLam) };
 }
 /* 동료 득점 — 예전에는 팀 득점이 내 골 + 내 도움뿐이라 동료가 넣는 골이 없었어요.
@@ -1539,7 +1557,7 @@ const TEAMMATE_GOALS = { fw: 0.35, wg: 0.5, mf: 0.8, df: 2.2 };
  *
  * 지금은 전력 차가 주인공이고 내 경기력은 거들기만 해요(±0.3 상한). */
 const MATE_SCALE = 1.7;    // 동료 골 전체 크기
-const MATE_EDGE = 2.2;     // 전력 차가 동료 골에 실리는 정도
+const MATE_EDGE = 3.0;     // 전력 차가 동료 골에 실리는 정도
 const MATE_FORM = 0.05;    // 내 경기력이 거드는 정도 — 작게 둡니다
 const MATE_FLOOR = 0.15;   // 아무리 전력이 뒤져도 동료가 아예 못 넣지는 않아요
 function teammateGoals(rating, oppStr) {
@@ -1551,7 +1569,8 @@ function teammateGoals(rating, oppStr) {
   /* 바닥을 0이 아니라 0.15로 둬요. 전력이 50이나 뒤지면 1 + edge×2.2가 음수가 돼서
    * 동료 골 기댓값이 **정확히 0**이 됩니다 — 최약체 팀은 나 말고 아무도 못 넣는
    * 팀이 되고, 그건 팀이 아니에요. */
-  const base = (TEAMMATE_GOALS[S.pos] ?? 0.6) * MATE_SCALE * Math.max(MATE_FLOOR, 1 + edge * MATE_EDGE + form);
+  const base = (TEAMMATE_GOALS[S.pos] ?? 0.6) * MATE_SCALE * GOAL_SCALE
+    * Math.max(MATE_FLOOR, 1 + edge * MATE_EDGE + form);
   return poissonish(base);
 }
 
@@ -1566,15 +1585,15 @@ function teammateGoals(rating, oppStr) {
  * 실점을 통째로 정했습니다(2.4 - (평점-5)×0.28 - 수비/100×1.4). */
 const CONC_BASE = 0.8;     // 전력이 같아도 오가는 기본 골
 const CONC_MIX = 0.75;     // 우리 골이 실점에 되비치는 정도 — 이 값이 승패를 나에게서 떼어내요
-const CONC_EDGE = 2.2;     // 전력 차가 실점에 실리는 정도 — 여기가 클수록 클럽이 승패를 정해요
+const CONC_EDGE = 3.4;     // 전력 차가 실점에 실리는 정도 — 여기가 클수록 클럽이 승패를 정해요
 const CONC_FORM = 0.05;    // 내 평점이 실점을 줄이는 정도
 const CONC_DEF = 400;      // 내 수비 능력치가 실점을 줄이는 정도 (나누는 값이라 클수록 약해요)
-const CONC_CAP = 6;        // 한 경기 실점 상한 — 8:5 같은 스코어가 나오지 않게
+const CONC_CAP = 5;        // 한 경기 실점 상한 — 8:5 같은 스코어가 나오지 않게
 function deriveOppGoals(rating, defStat, oppStr, teamGoals) {
   const edge = ((oppStr == null ? clubStrOf(S) : oppStr) - clubStrOf(S)) / 100;   // 모르면 대등한 경기
   const balance = Math.max(0.15, (1 + edge * CONC_EDGE)
     * (1 - (rating - 6.5) * CONC_FORM - ((defStat || 40) - 60) / CONC_DEF));
-  const lam = (CONC_BASE + Math.max(0, teamGoals || 0) * CONC_MIX) * balance;
+  const lam = (CONC_BASE * GOAL_SCALE + Math.max(0, teamGoals || 0) * CONC_MIX) * balance;
   return Math.min(CONC_CAP, poissonish(Math.max(0, lam)));
 }
 

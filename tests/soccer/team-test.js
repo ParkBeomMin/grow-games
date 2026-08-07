@@ -35,6 +35,7 @@ const parts = {
    * 같이 안 떼어 오면 ReferenceError로 죽습니다(조용히 통과하지는 않아요).
    * 이 검사들은 칭호가 없는 상태(S.buffs 없음)를 보니 배수는 전부 1이 나와요 —
    * 칭호가 붙었을 때의 동작은 tests/soccer/buff-test.js가 봅니다. */
+  goalScale: grab(GAME, /const GOAL_SCALE = [^;]+;/),
   buffFns: grab(GAME, /const HOT_FORM_BAR = [\s\S]*?const buffMul = [^;]+;/),
   matchContribution: grab(GAME, /function matchContribution\(rating\) \{[\s\S]*?\n\}/),
   deriveOppGoals: grab(GAME, /const CONC_BASE = [\s\S]*?function deriveOppGoals\(rating, defStat, oppStr, teamGoals\) \{[\s\S]*?\n\}/),
@@ -81,6 +82,7 @@ const clubSrc = [
 const tableFn = new Function(`${mateSrc}\n  return TEAMMATE_GOALS;`);
 // 동료 골 수 한 판 — 없으면 ReferenceError: teammateGoals is not defined
 const mateFn = new Function("S", "rating", "clamp", `
+  ${parts.goalScale}
   ${parts.poissonish}
   ${leagueSrc}
   ${clubSrc}
@@ -97,6 +99,7 @@ const simFn = new Function("S", "clamp", "rand", "randInt", "pick", `
   ${leagueSrc}
   ${clubSrc}
   ${consts}
+  ${parts.goalScale}
   ${parts.buffFns}
   ${parts.ratingOf}
   ${parts.poissonish}
