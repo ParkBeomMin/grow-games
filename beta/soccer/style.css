@@ -321,7 +321,9 @@ body {
  * 경기하러 가기 전에 늘 보여야 해서 접지 않고 칩으로 깔아 둡니다. */
 .buff-row {
   display: flex; flex-wrap: wrap; align-items: center; gap: .3rem;
-  margin: .4rem 0 .1rem;
+  /* 아래 여백이 .1rem이라 바로 밑의 🏆 리그 순위표 상자와 거의 붙어 보였어요.
+   * 순위표(.standings-box)는 자기 위 여백이 0이라 여기서 띄워 줘야 합니다. */
+  margin: .5rem 0 .7rem;
 }
 .buff-head { font-size: .72rem; color: var(--dim); margin-right: .1rem; }
 .buff-chip {
