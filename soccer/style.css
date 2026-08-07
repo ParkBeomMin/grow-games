@@ -178,6 +178,9 @@ body {
 .ms-final.win { color: #85e3ac; }
 .ms-final.lose { color: #ff8a80; }
 
+/* 🎒 이적 적응으로 배운 것 — 한 번만 뜨는 줄이라 눈에 띄어야 해요 */
+.hint.learn { color: var(--accent); }
+
 /* 💼 이적 제안 — 리그별로 묶고, 카드마다 도박의 크기(평점 페널티·수상 가치)를 적어요 */
 .tf-group {
   border: 1px solid var(--line);

@@ -1199,6 +1199,9 @@ window.WingerCareer = (() => {
           SoccerCup.shootout(document.getElementById("pk-box"), {
             myName: S.group, oppName: S.cup.opp.name,
             shoot: S.stats.shoot, oppStr: S.cup.opp.str,
+            /* 동료 키커 — 개인 순위 명단에서 우리 팀 선수를 데려와요.
+             * 예전에는 다섯 번을 전부 내가 찼어요("1번 (나) · 2번 (나) …"). */
+            mates: mateNames(), myStr: clubStrOf(S),
             onDone: (win) => { if (btn) btn.hidden = false; cupAdvance(win, head, true); },
           });
         },
@@ -1569,12 +1572,14 @@ window.WingerCareer = (() => {
         : y.promo === "up" ? `🔺 <b>리그 우승!</b> ${(y.y || 0) + 1}시즌부터 <b>${y.promoTo}</b>에서 뜁니다`
         : `🔻 최하위로 강등… ${(y.y || 0) + 1}시즌부터 <b>${y.promoTo}</b>에서 다시 시작해요`}</div>` : ""}
       ${y.club && y.club !== S.group ? `<div class="hint">🔁 <b>${S.group}</b>로 이적했어요 — ${(y.y || 0) + 1}시즌부터 새 팀에서 뜁니다</div>` : ""}
+      ${moveNote ? `<div class="hint learn">${moveNote}</div>` : ""}
       <table class="season-table season-soccer"><thead><tr><th>시즌</th><th>소속</th><th>성적</th><th>평점</th><th>수상</th></tr></thead><tbody>${rows}</tbody></table>
       <div class="draft-summary">
         통산 ${cr.years.length}시즌 · 출전 ${cr.apps || 0} · ⚽ ${cr.goals || 0}골 · 🅰️ ${cr.assists || 0}도움 · 🛡️ ${cr.defense || 0} · 🏅 MOM ${cr.wins}회<br/>
         🏆 MVP ${cr.daesang} · 베스트11 ${cr.bonsang}${cr.rookie ? " · 신인왕" : ""} · ⭐ 명성 ${Math.round(S.fandom)}<br/>
         ${forcedRetire ? "슬슬 은퇴를 고민할 나이가 됐어요. 아름다운 마무리를…" : "다음 시즌도 계속 뛸 수 있어요!"}
       </div>`;
+    moveNote = null;   // 한 번만 보여줘요 — 다음에 결산을 열면 안 뜹니다
     const act = $("career-actions");
     act.innerHTML = "";
     if (!forcedRetire) {
@@ -1831,6 +1836,60 @@ window.WingerCareer = (() => {
 
   /* 소속을 바꾸고 이적 기록을 남겨요. 리그·전력이 함께 바뀌어야
    * 다음 시즌 상대(oppClubs)와 동료 득점·실점이 새 클럽 기준으로 굴러가요. */
+  /* 🎒 이적 적응 — 새 팀에 가면 **낮은 확률로** 하나를 배워요.
+   *
+   * 그냥 공짜 보너스로 두면 "이적은 무조건 이득"이 돼서 지금의 도박 구조가
+   * 흐려져요(위 리그는 평점 페널티를 안고 가는 선택이에요). 그래서 두 가지로 묶었어요.
+   *
+   *   ① 확률은 **얼마나 높이 올라갔나**를 봐요. 같은 리그 안 이적은 배울 게 적고,
+   *      위 리그로 갈수록 커집니다. 내려가면 제일 낮아요.
+   *   ② 오르는 칸은 **가는 나라가 잘 가르치는 것**이에요 —
+   *      🇧🇷 드리블 · 🇮🇹 수비. 그 외 나라는 내 포지션 주 스탯이에요.
+   *      나라 특색(COUNTRY_TRAIT)이 훈련 배수로만 쓰이고 있었는데,
+   *      "왜 이 나라로 가나"에 이유를 하나 더 얹어요.
+   *
+   * 크기는 한 경기 실전 성장(rand(0.4,1.4) × 재능)보다 크고, 한 시즌 훈련보다는
+   * 훨씬 작아요. 이적을 갈아타는 이유가 되면 안 되고, 갔을 때 반가운 정도예요.
+   *
+   * ⚠️ 상한에 닿은 칸은 대상에서 빼요 — 안 그러면 "배웠는데 숫자가 그대로"가 돼요. */
+  let moveNote = null;            // 방금 이적에서 배운 것 — 결산 화면에 한 번 보여주고 지워요
+  /* 실측 — 실제로 일어나는 이적(1~3티어 상승)에서 18 · 26 · 34%예요.
+   * 경기당 실전 성장(6~25%)과 같은 결이라 "낮은 확률로 하나 배운다"로 읽혀요.
+   * 한 티어 이적 1회 기댓값 0.5p, 열 번 갈아타도 5p 안팎 — 한 시즌 실전 성장(5.3p)
+   * 수준이에요. 이적을 갈아타는 이유가 되면 안 되고, 갔을 때 반가운 정도입니다. */
+  const MOVE_LEARN_BASE = 0.10;   // 같은 리그로 옮길 때
+  const MOVE_LEARN_STEP = 0.08;   // 티어 한 칸 올라갈 때마다
+  const MOVE_LEARN_MAX = 0.40;
+
+  function moveLearnP(fromLg, toLg) {
+    const a = LEAGUES.find((l) => l.id === fromLg), b = LEAGUES.find((l) => l.id === toLg);
+    if (!a || !b) return MOVE_LEARN_BASE;
+    return clamp(MOVE_LEARN_BASE + (b.tier - a.tier) * MOVE_LEARN_STEP, 0.05, MOVE_LEARN_MAX);
+  }
+
+  /* 그 나라가 잘 가르치는 칸. 없으면 내 포지션 주 스탯이에요. */
+  function moveLearnKey(league) {
+    const t = COUNTRY_TRAIT[league.country] || {};
+    const key = t.focus || POS_INFO[S.pos].stat;
+    return atCap(key) ? null : key;
+  }
+
+  /* 이적 직후에 굴려요. 배웠으면 그 문구를 돌려주고, 아니면 null이에요. */
+  function moveLearn(fromLg, league) {
+    if (Math.random() >= moveLearnP(fromLg, league.id)) return null;
+    const key = moveLearnKey(league);
+    if (!key) return null;
+    const d = (Array.isArray(STAT_DEFS) ? STAT_DEFS : STAT_DEFS[S.pos]).find((x) => x.key === key);
+    if (!d) return null;
+    const gain = Math.round(rand(1.2, 3.2) * (S.talents[key] || 1) * 10) / 10;
+    S.stats[key] = clamp(S.stats[key] + gain, 0, statCap(key));
+    const t = COUNTRY_TRAIT[league.country] || {};
+    const why = t.focus === key
+      ? `${league.flag} ${league.name}의 방식이 몸에 붙어`
+      : "새 팀 훈련에 적응하며";
+    return `🎒 ${why} ${d.name}을(를) 배웠어요! +${gain.toFixed(1)} (${Math.round(S.stats[key])})`;
+  }
+
   function moveToClub(club, league, bonus) {
     const from = S.group;
     const prevLeague = S.league || 1;
@@ -1843,12 +1902,22 @@ window.WingerCareer = (() => {
     if (!Array.isArray(S.moves)) S.moves = [];
     S.moves.push({ y: S.proYear, from, to: club.name, fromLg: prevLeague, toLg: league.id });
     proLog(`💼 ${from} → ${club.name} 이적! (${league.name} · ${feeText(bonus || 0, prevBack)})`);
-    if (window.Stats) Stats.log("transfer", { y: S.proYear, from, to: club.name, fromLg: prevLeague, toLg: league.id });
+    /* 🎒 적응 — S.league을 새 리그로 바꾼 **뒤에** 굴려요. atCap·statCap이
+     * 초월 단계를 보는데 그건 소속과 무관하지만, 문구에 새 리그 이름이 들어가요. */
+    const learned = moveLearn(prevLeague, league);
+    if (learned) {
+      proLog(learned);
+      if (window.Fx) Fx.flash(learned.replace(/^🎒 /, "🎒 "));
+    }
+    if (window.Stats) Stats.log("transfer", { y: S.proYear, from, to: club.name, fromLg: prevLeague, toLg: league.id, learn: learned ? 1 : 0 });
     save();
+    return learned;
   }
 
   function acceptOffer(o) {
-    moveToClub(o.club, o.league, o.fee);
+    /* 적응으로 배운 게 있으면 결산 화면에 한 줄로 남겨요. 프로 로그(proLog)에만
+     * 남기면 결산으로 넘어가는 순간 안 보여서 "아무 일도 없었다"로 읽혀요. */
+    moveNote = moveToClub(o.club, o.league, o.fee);
     if (window.Fx) Fx.celebrate("award", `💼 ${o.club.name} 이적!`);
     yearReport();   // 결산으로 돌아가요 — 새 소속으로 다시 그려져요
   }
@@ -1989,6 +2058,7 @@ window.WingerCareer = (() => {
         🏅 MOM ${entry.wins}회 · 🏆 MVP ${entry.daesang} · 베스트11 ${entry.bonsang}${entry.rookie ? " · 신인왕" : ""}<br/>
         커리어 점수 <b>${entry.score}</b> — 명예의 전당에 영구 기록됐어요
       </div>`;
+    moveNote = null;   // 한 번만 보여줘요 — 다음에 결산을 열면 안 뜹니다
     const act = $("career-actions");
     act.innerHTML = "";
     const hofBtn = document.createElement("button");

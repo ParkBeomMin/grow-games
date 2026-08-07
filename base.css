@@ -82,6 +82,18 @@ h2 { font-size: 1.6rem; margin: 8px 0 6px; color: var(--accent); }
   transition: transform .12s ease, filter .12s ease;
 }
 .btn:active { transform: scale(.96); }
+/* ⚠️ `hidden`이 버튼에는 안 먹었어요.
+ * 브라우저 기본 규칙 `[hidden] { display: none }`은 **작성자 스타일에 무조건 집니다.**
+ * 그래서 위의 `.btn { display: inline-block }`이 이기고, JS에서 btn.hidden = true를
+ * 걸어도 버튼이 그대로 남았어요 — 승부차기가 끝났는데 "⚽ 승부차기 시작" 버튼이
+ * 계속 떠 있던 게 이것 때문입니다(제보).
+ * 버튼에 hidden을 거는 건 언제나 의도적이라, 그 자리만 좁게 되돌려요.
+ *
+ * !important를 쓰는 이유: `#move-actions .btn`처럼 ID가 붙은 선택자(1,1,0)가
+ * `.btn[hidden]`(0,2,0)보다 세서, 그런 자리에서는 또 안 먹어요.
+ * "보이나 안 보이나"는 다른 어떤 스타일보다 먼저 지켜져야 하는 값이라
+ * 표준 리셋(normalize.css)도 같은 방식으로 잠급니다. */
+.btn[hidden] { display: none !important; }
 .btn-primary {
   background: linear-gradient(180deg, #ffd97a, var(--accent));
   color: #4a3200;

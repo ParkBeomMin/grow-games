@@ -35,6 +35,17 @@ window.SoccerCup = (() => {
   const ROUNDS = ["8강", "4강", "결승"];
 
   const KICKS = 5;                    // 정규 키커 수
+  /* 내가 차는 순번(1~5). 나머지 넷은 동료가 차요.
+   *
+   * ⚠️ 예전에는 **다섯 번을 전부 내가 찼어요.** "1번 (나) · 2번 (나) · 3번 (나)"가
+   * 줄줄이 뜨는 게 화면에 그대로 보였습니다(제보). 축구에서 한 선수가 승부차기를
+   * 연달아 차는 일은 없어요.
+   *
+   * 4번인 이유: 너무 앞이면 압박이 없고, 5번이면 조기 종료로 내 차례가 아예
+   * 안 오는 판이 생겨요(승부가 갈리면 남은 키커를 안 세웁니다).
+   * 4번은 거의 항상 차면서 늦은 순번의 부담이 있어요.
+   * 서든데스는 전부 나예요 — 정규 키커를 다 쓴 뒤엔 에이스가 나섭니다. */
+  const MY_KICK = 4;
   const SIDES = [
     { key: "L", label: "왼쪽", arrow: "⬅️" },
     { key: "C", label: "가운데", arrow: "⬆️" },
@@ -60,9 +71,13 @@ window.SoccerCup = (() => {
   // 자동이면 곧바로, 아니면 한 박자 쉬고 — 화면에서는 차례가 넘어가는 게 보여야 해요
   const next = (fn) => { if (auto()) fn(); else setTimeout(fn, 420); };
 
-  /* 상대 키커의 성공 여부. 팀 전력(0~100)이 높을수록 잘 넣어요.
-   * 내 쪽과 달리 판정이 없으니 확률만 굴립니다 — 화면에는 결과만 나와요. */
+  /* 판정 없이 확률만 굴리는 킥. 팀 전력(0~100)이 높을수록 잘 넣어요.
+   * 상대 키커와 **우리 동료 키커**가 같은 식을 써요 — 화면에는 결과만 나옵니다. */
   const oppScores = (str) => Math.random() < Math.min(0.9, 0.55 + (str || 60) / 400);
+
+  /* 동료 키커 이름. career.js가 같은 클럽 선수 명단을 넘겨줘요.
+   * 모자라면 번호로 채웁니다 — 옛 세이브나 명단이 빈 경우예요. */
+  const mateName = (mates, n) => (mates && mates[n % mates.length]) || `${n + 1}번 키커`;
 
   /* 승부차기 한 판.
    *
@@ -77,6 +92,8 @@ window.SoccerCup = (() => {
   function shootout(box, cfg) {
     const shoot = cfg.shoot || 40;
     const oppStr = cfg.oppStr || 60;
+    const myStr = cfg.myStr || 60;                 // 동료 키커 성공률
+    const mates = Array.isArray(cfg.mates) ? cfg.mates.filter(Boolean) : [];
     let me = 0, opp = 0, turn = 0;        // turn: 0,1,2… 내 차례가 먼저
     const lines = [];
 
@@ -131,12 +148,14 @@ window.SoccerCup = (() => {
       next(myTurn);
     };
 
-    // 내 차례 — 키퍼가 먼저 몸을 틀고, 반대쪽을 고르면 골이에요
+    // 우리 차례 — 내 순번이면 방향을 고르고, 동료 차례면 확률만 굴려요
     const myTurn = () => {
       const n = Math.floor(turn / 2) + 1;
-      const lean = pick(SIDES);
       const sudden = n > KICKS;
-      hint.innerHTML = `${sudden ? "🔥 서든데스 · " : ""}${n}번 키커 — 키퍼가 <b>${lean.arrow} ${lean.label}</b>으로 몸을 틀었어요`;
+      // 정규 5명 중 내 순번(MY_KICK)만 내가 차요. 서든데스는 전부 나예요.
+      if (!sudden && n !== MY_KICK) { mateTurn(n); return; }
+      const lean = pick(SIDES);
+      hint.innerHTML = `${sudden ? "🔥 서든데스 · " : `${n}번 키커 — `}<b>내 차례!</b> 키퍼가 <b>${lean.arrow} ${lean.label}</b>으로 몸을 틀었어요`;
       btns.innerHTML = "";
 
       const kick = (side) => {
@@ -165,9 +184,21 @@ window.SoccerCup = (() => {
       }
     };
 
+    // 동료 차례 — 판정 없이 확률만. 화면에는 이름과 결과만 나와요
+    function mateTurn(n) {
+      const who = mateName(mates, n - 1);
+      const ok = oppScores(myStr);
+      if (ok) me += 1;
+      lines.push({ ok, txt: `${ok ? "⚽" : "❌"} ${n}번 ${who} — ${ok ? "골!" : "실축…"}` });
+      turn += 1;
+      draw();
+      if (decided()) { finish(); return; }
+      next(oppTurn);
+    }
+
     draw();
     myTurn();
   }
 
-  return { CUPS, nameOf, ROUNDS, KICKS, shootout, powerThrough, missWide, oppScores };
+  return { CUPS, nameOf, ROUNDS, KICKS, MY_KICK, shootout, powerThrough, missWide, oppScores, mateName };
 })();
