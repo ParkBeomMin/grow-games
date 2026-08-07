@@ -54,7 +54,9 @@ const parts = {
   scoreW: grab(SRC, /const SCORE_W = \{[\s\S]*?\n {2}\};/),
   peakPres: grab(SRC, /function peakPrestige\(\) \{[\s\S]*?\n {2}\}/),
   careerScore: grab(SRC, /function careerScore\(\) \{[\s\S]*?\n {2}\}/),
-  gradeOf: grab(SRC, /function gradeOfScore\(sc\) \{[\s\S]*?\n {2}\}/),
+  grades: grab(SRC, /const CAREER_GRADES = \[[\s\S]*?\n {2}\];/),
+  gradeOf: grab(SRC, /const gradeOfScore = \(sc\) =>[\s\S]*?;\n/),
+  nextGrade: grab(SRC, /function nextGrade\(sc\) \{[\s\S]*?\n {2}\}/),
 };
 const missing = Object.entries(parts).filter(([, v]) => !v).map(([k]) => k);
 if (missing.length) { console.log(`❌ 소스에서 못 찾았어요: ${missing.join(", ")}`); process.exit(1); }
@@ -71,9 +73,17 @@ const tierOf = (t) => titleIdx(PLAYER_TITLES.find(([, n]) => n === t)[0]);
 
 const scoreFn = new Function("S", "transTotal", `${parts.leagues}
   const leagueOf = (st) => LEAGUES.find((l) => l.id === ((st && st.league) || 1)) || LEAGUES[0];
-  ${parts.scoreW}\n${parts.peakPres}\n${parts.careerScore}\n${parts.gradeOf}
-  const sc = careerScore(); return { sc, grade: gradeOfScore(sc) };`);
+  ${parts.scoreW}\n${parts.peakPres}\n${parts.careerScore}
+  ${parts.grades}\n${parts.gradeOf}\n${parts.nextGrade}
+  const sc = careerScore(); return { sc, grade: gradeOfScore(sc), next: nextGrade(sc) };`);
 const scoreOf = (S) => scoreFn(S, () => (S.transLv || 0));
+const GRADES = new Function(`${parts.grades} return CAREER_GRADES;`)();
+/* 점수를 직접 넣어 등급만 물어보는 통로. careerScore를 거치지 않고 사다리 자체를 봐요. */
+const gradeFns = new Function(`${parts.grades}\n${parts.gradeOf}\n${parts.nextGrade}
+  return { gradeOfScore, nextGrade };`)();
+const gradeOfAt = (sc) => gradeFns.gradeOfScore(sc);
+const scoreAt = (sc) => ({ grade: gradeFns.gradeOfScore(sc), next: gradeFns.nextGrade(sc) });
+const TOP_GRADE = GRADES[0][1], BOTTOM_GRADE = GRADES[GRADES.length - 1][1];
 
 // ---------- ① 칭호는 실력에 대해 단조롭다 ----------
 guard("① 단조성", () => {
@@ -166,16 +176,50 @@ const stateOf = (over) => Object.assign({
 guard("⑥ 두 축", () => {
   const years = Array.from({ length: 12 }, (_, i) => ({ y: i + 1, league: 3 }));
   const great = stateOf({
-    league: 3, fandom: 2000,
-    career: Object.assign({}, EMPTY, { years, daesangW: 8 * 2.4, daesang: 8, ballon: 3, wins: 120 }),
+    league: 3, fandom: 4000,
+    career: Object.assign({}, EMPTY, {
+      years, daesangW: 12 * 2.4, daesang: 12, bonsangW: 14 * 2.4, bonsang: 14,
+      ballon: 6, wins: 200, ringW: 20 * 2.4,
+    }),
   });
   const g = scoreOf(great);
-  // 그 선수가 서른셋에 종합 45까지 내려왔다면 — 업적은 그대로, 칭호는 내려간다
+  // 그 선수가 서른셋에 종합 45까지 내려왔다면 — 업적은 그대로, 클래스는 내려간다
   const nowTitle = titleOf(45), peakTitle = titleOf(120);
-  console.log(`=== ⑥ 업적 ${g.sc}점 ${g.grade} · 전성기 칭호 ${peakTitle} → 은퇴 직전 ${nowTitle} ===`);
-  check(g.sc >= 2600, `발롱도르 3회 커리어는 최고 등급에 닿는다 (${g.sc}점 · ${g.grade})`);
+  console.log(`=== ⑥ 업적 ${g.sc}점 ${g.grade} · 전성기 클래스 ${peakTitle} → 은퇴 직전 ${nowTitle} ===`);
+  check(g.grade === TOP_GRADE,
+    `모든 걸 다 이룬 커리어는 최고 등급(${TOP_GRADE})에 닿는다 (${g.sc}점 · ${g.grade})`);
+  check(g.next === null, "최고 등급에서는 '다음 등급'이 없다");
   check(tierOf(nowTitle) < tierOf(peakTitle),
     "능력치가 내려가면 칭호는 내려간다 — 등급은 그대로인데도");
+});
+
+/* ---------- ⑥-2 커리어 등급 사다리 ----------
+ * 6단계였을 때는 커리어의 절반이 "🌟 한 시대를 풍미한 선수" 하나에 몰렸다.
+ * 12단계로 나눈 이상, 사다리가 성하고 다음 칸까지의 거리가 맞아야 한다. */
+guard("⑥-2 등급 사다리", () => {
+  check(GRADES.length >= 10, `등급이 10단계 이상이다 (${GRADES.length}단계)`);
+  const names = GRADES.map(([, n]) => n);
+  check(new Set(names).size === names.length, "등급 이름이 서로 다르다");
+  const bars = GRADES.map(([b]) => b);
+  check(bars.every((b, i) => i === 0 || b < bars[i - 1]), `문턱이 위에서 아래로 내려간다 (${bars.join(" > ")})`);
+  check(bars[bars.length - 1] === 0, "맨 아래 문턱이 0이다 — 어떤 점수든 등급이 하나는 나와요");
+
+  // 문턱 바로 위/아래에서 등급이 정확히 갈리는가
+  let bad = 0;
+  for (let i = 0; i < GRADES.length - 1; i++) {
+    const [bar, name] = GRADES[i];
+    if (gradeOfAt(bar) !== name) bad++;
+    if (gradeOfAt(bar - 1) !== GRADES[i + 1][1]) bad++;
+  }
+  check(bad === 0, `문턱에서 정확히 갈린다 (어긋난 자리 ${bad}곳)`);
+
+  // 다음 등급까지의 거리
+  const mid = Math.round((GRADES[5][0] + GRADES[6][0]) / 2);
+  const nx = scoreAt(mid).next;
+  console.log(`   ${mid}점 → ${gradeOfAt(mid)} · 다음은 ${nx ? `${nx.name}까지 ${nx.need}점` : "없음"}`);
+  check(!!nx && nx.name === GRADES[5][1] && nx.need === GRADES[5][0] - mid,
+    `다음 등급과 남은 점수가 맞는다 (${nx ? `${nx.name} · ${nx.need}점` : "없음"})`);
+  check(scoreAt(0).grade === BOTTOM_GRADE, `0점은 맨 아래 등급이다 (${BOTTOM_GRADE})`);
 });
 
 /* ---------- ⑦ 명성·MOM만 쌓은 커리어는 레전드가 아니다 ----------
@@ -202,7 +246,8 @@ guard("⑦ 제보 상황", () => {
   const d = scoreOf(decorated);
   console.log(`=== ⑦ 같은 커리어 + 발롱도르 4회 → ${d.sc}점 ${d.grade} ===`);
   check(d.sc > r.sc * 2, `업적이 등급을 끌어올린다 (${r.sc} → ${d.sc})`);
-  check(d.grade.includes("레전드"), `발롱도르 4회면 레전드다 (${d.grade})`);
+  check(GRADES.findIndex(([, n]) => n === d.grade) < GRADES.findIndex(([, n]) => n === r.grade),
+    `업적이 붙으면 등급이 실제로 올라간다 (${r.grade} → ${d.grade})`);
 });
 
 /* ---------- ⑧ 변이 검증 — 옛 산식·옛 문턱이면 ⑦이 무너져야 한다 ---------- */

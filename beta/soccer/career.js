@@ -1833,7 +1833,13 @@ window.WingerCareer = (() => {
       if (!confirm(
         `🎓 여기서 커리어를 마칠까요?\n\n` +
         `· 명예의 전당에 기록이 남아요\n` + retireSummary() +
-        `· 등급: ${gradeOfScore(careerScore())}\n\n` +
+        `· 등급: ${(() => {
+          const sc = careerScore();
+          const nx = nextGrade(sc);
+          /* 점수와 다음 등급까지 남은 거리를 같이 보여줘요. 되돌릴 수 없는 선택이니
+           * "한 시즌 더 뛰면 위로 올라가나"를 여기서 판단할 수 있어야 해요. */
+          return `${gradeOfScore(sc)} (${sc}점${nx ? ` · ${nx.name}까지 ${nx.need}점` : " · 최고 등급"})`;
+        })()}\n\n` +
         `⚠️ 되돌릴 수 없어요.\n\n진행할까요?`
       )) return;
       enshrine();
@@ -2150,15 +2156,36 @@ window.WingerCareer = (() => {
   }
 
   // ---------- 명예의 전당 ----------
-  /* 🏛️ 커리어 등급 — 은퇴할 때 남는 평가예요. 지금 실력을 재는 칭호(titleOf)와는
-   * 다른 축입니다. 문턱은 아래 careerScore의 실측 분포로 잡았어요. */
-  function gradeOfScore(sc) {
-    if (sc >= 2600) return "🐐 축구 역사에 남을 레전드";
-    if (sc >= 1900) return "👑 명예의 전당 헌액";
-    if (sc >= 1100) return "🌟 한 시대를 풍미한 선수";
-    if (sc >= 700) return "💪 리그를 대표한 선수";
-    if (sc >= 300) return "🧢 꾸준했던 주전";
-    return "🌱 짧지만 빛났던 커리어";
+  /* 🏛️ 커리어 등급 — 은퇴할 때 남는 평가예요. 지금 실력을 재는 클래스(titleOf)나
+   * 시즌 성적으로 받는 칭호(SEASON_TITLES)와는 또 다른, 평생치 축입니다.
+   *
+   * 12단계예요. 예전에는 6단계라 커리어의 절반이 "🌟 한 시대를 풍미한 선수" 하나에
+   * 몰렸어요 — 능력치 85로 15시즌을 뛴 커리어와 110으로 뛴 커리어가 같은 이름을
+   * 받았습니다. 문턱은 아래 careerScore의 실측 분포 위에 얹었어요. */
+  const CAREER_GRADES = [
+    [4200, "🌍 축구사를 다시 쓴 선수"],
+    [3400, "🐐 축구 역사에 남을 레전드"],
+    [2800, "🏆 시대를 지배한 선수"],
+    [2300, "👑 세계가 인정한 선수"],
+    [1850, "⭐ 모두가 아는 이름"],
+    [1400, "🌟 한 시대를 풍미한 선수"],
+    [1050, "🏅 리그의 상징"],
+    [800, "💪 리그를 대표한 선수"],
+    [550, "🎽 팀의 기둥"],
+    [300, "🧢 꾸준했던 주전"],
+    [150, "🔄 스쿼드의 한 자리"],
+    [0, "🌱 짧지만 빛났던 커리어"],
+  ];
+  const gradeOfScore = (sc) =>
+    (CAREER_GRADES.find(([bar]) => sc >= bar) || CAREER_GRADES[CAREER_GRADES.length - 1])[1];
+
+  /* 다음 등급까지 얼마나 남았나. 12단계로 잘게 나눈 이상, "지금 어디쯤이고 조금만
+   * 더 하면 뭐가 되는지"가 보여야 나눈 값을 합니다. 꼭대기면 null이에요. */
+  function nextGrade(sc) {
+    const at = CAREER_GRADES.findIndex(([bar]) => sc >= bar);
+    if (at <= 0) return null;                      // 이미 맨 위
+    const [bar, name] = CAREER_GRADES[at - 1];
+    return { name, need: bar - sc };
   }
 
   /* 커리어 점수의 가중치.
@@ -2173,17 +2200,14 @@ window.WingerCareer = (() => {
    * 가장 높이 오른 리그 자체에도 점수를 줍니다. 명성·MOM은 남겨 두되 비중을
    * 8분의 1로 낮췄어요 — 없애면 무관중 커리어와 슈퍼스타가 같아집니다.
    *
-   * 다시 잰 분포(15시즌 · 30회 평균 · 같은 능력치로 리그만 바꿔서):
-   *   능력 60  K리그3 604 · K리그1 550 · 챔피언십 582 · 프리미어리그 618
-   *   능력 85  K리그3 1208 · K리그1 1246 · 챔피언십 1144 · 프리미어리그 1208
-   *   능력 130 K리그3 1905 · K리그1 1960 · 챔피언십 2098 · 프리미어리그 2751
-   * 잘할수록, 그리고 위로 올라갈수록 커져요. 문턱은 이 분포 위에 얹었습니다.
-   *
-   * ⚠️ 위 실측은 우승을 0·2·5회로 **고정해서** 굴린 값이에요. 실제로 지배하는
-   * 커리어는 시즌마다 리그와 컵을 둘 다 가져가서 훨씬 많습니다. 확인용 세이브로
-   * 15시즌을 완주시켰더니 K리그1에서 트로피 29개·종합 128로 3871점이 나왔어요 —
-   * 국내에서 다 이겨도 🐐에 닿습니다. 같은 지배를 프리미어리그에서 하면
-   * 우승 가중(×2.40)과 도달 리그가 붙어 두 배 가까이 벌어져요. */
+   * 다시 잰 분포(15시즌 · 25회 평균 · 우승도 팀 승률로 함께 굴려서):
+   *   능력 60  K리그3 641 · K리그1 625 · 챔피언십 625 · 프리미어리그 621
+   *   능력 85  K리그3 1559 · K리그1 1639 · 챔피언십 1280 · 프리미어리그 1035
+   *   능력 110 K리그3 2209 · K리그1 2414 · 챔피언십 2447 · 프리미어리그 2330
+   *   능력 130 K리그3 2455 · K리그1 2688 · 챔피언십 3197 · 프리미어리그 3661
+   * 전체 폭은 534~4779. 잘할수록, 그리고 위로 갈수록 커집니다.
+   * (확인용 세이브로 15시즌을 완주시킨 실제 커리어는 K리그1 트로피 29개에 3871점)
+   * 등급 문턱(CAREER_GRADES)은 이 분포 위에 얹었어요. */
   const SCORE_W = {
     ballon: 220,  // 🏅 발롱도르 — 그 해 세계 최고 한 명
     dae: 90,      // 🏆 리그MVP (리그 격 가중)
@@ -2351,6 +2375,7 @@ window.WingerCareer = (() => {
       title: titleOf(overall()),
       bestTitle: titleAt(c.bestTitle != null ? c.bestTitle : titleIdx(overall())),
       grade: gradeOfScore(score) + (transTotal() ? ` · ${transcendTitle(transTotal())}` : ""),
+      nextGrade: nextGrade(score),
     };
     const hof = loadHof();
     hof.push(entry);
@@ -2381,7 +2406,8 @@ window.WingerCareer = (() => {
         통산 ${entry.apps}경기(유스 포함) ⚽ ${entry.goals}골 · 🅰️ ${entry.assists}도움<br/>
         🏆 우승 ${entry.trophies} · 🏅 발롱도르 ${c.ballon || 0} · 🎖️ 리그MVP ${entry.daesang} · 🥈 베스트11 ${entry.bonsang}${entry.rookie ? " · 🌟 신인왕" : ""}<br/>
         🏅 MOM ${entry.wins}회<br/>
-        커리어 점수 <b>${entry.score}</b> — 명예의 전당에 영구 기록됐어요
+        커리어 점수 <b>${entry.score}</b>${entry.nextGrade ? ` · ${entry.nextGrade.name}까지 ${entry.nextGrade.need}점이었어요` : " · 더 오를 곳이 없는 자리예요"}<br/>
+        명예의 전당에 영구 기록됐어요
       </div>`;
     moveNote = null;   // 한 번만 보여줘요 — 다음에 결산을 열면 안 뜹니다
     const act = $("career-actions");

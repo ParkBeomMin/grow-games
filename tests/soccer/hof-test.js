@@ -353,6 +353,49 @@ guard("⑨ 우승 표기", () => {
   check(conf.includes("MOM 96"), "MOM은 MOM으로 따로 적는다");
 });
 
+/* ---------- ⑩ 등급 12단계 — 확인창과 은퇴식에 점수·다음 등급이 뜬다 ----------
+ * 6단계였을 때는 커리어의 절반이 한 이름에 몰렸다. 잘게 나눈 이상 "지금 어디쯤이고
+ * 조금만 더 하면 뭐가 되는지"가 화면에 있어야 나눈 값을 한다. */
+guard("⑩ 등급 표시", () => {
+  const grades = new Set();
+  const seen = [];
+  // 점수를 넓게 훑어 실제로 몇 가지 등급이 나오는지 본다 (문턱을 옮겨 적지 않는다)
+  for (const c of [
+    {}, { wins: 30 }, { wins: 90 }, { daesang: 1, daesangW: 1 }, { daesang: 3, daesangW: 3 },
+    { daesang: 6, daesangW: 6, bonsang: 6, bonsangW: 6 },
+    { daesang: 10, daesangW: 24, bonsang: 12, bonsangW: 28, ballon: 2 },
+    { daesang: 14, daesangW: 33, bonsang: 16, bonsangW: 38, ballon: 6, wins: 200 },
+  ]) {
+    const st = stateWith(Object.assign({}, EMPTY_CAREER, c), inLeague(1));
+    st.fandom = (c.wins || 0) * 30;
+    openReport(st);
+    lastConfirm = "";
+    retireBtn().click();
+    const m = lastConfirm.replace(/\s+/g, " ").match(/등급: (\S+ [^(]+)\((\d+)점/);
+    if (m) { grades.add(m[1].trim()); seen.push(`${m[2]}점 ${m[1].trim()}`); }
+  }
+  console.log(`   ${seen.join(" · ")}`);
+  check(grades.size >= 5,
+    `점수를 넓게 훑으면 등급이 여러 가지로 갈린다 (${grades.size}가지) — 6단계였을 땐 한두 개에 몰렸어요`);
+
+  // 확인창에 점수와 다음 등급까지의 거리가 있다
+  const st = stateWith(Object.assign({}, EMPTY_CAREER, { daesang: 3, daesangW: 3, wins: 40 }), inLeague(1));
+  openReport(st);
+  lastConfirm = "";
+  retireBtn().click();
+  const conf = lastConfirm.replace(/\s+/g, " ");
+  const line = (conf.match(/등급:[^⚠]*/) || [""])[0].trim();
+  console.log(`=== ⑩ 확인창 등급 줄 — "${line}" ===`);
+  check(/\d+점/.test(line), `등급 옆에 커리어 점수가 있다 (${line})`);
+  check(/까지 \d+점|최고 등급/.test(line), `다음 등급까지 남은 점수가 있다 (${line})`);
+
+  // 은퇴식에도 남는다
+  const card = $("career-card").textContent.replace(/\s+/g, " ");
+  check(/커리어 점수 \d+/.test(card), "은퇴식에도 점수가 남는다");
+  check(/까지 \d+점이었어요|더 오를 곳이 없는/.test(card),
+    `은퇴식에도 다음 등급까지의 거리가 남는다 (${(card.match(/커리어 점수[^명]*/) || [""])[0].slice(0, 70)})`);
+});
+
 console.log(fail ? `\n❌ ${fail}건 실패` : "\n✅ 통과");
 w.close();
 process.exit(fail ? 1 : 0);
