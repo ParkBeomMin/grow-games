@@ -280,9 +280,24 @@ window.WingerCareer = (() => {
   function initTable() {
     const list = CLUBS[leagueOf(S).id] || CLUBS[1];
     const rows = list.map((c) => ({ name: c.name, str: c.str, w: 0, d: 0, l: 0 }));
-    // 승격·이적으로 내 클럽이 목록에 없을 수도 있어요. 없으면 넣어줍니다.
+    /* 승격·이적으로 내 클럽이 목록에 없을 수 있어요(applyPromotion은 리그만 바꾸고
+     * 클럽 이름은 그대로 둬요). 그때 **덧붙이면 팀이 7개가 됩니다.**
+     *
+     * ⚠️ 홀수가 되면 매 라운드 한 팀이 짝을 못 지어 쉬어요. 실제로 순위표의
+     * 경기 수가 26·22·22·23·19처럼 제각각으로 벌어졌습니다(제보).
+     * 승격은 누군가 내려갔다는 뜻이니, **가장 약한 팀을 밀어내고 그 자리에** 들어가요.
+     * 리그 팀 수가 시즌마다 그대로 유지되고, 짝도 항상 맞습니다. */
     if (S.group && !rows.some((r) => r.name === S.group)) {
-      rows.push({ name: S.group, str: 55, w: 0, d: 0, l: 0 });
+      let out = 0;
+      for (let i = 1; i < rows.length; i++) if (rows[i].str < rows[out].str) out = i;
+      rows.splice(out, 1, { name: S.group, str: clubStrOf(S), w: 0, d: 0, l: 0 });
+    }
+    // 어떤 이유로든 홀수면 제일 약한 팀을 빼요 — 쉬는 팀이 생기는 걸 막습니다
+    if (rows.length % 2 === 1) {
+      let out = 0;
+      for (let i = 1; i < rows.length; i++) if (rows[i].str < rows[out].str) out = i;
+      if (rows[out].name !== S.group) rows.splice(out, 1);
+      else rows.splice(rows.findIndex((r) => r.name !== S.group), 1);
     }
     S.table = { y: S.proYear, league: leagueOf(S).id, rows };
   }
@@ -308,7 +323,17 @@ window.WingerCareer = (() => {
       else if (res === "L") { me.l += 1; op.w += 1; out[S.group] = "L"; out[myOpp] = "W"; }
       else { me.d += 1; op.d += 1; out[S.group] = "D"; out[myOpp] = "D"; }
     }
+    /* 남은 팀을 짝지어 굴려요.
+     * 팀 수가 홀수면 한 팀이 남는데, 무작위로 두면 특정 팀만 계속 쉬어서
+     * 경기 수가 벌어져요. **지금까지 제일 많이 뛴 팀**을 쉬게 해서 간격을 좁힙니다.
+     * (initTable이 짝수를 지키니 평소엔 여기까지 안 와요 — 옛 세이브 대비예요) */
     const rest = shuffle(rows.filter((r) => r !== me && r !== op));
+    if (rest.length % 2 === 1) {
+      let most = 0;
+      const gp = (r) => r.w + r.d + r.l;
+      for (let i = 1; i < rest.length; i++) if (gp(rest[i]) > gp(rest[most])) most = i;
+      rest.splice(most, 1);
+    }
     for (let i = 0; i + 1 < rest.length; i += 2) {
       const a = rest[i], b = rest[i + 1];
       if (Math.random() < 0.22) {                                   // 무승부 비율
