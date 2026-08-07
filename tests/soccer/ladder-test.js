@@ -57,6 +57,9 @@ const parts = {
   posAxis: grab(SRC, /function posAxis\(act, pos\) \{[\s\S]*?\n {2}\}/),
   cbPerYear: grab(SRC, /const CB_PER_YEAR = [^;]+;/),
   weeksPerCb: grab(SRC, /const WEEKS_PER_CB = [^;]+;/),
+  /* agePen은 노쇠 시작 시즌(DECLINE_FROM)을 읽어요 — 상수까지 같이 떼어 와야 굴러가요.
+   * 따로 안 떼면 ReferenceError로 죽습니다(조용히 통과하지는 않아요). */
+  ageConst: grab(SRC, /const DECLINE_FROM = [^;]+;/),
   agePen: grab(SRC, /const agePen = [^;]+;/),
   hype: grab(SRC, /const hype = clamp\([^;]+;/),
   // 수상 판정 — 신인왕 · 리그MVP · 베스트11 세 블록을 통째로 떼어 와요
@@ -197,6 +200,7 @@ const seasonFn = new Function("S", "clamp", "rand", `
 const yearFn = new Function("S", "act", "clamp", "rand", `
   ${leagueSrc}
   ${axisSrc}
+  ${parts.ageConst}
   ${parts.agePen}
   ${parts.hype}
   ${parts.awards}

@@ -313,6 +313,9 @@ body {
 /* 숫자 칸 — 한 부문만 보여주니 폭을 줄이고 이름·소속에 자리를 넘겨요 */
 .race-table .rc-v, .race-table th:last-child { width: 4.2rem; text-align: right; white-space: nowrap; }
 .race-table .ch-club { display: block; font-size: .68rem; color: var(--dim); }
+/* 🏷️ 칭호 — 이 표에서 "다른 팀 선수가 어느 급인가"를 읽는 유일한 자리예요.
+ * 소속·역할과 같은 회색으로 두면 묻혀서, 색을 살짝 올려 눈에 걸리게 합니다. */
+.race-table .ch-title { color: var(--cream); font-weight: 600; }
 .race-note { font-size: .72rem; color: var(--dim); margin-top: .3rem; }
 /* 부문 탭 — 정렬만 바꿔요. 좁은 화면에서는 가로로 넘겨서 봐요 */
 .race-tabs {

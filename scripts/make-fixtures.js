@@ -474,6 +474,100 @@ function makeSoccerReport() {
   log("  ❌ 조건에 맞는 상태를 못 만들었어요 (연말 결산)");
 }
 
+/* 🎂 마지막 시즌 — 커리어가 15시즌으로 늘어난 뒤의 끝자락이에요.
+ * 노쇠 구간(11시즌~) 문구 · 칭호 · 새 커리어 등급을 한 화면에서 다 볼 수 있어요.
+ * 결산까지만 가고 은퇴는 안 눌러요 — 되돌릴 수 없는 선택이라 사람이 눌러야 해요. */
+function makeSoccerFinal() {
+  const MAX = 15;
+  log(`🎂 마지막 시즌 — ${MAX}시즌 결산(은퇴 직전)`);
+  for (const seed of seeds(6)) {
+    let P;
+    try {
+      P = makePage("soccer", seed);
+      soccerDebut(P, "pro", "pos", 0);
+      for (let y = 1; y <= MAX; y++) {
+        if (!playSeason(P, "pos")) break;
+        if (y === MAX) break;
+        const b = nextSeasonBtn(P); if (!b) break; b.click();
+      }
+      const st = P.state();
+      if (st.proYear >= MAX && P.active() === "screen-career") {
+        const lg = P.get("leagueOf")(st).name;
+        add({
+          id: "soccer-final",
+          game: "soccer", url: "soccer/", emoji: "🎂",
+          title: `마지막 시즌 — ${MAX}시즌 결산`,
+          state: `${st.group} · ${lg} · ${st.proYear}시즌 · 명성 ${Math.round(st.fandom)} · 트로피 ${(st.trophies || []).length}개`,
+          check: "커리어가 10시즌에서 <b>15시즌</b>으로 늘었어요. 이 화면에는 "
+            + "<b>다음 시즌 시작 버튼이 없고 은퇴만</b> 남아 있어야 해요. "
+            + "🎓 은퇴하기를 누르면 확인창에 <b>등급</b>이 뜨는데, 우승 횟수가 MOM 횟수가 아니라 "
+            + "<b>트로피 수</b>로 적히는지 봐주세요. 확인을 누르면 은퇴식에서 "
+            + "<b>마지막 클럽에서 몇 시즌</b>인지가 통산 시즌과 따로 적혀요",
+          steps: [
+            "게임이 열리면 <b>이어하기</b> → 선수 카드",
+            "바로 마지막 시즌 결산이 떠요",
+            "🎓 은퇴하기 → 확인창의 등급을 보고 → 확인",
+          ],
+          keys: snapshot(P),
+        });
+        P.close();
+        return;
+      }
+      P.close();
+    } catch (e) {
+      if (P) P.close();
+      log(`  · 시드 ${seed}: ${e.message}`);
+    }
+  }
+  log("  ❌ 조건에 맞는 상태를 못 만들었어요 (마지막 시즌)");
+}
+
+/* 🎂 노쇠 구간 — 전성기가 지난 시즌 중. 준비 화면에서 칭호와 개인 순위를 봐요. */
+function makeSoccerVeteran() {
+  log("🏷️ 노쇠 구간 — 12시즌 중 (칭호·개인 순위)");
+  for (const seed of seeds(6)) {
+    let P;
+    try {
+      P = makePage("soccer", seed);
+      soccerDebut(P, "pro", "pos", 0);
+      for (let y = 1; y <= 12; y++) {
+        if (!playSeason(P, "pos")) break;
+        const b = nextSeasonBtn(P); if (!b) break; b.click();
+      }
+      // 시즌이 시작되도록 준비 훈련을 소진해요 — 개인 순위표는 시즌 중에만 떠요
+      for (let g = 0; g < 40 && P.active() === "screen-pro" && !P.state().activity; g++) {
+        if (!doAct(P, "#pro-actions .action-btn", "pos")) break;
+      }
+      const st = P.state();
+      if (st.proYear >= 12 && st.activity && Array.isArray(st.activity.race)) {
+        add({
+          id: "soccer-veteran",
+          game: "soccer", url: "soccer/", emoji: "🏷️",
+          title: `노쇠 구간 — ${st.proYear}시즌 · 칭호`,
+          state: `${st.group} · ${P.get("leagueOf")(st).name} · ${st.proYear}시즌 · 종합 ${Math.round(P.get("overall")())}`,
+          check: "소속 줄 끝에 <b>종합 옆의 칭호</b>가 붙어요(🌟 월드클래스 같은). "
+            + "🥇 개인 순위를 펼치면 <b>경쟁자마다 칭호</b>가 붙어 있어요 — "
+            + "리그가 높을수록 위 칭호가 많이 보여야 맞아요. "
+            + "11시즌부터는 노쇠 구간이라 훈련해도 예전만큼 안 오르고 시즌 끝마다 능력치가 깎여요",
+          steps: [
+            "게임이 열리면 <b>이어하기</b> → 선수 카드",
+            "준비/시즌 화면의 소속 줄 끝에서 칭호를 확인",
+            "<b>🥇 개인 순위</b>를 펼쳐 경쟁자 칭호를 확인",
+          ],
+          keys: snapshot(P),
+        });
+        P.close();
+        return;
+      }
+      P.close();
+    } catch (e) {
+      if (P) P.close();
+      log(`  · 시드 ${seed}: ${e.message}`);
+    }
+  }
+  log("  ❌ 조건에 맞는 상태를 못 만들었어요 (노쇠 구간)");
+}
+
 /* 🏆 컵 대회 — 리그 4위 안에 들면 시즌이 끝난 뒤 8강부터 단판 토너먼트예요.
  * 리그 마지막 경기 결과 화면에서 멈춥니다 — 거기 '컵 8강 진출' 버튼이 있어요.
  * 그 버튼을 눌러야 대진이 뽑히니(startCup) 세이브에는 아직 컵이 없어요. */
@@ -1517,6 +1611,8 @@ if (want("soccer-semipro", "soccer")) makeSoccerEnding("semi");
 if (want("soccer-report", "soccer")) makeSoccerReport();
 if (want("soccer-chart", "soccer")) makeSoccerChart();
 if (want("soccer-cup", "soccer")) makeSoccerCup();
+if (want("soccer-final", "soccer")) makeSoccerFinal();
+if (want("soccer-veteran", "soccer")) makeSoccerVeteran();
 if (want("soccer-judge", "soccer")) makeSoccerJudge();
 if (want("soccer-nation-kr", "soccer")) makeSoccerNation(0, {
   country: "kr", emoji: "🇰🇷", title: "K리그 유스 → K리그1 · 회복 +30%",

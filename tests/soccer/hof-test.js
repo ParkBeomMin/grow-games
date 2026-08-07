@@ -138,20 +138,26 @@ function retireScore(st) {
 const P = { 1: leagueById(1).prestige, 2: leagueById(2).prestige, 3: leagueById(3).prestige };
 const inLeague = (id) => ({ league: id, group: CLUBS[id][0].name, clubStr: CLUBS[id][0].str });
 
+/* ⚠️ 기준점은 **같은 리그에서** 재야 해요. 커리어 점수에는 '가장 높이 오른 리그'
+ * 항이 따로 있어서, 1부 기준점으로 3부 점수를 빼면 그 항까지 상 하나의 몫으로
+ * 잘못 들어갑니다 (실제로 배수가 2.40이 아니라 6.44로 나왔어요). */
+const baseAt = {};
+const baseOf = (id) => (baseAt[id] != null ? baseAt[id] : (baseAt[id] = retireScore(stateWith({}, inLeague(id)))));
+
 // ---------- ① 3부 리그MVP 1회가 1부 1회보다 점수가 높다 ----------
 let base0 = 0, dae1 = 0, dae3 = 0;
 guard("① 리그MVP 가중", () => {
-  base0 = retireScore(stateWith({}, inLeague(1)));
+  base0 = baseOf(1);
   dae1 = retireScore(stateWith(award("dae", EMPTY_CAREER, leagueById(1)), inLeague(1)));
   dae3 = retireScore(stateWith(award("dae", EMPTY_CAREER, leagueById(3)), inLeague(3)));
-  console.log(`=== ① 커리어 점수 — 수상 없음 ${base0} · 1부 MVP 1회 ${dae1} · 3부 MVP 1회 ${dae3} ===`);
+  console.log(`=== ① 커리어 점수 — 수상 없음 1부 ${base0} · 3부 ${baseOf(3)} · 1부 MVP 1회 ${dae1} · 3부 MVP 1회 ${dae3} ===`);
   check(dae3 > dae1,
     `3부 리그MVP 1회가 1부 1회보다 커리어 점수가 높다 (${dae3} vs ${dae1})`);
 });
 
 // ---------- ② 배수가 prestige와 같다 ----------
 guard("② 배수 = prestige", () => {
-  const c1 = dae1 - base0, c3 = dae3 - base0;
+  const c1 = dae1 - baseOf(1), c3 = dae3 - baseOf(3);
   const want = P[3] / P[1];
   const got = c1 === 0 ? NaN : c3 / c1;
   console.log(`=== ② 기여 — 1부 +${c1} · 3부 +${c3} · 배수 ${Number.isFinite(got) ? got.toFixed(3) : "?"} (기대 ${want.toFixed(3)}) ===`);
@@ -161,7 +167,7 @@ guard("② 배수 = prestige", () => {
   /* 2부도 같은 규칙인지 — 3부만 특수 처리한 구현을 걸러낸다.
    * 점수는 Math.round를 거치니 반올림 0.5점까지는 허용한다 (1부 ×1.35 = 67.5 → 68). */
   const dae2 = retireScore(stateWith(award("dae", EMPTY_CAREER, leagueById(2)), inLeague(2)));
-  const c2 = dae2 - base0, want2 = c1 * P[2] / P[1];
+  const c2 = dae2 - baseOf(2), want2 = c1 * P[2] / P[1];
   check(Math.abs(c2 - want2) <= 0.5,
     `2부도 같은 규칙이다 (기여 +${c2} · prestige ${(P[2] / P[1]).toFixed(2)}배면 +${want2})`);
 });
@@ -170,14 +176,34 @@ guard("② 배수 = prestige", () => {
 guard("③ 베스트11 가중", () => {
   const b1 = retireScore(stateWith(award("bon", EMPTY_CAREER, leagueById(1)), inLeague(1)));
   const b3 = retireScore(stateWith(award("bon", EMPTY_CAREER, leagueById(3)), inLeague(3)));
-  const c1 = b1 - base0, c3 = b3 - base0;
+  const c1 = b1 - baseOf(1), c3 = b3 - baseOf(3);
   const got = c1 === 0 ? NaN : c3 / c1;
   console.log(`=== ③ 베스트11 — 1부 +${c1} · 3부 +${c3} · 배수 ${Number.isFinite(got) ? got.toFixed(3) : "?"} ===`);
   check(b3 > b1, `3부 베스트11 1회가 1부 1회보다 점수가 높다 (${b3} vs ${b1})`);
   check(Number.isFinite(got) && Math.abs(got - P[3] / P[1]) < 1e-6,
     `베스트11도 prestige 배수로 가중된다 (실측 ${Number.isFinite(got) ? got.toFixed(3) : "?"}배)`);
-  check(c1 > 0 && c1 < dae1 - base0,
-    `베스트11의 기여는 리그MVP보다 작다 (+${c1} vs +${dae1 - base0})`);
+  check(c1 > 0 && c1 < dae1 - baseOf(1),
+    `베스트11의 기여는 리그MVP보다 작다 (+${c1} vs +${dae1 - baseOf(1)})`);
+});
+
+/* ---------- ③-2 가장 높이 오른 리그 자체가 점수에 실린다 ----------
+ * 상·명성·MOM만 세면 **아래 리그일수록 유리**해져요. 실측(10시즌 30회)에서
+ * 같은 능력치로 K리그3에 눌러앉은 커리어가 프리미어리그까지 올라간 커리어보다
+ * 점수가 높았습니다. 여기가 그 역전을 막는 자리예요. */
+guard("③-2 도달 리그", () => {
+  console.log(`=== ③-2 수상 없는 커리어 — 1부 ${baseOf(1)} · 2부 ${baseOf(2)} · 3부 ${baseOf(3)} ===`);
+  check(baseOf(3) > baseOf(2) && baseOf(2) > baseOf(1),
+    `상이 하나도 없어도 위 리그까지 올라간 커리어가 점수가 높다 (${baseOf(1)} < ${baseOf(2)} < ${baseOf(3)})`);
+  /* 지금 있는 리그가 아니라 **가장 높이 올랐던 리그**를 봐요 —
+   * 프리미어리그에서 뛰다 강등돼 마친 커리어가 하부 리그 붙박이와 같아지면 안 돼요. */
+  const fell = stateWith({ years: [
+    { y: 4, hype: 5, wins: 0, sales: 0, dFan: 0, awards: [], goals: 0, assists: 0, defense: 0, apps: 30, league: 3 },
+    { y: 5, hype: 5, wins: 0, sales: 0, dFan: 0, awards: [], goals: 0, assists: 0, defense: 0, apps: 30, league: 1 },
+  ] }, inLeague(1));
+  const fellScore = retireScore(fell);
+  console.log(`=== ③-2 3부를 밟았다가 1부에서 마친 커리어 ${fellScore} (1부만 ${baseOf(1)}) ===`);
+  check(fellScore > baseOf(1),
+    `3부를 밟았던 기록이 남아 있으면 1부 붙박이보다 높다 (${fellScore} vs ${baseOf(1)})`);
 });
 
 // ---------- ④ 옛 세이브 방어 — 가중 필드가 없으면 옛 방식으로 계산하고 던지지 않는다 ----------
@@ -274,6 +300,57 @@ guard("⑦ 이적 이력 표시", () => {
     "은퇴식 화면의 이력에 전소속→새소속이 모두 있다");
   check(card.includes(leagueById(2).name),
     "은퇴식 화면에서도 리그가 바뀐 이적은 리그가 보인다");
+});
+
+/* ---------- ⑧ 은퇴식의 소속 시즌 ----------
+ * 제보(실기기 스크린샷): 5시즌에 옮겨 온 클럽인데 "로열 알비온에서 10시즌을
+ * 뛰었어요"라고 적혔다. 통산 시즌을 마지막 클럽 옆에 그대로 붙여 놨던 탓이다.
+ * 화면과 이적 기록이 서로 모르는 사이였던 자리다. */
+guard("⑧ 은퇴식 소속 시즌", () => {
+  const A = CLUBS[1][0], B = CLUBS[2][0];
+  const years = [];
+  for (let y = 1; y <= 10; y++) years.push({
+    y, hype: 5, wins: 0, sales: 0, dFan: 0, awards: [],
+    goals: 0, assists: 0, defense: 0, apps: 30,
+    club: y <= 5 ? A.name : B.name, league: y <= 5 ? 1 : 2,
+  });
+  const st = stateWith({ years }, {
+    league: 2, group: B.name, clubStr: B.str,
+    moves: [{ y: 5, from: A.name, to: B.name, fromLg: 1, toLg: 2 }],
+  });
+  openReport(st);
+  retireBtn().click();
+  const card = $("career-card").textContent.replace(/\s+/g, " ");
+  console.log(`=== ⑧ 은퇴식 — "${card.slice(0, 130)}" ===`);
+  check(/통산 10시즌/.test(card), `통산 시즌이 10으로 찍힌다 (${card.slice(0, 60)})`);
+  check(card.includes(`${B.name}에서 5시즌`),
+    `마지막 클럽에서 뛴 시즌은 5로 찍힌다 — 통산 10이 아니라 (${B.name})`);
+  check(!card.includes(`${B.name}에서 10시즌`),
+    "옛 문구(마지막 클럽에서 통산 시즌만큼 뛰었다)가 남아 있지 않다");
+
+  // 한 클럽에서만 뛴 커리어는 '원클럽맨'으로 적어요 — 5시즌/5시즌을 중복해 적지 않아요
+  const solo = stateWith({ years: years.map((y) => Object.assign({}, y, { club: A.name, league: 1 })) },
+    { league: 1, group: A.name, clubStr: A.str, moves: [] });
+  openReport(solo);
+  retireBtn().click();
+  const soloCard = $("career-card").textContent.replace(/\s+/g, " ");
+  console.log(`=== ⑧ 원클럽맨 — "${soloCard.slice(0, 110)}" ===`);
+  check(soloCard.includes("원클럽맨"), `이적이 없으면 원클럽맨으로 적는다 (${soloCard.slice(0, 60)})`);
+});
+
+/* ---------- ⑨ 은퇴 확인창의 '우승' 표기 ----------
+ * career.wins는 MOM 횟수다. 예전에는 확인창이 그걸 "🏆 우승"이라고 적어서,
+ * 한 시즌 38경기인 게임에서 "우승 96회"가 떴다. 판정과 표시가 어긋난 자리다. */
+guard("⑨ 우승 표기", () => {
+  const st = stateWith({ wins: 96 }, Object.assign({ trophies: ["3시즌 K리그1 우승", "4시즌 FA컵 우승"] }, inLeague(1)));
+  openReport(st);
+  lastConfirm = "";
+  retireBtn().click();
+  const conf = lastConfirm.replace(/\s+/g, " ");
+  console.log(`=== ⑨ 확인창 — "${conf.replace(/\n/g, " ").slice(0, 160)}" ===`);
+  check(conf.includes("🏆우승 2"), `우승은 트로피 수(2)로 적는다 (${conf.slice(0, 120)})`);
+  check(!conf.includes("🏆우승 96"), "MOM 96회를 우승으로 적지 않는다");
+  check(conf.includes("MOM 96"), "MOM은 MOM으로 따로 적는다");
 });
 
 console.log(fail ? `\n❌ ${fail}건 실패` : "\n✅ 통과");

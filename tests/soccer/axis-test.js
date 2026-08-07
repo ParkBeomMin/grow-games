@@ -48,6 +48,9 @@ const parts = {
   })(),
   cbPerYear: grab(SRC, /const CB_PER_YEAR = [^;]+;/),
   weeksPerCb: grab(SRC, /const WEEKS_PER_CB = [^;]+;/),
+  /* agePen은 노쇠 시작 시즌(DECLINE_FROM)을 읽어요 — 상수까지 같이 떼어 와야 굴러가요.
+   * 따로 안 떼면 ReferenceError로 죽습니다(조용히 통과하지는 않아요). */
+  ageConst: grab(SRC, /const DECLINE_FROM = [^;]+;/),
   agePen: grab(SRC, /const agePen = [^;]+;/),
   hype: grab(SRC, /const hype = clamp\([^;]+;/),
 };
@@ -152,6 +155,7 @@ if (!posAxisFn) {
 const hypeFn = new Function("S", "act", "clamp", `
   ${leagueSrc}
   ${axisSrc}
+  ${parts.ageConst}
   ${parts.agePen}
   ${parts.hype}
   return hype;
