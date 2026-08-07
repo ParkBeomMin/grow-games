@@ -295,6 +295,18 @@ function oppClubs(st) {
   return names.length ? names : list.map((c) => c.name);
 }
 
+/* 이름으로 클럽 전력을 찾아요. 리그 경기의 상대는 이름만 들고 다니는데,
+ * 팀 결과가 **전력 대 전력**으로 갈리려면 그 숫자가 필요해요.
+ * 세이브의 세계(S.world)를 먼저 봐요 — 승격·강등으로 명단이 바뀌면 CLUBS는 낡아요. */
+function clubStrByName(name, st) {
+  const S0 = st || (typeof S !== "undefined" ? S : null);
+  for (const lg of LEAGUES) {
+    const hit = clubsIn(lg.id, S0).find((c) => c && c.name === name);
+    if (hit) return hit.str;
+  }
+  return null;
+}
+
 /* 리그의 **모든** 클럽 — 내 클럽까지 넣어요.
  * 경쟁자 명단을 oppClubs로 뽑았더니 우리 팀 선수가 개인 순위에도 평점표에도
  * 한 번도 안 나왔어요. 리그 득점왕 표에 우리 팀 선수가 없는 건 이상하죠.
@@ -374,7 +386,7 @@ const RACE_ROLES = [
  * 실측(경쟁자 8명 평균 평점) — K리그3 7.11 · K리그1 7.49 · J1 7.76 ·
  * 세리에A 8.29 · 프리미어리그 8.53. 리그를 옮기면 표의 눈높이가 눈에 띄게 달라져요. */
 const raceLam = (base, pop, prestige) =>
-  base * ((pop || 70) / 70) * (0.95 + (prestige || 1) * 0.72);
+  base * ((pop || 70) / 70) * (0.95 + (prestige || 1) * 0.72) * GOAL_SCALE;
 
 // 평가 경기 종목: 주 스탯 / 보조 스탯 가중치
 const STAGE_TYPES = [
@@ -477,6 +489,141 @@ const overall = () => {
   const vals = Object.values(S.stats);
   return vals.reduce((a, b) => a + b, 0) / vals.length;
 };
+
+/* 🎖️ 시즌 칭호 — **지난 시즌에 해낸 일로 받아서, 이번 시즌 경기에만 붙는 효과**예요.
+ *
+ * 아래 PLAYER_TITLES(클래스)와는 완전히 다른 물건입니다. 클래스는 능력치에서
+ * 자동으로 나오는 라벨이라 "받는" 게 아니고, 경기에도 관여하지 않아요.
+ * 여기 있는 건 시즌이 끝날 때 성적을 보고 주는 것이고, 다음 시즌 한 해만 갑니다.
+ *
+ * 효과가 붙는 자리 — 전부 경기 안입니다.
+ *   g·a·d  matchContribution의 골·도움·수비 기댓값 (리그·컵 둘 다 이 함수를 씁니다)
+ *   rate   ratingOf의 경기 평점
+ *   moment autoRes의 승부처 성공 확률
+ *   train  훈련 상승폭
+ *
+ * 여러 개를 동시에 달 수 있어요 — 한 시즌을 지배하면 그만큼 다음 시즌이 편해야죠.
+ * 대신 종류별 합계에 상한(BUFF_CAP)을 둡니다. 안 그러면 한 번 앞서간 커리어가
+ * 영원히 앞서가요.
+ *
+ * 시즌이 끝나면 조건을 다시 보고 새로 정해요. 지난 시즌 것은 그냥 사라집니다 —
+ * 유지하려면 그 성적을 또 내야 해요. 그게 이 장치의 재미입니다. */
+/* 🔥 물오른 폼 문턱 — 시즌 평균 평점.
+ * 득점 눈금(GOAL_SCALE)을 넣으면서 평점 분포가 내려왔어요(종합 85 기준 8.1 → 6.8).
+ * 7.5로 두면 종합 115쯤 돼야 닿는 상이 됩니다. 실측에 맞춰 7.1로 내렸어요. */
+const HOT_FORM_BAR = 7.1;
+const SEASON_TITLES = [
+  { id: "boot", name: "🥇 골든부츠 위너", need: "득점 1위",
+    eff: { g: 0.15 }, desc: "골 +15%" },
+  { id: "maker", name: "🎯 리그 최고 도우미", need: "도움 1위",
+    eff: { a: 0.15 }, desc: "도움 +15%" },
+  { id: "wall", name: "🛡️ 리그 최고 수비수", need: "수비 1위",
+    eff: { d: 0.15 }, desc: "수비 +15%" },
+  { id: "point", name: "📈 공격포인트왕", need: "공격포인트 1위",
+    eff: { g: 0.06, a: 0.06 }, desc: "골·도움 +6%" },
+  { id: "ruler", name: "👑 리그의 지배자", need: "리그MVP 수상",
+    eff: { rate: 0.35 }, desc: "경기 평점 +0.35" },
+  { id: "ballon", name: "🏅 발롱도르 위너", need: "발롱도르 수상",
+    eff: { g: 0.08, a: 0.08, d: 0.08, rate: 0.25 }, desc: "모든 기여 +8% · 평점 +0.25" },
+  { id: "hot", name: "🔥 물오른 폼", need: `시즌 평균 평점 ${HOT_FORM_BAR} 이상`,
+    eff: { moment: 0.08 }, desc: "승부처 성공 확률 +8%p" },
+  { id: "champ", name: "🏆 챔피언", need: "리그 우승 또는 승격",
+    eff: { rate: 0.2, moment: 0.04 }, desc: "평점 +0.2 · 승부처 +4%p" },
+  /* 강등에도 하나 붙여요. 최악의 시즌 다음에 아무것도 없으면 그 커리어는 그냥
+   * 아래로만 굴러갑니다 — 되돌아올 손잡이가 하나는 있어야 해요. */
+  { id: "revenge", name: "🕯️ 설욕의 각오", need: "강등",
+    eff: { g: 0.12, a: 0.12 }, desc: "골·도움 +12%" },
+  { id: "rookie", name: "🌟 신인왕", need: "신인왕 수상",
+    eff: { train: 0.15 }, desc: "훈련 상승폭 +15%" },
+];
+const BUFF_CAP = { g: 0.4, a: 0.4, d: 0.4, rate: 0.6, moment: 0.12, train: 0.3 };
+/* 수상 이름 → 칭호. 조건을 따로 계산하지 않고 **화면에 뜬 수상 목록을 그대로**
+ * 읽어요 — 따로 세면 결산에 뜬 상과 칭호가 어긋납니다. 이 게임에서 여러 번
+ * 반복된 병이에요("표시와 판정이 서로 다른 것을 본다"). */
+const AWARD_BUFF = {
+  "골든부츠": "boot", "플레이메이커": "maker", "철벽상": "wall", "공격포인트왕": "point",
+  "리그MVP": "ruler", "발롱도르": "ballon", "신인왕": "rookie",
+};
+const seasonTitleOf = (id) => SEASON_TITLES.find((t) => t.id === id) || null;
+
+/* 이번 시즌에 살아 있는 칭호. buffY가 지금 시즌과 같을 때만 들어요 —
+ * 지난 시즌 것이 그대로 남으면 "한 번 잘하면 평생 간다"가 됩니다. */
+function activeBuffs(st) {
+  const S0 = st || (typeof S !== "undefined" ? S : null);
+  if (!S0 || !Array.isArray(S0.buffs) || S0.buffY !== S0.proYear) return [];
+  return S0.buffs.map(seasonTitleOf).filter(Boolean);
+}
+/* 종류별 합계. g·a·d·train은 배수(1 + 합), rate·moment는 그대로 더해요. */
+function buffSum(kind, st) {
+  const sum = activeBuffs(st).reduce((a, t) => a + (t.eff[kind] || 0), 0);
+  return Math.min(sum, BUFF_CAP[kind] != null ? BUFF_CAP[kind] : 1);
+}
+const buffMul = (kind, st) => 1 + buffSum(kind, st);
+
+/* 🏷️ 클래스 — "지금 이 선수가 어느 급인가".
+ *
+ * 은퇴할 때 붙는 커리어 등급(gradeOfScore)과는 **다른 축**이에요.
+ * 등급은 평생 쌓은 업적이라 안 줄어들지만, 칭호는 지금 실력이라 노쇠하면 내려가요.
+ * 둘을 한 축으로 묶으면 "전성기가 지났는데도 세계 최고"가 됩니다.
+ *
+ * ── 눈금 ──
+ * 실력 점수는 종합(스탯 평균, 상한 130 + 초월)이에요. 경쟁자는 pop(52~88)으로
+ * 굴러서 자가 다른데, 실측으로 맞췄습니다 — "pop 70 경쟁자 8명과 대등해지는
+ * 종합"을 리그마다 재면 K리그3 55.7 · K리그1 63.4 · 챔피언십 97.8 ·
+ * 프리미어리그 117.5가 나와요. 여기에 직선을 맞춘 게 raceStr입니다(최대 오차 5).
+ *
+ * ── 문턱을 어디에 뒀나 ──
+ * 각 리그의 **중간 선수**가 이렇게 불리도록 잡았어요.
+ *   K리그3 52.9 🧢 리그 주전 · K리그1 68.6 💪 리그 정상급
+ *   챔피언십 94.8 🏅 국가대표 주전 · 프리미어리그 117.6 🌟 월드클래스
+ * 프리미어리그 경쟁자 폭(87~148)이 🎖️국가대표 후보~🐐살아있는 전설에 걸쳐요.
+ * 내 쪽에서 👑 세계 최고(130)가 스탯 상한이고, 그 위 둘은 🌠초월까지 가야 닿아요.
+ *
+ * ── 획득 ──
+ * 자동이에요. 훈련·장비·각성으로 종합이 문턱을 넘으면 그 자리에서 올라가고,
+ * 노쇠로 내려가면 같이 내려가요. checkTitle(career.js)이 준비 화면을 그릴 때마다
+ * 봅니다. 올라간 순간에만 알려주고, 커리어 최고 칭호는 따로 기록해 둬요.
+ *
+ * ── 효과 ──
+ * 경기 수당이 칭호만큼 올라가요(titlePayMul). 능력치에 배수를 거는 대신 **돈**에
+ * 건 이유가 있어요 — 골·도움·평점·수상·명성은 이미 전부 종합이 굴리고 있어서,
+ * 거기에 또 곱하면 같은 축을 두 번 세는 셈이에요. 경기 수당은 여태 30만원 고정이라
+ * 실력과 아무 관계가 없던 자리라서, 여기에 걸어야 새 축이 생깁니다.
+ * ("월드클래스가 되면 몸값이 다르다"는 게 실제 축구의 규칙이기도 하고요.) */
+const PLAYER_TITLES = [
+  [155, "🏆 축구의 신"],
+  [142, "🐐 살아있는 전설"],
+  [130, "👑 세계 최고"],
+  [118, "⭐ 슈퍼스타"],
+  [106, "🌟 월드클래스"],
+  [92, "🏅 국가대표 주전"],
+  [78, "🎖️ 국가대표 후보"],
+  [64, "💪 리그 정상급"],
+  [52, "🧢 리그 주전"],
+  /* 아래 둘은 나이를 안 타는 말로 골랐어요 — 같은 실력이라도 열아홉이면 유망주,
+   * 서른셋이면 노장입니다. 칭호는 실력만 보니 스쿼드 안의 자리로 부릅니다. */
+  [38, "🔄 로테이션 자원"],
+  [0, "🪑 벤치 자원"],
+];
+/* 낮은 칭호가 0, 가장 높은 칭호가 10이에요. 표는 위에서부터 높은 순이라 뒤집어요 —
+ * 수당 배수와 커리어 최고 기록이 이 번호를 씁니다. */
+const TITLE_TOP = PLAYER_TITLES.length - 1;
+function titleIdx(power) {
+  const at = PLAYER_TITLES.findIndex(([bar]) => power >= bar);
+  return TITLE_TOP - (at < 0 ? TITLE_TOP : at);
+}
+const titleAt = (idx) => PLAYER_TITLES[TITLE_TOP - clamp(idx, 0, TITLE_TOP)][1];
+const titleOf = (power) => titleAt(titleIdx(power));
+
+/* 💰 칭호 수당 배수 — 🪑 벤치 자원이 ×1.00, 한 단계마다 +0.25씩 붙어 🏆 축구의 신이
+ * ×3.50이에요. 아래를 깎지 않고 위만 올려요 — 초반 살림은 그대로 두고 끝까지 간
+ * 커리어에만 보상을 얹으려는 거예요.
+ * 실측(38경기 · MOM 20회 기준 한 시즌 수당): 🪑 3,140만 → 🌟 월드클래스 7,850만 →
+ * 🏆 축구의 신 10,990만. 장비 IV(3만)·V(7.5만)가 그제야 손에 닿는 값이에요. */
+const TITLE_PAY_STEP = 0.25;
+const titlePayMul = (idx) => 1 + clamp(idx, 0, TITLE_TOP) * TITLE_PAY_STEP;
+// 경쟁자의 실력을 내 종합과 같은 자로 옮겨요 (위 실측에 맞춘 직선).
+const raceStr = (pop, prestige) => (pop || 70) * (0.48 + 0.5 * (prestige || 1));
 
 // ---------- 저장 — 여러 선수(슬롯) 지원 ----------
 const SLOTS_KEY = SAVE_KEY + "-slots";
@@ -1351,6 +1498,21 @@ function poissonish(lam) {
   return n - 1;
 }
 // rating(평점 0~10대) → 이번 경기 골·도움·수비 (포지션별 가중)
+/* ⚽ 득점 눈금 — 이 게임의 한 경기가 몇 골짜리인가.
+ *
+ * 1.0이던 시절에는 종합 85 선수가 경기당 2.2골(시즌 83골)을 넣었어요. 그러면
+ * 팀 스코어를 전력으로 갈라놓는 순간 4:3 같은 판이 됩니다 — 내 골이 곧 팀 골이라
+ * 실점도 그만큼 커져야 승패가 나에게서 떨어지거든요. "점수가 너무 잘 난다"는
+ * 제보가 그 자리예요.
+ *
+ * 그래서 **생산량 전체를 같은 배수로** 줄였어요. 나·경쟁자·동료·실점이 한 자로
+ * 움직이니 개인 순위 경쟁과 부문상은 그대로예요. 시즌 축(posAxis→hype)은
+ * 로그라서 AXIS_OFF 한 값으로 상쇄되고, 경기 평점은 RATE를 다시 잡았습니다.
+ *
+ * 이 상수를 건드리면 AXIS_OFF와 RATE도 같이 다시 잡아야 해요 —
+ * tests/soccer/goal-scale-test.js가 그 짝을 지킵니다. */
+const GOAL_SCALE = 0.33;
+
 function matchContribution(rating) {
   const perf = clamp((rating - 5) / 4 + 0.6, 0.15, 1.6);
   /* 윙어는 돌파로 기회를 만들어요. 골·도움 판정에 드리블이 함께 작용합니다.
@@ -1372,9 +1534,11 @@ function matchContribution(rating) {
   const G = { fw: 1.05, wg: 0.75, mf: 0.5, df: 0.14 };
   const A = { mf: 0.95, wg: 0.85, fw: 0.55, df: 0.28 };
   const D = { df: 2.3, mf: 1.2, wg: 0.5, fw: 0.45 };
-  const gLam = (G[S.pos] ?? 0.4) * perf * (0.55 + shootF);
-  const aLam = (A[S.pos] ?? 0.4) * perf * (0.55 + passF);
-  const dLam = (D[S.pos] ?? 0.6) * perf * (0.55 + defF);
+  /* 🎖️ 시즌 칭호가 여기서 경기에 들어와요 — 리그도 컵도 이 함수를 통해 골·도움·
+   * 수비를 뽑으니, 한 자리에 얹으면 모든 경기에 같은 규칙으로 붙습니다. */
+  const gLam = (G[S.pos] ?? 0.4) * perf * (0.55 + shootF) * buffMul("g") * GOAL_SCALE;
+  const aLam = (A[S.pos] ?? 0.4) * perf * (0.55 + passF) * buffMul("a") * GOAL_SCALE;
+  const dLam = (D[S.pos] ?? 0.6) * perf * (0.55 + defF) * buffMul("d") * GOAL_SCALE;
   return { g: poissonish(gLam), a: poissonish(aLam), def: poissonish(dLam) };
 }
 /* 동료 득점 — 예전에는 팀 득점이 내 골 + 내 도움뿐이라 동료가 넣는 골이 없었어요.
@@ -1384,24 +1548,55 @@ function matchContribution(rating) {
  * 이 골은 act.goals에 안 들어가요 — 내 골이 아니니까요. 수상 축은 그대로입니다. */
 const TEAMMATE_GOALS = { fw: 0.35, wg: 0.5, mf: 0.8, df: 2.2 };
 
-function teammateGoals(rating) {
-  // 전력 70이 기준이에요. 좋은 팀은 동료가 더 넣습니다.
-  const strF = clubStrOf(S) / 70;
-  const base = (TEAMMATE_GOALS[S.pos] ?? 0.6) * (0.6 + (rating - 5) * 0.14) * strF;
-  return poissonish(Math.max(0, base));
+/* 동료가 넣는 골 — **우리 전력 대 상대 전력**이 정해요.
+ *
+ * 예전에는 내 경기 평점이 이걸 거의 다 정했어요(0.6 + (평점-5)×0.14). 그래서
+ * 내가 못한 날은 동료도 같이 못 넣었고, 팀 결과가 통째로 나에게 묶였습니다.
+ * 실측: 클럽 전력을 45에서 95로 바꿔도 팀 승률이 10%p밖에 안 움직였는데,
+ * 내 종합을 45에서 125로 바꾸면 78%p가 움직였어요 — 팀이 사실상 나였습니다.
+ *
+ * 지금은 전력 차가 주인공이고 내 경기력은 거들기만 해요(±0.3 상한). */
+const MATE_SCALE = 1.7;    // 동료 골 전체 크기
+const MATE_EDGE = 3.0;     // 전력 차가 동료 골에 실리는 정도
+const MATE_FORM = 0.05;    // 내 경기력이 거드는 정도 — 작게 둡니다
+const MATE_FLOOR = 0.15;   // 아무리 전력이 뒤져도 동료가 아예 못 넣지는 않아요
+function teammateGoals(rating, oppStr) {
+  /* 상대를 모르면 **우리 전력과 같다**고 봐요(대등한 경기). 예전에는 리그 평균 70을
+   * 기본값으로 뒀는데, 그러면 K리그3(전력 45) 팀은 상대를 모를 때마다 전력 70과
+   * 붙는 셈이라 승률이 18%까지 떨어졌어요 — 자기 리그에서 뛰는데도요. */
+  const edge = (clubStrOf(S) - (oppStr == null ? clubStrOf(S) : oppStr)) / 100;
+  const form = clamp((rating - 6.5) * MATE_FORM, -0.3, 0.3);
+  /* 바닥을 0이 아니라 0.15로 둬요. 전력이 50이나 뒤지면 1 + edge×2.2가 음수가 돼서
+   * 동료 골 기댓값이 **정확히 0**이 됩니다 — 최약체 팀은 나 말고 아무도 못 넣는
+   * 팀이 되고, 그건 팀이 아니에요. */
+  const base = (TEAMMATE_GOALS[S.pos] ?? 0.6) * MATE_SCALE * GOAL_SCALE
+    * Math.max(MATE_FLOOR, 1 + edge * MATE_EDGE + form);
+  return poissonish(base);
 }
-// 내 골 수 & 평점에 어울리는 팀 스코어(우리:상대)와 승부 결과
-function matchScoreline(myGoals, rating) {
-  let tf = myGoals + randInt(0, 2);
-  const strength = clamp((rating - 5) / 5 + ((S.stats.defense || 40) - 50) / 120, -0.6, 0.9);
-  const winP = clamp(0.45 + strength * 0.4, 0.15, 0.82);
-  const roll = Math.random();
-  let ta, res;
-  if (roll < winP) { ta = randInt(0, Math.max(0, tf - 1)); res = "W"; }
-  else if (roll < winP + 0.22) { ta = tf; res = "D"; }
-  else { ta = tf + randInt(1, 2); res = "L"; }
-  return { tf, ta, res };
+
+/* 실점 — **이 경기가 얼마나 골이 오가는 판인가 × 전력 균형**이에요.
+ *
+ * 우리 골(teamGoals)을 섞는 게 핵심입니다. 한 경기에 3~4골을 넣는 선수가
+ * 주인공인 게임이라, 실점을 낮은 값에 묶어 두면 내 골 수가 곧 승패가 돼요.
+ * 내가 4골 넣는 급이면 상대도 그만큼 넣는 판이라야 "혼자 잘해도 팀은 진다"가
+ * 성립합니다. 실측: 공격P 2개 이상 올린 경기에서 팀이 지는 비율 0% → 41%.
+ *
+ * 내 평점과 수비 능력치도 실점을 줄이지만 계수가 작아요 — 예전에는 이 둘이
+ * 실점을 통째로 정했습니다(2.4 - (평점-5)×0.28 - 수비/100×1.4). */
+const CONC_BASE = 0.8;     // 전력이 같아도 오가는 기본 골
+const CONC_MIX = 0.75;     // 우리 골이 실점에 되비치는 정도 — 이 값이 승패를 나에게서 떼어내요
+const CONC_EDGE = 3.4;     // 전력 차가 실점에 실리는 정도 — 여기가 클수록 클럽이 승패를 정해요
+const CONC_FORM = 0.05;    // 내 평점이 실점을 줄이는 정도
+const CONC_DEF = 400;      // 내 수비 능력치가 실점을 줄이는 정도 (나누는 값이라 클수록 약해요)
+const CONC_CAP = 5;        // 한 경기 실점 상한 — 8:5 같은 스코어가 나오지 않게
+function deriveOppGoals(rating, defStat, oppStr, teamGoals) {
+  const edge = ((oppStr == null ? clubStrOf(S) : oppStr) - clubStrOf(S)) / 100;   // 모르면 대등한 경기
+  const balance = Math.max(0.15, (1 + edge * CONC_EDGE)
+    * (1 - (rating - 6.5) * CONC_FORM - ((defStat || 40) - 60) / CONC_DEF));
+  const lam = (CONC_BASE * GOAL_SCALE + Math.max(0, teamGoals || 0) * CONC_MIX) * balance;
+  return Math.min(CONC_CAP, poissonish(Math.max(0, lam)));
 }
+
 const RES_LABEL = { W: "승리 🎉", D: "무승부 🤝", L: "패배 💧" };
 // 골/도움/수비 이벤트를 분(') 마커와 함께 FM식 피드 라인으로
 function matchEventFeeds(c, oppName, tf, ta) {
@@ -1454,7 +1649,12 @@ const miniZone = (stat) => clamp(13 + stat * 0.22 + (S.condition - 50) * 0.08, 1
 
 const autoMiniOn = () => localStorage.getItem("grow-auto-mini") === "1";
 function autoRes(stat) {
-  const pPerfect = clamp(0.12 + stat * 0.003 + (S.condition - 50) * 0.001, 0.08, 0.5);
+  /* 🔥 물오른 폼·🏆 챔피언이 승부처 성공률을 밀어 올려요.
+   * ⚠️ 칭호는 **상한(0.5)을 씌운 뒤에** 더해요. 안쪽에 넣으면 칭호가 없을 때도
+   * 상한이 0.5에서 0.62로 올라가서, 능력치 130짜리 선수의 승부처 확률이
+   * 0.50 → 0.54로 조용히 바뀝니다 (실제로 ladder-test가 그걸 잡았어요). */
+  const base = clamp(0.12 + stat * 0.003 + (S.condition - 50) * 0.001, 0.08, 0.5);
+  const pPerfect = clamp(base + buffSum("moment"), 0.08, 0.62);
   const pMiss = clamp(0.4 - stat * 0.002, 0.08, 0.4);
   const r = Math.random();
   return r < pPerfect ? "perfect" : r < pPerfect + pMiss ? "miss" : "good";
@@ -1527,14 +1727,6 @@ function playRandomMini(container, cb) {
   }
 }
 
-// 평점·수비력으로 상대 실점 수를 산출
-function deriveOppGoals(rating, defStat) {
-  // 전력 70이 기준이에요. 좋은 팀은 덜 먹습니다.
-  const strAdj = (clubStrOf(S) - 70) / 100;
-  const base = 2.4 - (rating - 5) * 0.28 - (defStat / 100) * 1.4 - strAdj + rand(-0.3, 0.9);
-  return Math.max(0, Math.min(4, Math.round(base)));
-}
-
 // ---------- 경기 시뮬레이션 뷰 (스코어보드 + 미니 필드 + 중계) ----------
 // 유스/프로 경기 공통. #stage-card 안에 렌더하고 #btn-stage-next를 재사용해요.
 const MatchSim = (() => {
@@ -1592,7 +1784,11 @@ const MatchSim = (() => {
      * 그 선수가 없는** 일이 생겼습니다(제보). 이제 우리 팀 선수 이름으로 넣고,
      * 누가 넣었는지 mateGoals로 돌려줘서 career.js가 시즌 기록에 올려요. */
     const mateNames = Array.isArray(cfg.mates) ? cfg.mates.filter(Boolean) : [];
-    const mates = cfg.rating != null ? teammateGoals(cfg.rating) : 0;
+    /* 동료 골 수는 **부르는 쪽에서 넘겨줘요.** 실점(deriveOppGoals)이 우리 팀 골을
+     * 봐야 하는데, 여기서 굴리면 부르는 쪽은 그 값을 모른 채 실점을 정하게 돼요.
+     * 안 넘어오면 예전처럼 여기서 굴립니다(유스 경기 같은 옛 호출부). */
+    const mates = cfg.mateCount != null ? cfg.mateCount
+      : (cfg.rating != null ? teammateGoals(cfg.rating, cfg.oppStr) : 0);
     const mateGoals = [];
     for (let i = 0; i < mates; i++) {
       const who = mateNames.length ? mateNames[randInt(0, mateNames.length - 1)] : null;
@@ -1685,12 +1881,15 @@ function renderStageSim(type, grade, onFinal) {
   const gradeRating = { S: 8.4, A: 7.2, B: 6.1, C: 4.9, D: 3.7 }[grade.g] || 6;
   const rating = clamp(gradeRating + rand(-0.5, 0.5), 1, 10);
   const c = matchContribution(rating);
-  const oppGoals = deriveOppGoals(rating, S.stats.defense);
+  /* 유스 경기는 클럽 전력이라는 개념이 없어요 — 상대 전력을 안 넘기면
+   * 대등한 경기로 봅니다(전력 차 0). */
+  const mates = teammateGoals(rating, null);
+  const oppGoals = deriveOppGoals(rating, S.stats.defense, null, c.g + c.a + mates);
   MatchSim.run({
     home: "우리 유스",
     away: pick(oppClubs(S)),
     myName: S.name,
-    goals: c.g, assists: c.a, defense: c.def, oppGoals, rating,
+    goals: c.g, assists: c.a, defense: c.def, oppGoals, rating, mateCount: mates,
     finalize: (info) => {
       let gi = GRADE_ORDER.indexOf(grade.g);
       if (info.momentRes === "perfect") gi = Math.min(4, gi + 1);
@@ -2105,10 +2304,61 @@ const HELP_SECTIONS = [
     "3년이 끝나면 그동안의 성과로 프로 계약이 갈려요.\n" +
     "계약하면 리그 커리어를 이어가고, 아니면 유스에서 커리어가 끝나요.\n" +
     "🌱유스 재계약으로 끝났다면 딱 한 번, 능력치를 그대로 안고 3년차를 다시 뛸 수 있어요." },
-  { emoji: "🎓", title: "은퇴", body:
+  { emoji: "🎖️", title: "시즌 칭호", body:
+    "지난 시즌에 해낸 일로 받아서, 이번 시즌 경기에만 붙는 효과예요.\n" +
+    "시즌이 끝나면 다시 정해져요 — 유지하려면 그 성적을 또 내야 해요.\n" +
+    "\n" +
+    "🥇골든부츠 위너(득점 1위) 골 +15%\n" +
+    "🎯리그 최고 도우미(도움 1위) 도움 +15%\n" +
+    "🛡️리그 최고 수비수(수비 1위) 수비 +15%\n" +
+    "📈공격포인트왕(공격P 1위) 골·도움 +6%\n" +
+    "👑리그의 지배자(리그MVP) 경기 평점 +0.35\n" +
+    "🏅발롱도르 위너(발롱도르) 모든 기여 +8% · 평점 +0.25\n" +
+    "🔥물오른 폼(시즌 평균 평점 7.5 이상) 승부처 성공 +8%p\n" +
+    "🏆챔피언(리그 우승·승격) 평점 +0.2 · 승부처 +4%p\n" +
+    "🕯️설욕의 각오(강등) 골·도움 +12%\n" +
+    "🌟신인왕(신인왕) 훈련 상승폭 +15%\n" +
+    "\n" +
+    "여러 개를 동시에 달 수 있어요. 다만 종류별 합계에 상한이 있어요\n" +
+    "(골·도움·수비 각 +40% · 평점 +0.6 · 승부처 +12%p · 훈련 +30%).\n" +
+    "시즌 결산에서 다음 시즌 칭호를 알려주고, 준비/시즌 화면 위에 늘 떠 있어요." },
+  { emoji: "🏷️", title: "선수 클래스", body:
+    "시즌 칭호와 달리 이건 **받는 게 아니라 지금 실력에서 자동으로 나오는 이름**이에요.\n" +
+    "경기에는 관여하지 않아요. 11단계가 있어요.\n" +
+    "🪑벤치 자원 → 🔄로테이션 자원 → 🧢리그 주전 → 💪리그 정상급 →\n" +
+    "🎖️국가대표 후보 → 🏅국가대표 주전 → 🌟월드클래스 → ⭐슈퍼스타 →\n" +
+    "👑세계 최고 → 🐐살아있는 전설 → 🏆축구의 신\n" +
+    "\n" +
+    "획득 — 따로 조건을 채우는 게 아니라 종합(능력치 평균)이 문턱을 넘으면 바로 올라가요.\n" +
+    "훈련·장비·🔮각성 무엇으로 올려도 됩니다. 반대로 노쇠하면 내려가요.\n" +
+    "👑세계 최고(130)가 능력치 상한이고, 그 위 둘은 🌠초월로 상한을 올려야 닿아요.\n" +
+    "\n" +
+    "효과 — 경기 수당이 한 단계마다 +25%씩 붙어요 (🪑 ×1.00 … 🏆 ×3.50).\n" +
+    "클래스에 능력치 배수를 걸지 않은 건, 골·평점·수상·명성이 이미 전부 종합으로\n" +
+    "굴러가서 거기에 또 곱하면 같은 걸 두 번 세기 때문이에요. 경기에 직접 붙는 효과는\n" +
+    "🎖️시즌 칭호가 맡아요 — 그건 성적으로 받아 오는 거라 축이 겹치지 않아요.\n" +
+    "올라선 순간 명성도 한 번 크게 붙어요.\n" +
+    "\n" +
+    "🥇개인 순위표에는 다른 팀 선수들의 칭호도 함께 나와요. 리그가 높을수록 위 칭호가\n" +
+    "많이 보여요 — 프리미어리그의 중간 선수가 🌟월드클래스쯤 됩니다.\n" +
+    "은퇴하면 커리어에서 가장 높이 올랐던 칭호가 기록으로 남아요." },
+  { emoji: "🎓", title: "은퇴와 커리어 등급", body:
     "커리어를 마치면 🏛️명예의 전당에 기록이 남아요.\n" +
-    "은퇴 시점의 성적으로 등급이 매겨지고, 전 세계 플레이어와 순위를 겨뤄요.\n" +
-    "결산 화면에서 언제든 은퇴할 수 있어요. 확인창에서 남을 기록을 미리 보여줘요." },
+    "결산 화면에서 언제든 은퇴할 수 있고, 확인창에서 남을 기록과 등급을 미리 보여줘요.\n" +
+    "\n" +
+    "커리어 점수로 12단계 등급이 매겨져요 (아래로 갈수록 위):\n" +
+    "🌱짧지만 빛났던 커리어 → 🔄스쿼드의 한 자리 → 🧢꾸준했던 주전 → 🎽팀의 기둥 →\n" +
+    "💪리그를 대표한 선수 → 🏅리그의 상징 → 🌟한 시대를 풍미한 선수 →\n" +
+    "⭐모두가 아는 이름 → 👑세계가 인정한 선수 → 🏆시대를 지배한 선수 →\n" +
+    "🐐축구 역사에 남을 레전드 → 🌍축구사를 다시 쓴 선수\n" +
+    "\n" +
+    "점수는 업적이 중심이에요. 🏅발롱도르 · 🏆리그MVP · 🎖️베스트11 · 우승은\n" +
+    "리그 격을 곱해서 세요 — 프리미어리그에서 받은 상이 더 값이 나가요.\n" +
+    "**가장 높이 올라갔던 리그** 자체에도 점수가 붙어요. 명성과 MOM도 세지만\n" +
+    "비중이 작아요 — 약한 리그에서 쓸어 담는 값이라 그것만으로 위에 갈 수는 없어요.\n" +
+    "\n" +
+    "은퇴 확인창에 지금 점수와 **다음 등급까지 남은 점수**가 같이 떠요.\n" +
+    "한 시즌 더 뛰면 올라갈지 여기서 판단할 수 있어요." },
   { emoji: "💰", title: "돈 벌기와 쓰기", body:
     "활동 수당과 정산으로 돈이 들어와요.\n" +
     "🛍️상점에서 장비를 사면 능력치가 바로 올라요. 등급은 순서대로만 살 수 있어요.\n" +

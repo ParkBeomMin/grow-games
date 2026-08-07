@@ -44,7 +44,9 @@ window.WingerCareer = (() => {
     const myScore =
       (all * 0.50 + stats[main] * 0.14 + stats.stamina * 0.10 - weak) * clutch(main) +
       condition / 8 + Math.min((fandom || 0) / 45, FAN_CAP) + rand(-5, 5) + 20;
-    const rating = clamp(myScore / RATING_DIV - leagueOf(S).penalty, 1, 10);
+    /* 🎖️ 시즌 칭호(👑 리그의 지배자·🏆 챔피언·🏅 발롱도르)가 평점에 붙어요.
+     * clamp **안쪽**에서 더해요 — 밖에서 더하면 상한 10이 안 지켜집니다. */
+    const rating = clamp(myScore / RATING_DIV - leagueOf(S).penalty + buffSum("rate"), 1, 10);
     return rating;
   }
 
@@ -53,16 +55,28 @@ window.WingerCareer = (() => {
    * n은 정규화 계수예요. 수비수는 시즌 수비 성공이 68회인데 공격수는 골이 31개라,
    * 그대로 더하면 포지션이 곧 유불리가 됩니다. 시뮬레이션으로 잡은 값이에요. */
   const POS_AXIS = {
-    fw: { g: 1.0, a: 0.5, d: 0.15, n: 1.00 },
-    wg: { g: 0.8, a: 0.8, d: 0.15, n: 1.05 },
-    mf: { g: 0.5, a: 1.0, d: 0.30, n: 0.96 },
-    df: { g: 2.0, a: 1.0, d: 0.55, n: 0.72 },
+    fw: { g: 1.0, a: 0.5, d: 0.15, n: 0.98 },
+    wg: { g: 0.8, a: 0.8, d: 0.15, n: 1.08 },
+    mf: { g: 0.5, a: 1.0, d: 0.30, n: 1.04 },
+    df: { g: 2.0, a: 1.0, d: 0.55, n: 0.655 },
   };
   const AXIS_K = 3.00;
   /* 경기 수를 12 → 38로 올리면서 시즌 축이 3.23배가 됐어요. log가 AXIS_K(3.00)로
    * 곱해지므로 hype가 3.52 올라갑니다 — 그만큼 offset을 올려 수상 문턱
-   * (MVP 5.5 · 베스트11 4.5 · 신인왕 3)의 의미를 그대로 지켜요. */
-  const AXIS_OFF = 7.71;
+   * (MVP 5.5 · 베스트11 4.5 · 신인왕 3)의 의미를 그대로 지켜요.
+   *
+   * ⚽ 득점 눈금(GOAL_SCALE 0.33)을 넣으면서 한 번 더 내렸어요.
+   *
+   * ⚠️ 산술만 믿으면 틀립니다. 축이 0.33배면 -3.33이라고 계산했는데, **승부처
+   * 극장골(+1)은 눈금을 안 타요.** 실제 시즌 축은 0.33배가 아니라 0.44배쯤이
+   * 됩니다. 그래서 실측으로 잡았어요 — AXIS_OFF를 5.0·5.4·5.8로 놓고 15시즌
+   * 커리어를 굴려 리그MVP 횟수를 눈금 바꾸기 전과 맞춰 봤습니다.
+   * 최종값은 curve-test의 리그MVP 확률 밴드로 잡았어요 — 그게 이 게임의 계약이에요.
+   *   AXIS_OFF 4.4 → 능력치 90에서 MVP 45.5% (밴드 8~25%) · 너무 헐거움
+   *   AXIS_OFF 5.0 → 3.0 / 17.4 / 57.1 / 81.2 / 92.2% (능력치 70~150) ✔ 전부 밴드 안
+   *   AXIS_OFF 5.4 → 능력치 110에서 32.2% (밴드 45~72%) · 너무 빡빡함
+   * **생산량을 바꿀 때 이 값을 같이 안 옮기면 수상이 통째로 사라지거나 쏟아져요.** */
+  const AXIS_OFF = 5.0;
 
   /* ---------- ⭐ 경기 평점 — 실제 축구 평점처럼 ----------
    *
@@ -291,6 +305,17 @@ window.WingerCareer = (() => {
    * 이 상수를 소스에서 읽어 시즌을 굴려요. 함수로 바꾸면 테스트는 12경기로
    * 굴리는데 게임은 38경기로 돌아 기대값이 통째로 어긋납니다. */
   const WEEKS_PER_CB = 19;
+
+  /* 🎂 선수 생애 주기 — 실제 축구 선수의 굴곡을 그대로 따라가요.
+   * 열여덟에 데뷔해 서른셋에 그만두면 15시즌입니다. 예전에는 10시즌이라
+   * "이제 좀 알겠다" 싶을 때 끝났어요.
+   *
+   * 늘린 건 시즌 수만이 아니에요. 성장·전성기·노쇠 구간을 같은 비율로 늘렸습니다.
+   * 시즌만 5개 붙이면 노쇠 구간이 8년차부터 8시즌이 되어, 커리어의 절반이
+   * 내리막인 이상한 곡선이 돼요. */
+  const CAREER_MAX = 15;    // 마지막 시즌 — 이 시즌 결산에서는 은퇴만 남아요
+  const GROW_UNTIL = 4;     // 여기까지는 시즌이 끝날 때 재능만큼 저절로 자라요
+  const DECLINE_FROM = 11;  // 여기부터 노쇠 — 능력치가 깎이고 연말 평가에도 벌점이 붙어요
   const CB_LABELS = ["전반기", "후반기"];
   const cbLabel = (n) => CB_LABELS[n - 1] || `${n}차`;
 
@@ -481,6 +506,24 @@ window.WingerCareer = (() => {
     if (other) proLog(`🔁 ${other.name}이(가) ${LEAGUES.find((l) => l.id === fromId).name}(으)로 자리를 바꿨어요`);
   }
 
+  /* 🏆 우승 기록 — 트로피 목록과 **리그 격 가중 카운터**를 함께 세워요.
+   *
+   * 커리어 점수는 가중 카운터(ringW)를 봅니다. K리그3 우승과 프리미어리그 우승이
+   * 같은 값이면 위로 올라가지 않는 쪽이 이득이 돼요 — 실제로 그런 상태였습니다.
+   *
+   * 가중 카운터가 없던 옛 세이브는 지금까지 쌓인 트로피를 1부 기준(×1)으로 세고
+   * 이어붙여요. 0에서 시작하면 새 우승 하나 때문에 지난 우승이 통째로 사라집니다. */
+  function addTrophy(title, leagueId) {
+    S.trophies = S.trophies || [];
+    if (S.trophies.includes(title)) return false;
+    S.trophies.push(title);
+    S.career = S.career || {};
+    const before = S.career.ringW != null ? S.career.ringW : S.trophies.length - 1;
+    const lg = LEAGUES.find((l) => l.id === leagueId) || leagueOf(S);
+    S.career.ringW = before + lg.prestige;
+    return true;
+  }
+
   function applyPromotion() {
     if (!tableReady()) return null;
     const rows = tableRows();
@@ -508,9 +551,7 @@ window.WingerCareer = (() => {
      * 승격 대신 **리그 우승**이에요. 아무 일도 안 일어나면 1위를 해도 화면에 남는 게 없습니다. */
     // 사다리 맨 위 1위는 정착 기간과 무관하게 우승이에요 — 방금 올라왔어도 우승은 우승이죠
     if (rank === 1 && at === ladder.length - 1) {
-      S.trophies = S.trophies || [];
-      const title = `${S.proYear}시즌 ${leagueOf(S).name} 우승`;
-      if (!S.trophies.includes(title)) S.trophies.push(title);
+      addTrophy(`${S.proYear}시즌 ${leagueOf(S).name} 우승`, leagueOf(S).id);
       const prize = Math.round(prizeOf(TITLE_PRIZE, leagueOf(S).id) * traitMul(S, "money"));
       S.money = (S.money || 0) + prize;
       proLog(`🏆 ${leagueOf(S).name} 우승! 우승 상금 +${prize}만`);
@@ -549,6 +590,9 @@ window.WingerCareer = (() => {
      * 도착 리그 기준으로 주면 올라간 보상을 미리 당겨 받는 셈이 됩니다. */
     let prize = 0;
     if (kind === "up") {
+      /* 승격도 **그 리그 1위**라 우승이에요. 예전에는 트로피를 안 남겨서,
+       * 결산에는 "리그 우승!"이라 뜨는데 명예의 전당에는 아무것도 안 남았어요. */
+      addTrophy(`${S.proYear}시즌 ${from} 우승`, fromId);
       prize = Math.round(prizeOf(PROMO_PRIZE, fromId) * traitMul(S, "money"));
       S.money = (S.money || 0) + prize;
       proLog(`🔺 ${from} 우승으로 승격! 우승 상금 +${prize}만`);
@@ -649,8 +693,15 @@ window.WingerCareer = (() => {
   }
 
   /* 경쟁자 실점 — 소속 클럽의 그 라운드 결과에서 짐작해요. 실제로 굴리지는
-   * 않으니(순위표는 승패만 굴려요) 결과에 어울리는 값을 뽑습니다. */
-  const raceConceded = (res) => (res === "W" ? randInt(0, 1) : res === "L" ? randInt(1, 3) : randInt(1, 2));
+   * 않으니(순위표는 승패만 굴려요) 결과에 어울리는 값을 뽑습니다.
+   *
+   * ⚠️ 폭이 **내 실점 분포와 같아야** 해요. 평점은 무실점 보너스와 대량 실점
+   * 감점을 보는데, 경쟁자만 적게 먹는 걸로 잡으면 같은 표에서 내가 늘 손해를 봅니다.
+   * 팀 결과를 전력 대 전력으로 바꾸면서 내 실점이 크게 늘었어요 —
+   * 실측(승/무/패 평균) — 팀 결과를 전력으로 가르면서 2.05/3.19/4.58까지 올라갔다가,
+   * 득점 눈금(GOAL_SCALE)을 넣으면서 0.65 / 1.18 / 2.52로 돌아왔어요.
+   * 아래 폭이 그 평균과 맞아요 (0.5 / 1.0 / 2.5). */
+  const raceConceded = (res) => (res === "W" ? randInt(0, 1) : res === "L" ? randInt(1, 4) : randInt(0, 2));
 
   /* 경쟁자들의 그 라운드 평점. **나와 똑같은 matchRating을 씁니다** —
    * 예전에는 개인 순위 명단(act.race)과 평점표 명단(act.rivals)이 아예 다른
@@ -718,8 +769,13 @@ window.WingerCareer = (() => {
   function raceHTML() {
     const ranked = raceRank(raceKey);
     if (!ranked.length) return "";
+    /* 🏷️ 칭호를 같이 보여줘요 — 이 표가 "다른 팀 선수는 어느 급인가"를 볼 수 있는
+     * 유일한 자리인데, 여태 이름과 소속뿐이라 다 같은 선수로 보였어요.
+     * 내 줄은 종합, 경쟁자는 pop을 종합 눈금으로 옮긴 값(raceStr)을 씁니다. */
+    const pres = leagueOf(S).prestige;
+    const strOf = (r) => (r.me ? overall() : raceStr(r.pop, pres));
     const line = (r, i) => `<tr class="${r.me ? "me" : ""}"><td>${i + 1}</td>`
-      + `<td>${r.name}<span class="ch-club">${r.club || "-"}${r.role ? ` · ${r.role}` : ""}</span></td>`
+      + `<td>${r.name}<span class="ch-club"><b class="ch-title">${titleOf(strOf(r))}</b> · ${r.club || "-"}${r.role ? ` · ${r.role}` : ""}</span></td>`
       + `<td class="rc-v">${i === 0 ? "👑" : ""}${raceValue(r, raceKey)}</td></tr>`;
     const myIdx = ranked.findIndex((x) => x.me);
     const shown = ranked.slice(0, 5);
@@ -789,18 +845,66 @@ window.WingerCareer = (() => {
     show("screen-pro");
   }
 
+  /* 🏷️ 칭호 승급·강등 — 종합은 훈련·장비·각성·노쇠 어디서든 움직여요. 자리마다
+   * 검사를 심으면 하나를 빠뜨리는 순간 "올랐는데 아무 말도 없는" 칭호가 됩니다.
+   * 그려질 때 한 번만 봐요.
+   *
+   * ⚠️ 옛 세이브에는 S.titleIdx가 없어요. 마이그레이션하지 않고, 처음 볼 때
+   * 조용히 지금 칭호로 맞춰 둡니다 — 안 그러면 이어하기만 했는데 "승급!"이 떠요. */
+  function checkTitle() {
+    const idx = titleIdx(overall());
+    const had = S.titleIdx;
+    S.titleIdx = idx;
+    S.career = S.career || {};
+    if (S.career.bestTitle == null || idx > S.career.bestTitle) S.career.bestTitle = idx;
+    if (had == null || idx === had) return;
+    if (idx > had) {
+      /* 승급 명성 보너스 — 위 칭호일수록 세상이 더 크게 알아봐요.
+       * 한 번뿐이라(같은 칭호로 두 번 못 올라와요) 명성 곡선을 흔들지 않아요. */
+      const fan = 25 * idx;
+      S.fandom = Math.max(0, (S.fandom || 0) + fan);
+      proLog(`🏷️ 칭호 승급 — ${titleAt(idx)}! 명성 +${fan} · 수당 ×${titlePayMul(idx).toFixed(2)}`);
+      if (window.Fx) Fx.celebrate("award", `🏷️ ${titleAt(idx)}!`);
+    } else {
+      // 내려갈 때는 명성을 깎지 않아요 — 이미 노쇠 벌점이 따로 걸려 있어요
+      proLog(`🕯️ 기량이 떨어졌어요 — ${titleAt(idx)} · 수당 ×${titlePayMul(idx).toFixed(2)}`);
+    }
+    save();
+  }
+
   function renderPrep() {
+    checkTitle();
     $("pro-name").textContent = `${S.name} (${POS_INFO[S.pos].name})`;
     // 리그 이름을 함께 보여줘요 — 승격·강등하면 여기가 바뀌는 게 제일 먼저 눈에 띄어야 해요
     $("pro-team").textContent =
       `${leagueOf(S).flag} ${S.group}${S.center ? " · 주장" : ""} · ${leagueOf(S).name}`
-      + `${traitOf(S).tag ? ` · ${traitOf(S).tag}` : ""} · ${S.proYear}시즌 · 종합 ${Math.round(overall())}`;
+      + `${traitOf(S).tag ? ` · ${traitOf(S).tag}` : ""} · ${S.proYear}/${CAREER_MAX}시즌`
+      /* 🏷️ 칭호 — 경쟁자들에게 붙는 것과 **같은 자**로 잽니다. 내 종합만 덩그러니
+       * 있으면 그 숫자가 이 리그에서 어느 급인지 알 길이 없어요. */
+      + ` · 종합 ${Math.round(overall())} ${titleOf(overall())}`;
     $("pro-turn").textContent = S.activity
       ? `${cbLabel(S.activity.cb)} · R${S.activity.week}/${S.activity.weekTotal} · MOM ${S.activity.wins}회`
       : `시즌 준비 ${3 - S.camp}/3`;
-    $("pro-money").textContent = `💰 ${fmtMoney(S.money || 0)}`;
+    /* 칭호의 효과를 돈 줄에 붙여요 — 칭호만 띄우면 "그래서 뭐가 좋은데"가 남아요.
+     * ×1.00(🪑 벤치 자원)일 때는 안 붙여요. 아무 일도 안 하는 배수를 늘 띄우면
+     * 화면만 시끄러워집니다. */
+    const payMul = titlePayMul(titleIdx(overall()));
+    $("pro-money").textContent = `💰 ${fmtMoney(S.money || 0)}`
+      + (payMul > 1 ? ` · 수당 ×${payMul.toFixed(2)}` : "");
   $("pro-cond-num").textContent = Math.round(S.condition);
     $("pro-cond-bar").style.width = `${S.condition}%`;
+
+    /* 🎖️ 이번 시즌 칭호 — 지난 시즌에 받아 온 거예요. 효과가 경기에 붙으니
+     * 경기 화면으로 가기 전에 항상 보여야 해요. 없으면 줄 자체를 감춰요. */
+    const buffs = activeBuffs(S);
+    const bbox = $("pro-buffs");
+    if (bbox) {
+      bbox.hidden = buffs.length === 0;
+      bbox.innerHTML = buffs.length
+        ? `<span class="buff-head">🎖️ ${S.proYear}시즌 칭호</span>`
+          + buffs.map((t) => `<span class="buff-chip" title="${t.need}">${t.name}<b>${t.desc}</b></span>`).join("")
+        : "";
+    }
 
     /* 🏆 리그 순위표 — 시즌 중에만 보여줘요. 접어둬서 훈련 화면이 길어지지 않게 합니다.
      * "리그 경기중인데 리그 팀 순위표를 볼 수가 없네"에서 나왔어요. */
@@ -946,7 +1050,7 @@ window.WingerCareer = (() => {
     // 상한에 닿았으면 훈련은 턴만 소모돼요 — 각성으로 돌려줍니다
     if (def && atCap(def.key)) { if (awakenTalent(def.key, proLog)) renderPrep(); return; }
     if (def) {
-      const yearMod = S.proYear <= 3 ? 1.1 : S.proYear <= 6 ? 1.0 : S.proYear <= 8 ? 0.7 : 0.45;
+      const yearMod = S.proYear <= 4 ? 1.1 : S.proYear <= 9 ? 1.0 : S.proYear <= 12 ? 0.7 : 0.45;
       const failP = S.condition < 40 ? 0.15 : 0.07;
       if (Math.random() < failP) {
         const loss = Math.round(rand(0.5, 1.5) * 10) / 10;
@@ -963,7 +1067,8 @@ window.WingerCareer = (() => {
       /* 🌍 지금 뛰는 나라가 훈련에 얹혀요 — 🇯🇵는 전반적으로, 🇧🇷·🇮🇹는 잘 가르치는
        * 능력치 하나에만. 어느 리그에 머물지가 수상 값어치만의 문제가 아니게 됩니다. */
       const natMul = traitMul(S, "train") * traitFocusMul(S, def.key);
-      let gain = rand(1.8, 3.6) * S.talents[def.key] * yearMod * condMod * natMul;
+      // 🌟 신인왕 칭호가 훈련 상승폭에 붙어요 (그 한 시즌만)
+      let gain = rand(1.8, 3.6) * S.talents[def.key] * yearMod * condMod * natMul * buffMul("train");
       if (S.stats[def.key] >= 100) gain *= 0.5;
       gain = Math.round(gain * 10) / 10;
       S.stats[def.key] = clamp(S.stats[def.key] + gain, 0, statCap(def.key));
@@ -1017,11 +1122,15 @@ window.WingerCareer = (() => {
 
     const rating = ratingOf(S.stats, S.pos, S.condition, S.fandom);
     const c = matchContribution(rating);
-    const oppGoals = deriveOppGoals(rating, S.stats.defense);
+    /* 팀 결과는 **우리 전력 대 상대 전력**이 정해요. 상대 클럽의 전력을 찾아
+     * 동료 골과 실점에 함께 물려줍니다 — 여태 리그 경기는 상대가 누구든 똑같았어요. */
+    const oppStr = clubStrByName(act.opp, S);
+    const mates = teammateGoals(rating, oppStr);
+    const oppGoals = deriveOppGoals(rating, S.stats.defense, oppStr, c.g + c.a + mates);
     ensureRace();   // 명단이 있어야 동료 이름으로 골을 넣어요
     MatchSim.run({
       home: S.group, away: act.opp, myName: S.name,
-      goals: c.g, assists: c.a, defense: c.def, oppGoals, rating,
+      goals: c.g, assists: c.a, defense: c.def, oppGoals, rating, mateCount: mates,
       mates: mateNames(),          // 동료 골에 이름을 붙여요 (개인 순위로 이어집니다)
       finalize: (info) => proMatchFinalize(act, info),
     });
@@ -1081,6 +1190,10 @@ window.WingerCareer = (() => {
       dFan = randInt(-3, 3);
     }
     S.fandom = Math.max(0, (S.fandom || 0) + dFan);
+    /* 🏷️ 칭호가 곧 몸값이에요 — 수당은 여태 30만원 고정이라 실력과 아무 관계가
+     * 없던 자리였어요. 골·평점·수상·명성은 이미 종합이 굴리니 거기에 또 곱하면
+     * 같은 축을 두 번 세는 셈이라, 새 축인 돈에 걸었습니다. */
+    pay = Math.round(pay * titlePayMul(titleIdx(overall())));
     // 🌍 나라 특색 — 🇬🇧 잉글랜드는 돈이 도는 리그예요 (계약금에도 같은 배수가 붙어요)
     pay = Math.round(pay * traitMul(S, "money"));
     S.money = (S.money || 0) + pay;
@@ -1256,7 +1369,9 @@ window.WingerCareer = (() => {
   function cupMatch() {
     const rounds = cupRounds();
     const opp = cupDraw();
-    if (!opp) { cupFinish(false); return; }
+    /* 대진이 비었어요 — 있을 수 없는 상태지만, 예전에는 여기서 **없는 함수**
+     * (cupFinish)를 불러 그 자리에서 죽었습니다. 컵을 접고 결산으로 보내요. */
+    if (!opp) { S.cup = null; save(); finishYear(); return; }
     S.cup.opp = opp;
     save();
     $("stage-title").textContent = `🏆 ${S.cup.name} ${rounds[S.cup.round]}`;
@@ -1265,12 +1380,13 @@ window.WingerCareer = (() => {
 
     const rating = ratingOf(S.stats, S.pos, S.condition, S.fandom);
     const c = matchContribution(rating);
-    /* 컵 상대는 그 팀 전력으로 실점을 잡아요. 리그 경기의 deriveOppGoals는
-     * 내 리그 평균을 기준으로 삼는데, 컵에서는 2부 팀도 1부 팀도 오니까요. */
-    const oppGoals = deriveOppGoals(rating, S.stats.defense) + (opp.str > clubStrOf(S) ? 1 : 0);
+    /* 컵 상대는 그 팀 전력을 그대로 물려요. 리그와 같은 산식이라 따로 보정하지
+     * 않습니다 — 예전에는 "상대가 더 세면 +1 실점"이라는 손보정이 붙어 있었어요. */
+    const mates = teammateGoals(rating, opp.str);
+    const oppGoals = deriveOppGoals(rating, S.stats.defense, opp.str, c.g + c.a + mates);
     MatchSim.run({
       home: S.group, away: opp.name, myName: S.name,
-      goals: c.g, assists: c.a, defense: c.def, oppGoals, rating,
+      goals: c.g, assists: c.a, defense: c.def, oppGoals, rating, mateCount: mates,
       mates: mateNames(),
       finalize: (info) => cupFinalize(info),
     });
@@ -1358,9 +1474,7 @@ window.WingerCareer = (() => {
     const fan = randInt(25, 45);
     S.money = (S.money || 0) + money;
     S.fandom = Math.max(0, (S.fandom || 0) + fan);
-    S.trophies = S.trophies || [];
-    const title = `${S.proYear}시즌 ${S.cup.name} 우승`;
-    if (!S.trophies.includes(title)) S.trophies.push(title);
+    addTrophy(`${S.proYear}시즌 ${S.cup.name} 우승`, leagueOf(S).id);
     const name = S.cup.name;
     if (window.Stats) Stats.log("cup", { act: "win", y: S.proYear, pk: !!pk, name });
     S.cup = null;
@@ -1385,7 +1499,7 @@ window.WingerCareer = (() => {
   // ---------- 시즌 결산 ----------
   function finishYear() {
     const act = S.activity;
-    const agePen = S.proYear >= 8 ? (S.proYear - 7) * 0.8 : 0;
+    const agePen = S.proYear >= DECLINE_FROM ? (S.proYear - DECLINE_FROM + 1) * 0.8 : 0;
     /* 연말 평가는 이제 축이 해요. 예전에는 hypeSum(순위 기반)이라
      * 1위를 하는 순간 천장에 붙어서 능력치를 더 올려도 결과가 같았어요.
      * 축은 골·도움·수비 성공 개수라 상한이 없어요. 후반에 기하급수로 커지니
@@ -1503,6 +1617,19 @@ window.WingerCareer = (() => {
      * S.moves에서 역산해 메워요 — 세이브는 고치지 않아요(클라우드 동기화와 부딪혀요). */
     // 평균 평점 — 골·도움만으로는 안 드러나는 '꾸준함'을 보여줘요
     const avgRating = apps ? Math.round(((act.ratingSum || 0) / apps) * 10) / 10 : null;
+    /* 🎖️ 다음 시즌 칭호 — 이 시즌에 해낸 일로 정해요.
+     * 판정은 **수상 목록과 승강 결과를 그대로** 읽습니다(AWARD_BUFF).
+     * 지난 시즌 것은 여기서 통째로 갈려요 — 유지하려면 그 성적을 또 내야 해요. */
+    const nextBuffs = [];
+    for (const a of awards) {
+      const id = AWARD_BUFF[a];
+      if (id && !nextBuffs.includes(id)) nextBuffs.push(id);
+    }
+    if (avgRating != null && avgRating >= HOT_FORM_BAR) nextBuffs.push("hot");
+    if (move && (move.kind === "title" || move.kind === "up")) nextBuffs.push("champ");
+    if (move && move.kind === "down") nextBuffs.push("revenge");
+    S.buffs = nextBuffs;
+    S.buffY = S.proYear + 1;
     S.career.years.push({ y: S.proYear, hype: Math.round(hype * 10) / 10, wins, sales, dFan, awards, goals: gg, assists: ga, defense: gd, apps, avg: avgRating, club: S.group, league: leaguePlayed, rank: finalRank, teams: finalTeams, promo: move ? move.kind : null, promoTo: move ? move.to : null, prize: move && move.prize ? move.prize : 0 });
     /* 리그·나라·순위를 함께 남겨요. 나라별 리그를 11개 만들어 놓고 **어느 리그에서
      * 몇 시즌을 뛰는지** 데이터가 없었어요 — "새 리그가 실제로 쓰이나"를 물을 수가
@@ -1513,8 +1640,8 @@ window.WingerCareer = (() => {
       rank: finalRank, hype: Math.round(hype * 10) / 10,
     });
     for (const d of STAT_DEFS) {
-      if (S.proYear <= 3) S.stats[d.key] = clamp(S.stats[d.key] + rand(0, 1) * S.talents[d.key], 0, statCap(d.key));
-      else if (S.proYear >= 8) S.stats[d.key] = clamp(S.stats[d.key] - rand(0.6, 1.8), 0, statCap(d.key));
+      if (S.proYear <= GROW_UNTIL) S.stats[d.key] = clamp(S.stats[d.key] + rand(0, 1) * S.talents[d.key], 0, statCap(d.key));
+      else if (S.proYear >= DECLINE_FROM) S.stats[d.key] = clamp(S.stats[d.key] - rand(0.6, 1.8), 0, statCap(d.key));
     }
     const income = sales * 3 + wins * 40;
     S.money = (S.money || 0) + income;
@@ -1664,7 +1791,7 @@ window.WingerCareer = (() => {
     const rows = slice.map((x, i) =>
       `<tr><td>${x.y}시즌</td>${clubCell(x, slice[i - 1])}${statCell(x)}<td>${x.awards.length ? "🏆" + x.awards.join(",") : "-"}</td></tr>`
     ).join("");
-    const forcedRetire = S.proYear >= 10;
+    const forcedRetire = S.proYear >= CAREER_MAX;
     const cr = S.career;
     $("career-title").textContent = `📊 ${y.y}시즌 결산`;
     $("career-card").innerHTML = `
@@ -1690,11 +1817,20 @@ window.WingerCareer = (() => {
         : `🔻 최하위로 강등… ${(y.y || 0) + 1}시즌부터 <b>${y.promoTo}</b>에서 다시 시작해요`}</div>` : ""}
       ${y.club && y.club !== S.group ? `<div class="hint">🔁 <b>${S.group}</b>로 이적했어요 — ${(y.y || 0) + 1}시즌부터 새 팀에서 뜁니다</div>` : ""}
       ${moveNote ? `<div class="hint learn">${moveNote}</div>` : ""}
+      ${/* 🎖️ 이 시즌에 받은 칭호 — 다음 시즌 경기에 붙어요. 결산에서 보여줘야
+          "이번 시즌을 잘 치르면 다음 시즌이 편해진다"가 눈에 들어와요. */
+        (S.buffs || []).length
+          ? `<div class="hint buff-next">🎖️ <b>${(S.proYear || 0) + 1}시즌 칭호</b> — `
+            + S.buffs.map((id) => { const t = seasonTitleOf(id); return t ? `${t.name} <span class="bn-eff">${t.desc}</span>` : ""; })
+              .filter(Boolean).join(" · ") + `</div>`
+          : `<div class="hint buff-next dim">🎖️ 다음 시즌 칭호 없음 — 부문 1위·수상·우승·승격 중 하나를 해내면 다음 시즌 경기에 효과가 붙어요</div>`}
       <table class="season-table season-soccer"><thead><tr><th>시즌</th><th>소속</th><th>성적</th><th>평점</th><th>수상</th></tr></thead><tbody>${rows}</tbody></table>
       <div class="draft-summary">
-        통산 ${cr.years.length}시즌 · 출전 ${cr.apps || 0} · ⚽ ${cr.goals || 0}골 · 🅰️ ${cr.assists || 0}도움 · 🛡️ ${cr.defense || 0} · 🏅 MOM ${cr.wins}회<br/>
+        프로 통산 ${cr.years.length}시즌 · 출전 ${cr.apps || 0} · ⚽ ${cr.goals || 0}골 · 🅰️ ${cr.assists || 0}도움 · 🛡️ ${cr.defense || 0} · 🏅 MOM ${cr.wins}회<br/>
         🏆 MVP ${cr.daesang} · 베스트11 ${cr.bonsang}${cr.rookie ? " · 신인왕" : ""} · ⭐ 명성 ${Math.round(S.fandom)}<br/>
-        ${forcedRetire ? "슬슬 은퇴를 고민할 나이가 됐어요. 아름다운 마무리를…" : "다음 시즌도 계속 뛸 수 있어요!"}
+        ${forcedRetire ? "슬슬 은퇴를 고민할 나이가 됐어요. 아름다운 마무리를…"
+          : S.proYear >= DECLINE_FROM ? `🕯️ 전성기가 지났어요 — 몸이 예전 같지 않습니다 (${CAREER_MAX}시즌까지)`
+          : "다음 시즌도 계속 뛸 수 있어요!"}
       </div>`;
     moveNote = null;   // 한 번만 보여줘요 — 다음에 결산을 열면 안 뜹니다
     const act = $("career-actions");
@@ -1723,7 +1859,13 @@ window.WingerCareer = (() => {
       if (!confirm(
         `🎓 여기서 커리어를 마칠까요?\n\n` +
         `· 명예의 전당에 기록이 남아요\n` + retireSummary() +
-        `· 등급: ${gradeOfScore(careerScore())}\n\n` +
+        `· 등급: ${(() => {
+          const sc = careerScore();
+          const nx = nextGrade(sc);
+          /* 점수와 다음 등급까지 남은 거리를 같이 보여줘요. 되돌릴 수 없는 선택이니
+           * "한 시즌 더 뛰면 위로 올라가나"를 여기서 판단할 수 있어야 해요. */
+          return `${gradeOfScore(sc)} (${sc}점${nx ? ` · ${nx.name}까지 ${nx.need}점` : " · 최고 등급"})`;
+        })()}\n\n` +
         `⚠️ 되돌릴 수 없어요.\n\n진행할까요?`
       )) return;
       enshrine();
@@ -1766,10 +1908,19 @@ window.WingerCareer = (() => {
    * 능력치로 환산하면 51 → 61 → 69 → 88로 단조 증가해요. 하부에서 위로 가는 게
    * K리그1에서 유로파로 가는 것보다 확실히 쉽다는 뜻이고, tests/soccer/promote-test.js가
    * 이 순서를 지킵니다. 위쪽 둘(5.5·6.5)은 이적 작업에서 잡은 값 그대로예요. */
-  /* 리그 11개로 늘면서 칸을 촘촘히 나눴어요. tier 순으로 단조 증가해야 하고,
-   * 양 끝(한국 3부 0 · 잉글랜드 1부 6.5)은 예전 값 그대로 둡니다 —
-   * 사다리 전체의 길이가 안 변해야 지금까지 잡아 둔 곡선이 안 흔들려요. */
-  const PROMOTE_HYPE = { 5: 0, 4: 2.5, 1: 4.5, 6: 5.45, 8: 5.6, 7: 5.75, 9: 5.9, 10: 6.05, 2: 6.2, 11: 6.35, 3: 6.5 };
+  /* 리그 11개로 늘면서 칸을 나눴어요. tier 순으로 단조 증가해야 해요.
+   *
+   * ⚠️ 위쪽 칸 간격을 0.15에서 0.39로 넓혔어요. ⚽ 득점 눈금(GOAL_SCALE)을 넣으면서
+   * 골 수가 작아졌고, 포아송의 상대 분산이 커져서 **시즌 hype의 편차가 넓어졌습니다** —
+   * 능력치 70의 최고 시즌이 6.32 → 6.96으로 뛰었어요. 칸이 0.15씩이면 그 흔들림에
+   * 리그 서너 개가 통째로 묻혀서, "위로 갈수록 필요 능력치가 는다"가 깨집니다
+   * (실측: J1 67.5 < 브라질B 67.6처럼 뒤집혔어요).
+   *
+   * 지금 눈금(K리그1 기준 시즌 hype): 능력치 70 중앙 5.65 · 최고 6.96 /
+   * 능력치 90 중앙 6.60 · 상위1% 7.49 / 능력치 110 중앙 7.37 · 상위1% 8.03.
+   * 프리미어리그 7.60은 **능력치 110의 좋은 시즌**이라야 닿고, 능력치 70은
+   * 아무리 잘해도 못 닿아요 — tests/soccer/transfer-test.js가 그걸 지킵니다. */
+  const PROMOTE_HYPE = { 5: 0, 4: 2.5, 1: 4.5, 6: 5.45, 8: 5.76, 7: 6.07, 9: 6.37, 10: 6.68, 2: 6.99, 11: 7.29, 3: 7.60 };
   const OFFERS_PER_LEAGUE = 2;               // 리그마다 제안 수
 
   /* 계약금 — 리그 격과 클럽 전력에서 뽑아요. 격은 거듭제곱(FEE_PRESTIGE_POW)으로 실어요.
@@ -2040,28 +2191,108 @@ window.WingerCareer = (() => {
   }
 
   // ---------- 명예의 전당 ----------
-  function gradeOfScore(sc) {
-    if (sc >= 850) return "🐐 축구 역사에 남을 레전드";
-    if (sc >= 600) return "👑 명예의 전당 헌액";
-    if (sc >= 400) return "🌟 월드클래스";
-    if (sc >= 220) return "💪 리그 정상급";
-    if (sc >= 90) return "🧢 꾸준한 주전";
-    return "🌱 짧지만 빛났던 커리어";
+  /* 🏛️ 커리어 등급 — 은퇴할 때 남는 평가예요. 지금 실력을 재는 클래스(titleOf)나
+   * 시즌 성적으로 받는 칭호(SEASON_TITLES)와는 또 다른, 평생치 축입니다.
+   *
+   * 12단계예요. 예전에는 6단계라 커리어의 절반이 "🌟 한 시대를 풍미한 선수" 하나에
+   * 몰렸어요 — 능력치 85로 15시즌을 뛴 커리어와 110으로 뛴 커리어가 같은 이름을
+   * 받았습니다. 문턱은 아래 careerScore의 실측 분포 위에 얹었어요. */
+  const CAREER_GRADES = [
+    [4200, "🌍 축구사를 다시 쓴 선수"],
+    [3400, "🐐 축구 역사에 남을 레전드"],
+    [2800, "🏆 시대를 지배한 선수"],
+    [2300, "👑 세계가 인정한 선수"],
+    [1850, "⭐ 모두가 아는 이름"],
+    [1400, "🌟 한 시대를 풍미한 선수"],
+    [1050, "🏅 리그의 상징"],
+    [800, "💪 리그를 대표한 선수"],
+    [550, "🎽 팀의 기둥"],
+    [300, "🧢 꾸준했던 주전"],
+    [150, "🔄 스쿼드의 한 자리"],
+    [0, "🌱 짧지만 빛났던 커리어"],
+  ];
+  const gradeOfScore = (sc) =>
+    (CAREER_GRADES.find(([bar]) => sc >= bar) || CAREER_GRADES[CAREER_GRADES.length - 1])[1];
+
+  /* 다음 등급까지 얼마나 남았나. 12단계로 잘게 나눈 이상, "지금 어디쯤이고 조금만
+   * 더 하면 뭐가 되는지"가 보여야 나눈 값을 합니다. 꼭대기면 null이에요. */
+  function nextGrade(sc) {
+    const at = CAREER_GRADES.findIndex(([bar]) => sc >= bar);
+    if (at <= 0) return null;                      // 이미 맨 위
+    const [bar, name] = CAREER_GRADES[at - 1];
+    return { name, need: bar - sc };
+  }
+
+  /* 커리어 점수의 가중치.
+   *
+   * ⚠️ 예전 산식은 명성 ×0.5 · MOM ×6이 전체의 3분의 2를 차지했어요. 둘 다
+   * **약한 리그일수록 쉽게 쌓이는** 값이라 순서가 뒤집혀 있었습니다 —
+   * 실측(10시즌 · 30회): 같은 능력치 130으로 K리그3에 눌러앉으면 4173점,
+   * 프리미어리그까지 올라가면 2572점. 올라가는 게 손해였어요.
+   * 게다가 분포의 **바닥이 946점**이라 850점 문턱은 사실상 전원 레전드였습니다.
+   *
+   * 지금은 업적이 중심이에요. 상과 우승은 리그 격을 곱한 가중 카운터로 세고,
+   * 가장 높이 오른 리그 자체에도 점수를 줍니다. 명성·MOM은 남겨 두되 비중을
+   * 8분의 1로 낮췄어요 — 없애면 무관중 커리어와 슈퍼스타가 같아집니다.
+   *
+   * 다시 잰 분포(15시즌 · 25회 평균 · 우승도 팀 승률로 함께 굴려서):
+   *   능력 60  K리그3 641 · K리그1 625 · 챔피언십 625 · 프리미어리그 621
+   *   능력 85  K리그3 1559 · K리그1 1639 · 챔피언십 1280 · 프리미어리그 1035
+   *   능력 110 K리그3 2209 · K리그1 2414 · 챔피언십 2447 · 프리미어리그 2330
+   *   능력 130 K리그3 2455 · K리그1 2688 · 챔피언십 3197 · 프리미어리그 3661
+   * 전체 폭은 534~4779. 잘할수록, 그리고 위로 갈수록 커집니다.
+   * (확인용 세이브로 15시즌을 완주시킨 실제 커리어는 K리그1 트로피 29개에 3871점)
+   * 등급 문턱(CAREER_GRADES)은 이 분포 위에 얹었어요. */
+  const SCORE_W = {
+    ballon: 220,  // 🏅 발롱도르 — 그 해 세계 최고 한 명
+    dae: 90,      // 🏆 리그MVP (리그 격 가중)
+    bon: 30,      // 🎖️ 베스트11 (리그 격 가중)
+    rookie: 30,   // 🌟 신인왕
+    ring: 45,     // 🏆 우승 (리그 격 가중)
+    mom: 1.5,     // 🏅 MOM
+    fan: 0.06,    // ⭐ 명성
+    year: 6,      // 뛴 시즌
+    peak: 260,    // 가장 높이 오른 리그 — K리그1(격 1.00)을 0으로 둔 초과분
+    center: 30,   // 주장
+    trans: 25,    // 🌠 초월 단계
+  };
+
+  /* 가장 높이 오른 리그의 격. 시즌 기록에 남은 리그를 전부 훑어요 —
+   * 지금 어디에 있는지만 보면, 프리미어리그에서 뛰다 강등돼 마친 커리어가
+   * 하부 리그에서만 뛴 커리어와 같아집니다. */
+  function peakPrestige() {
+    const ys = (S.career && S.career.years) || [];
+    const ps = ys
+      .map((y) => (LEAGUES.find((l) => l.id === y.league) || {}).prestige)
+      .filter((p) => p != null);
+    ps.push(leagueOf(S).prestige);
+    return Math.max(...ps);
   }
 
   function careerScore() {
     const c = S.career || { seasons: [], mvp: 0, gg: 0, roy: 0, rings: 0, warSum: 0 };
-    /* daesangW가 없는 옛 세이브는 가중 없이 계산해요. 마이그레이션하지 않습니다.
-     * 1부만 뛴 커리어는 prestige가 1이라 두 경로의 값이 같아요 — 점수가 안 변합니다. */
+    /* 가중 카운터가 없는 옛 세이브는 가중 없이(1부 기준) 계산해요. 마이그레이션하지
+     * 않습니다. 1부만 뛴 커리어는 prestige가 1이라 두 경로의 값이 같아요. */
     const dae = c.daesangW != null ? c.daesangW : (c.daesang || 0);
     const bon = c.bonsangW != null ? c.bonsangW : (c.bonsang || 0);
-    // 🏅 발롱도르는 리그MVP 위의 상이라 점수도 그만큼 큽니다
+    const ring = c.ringW != null ? c.ringW : (S.trophies ? S.trophies.length : 0);
+    const W = SCORE_W;
     return Math.round(
-      S.fandom * 0.5 + c.wins * 6 + dae * 50 + bon * 15 + c.rookie * 20 + (c.ballon || 0) * 80 +
-      (c.years ? c.years.length : 0) * 5 + (S.trophies ? S.trophies.length : 0) * 8 + (S.center ? 30 : 0) +
-      transTotal() * 25   // ✨ 초월 단계 보너스
+      (c.ballon || 0) * W.ballon + dae * W.dae + bon * W.bon + (c.rookie || 0) * W.rookie +
+      ring * W.ring + (c.wins || 0) * W.mom + (S.fandom || 0) * W.fan +
+      (c.years ? c.years.length : 0) * W.year +
+      Math.max(0, peakPrestige() - 1) * W.peak +
+      (S.center ? W.center : 0) + transTotal() * W.trans
     );
   }
+
+  /* 🏛️ 명예의 전당에 이미 올라간 기록은 **옛 눈금**으로 매겨졌어요.
+   * 세이브를 고치지 않는 게 이 저장소의 규칙이라, 읽는 쪽에서 환산합니다.
+   * 2.11 실측 평균비(옛 2659 : 새 1260)로 나눠요 — 한 표에서 순위를 겨루니
+   * 눈금이 섞이면 옛 기록이 영원히 위를 차지합니다. */
+  const SCORE_V = 2;          // 지금 눈금의 판 번호 — 새 기록에는 entry.sv로 남겨요
+  const OLD_SCORE_DIV = 2.1;
+  const hofScore = (e) => (e && e.sv >= SCORE_V ? e.score : Math.round((e.score || 0) / OLD_SCORE_DIV));
 
   // ---------- 🧬 환생 ----------
   // 은퇴(명예의 전당 등록)와 달리, 기록은 남기지 않고 유산만 다음 세대에 넘겨요.
@@ -2077,7 +2308,8 @@ window.WingerCareer = (() => {
   }
   function rebirthHint() {
     const c = S.career || {};
-    return `🏆 우승 ${c.wins || 0}/${REBIRTH_NEED.win} · 🎖️ 대상 ${c.daesang || 0}/${REBIRTH_NEED.top} · 🌠 초월 ${transTotal()}/${REBIRTH_NEED.trans} — 하나만 채우면 열려요`;
+    // ⚠️ c.wins는 MOM 횟수예요. 예전에는 '🏆 우승'이라고 적혀 있어서 판정과 표시가 어긋났어요.
+    return `🏅 MOM ${c.wins || 0}/${REBIRTH_NEED.win} · 🎖️ 리그MVP ${c.daesang || 0}/${REBIRTH_NEED.top} · 🌠 초월 ${transTotal()}/${REBIRTH_NEED.trans} — 하나만 채우면 열려요`;
   }
 
   function rebirth(team) {
@@ -2086,7 +2318,9 @@ window.WingerCareer = (() => {
       return;
     }
     const sc = careerScore();
-    const gain = legacyGain(sc);
+    /* 유산은 옛 눈금으로 재요 — 점수 산식을 바꿨다고 환생 보상까지 줄면
+     * 이번 작업과 상관없는 축이 조용히 깎입니다. */
+    const gain = legacyGain(sc * OLD_SCORE_DIV);
     const L = loadLegacy();
     const nextPts = L.pts + gain, nextGen = L.gen + 1;
     const before = legacyTalentBonus(L.pts), after = legacyTalentBonus(nextPts);
@@ -2114,18 +2348,54 @@ window.WingerCareer = (() => {
     else location.reload();
   }
 
+  /* 마지막 소속에서 몇 시즌을 뛰었나.
+   *
+   * 예전 은퇴식은 "${마지막 클럽}에서 ${통산 시즌}시즌을 뛰었어요"였어요. 다섯 시즌
+   * 만에 옮겨 온 클럽인데 10시즌을 뛴 것처럼 적혔습니다 — 화면이 이적 기록과
+   * 서로 모르는 사이였어요. 시즌 기록에 남은 소속을 세서 맞춥니다. */
+  /* 🌍 밟아 온 리그 — 명예의 전당에서 "이 선수가 어디까지 갔나"를 볼 수 있어야 해요.
+   * 이름·시즌·점수만 있으면 K리그3 붙박이와 프리미어리그를 밟은 커리어가 똑같아 보입니다.
+   * 시즌 기록의 리그를 순서대로 훑되 **연달아 같은 리그는 접어요**
+   * (K3 K3 K3 K1 K1 → K리그3 → K리그1). 옛 항목은 소속을 fillClubs로 메웁니다. */
+  function leaguePath(st) {
+    const ys = fillClubs(((st && st.career && st.career.years) || []), st);
+    const out = [];
+    for (const y of ys) {
+      const lg = LEAGUES.find((l) => l.id === (y && y.league));
+      if (!lg || (out.length && out[out.length - 1].id === lg.id)) continue;
+      out.push(lg);
+    }
+    if (!out.length) out.push(leagueOf(st));
+    return out;
+  }
+  const leaguePathText = (st) => leaguePath(st).map((l) => `${l.flag} ${l.short}`).join(" → ");
+  const peakLeague = (st) => leaguePath(st).slice().sort((a, b) => b.prestige - a.prestige)[0];
+
+  function seasonsAtClub(st, club) {
+    const ys = fillClubs(((st && st.career && st.career.years) || []), st);
+    return ys.filter((y) => y && y.club === club).length;
+  }
+
   /* 🎓 은퇴 확인창에 넣을 요약. 되돌릴 수 없는 선택이라 뭐가 남는지 보여줘요. */
   function retireSummary() {
     const c = S.career || {};
+    /* ⚠️ c.wins는 **MOM 횟수**예요. 우승이 아닙니다.
+     * 예전에는 여기와 환생 안내가 "🏆 우승 96"이라고 적었어요 — 한 시즌에 38경기니
+     * MOM을 96번 받는 건 있을 수 있지만, 우승 96회는 있을 수 없는 숫자였습니다.
+     * 진짜 우승 횟수는 트로피 목록(S.trophies)이에요. */
     const awards = [
-      (c.wins || 0) ? `🏆우승 ${c.wins}` : "",
-      (c.daesang || 0) ? `🎖️대상 ${c.daesang}` : "",
-      (c.bonsang || 0) ? `🏅본상 ${c.bonsang}` : "",
-      (c.rookie || 0) ? "🌟신인상" : "",
+      (S.trophies || []).length ? `🏆우승 ${(S.trophies || []).length}` : "",
+      (c.ballon || 0) ? `🏅발롱도르 ${c.ballon}` : "",
+      (c.daesang || 0) ? `🎖️리그MVP ${c.daesang}` : "",
+      (c.bonsang || 0) ? `🥈베스트11 ${c.bonsang}` : "",
+      (c.rookie || 0) ? "🌟신인왕" : "",
+      (c.wins || 0) ? `🏅MOM ${c.wins}` : "",
     ].filter(Boolean).join(" · ");
     const years = (c.years || []).length;
+    const here = seasonsAtClub(S, S.group);
     const moves = moveLog(S);
-    return `    ${S.name} · ${years}년차\n`
+    return `    ${S.name} · ${years}년차`
+      + (here && here < years ? ` (${S.group} ${here}시즌)` : "") + `\n`
       + (awards ? `    ${awards}\n` : "    수상 기록 없음\n")
       + (moves ? `    🔁 이적 ${(S.moves || []).length}회 — ${moves}\n` : "");
   }
@@ -2149,7 +2419,19 @@ window.WingerCareer = (() => {
       trans: transTotal(),
       gen: loadLegacy().gen + 1,
       score,
+      sv: SCORE_V,          // 점수 눈금 판 번호 — 없으면 옛 눈금으로 보고 환산해요
+      teamSeasons: seasonsAtClub(S, S.group),
+      trophies: (S.trophies || []).length,
+      leagues: leaguePathText(S),                                  // 🌍 밟아 온 리그
+      peakLg: `${peakLeague(S).flag} ${peakLeague(S).name}`,        // 가장 높이 오른 리그
+      country: leagueOf(S).country,
+      /* 🏷️ 칭호는 두 개를 남겨요. 그만둘 때의 실력(title)과 커리어에서 가장 높이
+       * 올랐던 자리(bestTitle)예요. 노쇠하면 칭호가 내려가니 마지막 값만 남기면
+       * "전성기에 세계 최고였다"는 사실이 통째로 사라집니다. */
+      title: titleOf(overall()),
+      bestTitle: titleAt(c.bestTitle != null ? c.bestTitle : titleIdx(overall())),
       grade: gradeOfScore(score) + (transTotal() ? ` · ${transcendTitle(transTotal())}` : ""),
+      nextGrade: nextGrade(score),
     };
     const hof = loadHof();
     hof.push(entry);
@@ -2168,12 +2450,21 @@ window.WingerCareer = (() => {
       <div class="draft-emoji">⚽</div>
       <div class="draft-title">${entry.name}, 그라운드와 작별</div>
       <div class="draft-team">${entry.grade}</div>
-      <div>${entry.seasons ? `${entry.team}에서 ${entry.seasons}시즌을 뛰었어요.` : "프로 무대 대신 다른 길을 택했어요."}</div>
+      <div>${entry.seasons
+        /* ⚠️ 마지막 클럽에서 뛴 시즌과 통산 시즌은 다른 숫자예요. 예전에는 통산을
+         * 클럽 옆에 적어서, 5시즌 만에 옮겨 온 클럽인데 10시즌을 뛴 게 됐습니다. */
+        ? `통산 <b>${entry.seasons}시즌</b>${entry.teamSeasons && entry.teamSeasons < entry.seasons
+            ? ` · 마지막 ${entry.team}에서 ${entry.teamSeasons}시즌` : ` — ${entry.team} 원클럽맨`}`
+        : "프로 무대 대신 다른 길을 택했어요."}</div>
+      <div class="hint">🏷️ 최고 ${entry.bestTitle}${entry.bestTitle !== entry.title ? ` · 은퇴 시 ${entry.title}` : ""} · 마지막 종합 ${entry.finalOvr}</div>
+      <div class="hint lg-path">🌍 ${entry.leagues}${entry.leagues.includes("→") ? ` · 최고 ${entry.peakLg}` : ""}</div>
       ${moves ? `<div class="hint move-log">🔁 이적 이력 — ${moves}</div>` : ""}
       <div class="draft-summary">
-        통산 ${entry.apps}경기 ⚽ ${entry.goals}골 · 🅰️ ${entry.assists}도움<br/>
-        🏅 MOM ${entry.wins}회 · 🏆 MVP ${entry.daesang} · 베스트11 ${entry.bonsang}${entry.rookie ? " · 신인왕" : ""}<br/>
-        커리어 점수 <b>${entry.score}</b> — 명예의 전당에 영구 기록됐어요
+        통산 ${entry.apps}경기(유스 포함) ⚽ ${entry.goals}골 · 🅰️ ${entry.assists}도움<br/>
+        🏆 우승 ${entry.trophies} · 🏅 발롱도르 ${c.ballon || 0} · 🎖️ 리그MVP ${entry.daesang} · 🥈 베스트11 ${entry.bonsang}${entry.rookie ? " · 🌟 신인왕" : ""}<br/>
+        🏅 MOM ${entry.wins}회<br/>
+        커리어 점수 <b>${entry.score}</b>${entry.nextGrade ? ` · ${entry.nextGrade.name}까지 ${entry.nextGrade.need}점이었어요` : " · 더 오를 곳이 없는 자리예요"}<br/>
+        명예의 전당에 영구 기록됐어요
       </div>`;
     moveNote = null;   // 한 번만 보여줘요 — 다음에 결산을 열면 안 뜹니다
     const act = $("career-actions");
@@ -2211,7 +2502,7 @@ window.WingerCareer = (() => {
         list.push(e);
       }
     }
-    list.sort((a, b) => b.score - a.score);
+    list.sort((a, b) => hofScore(b) - hofScore(a));
     hofShown = 20;
     drawHof(list, localIds);
   }
@@ -2232,7 +2523,9 @@ window.WingerCareer = (() => {
         <div class="hof-face-emoji">⚽</div>
         <div class="hof-info">
           <div class="hof-name">${i + 1}. ${e.gen > 1 ? `<span class="hof-gen">${e.gen}세</span> ` : ""}${e.name} <span class="hof-grade">${e.grade}</span></div>
-          ${e.team} · ${e.seasons}시즌${e.goals != null ? ` · ⚽${e.goals} 🅰️${e.assists || 0}` : ""} · 🏅MOM ${e.wins} · 🏆${e.daesang + e.bonsang} · 점수 ${e.score}
+          ${e.team} · ${e.seasons}시즌${e.goals != null ? ` · ⚽${e.goals} 🅰️${e.assists || 0}` : ""} · 🏅MOM ${e.wins} · 🏆${e.daesang + e.bonsang} · 점수 ${hofScore(e)}
+          ${/* 🌍 밟아 온 리그 — 옛 항목에는 없어요(읽는 쪽에서 건너뜁니다). */
+            e.leagues ? `<div class="hof-lg">🌍 ${e.leagues}</div>` : ""}
         </div>`;
       box.appendChild(div);
     });
@@ -2276,7 +2569,7 @@ window.WingerCareer = (() => {
       });
     }
     for (const e of loadHof().filter((x) => x.game === "soccer")) {
-      list.push({ id: e.id, name: e.name, bp: bpOf(e.score, e.finalOvr) });
+      list.push({ id: e.id, name: e.name, bp: bpOf(hofScore(e), e.finalOvr) });
     }
     return list;
   }

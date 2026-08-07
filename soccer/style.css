@@ -313,6 +313,32 @@ body {
 /* 숫자 칸 — 한 부문만 보여주니 폭을 줄이고 이름·소속에 자리를 넘겨요 */
 .race-table .rc-v, .race-table th:last-child { width: 4.2rem; text-align: right; white-space: nowrap; }
 .race-table .ch-club { display: block; font-size: .68rem; color: var(--dim); }
+/* 🏷️ 칭호 — 이 표에서 "다른 팀 선수가 어느 급인가"를 읽는 유일한 자리예요.
+ * 소속·역할과 같은 회색으로 두면 묻혀서, 색을 살짝 올려 눈에 걸리게 합니다. */
+.race-table .ch-title { color: var(--cream); font-weight: 600; }
+
+/* 🎖️ 시즌 칭호 — 지난 시즌에 받아 이번 시즌 경기에 붙는 효과예요.
+ * 경기하러 가기 전에 늘 보여야 해서 접지 않고 칩으로 깔아 둡니다. */
+.buff-row {
+  display: flex; flex-wrap: wrap; align-items: center; gap: .3rem;
+  /* 아래 여백이 .1rem이라 바로 밑의 🏆 리그 순위표 상자와 거의 붙어 보였어요.
+   * 순위표(.standings-box)는 자기 위 여백이 0이라 여기서 띄워 줘야 합니다. */
+  margin: .5rem 0 .7rem;
+}
+.buff-head { font-size: .72rem; color: var(--dim); margin-right: .1rem; }
+.buff-chip {
+  display: inline-flex; align-items: baseline; gap: .3rem;
+  padding: .16rem .45rem; border-radius: .7rem;
+  background: rgba(255, 209, 102, .12); border: 1px solid rgba(255, 209, 102, .35);
+  font-size: .72rem; color: var(--cream); line-height: 1.35;
+}
+.buff-chip b { font-weight: 600; color: var(--accent); font-size: .68rem; }
+/* 🌍 밟아 온 리그 — 명예의 전당 카드와 은퇴식에 한 줄 */
+.hof-lg { font-size: .72rem; color: var(--dim); margin-top: .12rem; }
+.lg-path { letter-spacing: .01em; }
+/* 결산의 '다음 시즌 칭호' 한 줄 */
+.buff-next .bn-eff { color: var(--accent); }
+.buff-next.dim { opacity: .72; }
 .race-note { font-size: .72rem; color: var(--dim); margin-top: .3rem; }
 /* 부문 탭 — 정렬만 바꿔요. 좁은 화면에서는 가로로 넘겨서 봐요 */
 .race-tabs {
