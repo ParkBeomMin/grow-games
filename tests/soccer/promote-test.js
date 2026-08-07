@@ -238,7 +238,16 @@ function playSeason() {
   while (g++ < 800) {
     const id = active();
     if (id === "screen-career") return true;
-    if (id === "screen-stage") { const n = $("btn-stage-next"); if (!n) return false; n.click(); continue; }
+    if (id === "screen-stage") {
+      /* 🏆 컵에서 비기면 승부차기가 뜨고 그동안 '다음' 버튼이 잠겨요.
+       * 팀 결과를 전력 대 전력으로 바꾼 뒤 무승부가 흔해져서 여기 자주 걸립니다 —
+       * 예전에는 운 좋게 안 걸렸을 뿐이에요. 키커 버튼을 눌러 진행시켜요. */
+      const pkBtn = w.document.querySelector("#pk-box button");
+      if (pkBtn) { pkBtn.click(); continue; }
+      const n = $("btn-stage-next");
+      if (!n || n.hidden || n.disabled) return false;
+      n.click(); continue;
+    }
     if (id !== "screen-pro") return false;
     const go = w.document.querySelector("#pro-actions .go-game");
     if (go) { go.click(); continue; }

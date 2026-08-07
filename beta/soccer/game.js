@@ -295,6 +295,18 @@ function oppClubs(st) {
   return names.length ? names : list.map((c) => c.name);
 }
 
+/* 이름으로 클럽 전력을 찾아요. 리그 경기의 상대는 이름만 들고 다니는데,
+ * 팀 결과가 **전력 대 전력**으로 갈리려면 그 숫자가 필요해요.
+ * 세이브의 세계(S.world)를 먼저 봐요 — 승격·강등으로 명단이 바뀌면 CLUBS는 낡아요. */
+function clubStrByName(name, st) {
+  const S0 = st || (typeof S !== "undefined" ? S : null);
+  for (const lg of LEAGUES) {
+    const hit = clubsIn(lg.id, S0).find((c) => c && c.name === name);
+    if (hit) return hit.str;
+  }
+  return null;
+}
+
 /* 리그의 **모든** 클럽 — 내 클럽까지 넣어요.
  * 경쟁자 명단을 oppClubs로 뽑았더니 우리 팀 선수가 개인 순위에도 평점표에도
  * 한 번도 안 나왔어요. 리그 득점왕 표에 우리 팀 선수가 없는 건 이상하죠.
@@ -1518,24 +1530,54 @@ function matchContribution(rating) {
  * 이 골은 act.goals에 안 들어가요 — 내 골이 아니니까요. 수상 축은 그대로입니다. */
 const TEAMMATE_GOALS = { fw: 0.35, wg: 0.5, mf: 0.8, df: 2.2 };
 
-function teammateGoals(rating) {
-  // 전력 70이 기준이에요. 좋은 팀은 동료가 더 넣습니다.
-  const strF = clubStrOf(S) / 70;
-  const base = (TEAMMATE_GOALS[S.pos] ?? 0.6) * (0.6 + (rating - 5) * 0.14) * strF;
-  return poissonish(Math.max(0, base));
+/* 동료가 넣는 골 — **우리 전력 대 상대 전력**이 정해요.
+ *
+ * 예전에는 내 경기 평점이 이걸 거의 다 정했어요(0.6 + (평점-5)×0.14). 그래서
+ * 내가 못한 날은 동료도 같이 못 넣었고, 팀 결과가 통째로 나에게 묶였습니다.
+ * 실측: 클럽 전력을 45에서 95로 바꿔도 팀 승률이 10%p밖에 안 움직였는데,
+ * 내 종합을 45에서 125로 바꾸면 78%p가 움직였어요 — 팀이 사실상 나였습니다.
+ *
+ * 지금은 전력 차가 주인공이고 내 경기력은 거들기만 해요(±0.3 상한). */
+const MATE_SCALE = 1.7;    // 동료 골 전체 크기
+const MATE_EDGE = 2.2;     // 전력 차가 동료 골에 실리는 정도
+const MATE_FORM = 0.05;    // 내 경기력이 거드는 정도 — 작게 둡니다
+const MATE_FLOOR = 0.15;   // 아무리 전력이 뒤져도 동료가 아예 못 넣지는 않아요
+function teammateGoals(rating, oppStr) {
+  /* 상대를 모르면 **우리 전력과 같다**고 봐요(대등한 경기). 예전에는 리그 평균 70을
+   * 기본값으로 뒀는데, 그러면 K리그3(전력 45) 팀은 상대를 모를 때마다 전력 70과
+   * 붙는 셈이라 승률이 18%까지 떨어졌어요 — 자기 리그에서 뛰는데도요. */
+  const edge = (clubStrOf(S) - (oppStr == null ? clubStrOf(S) : oppStr)) / 100;
+  const form = clamp((rating - 6.5) * MATE_FORM, -0.3, 0.3);
+  /* 바닥을 0이 아니라 0.15로 둬요. 전력이 50이나 뒤지면 1 + edge×2.2가 음수가 돼서
+   * 동료 골 기댓값이 **정확히 0**이 됩니다 — 최약체 팀은 나 말고 아무도 못 넣는
+   * 팀이 되고, 그건 팀이 아니에요. */
+  const base = (TEAMMATE_GOALS[S.pos] ?? 0.6) * MATE_SCALE * Math.max(MATE_FLOOR, 1 + edge * MATE_EDGE + form);
+  return poissonish(base);
 }
-// 내 골 수 & 평점에 어울리는 팀 스코어(우리:상대)와 승부 결과
-function matchScoreline(myGoals, rating) {
-  let tf = myGoals + randInt(0, 2);
-  const strength = clamp((rating - 5) / 5 + ((S.stats.defense || 40) - 50) / 120, -0.6, 0.9);
-  const winP = clamp(0.45 + strength * 0.4, 0.15, 0.82);
-  const roll = Math.random();
-  let ta, res;
-  if (roll < winP) { ta = randInt(0, Math.max(0, tf - 1)); res = "W"; }
-  else if (roll < winP + 0.22) { ta = tf; res = "D"; }
-  else { ta = tf + randInt(1, 2); res = "L"; }
-  return { tf, ta, res };
+
+/* 실점 — **이 경기가 얼마나 골이 오가는 판인가 × 전력 균형**이에요.
+ *
+ * 우리 골(teamGoals)을 섞는 게 핵심입니다. 한 경기에 3~4골을 넣는 선수가
+ * 주인공인 게임이라, 실점을 낮은 값에 묶어 두면 내 골 수가 곧 승패가 돼요.
+ * 내가 4골 넣는 급이면 상대도 그만큼 넣는 판이라야 "혼자 잘해도 팀은 진다"가
+ * 성립합니다. 실측: 공격P 2개 이상 올린 경기에서 팀이 지는 비율 0% → 41%.
+ *
+ * 내 평점과 수비 능력치도 실점을 줄이지만 계수가 작아요 — 예전에는 이 둘이
+ * 실점을 통째로 정했습니다(2.4 - (평점-5)×0.28 - 수비/100×1.4). */
+const CONC_BASE = 0.8;     // 전력이 같아도 오가는 기본 골
+const CONC_MIX = 0.75;     // 우리 골이 실점에 되비치는 정도 — 이 값이 승패를 나에게서 떼어내요
+const CONC_EDGE = 2.2;     // 전력 차가 실점에 실리는 정도 — 여기가 클수록 클럽이 승패를 정해요
+const CONC_FORM = 0.05;    // 내 평점이 실점을 줄이는 정도
+const CONC_DEF = 400;      // 내 수비 능력치가 실점을 줄이는 정도 (나누는 값이라 클수록 약해요)
+const CONC_CAP = 6;        // 한 경기 실점 상한 — 8:5 같은 스코어가 나오지 않게
+function deriveOppGoals(rating, defStat, oppStr, teamGoals) {
+  const edge = ((oppStr == null ? clubStrOf(S) : oppStr) - clubStrOf(S)) / 100;   // 모르면 대등한 경기
+  const balance = Math.max(0.15, (1 + edge * CONC_EDGE)
+    * (1 - (rating - 6.5) * CONC_FORM - ((defStat || 40) - 60) / CONC_DEF));
+  const lam = (CONC_BASE + Math.max(0, teamGoals || 0) * CONC_MIX) * balance;
+  return Math.min(CONC_CAP, poissonish(Math.max(0, lam)));
 }
+
 const RES_LABEL = { W: "승리 🎉", D: "무승부 🤝", L: "패배 💧" };
 // 골/도움/수비 이벤트를 분(') 마커와 함께 FM식 피드 라인으로
 function matchEventFeeds(c, oppName, tf, ta) {
@@ -1666,14 +1708,6 @@ function playRandomMini(container, cb) {
   }
 }
 
-// 평점·수비력으로 상대 실점 수를 산출
-function deriveOppGoals(rating, defStat) {
-  // 전력 70이 기준이에요. 좋은 팀은 덜 먹습니다.
-  const strAdj = (clubStrOf(S) - 70) / 100;
-  const base = 2.4 - (rating - 5) * 0.28 - (defStat / 100) * 1.4 - strAdj + rand(-0.3, 0.9);
-  return Math.max(0, Math.min(4, Math.round(base)));
-}
-
 // ---------- 경기 시뮬레이션 뷰 (스코어보드 + 미니 필드 + 중계) ----------
 // 유스/프로 경기 공통. #stage-card 안에 렌더하고 #btn-stage-next를 재사용해요.
 const MatchSim = (() => {
@@ -1731,7 +1765,11 @@ const MatchSim = (() => {
      * 그 선수가 없는** 일이 생겼습니다(제보). 이제 우리 팀 선수 이름으로 넣고,
      * 누가 넣었는지 mateGoals로 돌려줘서 career.js가 시즌 기록에 올려요. */
     const mateNames = Array.isArray(cfg.mates) ? cfg.mates.filter(Boolean) : [];
-    const mates = cfg.rating != null ? teammateGoals(cfg.rating) : 0;
+    /* 동료 골 수는 **부르는 쪽에서 넘겨줘요.** 실점(deriveOppGoals)이 우리 팀 골을
+     * 봐야 하는데, 여기서 굴리면 부르는 쪽은 그 값을 모른 채 실점을 정하게 돼요.
+     * 안 넘어오면 예전처럼 여기서 굴립니다(유스 경기 같은 옛 호출부). */
+    const mates = cfg.mateCount != null ? cfg.mateCount
+      : (cfg.rating != null ? teammateGoals(cfg.rating, cfg.oppStr) : 0);
     const mateGoals = [];
     for (let i = 0; i < mates; i++) {
       const who = mateNames.length ? mateNames[randInt(0, mateNames.length - 1)] : null;
@@ -1824,12 +1862,15 @@ function renderStageSim(type, grade, onFinal) {
   const gradeRating = { S: 8.4, A: 7.2, B: 6.1, C: 4.9, D: 3.7 }[grade.g] || 6;
   const rating = clamp(gradeRating + rand(-0.5, 0.5), 1, 10);
   const c = matchContribution(rating);
-  const oppGoals = deriveOppGoals(rating, S.stats.defense);
+  /* 유스 경기는 클럽 전력이라는 개념이 없어요 — 상대 전력을 안 넘기면
+   * 대등한 경기로 봅니다(전력 차 0). */
+  const mates = teammateGoals(rating, null);
+  const oppGoals = deriveOppGoals(rating, S.stats.defense, null, c.g + c.a + mates);
   MatchSim.run({
     home: "우리 유스",
     away: pick(oppClubs(S)),
     myName: S.name,
-    goals: c.g, assists: c.a, defense: c.def, oppGoals, rating,
+    goals: c.g, assists: c.a, defense: c.def, oppGoals, rating, mateCount: mates,
     finalize: (info) => {
       let gi = GRADE_ORDER.indexOf(grade.g);
       if (info.momentRes === "perfect") gi = Math.min(4, gi + 1);

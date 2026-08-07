@@ -116,11 +116,24 @@ const cleanDf = (() => { let s = 0; for (let i = 0; i < N; i++) s += rateOf({ my
 const leakDf = (() => { let s = 0; for (let i = 0; i < N; i++) s += rateOf({ myGoals: 0, assists: 0, defense: 3, res: "W", oppGoals: 3 }, "df", clamp, rand); return s / N; })();
 check(cleanDf - leakDf > 5, `수비수는 무실점 승리가 3실점 승리보다 0.5점 넘게 높다 (${((cleanDf - leakDf) / 10).toFixed(2)}점)`);
 
-/* ④ 짐작한 실점이 결과와 어울린다 — 이긴 클럽 선수가 대량 실점 경기를 뛰지는 않는다. */
-let winLeak = 0, lossLeak = 0;
-for (let i = 0; i < N; i++) { if (conceded("W") >= 3) winLeak++; if (conceded("L") >= 3) lossLeak++; }
-check(winLeak === 0 && lossLeak > 0,
-  `이긴 클럽의 실점은 3점 미만이고 진 클럽은 대량 실점이 나온다 (승 ${winLeak}회 · 패 ${lossLeak}회)`);
+/* ④ 짐작한 실점이 결과와 어울린다 — 이긴 클럽이 진 클럽보다 덜 먹는다.
+ *
+ * ⚠️ 예전에는 "이긴 클럽의 실점은 3 미만"이었다. 팀 결과를 전력 대 전력으로 바꾸면서
+ * 내 실점이 크게 늘었고(승/무/패 평균 0.5·1.5·2.0 → 2.05·3.19·4.58), 5:4로 이기는
+ * 경기가 흔해졌다. 그 절대 문턱을 그대로 두면 **경쟁자만 적게 먹는 눈금**이 되어,
+ * 같은 표에서 내가 늘 대량 실점 감점을 먹는다. 그래서 절대값이 아니라 순서와
+ * **내 실점 분포와의 거리**를 지킨다. */
+const mean = (res) => { let s = 0; for (let i = 0; i < N; i++) s += conceded(res); return s / N; };
+const cw = mean("W"), cd = mean("D"), cl = mean("L");
+console.log(`   경쟁자 실점 평균 — 승 ${cw.toFixed(2)} · 무 ${cd.toFixed(2)} · 패 ${cl.toFixed(2)}`);
+check(cw < cd && cd < cl, `이긴 클럽이 비긴 클럽보다, 비긴 클럽이 진 클럽보다 덜 먹는다 (${cw.toFixed(2)} < ${cd.toFixed(2)} < ${cl.toFixed(2)})`);
+/* 내 실점 실측(승/무/패 2.05 · 3.19 · 4.58)과 1.0 안에 붙어 있어야 한다.
+ * 여기가 벌어지면 경쟁자와 내가 다른 자로 평점을 받는다. */
+const MINE = { W: 2.05, D: 3.19, L: 4.58 };
+const gap = Math.max(Math.abs(cw - MINE.W), Math.abs(cd - MINE.D), Math.abs(cl - MINE.L));
+check(gap <= 1.0,
+  `경쟁자 실점 폭이 내 실점 폭(승 ${MINE.W} · 무 ${MINE.D} · 패 ${MINE.L})과 같은 눈금이다 (최대 차이 ${gap.toFixed(2)})`);
+check(mean("W") > 0.5, "이겨도 실점은 한다 — 예전엔 승리 시 0~1이라 무실점 보너스를 경쟁자가 독식했어요");
 
 /* ── 변이 검증 — 승패 보정을 빼면 ①이 무너져야 한다. */
 const flatRes = parts.rateRes.replace(/= [\d.]+;/, "= 0;");

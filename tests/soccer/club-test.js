@@ -44,10 +44,10 @@ const parts = {
    * 칭호가 붙었을 때의 동작은 tests/soccer/buff-test.js가 봅니다. */
   buffFns: grab(GAME, /const HOT_FORM_BAR = [\s\S]*?const buffMul = [^;]+;/),
   matchContribution: grab(GAME, /function matchContribution\(rating\) \{[\s\S]*?\n\}/),
-  deriveOppGoals: grab(GAME, /function deriveOppGoals\(rating, defStat\) \{[\s\S]*?\n\}/),
+  deriveOppGoals: grab(GAME, /const CONC_BASE = [\s\S]*?function deriveOppGoals\(rating, defStat, oppStr, teamGoals\) \{[\s\S]*?\n\}/),
   autoRes: grab(GAME, /function autoRes\(stat\) \{[\s\S]*?\n\}/),
   teammateGoalsTable: grab(GAME, /const TEAMMATE_GOALS = \{[^}]*\};/),
-  teammateGoals: grab(GAME, /function teammateGoals\(rating\) \{[\s\S]*?\n\}/),
+  teammateGoals: grab(GAME, /const MATE_SCALE = [\s\S]*?function teammateGoals\(rating, oppStr\) \{[\s\S]*?\n\}/),
   // MatchSim.run — cfg 구조 분해 · 이벤트(evs) 생성부 · 결과 res · info 블록
   cfgPick: grab(GAME, /const \{ home, away[^;]*\} = cfg;/),
   evsBlock: grab(GAME, /const evs = \[\];[\s\S]*?evs\.sort\([^;]*\);/),
@@ -147,18 +147,22 @@ guard("기본 전력", () => {
 /* 동료 득점 · 실점 — 전력이 실제로 작용하는 두 곳이에요.
  * 전역 S를 읽는 산식이라 new Function이 S를 파라미터로 받고 떼어 온 선언들이
  * 그 S를 클로저로 잡게 감쌌어요. */
-const mateFn = new Function("S", "rating", "clamp", `
+const mateFn = new Function("S", "rating", "clamp", "oppStr", `
   ${parts.poissonish}
   ${leagueSrc}
   ${clubSrc}
   ${mateSrc}
-  return teammateGoals(rating);
+  return teammateGoals(rating, oppStr);
 `);
-const oppFn = new Function("S", "rating", "defStat", "clamp", "rand", `
+/* 실점은 이제 **상대 전력**과 **우리 팀 골**을 함께 봐요. 우리 팀 골을 안 넘기면
+ * 늘 0으로 읽혀서 전력 차만 남습니다 — 여기서는 전력의 작용을 보는 게 목적이라
+ * 팀 골을 고정값으로 두고 전력만 움직입니다. */
+const oppFn = new Function("S", "rating", "defStat", "clamp", "rand", "oppStr", "teamGoals", `
+  ${parts.poissonish}
   ${leagueSrc}
   ${clubSrc}
   ${parts.deriveOppGoals}
-  return deriveOppGoals(rating, defStat);
+  return deriveOppGoals(rating, defStat, oppStr, teamGoals == null ? 3 : teamGoals);
 `);
 
 function stateOf(pos, stat, over = {}) {
@@ -172,7 +176,9 @@ const mean = (n, fn) => { let s = 0; for (let i = 0; i < n; i++) s += fn(i); ret
 
 // ④ 전력이 동료 득점에 작용한다 — 좋은 팀은 동료가 더 넣어요
 guard("동료 득점", () => {
-  const m = (str) => mean(N_MATCH, () => mateFn(stateOf("mf", 90, { clubStr: str }), 7, clamp));
+  /* ⚠️ 상대 전력을 **고정**해야 우리 전력의 작용이 보여요. 안 넘기면 "대등한 경기"로
+   * 읽혀서(상대 = 우리 전력) 전력을 뭘로 바꿔도 결과가 같습니다. */
+  const m = (str) => mean(N_MATCH, () => mateFn(stateOf("mf", 90, { clubStr: str }), 7, clamp, 70));
   const lo = m(50), hi = m(90);
   console.log(`=== ④ 미드필더 동료 골 평균 (${N_MATCH}경기) ===`);
   console.log(`  전력 50 ${lo.toFixed(3)} · 전력 90 ${hi.toFixed(3)}`);
@@ -181,7 +187,7 @@ guard("동료 득점", () => {
 
 // ⑤ 전력이 실점에 작용한다 — 좋은 팀은 덜 먹어요
 guard("실점", () => {
-  const m = (str) => mean(N_MATCH, () => oppFn(stateOf("mf", 90, { clubStr: str }), 7, 70, clamp, rand));
+  const m = (str) => mean(N_MATCH, () => oppFn(stateOf("mf", 90, { clubStr: str }), 7, 70, clamp, rand, 70, 3));
   const lo = m(50), hi = m(90);
   console.log(`=== ⑤ 실점 평균 (평점 7 · 수비 70, ${N_MATCH}경기) ===`);
   console.log(`  전력 50 ${lo.toFixed(3)} · 전력 90 ${hi.toFixed(3)}`);
@@ -263,11 +269,14 @@ const seasonFn = new Function("S", "clamp", "rand", "randInt", "pick", `
   for (let i = 0; i < games; i++) {
     const rating = ratingOf(S.stats, S.pos, S.condition, S.fandom);
     const c = matchContribution(rating);
+    /* career.js playShow와 같은 순서 — 동료 골을 먼저 굴려 우리 팀 골을 알고,
+     * 그 값을 실점에 물려줍니다. */
+    const mateCount = teammateGoals(rating, S.oppStr);
     const cfg = {
       home: "우리", away: "상대", myName: S.name,
       goals: c.g, assists: c.a, defense: c.def,
-      oppGoals: deriveOppGoals(rating, S.stats.defense),
-      rating,
+      oppGoals: deriveOppGoals(rating, S.stats.defense, S.oppStr, c.g + c.a + mateCount),
+      rating, mateCount,
     };
     ${parts.cfgPick}
     ${parts.evsBlock}
@@ -306,10 +315,13 @@ const yearFn = new Function("S", "act", "clamp", "rand", `
  * 전력이 새면 곧바로 튀는 구간이에요. 팀 승률은 능력치 70에서 봐요 —
  * 110쯤 되면 1부 승률이 98%로 천장에 붙어서 전력을 올려도 더 오를 자리가 없어요. */
 const N_SEASON = Number(process.env.CLUB_N || 3000);
-function seasonRates(pos, stat, league, str) {
+/* oppStr — 상대 클럽 전력. 안 주면 **대등한 경기**(상대 = 우리 전력)로 굴러요.
+ * 우리 전력의 작용을 보려면 상대를 고정해야 합니다 — 둘이 같이 오르면 차이가 안 생겨요. */
+function seasonRates(pos, stat, league, str, oppStr) {
   let mvp = 0, w = 0, g = 0;
   for (let i = 0; i < N_SEASON; i++) {
-    const S = stateOf(pos, stat, { league, clubStr: str, career: { rookie: 0, daesang: 0, bonsang: 0 } });
+    const S = stateOf(pos, stat, { league, clubStr: str, oppStr,
+      career: { rookie: 0, daesang: 0, bonsang: 0 } });
     const act = seasonFn(S, clamp, rand, randInt, pick);
     if (yearFn(S, act, clamp, rand).awards.includes("리그MVP")) mvp++;
     w += act.teamW;
@@ -325,8 +337,8 @@ guard("전력이 수상에 안 닿는다", () => {
   console.log("  포지션 | 전력 | 리그MVP(능력치 90) | 팀 승률(능력치 70)");
   let bad = 0;
   for (const pos of POS) {
-    const aLo = seasonRates(pos, 90, 1, 50), aHi = seasonRates(pos, 90, 1, 90);
-    const wLo = seasonRates(pos, 70, 1, 50), wHi = seasonRates(pos, 70, 1, 90);
+    const aLo = seasonRates(pos, 90, 1, 50, 70), aHi = seasonRates(pos, 90, 1, 90, 70);
+    const wLo = seasonRates(pos, 70, 1, 50, 70), wHi = seasonRates(pos, 70, 1, 90, 70);
     if (Math.abs(aHi.mvp - aLo.mvp) > 0.05) bad++;
     console.log(`  ${POS_NAME[pos].padStart(5)} |   50 | ${pct(aLo.mvp).padStart(17)} | ${pct(wLo.win).padStart(17)}`);
     console.log(`  ${"".padStart(5)} |   90 | ${pct(aHi.mvp).padStart(17)} | ${pct(wHi.win).padStart(17)}`);
@@ -346,7 +358,7 @@ guard("깨진 값 방어", () => {
     `깨진 clubStr이 던지지 않고 40~95로 막힌다 (${got.join("·")})`);
   // 산식이 그 값을 실제로 써도 죽지 않아야 해요
   const S = stateOf("fw", 90, { clubStr: "이상한값" });
-  const m = mateFn(S, 7, clamp), o = oppFn(S, 7, 70, clamp, rand);
+  const m = mateFn(S, 7, clamp, 70), o = oppFn(S, 7, 70, clamp, rand, 70, 3);
   check(Number.isFinite(m) && Number.isFinite(o) && m >= 0 && o >= 0,
     `깨진 전력으로도 동료 득점·실점이 정상 범위다 (동료 ${m} · 실점 ${o})`);
 });

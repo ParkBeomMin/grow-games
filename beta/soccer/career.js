@@ -681,8 +681,14 @@ window.WingerCareer = (() => {
   }
 
   /* 경쟁자 실점 — 소속 클럽의 그 라운드 결과에서 짐작해요. 실제로 굴리지는
-   * 않으니(순위표는 승패만 굴려요) 결과에 어울리는 값을 뽑습니다. */
-  const raceConceded = (res) => (res === "W" ? randInt(0, 1) : res === "L" ? randInt(1, 3) : randInt(1, 2));
+   * 않으니(순위표는 승패만 굴려요) 결과에 어울리는 값을 뽑습니다.
+   *
+   * ⚠️ 폭이 **내 실점 분포와 같아야** 해요. 평점은 무실점 보너스와 대량 실점
+   * 감점을 보는데, 경쟁자만 적게 먹는 걸로 잡으면 같은 표에서 내가 늘 손해를 봅니다.
+   * 팀 결과를 전력 대 전력으로 바꾸면서 내 실점이 크게 늘었어요 —
+   * 실측(승/무/패 평균): 예전 0.5 / 1.5 / 2.0 → 지금 2.05 / 3.19 / 4.58.
+   * 아래 폭이 그 평균과 맞아요 (2.0 / 3.0 / 4.5). */
+  const raceConceded = (res) => (res === "W" ? randInt(0, 4) : res === "L" ? randInt(2, 7) : randInt(1, 5));
 
   /* 경쟁자들의 그 라운드 평점. **나와 똑같은 matchRating을 씁니다** —
    * 예전에는 개인 순위 명단(act.race)과 평점표 명단(act.rivals)이 아예 다른
@@ -1103,11 +1109,15 @@ window.WingerCareer = (() => {
 
     const rating = ratingOf(S.stats, S.pos, S.condition, S.fandom);
     const c = matchContribution(rating);
-    const oppGoals = deriveOppGoals(rating, S.stats.defense);
+    /* 팀 결과는 **우리 전력 대 상대 전력**이 정해요. 상대 클럽의 전력을 찾아
+     * 동료 골과 실점에 함께 물려줍니다 — 여태 리그 경기는 상대가 누구든 똑같았어요. */
+    const oppStr = clubStrByName(act.opp, S);
+    const mates = teammateGoals(rating, oppStr);
+    const oppGoals = deriveOppGoals(rating, S.stats.defense, oppStr, c.g + c.a + mates);
     ensureRace();   // 명단이 있어야 동료 이름으로 골을 넣어요
     MatchSim.run({
       home: S.group, away: act.opp, myName: S.name,
-      goals: c.g, assists: c.a, defense: c.def, oppGoals, rating,
+      goals: c.g, assists: c.a, defense: c.def, oppGoals, rating, mateCount: mates,
       mates: mateNames(),          // 동료 골에 이름을 붙여요 (개인 순위로 이어집니다)
       finalize: (info) => proMatchFinalize(act, info),
     });
@@ -1346,7 +1356,9 @@ window.WingerCareer = (() => {
   function cupMatch() {
     const rounds = cupRounds();
     const opp = cupDraw();
-    if (!opp) { cupFinish(false); return; }
+    /* 대진이 비었어요 — 있을 수 없는 상태지만, 예전에는 여기서 **없는 함수**
+     * (cupFinish)를 불러 그 자리에서 죽었습니다. 컵을 접고 결산으로 보내요. */
+    if (!opp) { S.cup = null; save(); finishYear(); return; }
     S.cup.opp = opp;
     save();
     $("stage-title").textContent = `🏆 ${S.cup.name} ${rounds[S.cup.round]}`;
@@ -1355,12 +1367,13 @@ window.WingerCareer = (() => {
 
     const rating = ratingOf(S.stats, S.pos, S.condition, S.fandom);
     const c = matchContribution(rating);
-    /* 컵 상대는 그 팀 전력으로 실점을 잡아요. 리그 경기의 deriveOppGoals는
-     * 내 리그 평균을 기준으로 삼는데, 컵에서는 2부 팀도 1부 팀도 오니까요. */
-    const oppGoals = deriveOppGoals(rating, S.stats.defense) + (opp.str > clubStrOf(S) ? 1 : 0);
+    /* 컵 상대는 그 팀 전력을 그대로 물려요. 리그와 같은 산식이라 따로 보정하지
+     * 않습니다 — 예전에는 "상대가 더 세면 +1 실점"이라는 손보정이 붙어 있었어요. */
+    const mates = teammateGoals(rating, opp.str);
+    const oppGoals = deriveOppGoals(rating, S.stats.defense, opp.str, c.g + c.a + mates);
     MatchSim.run({
       home: S.group, away: opp.name, myName: S.name,
-      goals: c.g, assists: c.a, defense: c.def, oppGoals, rating,
+      goals: c.g, assists: c.a, defense: c.def, oppGoals, rating, mateCount: mates,
       mates: mateNames(),
       finalize: (info) => cupFinalize(info),
     });

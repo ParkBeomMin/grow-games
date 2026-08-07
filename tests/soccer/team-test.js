@@ -37,7 +37,7 @@ const parts = {
    * 칭호가 붙었을 때의 동작은 tests/soccer/buff-test.js가 봅니다. */
   buffFns: grab(GAME, /const HOT_FORM_BAR = [\s\S]*?const buffMul = [^;]+;/),
   matchContribution: grab(GAME, /function matchContribution\(rating\) \{[\s\S]*?\n\}/),
-  deriveOppGoals: grab(GAME, /function deriveOppGoals\(rating, defStat\) \{[\s\S]*?\n\}/),
+  deriveOppGoals: grab(GAME, /const CONC_BASE = [\s\S]*?function deriveOppGoals\(rating, defStat, oppStr, teamGoals\) \{[\s\S]*?\n\}/),
   autoRes: grab(GAME, /function autoRes\(stat\) \{[\s\S]*?\n\}/),
   // MatchSim.run — cfg 구조 분해 · 이벤트(evs) 생성부 · 결과 res · info 블록
   cfgPick: grab(GAME, /const \{ home, away[^;]*\} = cfg;/),
@@ -59,7 +59,7 @@ const consts = [
 ].filter(Boolean).join(" ");
 const mateSrc = [
   grab(GAME, /const TEAMMATE_GOALS = \{[^}]*\};/),
-  grab(GAME, /function teammateGoals\(rating\) \{[\s\S]*?\n\}/),
+  grab(GAME, /const MATE_SCALE = [\s\S]*?function teammateGoals\(rating, oppStr\) \{[\s\S]*?\n\}/),
 ].filter(Boolean).join("\n");
 /* 리그 티어도 같은 규칙으로 '있으면 넣는다'. ratingOf가 리그 페널티를 빼기 때문에
  * 없으면 ReferenceError가 난다. 아래 stateOf는 league를 안 넣으니 1부(penalty 0)라
@@ -85,7 +85,7 @@ const mateFn = new Function("S", "rating", "clamp", `
   ${leagueSrc}
   ${clubSrc}
   ${mateSrc}
-  return teammateGoals(rating);
+  return teammateGoals(rating, S.oppStr);
 `);
 
 /* 경기 한 판. career.js의 playShow와 같은 순서로 평점 → 기여도 → 실점을 구하고,
@@ -106,11 +106,14 @@ const simFn = new Function("S", "clamp", "rand", "randInt", "pick", `
   ${parts.autoRes}
   const rt = ratingOf(S.stats, S.pos, S.condition, S.fandom);
   const c = matchContribution(rt);
+  /* career.js playShow와 같은 순서예요 — 동료 골을 **먼저** 굴려서 우리 팀 골을 알고,
+   * 그 값을 실점 산식에 물려줍니다. 이 순서가 팀 결과를 내 활약에서 떼어내는 축이에요. */
+  const mateCount = teammateGoals(rt, S.oppStr);
   const cfg = {
     home: "우리", away: "상대", myName: S.name,
     goals: c.g, assists: c.a, defense: c.def,
-    oppGoals: deriveOppGoals(rt, S.stats.defense),
-    rating: rt,
+    oppGoals: deriveOppGoals(rt, S.stats.defense, S.oppStr, c.g + c.a + mateCount),
+    rating: rt, mateCount,
   };
   ${parts.cfgPick}
   ${parts.evsBlock}
