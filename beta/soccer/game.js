@@ -834,11 +834,35 @@ function renderRecord() {
   }
   let proHtml = "";
   if (S.career && S.career.years && S.career.years.length) {
-    const rows = S.career.years.map((x) =>
+    /* 시즌마다 소속과 리그가 달라요. 여기엔 그게 아예 안 적혀 있어서
+     * "3시즌 103골"이 어느 리그에서 낸 기록인지 알 수가 없었어요(제보).
+     *
+     * 칸을 새로 만들지는 않아요 — 수상 칸이 이미 다섯 줄까지 늘어나서
+     * 폭이 남아 있지 않습니다(결산 표를 7칸 → 4칸으로 줄인 것과 같은 이유).
+     * 시즌 칸 아래에 작은 글씨로 두 줄 붙여요.
+     *
+     * 소속은 career.js가 채워요 — 이 필드가 생기기 전 시즌에는 club이 없어서
+     * S.moves에서 역산합니다(fillClubs). career.js는 이 파일 뒤에 로드되지만
+     * openRecord는 버튼을 눌러야 도니까 그때는 이미 올라와 있어요. */
+    const CT = (window.WingerCareer && window.WingerCareer._t) || {};
+    const yrs = CT.fillClubs ? CT.fillClubs(S.career.years, S) : S.career.years;
+    const shortOf = CT.shortClub || ((n) => (n ? String(n).slice(0, 4) : "-"));
+    const lgShort = (id) => {
+      const l = (CT.LEAGUES || LEAGUES).find((x) => x.id === id);
+      return l ? `${l.flag} ${l.short}` : "";
+    };
+    const seasonCell = (x) => {
+      const club = x.club ? `<span class="rec-club" title="${x.club}">${shortOf(x.club)}</span>` : "";
+      const lg = x.league != null ? lgShort(x.league) : "";
+      const rank = x.rank ? `${x.rank}위` : "";
+      const sub = [lg, rank].filter(Boolean).join(" ");
+      return `${x.y}시즌${club}${sub ? `<span class="rec-lg">${sub}</span>` : ""}`;
+    };
+    const rows = yrs.map((x) =>
       /* 골·도움·수비를 한 칸에 합쳐요. 칸마다 나누면 폰 폭에서 헤더가
        * 세로로 쪼개져요 (⚽골 · 🅰️도움 · 🛡️수비가 28~34px 칸에 안 들어가요).
        * 결산 화면(career.js)이 같은 이유로 이미 합쳤어요. */
-      `<tr><td>${x.y}시즌</td><td class="yr-stat">${[
+      `<tr><td class="rec-season">${seasonCell(x)}</td><td class="yr-stat">${[
         x.goals != null ? `${x.goals}골` : null,
         x.assists != null ? `${x.assists}도움` : null,
         x.defense != null ? `${x.defense}수비` : null,

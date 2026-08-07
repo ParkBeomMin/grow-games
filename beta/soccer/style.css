@@ -244,10 +244,19 @@ body {
  * 칸을 나누면 폰 폭에서 헤더가 세로로 쪼개져요. 수상 칸만 유동 폭입니다. */
 .season-record { table-layout: fixed; }
 .season-record th, .season-record td { word-break: keep-all; }
-/* 폭 근거는 위 .season-soccer 주석과 같아요. 성적 칸은 112px 필요합니다. */
-.season-record th:nth-child(1), .season-record td:nth-child(1) { width: 44px; }
+/* 폭 근거는 위 .season-soccer 주석과 같아요. 성적 칸은 112px 필요합니다.
+ * 시즌 칸은 44 → 60px — 아래에 소속·리그를 작은 글씨로 붙였어요.
+ * ("3시즌 103골"이 어느 리그 기록인지 알 수가 없다는 제보) */
+.season-record th:nth-child(1), .season-record td:nth-child(1) { width: 60px; }
 .season-record th:nth-child(2), .season-record td:nth-child(2) { width: 112px; }
 .season-record .yr-stat { white-space: nowrap; }
+.season-record .rec-season { vertical-align: middle; line-height: 1.35; }
+/* 소속은 칸보다 길 수 있어서 넘치면 잘라요 (전체 이름은 title에 있어요) */
+.season-record .rec-club {
+  display: block; font-size: 0.66rem; color: var(--accent); opacity: .85;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.season-record .rec-lg { display: block; font-size: 0.62rem; opacity: .6; white-space: nowrap; }
 
 /* 🏆 리그 순위표 — 접이식. 루키의 같은 요소와 모양을 맞춰요 */
 .standings-box { margin: 0 0 10px; border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; }
