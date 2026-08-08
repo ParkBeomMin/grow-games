@@ -69,6 +69,29 @@ guard("① 단일 관문", () => {
     "진행(wcAfterMatch)과 종료(endTournament)가 각각 함수 하나다");
 });
 
+/* ---------- ①-b 테마 CSS — 색만 바꾸고 레이아웃은 안 건드리는가 ----------
+ *
+ * 이 저장소에서 **CSS는 자동 검증의 사각지대**다. 기계가 화면을 못 보니
+ * "월드컵 테마가 예쁜가"는 사람이 봐야 한다. 대신 **규율은 기계가 지킬 수 있다** —
+ * 기존 요소(body.wc-mode ...)의 간격·폭·배치를 만지지 않았는지는 소스로 확인된다.
+ * 여기서 레이아웃을 만지면 "성적 칸이 세로로 접히는" 류의 사고를 아무도 못 잡는다. */
+console.log("=== ①-b 테마 CSS가 색만 바꾸는가 ===");
+guard("①-b 테마 CSS", () => {
+  const CSS = fs.readFileSync(path.join(DIR, "style.css"), "utf8");
+  const blocks = CSS.match(/body\.wc-mode[^{]*\{[^}]*\}/g) || [];
+  console.log(`   body.wc-mode 규칙 ${blocks.length}개`);
+  check(blocks.length > 0, "월드컵 테마 스타일이 있다 (body.wc-mode)");
+  /* 레이아웃을 바꾸는 속성들. 색·보더·그림자·글꼴색은 얼마든지 괜찮아요. */
+  const LAYOUT = /(^|[;{\s])(margin|padding|width|height|top|left|right|bottom|position|display|flex|grid|gap|font-size|line-height|order|float|transform)\s*:/;
+  const bad = blocks.filter((b) => LAYOUT.test(b.split("{")[1] || ""));
+  bad.forEach((b) => console.log(`   ⚠️ ${b.replace(/\s+/g, " ").slice(0, 90)}`));
+  check(bad.length === 0,
+    `기존 요소의 레이아웃은 안 건드린다 (어긴 규칙 ${bad.length}개) — CSS는 기계가 못 보는 자리라 색까지만이에요`);
+  // 대회 전용으로 새로 만든 조각들은 레이아웃을 가져도 괜찮아요
+  check(/\.wc-badge\s*\{/.test(CSS) && /\.wc-invite\s*\{/.test(CSS),
+    "대회 전용 조각(배지·초대장)에 스타일이 있다");
+});
+
 // ---------- 페이지 ----------
 const PRELUDE = `
   window.fetch = () => Promise.reject(new Error("net off"));
