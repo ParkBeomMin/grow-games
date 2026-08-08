@@ -486,6 +486,63 @@ function makeSoccerReport() {
   log("  ❌ 조건에 맞는 상태를 못 만들었어요 (연말 결산)");
 }
 
+/* 💜 1군 콜업 대기로 막 입단한 선수 — 선발일까 벤치일까.
+ *
+ * 유스 마지막 라운드에서만 떨어지면(lastRound === 3) 💜 1군 콜업 대기예요.
+ * 프로로는 이어지지만 **그 리그 최약체 클럽**에서 출발합니다 — 예전에는
+ * 🌟 프로 계약 성공과 기계적으로 완전히 같았어요(제보).
+ * 스쿼드가 생긴 뒤로는 여기서 곧바로 "내가 선발인가"가 갈립니다. */
+function makeSoccerCallup() {
+  log("💜 1군 콜업 대기 — 데뷔 직후 선발/벤치");
+  for (const seed of seeds(20)) {
+    let P;
+    try {
+      P = makePage("soccer", seed);
+      newPlayer(P, 0, "df", "콜업");
+      youthUntilSurvival(P, "pos");
+      const n = P.get("SURVIVAL_ROUNDS").length;
+      for (let i = 0; i < n; i++) survivalRound(P, i < n - 1);   // 마지막만 탈락
+      if (toEnding(P) !== "screen-ending") throw new Error(`엔딩 화면이 안 떠요 (${P.active()})`);
+      const title = endingTitle(P);
+      if (!title.includes("1군 콜업")) throw new Error(`엔딩이 💜가 아니라 '${title}'이에요`);
+      const btn = P.$("btn-go-debut");
+      if (!btn) throw new Error("'프로 커리어 시작' 버튼이 없어요");
+      btn.click();
+      const st = P.state();
+      const Sq = P.w.WingerSquad;
+      if (!Sq) throw new Error("squad.js가 안 실렸어요");
+      const L = Sq.myLine();
+      const starter = Sq.isStarter();
+      add({
+        id: "soccer-callup",
+        game: "soccer", url: "soccer/", emoji: "💜",
+        title: `1군 콜업 대기 — ${starter ? "선발" : "벤치"}로 데뷔`,
+        state: `${st.group} · ${P.get("leagueOf")(st).name} · 전력 ${st.clubStr} · 종합 ${Math.round(P.overall())}`
+          + ` · 수비수 ${L.slots}자리 중 ${L.rank}번째 → ${starter ? "선발" : "벤치"}`,
+        check: "💜 1군 콜업 대기는 이제 🌟 프로 계약과 **다릅니다** — 그 리그 "
+          + "<b>최약체 클럽</b>에서 출발해요. HUD의 <b>👥 스쿼드</b> 버튼을 눌러 "
+          + "선발 11과 벤치를 보고, 내가 몇 번째인지 확인해 주세요.<br>"
+          + "벤치면 경기 대신 <b>훈련장에서 능력치 하나가 올라요</b>(결장이 손해가 "
+          + "되면 안 되니까요). 팀은 나 없이 경기를 치르고 순위표도 그대로 굴러가요.<br>"
+          + "훈련으로 종합을 올려 앞사람을 넘으면 선발이 됩니다 — 버튼 문구가 "
+          + "<b>🪑 벤치 4번 → 👥 선발 3/3</b>으로 바뀌는지 봐주세요.",
+        steps: [
+          "게임이 열리면 <b>이어하기</b> → 선수 카드",
+          "HUD의 <b>👥 스쿼드 / 🪑 벤치</b> 버튼을 눌러 명단 확인",
+          "훈련 3회를 쓰고 경기에 나가 보기 (벤치면 벤치 화면이 떠요)",
+        ],
+        keys: snapshot(P),
+      });
+      P.close();
+      return;
+    } catch (e) {
+      if (P) P.close();
+      log(`  · 시드 ${seed}: ${e.message}`);
+    }
+  }
+  log("  ❌ 조건에 맞는 상태를 못 만들었어요 (1군 콜업)");
+}
+
 /* 🎂 마지막 시즌 — 커리어가 15시즌으로 늘어난 뒤의 끝자락이에요.
  * 노쇠 구간(11시즌~) 문구 · 칭호 · 새 커리어 등급을 한 화면에서 다 볼 수 있어요.
  * 결산까지만 가고 은퇴는 안 눌러요 — 되돌릴 수 없는 선택이라 사람이 눌러야 해요. */
@@ -1628,6 +1685,7 @@ if (want("soccer-semipro", "soccer")) makeSoccerEnding("semi");
 if (want("soccer-report", "soccer")) makeSoccerReport();
 if (want("soccer-chart", "soccer")) makeSoccerChart();
 if (want("soccer-cup", "soccer")) makeSoccerCup();
+if (want("soccer-callup", "soccer")) makeSoccerCallup();
 if (want("soccer-final", "soccer")) makeSoccerFinal();
 if (want("soccer-veteran", "soccer")) makeSoccerVeteran();
 if (want("soccer-judge", "soccer")) makeSoccerJudge();

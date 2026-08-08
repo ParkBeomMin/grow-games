@@ -388,8 +388,12 @@ guard("사다리 분리", () => {
     nb.click();
   }
   console.log(`  ${SEASONS}시즌 성적(hype): ${hypes.join(" · ")} — 소속 리그: ${[...new Set(seen)].map((id) => leagueById(id).name).join(", ")}`);
-  check(seen.length === SEASONS && seen.every((id) => id === EUR.id),
-    `성적이 바닥이어도 ${SEASONS}시즌 내내 ${EUR.name} 소속 그대로다 (리그 ${[...new Set(seen)].map((id) => leagueById(id).name).join(", ")})`);
+  /* ⚠️ "5시즌 내내 같은 리그"는 이제 못 지켜요 — 승격에서 조건을 걷어낸 뒤로는
+   * 1위만 하면 올라갑니다. 최약체 클럽이어도 팀이 1위를 하면 승격해요.
+   * 여기서 지킬 건 그게 아니라 **두 사다리가 안 이어진다**는 것입니다. */
+  const ENG = [EUR.id, UCL.id];
+  check(seen.length === SEASONS && seen.every((id) => ENG.includes(id)),
+    `${SEASONS}시즌 내내 잉글랜드 사다리 안에 있다 (리그 ${[...new Set(seen)].map((id) => leagueById(id).name).join(", ")})`);
   check(seen.every((id) => ![K3.id, K2.id, K1.id].includes(id)),
     `국내 리그로 넘어가는 일이 없다 — 두 사다리는 안 이어진다 (${[...new Set(seen)].map((id) => leagueById(id).name).join(", ")})`);
   check(hypes.every((h) => h != null && h < PROMOTE_HYPE[UCL.id]),

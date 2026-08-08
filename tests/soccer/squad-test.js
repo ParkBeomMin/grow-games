@@ -237,6 +237,22 @@ guard("⑥ 개인 순위와 같은 사람", () => {
 });
 
 // ---------- ⑦ 클럽이 바뀌면 새로 ----------
+/* ---------- ⑪ 세이브에 내 실력이 제대로 남는가 ----------
+ * 처음에는 save()를 먼저 부르고 그 뒤에 내 str을 채웠다. 메모리에서는 매번 다시
+ * 채워지니 화면은 멀쩡했지만, **디스크에 남은 세이브만 열어 보면 내가 str 0으로
+ * 꼴찌**였다(확인용 세이브를 뽑아 보고 발견). 세이브를 남의 눈으로 읽는 순간
+ * (클라우드 복원·확인 페이지·통계) 거기서 어긋난다. */
+guard("⑪ 세이브에 남는 값", () => {
+  setOvr(72);
+  Squad.ensureSquads();
+  const raw = JSON.parse(JSON.stringify(S().squads));
+  const meRow = (raw[S().group] || []).find((x) => x.me);
+  console.log(`   세이브의 내 줄 — ${meRow ? `${meRow.name} ${Math.round(meRow.str)}` : "없음"} (종합 72)`);
+  check(!!meRow && Math.abs(meRow.str - 72) < 1,
+    `저장된 내 실력이 지금 종합과 같다 (${meRow ? Math.round(meRow.str) : "없음"})`);
+  check(!!meRow && meRow.name === S().name, "저장된 내 이름도 지금 이름과 같다");
+});
+
 guard("⑦ 이적", () => {
   const before = Squad.ensureSquad().map((x) => x.name).join("|");
   S().group = "다른 클럽 FC";

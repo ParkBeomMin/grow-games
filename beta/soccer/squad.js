@@ -57,7 +57,7 @@ window.WingerSquad = (() => {
       /* 내 자리 하나를 나로 바꿔요. 스쿼드에는 **나도 한 줄로** 들어가야
        * 선발 경쟁이 같은 표 안에서 벌어져요. */
       const at = list.findIndex((x) => x.pos === S.pos);
-      list[at] = { me: true, name: S.name, pos: S.pos, str: 0, g: 0, a: 0, d: 0, apps: 0 };
+      list[at] = { me: true, name: S.name, pos: S.pos, str: overall(), g: 0, a: 0, d: 0, apps: 0 };
     }
     return list.slice(0, SQUAD_SIZE);
   }
@@ -76,11 +76,20 @@ window.WingerSquad = (() => {
       S.squads = out;
       S.squadsLeague = lg;
       S.squadClub = S.group;
+      /* ⚠️ 내 줄을 **저장하기 전에** 채워요. 예전에는 save()를 먼저 부르고 그 뒤에
+       * str을 넣어서, 디스크에는 str 0인 내가 남았습니다. 메모리에서는 매번 다시
+       * 채워지니 화면은 멀쩡했지만, 세이브만 열어 보면 내가 꼴찌였어요. */
+      refreshMe();
       save();
     }
-    // 내 줄의 실력은 늘 지금 종합이에요 (훈련·각성으로 계속 움직여요)
-    for (const x of S.squads[S.group] || []) if (x.me) { x.str = overall(); x.name = S.name; }
+    refreshMe();
     return S.squads;
+  }
+  // 내 줄의 실력·이름은 늘 지금 값이에요 (훈련·각성·개명으로 계속 움직여요)
+  function refreshMe() {
+    for (const x of (S.squads && S.squads[S.group]) || []) {
+      if (x.me) { x.str = overall(); x.name = S.name; }
+    }
   }
   const squadOf = (club) => ensureSquads()[club] || [];
   const ensureSquad = () => squadOf(S.group);        // 우리 팀
