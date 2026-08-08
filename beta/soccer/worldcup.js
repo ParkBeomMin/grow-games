@@ -110,6 +110,31 @@ window.WingerWorldCup = (() => {
     return NATIONS.find((n) => n.c === c) || NATIONS.find((n) => n.c === "kr");
   };
 
+  const NAT_MEAN = NATIONS.reduce((a, n) => a + n.str, 0) / NATIONS.length;
+  const natStr = (n) => NAT_MEAN + (n.str - NAT_MEAN) * NAT_SPREAD;
+  // 우리 팀 전력 — 좁힌 국가 전력에 내 종합(에이스 보정)을 얹어요
+  const teamStr = () => natStr(myNation()) + clamp((overall() - 90) / ACE_DIV, ACE_LO, ACE_HI);
+
+  /* 🌍 국가 전력을 **평균 쪽으로 좁혀서** 써요.
+   *
+   * 표의 74~90을 그대로 쓰면 유스 국적이 성적을 통째로 정합니다. 실측(대회 6,000판):
+   * 종합 100에서 🇧🇷 브라질 우승 18% · 🇰🇷 한국 5% — **3.6배**였어요. 유스 선택이
+   * 유불리는 되어야 하지만 사형선고가 되면 안 됩니다(목표 2.0배 이내).
+   * 0.35로 좁히니 1.6배가 됐어요. 순위 느낌은 남고 벽은 사라집니다.
+   * 표를 직접 고치지 않고 여기서 좁히는 이유: "실제 전력을 이만큼 눌러 쓴다"는
+   * 의도가 코드에 남아야 나중에 되돌리거나 다시 재기 쉬워요. */
+  const NAT_SPREAD = 0.35;
+
+  /* 🌟 에이스 보정 — **내 종합이 대표팀 전력에 얹혀요.**
+   *
+   * 이게 없으면 실력이 성적을 거의 못 움직였어요. 실측: 종합 80 → 140으로 올려도
+   * 우승률이 4% → 12%뿐이었습니다(리그는 같은 구간에서 리그MVP 3% → 85%예요).
+   * 내 골은 GOAL_SCALE 때문에 작은데 팀 전력 차가 크게 실려서, 대회가 "어느 나라
+   * 유스를 골랐나" 게임이 됐던 거예요.
+   * 에이스 한 명이 팀을 끌어올리는 건 실제 축구고, 이 게임은 내가 주인공이에요.
+   * 넣고 나니 5% → 30%로 여섯 배가 됐어요. */
+  const ACE_DIV = 4, ACE_LO = -6, ACE_HI = 8;
+
   const GROUP_N = 4;          // 우리 조 팀 수 (나 포함)
   const GROUP_GAMES = 3;      // 조별리그는 3경기
   const CAMP_FIRST = 2;       // 소집 직후 훈련 턴
@@ -261,9 +286,11 @@ window.WingerWorldCup = (() => {
     const me = myNation();
     const pool = NATIONS.filter((n) => n.c !== me.c);
     const picked = shuffle(pool.slice()).slice(0, 7);
-    const myGroup = [{ name: me.name, str: me.str, me: true, pts: 0, gd: 0 }]
-      .concat(picked.slice(0, GROUP_N - 1).map((n) => ({ name: n.name, str: n.str, pts: 0, gd: 0 })));
-    const others = picked.slice(GROUP_N - 1).map((n) => ({ name: n.name, str: n.str }));
+    /* 명단에는 **좁힌 전력**을 적어 둬요 — 이후 판정이 전부 이 숫자를 봅니다.
+     * 표의 원래 값과 실제 판정 값이 갈리면 "표시와 판정이 다른 것을 본다"가 돼요. */
+    const myGroup = [{ name: me.name, str: natStr(me), me: true, pts: 0, gd: 0 }]
+      .concat(picked.slice(0, GROUP_N - 1).map((n) => ({ name: n.name, str: natStr(n), pts: 0, gd: 0 })));
+    const others = picked.slice(GROUP_N - 1).map((n) => ({ name: n.name, str: natStr(n) }));
     return { myGroup, others };
   }
 
@@ -375,8 +402,9 @@ window.WingerWorldCup = (() => {
      * 넘긴다는 것뿐입니다(ratingOf는 리그 벌점을 0으로 — 난이도는 국가 전력이 실어요). */
     const rating = CTX.ratingOf(S.stats, S.pos, S.condition, S.fandom, 0);
     const c = matchContribution(rating);
-    const mates = teammateGoals(rating, opp.str, nat.str);
-    const oppGoals = deriveOppGoals(rating, S.stats.defense, opp.str, c.g + c.a + mates, nat.str);
+    const us = teamStr();
+    const mates = teammateGoals(rating, opp.str, us);
+    const oppGoals = deriveOppGoals(rating, S.stats.defense, opp.str, c.g + c.a + mates, us);
     MatchSim.run({
       home: nat.name, away: opp.name, myName: S.name,
       goals: c.g, assists: c.a, defense: c.def, oppGoals, rating, mateCount: mates,
@@ -422,7 +450,7 @@ window.WingerWorldCup = (() => {
           SoccerCup.shootout(document.getElementById("pk-box"), {
             myName: myNation().name, oppName: w.opp,
             shoot: S.stats.shoot, oppStr: nextOpponent().str,
-            mates: w.mates, myStr: myNation().str,
+            mates: w.mates, myStr: teamStr(),
             onDone: (win) => {
               /* ⚠️ 승부차기 판을 **치워요.** 안 치우면 마지막 버튼이 그대로 남고,
                * 그걸 한 번 더 누르면 onDone이 또 불려 대회가 한 단계 더 넘어갑니다
@@ -580,6 +608,7 @@ window.WingerWorldCup = (() => {
     isWcYear, callBar, myNation,
     _t: {
       NATIONS, WILD_BAR, TRUST_GO, TRUST_STAY, PRIZE, FAME,
+      NAT_SPREAD, ACE_DIV, ACE_LO, ACE_HI, natStr, teamStr, NAT_MEAN,
       FIRST_WC, WC_CYCLE, CAMP_FIRST, CAMP_BETWEEN, GROUP_GAMES,
       wildOpen, rollGroups, wcAfterMatch, endTournament, MARKET_NATION,
     },
