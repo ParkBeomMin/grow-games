@@ -1272,8 +1272,7 @@ window.WingerCareer = (() => {
       <div class="bench-card">
         <div class="draft-emoji">🪑</div>
         <div class="draft-title">이번 주는 벤치예요</div>
-        <div class="tour-line">${POS_INFO[S.pos].name} 선발 ${L.slots}자리인데 지금 <b>${L.rank}번째</b>예요.<br/>
-          실력을 올려 앞사람을 넘어야 뛸 수 있어요.</div>
+        <div class="tour-line">${WingerSquad.benchReason(L)}</div>
         <div class="ms-final ${res === "W" ? "win" : res === "L" ? "lose" : ""}">
           ${S.group} ${mates} : ${conceded} ${act.opp} · ${RES_LABEL[res]} (나 없이)</div>
         <div class="tour-pts">${grew.emoji} 훈련장에서 <b>${grew.name} +${grew.gain.toFixed(1)}</b>

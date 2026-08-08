@@ -269,7 +269,7 @@ guard("⑫ 매 경기 재선발", () => {
   const others = sq.filter((x) => x.pos === S().pos && !x.me).sort((a, b) => b.str - a.str);
   const slots = C.FORMATION[S().pos];
   /* 마지막 선발 자리를 놓고 다투는 값 — 나를 뺀 줄에서 (slots-1)번째와 slots번째 사이 */
-  const edge = (others[slots - 2].str + others[slots - 1].str) / 2;
+  const edgeStr = (others[slots - 2].str + others[slots - 1].str) / 2;
   const runs = (ovr, n, base) => {
     setOvr(ovr);
     S().activity = { week: 0 };
@@ -277,7 +277,16 @@ guard("⑫ 매 경기 재선발", () => {
     for (let i = 0; i < n; i++) { S().activity.week = base + i; Squad.rollLineup(); if (Squad.isStarter()) hit++; }
     return hit;
   };
-  const mid = runs(edge, 200, 0);
+  /* ⚠️ 실력만으로 경계를 잡으면 안 돼요. 감독은 실력 위에 컨디션과 최근 폼을
+   * 얹어서 보거든요("선발 확률은 컨디션에만 비례해??"의 답으로 폼이 들어왔어요).
+   * 보정값을 코드에서 읽어와 빼면 검사가 산식을 따라다니게 되니(그러면 산식을
+   * 바꿔도 안 잡혀요), **실제로 굴려 보고** 반반이 되는 자리를 찾습니다. */
+  let edge = edgeStr, mid = runs(edgeStr, 200, 0);
+  for (let d = 1; d <= 12 && (mid <= 20 || mid >= 180); d++) {
+    const tryOvr = edgeStr + (mid >= 180 ? -d : d);
+    const got = runs(tryOvr, 200, d * 500);
+    if (Math.abs(got - 100) < Math.abs(mid - 100)) { edge = tryOvr; mid = got; }
+  }
   console.log(`   경계(종합 ${edge.toFixed(0)}) 200경기 — 선발 ${mid}회`);
   check(mid > 20 && mid < 180,
     `경계에 있으면 경기마다 갈린다 (선발 ${mid}/200) — 고정이면 0이나 200이 나와요`);
@@ -412,6 +421,100 @@ guard("⑬ 벤치 경기 진행", () => {
       || Math.abs(Object.values(S().stats).reduce((a, b) => a + b, 0) - sum0) > 1e-9;
     check(moved, `훈련 버튼을 누르면 실제로 뭔가 일어난다 (훈련 ${camp0} → ${S().camp})`);
   }
+});
+
+/* ---------- ⑮ 선발 확률이 컨디션 하나로 결정되지 않는가 ----------
+ *
+ * 제보 두 줄: "공격수 선발 2자리인데 지금 1번째라는 말이 무슨 의미지???"
+ *            "그리고 선발 확률은 컨디션에만 비례해??"
+ *
+ * 둘 다 같은 뿌리였다. 보정이 (컨디션-70)/6, 폭이 -11.7 ~ +5였는데 같은 포지션
+ * 실력 차는 보통 1~2였다. 그래서 **실력 1위인데 컨디션 34면 선발 23%** —
+ * 컨디션만 10→100으로 옮기면 4% ↔ 99%. 실력은 순번만 매기고 당락은 컨디션이
+ * 다 정했고, 화면은 그 사정을 말하지 않은 채 "앞사람을 넘어라"라고 적었다.
+ *
+ * 지키는 것: 실력·컨디션·최근 폼이 **셋 다** 확률을 움직이고,
+ * 어느 하나가 나머지를 압도하지 않는다. 그리고 문구가 실제 이유를 말한다. */
+const clampStat = (v) => Math.max(1, Math.min(150, v));
+guard("⑮ 선발 확률의 근거", () => {
+  const st = S();
+  st.condition = 60;
+  if (st.activity) { st.activity.apps = 0; st.activity.ratingSum = 0; }
+
+  /* ⑬에서 실력을 바닥까지 내려놨어요(20). 거기서는 무엇을 흔들어도 0%라
+   * 아무것도 못 봅니다. 먼저 **경쟁이 벌어지는 자리**로 올려놔요 —
+   * 마지막 선발 자리를 쥔 동료와 실력을 맞춥니다. */
+  const rivalStr = (() => {
+    const L = Squad.myLine();
+    const rivals = L.line.filter((x) => !x.me).map((x) => x.str).sort((a, b) => b - a);
+    return rivals[Math.min(L.slots, rivals.length) - 1];
+  })();
+  for (let i = 0; i < 400; i++) {
+    const mine = Squad.myLine().line.find((x) => x.me).str;
+    if (Math.abs(mine - rivalStr) < 0.4) break;
+    const step = mine < rivalStr ? 1 : -1;
+    for (const k of Object.keys(st.stats)) st.stats[k] = clampStat(st.stats[k] + step);
+  }
+  console.log(`   경쟁 자리로 맞춤 — 나 ${Squad.myLine().line.find((x) => x.me).str.toFixed(1)} · 마지막 선발 자리 ${rivalStr.toFixed(1)}`);
+
+  const base = {};
+  for (const k of Object.keys(st.stats)) base[k] = st.stats[k];
+  const setD = (d) => { for (const k of Object.keys(st.stats)) st.stats[k] = base[k] + d; };
+  const odds = () => Squad.myLine().odds;
+
+  // ── 실력 (컨디션·폼 고정)
+  setD(-9); const sLow = odds();
+  setD(9); const sHigh = odds();
+  setD(0);
+  console.log(`   실력 -9 → ${Math.round(sLow * 100)}% · +9 → ${Math.round(sHigh * 100)}%`);
+  check(sHigh - sLow > 0.3,
+    `실력이 확률을 크게 움직인다 (${Math.round(sLow * 100)}% → ${Math.round(sHigh * 100)}%) — 여기가 막히면 훈련할 이유가 없어요`);
+
+  // ── 컨디션 (실력·폼 고정)
+  st.condition = 15; const cLow = odds();
+  st.condition = 100; const cHigh = odds();
+  st.condition = 60;
+  console.log(`   컨디션 15 → ${Math.round(cLow * 100)}% · 100 → ${Math.round(cHigh * 100)}%`);
+  check(cHigh - cLow > 0.1, `컨디션도 확률을 움직인다 (${Math.round(cLow * 100)}% → ${Math.round(cHigh * 100)}%)`);
+  check(cLow > 0.1,
+    `실력이 선발권이면 컨디션이 바닥이어도 아예 못 나가지는 않는다 (${Math.round(cLow * 100)}%) — 예전엔 4%였어요`);
+
+  // ── 최근 폼 (실력·컨디션 고정)
+  if (st.activity) {
+    st.activity.apps = 6; st.activity.ratingSum = 4.5 * 6; const fLow = odds();
+    st.activity.ratingSum = 8.5 * 6; const fHigh = odds();
+    st.activity.apps = 0; st.activity.ratingSum = 0;
+    console.log(`   평점 4.5 → ${Math.round(fLow * 100)}% · 8.5 → ${Math.round(fHigh * 100)}%`);
+    check(fHigh - fLow > 0.1,
+      `최근 폼도 확률을 움직인다 (${Math.round(fLow * 100)}% → ${Math.round(fHigh * 100)}%) — "컨디션에만 비례해?"의 답이에요`);
+  }
+
+  // ── 어느 하나가 나머지를 압도하지 않는가
+  check(sHigh - sLow >= cHigh - cLow,
+    `실력이 컨디션보다 덜 중요하지 않다 (실력 ${Math.round((sHigh - sLow) * 100)}%p · 컨디션 ${Math.round((cHigh - cLow) * 100)}%p)`);
+
+  // ── 문구가 실제 이유를 말하는가
+  const L1 = Squad.myLine();
+  const inSlot = Squad.benchReason(L1).replace(/<[^>]+>/g, " ");
+  console.log(`   순번 ${L1.rank}/${L1.of} (자리 ${L1.slots}) — "${inSlot.trim()}"`);
+  if (L1.rank <= L1.slots) {
+    check(!/앞사람/.test(inSlot),
+      "실력이 선발권인데 앉은 날에는 '앞사람을 넘어라'라고 하지 않는다 — 넘을 앞사람이 없어요");
+    check(/밀렸|다른 선수|컨디션|폼/.test(inSlot), "대신 이번 주에 밀린 이유를 짚어 준다");
+  }
+  setD(-9);
+  const L2 = Squad.myLine();
+  const outSlot = Squad.benchReason(L2).replace(/<[^>]+>/g, " ");
+  console.log(`   순번 ${L2.rank}/${L2.of} — "${outSlot.trim()}"`);
+  check(L2.rank > L2.slots && /앞사람/.test(outSlot),
+    "실력으로 밀린 날에는 '앞사람을 넘으면 자리가 난다'고 말한다");
+  setD(0);
+
+  /* 벤치 카드와 스쿼드 레이어가 **같은 함수**를 쓰는가 — 각자 문장을 만들면
+   * 한쪽은 "앞사람을 넘어라", 다른 쪽은 "1번째"라고 적는 일이 또 생겨요. */
+  const CAREER = fs.readFileSync(path.join(DIR, "career.js"), "utf8");
+  check(/WingerSquad\.benchReason\(/.test(CAREER),
+    "벤치 카드가 문장을 직접 만들지 않고 benchReason 하나를 쓴다");
 });
 
 console.log(fail ? `\n❌ ${fail}건 실패` : "\n✅ 통과");

@@ -421,3 +421,5 @@ body {
 .squad-modal .av-title { text-align: center; }
 .squad-modal .av-actions { margin-top: 10px; }
 .sq-odds { color: var(--accent); font-weight: 600; }
+/* 확률이 어디서 나왔는지 펼쳐 주는 줄 — 본문보다 한 단계 작고 흐리게 */
+.sq-parts { font-size: 0.82rem; color: var(--muted); line-height: 1.6; }

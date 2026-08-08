@@ -114,8 +114,30 @@ window.WingerSquad = (() => {
    * 잘 쉬면 뽑히기 쉬워집니다(휴식에 이유가 하나 더 생겨요).
    * 경계에 있는 선수만 갈리고, 실력 차가 크면 그대로예요. */
   const FORM_SWING = 5;
-  const lineupScore = (x) =>
-    x.str + rand(-FORM_SWING, FORM_SWING) + (x.me ? (S.condition - 70) / 6 : 0);
+
+  /* 감독이 나를 볼 때 실력 위에 얹는 것 — **컨디션과 최근 폼** 두 가지예요.
+   *
+   * ⚠️ 예전에는 컨디션 하나뿐이었고 그 폭이 (컨디션-70)/6, 즉 -11.7 ~ +5였어요.
+   * 같은 포지션 실력 차가 보통 1~2인데 보정이 그보다 훨씬 커서, **실력 1위인데도
+   * 컨디션 34면 선발 확률이 23%**였습니다. 실측: 컨디션만 10→100으로 옮기면
+   * 4% ↔ 99%. 사실상 컨디션 하나가 당락을 다 정하고 실력은 순번만 매겼어요
+   * (제보: "선발 확률은 컨디션에만 비례해??" — 그때는 사실상 그랬습니다).
+   *
+   * 그래서 둘 다 **한계를 두고** 얹어요. 컨디션이 바닥이어도 실력으로 밀어붙일
+   * 여지를 남기고, 잘하고 있으면 그게 자리를 지켜 줍니다. */
+  const COND_MID = 60, COND_DIV = 10, COND_CAP = 4;   // 컨디션 20 → -4 · 100 → +4
+  const FORM_MID = 6.5, FORM_MUL = 1.5, FORM_CAP = 3; // 평균 평점 4.5 → -3 · 8.5 → +3
+  function myBonus() {
+    const cond = clamp((S.condition - COND_MID) / COND_DIV, -COND_CAP, COND_CAP);
+    /* 최근 폼 — 이번 시즌 평균 평점이에요. 한 경기도 안 뛴 주에는 0(중립)이라
+     * 시즌 초에 폼을 이유로 앉히는 일이 없어요. */
+    const act = S.activity;
+    const apps = (act && act.apps) || 0;
+    const avg = apps ? (act.ratingSum || 0) / apps : null;
+    const form = avg == null ? 0 : clamp((avg - FORM_MID) * FORM_MUL, -FORM_CAP, FORM_CAP);
+    return { cond, form, avg, total: cond + form };
+  }
+  const lineupScore = (x) => x.str + rand(-FORM_SWING, FORM_SWING) + (x.me ? myBonus().total : 0);
 
   /* 이번 경기 선발을 뽑아 활동 기록에 새겨요. 같은 라운드를 다시 그려도
    * 흔들리지 않게 **한 번 정하면 그 라운드 동안 고정**입니다. */
@@ -184,7 +206,28 @@ window.WingerSquad = (() => {
       const roll = line.map((x) => ({ x, v: lineupScore(x) })).sort((a, b) => b.v - a.v);
       if (roll.slice(0, FORMATION[S.pos]).some((e) => e.x.me)) hit++;
     }
-    return { rank, of: line.length, slots: FORMATION[S.pos], line, odds: hit / N };
+    return { rank, of: line.length, slots: FORMATION[S.pos], line, odds: hit / N, bonus: myBonus() };
+  }
+
+  /* 왜 앉았는지 / 왜 뽑혔는지 한 줄 — **화면 세 군데가 이 함수 하나를 써요.**
+   * 벤치 카드와 스쿼드 레이어가 각자 문장을 만들면, 한쪽은 "앞사람을 넘어라"라고
+   * 하고 다른 쪽은 "1번째"라고 적는 일이 생겨요. 실제로 그렇게 났습니다
+   * (제보: "공격수 선발 2자리인데 지금 1번째라는 게 무슨 의미지?" — 실력으로는
+   * 선발권인데 컨디션에 밀린 날이었어요. 문장이 그걸 말해 주지 않았습니다). */
+  function benchReason(L) {
+    const b = L.bonus;
+    if (L.rank > L.slots) {
+      return `${posName(S.pos)} 선발 ${L.slots}자리인데 실력으로는 <b>${L.rank}번째</b>예요.`
+        + `<br/>앞사람을 넘으면 자리가 나요.`;
+    }
+    /* 실력으로는 선발권인데 앉은 날 — 이유를 숫자로 짚어 줘요 */
+    const why = b.cond <= -1.5
+      ? `컨디션이 ${Math.round(S.condition)}까지 떨어졌어요 — 🛌 휴식이 확률을 올려요.`
+      : b.form <= -1.5
+      ? `최근 폼이 안 좋아요 (평균 평점 ${b.avg.toFixed(1)}).`
+      : `감독이 오늘은 다른 선수를 썼어요 — 경기마다 다시 뽑거든요.`;
+    return `${posName(S.pos)} 선발 ${L.slots}자리 중 실력은 <b>${L.rank}번째</b>인데 이번 주는 밀렸어요.`
+      + `<br/>${why}`;
   }
 
   /* 🪑 벤치 주 — 경기를 못 뛴 대신 능력치 하나가 올라요.
@@ -252,12 +295,19 @@ window.WingerSquad = (() => {
     const bench = sq.filter((x) => !inXI.has(x)).sort((a, b) => b.str - a.str);
     const L = myLine();
     const head = `<tr><th>선수</th><th>포지션</th><th>실력</th><th>기록</th></tr>`;
+    const b = L.bonus;
+    const sign = (v) => `${v >= 0 ? "+" : ""}${v.toFixed(1)}`;
+    /* 확률이 어디서 나왔는지 숫자로 펼쳐요 — 안 보이면 "컨디션이 다 정하나?"가 돼요 */
+    const parts = `실력 ${Math.round(L.line.find((x) => x.me).str)}`
+      + ` · 컨디션 ${sign(b.cond)}`
+      + ` · 폼 ${b.avg == null ? "—" : sign(b.form)}`
+      + ` · 그날 흔들림 ±${FORM_SWING}`;
     return `<div class="sq-note">${
       isStarter()
-        ? `✅ <b>이번 경기 선발</b> — ${posName(S.pos)} ${L.slots}자리 중 ${L.rank}번째`
-        : `🪑 <b>이번 경기 벤치</b> — ${posName(S.pos)} ${L.slots}자리인데 ${L.rank}번째`}`
+        ? `✅ <b>이번 경기 선발</b> — ${posName(S.pos)} ${L.slots}자리 중 실력 ${L.rank}번째`
+        : `🪑 <b>이번 경기 벤치</b> — ${posName(S.pos)} ${L.slots}자리 · 실력 ${L.rank}번째`}`
       + `<br/><span class="sq-odds">선발 확률 ${Math.round(L.odds * 100)}%</span>`
-      + ` — 매 경기 다시 뽑아요. 실력과 컨디션이 확률을 올려요</div>`
+      + `<br/><span class="sq-parts">${parts}</span></div>`
       + `<table class="rank-table season-standings squad-table"><thead>${head}</thead>`
       + `<tbody><tr class="sq-sep"><td colspan="4">⚽ 선발 11</td></tr>${group(xi)}`
       + `<tr class="sq-sep"><td colspan="4">🪑 벤치 ${bench.length}</td></tr>${group(bench)}</tbody></table>`;
@@ -286,7 +336,7 @@ window.WingerSquad = (() => {
   return {
     openSquad, rollLineup, matchXI, FORM_SWING,
     ensureSquads, ensureSquad, squadOf, startingXI, startingXIOf, leagueFaces,
-    isStarter, myLine, benchTurn, creditMateGoals, markApps, resetSeason, squadHTML,
+    isStarter, myLine, benchReason, myBonus, benchTurn, creditMateGoals, markApps, resetSeason, squadHTML,
     FORMATION, BENCH, SQUAD_SIZE, BENCH_GAIN, SCORE_W,
     _t: { rollSquad, pickScorer },
   };
