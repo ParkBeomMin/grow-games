@@ -187,6 +187,33 @@ guard("⑤⑥ 동료 골", () => {
   check((byPos.fw || 0) > (byPos.df || 0), `공격수가 수비수보다 많이 넣는다 (fw ${byPos.fw || 0} vs df ${byPos.df || 0})`);
 });
 
+/* ---------- ⑨ 리그의 모든 클럽에 명단이 있는가 ----------
+ * "11명 스쿼드는 다른 팀도 다 동일하게 맞춘 거지?" — 처음에는 우리 팀만이었다.
+ * 우리 팀만 사람이 있고 상대는 숫자뿐이면, 개인 순위에 뜨는 다른 팀 선수가
+ * 어느 명단에도 없는 유령이 된다. */
+guard("⑨ 리그 전체 명단", () => {
+  const all = Squad.ensureSquads();
+  const clubs = Object.keys(all);
+  console.log(`   ${clubs.length}개 클럽 — ${clubs.map((c) => `${c}(${all[c].length})`).join(" · ")}`);
+  check(clubs.length >= 4, `리그의 클럽마다 명단이 있다 (${clubs.length}개)`);
+  check(clubs.every((c) => all[c].length === C.SQUAD_SIZE),
+    `모든 클럽이 ${C.SQUAD_SIZE}명이다`);
+  check(clubs.every((c) => Squad.startingXIOf(c).length === 11),
+    "모든 클럽의 선발이 11명이다");
+  // 나는 우리 팀에만 한 줄로 있어야 해요
+  const meRows = clubs.reduce((a, c) => a + all[c].filter((x) => x.me).length, 0);
+  check(meRows === 1, `내 줄은 리그 전체에서 하나뿐이다 (${meRows})`);
+  check((all[S().group] || []).some((x) => x.me), "그 한 줄이 우리 팀에 있다");
+  // 클럽 전력이 명단 실력에 반영돼요 — 강팀이 더 좋은 선수를 갖습니다
+  const avg = (c) => all[c].reduce((a, x) => a + x.str, 0) / all[c].length;
+  const strs = w.__get("clubsIn")(w.__get("leagueOf")(S()).id, S());
+  const strong = strs.slice().sort((a, b) => b.str - a.str)[0];
+  const weak = strs.slice().sort((a, b) => a.str - b.str)[0];
+  console.log(`   ${strong.name}(전력 ${strong.str}) 평균 ${avg(strong.name).toFixed(0)} · ${weak.name}(전력 ${weak.str}) 평균 ${avg(weak.name).toFixed(0)}`);
+  check(avg(strong.name) > avg(weak.name),
+    `전력이 센 클럽의 명단이 더 좋다 (${avg(strong.name).toFixed(0)} vs ${avg(weak.name).toFixed(0)})`);
+});
+
 guard("⑥ 개인 순위와 같은 사람", () => {
   // 시즌을 시작해 경쟁자 명단을 만들어요
   const st = S();
@@ -195,12 +222,18 @@ guard("⑥ 개인 순위와 같은 사람", () => {
   const rest = w.document.querySelector("#pro-actions .action-btn.rest");
   if (rest) rest.click();
   const race = (S().activity || {}).race || [];
+  const all = Squad.ensureSquads();
   const mine = race.filter((r) => r.club === S().group);
-  const sqNames = new Set(Squad.ensureSquad().map((x) => x.name));
-  console.log(`   개인 순위의 우리 클럽 선수 ${mine.length}명 — ${mine.map((r) => r.name).join(" · ") || "없음"}`);
-  check(mine.length > 0, `개인 순위에 우리 클럽 선수가 있다 (${mine.length}명)`);
-  check(mine.every((r) => sqNames.has(r.name)),
-    `그 사람들이 전부 스쿼드에 있다 — 명단이 둘로 갈리지 않는다`);
+  console.log(`   개인 순위 ${race.length}명 — ${race.map((r) => `${r.name}(${r.club})`).slice(0, 4).join(" · ")} …`);
+  check(race.length > 0, `개인 순위 명단이 만들어졌다 (${race.length}명)`);
+  check(mine.length > 0, `그중 우리 클럽 선수가 있다 (${mine.length}명)`);
+  /* ⚠️ **여덟 명 전부**가 실제 명단의 사람이어야 해요. 우리 팀만 맞추면
+   * 다른 팀 선수는 어느 명단에도 없는 유령이 됩니다. */
+  const ghosts = race.filter((r) => !(all[r.club] || []).some((x) => x.name === r.name));
+  check(ghosts.length === 0,
+    `여덟 명 전부 그 클럽 명단에 있는 사람이다 (유령 ${ghosts.length}명${ghosts.length ? ` — ${ghosts.map((g) => `${g.name}(${g.club})`).join(", ")}` : ""})`);
+  const clubs = new Set(race.map((r) => r.club));
+  check(clubs.size >= 4, `여러 클럽에서 고르게 나온다 (${clubs.size}개 클럽)`);
 });
 
 // ---------- ⑦ 클럽이 바뀌면 새로 ----------

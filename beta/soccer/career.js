@@ -643,24 +643,36 @@ window.WingerCareer = (() => {
   function rollRace() {
     /* ⚠️ oppClubs가 아니라 leagueClubs예요 — 내 클럽을 빼고 뽑으면
      * **우리 팀 선수가 순위표에 한 번도 안 나와요.** 실제로 그랬습니다. */
+    /* 👥 경쟁자 여덟 명을 **리그의 실제 선수 중에서** 뽑아요.
+     *
+     * 예전에는 이름을 새로 지어 여덟을 만들었어요. 그러면 개인 순위 1위가
+     * 어느 팀 명단에도 없는 유령이 됩니다 — 중계에 뜨는 동료, 개인 순위의
+     * 그 선수, 명단 화면의 그 줄이 서로 모르는 사이가 되는 이 저장소의 단골 병이에요.
+     *
+     * 생산량(pop)도 그 선수의 실력을 그대로 씁니다. 역할(RACE_ROLES)은 포지션에
+     * 맞는 것을 골라요 — 센터백에게 스트라이커 생산량을 물리면 안 되니까요.
+     * squad.js가 없는 옛 캐시에서는 예전처럼 이름을 지어 씁니다. */
+    const faces = window.WingerSquad ? WingerSquad.leagueFaces(RACE_ROLES.length) : [];
+    if (faces.length === RACE_ROLES.length) {
+      const byPos = {};
+      for (const r of RACE_ROLES) (byPos[RACE_POS[r.key] || "mf"] ||= []).push(r);
+      const left = RACE_ROLES.slice();
+      return faces.map(({ club, player }) => {
+        const fit = (byPos[player.pos] || []).filter((r) => left.includes(r));
+        const role = fit.length ? pick(fit) : left[0];
+        left.splice(left.indexOf(role), 1);
+        return {
+          name: player.name, role: role.name, key: role.key, pos: player.pos,
+          pop: clamp(player.str, 40, 95), club, g: 0, a: 0, d: 0, rate: 0, mom: 0,
+        };
+      });
+    }
     const clubs = shuffle(leagueClubs(S));
-    /* 👥 우리 클럽 자리는 **스쿼드 선발에서** 이름을 가져와요.
-     * 그래야 중계에 뜨는 동료, 개인 순위의 우리 팀 선수, 명단 화면의 그 사람이
-     * 전부 같은 사람이 됩니다 — 예전에는 명단이 갈려 있어서 서로 모르는 사이였어요. */
-    const mates = window.WingerSquad
-      ? WingerSquad.startingXI().filter((x) => !x.me).map((x) => x.name)
-      : [];
-    let mi = 0;
-    return RACE_ROLES.map((r, i) => {
-      const club = clubs[i % clubs.length];
-      const mine = club === S.group && mi < mates.length;
-      return {
-        name: mine ? mates[mi++]
-          : randomPlayerName(Math.random() < 0.5 ? null : MARKETS.find((m) => m.id === "eu")),
-        role: r.name, key: r.key, pos: RACE_POS[r.key] || "mf", pop: rand(52, 88),
-        club, g: 0, a: 0, d: 0, rate: 0, mom: 0,
-      };
-    });
+    return RACE_ROLES.map((r, i) => ({
+      name: randomPlayerName(Math.random() < 0.5 ? null : MARKETS.find((m) => m.id === "eu")),
+      role: r.name, key: r.key, pos: RACE_POS[r.key] || "mf", pop: rand(52, 88),
+      club: clubs[i % clubs.length], g: 0, a: 0, d: 0, rate: 0, mom: 0,
+    }));
   }
 
   /* 진행 중이던 세이브에는 경쟁자 명단이 없어요 — 시즌 시작(initActivity)에만
@@ -734,9 +746,10 @@ window.WingerCareer = (() => {
     }
     /* 👥 명단 화면의 기록도 같이 채워요. 이름이 같은 사람이라 개인 순위와
      * 팀 명단이 서로 다른 숫자를 보여주면 안 돼요. */
-    if (window.WingerSquad && Array.isArray(S.squad)) {
+    if (window.WingerSquad) {
+      const mine = WingerSquad.squadOf(S.group);
       for (const n of names || []) {
-        const who = S.squad.find((x) => x.name === n);
+        const who = mine.find((x) => x.name === n);
         if (who) who.g += 1;
       }
     }

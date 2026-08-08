@@ -4,7 +4,9 @@
  * 중계에 뜨는 이름은 **개인 순위 8명 중 우리 클럽 소속인 한두 명**에게서
  * 빌려 썼습니다("한 팀에 선수는 11명으로 있는 거 맞지?" — 아니었어요).
  *
- * 이제 선발 11 + 벤치 5, 모두 16명이 이름과 실력을 갖고 있어요.
+ * 이제 **리그의 모든 클럽**이 선발 11 + 벤치 5, 16명씩 갖습니다.
+ * 우리 팀만 사람이 있고 상대는 숫자뿐이면, 개인 순위에 뜨는 다른 팀 선수와
+ * 그 팀의 실제 명단이 또 서로 모르는 사이가 돼요 — 이 저장소의 단골 병이에요.
  *   · 선발은 **포지션 자리마다 실력 순**으로 정해져요. 내 종합이 그 경쟁에 들어가요.
  *   · 선발이 아니면 경기를 못 뛰어요. 대신 그 주에 능력치 하나가 올라요 —
  *     "결장 = 성장 정지"가 되면 벤치는 그냥 벌이 되고, 그건 이탈로 이어져요.
@@ -32,14 +34,14 @@ window.WingerSquad = (() => {
   const POS_KEYS = ["fw", "wg", "mf", "df"];
   const posName = (p) => (POS_INFO[p] || {}).name || p;
 
-  /* 스쿼드를 새로 꾸려요. 클럽이 바뀌면(이적·승격) 다시 부릅니다. */
-  function rollSquad() {
-    const base = clubStrOf(S);
+  /* 클럽 하나의 스쿼드를 꾸려요. base는 그 클럽의 전력이에요.
+   * mine이면 내 자리 하나를 나로 바꿔요. */
+  function rollSquad(base, mine) {
     const need = {};
     for (const p of POS_KEYS) need[p] = FORMATION[p];
     // 벤치 몫은 포지션에 고르게 흩뿌려요
     for (let i = 0; i < BENCH; i++) need[POS_KEYS[i % POS_KEYS.length]] += 1;
-    need[S.pos] = Math.max(need[S.pos], FORMATION[S.pos] + 1);   // 내 자리엔 경쟁자가 있어야 해요
+    if (mine) need[S.pos] = Math.max(need[S.pos], FORMATION[S.pos] + 1);   // 내 자리엔 경쟁자가 있어야 해요
 
     const list = [];
     for (const p of POS_KEYS) {
@@ -51,30 +53,41 @@ window.WingerSquad = (() => {
         });
       }
     }
-    /* 내 자리 하나를 나로 바꿔요. 스쿼드에는 **나도 한 줄로** 들어가야
-     * 선발 경쟁이 같은 표 안에서 벌어져요. */
-    const mine = list.findIndex((x) => x.pos === S.pos);
-    list[mine] = { me: true, name: S.name, pos: S.pos, str: 0, g: 0, a: 0, d: 0, apps: 0 };
+    if (mine) {
+      /* 내 자리 하나를 나로 바꿔요. 스쿼드에는 **나도 한 줄로** 들어가야
+       * 선발 경쟁이 같은 표 안에서 벌어져요. */
+      const at = list.findIndex((x) => x.pos === S.pos);
+      list[at] = { me: true, name: S.name, pos: S.pos, str: 0, g: 0, a: 0, d: 0, apps: 0 };
+    }
     return list.slice(0, SQUAD_SIZE);
   }
 
-  /* 세이브에 없거나 클럽이 바뀌었으면 다시 꾸려요.
-   * 옛 세이브에는 스쿼드가 아예 없어요 — 마이그레이션하지 않고 여기서 만듭니다. */
-  function ensureSquad() {
-    if (!S || !S.group) return [];
-    if (!Array.isArray(S.squad) || !S.squad.length || S.squadClub !== S.group) {
-      S.squad = rollSquad();
+  /* 리그의 **모든 클럽** 명단을 세이브에 둬요. 리그나 내 클럽이 바뀌면 다시 꾸립니다.
+   * 옛 세이브에는 아예 없어요 — 마이그레이션하지 않고 여기서 만듭니다.
+   * 크기는 6팀 × 16명 = 96줄이라 세이브에 담아도 부담이 없어요. */
+  function ensureSquads() {
+    if (!S || !S.group) return {};
+    const lg = leagueOf(S).id;
+    if (!S.squads || S.squadsLeague !== lg || S.squadClub !== S.group) {
+      const out = {};
+      for (const c of clubsIn(lg, S)) out[c.name] = rollSquad(c.str, c.name === S.group);
+      // 내 클럽이 리그 명단에 없는 옛 세이브 방어 — 없으면 만들어 둬요
+      if (!out[S.group]) out[S.group] = rollSquad(clubStrOf(S), true);
+      S.squads = out;
+      S.squadsLeague = lg;
       S.squadClub = S.group;
       save();
     }
     // 내 줄의 실력은 늘 지금 종합이에요 (훈련·각성으로 계속 움직여요)
-    for (const x of S.squad) if (x.me) { x.str = overall(); x.name = S.name; }
-    return S.squad;
+    for (const x of S.squads[S.group] || []) if (x.me) { x.str = overall(); x.name = S.name; }
+    return S.squads;
   }
+  const squadOf = (club) => ensureSquads()[club] || [];
+  const ensureSquad = () => squadOf(S.group);        // 우리 팀
 
   /* 선발 11명 — 포지션 자리마다 실력 순이에요. */
-  function startingXI() {
-    const sq = ensureSquad();
+  function startingXIOf(club) {
+    const sq = squadOf(club);
     const out = [];
     for (const p of POS_KEYS) {
       const line = sq.filter((x) => x.pos === p).sort((a, b) => b.str - a.str);
@@ -82,7 +95,34 @@ window.WingerSquad = (() => {
     }
     return out;
   }
+  const startingXI = () => startingXIOf(S.group);
   const isStarter = () => startingXI().some((x) => x.me);
+
+  /* 🥇 개인 순위에 올릴 리그의 얼굴들 — **각 클럽의 선발 중 실력 상위**예요.
+   * 예전에는 이름을 새로 지어 8명을 만들었어요. 그러면 개인 순위에 뜬 그 선수가
+   * 어느 팀 명단에도 없는 유령이 됩니다. 이제 실제 사람 중에서 뽑아요. */
+  function leagueFaces(n) {
+    const all = [];
+    for (const club of Object.keys(ensureSquads())) {
+      const xi = startingXIOf(club).filter((x) => !x.me).sort((a, b) => b.str - a.str);
+      xi.forEach((x, i) => all.push({ club, player: x, seed: x.str - i * 2 }));
+    }
+    all.sort((a, b) => b.seed - a.seed);
+    /* 클럽마다 최소 한 명씩 먼저 넣고, 남는 자리를 실력 순으로 채워요 —
+     * 안 그러면 강팀 선수만 표를 채워서 "리그 경쟁"이 아니라 "그 팀 명단"이 돼요. */
+    const out = [], used = new Set(), byClub = new Set();
+    for (const cand of all) {
+      if (byClub.has(cand.club)) continue;
+      out.push(cand); used.add(cand.player); byClub.add(cand.club);
+      if (out.length >= n) break;
+    }
+    for (const cand of all) {
+      if (out.length >= n) break;
+      if (used.has(cand.player)) continue;
+      out.push(cand); used.add(cand.player);
+    }
+    return out.slice(0, n);
+  }
 
   /* 내 자리 경쟁 — 같은 포지션에서 몇 등인가, 선발 자리는 몇 개인가. */
   function myLine() {
@@ -134,10 +174,12 @@ window.WingerSquad = (() => {
   // 선발이 한 경기를 치렀다고 표시해요 (명단 화면의 출전 수)
   function markApps() { for (const x of startingXI()) x.apps += 1; }
 
-  /* 새 시즌 — 동료들의 시즌 기록만 비워요. 명단은 그대로예요. */
+  /* 새 시즌 — 리그 전체의 시즌 기록만 비워요. 명단은 그대로예요. */
   function resetSeason() {
-    if (!Array.isArray(S.squad)) return;
-    for (const x of S.squad) { x.g = 0; x.a = 0; x.d = 0; x.apps = 0; }
+    if (!S.squads) return;
+    for (const club of Object.keys(S.squads)) {
+      for (const x of S.squads[club]) { x.g = 0; x.a = 0; x.d = 0; x.apps = 0; }
+    }
   }
 
   // ---------- 화면 ----------
@@ -165,8 +207,8 @@ window.WingerSquad = (() => {
   }
 
   return {
-    ensureSquad, startingXI, isStarter, myLine, benchTurn,
-    creditMateGoals, markApps, resetSeason, squadHTML,
+    ensureSquads, ensureSquad, squadOf, startingXI, startingXIOf, leagueFaces,
+    isStarter, myLine, benchTurn, creditMateGoals, markApps, resetSeason, squadHTML,
     FORMATION, BENCH, SQUAD_SIZE, BENCH_GAIN, SCORE_W,
     _t: { rollSquad, pickScorer },
   };
