@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>⚾ 통합 리그 시뮬 미리보기 (베타 전용)</title>
+<style>
+  :root { --bg:#0f1216; --card:#171c22; --line:#2a323c; --ink:#e7edf3; --muted:#8a97a6; --accent:#4fd1c5; --field:#1e2731; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo",sans-serif; }
+  main { max-width:680px; margin:0 auto; padding:18px 14px 60px; }
+  h1 { font-size:1.1rem; margin:6px 0; }
+  .hint { color:var(--muted); font-size:.8rem; line-height:1.5; }
+  .bar { display:flex; gap:8px; align-items:center; margin:12px 0; flex-wrap:wrap; }
+  button { border:1px solid var(--line); background:transparent; color:var(--ink); border-radius:8px; padding:7px 12px; cursor:pointer; font-size:.85rem; }
+  button.primary { border-color:var(--accent); color:var(--accent); font-weight:700; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px 14px; margin:12px 0; }
+  .card h2 { font-size:.92rem; margin:0 0 8px; }
+  table { width:100%; border-collapse:collapse; font-size:.82rem; }
+  th, td { padding:5px 6px; border-bottom:1px solid var(--line); text-align:left; }
+  th:last-child, td.num { text-align:right; font-variant-numeric:tabular-nums; }
+  tr.me td { color:var(--accent); font-weight:700; }
+  .tabs { display:flex; flex-wrap:wrap; gap:4px; margin-bottom:8px; }
+  .tabs button { padding:5px 8px; font-size:.74rem; }
+  .tabs button.on { border-color:var(--accent); color:var(--accent); background:var(--field); font-weight:700; }
+  .sub { display:block; font-size:.68rem; color:var(--muted); font-weight:400; }
+</style>
+</head>
+<body>
+<main>
+  <h1>⚾ 통합 리그 시뮬 미리보기 <span class="hint">· 1단계 엔진 · 베타 전용</span></h1>
+  <p class="hint">팀마다 로스터를 세우고 한 시즌(144경기)을 통째로 굴린 결과예요. <b>팀 순위표와 개인 기록이 같은 시뮬 하나에서</b> 나와요 —
+  강한 타선 팀이 많이 이기고, 그 팀 타자들이 상위에 오르는 게 한 입력에서 떨어져요. (아직 게임엔 안 붙었고, 여기서 눈으로만 봐요)</p>
+  <div class="bar">
+    <button class="primary" id="reroll">🔄 다시 굴리기 (새 시즌)</button>
+    <span class="hint" id="seedline"></span>
+  </div>
+  <div class="card"><h2>📊 팀 순위</h2><div id="standings"></div></div>
+  <div class="card">
+    <h2>🏅 개인 기록 순위</h2>
+    <div class="tabs" id="lead-tabs"></div>
+    <div id="leaders"></div>
+  </div>
+</main>
+
+<script src="squad.js"></script>
+<script src="sim.js"></script>
+<script>
+  var Sim = window.RookieSim, Sq = window.RookieSquad;
+  var TEAMS = ["한백 코메츠","태평 팰컨스","미르 스파크스","해든 앵커스","다온 나이츠","청우 크레인스","나래 블레이즈","한별 썬더스","우주 타이푼스","대륙 웨이브스"];
+  var STR = {}; TEAMS.forEach(function(t,i){ STR[t] = 0.40 + i*0.0222; });   // 약→강
+  var TABS = [["hits","안타"],["hr","홈런"],["avg","타율"],["sb","도루"],["wins","다승"],["k","탈삼진"],["era","자책"],["saves","세이브"]];
+  var seed = 20260808, tab = "hr", last = null;
+
+  function names(seed) {
+    // squad.js의 이름 생성기로 로스터용 별명 풀을 만들어요 (미리보기용 — 실제 게임은 유저 풀).
+    var rng = Sq._mulberry32(seed >>> 0), bat = [], pit = [];
+    for (var i=0;i<TEAMS.length*9;i++) bat.push(Sq.nameFrom(rng));
+    for (var j=0;j<TEAMS.length*6;j++) pit.push(Sq.nameFrom(rng));
+    return { batters: bat, pitchers: pit };
+  }
+  function fmt(m, v) { return m==="avg" ? v.toFixed(3) : m==="era" ? v.toFixed(2) : Math.round(v); }
+
+  function run() {
+    var lg = Sim.buildLeague(TEAMS, function(t){ return STR[t]; }, seed, names(seed));
+    last = Sim.simSeason(lg, seed, 144);
+    document.getElementById("seedline").textContent = "시드 " + seed;
+    var sh = '<table><thead><tr><th>#</th><th>팀</th><th>승-패</th><th>승률</th></tr></thead><tbody>';
+    last.standings.forEach(function(t,i){
+      sh += '<tr><td>'+(i+1)+'</td><td>'+t.name+'</td><td>'+t.w+'-'+t.l+'</td><td class="num">'+(t.w/(t.w+t.l)).toFixed(3).slice(1)+'</td></tr>';
+    });
+    document.getElementById("standings").innerHTML = sh + '</tbody></table>';
+    renderTabs(); renderLeaders();
+  }
+  function renderTabs() {
+    document.getElementById("lead-tabs").innerHTML = TABS.map(function(t){
+      return '<button class="'+(t[0]===tab?"on":"")+'" data-k="'+t[0]+'">'+t[1]+'</button>';
+    }).join("");
+    Array.prototype.forEach.call(document.querySelectorAll("#lead-tabs button"), function(b){
+      b.onclick = function(){ tab = b.dataset.k; renderTabs(); renderLeaders(); };
+    });
+  }
+  function renderLeaders() {
+    var L = Sim.leaders(last, tab, 144).slice(0, 8);
+    var unit = { hits:"안타", hr:"홈런", avg:"타율", sb:"도루", wins:"승", k:"탈삼진", era:"자책", saves:"세이브" }[tab];
+    var h = '<table><thead><tr><th>#</th><th>선수</th><th>'+unit+'</th></tr></thead><tbody>';
+    L.forEach(function(x,i){
+      h += '<tr><td>'+(i+1)+'</td><td>'+x.name+'<span class="sub">'+x.team+'</span></td><td class="num">'+(i===0?"👑 ":"")+fmt(tab,x.v)+'</td></tr>';
+    });
+    document.getElementById("leaders").innerHTML = h + '</tbody></table>';
+  }
+  document.getElementById("reroll").onclick = function(){ seed = (seed*1664525 + 1013904223) & 0x7fffffff; run(); };
+  run();
+</script>
+</body>
+</html>
