@@ -1272,7 +1272,7 @@ window.WingerCareer = (() => {
       <div class="bench-card">
         <div class="draft-emoji">🪑</div>
         <div class="draft-title">이번 주는 벤치예요</div>
-        <div class="tour-line">${WingerSquad.benchReason(L)}</div>
+        ${WingerSquad.benchReason(L)}
         <div class="ms-final ${res === "W" ? "win" : res === "L" ? "lose" : ""}">
           ${S.group} ${mates} : ${conceded} ${act.opp} · ${RES_LABEL[res]} (나 없이)</div>
         <div class="tour-pts">${grew.emoji} 훈련장에서 <b>${grew.name} +${grew.gain.toFixed(1)}</b>

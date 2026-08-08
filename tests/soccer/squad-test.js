@@ -497,17 +497,30 @@ guard("⑮ 선발 확률의 근거", () => {
   const L1 = Squad.myLine();
   const inSlot = Squad.benchReason(L1).replace(/<[^>]+>/g, " ");
   console.log(`   순번 ${L1.rank}/${L1.of} (자리 ${L1.slots}) — "${inSlot.trim()}"`);
+  check(/🗣️ 감독 — “.+”/.test(Squad.benchReason(L1).replace(/<[^>]+>/g, " ")),
+    "이유를 감독의 말로 알려준다 — 산식을 읽어 주지 않아요");
   if (L1.rank <= L1.slots) {
-    check(!/앞사람/.test(inSlot),
-      "실력이 선발권인데 앉은 날에는 '앞사람을 넘어라'라고 하지 않는다 — 넘을 앞사람이 없어요");
-    check(/밀렸|다른 선수|컨디션|폼/.test(inSlot), "대신 이번 주에 밀린 이유를 짚어 준다");
+    check(!/넘|순번|앞에/.test(inSlot),
+      "실력이 선발권인데 앉은 날에는 '넘어라'라고 하지 않는다 — 넘을 앞사람이 없어요");
   }
   setD(-9);
   const L2 = Squad.myLine();
   const outSlot = Squad.benchReason(L2).replace(/<[^>]+>/g, " ");
   console.log(`   순번 ${L2.rank}/${L2.of} — "${outSlot.trim()}"`);
-  check(L2.rank > L2.slots && /앞사람/.test(outSlot),
-    "실력으로 밀린 날에는 '앞사람을 넘으면 자리가 난다'고 말한다");
+  check(L2.rank > L2.slots && /넘|순번|앞에/.test(outSlot),
+    "실력으로 밀린 날에는 앞사람을 넘으라고 말한다");
+
+  /* 벤치가 이어질 때 같은 문장이 계속 나오면 사람이 아니라 안내문이 돼요.
+   * 대신 같은 주 안에서는 다시 그려도 같은 말이어야 합니다. */
+  const says = new Set();
+  for (let wk = 0; wk < 6; wk++) {
+    if (st.activity) st.activity.week = wk;
+    says.add(Squad.benchReason(Squad.myLine()).match(/“([^”]+)”/)[1]);
+  }
+  check(says.size >= 2, `벤치가 이어져도 같은 말만 하지 않는다 (6주에 ${says.size}가지)`);
+  if (st.activity) st.activity.week = 3;
+  const twice = [0, 1].map(() => Squad.benchReason(Squad.myLine()).match(/“([^”]+)”/)[1]);
+  check(twice[0] === twice[1], "같은 주에는 다시 그려도 같은 말이다");
   setD(0);
 
   /* 벤치 카드와 스쿼드 레이어가 **같은 함수**를 쓰는가 — 각자 문장을 만들면
