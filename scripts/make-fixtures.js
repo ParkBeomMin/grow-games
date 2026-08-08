@@ -1656,38 +1656,45 @@ function makeRookieAll() {
     done.add("rookie-retire");
   }
 
-  // 🏅 타이틀 레이스 — 시즌 도중 순위표 아래 레이스 패널을 보여줘요.
-  // 능력치를 올려 경쟁권에 들게 한 뒤, 다음 시즌을 절반쯤 굴리다 프로 화면에서 멈춰 떠요.
-  log("🏅 타이틀 레이스 — 시즌 도중 순위 경쟁");
-  for (const seed of seeds(6)) {
-    let P;
-    try {
-      P = makePage("rookie", seed);
-      rookieDebut(P, 0, "batter", "확인용");
-      const st = P.state();
-      for (const key in st.stats) st.stats[key] = 128;   // 타이틀 경쟁권에 들도록 능력치를 올려요
-      if (!rookieSeason(P)) { P.close(); continue; }       // 한 시즌 온전히 — 통산 기록을 쌓아요
-      const cb = campBtn(P); if (!cb) { P.close(); continue; }
-      cb.click();
-      // 캠프(S.season 아직 null)를 지나 시즌을 절반쯤(KBO 144경기 중 70경기) 굴리다 멈춰요.
-      if (!playPartial(P, 70) || !P.state().season) { P.close(); continue; }
-      const s2 = P.state();
-      add({
-        id: "rookie-titlerace", game: "rookie", url: "rookie/", emoji: "🏅",
-        title: "타이틀 레이스 — 시즌 도중 순위 경쟁",
-        state: `${s2.team} · 🇰🇷 KBO · ${s2.proYear}년차 · ${s2.season.game}/${s2.season.total}경기`,
-        check: "프로 화면에서 📊 순위표를 펼치면 아래 <b>🏅 개인 기록 순위</b>가 뜨는지 — 종목마다 라이벌 3명과 내 순위가 함께 줄서는지(예: 1.최강속 34 · 2.윤노히 31 · 3.나 28), top3 밖이면 뒤에 내 순위가 붙는지",
-        steps: [...ROOKIE_STEP1, "프로 화면에서 <b>📊 순위표</b>를 펼치면 아래에 🏅 타이틀 레이스"],
-        keys: snapshot(P),
-      });
-      done.add("rookie-titlerace");
-      P.close();
-      break;
-    } catch (e) { log(`  ⚠️ 타이틀 레이스 ${seed}: ${e.message}`); if (P) P.close(); }
-  }
+  // 🏅 개인 기록 순위 — 타자·투수 두 예시. 능력치를 올려 경쟁권에 들게 한 뒤, 다음 시즌을
+  // 절반쯤 굴리다 프로 화면에서 멈춰 떠요 (시즌 중에만 보이는 자리라 결산 전에 멈춰요).
+  log("🏅 개인 기록 순위 — 시즌 도중 순위 경쟁 (타자·투수)");
+  const mkTitleRace = (pos, id) => {
+    const who = pos === "batter" ? "타자" : "선발 투수";
+    const cats = pos === "batter" ? "안타·홈런·타율·도루" : "다승·탈삼진·평균자책";
+    for (const seed of seeds(6)) {
+      let P;
+      try {
+        P = makePage("rookie", seed);
+        rookieDebut(P, 0, pos, "확인용");
+        const st = P.state();
+        for (const key in st.stats) st.stats[key] = 128;   // 타이틀 경쟁권에 들도록 능력치를 올려요
+        if (pos === "pitcher") st.role = "선발 투수";        // 다승·탈삼진·평균자책 세 부문이 보이도록
+        if (!rookieSeason(P)) { P.close(); continue; }       // 한 시즌 온전히 — 통산 기록을 쌓아요
+        const cb = campBtn(P); if (!cb) { P.close(); continue; }
+        cb.click();
+        // 캠프(S.season 아직 null)를 지나 시즌을 절반쯤(KBO 144경기 중 70경기) 굴리다 멈춰요.
+        if (!playPartial(P, 70) || !P.state().season) { P.close(); continue; }
+        const s2 = P.state();
+        add({
+          id, game: "rookie", url: "rookie/", emoji: "🏅",
+          title: `개인 기록 순위 — ${who}`,
+          state: `${s2.team} · 🇰🇷 KBO · ${s2.proYear}년차 · ${s2.season.game}/${s2.season.total}경기 · ${who}`,
+          check: `프로 화면에서 📊 순위표를 펼치면 <b>🏅 개인 기록 순위</b>가 뜨는지 — ${cats} 탭마다 리그 각 팀 간판 선수와 내 순위가 실수치로 줄서는지, 내가 앞선 부문엔 👑이 붙는지`,
+          steps: [...ROOKIE_STEP1, "프로 화면에서 <b>📊 순위표</b>를 펼치면 아래에 🏅 개인 기록 순위 (종목 탭)"],
+          keys: snapshot(P),
+        });
+        done.add(id);
+        P.close();
+        return;
+      } catch (e) { log(`  ⚠️ ${id} ${seed}: ${e.message}`); if (P) P.close(); }
+    }
+  };
+  mkTitleRace("batter", "rookie-titlerace");
+  mkTitleRace("pitcher", "rookie-titlerace-pit");
 
   for (const id of ["rookie-posting", "rookie-posting-locked", "rookie-abroad-report",
-    "rookie-cont-series", "rookie-retire", "rookie-titlerace"]) {
+    "rookie-cont-series", "rookie-retire", "rookie-titlerace", "rookie-titlerace-pit"]) {
     if (!done.has(id)) log(`  ❌ ${id} — 조건에 맞는 상태를 못 만들었어요`);
   }
 }
