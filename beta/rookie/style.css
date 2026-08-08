@@ -302,6 +302,7 @@
 .race-table th:last-child, .race-table td.rc-v { text-align: right; }
 .race-table td.rc-v { font-variant-numeric: tabular-nums; font-weight: 600; }
 .race-table tr.me td { color: var(--accent); font-weight: 700; }
+.race-table .rc-me { font-size: .62rem; padding: 0 5px; margin-left: 4px; border: 1px solid var(--accent); border-radius: 999px; vertical-align: middle; }
 .race-table tr.rc-gap td { text-align: center; color: var(--muted); padding: 2px; }
 .race-table .rc-club { display: block; font-size: .68rem; color: var(--muted); font-weight: 400; }
 .race-note { font-size: .7rem; color: var(--muted); margin-top: 4px; }

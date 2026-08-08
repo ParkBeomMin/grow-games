@@ -431,7 +431,7 @@ window.Career = (() => {
     const higher = !(metric === "era");
     const valOf = (x) => (metric === "avg" || metric === "era") ? (x.me ? titleMetric(sn.stats, metric) : x[metric])
       : (x.me ? (sn.stats[metric] || 0) : (x[metric] || 0));
-    const me = { name: "나", team: S.team, me: true };
+    const me = { name: S.name, team: S.team, me: true };
     const field = (sn.race || []).concat([me]).map((x) => ({ ...x, v: valOf(x) }));
     field.sort((a, b) => (higher ? b.v - a.v : a.v - b.v) || (a.me ? -1 : b.me ? 1 : 0));
     return field;
@@ -450,7 +450,7 @@ window.Career = (() => {
     const ranked = raceRank(raceKey);
     const myIdx = ranked.findIndex((x) => x.me);
     const line = (x, i) => `<tr class="${x.me ? "me" : ""}"><td>${i + 1}</td>`
-      + `<td>${x.me ? "나" : x.name}<span class="rc-club">${x.team || ""}</span></td>`
+      + `<td>${x.name || "나"}${x.me ? ` <span class="rc-me">나</span>` : ""}<span class="rc-club">${x.team || ""}</span></td>`
       + `<td class="rc-v">${i === 0 ? "👑" : ""}${raceFmt(raceKey, x.v)}</td></tr>`;
     const shown = ranked.slice(0, 5).map(line).join("");
     const pinned = myIdx >= 5 ? `<tr class="rc-gap"><td colspan="3">⋯</td></tr>${line(ranked[myIdx], myIdx)}` : "";
