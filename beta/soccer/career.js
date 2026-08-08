@@ -299,6 +299,29 @@ window.WingerCareer = (() => {
     show("screen-pro");
   }
 
+  /* 🎬 연출 줄 세우기 — 한 순간에 여럿을 부르면 겹쳐서 뭘 받았는지 안 보여요.
+   *
+   * 결산의 우승·수상은 이미 줄을 서 있었는데, **이적은 그 밖에서 따로 터졌어요** —
+   * 💼 이적 축하와 🎒 적응으로 배운 능력치가 같은 순간에 겹쳤고, 결산 직후에
+   * 이적하면 아직 도는 중인 수상 연출과도 부딪혔습니다(제보).
+   * 여기 한 통로로 모아요. 앞선 줄이 아직 안 끝났으면 그 뒤에 이어 붙입니다. */
+  const FX_GAP = 1700;
+  let fxFreeAt = 0;
+  function queueFx(list) {
+    if (!window.Fx || !list || !list.length) return;
+    const now = Date.now();
+    let at = Math.max(0, fxFreeAt - now);
+    for (const [kind, text, sel] of list) {
+      const delay = at;
+      setTimeout(() => {
+        if (kind === "flash") Fx.flash(text);
+        else Fx.celebrate(kind, text, sel);
+      }, delay);
+      at += FX_GAP;
+    }
+    fxFreeAt = now + at;
+  }
+
   // ---------- 시즌 활동 (전/후반기 × 리그 6라운드) ----------
   const CB_PER_YEAR = 2;
   /* 한 시즌 38경기 — 실제 K리그1과 같아요. 예전에는 12경기(전반 6 + 후반 6)라
@@ -866,7 +889,7 @@ window.WingerCareer = (() => {
       const fan = 25 * idx;
       S.fandom = Math.max(0, (S.fandom || 0) + fan);
       proLog(`🏷️ 칭호 승급 — ${titleAt(idx)}! 명성 +${fan} · 수당 ×${titlePayMul(idx).toFixed(2)}`);
-      if (window.Fx) Fx.celebrate("award", `🏷️ ${titleAt(idx)}!`);
+      queueFx([["award", `🏷️ ${titleAt(idx)}!`]]);
     } else {
       /* 내려갈 때는 명성을 깎지 않아요 — 이미 노쇠 벌점이 따로 걸려 있어요.
        *
@@ -1261,7 +1284,7 @@ window.WingerCareer = (() => {
         S.stats[d.key] = clamp(S.stats[d.key] + gain, 0, statCap(d.key));
         const why = GROW_WHY[d.key];
         proLog(`⚡ ${why ? why + " " : "실전에서 "}${d.name}을(를) 깨쳤어요! +${gain.toFixed(1)} (${Math.round(S.stats[d.key])})`);
-        if (window.Fx) Fx.flash(`⚡ ${d.name} +${gain.toFixed(1)}`);
+        queueFx([["flash", `⚡ ${d.name} +${gain.toFixed(1)}`]]);
       }
     }
     S.condition = clamp(S.condition - randInt(3, 6), 0, 100);
@@ -1491,7 +1514,7 @@ window.WingerCareer = (() => {
     if (window.Stats) Stats.log("cup", { act: "win", y: S.proYear, pk: !!pk, name });
     S.cup = null;
     save();
-    if (window.Fx) Fx.celebrate("champion", `🏆 ${name} 우승!`);
+    queueFx([["champion", `🏆 ${name} 우승!`]]);
     return {
       resultHTML: (head || "") + `<div class="tour-line">🏆 <b>${name} 우승!!</b>${pk || ""}</div>`
         + `<div class="tour-pts">💰 우승 상금 +${money}만 · ⭐ 명성 +${fan}</div>`,
@@ -1628,9 +1651,7 @@ window.WingerCareer = (() => {
     if (move && move.kind === "title") fxQueue.push(["champion", `🏆 ${move.from} 우승!`]);
     else if (move && move.kind === "up") fxQueue.push(["champion", `🔺 ${move.to} 승격!`]);
     for (const a of awards) fxQueue.push(["award", `🎖️ ${a}!`]);
-    if (fxQueue.length && window.Fx) {
-      fxQueue.forEach(([kind, text], i) => setTimeout(() => Fx.celebrate(kind, text), i * 1700));
-    }
+    queueFx(fxQueue);
     /* club·league — 그 시즌에 뛴 소속을 결산 시점에 그냥 적어요. 여기 적힌 값이 정본이에요.
      * 이 필드가 생기기 전에 쌓인 옛 항목에는 club이 없어요. 그건 읽는 쪽(fillClubs)이
      * S.moves에서 역산해 메워요 — 세이브는 고치지 않아요(클라우드 동기화와 부딪혀요). */
@@ -2194,7 +2215,7 @@ window.WingerCareer = (() => {
     const learned = moveLearn(prevLeague, league);
     if (learned) {
       proLog(learned);
-      if (window.Fx) Fx.flash(learned.replace(/^🎒 /, "🎒 "));
+      queueFx([["flash", learned.replace(/^🎒 /, "🎒 ")]]);
     }
     if (window.Stats) Stats.log("transfer", { y: S.proYear, from, to: club.name, fromLg: prevLeague, toLg: league.id, learn: learned ? 1 : 0 });
     save();
@@ -2205,7 +2226,10 @@ window.WingerCareer = (() => {
     /* 적응으로 배운 게 있으면 결산 화면에 한 줄로 남겨요. 프로 로그(proLog)에만
      * 남기면 결산으로 넘어가는 순간 안 보여서 "아무 일도 없었다"로 읽혀요. */
     moveNote = moveToClub(o.club, o.league, o.fee);
-    if (window.Fx) Fx.celebrate("award", `💼 ${o.club.name} 이적!`);
+    /* 💼 이적 축하가 먼저, 🎒 적응으로 배운 것은 그 뒤에 와요 — moveToClub이
+     * 같은 줄에 넣어 뒀으니 여기서 앞에 끼워 넣으면 순서가 뒤집혀요.
+     * 그래서 moveToClub보다 **먼저** 부르지 않고, 큐가 알아서 잇게 둡니다. */
+    queueFx([["award", `💼 ${o.club.name} 이적!`]]);
     yearReport();   // 결산으로 돌아가요 — 새 소속으로 다시 그려져요
   }
 
