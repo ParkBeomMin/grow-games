@@ -1676,7 +1676,7 @@ function makeRookieAll() {
         id: "rookie-titlerace", game: "rookie", url: "rookie/", emoji: "🏅",
         title: "타이틀 레이스 — 시즌 도중 순위 경쟁",
         state: `${s2.team} · 🇰🇷 KBO · ${s2.proYear}년차 · ${s2.season.game}/${s2.season.total}경기`,
-        check: "프로 화면에서 📊 순위표를 펼치면 아래 <b>🏅 타이틀 레이스</b>(현재·예상·1등선)가 뜨는지, 앞서는 종목에 🥇가 붙는지",
+        check: "프로 화면에서 📊 순위표를 펼치면 아래 <b>🏅 개인 기록 순위</b>가 뜨는지 — 종목마다 라이벌 3명과 내 순위가 함께 줄서는지(예: 1.최강속 34 · 2.윤노히 31 · 3.나 28), top3 밖이면 뒤에 내 순위가 붙는지",
         steps: [...ROOKIE_STEP1, "프로 화면에서 <b>📊 순위표</b>를 펼치면 아래에 🏅 타이틀 레이스"],
         keys: snapshot(P),
       });
