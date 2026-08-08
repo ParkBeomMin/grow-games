@@ -452,8 +452,7 @@ function renderRoll() {
   $("roll-stars").innerHTML = STAT_DEFS
     // 이 줄은 텍스트로만 쓰여서 태그가 못 들어가요 — 별만 그려요
     .map((d) => `${d.emoji} ${d.name} ${"⭐".repeat(talentStars(pendingRoll.talents[d.key]))}`)
-    .join(" · ") + `<br/>⭐ = 잠재력 — 별이 많은 능력치일수록 훈련 효율이 높아요`
-    + `<br/>옆의 <b>×1.20</b> 같은 수치가 훈련 상승폭에 곱해지는 배수예요`;
+    .join(" · ") + `<br/>⭐ = 잠재력 — 별이 많은 능력치일수록 훈련 효율이 높아요`;
 }
 $("btn-reroll")?.addEventListener("click", () => {
   pendingRoll = rollStats(chosenPos);
@@ -735,20 +734,26 @@ function transcendTitle(n) {
   return "";
 }
 const talentStars = (t) => clamp(Math.round(((t - 0.6) / (TALENT_MAX - 0.6)) * 5), 1, 5);
+/* ⭐ 한 칸의 값 — 각성 성공은 **정확히 이만큼** 올라요.
+ * 한 칸을 통째로 더하면 반올림한 별 개수가 언제나 정확히 1 늘어납니다
+ * (시작값이 얼마든, 앞서 실패로 조금 잃었든 상관없어요). */
+const TALENT_STEP = (TALENT_MAX - 0.6) / 5;
 // 능력치 키 다섯 — 재능 평균처럼 "전부"를 훑을 때 써요
 const STAT_KEYS = ["shoot", "pass", "dribble", "defense", "stamina"];
-/* ⭐ 별 그림 — 별 다섯 칸 **옆에 재능 수치**를 적어요.
+/* ⭐ 별 그림 — **별만** 그려요.
  *
- * 별 다섯 칸으로 재능 0.6~1.8을 나누면 한 칸이 0.24인데, 각성 한 번의 상승은
- * 평균 0.225라 **성공해도 별이 그대로**인 경우가 흔했어요(제보: "별이 4개에서
- * 각성 성공했는데 그대로 4개야"). 반칸(✩)으로 쪼개 봤지만 "빈 별은 안 해도
- * 되지 않을까"라는 제보가 이어졌습니다 — 눈에 지저분했어요.
- * 숫자를 한 칸 붙이는 게 가장 정직해요. 별은 한눈에 보는 눈금이고,
- * 수치는 각성 한 번이 얼마나 움직였는지를 정확히 보여줍니다. */
+ * 여기서 세 번 방향을 바꿨어요. 별 다섯 칸으로 재능 0.6~1.8을 나누면 한 칸이
+ * 0.24인데 각성 상승이 rand(0.15, 0.3)이라, 성공해도 별이 그대로인 날이
+ * 흔했습니다("별이 4개에서 각성 성공했는데 그대로 4개야"). 반칸(✩)으로
+ * 쪼개 봤더니 "빈 별은 안 해도 되지 않을까", 수치를 붙였더니 "별 옆에 숫자는
+ * 뭐지??"였어요.
+ *
+ * 결론은 표시가 아니라 **장치**를 고치는 것이었어요 — 각성이 정확히 한 칸씩
+ * 오르게 하면 별만 그려도 성공할 때마다 하나씩 늡니다(제보: "숫자는 빼줘
+ * 원래처럼 별만 나오게 해주고, 각성 성공했을 때 별 개수가 정상적으로 증가만
+ * 하면 문제없어"). 눈금을 고쳐 그리는 대신 눈금에 맞게 걸음을 맞췄어요. */
 function talentStarStr(t) {
-  /* ×를 붙여요 — 숫자만 있으면 그게 뭔지 물어보게 됩니다("별 옆에 숫자는 뭐지??").
-   * 이 값은 훈련 상승폭에 그대로 곱해져요. 1.42면 같은 훈련을 해도 1.42배 올라요. */
-  return `${"⭐".repeat(talentStars(t))}<span class="tal-num">×${(t || 0).toFixed(2)}</span>`;
+  return "⭐".repeat(talentStars(t));
 }
 const isTalentMax = (t) => t >= TALENT_MAX - 1e-9;
 // 재능 MAX 이후 — 상한까지 채운 스탯으로 초월에 도전해요.
@@ -801,7 +806,7 @@ function awakenTalent(key, logFn) {
   const ok = confirm(
     `🔮 ${d.name} 재능 각성 시도!\n\n` +
     `성공 확률 ${Math.round(p * 100)}% (돌파가 깊을수록 올라가요)\n` +
-    `· 성공: 재능(⭐)이 영구히 상승 — 훈련 효율이 평균 ${Math.round(0.225 / S.talents[key] * 100)}% 빨라져요\n` +
+    `· 성공: ⭐ 별이 하나 늘어요 — 훈련 효율이 ${Math.round(TALENT_STEP / S.talents[key] * 100)}% 빨라져요\n` +
     `· 실패: 낮은 확률로 재능이 살짝 하락\n` +
     `· 성공하든 실패하든 ${d.name} 수치는 크게 낮아져서 다시 키워야 해요` +
     (gearBonus(key) ? `\n· 🛍️ 장비 +${gearBonus(key)}는 그대로 남아요` : "") +
@@ -815,11 +820,11 @@ function awakenTalent(key, logFn) {
   if (window.Stats) Stats.log("awaken", { key, lv: Math.round(S.talents[key] * 100) / 100, ok: awakenOk });
   if (awakenOk) {
     const before = S.talents[key];
-    S.talents[key] = Math.min(S.talents[key] + rand(0.15, 0.3), TALENT_MAX);
+    /* 딱 한 칸 — 그래야 별이 반드시 하나 늘어요. 무작위 폭을 두면 성공했는데
+     * 별이 그대로인 날이 생기고, 그건 성공을 실패로 읽히게 합니다. */
+    S.talents[key] = Math.min(S.talents[key] + TALENT_STEP, TALENT_MAX);
     S.stats[key] = resetStat(key, 45, 60);
-    /* 재능 수치를 같이 적어요. 별 그림만으로는 반칸이 움직였는지 헷갈려요 —
-     * "성공했는데 별이 그대로"라는 제보가 여기서 나왔습니다. */
-    logFn(`🔮✨ ${d.name} 재능 각성 성공!! ⭐ ${before.toFixed(2)} → ${S.talents[key].toFixed(2)}`
+    logFn(`🔮✨ ${d.name} 재능 각성 성공!! ${"⭐".repeat(talentStars(before))} → ${"⭐".repeat(talentStars(S.talents[key]))}`
       + ` (수치 ${Math.round(S.stats[key])}부터 재도전)`);
     if (window.Fx) Fx.celebrate("awaken", `⭐ ${d.name} 각성 성공!`, ".awaken-btn");
   } else if (Math.random() < 0.1) {
