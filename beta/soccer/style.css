@@ -362,31 +362,41 @@ body {
 }
 .camp-stat .cs-emoji { font-size: 1.1rem; }
 .camp-stat .cs-now { margin-left: auto; color: var(--dim); font-size: .8rem; }
-.camp-way { display: block; text-align: left; padding: .7rem .8rem; }
-.camp-way .cw-sub { display: block; font-size: .72rem; color: var(--dim); margin-top: .15rem; }
-.camp-back { font-size: .8rem; opacity: .8; }
 
-/* 연타 — 남은 시간이 줄어드는 막대와 큰 버튼 하나 */
-.camp-tap { margin: .6rem 0 .4rem; }
+/* 두 갈래는 나란히 두 칸 — 셋을 한 줄에 두면 글자가 접혀서 안 읽혀요.
+   '다른 능력치 고르기'는 아래 한 줄을 통째로 써요(얇고 길게). */
+.action-grid.camp-two { grid-template-columns: 1fr 1fr; }
+.camp-way {
+  display: flex; flex-direction: column; justify-content: center; gap: .25rem;
+  text-align: center; padding: .8rem .5rem; min-height: 5.4rem;
+}
+.camp-way .cw-top { font-size: .92rem; font-weight: 700; line-height: 1.25; }
+.camp-way .cw-sub { font-size: .68rem; color: var(--dim); line-height: 1.35; }
+.action-grid.camp-two .camp-back {
+  grid-column: 1 / -1; padding: .45rem; font-size: .78rem; opacity: .85;
+}
+
+/* 연타 레이어 — 화면 한가운데. 아래에 붙여 두면 폰에서 접혀 안 보였어요 */
+.tap-modal { width: min(340px, 90vw); }
+.tap-hint { font-size: .78rem; color: var(--dim); margin-bottom: 10px; line-height: 1.5; }
 .ct-bar {
-  height: 8px; border-radius: 4px; overflow: hidden;
-  background: rgba(255, 255, 255, .1); margin-bottom: .5rem;
+  height: 10px; border-radius: 5px; overflow: hidden;
+  background: rgba(255, 255, 255, .1); margin-bottom: 12px;
 }
 .ct-fill { height: 100%; width: 100%; background: var(--accent); transition: width .05s linear; }
 .ct-btn {
-  width: 100%; padding: 1.4rem .8rem; border-radius: 14px; cursor: pointer;
-  font-family: inherit; color: var(--cream); font-size: 1.1rem; font-weight: 700;
-  background: var(--field); border: 2px solid var(--line);
-  display: flex; flex-direction: column; align-items: center; gap: .2rem;
+  width: 100%; padding: 2.2rem .8rem; border-radius: 18px; cursor: pointer;
+  font-family: inherit; color: var(--cream); font-weight: 700;
+  background: var(--field); border: 3px solid var(--line);
+  display: flex; flex-direction: column; align-items: center; gap: .3rem;
   /* 연타라 터치가 겹쳐요 — 길게 눌러 나오는 선택·확대를 막아요 */
   user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
   touch-action: manipulation;
 }
-.ct-btn .ct-emoji { font-size: 1.8rem; }
-.ct-btn .ct-count { font-size: 1.4rem; color: var(--accent); }
-.ct-btn.hit { animation: ct-pop .09s ease-out; }
-.ct-btn:disabled { opacity: .5; }
-@keyframes ct-pop { from { transform: scale(1); } 50% { transform: scale(.96); } to { transform: scale(1); } }
+.ct-btn .ct-emoji { font-size: 2.6rem; }
+.ct-btn .ct-count { font-size: 2rem; color: var(--accent); }
+.ct-btn.hit { animation: ct-pop .09s ease-out; border-color: var(--accent); }
+@keyframes ct-pop { from { transform: scale(1); } 50% { transform: scale(.95); } to { transform: scale(1); } }
 
 /* 👥 스쿼드 — 선발 11 + 벤치 */
 .squad-table { width: 100%; font-size: .74rem; }
@@ -410,3 +420,4 @@ body {
 .squad-modal { width: min(420px, 94vw); text-align: left; }
 .squad-modal .av-title { text-align: center; }
 .squad-modal .av-actions { margin-top: 10px; }
+.sq-odds { color: var(--accent); font-weight: 600; }

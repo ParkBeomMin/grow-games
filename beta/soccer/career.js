@@ -1011,10 +1011,10 @@ window.WingerCareer = (() => {
     const sqBtn = $("btn-squad-pro");
     if (sqBtn && window.WingerSquad && isPro() && S.group) {
       sqBtn.hidden = false;
+      /* 준비 화면에서는 **확정이 아니라 확률**을 보여줘요. 선발은 경기 시작 때
+       * 다시 뽑히니, 여기서 "선발"이라고 못 박으면 화면이 거짓말을 하게 돼요. */
       const L = WingerSquad.myLine();
-      sqBtn.textContent = WingerSquad.isStarter()
-        ? `👥 선발 ${L.rank}/${L.slots}`
-        : `🪑 벤치 ${L.rank}번`;
+      sqBtn.textContent = `👥 선발 ${Math.round(L.odds * 100)}%`;
       sqBtn.onclick = () => WingerSquad.openSquad();
     } else if (sqBtn) {
       sqBtn.hidden = true;
@@ -1206,9 +1206,13 @@ window.WingerCareer = (() => {
   function playShow() {
     const act = S.activity;
     act.opp = pick(oppClubs(S)); // 이번 상대 — 같은 리그에서 내 클럽을 빼고 뽑아요
-    /* 🪑 선발이 아니면 못 뛰어요. 팀은 나 없이 경기를 치릅니다. */
-    if (window.WingerSquad && !WingerSquad.isStarter()) { benchShow(act); return; }
-    if (window.WingerSquad) WingerSquad.markApps();
+    /* 🪑 선발은 **경기마다 다시 뽑아요.** 실력이 주지만 그날 몸 상태와 흔들림이
+     * 얹혀서, 경계에 있으면 이번 주에 뛰고 다음 주에 앉을 수 있어요. */
+    if (window.WingerSquad) {
+      WingerSquad.rollLineup();
+      if (!WingerSquad.isStarter()) { benchShow(act); return; }
+      WingerSquad.markApps();
+    }
     $("stage-title").textContent = `⚽ ${S.proYear}시즌 ${cbLabel(act.cb)} — ${S.group}`;
     $("stage-round").textContent = `R${act.week + 1}/${act.weekTotal} 리그 · vs ${act.opp}`;
     show("screen-stage");

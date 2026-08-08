@@ -105,7 +105,45 @@ window.WingerSquad = (() => {
     return out;
   }
   const startingXI = () => startingXIOf(S.group);
-  const isStarter = () => startingXI().some((x) => x.me);
+
+  /* 🔄 그 경기의 선발 — **매 경기 다시 뽑아요.**
+   *
+   * 실력 순으로만 고정하면 한 번 선발이면 시즌 내내 선발이고, 한 번 밀리면
+   * 계속 벤치예요. 실제로는 감독이 그날 몸 상태와 최근 흐름을 보고 돌립니다.
+   * 그래서 경기마다 ±5의 흔들림을 얹고, 내 쪽에는 **컨디션**을 더해요 —
+   * 잘 쉬면 뽑히기 쉬워집니다(휴식에 이유가 하나 더 생겨요).
+   * 경계에 있는 선수만 갈리고, 실력 차가 크면 그대로예요. */
+  const FORM_SWING = 5;
+  const lineupScore = (x) =>
+    x.str + rand(-FORM_SWING, FORM_SWING) + (x.me ? (S.condition - 70) / 6 : 0);
+
+  /* 이번 경기 선발을 뽑아 활동 기록에 새겨요. 같은 라운드를 다시 그려도
+   * 흔들리지 않게 **한 번 정하면 그 라운드 동안 고정**입니다. */
+  function rollLineup() {
+    const sq = ensureSquad();
+    const picked = [];
+    for (const p of POS_KEYS) {
+      const line = sq.filter((x) => x.pos === p)
+        .map((x) => ({ x, v: lineupScore(x) })).sort((a, b) => b.v - a.v);
+      picked.push(...line.slice(0, FORMATION[p]).map((e) => e.x));
+    }
+    if (S.activity) {
+      S.activity.xi = picked.map((x) => x.name);
+      S.activity.xiWeek = S.activity.week;
+    }
+    return picked;
+  }
+  /* 이번 경기 선발 명단 — 굴린 게 있으면 그걸, 없으면 실력 순 기본값이에요. */
+  function matchXI() {
+    const act = S.activity;
+    if (act && Array.isArray(act.xi) && act.xiWeek === act.week) {
+      const sq = ensureSquad();
+      const out = act.xi.map((n) => sq.find((x) => x.name === n)).filter(Boolean);
+      if (out.length === 11) return out;
+    }
+    return startingXI();
+  }
+  const isStarter = () => matchXI().some((x) => x.me);
 
   /* 🥇 개인 순위에 올릴 리그의 얼굴들 — **각 클럽의 선발 중 실력 상위**예요.
    * 예전에는 이름을 새로 지어 8명을 만들었어요. 그러면 개인 순위에 뜬 그 선수가
@@ -133,11 +171,20 @@ window.WingerSquad = (() => {
     return out.slice(0, n);
   }
 
-  /* 내 자리 경쟁 — 같은 포지션에서 몇 등인가, 선발 자리는 몇 개인가. */
+  /* 내 자리 경쟁 — 같은 포지션에서 몇 등인가, 선발 자리는 몇 개인가.
+   * odds — 흔들림(±FORM_SWING)과 컨디션을 감안한 **이번 경기 선발 확률**이에요.
+   * 순번만 보여주면 "3/3인데 왜 벤치야?"가 되니, 경합 중이라는 걸 숫자로 알려줘요. */
   function myLine() {
     const sq = ensureSquad();
     const line = sq.filter((x) => x.pos === S.pos).sort((a, b) => b.str - a.str);
-    return { rank: line.findIndex((x) => x.me) + 1, of: line.length, slots: FORMATION[S.pos], line };
+    const rank = line.findIndex((x) => x.me) + 1;
+    let hit = 0;
+    const N = 400;
+    for (let i = 0; i < N; i++) {
+      const roll = line.map((x) => ({ x, v: lineupScore(x) })).sort((a, b) => b.v - a.v);
+      if (roll.slice(0, FORMATION[S.pos]).some((e) => e.x.me)) hit++;
+    }
+    return { rank, of: line.length, slots: FORMATION[S.pos], line, odds: hit / N };
   }
 
   /* 🪑 벤치 주 — 경기를 못 뛴 대신 능력치 하나가 올라요.
@@ -157,7 +204,7 @@ window.WingerSquad = (() => {
    * 나는 빼요. 내 골은 이미 내 기록으로 따로 쌓입니다. */
   const SCORE_W = { fw: 1.0, wg: 0.75, mf: 0.4, df: 0.12 };
   function pickScorer() {
-    const xi = startingXI().filter((x) => !x.me);
+    const xi = matchXI().filter((x) => !x.me);
     if (!xi.length) return null;
     let total = 0;
     for (const x of xi) total += (SCORE_W[x.pos] || 0.4) * (x.str / 70);
@@ -181,7 +228,7 @@ window.WingerSquad = (() => {
     return names;
   }
   // 선발이 한 경기를 치렀다고 표시해요 (명단 화면의 출전 수)
-  function markApps() { for (const x of startingXI()) x.apps += 1; }
+  function markApps() { for (const x of matchXI()) x.apps += 1; }
 
   /* 새 시즌 — 리그 전체의 시즌 기록만 비워요. 명단은 그대로예요. */
   function resetSeason() {
@@ -193,7 +240,7 @@ window.WingerSquad = (() => {
 
   // ---------- 화면 ----------
   function squadHTML() {
-    const xi = startingXI();
+    const xi = matchXI();
     const inXI = new Set(xi);
     const sq = ensureSquad();
     const row = (x) => `<tr class="${x.me ? "me" : ""}">`
@@ -207,9 +254,10 @@ window.WingerSquad = (() => {
     const head = `<tr><th>선수</th><th>포지션</th><th>실력</th><th>기록</th></tr>`;
     return `<div class="sq-note">${
       isStarter()
-        ? `✅ <b>선발</b> — ${posName(S.pos)} ${L.slots}자리 중 ${L.rank}번째예요`
-        : `🪑 <b>벤치</b> — ${posName(S.pos)} ${L.slots}자리인데 ${L.rank}번째예요.`
-          + ` 실력을 올려 앞사람을 넘어야 뛸 수 있어요`}</div>`
+        ? `✅ <b>이번 경기 선발</b> — ${posName(S.pos)} ${L.slots}자리 중 ${L.rank}번째`
+        : `🪑 <b>이번 경기 벤치</b> — ${posName(S.pos)} ${L.slots}자리인데 ${L.rank}번째`}`
+      + `<br/><span class="sq-odds">선발 확률 ${Math.round(L.odds * 100)}%</span>`
+      + ` — 매 경기 다시 뽑아요. 실력과 컨디션이 확률을 올려요</div>`
       + `<table class="rank-table season-standings squad-table"><thead>${head}</thead>`
       + `<tbody><tr class="sq-sep"><td colspan="4">⚽ 선발 11</td></tr>${group(xi)}`
       + `<tr class="sq-sep"><td colspan="4">🪑 벤치 ${bench.length}</td></tr>${group(bench)}</tbody></table>`;
@@ -236,7 +284,7 @@ window.WingerSquad = (() => {
   }
 
   return {
-    openSquad,
+    openSquad, rollLineup, matchXI, FORM_SWING,
     ensureSquads, ensureSquad, squadOf, startingXI, startingXIOf, leagueFaces,
     isStarter, myLine, benchTurn, creditMateGoals, markApps, resetSeason, squadHTML,
     FORMATION, BENCH, SQUAD_SIZE, BENCH_GAIN, SCORE_W,

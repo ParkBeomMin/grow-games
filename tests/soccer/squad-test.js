@@ -253,6 +253,58 @@ guard("⑪ 세이브에 남는 값", () => {
   check(!!meRow && meRow.name === S().name, "저장된 내 이름도 지금 이름과 같다");
 });
 
+/* ---------- ⑫ 선발은 경기마다 다시 뽑힌다 ----------
+ * "선발 벤치는 매 경기마다 바뀌는 거지??" — 처음에는 실력 순으로 **고정**이었다.
+ * 한 번 선발이면 시즌 내내 선발이고, 한 번 밀리면 계속 벤치였다.
+ * 실제로는 감독이 그날 몸 상태와 흐름을 보고 돌린다.
+ *
+ * ⚠️ 내 실력은 늘 종합에서 다시 채워져요(refreshMe). 그래서 여기서는 명단의
+ * str을 직접 만지지 않고 **능력치로** 세웁니다 — 직접 만지면 다음 호출에
+ * 덮여서 "실력 5인데 100% 선발" 같은 거짓 결과가 나와요. */
+guard("⑫ 매 경기 재선발", () => {
+  S().condition = 70;
+  setOvr(60);
+  const sq = Squad.ensureSquad();
+  const others = sq.filter((x) => x.pos === S().pos && !x.me).sort((a, b) => b.str - a.str);
+  const slots = C.FORMATION[S().pos];
+  /* 마지막 선발 자리를 놓고 다투는 값 — 나를 뺀 줄에서 (slots-1)번째와 slots번째 사이 */
+  const edge = (others[slots - 2].str + others[slots - 1].str) / 2;
+  const runs = (ovr, n, base) => {
+    setOvr(ovr);
+    S().activity = { week: 0 };
+    let hit = 0;
+    for (let i = 0; i < n; i++) { S().activity.week = base + i; Squad.rollLineup(); if (Squad.isStarter()) hit++; }
+    return hit;
+  };
+  const mid = runs(edge, 200, 0);
+  console.log(`   경계(종합 ${edge.toFixed(0)}) 200경기 — 선발 ${mid}회`);
+  check(mid > 20 && mid < 180,
+    `경계에 있으면 경기마다 갈린다 (선발 ${mid}/200) — 고정이면 0이나 200이 나와요`);
+
+  // 같은 라운드를 다시 그려도 흔들리지 않아요
+  S().activity.week = 7;
+  Squad.rollLineup();
+  const first = Squad.isStarter();
+  let stable = true;
+  for (let i = 0; i < 20; i++) if (Squad.isStarter() !== first) stable = false;
+  check(stable, "한 번 정해진 라운드 안에서는 안 바뀐다 — 다시 그려도 같아요");
+
+  // 실력 차가 크면 흔들려도 그대로예요
+  const low = runs(edge - 30, 100, 1000);
+  const high = runs(edge + 30, 100, 3000);
+  console.log(`   종합 ${(edge - 30).toFixed(0)} → 선발 ${low}/100 · 종합 ${(edge + 30).toFixed(0)} → ${high}/100`);
+  check(low <= 5 && high >= 95, `실력 차가 크면 흔들려도 그대로다 (${low} · ${high})`);
+
+  // 컨디션이 좋으면 뽑히기 쉬워요
+  setOvr(edge);
+  const oddsAt = (cond) => { S().condition = cond; return Squad.myLine().odds; };
+  const lowC = oddsAt(20), highC = oddsAt(100);
+  console.log(`   컨디션 20 → ${Math.round(lowC * 100)}% · 컨디션 100 → ${Math.round(highC * 100)}%`);
+  check(highC > lowC + 0.03,
+    `컨디션이 좋으면 선발 확률이 오른다 (${Math.round(lowC * 100)}% → ${Math.round(highC * 100)}%)`);
+  S().condition = 70; S().activity = null;
+});
+
 guard("⑦ 이적", () => {
   const before = Squad.ensureSquad().map((x) => x.name).join("|");
   S().group = "다른 클럽 FC";
@@ -275,8 +327,8 @@ guard("⑩ 명단 레이어", () => {
   check(!w.document.getElementById("pro-squad"),
     "준비 화면에 펼쳐진 명단 상자가 더는 없다 — 자리를 안 먹어요");
   console.log(`   버튼 문구 "${btn ? btn.textContent : ""}"`);
-  check(!!btn && /선발|벤치/.test(btn.textContent),
-    `버튼이 선발인지 벤치인지 말한다 (${btn ? btn.textContent : ""})`);
+  check(!!btn && /선발 \d+%/.test(btn.textContent),
+    `버튼이 이번 경기 선발 확률을 말한다 (${btn ? btn.textContent : ""}) — 선발은 경기마다 다시 뽑혀요`);
 
   check(!w.document.querySelector(".squad-overlay"), "누르기 전에는 레이어가 없다");
   btn.click();
@@ -284,6 +336,7 @@ guard("⑩ 명단 레이어", () => {
   check(!!layer, "누르면 레이어가 뜬다");
   const txt = layer ? layer.textContent.replace(/\s+/g, " ") : "";
   check(/선발 11/.test(txt) && /벤치/.test(txt), `레이어에 선발 11과 벤치가 있다`);
+  check(/선발 확률 \d+%/.test(txt), "레이어에도 선발 확률이 적힌다");
   check(txt.includes(S().name), "레이어에 내 이름이 있다");
   btn.click();
   check(w.document.querySelectorAll(".squad-overlay").length === 1,

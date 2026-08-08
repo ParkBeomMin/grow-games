@@ -486,6 +486,65 @@ function makeSoccerReport() {
   log("  ❌ 조건에 맞는 상태를 못 만들었어요 (연말 결산)");
 }
 
+/* 🪑 벤치 — 이번 경기에 못 뛰는 자리.
+ *
+ * "벤치인 경우 시나리오가 없는 것 같아" — 맞아요. 선발이 잘 되는 상태만
+ * 뽑혀 있었습니다. 선발은 매 경기 다시 뽑히니(실력 + 컨디션 + 흔들림),
+ * **선발 확률이 낮은 상태**에서 멈춰 두면 그 자리를 볼 수 있어요.
+ * 컨디션까지 낮춰 두면 확률이 더 내려갑니다 — 휴식이 왜 필요한지도 같이 보여요. */
+function makeSoccerBench() {
+  log("🪑 벤치 — 이번 경기 못 뛰는 자리");
+  for (const seed of seeds(30)) {
+    let P;
+    try {
+      P = makePage("soccer", seed);
+      soccerDebut(P, "pro", "pos", 0);
+      // 시즌 준비 턴을 다 쓰고 경기 직전에서 멈춰요
+      for (let g = 0; g < 40 && P.active() === "screen-pro"; g++) {
+        if (P.w.document.querySelector("#pro-actions .go-game")) break;
+        if (!doAct(P, "#pro-actions .action-btn", "pos")) break;
+      }
+      const st = P.state();
+      const Sq = P.w.WingerSquad;
+      if (!Sq) throw new Error("squad.js가 안 실렸어요");
+      st.condition = 34;                     // 몸이 안 올라온 상태 — 선발에서 밀려요
+      P.get("save")();
+      const L = Sq.myLine();
+      /* 0%면 "매 경기 바뀐다"를 못 보여줘요 — 뛸 때도 있고 앉을 때도 있는
+       * 15~45% 구간을 찾습니다. 그게 이 시나리오가 보여줘야 하는 자리예요. */
+      if (L.odds < 0.15 || L.odds > 0.45) {
+        throw new Error(`선발 확률이 구간 밖이에요 (${Math.round(L.odds * 100)}%)`);
+      }
+      add({
+        id: "soccer-bench",
+        game: "soccer", url: "soccer/", emoji: "🪑",
+        title: `벤치 — 선발 확률 ${Math.round(L.odds * 100)}%`,
+        state: `${st.group} · ${P.get("leagueOf")(st).name} · 종합 ${Math.round(P.overall())}`
+          + ` · 컨디션 ${Math.round(st.condition)} · ${P.get("POS_INFO")[st.pos].name} ${L.slots}자리 중 ${L.rank}번째`,
+        check: "선발은 <b>매 경기 다시 뽑혀요</b> — 실력이 주지만 그날 컨디션과 "
+          + "흔들림(±5)이 얹힙니다. HUD의 <b>👥 선발 %</b> 버튼이 이번 경기 확률이에요.<br>"
+          + "경기에 나가 보면 <b>🪑 벤치 화면</b>이 뜰 거예요 — 팀은 나 없이 경기를 "
+          + "치르고(순위표도 그대로 굴러가요), 나는 <b>훈련장에서 능력치 하나가 올라요</b>. "
+          + "결장이 손해가 되면 안 되니까요.<br>"
+          + "🛌 휴식으로 컨디션을 올리면 버튼의 확률이 오르는지, 몇 경기 돌려 보면 "
+          + "<b>어떤 주는 뛰고 어떤 주는 앉는지</b> 봐주세요.",
+        steps: [
+          "게임이 열리면 <b>이어하기</b> → 선수 카드",
+          "HUD의 <b>👥 선발 %</b>를 눌러 명단과 확률 확인",
+          "경기에 나가 보기 (벤치면 벤치 화면) → 🛌 휴식 뒤 확률이 오르는지 확인",
+        ],
+        keys: snapshot(P),
+      });
+      P.close();
+      return;
+    } catch (e) {
+      if (P) P.close();
+      log(`  · 시드 ${seed}: ${e.message}`);
+    }
+  }
+  log("  ❌ 조건에 맞는 상태를 못 만들었어요 (벤치)");
+}
+
 /* 💜 1군 콜업 대기로 막 입단한 선수 — 선발일까 벤치일까.
  *
  * 유스 마지막 라운드에서만 떨어지면(lastRound === 3) 💜 1군 콜업 대기예요.
@@ -1686,6 +1745,7 @@ if (want("soccer-report", "soccer")) makeSoccerReport();
 if (want("soccer-chart", "soccer")) makeSoccerChart();
 if (want("soccer-cup", "soccer")) makeSoccerCup();
 if (want("soccer-callup", "soccer")) makeSoccerCallup();
+if (want("soccer-bench", "soccer")) makeSoccerBench();
 if (want("soccer-final", "soccer")) makeSoccerFinal();
 if (want("soccer-veteran", "soccer")) makeSoccerVeteran();
 if (want("soccer-judge", "soccer")) makeSoccerJudge();

@@ -222,6 +222,68 @@ guard("①⑥⑦ 특훈 화면", () => {
   check(active() === at, `특훈은 커리어당 한 번이다 — 다시 불러도 안 열린다 (${active()})`);
 });
 
+/* ---------- ⑩ 연타가 실제로 뜨는가 (자동 미니게임 OFF) ----------
+ *
+ * 제보: "노력 버튼 누르면 뭐 연타 치는 게 나와야 하는 거 아니야?? 그냥 바로
+ * 훈련된 거로 처리되네."
+ * 연타판을 화면 아래에 붙여 뒀는데, 폰에서는 선택 버튼 밑이 이미 접힌 자리라
+ * **버튼을 눌러도 안 보였다.** 3초가 그냥 흘러 0타로 끝나니 누르자마자 처리된
+ * 것처럼 보였다. 화면 한가운데 레이어로 띄우고, **첫 탭이 있어야 시간이 흐르게** 했다.
+ *
+ * ⚠️ 위의 ①⑥⑦은 자동 미니게임을 켠 채로 돌아서 이 경로를 한 번도 안 지났다.
+ * 그래서 페이지를 새로 열어 **자동을 끄고** 확인한다. */
+(() => {
+  const dom2 = new JSDOM(
+    html.replace('localStorage.setItem("grow-auto-mini", "1");', 'localStorage.setItem("grow-auto-mini", "0");'),
+    { runScripts: "dangerously", pretendToBeVisual: true, url: "https://x.test/soccer/" });
+  const w2 = dom2.window;
+  w2.Ads = { display() {}, init() {} };
+  w2.Stats = { log() {} };
+  const D = w2.document;
+  try {
+    w2.__set("S", w2.__get('newState(MARKETS[0], "df", "테스트")'));
+    w2.WingerCareer.onEnding(true, false);
+    D.getElementById("btn-go-debut").click();
+    const st = w2.WingerCareer._t.state();
+    st.campDone = false; st.youthExt = false;
+    w2.WingerCamp.start();
+    check(!w2.__get("autoMiniOn")(), "자동 미니게임이 꺼진 상태로 연다");
+    D.querySelector("#camp-actions .camp-stat").click();
+
+    // 두 갈래가 나란히, 문구가 능력치 이름을 담는다
+    const eff = D.getElementById("btn-camp-effort"), gam = D.getElementById("btn-camp-gamble");
+    const back = D.getElementById("btn-camp-back");
+    check(!!eff && !!gam && !!back, "노력·도박·다른 능력치 버튼이 다 있다");
+    check(D.getElementById("camp-actions").classList.contains("camp-two"),
+      "두 갈래가 두 칸으로 놓인다 (셋을 한 줄에 두면 글자가 접혀요)");
+    const nm = w2.__get("STAT_DEFS").find((d) => d.key === D.querySelector("#camp-actions .camp-stat, [data-key]").dataset.key);
+    console.log(`=== ⑩ 문구 — "${eff.textContent.replace(/\s+/g, " ").slice(0, 40)}" / "${gam.textContent.replace(/\s+/g, " ").slice(0, 30)}" ===`);
+    check(!/^💪 노력/.test(eff.textContent.trim()) && /훈련|특훈/.test(eff.textContent),
+      "노력 버튼이 '무엇을 하는지'로 적힌다 (장치 이름이 아니라)");
+    void nm;
+
+    const turnBefore = w2.WingerCamp._t.state().turn;
+    check(!D.querySelector(".tap-overlay"), "누르기 전에는 연타 레이어가 없다");
+    eff.click();
+    const layer = D.querySelector(".tap-overlay");
+    check(!!layer, "노력을 누르면 연타 레이어가 뜬다 — 화면 아래가 아니라 한가운데");
+    check(w2.WingerCamp._t.state().turn === turnBefore,
+      "레이어가 뜬 시점에는 아직 회차가 안 넘어간다 — 제보의 '바로 처리'가 여기였어요");
+
+    // 실기기와 같은 이벤트로 두드려요
+    const btn = D.getElementById("camp-tap-btn");
+    const tap = () => btn.dispatchEvent(new w2.Event("pointerdown", { bubbles: true, cancelable: true }));
+    for (let i = 0; i < 12; i++) tap();
+    check(D.getElementById("camp-tap-count").textContent === "12",
+      `두드린 만큼 세어진다 (${D.getElementById("camp-tap-count").textContent})`);
+    check(!!D.querySelector(".tap-overlay") && w2.WingerCamp._t.state().turn === turnBefore,
+      "두드리는 동안에는 안 끝난다");
+  } catch (e) {
+    check(false, `⑩ 연타 — ${e.message}`);
+  }
+  try { w2.close(); } catch { /* 타이머가 남아 있어도 검사에는 영향 없어요 */ }
+})();
+
 console.log(fail ? `\n❌ ${fail}건 실패` : "\n✅ 통과");
 w.close();
 process.exit(fail ? 1 : 0);

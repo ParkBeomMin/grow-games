@@ -79,6 +79,7 @@ window.WingerCamp = (() => {
 
     const box = $("camp-actions");
     box.innerHTML = "";
+    box.classList.remove("camp-two");
     if (!cur.key) {
       for (const d of statDefs()) {
         const b = document.createElement("button");
@@ -90,21 +91,29 @@ window.WingerCamp = (() => {
         box.appendChild(b);
       }
     } else {
+      /* 두 갈래는 **나란히 두 칸**이에요. 셋을 한 줄에 두면 글자가 접혀서
+       * 무엇을 고르는지가 안 읽혀요(제보). '다른 능력치'는 아래 얇은 줄로 뺍니다. */
+      box.classList.add("camp-two");
+      const nm = nameOf(cur.key);
       const effort = document.createElement("button");
       effort.id = "btn-camp-effort";
       effort.className = "btn btn-primary camp-way";
-      effort.innerHTML = `💪 노력<span class="cw-sub">연타 ${TAP_MS / 1000}초 — 친 만큼 올라요 (최소 +${EFFORT_MIN})</span>`;
+      /* 문구도 무엇을 하는지로 적어요 — "노력/도박"은 장치 이름이지 훈련 이름이 아니에요. */
+      effort.innerHTML = `<span class="cw-top">💪 ${nm} 집중 훈련</span>`
+        + `<span class="cw-sub">${TAP_MS / 1000}초 연타 · 친 만큼 올라요<br/>못 쳐도 최소 +${EFFORT_MIN}</span>`;
       effort.onclick = startTap;
       box.appendChild(effort);
 
       const gamble = document.createElement("button");
       gamble.id = "btn-camp-gamble";
       gamble.className = "btn btn-ghost camp-way";
-      gamble.innerHTML = `🎲 도박<span class="cw-sub">🌠 대박 · ✅ 성공 · 💨 허탕 · 🤕 부상</span>`;
+      gamble.innerHTML = `<span class="cw-top">🎲 무리한 ${nm} 특훈</span>`
+        + `<span class="cw-sub">한 방 판정<br/>🌠 대박 · ✅ 성공 · 💨 허탕 · 🤕 부상</span>`;
       gamble.onclick = doGamble;
       box.appendChild(gamble);
 
       const back = document.createElement("button");
+      back.id = "btn-camp-back";
       back.className = "btn btn-ghost camp-back";
       back.textContent = "↩ 다른 능력치 고르기";
       back.onclick = () => { cur.key = null; render(); };
@@ -114,57 +123,71 @@ window.WingerCamp = (() => {
     $("camp-log").innerHTML = cur.log
       .map((l, i) => `<div class="${i === 0 ? "new" : ""}">${l}</div>`).join("");
     $("camp-left").textContent = left > 0 ? `${left}회 남았어요` : "";
-    $("camp-tap").hidden = true;
   }
 
   // ---------- 💪 노력 — 연타 ----------
+  /* ⚠️ 연타판을 화면 아래에 붙여 뒀더니 **버튼을 눌러도 안 보였어요.**
+   * 폰에서는 선택 버튼 밑이 이미 접힌 자리라, 3초가 그냥 흘러 0타로 끝나고
+   * "누르자마자 훈련이 처리된 것처럼" 보였습니다(제보).
+   * 그래서 화면 한가운데 레이어로 띄우고, **첫 탭이 있어야 시간이 흐르게** 했어요 —
+   * 준비가 안 된 채로 3초가 지나가는 일이 없어야 해요. */
   function startTap() {
-    /* 🤖 자동 미니게임을 켠 사람에게는 능력치로 대신 굴려줘요.
-     * 연타는 손이 빠른 사람이 유리한 장치라, 자동 쪽이 손해만 보면 안 됩니다 —
-     * 체력이 좋을수록 잘 치는 것으로 봐서 중간값 언저리를 줍니다. */
     if (typeof autoMiniOn === "function" && autoMiniOn()) {
+      /* 🤖 자동 미니게임을 켠 사람에게는 능력치로 대신 굴려줘요.
+       * 연타는 손이 빠른 사람이 유리한 장치라, 자동 쪽이 손해만 보면 안 됩니다. */
       const auto = Math.round(TAP_TARGET * clamp(0.45 + (S.stats.stamina || 40) / 260, 0.35, 0.95));
       finishTap(auto);
       return;
     }
-    const box = $("camp-tap");
-    box.hidden = false;
-    const btn = $("camp-tap-btn");
-    const bar = $("camp-tap-bar");
-    const cnt = $("camp-tap-count");
-    let taps = 0, done = false;
-    cnt.textContent = "0";
-    bar.style.width = "100%";
-    btn.disabled = false;
-    $("camp-actions").querySelectorAll("button").forEach((b) => { b.disabled = true; });
+    if (document.querySelector(".tap-overlay")) return;
+    const wrap = document.createElement("div");
+    wrap.className = "av-overlay tap-overlay";
+    wrap.innerHTML = `<div class="av-modal tap-modal">
+      <div class="av-title">💪 ${nameOf(cur.key)} 집중 훈련</div>
+      <div class="tap-hint" id="camp-tap-hint">화면을 눌러 시작! ${TAP_MS / 1000}초 동안 최대한 연타하세요</div>
+      <div class="ct-bar"><div class="ct-fill" id="camp-tap-bar"></div></div>
+      <button class="ct-btn" id="camp-tap-btn" type="button">
+        <span class="ct-emoji">👟</span>
+        <span class="ct-count" id="camp-tap-count">0</span>
+      </button>
+    </div>`;
+    document.body.appendChild(wrap);
 
-    const t0 = Date.now();
-    const tick = setInterval(() => {
-      const left = Math.max(0, 1 - (Date.now() - t0) / TAP_MS);
-      bar.style.width = `${left * 100}%`;
-      if (left <= 0) end();
-    }, 50);
+    const btn = document.getElementById("camp-tap-btn");
+    const bar = document.getElementById("camp-tap-bar");
+    const cnt = document.getElementById("camp-tap-count");
+    const hint = document.getElementById("camp-tap-hint");
+    let taps = 0, done = false, t0 = 0, tick = null;
+
+    const end = () => {
+      if (done) return;
+      done = true;
+      if (tick) clearInterval(tick);
+      btn.removeEventListener("pointerdown", onTap);
+      wrap.remove();
+      finishTap(taps);
+    };
     /* 실기기는 pointerdown → pointerup → click이 다 와요. 한 번의 탭이 두 번
-     * 세어지지 않게 pointerdown만 듣고 click은 막아요. */
+     * 세어지지 않게 pointerdown만 듣고 기본 동작은 막아요. */
     const onTap = (ev) => {
       ev.preventDefault();
       if (done) return;
+      if (!t0) {                       // 첫 탭에 시계가 돌기 시작해요
+        t0 = Date.now();
+        hint.textContent = "🔥 지금! 계속 두드리세요";
+        tick = setInterval(() => {
+          const left = Math.max(0, 1 - (Date.now() - t0) / TAP_MS);
+          bar.style.width = `${left * 100}%`;
+          if (left <= 0) end();
+        }, 50);
+      }
       taps += 1;
       cnt.textContent = String(taps);
       btn.classList.remove("hit");
       void btn.offsetWidth;
       btn.classList.add("hit");
     };
-    const end = () => {
-      if (done) return;
-      done = true;
-      clearInterval(tick);
-      btn.removeEventListener("pointerdown", onTap);
-      btn.disabled = true;
-      finishTap(taps);
-    };
     btn.addEventListener("pointerdown", onTap);
-    setTimeout(end, TAP_MS + 60);
   }
 
   function finishTap(taps) {
@@ -213,7 +236,6 @@ window.WingerCamp = (() => {
     $("camp-title").textContent = "🔥 특훈을 마쳤어요";
     $("camp-turn").textContent = `${CAMP_TURNS} / ${CAMP_TURNS}회차`;
     $("camp-left").textContent = `종합 ${Math.round(overall())} · 이제 다시 도전할 때예요`;
-    $("camp-tap").hidden = true;
     const go = document.createElement("button");
     go.id = "btn-camp-done";
     go.className = "btn btn-primary";
