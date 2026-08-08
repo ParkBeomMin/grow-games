@@ -194,6 +194,9 @@ const CAREER_CONSTS = [
   ["rateJit", /  const rateJit = [^;]+;/],
   ["squadLib", /  const squadLib = [^;]+;/],
   ["raceTop", /  const raceTop = [^\n]+;/],
+  // 🌍 라이벌 이름 풀 — rollRace가 pickRivalNames를 부르니 스텁으로 새면 안 돼요
+  ["RIVAL_POOL_KEY", /  const RIVAL_POOL_KEY = [^;]+;/],
+  ["rivalPool", /  let rivalPool = [^;]+;/],
 ];
 const CAREER_FNS = [
   "  function proLog(msg) {",
@@ -223,6 +226,8 @@ const CAREER_FNS = [
   "  function rollRace() {",
   "  function fallbackName(team, seed, i) {",
   "  function hashStr(s) {",
+  "  function readRivalPool() {",
+  "  function pickRivalNames(n, seed) {",
   "  function raceStep() {",
   "  function ensureRace() {",
   "  function raceRank(metric) {",

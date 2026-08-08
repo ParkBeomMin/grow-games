@@ -92,6 +92,7 @@ window.Career = (() => {
     // 가을야구 화면이 순위표를 펼쳐놨어요. 새 시즌은 접힌 채로 시작해요.
     const sb = $("pro-standings");
     if (sb) sb.open = false;
+    loadRivalPool();   // 🌍 캠프마다 다른 유저 이름 풀을 새로 받아 둬요 (이번·다음 시즌 라이벌 이름)
     S.proYear += 1;
     S.camp = 3;
     S.condition = 80;
@@ -348,6 +349,41 @@ window.Career = (() => {
   const RACE_COUNTS = { batter: ["hits", "hr", "sb"], pitcher: ["wins", "k", "saves"] };
   let raceKey = null;   // 지금 보고 있는 순위 탭 (저장 안 해요 — 화면 상태예요)
 
+  /* 🌍 라이벌 이름 풀 — **다른 유저가 만든 선수 이름**을 끌어와 리그를 채워요(match.js·Supabase).
+   * 이름만 풀에서 와요. 스탯·전력은 squad(팀 전력)로 정해져 밸런스엔 영향이 없어요.
+   * 풀이 없으면(오프라인·첫 실행·테스트) squad 별명(강태풍…)으로 떨어져요. */
+  const RIVAL_POOL_KEY = "rookie-rival-pool-v1";
+  function readRivalPool() {
+    try {
+      if (typeof localStorage === "undefined") return [];
+      return JSON.parse(localStorage.getItem(RIVAL_POOL_KEY) || "[]") || [];
+    } catch (e) { return []; }
+  }
+  let rivalPool = readRivalPool();   // 지난 세션에 받아 둔 이름을 바로 써요 (오프라인에서도 이름이 떠요)
+  async function loadRivalPool() {
+    if (typeof window === "undefined" || !window.Match) return;
+    try {
+      const roster = await fetchRoster();
+      if (!roster) return;
+      const names = Array.from(new Set(roster.filter((r) => !r.mine && r.name).map((r) => String(r.name).slice(0, 24))));
+      if (names.length) {
+        rivalPool = names;
+        try { localStorage.setItem(RIVAL_POOL_KEY, JSON.stringify(names.slice(0, 100))); } catch (e) { /* noop */ }
+      }
+    } catch (e) { /* noop */ }
+  }
+  // 시드로 풀을 섞어 앞에서 n명 — 같은 시즌엔 늘 같은 선수들이에요(전역 난수 안 씀).
+  function pickRivalNames(n, seed) {
+    if (!rivalPool || !rivalPool.length) return [];
+    const rng = mulberry((Math.imul(seed, 2654435761)) >>> 0);
+    const arr = rivalPool.slice();
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(rng() * (i + 1));
+      const t = arr[i]; arr[i] = arr[j]; arr[j] = t;
+    }
+    return arr.slice(0, n);
+  }
+
   // 크누스 포아송 — 평균 mean으로 정수 하나. rng는 넘겨받은 시드 PRNG예요(전역 난수 아님).
   function racePoisson(rng, mean) {
     if (mean <= 0) return 0;
@@ -368,6 +404,7 @@ window.Career = (() => {
     const RS = squadLib();
     const book = RS ? RS.build(others.concat([S.team]), teamStrOf, seed) : null;
     const counts = RACE_COUNTS[cls], anch = RACE_ANCHOR[cls];
+    const poolNames = pickRivalNames(others.length, seed);   // 🌍 유저 이름 풀 (없으면 [])
     return others.map((team, i) => {
       const star = book ? book[team][cls]
         : { name: fallbackName(team, seed, i), pop: clamp((teamStrOf(team) - 0.34) / 0.30, 0.4, 1), jit: {} };
@@ -375,7 +412,7 @@ window.Career = (() => {
       const jit = (k) => star.jit[k] || 1;
       const rate = {};
       for (const k of counts) rate[k] = (anch[k] * popF * jit(k)) / (S.season.total || 144);
-      const r = { name: star.name, team, pop, rate };
+      const r = { name: poolNames[i] || star.name, team, pop, rate };   // 풀 이름 우선, 없으면 별명
       for (const k of counts) r[k] = 0;
       if (cls === "batter") r.avg = +(anch.avg * (0.88 + 0.13 * pop) * rateJit(jit("avg"))).toFixed(3);
       else r.era = +(anch.era * (1.35 - 0.5 * pop) * rateJit(jit("era"))).toFixed(2);

@@ -209,6 +209,8 @@ const CAREER_CONSTS = [
   ["rateJit", /  const rateJit = [^;]+;/],
   ["squadLib", /  const squadLib = [^;]+;/],
   ["raceTop", /  const raceTop = [^\n]+;/],
+  ["RIVAL_POOL_KEY", /  const RIVAL_POOL_KEY = [^;]+;/],
+  ["rivalPool", /  let rivalPool = [^;]+;/],
 ];
 const CAREER_FNS = [
   "  function proLog(msg) {",
@@ -241,6 +243,8 @@ const CAREER_FNS = [
   "  function rollRace() {",
   "  function fallbackName(team, seed, i) {",
   "  function hashStr(s) {",
+  "  function readRivalPool() {",
+  "  function pickRivalNames(n, seed) {",
   "  function raceStep() {",
   "  function ensureRace() {",
   "  function raceRank(metric) {",

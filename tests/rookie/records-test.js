@@ -195,7 +195,7 @@ guard("시즌 타이틀", () => {
   const teamStrOf = (name) => STR[name];
   const mk = (S) => new Function("S", "clamp", "leagueTeams", "teamStrOf",
     titleBlock + "\n" + raceBlock +
-    "\n return { TITLES, titleMetric, myTitles, titlesWon, rollRace, raceStep, raceRank, raceTop, ensureRace };"
+    "\n return { TITLES, titleMetric, myTitles, titlesWon, rollRace, raceStep, raceRank, raceTop, ensureRace, setRivalPool: (a) => { rivalPool = a; } };"
   )(S, clamp, leagueTeams, teamStrOf);
   // 한 시즌을 끝까지 굴려요 — race를 깔고 144경기만큼 raceStep을 밟아요.
   const runField = (api, S) => {
@@ -216,6 +216,14 @@ guard("시즌 타이틀", () => {
   check(field.length === TEAMS.length - 1, `라이벌은 내 팀을 뺀 ${TEAMS.length - 1}팀의 간판 선수다 (${field.length}명)`);
   check(field.every((r) => r.team !== "A" && typeof r.name === "string" && r.name.length > 0), "라이벌마다 소속 팀과 이름이 붙는다");
   check(field.every((r) => "hits" in r && "hr" in r && "sb" in r && "avg" in r), "타자 라이벌은 안타·홈런·도루·타율을 다 갖는다");
+
+  // 🌍 유저 이름 풀이 있으면 라이벌 이름을 거기서 가져온다 (스탯은 그대로 — 이름만 오버레이)
+  const poolApi = mk({ pos: "batter", team: "A", role: "4번 타자", proYear: 1, season: { total: 144, game: 0, stats: {} } });
+  poolApi.setRivalPool(["김유저", "이유저", "박유저", "최유저", "정유저", "강유저", "윤유저", "장유저", "임유저"]);
+  const poolField = poolApi.rollRace();
+  check(poolField.every((r) => r.name.endsWith("유저")), "풀이 있으면 라이벌 이름을 유저 풀에서 가져온다");
+  check(new Set(poolField.map((r) => r.name)).size === poolField.length, "라이벌 이름이 서로 겹치지 않는다");
+  check(poolField.every((r) => typeof r.pop === "number" && r.rate), "이름만 바뀌고 스탯(pop·rate)은 그대로다");
 
   // ── 시뮬 — 144경기를 밟으면 라이벌 기록이 쌓이고, 강한 팀 선수가 더 잘한다 ──
   runField(api0, S0);
