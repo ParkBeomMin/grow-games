@@ -424,6 +424,12 @@ window.WingerWorldCup = (() => {
             shoot: S.stats.shoot, oppStr: nextOpponent().str,
             mates: w.mates, myStr: myNation().str,
             onDone: (win) => {
+              /* ⚠️ 승부차기 판을 **치워요.** 안 치우면 마지막 버튼이 그대로 남고,
+               * 그걸 한 번 더 누르면 onDone이 또 불려 대회가 한 단계 더 넘어갑니다
+               * (4강을 이겼는데 결승을 건너뛰고 끝나는 식). 실제로 검사 드라이버가
+               * 그 버튼을 계속 눌러 자리를 맴돌면서 드러났어요. */
+              const pk = document.getElementById("pk-box");
+              if (pk) pk.innerHTML = "";
               if (btn) btn.hidden = false;
               CTX.proLog(`🌏 월드컵 ${stageLabel()} 승부차기 — ${win ? "승리" : "패배"}`);
               const step = wcAfterMatch(win ? "W" : "L", onDone);
