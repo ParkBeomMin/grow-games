@@ -1273,7 +1273,10 @@ window.WingerCareer = (() => {
         <div class="tour-pts">${grew.emoji} 훈련장에서 <b>${grew.name} +${grew.gain.toFixed(1)}</b>
           · 🩹 컨디션 회복</div>
       </div>`;
-    $("stage-result").innerHTML = "";
+    /* ⚠️ #stage-result는 건드리지 않아요 — 그 요소는 **MatchSim이 경기 화면을
+     * 그릴 때 만드는** 것이라, 벤치 화면(여기)에서는 아직 없습니다.
+     * 없는 걸 만지다 함수가 그 자리에서 죽었고, 그래서 리그 경기 버튼을 눌러도
+     * 아무 반응이 없었어요(제보). 벤치 카드는 위에서 이미 다 그렸습니다. */
     /* 다음 화면은 **경기를 뛴 주와 같은 갈래**를 따라요 — 반기가 끝났으면 다음
      * 반기 준비, 리그가 끝났으면 컵이나 결산. 벤치라고 흐름이 달라지면 안 돼요. */
     const cbDone = act.week >= act.weekTotal;

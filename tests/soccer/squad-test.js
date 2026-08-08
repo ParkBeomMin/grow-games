@@ -78,6 +78,7 @@ const w = dom.window;
 w.Ads = { display() {}, init() {} };
 w.Stats = { log() {} };
 const $ = (id) => w.document.getElementById(id);
+const active = () => (w.document.querySelector(".screen.active") || {}).id;
 const Career = w.WingerCareer, Squad = w.WingerSquad;
 check(!!Squad, "squad.js가 페이지에서 로드된다 (WingerSquad)");
 if (!Squad || !Career) { console.log("\n❌ 실패"); process.exit(1); }
@@ -343,6 +344,51 @@ guard("⑩ 명단 레이어", () => {
     "이미 열려 있으면 겹쳐 열리지 않는다");
   w.document.getElementById("btn-squad-close").click();
   check(!w.document.querySelector(".squad-overlay"), "닫기를 누르면 사라진다");
+});
+
+/* ---------- ⑬ 벤치인 주에 경기 버튼이 실제로 굴러가는가 ----------
+ *
+ * 제보: "선발이 아니게 된 경우 리그 경기 버튼 누르면 걍 반응이 없네."
+ * 벤치 화면을 그리다가 #stage-result를 만졌는데, 그 요소는 **MatchSim이 경기
+ * 화면을 그릴 때 만드는** 것이라 벤치 경로에는 없었다. 없는 걸 만지다 함수가
+ * 그 자리에서 죽었고, 화면 전환도 다음 버튼도 없이 아무 일도 안 일어났다.
+ *
+ * 그래서 여기서는 **실제로 버튼을 눌러** 벤치 화면까지 가 본다.
+ * 화면이 뜨는지, 주가 넘어가는지, 다음 버튼이 살아 있는지까지. */
+guard("⑬ 벤치 경기 진행", () => {
+  const st = S();
+  st.condition = 15;               // 컨디션 바닥 — 선발에서 밀려요
+  setOvr(20);                      // 실력도 낮게
+  st.camp = 1; st.activity = null; st.pendingShow = false;
+  Career.refreshPro();
+  const rest = w.document.querySelector("#pro-actions .action-btn.rest");
+  if (rest) rest.click();          // 마지막 준비를 마치면 시즌이 시작돼요
+  const act = S().activity;
+  check(!!act, "시즌이 시작됐다");
+  if (!act) return;
+
+  const before = { week: act.week, shoot: S().stats.shoot };
+  const go = w.document.querySelector("#pro-actions .go-game");
+  check(!!go, "준비 화면에 경기 버튼이 있다");
+  go.click();
+
+  check(!Squad.isStarter(), `이번 경기는 벤치다 (선발 확률 ${Math.round(Squad.myLine().odds * 100)}%)`);
+  check(active() === "screen-stage", `경기 버튼을 누르면 화면이 넘어간다 (${active()}) — 제보의 '반응이 없다'가 여기였어요`);
+  const card = $("stage-card") ? $("stage-card").textContent.replace(/\s+/g, " ") : "";
+  console.log(`   벤치 화면 — "${card.slice(0, 80)}"`);
+  check(/벤치/.test(card), "벤치 화면이 그려진다");
+  check(/훈련장/.test(card), "훈련장에서 뭘 올렸는지 적힌다");
+  check(S().activity.week === before.week + 1,
+    `주가 넘어간다 (${before.week} → ${S().activity.week}) — 리그가 나 없이도 굴러가요`);
+  const grew = Object.keys(S().stats).some((k) => S().stats[k] > (k === "shoot" ? before.shoot : 0));
+  check(grew, "능력치가 하나 올랐다");
+
+  const next = $("btn-stage-next");
+  check(!!next && !next.hidden && !next.disabled, "다음 버튼이 살아 있다");
+  if (next) {
+    next.click();
+    check(active() === "screen-pro", `다음을 누르면 준비 화면으로 돌아온다 (${active()})`);
+  }
 });
 
 console.log(fail ? `\n❌ ${fail}건 실패` : "\n✅ 통과");
