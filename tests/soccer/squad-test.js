@@ -353,6 +353,31 @@ guard("⑩ 명단 레이어", () => {
     "이미 열려 있으면 겹쳐 열리지 않는다");
   w.document.getElementById("btn-squad-close").click();
   check(!w.document.querySelector(".squad-overlay"), "닫기를 누르면 사라진다");
+
+  /* HUD 버튼과 레이어가 **같은 숫자**를 적는가 (제보: "HUD랑 레이어랑 다른데").
+   * 버튼 글자는 준비 화면을 그릴 때 한 번 적히고 남아요 — 그 사이에 상태가
+   * 움직이면 어긋납니다. 레이어를 여는 김에 버튼도 다시 적게 해 뒀어요. */
+  const hudBtn = $("btn-squad-pro");
+  if (hudBtn && !hudBtn.hidden) {
+    /* 0%나 100%로는 아무것도 못 봐요 — 두 숫자가 어긋나도 우연히 같아 보입니다.
+     * 경쟁이 도는 자리로 올려놓고, 버튼을 그린 **뒤에** 컨디션을 흔들어요. */
+    for (let i = 0; i < 200; i++) {
+      const o = Squad.myLine().odds;
+      if (o > 0.15 && o < 0.85) break;
+      setOvr(Math.max(1, S().stats.shoot + (o <= 0.15 ? 1 : -1)));
+    }
+    Career.refreshPro();
+    S().condition = Math.max(5, S().condition - 12);   // 버튼을 일부러 낡게 만들어요
+    hudBtn.click();
+    const note = w.document.querySelector(".squad-overlay .sq-note").textContent;
+    const inLayer = (note.match(/선발 확률 (\d+)%/) || [])[1];
+    const onHud = (hudBtn.textContent.match(/(\d+)%/) || [])[1];
+    console.log(`   HUD "${hudBtn.textContent}" · 레이어 ${inLayer}%`);
+    check(inLayer != null && inLayer === onHud, `HUD와 레이어가 같은 숫자를 적는다 (${onHud}% · ${inLayer}%)`);
+    check(Number(inLayer) > 0 && Number(inLayer) < 100,
+      `그 숫자가 0%도 100%도 아니다 (${inLayer}%) — 양 끝에서는 어긋나도 같아 보여요`);
+    w.document.getElementById("btn-squad-close").click();
+  }
 });
 
 /* ---------- ⑬ 벤치인 주에 경기 버튼이 실제로 굴러가는가 ----------

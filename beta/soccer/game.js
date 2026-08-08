@@ -452,7 +452,8 @@ function renderRoll() {
   $("roll-stars").innerHTML = STAT_DEFS
     // 이 줄은 텍스트로만 쓰여서 태그가 못 들어가요 — 별만 그려요
     .map((d) => `${d.emoji} ${d.name} ${"⭐".repeat(talentStars(pendingRoll.talents[d.key]))}`)
-    .join(" · ") + `<br/>⭐ = 잠재력 — 별이 많은 능력치일수록 훈련 효율이 높아요`;
+    .join(" · ") + `<br/>⭐ = 잠재력 — 별이 많은 능력치일수록 훈련 효율이 높아요`
+    + `<br/>옆의 <b>×1.20</b> 같은 수치가 훈련 상승폭에 곱해지는 배수예요`;
 }
 $("btn-reroll")?.addEventListener("click", () => {
   pendingRoll = rollStats(chosenPos);
@@ -745,7 +746,9 @@ const STAT_KEYS = ["shoot", "pass", "dribble", "defense", "stamina"];
  * 숫자를 한 칸 붙이는 게 가장 정직해요. 별은 한눈에 보는 눈금이고,
  * 수치는 각성 한 번이 얼마나 움직였는지를 정확히 보여줍니다. */
 function talentStarStr(t) {
-  return `${"⭐".repeat(talentStars(t))}<span class="tal-num">${(t || 0).toFixed(2)}</span>`;
+  /* ×를 붙여요 — 숫자만 있으면 그게 뭔지 물어보게 됩니다("별 옆에 숫자는 뭐지??").
+   * 이 값은 훈련 상승폭에 그대로 곱해져요. 1.42면 같은 훈련을 해도 1.42배 올라요. */
+  return `${"⭐".repeat(talentStars(t))}<span class="tal-num">×${(t || 0).toFixed(2)}</span>`;
 }
 const isTalentMax = (t) => t >= TALENT_MAX - 1e-9;
 // 재능 MAX 이후 — 상한까지 채운 스탯으로 초월에 도전해요.

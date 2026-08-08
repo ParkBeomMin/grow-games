@@ -410,6 +410,12 @@ window.WingerSquad = (() => {
     const wrap = document.createElement("div");
     wrap.className = "av-overlay squad-overlay";
     const L = myLine();
+    /* HUD 버튼은 준비 화면을 그릴 때 한 번 적히고 그대로 남아요. 그 사이에
+     * 상태가 움직이면 버튼과 레이어가 다른 숫자를 적게 됩니다(제보: "HUD랑
+     * 레이어랑 선발 확률값이 다른데"). 레이어를 여는 김에 버튼도 같은 계산으로
+     * 다시 적어요 — 두 숫자가 어긋날 자리를 아예 없앱니다. */
+    const hud = document.getElementById("btn-squad-pro");
+    if (hud && !hud.hidden) hud.textContent = `👥 선발 ${Math.round(L.odds * 100)}%`;
     wrap.innerHTML = `<div class="av-modal squad-modal">
       <div class="av-title">👥 ${S.group} 스쿼드</div>
       ${squadHTML()}
