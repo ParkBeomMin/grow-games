@@ -1860,6 +1860,12 @@ window.WingerCareer = (() => {
     if (avgRating != null && avgRating >= HOT_FORM_BAR) nextBuffs.push("hot");
     if (move && (move.kind === "title" || move.kind === "up")) nextBuffs.push("champ");
     if (move && move.kind === "down") nextBuffs.push("revenge");
+    /* 🌏 월드컵 우승 — **wcHist에 남은 결과를 그대로 읽어요.**
+     * 조건을 여기서 다시 계산하면 결산에 뜬 결과와 칭호가 어긋납니다
+     * (AWARD_BUFF가 수상 목록을 그대로 읽는 것과 같은 이유예요). */
+    if (((S.wcHist || []).filter((h) => h.y === S.proYear)[0] || {}).result === "champion") {
+      nextBuffs.push("wcwin");
+    }
     S.buffs = nextBuffs;
     S.buffY = S.proYear + 1;
     S.career.years.push({ y: S.proYear, hype: Math.round(hype * 10) / 10, wins, sales, dFan, awards, goals: gg, assists: ga, defense: gd, apps, avg: avgRating, club: S.group, league: leaguePlayed, rank: finalRank, teams: finalTeams, promo: move ? move.kind : null, promoTo: move ? move.to : null, prize: move && move.prize ? move.prize : 0 });
@@ -2490,6 +2496,12 @@ window.WingerCareer = (() => {
     peak: 260,    // 가장 높이 오른 리그 — K리그1(격 1.00)을 0으로 둔 초과분
     center: 30,   // 주장
     trans: 25,    // 🌠 초월 단계
+    /* 🌏 월드컵 우승 — **게임 최고의 단일 업적**이에요. 발롱도르(220)보다 위에 둡니다.
+     * 4년에 한 번뿐이라 커리어에 3~4번의 기회밖에 없고, 실측으로 종합 120이
+     * 커리어 4번 안에 한 번 드는 확률이 62%예요.
+     * ⚠️ 트로피 가중(addTrophy)에는 **0**을 넘겨요 — 점수가 양쪽에 실리면
+     * 조절할 손잡이가 둘이 됩니다. 여기 하나로 몰아 둡니다. */
+    wc: 320,
   };
 
   /* 가장 높이 오른 리그의 격. 시즌 기록에 남은 리그를 전부 훑어요 —
@@ -2517,7 +2529,8 @@ window.WingerCareer = (() => {
       ring * W.ring + (c.wins || 0) * W.mom + (S.fandom || 0) * W.fan +
       (c.years ? c.years.length : 0) * W.year +
       Math.max(0, peakPrestige() - 1) * W.peak +
-      (S.center ? W.center : 0) + transTotal() * W.trans
+      (S.center ? W.center : 0) + transTotal() * W.trans +
+      (c.wcWin || 0) * W.wc
     );
   }
 
@@ -2625,6 +2638,10 @@ window.WingerCareer = (() => {
       (c.bonsang || 0) ? `🥈베스트11 ${c.bonsang}` : "",
       (c.rookie || 0) ? "🌟신인왕" : "",
       (c.wins || 0) ? `🏅MOM ${c.wins}` : "",
+      /* 🌏 월드컵 — 우승은 물론이고 **출전**도 적어요. 4년에 한 번뿐이라
+       * 나갔다는 것만으로도 커리어의 한 줄입니다. */
+      (c.wcWin || 0) ? `🌏월드컵 우승 ${c.wcWin}` : "",
+      (c.wcApps || 0) ? `🌏월드컵 ${c.wcApps}회 출전` : "",
     ].filter(Boolean).join(" · ");
     const years = (c.years || []).length;
     const here = seasonsAtClub(S, S.group);
@@ -2665,7 +2682,11 @@ window.WingerCareer = (() => {
        * "전성기에 세계 최고였다"는 사실이 통째로 사라집니다. */
       title: titleOf(overall()),
       bestTitle: titleAt(c.bestTitle != null ? c.bestTitle : titleIdx(overall())),
-      grade: gradeOfScore(score) + (transTotal() ? ` · ${transcendTitle(transTotal())}` : ""),
+      /* 🌏 월드컵 챔피언은 등급 줄에 서픽스로 붙여요 — 등급 **문턱**은 안 움직이고
+       * 표기만 얹습니다(초월 서픽스 선례). */
+      grade: gradeOfScore(score) + (transTotal() ? ` · ${transcendTitle(transTotal())}` : "")
+        + ((c.wcWin || 0) ? ` · 🌏 월드컵 챔피언` : ""),
+      wcWin: c.wcWin || 0, wcApps: c.wcApps || 0,
       nextGrade: nextGrade(score),
     };
     const hof = loadHof();
@@ -2761,6 +2782,9 @@ window.WingerCareer = (() => {
           ${e.team} · ${e.seasons}시즌${e.goals != null ? ` · ⚽${e.goals} 🅰️${e.assists || 0}` : ""} · 🏅MOM ${e.wins} · 🏆${e.daesang + e.bonsang} · 점수 ${hofScore(e)}
           ${/* 🌍 밟아 온 리그 — 옛 항목에는 없어요(읽는 쪽에서 건너뜁니다). */
             e.leagues ? `<div class="hof-lg">🌍 ${e.leagues}</div>` : ""}
+          ${/* 🌏 월드컵 — 이 필드도 나중에 생겼어요. 없으면 줄 자체를 안 그려요. */
+            e.wcApps ? `<div class="hof-lg">🌏 월드컵 ${e.wcApps}회`
+              + `${e.wcWin ? ` · 🏆 우승 ${e.wcWin}` : ""}</div>` : ""}
         </div>`;
       box.appendChild(div);
     });

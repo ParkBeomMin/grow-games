@@ -265,6 +265,10 @@ window.WingerWorldCup = (() => {
   const due = () => !!(S && isWcYear(S.proYear) && !playedThisYear() && !wc());
 
   function enter(onDone) {
+    /* ⚠️ 이 시즌을 이미 치렀으면(우승했든, 문턱에 못 미쳤든, **고사했든**) 다시 안 열어요.
+     * 관문(seasonEnd)이 due()로 한 번 거르지만 여기서도 막습니다 — 고사해 놓고
+     * 늦깎이 발탁으로 들어가는 뒷문이 생기면 그 선택이 선택이 아니게 돼요. */
+    if (playedThisYear() || wc()) { onDone(); return; }
     const bar = wildOpen(S) ? WILD_BAR : callBar();
     const ovr = overall();
     /* 초대장을 받았으면 종합이 떨어졌어도 들어가요(래칫). 못 받았어도 지금
