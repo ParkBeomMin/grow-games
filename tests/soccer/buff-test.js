@@ -120,6 +120,11 @@ guard("④ 수상 ↔ 칭호", () => {
   const stray = Object.keys(B.AWARD_BUFF).filter((k) => !pushed.includes(k));
   check(stray.length === 0,
     `대응표의 수상 이름이 전부 실제로 주어지는 상이다 (없는 상: ${stray.join(", ") || "없음"})`);
+  /* ⚠️ 반대 방향도 봐야 해요. 🥈 베스트11이 대응표에서 빠져 있어서 **그 상만
+   * 칭호가 없었어요**(제보). 상은 받는데 다음 시즌에 아무것도 안 붙는 자리였습니다. */
+  const orphan = pushed.filter((k) => !B.AWARD_BUFF[k]);
+  check(orphan.length === 0,
+    `결산에서 주는 상이 전부 칭호로 이어진다 (칭호 없는 상: ${orphan.join(", ") || "없음"})`);
   const mapped = Object.values(B.AWARD_BUFF);
   const missingTitle = mapped.filter((id) => !B.seasonTitleOf(id));
   check(missingTitle.length === 0,
