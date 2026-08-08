@@ -262,6 +262,10 @@ const endingTitle = (P) => {
 // 프로 한 시즌을 버튼 클릭만으로 끝까지 소화해요 (결산 화면까지).
 function playSeason(P, plan) {
   for (let g = 0; g < 4000; g++) {
+    /* 📨 월드컵 초대장 — 시즌 한복판에 뜨는 모달이에요(⚽ 3·7·11·15시즌).
+     * 안 치우면 그 뒤가 통째로 막혀요. 사람이 누르는 것과 같은 버튼을 눌러요. */
+    const inv = P.w.document.querySelector(".wc-overlay button");
+    if (inv) { inv.click(); continue; }
     const id = P.active();
     if (id === "screen-career") return true;
     if (id === "screen-pro") {
@@ -284,9 +288,11 @@ function playSeason(P, plan) {
       /* 🏆 컵에서 비기면 승부차기가 뜨고 '다음' 버튼이 잠겨요. 팀 결과를 전력 대
        * 전력으로 가른 뒤 무승부가 흔해져서 여기 자주 걸립니다 — 안 넘기면
        * 시나리오가 통째로 "조건에 맞는 상태를 못 만들었어요"로 끝나요. */
-      const pkBtn = P.w.document.querySelector("#pk-box button");
-      if (pkBtn) { pkBtn.click(); continue; }
+      /* ⚠️ 승부차기 판은 **다음 버튼이 숨어 있을 때만** 눌러요. 순서를 바꾸면
+       * 다 끝난 판의 남은 버튼을 계속 누르며 제자리를 맴돕니다. */
       const n = P.$("btn-stage-next");
+      const pkBtn = (!n || n.hidden) ? P.w.document.querySelector("#pk-box button") : null;
+      if (pkBtn) { pkBtn.click(); continue; }
       if (!n || n.hidden || n.disabled) return false;
       n.click(); continue;
     }
@@ -484,6 +490,166 @@ function makeSoccerReport() {
     }
   }
   log("  ❌ 조건에 맞는 상태를 못 만들었어요 (연말 결산)");
+}
+
+/* 🌏 월드컵 — 세 자리를 잡아요.
+ *
+ *   📨 초대장 직전  전반기 막바지 · 종합이 문턱 위 → 몇 경기 치르면 초대장이 떠요
+ *   🌱 와일드카드   3시즌 · 종합이 문턱 아래·와일드카드 위 → 대가 있는 선택이 떠요
+ *   🏆 대회 진행 중  S.wc가 살아 있는 상태 → 테마·훈련 턴·조별리그를 바로 볼 수 있어요
+ *
+ * 초대장이 **뜬 순간**을 세이브로 뜰 수는 없어요(모달은 렌더할 때 열려요).
+ * 그래서 "곧 뜨는 자리"에서 멈춥니다 — 사람이 몇 번 눌러 실제로 받아 보는 게
+ * 이 기능의 확인 항목이기도 해요. */
+function soccerToYear(P, year) {
+  for (let y = 1; y < year; y++) {
+    if (!playSeason(P, "pos")) throw new Error(`${y}시즌을 못 마쳤어요`);
+    const b = nextSeasonBtn(P); if (!b) throw new Error(`${y + 1}시즌 시작 버튼이 없어요`);
+    b.click();
+  }
+}
+// 전반기 막바지까지만 굴려요 (후반기에 들어가면 초대장이 바로 떠 버려요)
+function soccerToLateFirstHalf(P) {
+  for (let g = 0; g < 600; g++) {
+    const st = P.state();
+    if (st.activity && st.activity.cb === 1 && st.activity.week >= st.activity.weekTotal - 3) return true;
+    if (P.w.document.querySelector(".wc-overlay button")) return false;   // 벌써 떴으면 실패
+    const id = P.active();
+    if (id === "screen-stage") {
+      const n = P.$("btn-stage-next");
+      const pk = (!n || n.hidden) ? P.w.document.querySelector("#pk-box button") : null;
+      if (pk) { pk.click(); continue; }
+      if (!n || n.hidden || n.disabled) return false;
+      n.click(); continue;
+    }
+    if (id !== "screen-pro") return false;
+    const go = P.w.document.querySelector("#pro-actions .go-game");
+    if (go) { go.click(); continue; }
+    if (!doAct(P, "#pro-actions .action-btn", "pos")) return false;
+  }
+  return false;
+}
+function setOverall(P, target) {
+  const st = P.state();
+  for (const k of Object.keys(st.stats)) st.stats[k] = target;
+  for (let i = 0; i < 400; i++) {
+    const cur = P.get("overall")();
+    if (Math.abs(cur - target) < 0.8) break;
+    const d = cur < target ? 0.5 : -0.5;
+    for (const k of Object.keys(st.stats)) st.stats[k] = Math.max(1, st.stats[k] + d);
+  }
+  P.get("save")();
+}
+
+function makeSoccerWc(kind) {
+  const YEAR = kind === "rookie" ? 3 : 7;
+  log(`🌏 월드컵 — ${kind === "rookie" ? "🌱 유망주 와일드카드" : kind === "invite" ? "📨 초대장 직전" : "🏆 대회 진행 중"}`);
+  for (const seed of seeds(kind === "live" ? 10 : 8)) {
+    let P;
+    try {
+      P = makePage("soccer", seed);
+      soccerDebut(P, "pro", "pos", 0);
+      const WC = P.w.WingerWorldCup;
+      if (!WC) throw new Error("worldcup.js가 안 실렸어요");
+      const BAR = WC.callBar(), WILD = WC._t.WILD_BAR;
+      soccerToYear(P, YEAR);
+      const st = P.state();
+      /* ⚠️ 종합은 **멈출 자리에 다 온 뒤에** 놓아요. 먼저 놓으면 그 뒤 시즌을
+       * 굴리는 동안 훈련으로 올라가 버립니다 — 실제로 🌱 와일드카드(문턱 68 아래)를
+       * 만들려다 종합 87이 되어 정식 발탁 세이브가 나왔어요. */
+      if (kind === "live") setOverall(P, BAR + 22);
+
+      if (kind === "live") {
+        /* 대회가 실제로 열릴 때까지 굴려요. 초대장은 도중에 눌러 치웁니다 —
+         * 이 시나리오가 보여줄 건 초대장이 아니라 **대회 안**이니까요. */
+        let ok = false;
+        for (let g = 0; g < 3000; g++) {
+          if (st.wc) { ok = true; break; }
+          const inv = P.w.document.querySelector(".wc-overlay button");
+          if (inv) { inv.click(); continue; }
+          const id = P.active();
+          if (id === "screen-career") break;
+          if (id === "screen-stage") {
+            const n = P.$("btn-stage-next");
+            const pk = (!n || n.hidden) ? P.w.document.querySelector("#pk-box button") : null;
+            if (pk) { pk.click(); continue; }
+            if (!n || n.hidden || n.disabled) break;
+            n.click(); continue;
+          }
+          if (id !== "screen-pro") break;
+          const go = P.w.document.querySelector("#pro-actions .go-game");
+          if (go) { go.click(); continue; }
+          if (!doAct(P, "#pro-actions .action-btn", "pos")) break;
+        }
+        if (!ok) throw new Error("대회가 안 열렸어요");
+        P.get("save")();
+        add({
+          id: "soccer-wc-live", game: "soccer", url: "soccer/", emoji: "🏆",
+          title: `월드컵 진행 중 — ${WC.myNation().name} 조별리그`,
+          state: `${st.group} · ${YEAR}시즌 · 종합 ${Math.round(P.get("overall")())} · ${WC.myNation().name} 대표팀`,
+          check: "🌏 <b>대회 기간 동안 화면의 결이 바뀌어요</b> — 색과 헤더가 월드컵 테마로 "
+            + "갈아입습니다. <b>이건 기계가 못 보는 부분이라 눈으로 확인해 주셔야 해요.</b><br>"
+            + "연전이 아니에요 — <b>경기 사이에 훈련 턴</b>이 있고, 그동안 대표팀 훈련장에서 "
+            + "<b>훈련이 잘 돼요</b>(화면 위 칩 줄에 🌏 대표팀 훈련장이 떠요).<br>"
+            + "조별리그 3경기 → 상위 2팀이 4강으로 → 결승. 무승부면 승부차기예요.<br>"
+            + "<b>대회가 끝나면 화면이 원래 색으로 돌아오는지</b>도 꼭 봐주세요 — "
+            + "안 돌아오면 리그로 왔는데 화면만 월드컵인 채로 남은 거예요.",
+          steps: [
+            "게임이 열리면 <b>이어하기</b> → 선수 카드",
+            "화면 색·헤더가 <b>월드컵 테마</b>인지 확인",
+            "훈련 → <b>🌏 조별리그 N차전 시작</b> → 경기 → 다시 훈련 … 을 반복",
+            "대회가 끝나고 결산으로 갔을 때 <b>화면이 원래 색으로 돌아오는지</b> 확인",
+          ],
+          keys: snapshot(P),
+        });
+        P.close();
+        return;
+      }
+
+      if (!soccerToLateFirstHalf(P)) throw new Error("전반기 막바지에 못 멈췄어요");
+      setOverall(P, kind === "rookie" ? WILD + 3 : BAR + 5);
+      const ovr = Math.round(P.get("overall")());
+      // 만들려던 갈래가 실제로 열리는지 확인해요 — 아니면 이 세이브는 쓸모가 없어요
+      if (kind === "rookie" && ovr >= BAR) throw new Error(`와일드카드 구간이 아니에요 (종합 ${ovr} ≥ ${BAR})`);
+      if (kind === "invite" && ovr < BAR) throw new Error(`문턱 아래예요 (종합 ${ovr} < ${BAR})`);
+      const wild = kind === "rookie";
+      add({
+        id: wild ? "soccer-wc-rookie" : "soccer-wc-invite",
+        game: "soccer", url: "soccer/", emoji: wild ? "🌱" : "📨",
+        title: wild ? "유망주 와일드카드 — 가느냐 남느냐" : "월드컵 초대장 — 소집 직전",
+        state: `${st.group} · ${P.get("leagueOf")(st).name} · ${YEAR}시즌 전반기 막바지`
+          + ` · 종합 ${ovr} (문턱 ${wild ? `${WILD} 와일드카드` : BAR})`,
+        check: wild
+          ? "🌱 <b>3시즌은 첫 월드컵이에요.</b> 이때는 아직 아무도 소집 문턱(종합 " + BAR + ")에 "
+            + "못 닿아서, 첫 대회만 <b>유망주 와일드카드</b>로 낮은 문턱이 열려요.<br>"
+            + "대신 <b>선택</b>이 붙습니다 — 다녀오면 대회 경험과 훈련을 얻지만 "
+            + "<b>다음 시즌 클럽 선발 확률이 내려가요</b>. 남으면 감독의 신뢰를 얻어 올라가요.<br>"
+            + "전반기 남은 경기를 치르고 <b>후반기에 들어가면</b> 📨 초대장이 뜹니다. "
+            + "두 선택지 문구가 읽히는지, 고른 뒤 준비 화면 배지가 바뀌는지 봐주세요."
+          : "📨 <b>초대장은 시즌 한복판에 날아와요.</b> 전반기 남은 경기를 치르고 "
+            + "후반기에 들어가면 소집 통지가 뜹니다 — 그 뒤 준비 화면에 "
+            + "<b>📨 월드컵 명단 승선</b> 배지가 상주해요. 남은 리그가 "
+            + "'월드컵을 향한 일정'으로 읽히는지 봐주세요.<br>"
+            + "한 번 받으면 <b>안 뺏겨요</b> — 🔮 각성으로 종합이 떨어져도 그대로예요. "
+            + "각성은 투자인데 그걸로 명단에서 빼면 잘하려던 행동에 벌을 주는 꼴이니까요.<br>"
+            + "시즌(리그 → 컵)이 끝나면 대표팀에 합류합니다.",
+        steps: [
+          "게임이 열리면 <b>이어하기</b> → 선수 카드",
+          "전반기 남은 경기를 치러 <b>후반기</b>로 넘어가기",
+          wild ? "📨 초대장에서 <b>🌏 다녀오겠습니다 / ⚽ 클럽에 남겠습니다</b>를 골라 보기"
+               : "📨 초대장을 받고, 준비 화면 배지와 🔮 각성 뒤에도 유지되는지 확인",
+          "시즌 끝까지 진행해 <b>대표팀 소집</b>까지 가 보기",
+        ],
+        keys: snapshot(P),
+      });
+      P.close();
+      return;
+    } catch (e) {
+      if (P) P.close();
+      log(`  · 시드 ${seed}: ${e.message}`);
+    }
+  }
+  log("  ❌ 조건에 맞는 상태를 못 만들었어요 (월드컵)");
 }
 
 /* 🪑 벤치 — 이번 경기에 못 뛰는 자리.
@@ -1756,6 +1922,9 @@ if (want("soccer-chart", "soccer")) makeSoccerChart();
 if (want("soccer-cup", "soccer")) makeSoccerCup();
 if (want("soccer-callup", "soccer")) makeSoccerCallup();
 if (want("soccer-bench", "soccer")) makeSoccerBench();
+if (want("soccer-wc-invite", "soccer")) makeSoccerWc("invite");
+if (want("soccer-wc-rookie", "soccer")) makeSoccerWc("rookie");
+if (want("soccer-wc-live", "soccer")) makeSoccerWc("live");
 if (want("soccer-final", "soccer")) makeSoccerFinal();
 if (want("soccer-veteran", "soccer")) makeSoccerVeteran();
 if (want("soccer-judge", "soccer")) makeSoccerJudge();
