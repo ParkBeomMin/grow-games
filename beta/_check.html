@@ -28,6 +28,21 @@
     .ck-group { color: var(--sky); font-size: 1.05rem; margin: 6px 0 10px; }
     .ck-back { display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px; }
 
+    /* 게임별 탭 — 시나리오 칸과 미니게임 칸 둘 다 같은 모양을 써요. */
+    .ck-tabs, .mg-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+    .ck-tabs button, .mg-tabs button {
+      font: inherit;
+      font-size: .84rem;
+      padding: 7px 13px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: transparent;
+      color: var(--dim);
+      cursor: pointer;
+    }
+    .ck-tabs button.on, .mg-tabs button.on { border-color: var(--accent); background: var(--field); color: var(--accent); }
+    .mg-tabs { margin: 0 0 12px; }
+
     /* 🎮 미니게임 바로 해보기 — 세이브와 상관없는 칸이라 테두리 색을 따로 줬어요. */
     .mg-box {
       border: 2px solid var(--sky);
@@ -88,13 +103,32 @@
       <!-- 어느 버전을 보고 있는지 — 배포 직후 캐시가 남았는지 바로 알 수 있어요 -->
       <p class="hint" id="ck-version" style="margin:-6px 0 10px">버전 확인 중…</p>
 
-      <!-- 🎮 미니게임을 그 자리에서 돌려 보는 칸이에요. 세이브와 아무 상관 없어요. -->
+      <div class="ck-warn">
+        <b>⚠️ 개발 확인용 — 세이브를 덮어씁니다</b><br />
+        시나리오를 누르면 <b>진행 중인 캐릭터가 확인용 세이브로 바뀌어요.</b>
+        처음 누를 때 지금 세이브를 통째로 백업하고, 아래 <b>되돌리기</b>로 되살릴 수 있어요.
+      </div>
+
+      <div class="ck-back">
+        <p class="hint" id="ck-backup-line" style="margin:0"></p>
+        <button type="button" class="btn btn-ghost" id="ck-restore" style="margin:0">↩️ 되돌리기 (백업 복구)</button>
+      </div>
+
+      <div id="ck-body"></div>
+
+      <p class="hint" id="ck-foot"></p>
+
+      <!-- 🎮 미니게임을 그 자리에서 돌려 보는 칸이에요. 세이브와 아무 상관 없어요.
+           페이지 맨 아래로 내려 뒀어요 — 시나리오를 먼저 보고, 미니게임은 필요할 때 여기서. -->
       <section class="mg-box" id="mg">
         <h3 class="ck-group">🎮 미니게임 바로 해보기</h3>
         <p class="mg-safe">
           가을야구 4종·투어 3종은 경기 중에 <b>무작위로</b> 나와요. 하나를 보려고 운에 맡길 필요 없이 여기서 바로 돌려 봐요.<br />
-          ✅ <b>세이브를 한 글자도 안 건드려요</b> — 아래 시나리오 칸의 백업·되돌리기와도 완전히 따로예요.
+          ✅ <b>세이브를 한 글자도 안 건드려요</b> — 위 시나리오 칸의 백업·되돌리기와도 완전히 따로예요.
         </p>
+
+        <!-- 게임별 탭 — 고른 게임의 미니게임만 아래 목록에 보여요. -->
+        <div class="mg-tabs" id="mg-tabs"></div>
 
         <div class="mg-row">
           <b>👤 시점</b><span class="mg-seg" id="mg-pos"></span>
@@ -123,20 +157,6 @@
         </div>
       </section>
 
-      <div class="ck-warn">
-        <b>⚠️ 개발 확인용 — 세이브를 덮어씁니다</b><br />
-        시나리오를 누르면 <b>진행 중인 캐릭터가 확인용 세이브로 바뀌어요.</b>
-        처음 누를 때 지금 세이브를 통째로 백업하고, 아래 <b>되돌리기</b>로 되살릴 수 있어요.
-      </div>
-
-      <div class="ck-back">
-        <p class="hint" id="ck-backup-line" style="margin:0"></p>
-        <button type="button" class="btn btn-ghost" id="ck-restore" style="margin:0">↩️ 되돌리기 (백업 복구)</button>
-      </div>
-
-      <div id="ck-body"></div>
-
-      <p class="hint" id="ck-foot"></p>
       <a class="btn btn-ghost" href="index.html" style="display:block;text-align:center;text-decoration:none">🎮 베타 게임 목록으로</a>
     </section>
   </main>
@@ -158,8 +178,20 @@
       idol: "🎤 더 트레이니 (아이돌)",
       rookie: "⚾ 더 드래프트 (야구)",
     };
-    // 화면에 그리는 순서예요. 여기 없는 게임은 카드가 아예 안 그려져요.
-    const GAME_ORDER = ["soccer", "idol", "rookie"];
+    // 탭에 짧게 붙이는 이름이에요 — 모르는 게임은 game 키를 그대로 써요.
+    const GAME_TAB = {
+      rookie: "⚾ 야구",
+      soccer: "⚽ 축구",
+      idol: "🎤 아이돌",
+      stock: "📈 주식",
+      dev: "💻 개발",
+      chef: "🍳 요리",
+      stream: "📺 방송",
+      unicorn: "🦄 유니콘",
+    };
+    // 화면에 그리는 순서예요(탭 순서이기도 해요). 여기 없는 게임은 카드가 아예 안 그려져요.
+    const GAME_ORDER = ["rookie", "soccer", "idol"];
+    let ckTab = null;   // 지금 보고 있는 시나리오 탭(게임 키)이에요.
     const $ = (id) => document.getElementById(id);
 
     // localStorage 열거는 key(i)로 해요 — env.js가 씌운 래퍼에는 Object.keys가 안 통해요.
@@ -277,6 +309,9 @@
     // 아이돌은 시점이 아니라 포지션이에요. ✨ 싱크로만 이 값을 봐요(포지션 주 스탯).
     const MG_IDOL_POS = "vocal";
     const MG = { pos: "batter", tier: 0, stat: 55, id: null };
+    // 미니게임 목록의 게임별 탭 — MG_MECHS에 있는 게임 순서대로예요.
+    const MG_GAME_ORDER = [...new Set(MG_MECHS.map((m) => m.game))];
+    let mgTab = MG_GAME_ORDER[0];
     const MG_GAMES = {};          // game → 받아 오는 중인 Promise
     const mgDone = {};            // game → { stage, glue, meta, S } (다 받은 알맹이)
     const mgReady = (game) => mgDone[game] || null;
@@ -483,6 +518,22 @@
       seg($("mg-pos"), MG_POS, (it) => it.id === MG.pos, (it) => { MG.pos = it.id; });
       seg($("mg-tier"), MG_TIER, (it) => it.v === MG.tier, (it) => { MG.tier = it.v; });
 
+      // 게임별 탭 — 고른 게임의 미니게임만 목록에 보여요.
+      const tabs = $("mg-tabs");
+      tabs.innerHTML = "";
+      for (const gk of MG_GAME_ORDER) {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.dataset.game = gk;
+        b.textContent = GAME_TAB[gk] || gk;
+        if (gk === mgTab) b.className = "on";
+        b.onclick = () => { mgTab = gk; renderMg(); };
+        tabs.appendChild(b);
+      }
+      // 야구 4종만 시점·시리즈가 갈려요 — 아이돌 탭에서는 이 두 줄을 숨겨요.
+      $("mg-pos").closest(".mg-row").hidden = mgTab !== "rookie";
+      $("mg-tier").closest(".mg-row").hidden = mgTab !== "rookie";
+
       /* 판정 존은 소스의 miniZone이 내요 — 여기서 산식을 베끼지 않아요.
        * 아직 소스를 못 읽었으면 능력치 숫자만 보여줘요. */
       const g0 = mgReady("rookie") || mgReady("idol");
@@ -500,6 +551,7 @@
         b.dataset.mech = m.id;
         b.dataset.game = m.game;
         b.dataset.stat = stat;                        // 검사가 라벨을 꺼내 볼 자리예요
+        b.hidden = m.game !== mgTab;                  // 고른 게임의 미니게임만 보여요
         b.innerHTML = `<b>${esc(m.emoji)} ${esc(m.name)}</b>`
           + `<span>${esc(m.desc)}</span>`
           + `<span class="mg-stat">📊 ${esc(stat)}${m.game === "rookie" ? " · 🏆 시리즈 단계 적용" : ""}</span>`;
@@ -531,6 +583,16 @@
       mgLoadAll();
     }
 
+    /* 탭을 고르면 그 게임의 시나리오 칸만 펼쳐요. 카드는 전부 DOM에 남아 있어요
+     * — 숨기기만 해요(해시로 바로 들어가거나 검사가 세 볼 수 있게요). */
+    function selectCkTab(game) {
+      if (game == null) return;
+      ckTab = game;
+      const body = $("ck-body");
+      for (const p of body.querySelectorAll(".ck-panel")) p.hidden = p.dataset.game !== game;
+      for (const t of body.querySelectorAll(".ck-tabs button")) t.classList.toggle("on", t.dataset.game === game);
+    }
+
     function render() {
       const b = backupInfo();
       $("ck-backup-line").innerHTML = b
@@ -544,13 +606,30 @@
         body.innerHTML = `<p class="hint">시나리오가 없어요. <code>node scripts/make-fixtures.js</code>로 먼저 뽑아 주세요.</p>`;
         return;
       }
-      for (const game of GAME_ORDER) {
+      // 게임별로 나눠 탭으로 보여줘요. 카드는 전부 그려 두고, 고른 게임만 펼쳐요.
+      const present = GAME_ORDER.filter((g) => F.items.some((x) => x.game === g));
+      const tabBar = document.createElement("div");
+      tabBar.className = "ck-tabs";
+      body.appendChild(tabBar);
+
+      for (const game of present) {
         const mine = F.items.filter((x) => x.game === game);
-        if (!mine.length) continue;
+
+        const tab = document.createElement("button");
+        tab.type = "button";
+        tab.dataset.game = game;
+        tab.textContent = GAME_TAB[game] || game;
+        tab.onclick = () => selectCkTab(game);
+        tabBar.appendChild(tab);
+
+        const panel = document.createElement("div");
+        panel.className = "ck-panel";
+        panel.dataset.game = game;
+
         const h = document.createElement("h3");
         h.className = "ck-group";
         h.textContent = GAME_NAME[game] || game;
-        body.appendChild(h);
+        panel.appendChild(h);
 
         const list = document.createElement("div");
         list.className = "ck-list";
@@ -575,8 +654,11 @@
           card.onclick = () => go(it.id);
           list.appendChild(card);
         }
-        body.appendChild(list);
+        panel.appendChild(list);
+        body.appendChild(panel);
       }
+      // 기본은 첫 탭이에요. 이전에 보던 탭이 아직 있으면 그대로 둬요.
+      selectCkTab(present.includes(ckTab) ? ckTab : present[0]);
       $("ck-foot").textContent =
         `🗓️ ${F.generatedAt || "?"} 에 뽑은 세이브예요. 산식이 바뀌면 node scripts/make-fixtures.js 로 다시 뽑으세요.`;
 
@@ -605,6 +687,7 @@
       if (!id) return;
       const it = F.items.find((x) => x.id === id);
       if (!it) return;
+      selectCkTab(it.game);   // 그 카드가 있는 게임 탭으로 먼저 옮겨요.
       /* CSS.escape는 안 써요 — 없는 환경이 있어요(jsdom에서 바로 터졌습니다).
        * 카드 수가 스물 몇 개라 훑어도 값싸요. */
       const card = Array.prototype.find.call(

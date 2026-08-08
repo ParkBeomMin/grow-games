@@ -188,6 +188,12 @@ const CAREER_CONSTS = [
   ["TITLES", /  const TITLES = \{[\s\S]*?\n  \};/],
   ["titleMetric", /  const titleMetric = [^;]+;/],
   ["myTitles", /  const myTitles = [^;]+;/],
+  // 🏅 개인 기록 순위 — finishSeason(titlesWon→raceTop)·finishProGame(raceStep)가 부름
+  ["RACE_ANCHOR", /  const RACE_ANCHOR = \{[\s\S]*?\n  \};/],
+  ["RACE_COUNTS", /  const RACE_COUNTS = \{[^\n]*\};/],
+  ["rateJit", /  const rateJit = [^;]+;/],
+  ["squadLib", /  const squadLib = [^;]+;/],
+  ["raceTop", /  const raceTop = [^\n]+;/],
 ];
 const CAREER_FNS = [
   "  function proLog(msg) {",
@@ -211,9 +217,16 @@ const CAREER_FNS = [
   "  function addAwardWeight(awards, pre) {",
   // 🏛️ 통산 마일스톤 — finishSeason(careerCounts·newMilestones)·careerScore(mileScore)·seasonReport(milestoneHTML)가 부름
   "  function careerCounts(seasons) {",
-  "  function makeTitleBar() {",
-  "  function titlesWon(stats, bar) {",
-  "  function titleRaceHTML() {",
+  // 🏅 개인 기록 순위 — 라이벌 필드 시뮬·순위·수상 판정 (스텁으로 새면 수상이 조용히 0이 돼요)
+  "  function racePoisson(rng, mean) {",
+  "  function mulberry(a) {",
+  "  function rollRace() {",
+  "  function fallbackName(team, seed, i) {",
+  "  function hashStr(s) {",
+  "  function raceStep() {",
+  "  function ensureRace() {",
+  "  function raceRank(metric) {",
+  "  function titlesWon(stats) {",
   "  function mileScore(c) {",
   "  function newMilestones(prev, now, year) {",
   "  function milestoneHTML() {",

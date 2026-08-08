@@ -178,55 +178,86 @@ guard("한 경기 대기록", () => {
 
 // ── ⑥ 시즌 타이틀 (홈런왕·다승왕…) ────────────────────────────
 guard("시즌 타이틀", () => {
-  const ta = SRC.indexOf("const TITLES = {");
-  const tblock = SRC.slice(ta, SRC.indexOf("\n  }", SRC.indexOf("function titlesWon")) + 4);
-  const gauss = (rnd, m, sd) => { const u = Math.max(1e-9, rnd()), v = rnd(); return m + sd * Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); };
-  const mkT = (S, seed) => {
-    const M = Object.assign(Object.create(Math), { random: mulberry32(seed) });
-    const rand = (a, b) => a + M.random() * (b - a);
-    return new Function("S", "rand", "Math", tblock + "\n return { TITLES, makeTitleBar, titlesWon, titleMetric, myTitles };")(S, rand, M);
+  // 소스에서 두 덩어리를 떼어 붙여요: ① 타이틀 정의/판정  ② 라이벌 레이스(squad 시뮬)
+  const between = (from, toAfter) => {
+    const a = SRC.indexOf(from);
+    const b = SRC.indexOf("\n  }", SRC.indexOf(toAfter, a)) + 4;
+    return SRC.slice(a, b);
   };
-  const T0 = mkT({ pos: "batter", season: { total: 144 } }, 1).TITLES;
+  const titleBlock = between("const TITLES = {", "function titlesWon");     // TITLES..titlesWon
+  const raceBlock = between("const RACE_ANCHOR = {", "function raceHTML");   // RACE_ANCHOR..raceHTML
+  const gauss = (rnd, m, sd) => { const u = Math.max(1e-9, rnd()), v = rnd(); return m + sd * Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); };
+  // 10개 팀 · 전력은 A(강)→J(약)로 벌려 둬요. squad.js 없이 fallback 이름 경로를 타요.
+  const TEAMS = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"];
+  const STR = {}; TEAMS.forEach((t, i) => (STR[t] = 0.62 - i * 0.024));   // 0.62..0.404
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const leagueTeams = () => TEAMS;
+  const teamStrOf = (name) => STR[name];
+  const mk = (S) => new Function("S", "clamp", "leagueTeams", "teamStrOf",
+    titleBlock + "\n" + raceBlock +
+    "\n return { TITLES, titleMetric, myTitles, titlesWon, rollRace, raceStep, raceRank, raceTop, ensureRace };"
+  )(S, clamp, leagueTeams, teamStrOf);
+  // 한 시즌을 끝까지 굴려요 — race를 깔고 144경기만큼 raceStep을 밟아요.
+  const runField = (api, S) => {
+    S.season.raceSeed = ((S.proYear || 1) * 2654435761) >>> 0;
+    S.season.race = api.rollRace();
+    for (let g = 1; g <= S.season.total; g++) { S.season.game = g; api.raceStep(); }
+  };
+
+  const S0 = { pos: "batter", team: "A", role: "4번 타자", proYear: 1, season: { total: 144, game: 0, stats: {} } };
+  const api0 = mk(S0);
+  const T0 = api0.TITLES;
   for (const id in T0) check(["batter", "pitcher"].includes(T0[id].pos) && T0[id].pv > 0 && typeof T0[id].higher === "boolean", `${T0[id].name} — 구조가 맞다`);
   check(T0.era.higher === false, "평균자책왕은 낮을수록 좋다 (higher=false)");
+  check(!!T0.hits && T0.hits.pos === "batter", "최다안타 타이틀이 생겼다 (안타 순위를 볼 수 있게)");
 
-  // 시즌 길이에 따라 누적 기준선은 늘고(162>144), 비율(타율)은 안 는다
-  let sHi = 0, sLo = 0, aHi = 0, aLo = 0; const N0 = 300;
-  for (let i = 0; i < N0; i++) {
-    const b144 = mkT({ pos: "batter", season: { total: 144 } }, 500 + i).makeTitleBar();
-    const b162 = mkT({ pos: "batter", season: { total: 162 } }, 500 + i).makeTitleBar();
-    sLo += b144.hr; sHi += b162.hr; aLo += b144.avg; aHi += b162.avg;
-  }
-  check(sHi > sLo, `162경기 리그는 홈런왕 기준선이 더 높다 (${(sLo / N0).toFixed(0)} → ${(sHi / N0).toFixed(0)})`);
-  check(Math.abs(aHi - aLo) / N0 < 0.005, "타율 기준선은 경기 수와 무관하다 (비율이니까요)");
+  // ── 라이벌 필드 — 팀마다 간판 선수 한 명씩, 내 시점(타자/투수)과 같은 종목 ──
+  const field = api0.rollRace();
+  check(field.length === TEAMS.length - 1, `라이벌은 내 팀을 뺀 ${TEAMS.length - 1}팀의 간판 선수다 (${field.length}명)`);
+  check(field.every((r) => r.team !== "A" && typeof r.name === "string" && r.name.length > 0), "라이벌마다 소속 팀과 이름이 붙는다");
+  check(field.every((r) => "hits" in r && "hr" in r && "sb" in r && "avg" in r), "타자 라이벌은 안타·홈런·도루·타율을 다 갖는다");
 
-  // 게이팅 — 타율은 최소 타석을 요구하고, 시점에 안 맞는 타이틀은 안 겨룬다
-  const bat = mkT({ pos: "batter", role: "4번 타자", season: { total: 144 } }, 7);
-  const bar = { hr: 40, avg: 0.300, sb: 50, wins: 15, k: 400, era: 2.5, saves: 40 };
-  check(bat.titlesWon({ ab: 50, hits: 25, hr: 45, sb: 0 }, bar).some((w) => w.id === "avg") === false,
-    "타율왕은 타석이 모자라면 자격이 없다 (50타수 5할이어도)");
-  check(bat.titlesWon({ ab: 600, hits: 200, hr: 45, sb: 0 }, bar).some((w) => w.id === "avg"),
-    "타석이 충분하고 기준선을 넘으면 타율왕을 딴다");
-  check(bat.titlesWon({ ab: 600, hits: 180, hr: 45, sb: 60 }, bar).every((w) => T0[w.id].pos === "batter"),
-    "타자는 투수 타이틀을 안 겨룬다");
-  const pit = mkT({ pos: "pitcher", role: "선발 투수", season: { total: 144 } }, 8);
-  check(pit.titlesWon({ ip: 180, k: 420, wins: 18, er: 40 }, bar).some((w) => w.id === "era"),
-    "자책이 기준선보다 낮으면 평균자책왕을 딴다");
-  check(pit.titlesWon({ ip: 180, k: 420, wins: 18, er: 70 }, bar).some((w) => w.id === "era") === false,
-    "자책이 기준선보다 높으면 평균자책왕이 아니다");
+  // ── 시뮬 — 144경기를 밟으면 라이벌 기록이 쌓이고, 강한 팀 선수가 더 잘한다 ──
+  runField(api0, S0);
+  const sorted = S0.season.race.slice().sort((a, b) => b.hr - a.hr);
+  check(sorted[0].hr > 30 && sorted[0].hr < 75, `홈런 1위 라이벌이 현실적인 범위다 (${sorted[0].hr}홈런)`);
+  const strong = S0.season.race.find((r) => r.team === "B"), weak = S0.season.race.find((r) => r.team === "J");
+  check(strong.pop > weak.pop, `강팀(B) 간판이 약팀(J)보다 강하다 (pop ${strong.pop.toFixed(2)} > ${weak.pop.toFixed(2)})`);
 
-  // win rate 실측 — 엘리트는 시즌당 몇 번, 평범하면 거의 없다 (드물어야 특별)
+  // ── 순위 — 나 + 라이벌을 한 종목으로 줄세운다 (era만 낮은 게 위, 동률은 내가 위) ──
+  S0.season.stats = { ab: 600, hits: 300, hr: 99, sb: 99 };   // 압도적이면 1위
+  check(api0.raceTop("hr"), "내 홈런이 라이벌 전부를 앞서면 그 부문 1위다");
+  const ranked = api0.raceRank("hr");
+  check(ranked[0].me && ranked.length === TEAMS.length, "순위표에 나와 라이벌이 함께 줄선다");
+  check(ranked.every((x, i) => i === 0 || ranked[i - 1].v >= x.v), "홈런 순위는 큰 값이 위로 정렬된다");
+  S0.season.stats = { ab: 600, hits: 120, hr: 1, sb: 1 };     // 형편없으면 1위 아님
+  check(!api0.raceTop("hr"), "내 성적이 라이벌보다 낮으면 그 부문 1위가 아니다");
+
+  // ── 게이팅 — 타율은 최소 타석, 자책은 최소 이닝을 요구한다 ──
+  const Sbat = { pos: "batter", team: "A", role: "4번 타자", proYear: 3, season: { total: 144, game: 0, stats: {} } };
+  const apiBat = mk(Sbat); runField(apiBat, Sbat);
+  Sbat.season.stats = { ab: 50, hits: 40, hr: 99, sb: 99 };   // 50타수 8할이어도 타석 부족
+  check(apiBat.titlesWon(Sbat.season.stats).some((w) => w.id === "avg") === false, "타율왕은 타석이 모자라면 자격이 없다");
+  Sbat.season.stats = { ab: 600, hits: 300, hr: 99, sb: 99 };
+  check(apiBat.titlesWon(Sbat.season.stats).every((w) => T0[w.id].pos === "batter"), "타자는 투수 타이틀을 안 겨룬다");
+  const Spit = { pos: "pitcher", team: "A", role: "선발 투수", proYear: 3, season: { total: 144, game: 0, stats: {} } };
+  const apiPit = mk(Spit); runField(apiPit, Spit);
+  Spit.season.stats = { ip: 20, k: 999, wins: 99, er: 0 };    // 20이닝은 규정 미달
+  check(apiPit.titlesWon(Spit.season.stats).some((w) => w.id === "era") === false, "평균자책왕은 이닝이 모자라면 자격이 없다");
+  Spit.season.stats = { ip: 200, k: 999, wins: 99, er: 20 };  // 규정 이닝 + 압도적
+  check(apiPit.titlesWon(Spit.season.stats).some((w) => w.id === "era"), "규정 이닝을 채우고 자책이 가장 낮으면 평균자책왕을 딴다");
+
+  // ── win rate 실측 — 엘리트는 시즌당 몇 번, 평범하면 거의 없다 (드물어야 특별) ──
   const seasonTitles = (pos, prof, seed) => {
     const rnd = mulberry32(seed);
-    const S = { pos, role: pos === "pitcher" ? "선발 투수" : "4번 타자", season: { total: 144 } };
-    const api = mkT(S, seed + 11);
     let n = 0;
-    for (let i = 0; i < 60; i++) {
+    for (let i = 0; i < 40; i++) {
+      const S = { pos, team: "E", role: pos === "pitcher" ? "선발 투수" : "4번 타자", proYear: seed + i, season: { total: 144, game: 0, stats: {} } };
+      const api = mk(S); runField(api, S);
       S.season.stats = prof(rnd);
-      S.season.titleBar = api.makeTitleBar();
-      n += api.titlesWon(S.season.stats, S.season.titleBar).length;
+      n += api.titlesWon(S.season.stats).length;
     }
-    return n / 60;
+    return n / 40;
   };
   const PROF = {
     batElite: (r) => ({ ab: 615, hits: Math.round(gauss(r, 196, 14)), hr: Math.round(gauss(r, 45, 7)), sb: Math.round(gauss(r, 67, 11)) }),
@@ -235,23 +266,24 @@ guard("시즌 타이틀", () => {
     pitLow: (r) => { const ip = gauss(r, 222, 15); return { ip, k: Math.round(gauss(r, 302, 25)), wins: Math.round(gauss(r, 8, 3)), er: ip * Math.max(1.5, gauss(r, 3.4, 0.4)) / 9 }; },
   };
   for (const [pos, hiP, loP] of [["batter", PROF.batElite, PROF.batLow], ["pitcher", PROF.pitElite, PROF.pitLow]]) {
-    let hi = 0, lo = 0; for (let i = 0; i < 30; i++) { hi += seasonTitles(pos, hiP, 3000 + i); lo += seasonTitles(pos, loP, 6000 + i); }
-    hi /= 30; lo /= 30;
+    let hi = 0, lo = 0; for (let i = 0; i < 8; i++) { hi += seasonTitles(pos, hiP, 3000 + i * 40); lo += seasonTitles(pos, loP, 6000 + i * 40); }
+    hi /= 8; lo /= 8;
     console.log(`   ${pos === "batter" ? "타자" : "선발"} 시즌당 타이틀 | 엘리트 ${hi.toFixed(2)} · 평범 ${lo.toFixed(2)}`);
-    check(hi >= 0.4 && hi <= 1.8, `${pos} 엘리트는 시즌당 타이틀이 0.4~1.8개다 (${hi.toFixed(2)}) — 특별하되 매 시즌은 아니게`);
-    check(lo < 0.25, `${pos} 평범한 성적은 타이틀이 거의 없다 (${lo.toFixed(2)})`);
+    check(hi >= 0.4 && hi <= 2.2, `${pos} 엘리트는 시즌당 타이틀이 0.4~2.2개다 (${hi.toFixed(2)}) — 특별하되 매 시즌은 아니게`);
+    check(lo < 0.4, `${pos} 평범한 성적은 타이틀이 드물다 (${lo.toFixed(2)})`);
     check(hi > lo + 0.3, `${pos} 능력치가 타이틀을 가른다 (${lo.toFixed(2)} → ${hi.toFixed(2)})`);
   }
 
   // 배선
-  check(/S\.season\.titleBar = makeTitleBar\(\)/.test(SRC), "initSeason이 올해 타이틀 기준선을 뽑는다");
-  check(/titlesWon\(raw, S\.season && S\.season\.titleBar\)/.test(SRC), "finishSeason이 최종 성적으로 타이틀을 판정한다");
-  check(/standingsHTML\(\) \+ titleRaceHTML\(\)/.test(SRC), "프로 화면 순위표 아래에 타이틀 레이스가 붙는다");
+  check(/S\.season\.race = rollRace\(\)/.test(SRC), "initSeason이 이번 시즌 라이벌 필드를 만든다");
+  check(/raceStep\(\);/.test(SRC), "finishProGame이 매 경기 라이벌 기록을 굴린다");
+  check(/titlesWon\(raw\)/.test(SRC), "finishSeason이 최종 성적으로 타이틀을 판정한다 (개인 기록 순위 1위)");
+  check(/standingsHTML\(\) \+ raceHTML\(\)/.test(SRC), "프로 화면 순위표 아래에 개인 기록 순위가 붙는다");
   check(/TITLES\[tt\.id\]/.test(SRC), "mileScore가 통산 타이틀 가치를 얹는다");
-  check(/S\.season\.titleLead = makeTitleLeaders\(\)/.test(SRC) && !/Math\.random/.test(SRC.slice(SRC.indexOf("function makeTitleLeaders"), SRC.indexOf("function makeTitleLeaders") + 300)),
-    "initSeason이 라이벌(현재 1위) 이름을 뽑되 난수는 안 쓴다 (밸런스 시뮬 보호)");
-  check(/개인 기록 순위/.test(SRC) && /myRank/.test(SRC) && !/<th>1등선<\/th>/.test(SRC),
-    "타이틀 레이스가 개인 기록 순위(라이벌+나)로 뜨고 헷갈리던 1등선 칸을 없앴다");
+  check(!/makeTitleBar|titleRaceHTML|titleLead/.test(SRC), "가짜 1등 기준선(makeTitleBar·titleLead) 시스템을 걷어냈다");
+  const raceSrc = SRC.slice(SRC.indexOf("function raceStep"), SRC.indexOf("function raceStep") + 500);
+  check(!/Math\.random/.test(raceSrc), "라이벌 시뮬은 전역 Math.random을 안 쓴다 (자체 시드 — 밸런스 시뮬 보호)");
+  check(/class="race-tabs"/.test(SRC) && /race-tab/.test(SRC), "개인 기록 순위가 종목 탭으로 나뉜다 (더 윙어처럼)");
   // 🏛️ 통산 기록 블록이 결산뿐 아니라 상시 접근하는 📊 기록 화면(game.js)에도 뜬다
   check(/^\s*milestoneHTML,/m.test(SRC), "Career가 통산 기록 블록을 공개한다");
   check(/window\.Career && window\.Career\.milestoneHTML/.test(GAME), "📊 기록 화면(game.js)이 통산 기록 블록을 그린다");

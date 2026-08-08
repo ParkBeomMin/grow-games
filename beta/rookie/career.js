@@ -327,43 +327,139 @@ window.Career = (() => {
       others: leagueTeams().filter((t) => t !== S.team).map((name) => ({ name, w: 0, l: 0, str: teamStrOf(name) })),
       stats: S.pos === "batter" ? { ab: 0, hits: 0, hr: 0, sb: 0 } : { ip: 0, k: 0, er: 0, wins: 0, saves: 0, g: 0 },
     };
-    S.season.titleBar = makeTitleBar();       // 🏅 올해 1등 기준선 — 시즌 내내 이 선과 겨뤄요
-    S.season.titleLead = makeTitleLeaders();  // 각 타이틀의 라이벌 이름 (현재 1위 표시용)
+    // 🏅 개인 기록 순위 — 이번 시즌 라이벌 필드. 자체 시드로만 굴려요(전역 난수 안 씀).
+    S.season.raceSeed = ((S.proYear || 1) * 2654435761) >>> 0;
+    S.season.race = rollRace();
     save();
   }
 
-  /* 🏅 타이틀 레이스 — 프로 화면 순위표 아래에 붙어요. 내 현재 기록과 **현재 1위가
-   * 누구고 수치가 얼마인지**를 나란히 놓아, 사람 대 사람의 경쟁으로 보여줘요.
-   * 라이벌의 '지금 수치'는 그 종목 1등선을 향한 페이스로 잡아요(누적은 경기 비례, 비율은
-   * 시즌 내내 일정). 내가 라이벌의 지금 수치를 앞서면 🥇 — 그 순간 1위가 나예요. */
-  function titleRaceHTML() {
-    const bar = S.season && S.season.titleBar;
-    const lead = (S.season && S.season.titleLead) || {};
-    const mine = myTitles();
-    if (!bar || !mine.length) return "";
-    const g = S.season.game || 0, tot = S.season.total || 144;
-    const fmt = (m, x) => (m === "avg" ? x.toFixed(3) : m === "era" ? x.toFixed(2) : Math.round(x));
-    // 1위 아래로 완만히 벌어지는 라이벌들 (1위의 최종치 = titleBar). 난수 없이 배수로 만들어요.
-    const FACTORS = [1, 0.9, 0.81, 0.72];
-    const rows = mine.map(([, t]) => {
-      const m = t.metric, rate = (m === "avg" || m === "era");
-      const my = titleMetric(S.season.stats, m);
-      const names = Array.isArray(lead[m]) ? lead[m] : [lead[m] || "리그 선두"];
-      // 경쟁자 필드 — 각자의 '지금' 수치(누적은 페이스, 비율은 시즌 내내 일정) + 나
-      const field = FACTORS.map((f, r) => {
-        const final = t.higher ? bar[m] * f : bar[m] / f;      // era는 낮을수록 위 → 아래 순위일수록 값이 커져요
-        const now = rate ? final : (g > 0 ? final * g / tot : 0);
-        return { name: names[r] || `라이벌${r + 1}`, now, me: false };
-      });
-      field.push({ name: "나", now: my, me: true });
-      field.sort((a, b2) => (t.higher ? b2.now - a.now : a.now - b2.now));   // higher: 큰 게 위 / era: 작은 게 위
-      const myRank = field.findIndex((x) => x.me) + 1;
-      const board = field.slice(0, 3).map((x, i) =>
-        `<span class="${x.me ? "tr-me" : ""}">${i + 1}.${x.me ? "나" : x.name} ${fmt(m, x.now)}</span>`).join(" · ")
-        + (myRank > 3 ? ` <span class="tr-me">… ${myRank}.나 ${fmt(m, my)}</span>` : "");
-      return `<tr class="${myRank === 1 ? "title-lead" : ""}"><td>${t.emoji} ${t.name}</td><td class="tr-board">${board}</td></tr>`;
-    }).join("");
-    return `<table class="rank-table title-race"><thead><tr><th>🏅 개인 기록 순위</th><th>1위 → 내 순위</th></tr></thead><tbody>${rows}</tbody></table>`;
+  /* ---------- 🏅 개인 기록 순위 (라이벌 레이스) ----------
+   * 더 윙어의 개인 순위와 같은 결이에요. 리그 각 팀의 간판 선수(squad.js)가 매 경기
+   * 실제로 안타·홈런을 쌓고, 나와 같은 잣대로 한 표에 줄서요. 시즌이 끝나면 종목 1위가
+   * 그 부문 타이틀을 가져가요 — 화면에서 보던 순위가 곧 수상 결과예요.
+   *
+   * ⚠️ 라이벌 시뮬은 **전역 Math.random을 절대 안 써요.** S.season.raceSeed에서 갈라낸
+   * 자체 시드 PRNG로만 굴려요. 정규시즌 마지막 경기부터 도는 밸런스 시뮬(post-mech ⑤)이
+   * 이 난수에 흔들리면 안 되니까요. 그래서 재현·테스트도 쉬워요. */
+  const RACE_ANCHOR = {
+    batter: { hits: 185, hr: 48, sb: 70, avg: 0.333 },
+    pitcher: { wins: 15, k: 415, saves: 42, era: 2.5 },
+  };
+  const RACE_COUNTS = { batter: ["hits", "hr", "sb"], pitcher: ["wins", "k", "saves"] };
+  let raceKey = null;   // 지금 보고 있는 순위 탭 (저장 안 해요 — 화면 상태예요)
+
+  // 크누스 포아송 — 평균 mean으로 정수 하나. rng는 넘겨받은 시드 PRNG예요(전역 난수 아님).
+  function racePoisson(rng, mean) {
+    if (mean <= 0) return 0;
+    const L = Math.exp(-mean); let k = 0, p = 1;
+    do { k++; p *= rng(); } while (p > L);
+    return k - 1;
+  }
+  // 종목 지터를 비율 스탯(타율·자책)엔 좁게 눌러요 — 안 그러면 타율이 .27~.44로 튀어요.
+  const rateJit = (j) => 1 + (j - 0.985) * 0.4;
+
+  /* 이번 시즌 라이벌 필드를 만들어요. 다른 팀마다 간판 선수(내 시점과 같은 타자/투수)를
+   * 한 명씩 세우고, 각자의 시즌 목표치(누적은 경기마다 쌓고, 비율은 고정)를 잡아요. */
+  const squadLib = () => (typeof window !== "undefined" ? window.RookieSquad : null);
+  function rollRace() {
+    const cls = S.pos;
+    const others = leagueTeams().filter((t) => t !== S.team);
+    const seed = (S.proYear || 1);
+    const RS = squadLib();
+    const book = RS ? RS.build(others.concat([S.team]), teamStrOf, seed) : null;
+    const counts = RACE_COUNTS[cls], anch = RACE_ANCHOR[cls];
+    return others.map((team, i) => {
+      const star = book ? book[team][cls]
+        : { name: fallbackName(team, seed, i), pop: clamp((teamStrOf(team) - 0.34) / 0.30, 0.4, 1), jit: {} };
+      const pop = star.pop, popF = 0.55 + 0.5 * pop;
+      const jit = (k) => star.jit[k] || 1;
+      const rate = {};
+      for (const k of counts) rate[k] = (anch[k] * popF * jit(k)) / (S.season.total || 144);
+      const r = { name: star.name, team, pop, rate };
+      for (const k of counts) r[k] = 0;
+      if (cls === "batter") r.avg = +(anch.avg * (0.88 + 0.13 * pop) * rateJit(jit("avg"))).toFixed(3);
+      else r.era = +(anch.era * (1.35 - 0.5 * pop) * rateJit(jit("era"))).toFixed(2);
+      return r;
+    });
+  }
+  // squad.js가 아직 없을 때(옛 캐시·시뮬 하네스)만 쓰는 이름 — 전역 난수 안 써요.
+  function fallbackName(team, seed, i) {
+    const P = ["강태풍", "이대포", "박홈런", "최강속", "정교타", "김일발", "윤노히", "장수호", "임쾌속", "조폭투"];
+    return P[(hashStr(team) + seed * 7 + i * 3) % P.length];
+  }
+  function hashStr(s) {
+    let h = 0;
+    for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+    return h;
+  }
+
+  /* 경기 한 판만큼 라이벌 기록을 굴려요 (finishProGame에서 sn.game을 올린 직후에 불러요).
+   * 시드는 (raceSeed, 그 경기 번호)로 갈라내서 언제 불러도 같은 결과가 나와요. */
+  function raceStep() {
+    const sn = S.season; if (!sn || !Array.isArray(sn.race)) return;
+    const counts = RACE_COUNTS[S.pos];
+    const g = sn.game;
+    const seed = ((sn.raceSeed >>> 0) ^ Math.imul(g, 2654435761)) >>> 0;
+    const RS = squadLib();
+    const rng = RS ? RS._mulberry32(seed) : mulberry(seed);
+    for (const r of sn.race) for (const k of counts) r[k] += racePoisson(rng, r.rate[k]);
+  }
+  // squad.js 없을 때를 위한 최소 PRNG (같은 식).
+  function mulberry(a) {
+    return function () {
+      a |= 0; a = (a + 0x6d2b79f5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  /* 옛 세이브(시즌 중인데 race가 없음)나 시뮬 하네스를 위해 지금 경기 수까지 되감아요. */
+  function ensureRace() {
+    const sn = S.season; if (!sn) return;
+    if (Array.isArray(sn.race)) return;
+    if (sn.raceSeed == null) sn.raceSeed = (S.proYear || 1) * 2654435761 >>> 0;
+    sn.race = rollRace();
+    const upto = sn.game || 0, save0 = sn.game;
+    for (let g = 1; g <= upto; g++) { sn.game = g; raceStep(); }
+    sn.game = save0;
+  }
+
+  // 나 + 라이벌을 한 종목으로 줄세워요. era만 낮은 게 위, 나머지는 큰 게 위. 동률은 내가 위(공동 수상).
+  function raceRank(metric) {
+    const sn = S.season; if (!sn) return [];
+    ensureRace();
+    const higher = !(metric === "era");
+    const valOf = (x) => (metric === "avg" || metric === "era") ? (x.me ? titleMetric(sn.stats, metric) : x[metric])
+      : (x.me ? (sn.stats[metric] || 0) : (x[metric] || 0));
+    const me = { name: "나", team: S.team, me: true };
+    const field = (sn.race || []).concat([me]).map((x) => ({ ...x, v: valOf(x) }));
+    field.sort((a, b) => (higher ? b.v - a.v : a.v - b.v) || (a.me ? -1 : b.me ? 1 : 0));
+    return field;
+  }
+  const raceTop = (metric) => { const r = raceRank(metric); return r.length && r[0].me; };
+  const raceFmt = (m, x) => (m === "avg" ? x.toFixed(3) : m === "era" ? x.toFixed(2) : Math.round(x));
+  const RACE_UNIT = { hits: "안타", hr: "홈런", sb: "도루", avg: "타율", wins: "승", k: "탈삼진", era: "자책", saves: "세이브" };
+
+  /* 순위표 HTML — 종목 탭 + 그 종목의 상위 5명(내가 5위 밖이면 내 줄을 아래에 핀). */
+  function raceHTML() {
+    const sn = S.season; const mine = myTitles();
+    if (!sn || !mine.length) return "";
+    const metrics = mine.map(([, t]) => t.metric);
+    if (!raceKey || !metrics.includes(raceKey)) raceKey = metrics[0];
+    const t = mine.find(([, x]) => x.metric === raceKey)[1];
+    const ranked = raceRank(raceKey);
+    const myIdx = ranked.findIndex((x) => x.me);
+    const line = (x, i) => `<tr class="${x.me ? "me" : ""}"><td>${i + 1}</td>`
+      + `<td>${x.me ? "나" : x.name}<span class="rc-club">${x.team || ""}</span></td>`
+      + `<td class="rc-v">${i === 0 ? "👑" : ""}${raceFmt(raceKey, x.v)}</td></tr>`;
+    const shown = ranked.slice(0, 5).map(line).join("");
+    const pinned = myIdx >= 5 ? `<tr class="rc-gap"><td colspan="3">⋯</td></tr>${line(ranked[myIdx], myIdx)}` : "";
+    const tabs = mine.map(([, x]) =>
+      `<button type="button" class="race-tab${x.metric === raceKey ? " on" : ""}" data-k="${x.metric}">${x.emoji} ${x.name}</button>`).join("");
+    return `<div class="race-tabs">${tabs}</div>`
+      + `<table class="rank-table race-table"><thead><tr><th>#</th><th>선수</th><th>${t.emoji} ${RACE_UNIT[raceKey]}</th></tr></thead>`
+      + `<tbody>${shown}${pinned}</tbody></table>`
+      + `<div class="race-note">👑 이 부문 1위 — 시즌이 끝나면 부문 타이틀을 받아요</div>`;
   }
 
   function standingsHTML() {
@@ -397,7 +493,18 @@ window.Career = (() => {
     const l = leagueOf(S);
     $("pro-standings-sum").textContent =
       `📊 ${l.id === 1 ? "" : `${l.flag} ${l.name} · `}${myRank()}위 · ${S.season.teamW}승 ${S.season.teamL}패`;
-    $("pro-standings-body").innerHTML = standingsHTML() + titleRaceHTML();
+    const body = $("pro-standings-body");
+    body.innerHTML = standingsHTML() + raceHTML();
+    // 순위 탭은 한 번만 위임으로 물려요 — 눌리면 그 종목으로 다시 그려요 (화면 상태만 바뀜).
+    if (!body.dataset.raceWired) {
+      body.dataset.raceWired = "1";
+      body.addEventListener("click", (e) => {
+        const btn = e.target.closest(".race-tab");
+        if (!btn || !S.season) return;
+        raceKey = btn.dataset.k;
+        renderStandings();
+      });
+    }
   }
 
   function nextOpp() {
@@ -772,6 +879,7 @@ window.Career = (() => {
     for (const o of sn.others) {
       if (Math.random() < o.str) o.w += 1; else o.l += 1;
     }
+    raceStep();                       // 🏅 라이벌들도 이번 경기만큼 기록을 쌓아요 (자체 시드)
     const t = sn.stats;
     if (perf) {
       if (S.pos === "batter") {
@@ -1121,54 +1229,34 @@ window.Career = (() => {
     cycle: { name: "사이클링히트", emoji: "🔄", pv: 20, pos: "batter" },
     multihr: { name: "멀티홈런 쇼", emoji: "💥", pv: 12, pos: "batter" },
   };
-  /* 🏅 시즌 타이틀 — 홈런왕·다승왕처럼 리그 1등에게 주는 상. 시즌이 열릴 때 '올해 1등이
-   * 될 기준선'을 한 번 뽑아 두고(S.season.titleBar), 시즌 내내 그 선과 경쟁해요. 끝에
-   * 내 성적이 그 선을 넘으면 타이틀을 따요 — 시즌 중 레이스 표시와 결과가 안 어긋나요. */
+  /* 🏅 시즌 타이틀 — 홈런왕·다승왕처럼 리그 1등에게 주는 상. 개인 기록 순위(라이벌 필드)에서
+   * 그 종목 1위면 받아요. 화면에서 시즌 내내 보던 순위가 곧 수상 결과예요(raceTop). */
   const TITLES = {
+    hits: { name: "최다안타", emoji: "🏏", pos: "batter", metric: "hits", higher: true, pv: 14 },
     hr: { name: "홈런왕", emoji: "💣", pos: "batter", metric: "hr", higher: true, pv: 18 },
-    avg: { name: "수위타자", emoji: "🏏", pos: "batter", metric: "avg", higher: true, pv: 18 },
+    avg: { name: "수위타자", emoji: "📈", pos: "batter", metric: "avg", higher: true, pv: 18 },
     sb: { name: "도루왕", emoji: "👟", pos: "batter", metric: "sb", higher: true, pv: 14 },
     wins: { name: "다승왕", emoji: "🏆", pos: "pitcher", metric: "wins", higher: true, pv: 18, role: "선발 투수" },
     k: { name: "탈삼진왕", emoji: "🔥", pos: "pitcher", metric: "k", higher: true, pv: 16, role: "선발 투수" },
     era: { name: "평균자책왕", emoji: "🎯", pos: "pitcher", metric: "era", higher: false, pv: 18, role: "선발 투수" },
     saves: { name: "세이브왕", emoji: "🚪", pos: "pitcher", metric: "saves", higher: true, pv: 16, role: "마무리 투수" },
   };
-  /* 이번 시즌 '1등 기준선'. 시즌 길이(경기 수)에 맞춰 누적 스탯은 늘리고 비율(타율·자책)은
-   * 그대로 둬요. 주사위는 **늘 21번**(7종 × 3) 굴려요 — 소비를 일정하게 (밸런스 시뮬 보호). */
-  function makeTitleBar() {
-    const k = ((S.season && S.season.total) || 144) / 144;
-    const maxOf = (lo, hi) => Math.max(rand(lo, hi), rand(lo, hi), rand(lo, hi));
-    const minOf = (lo, hi) => Math.min(rand(lo, hi), rand(lo, hi), rand(lo, hi));
-    return {
-      hr: Math.round(maxOf(38, 54) * k), avg: +maxOf(0.312, 0.342).toFixed(3), sb: Math.round(maxOf(56, 80) * k),
-      wins: Math.round(maxOf(10, 16) * k), k: Math.round(maxOf(360, 440) * k),
-      era: +minOf(2.3, 3.1).toFixed(2), saves: Math.round(maxOf(34, 44) * k),
-    };
-  }
-  /* 각 타이틀의 '현재 1위' 라이벌 이름. 시즌마다·종목마다 하나씩 붙여 레이스가 사람
-   * 대 사람으로 보이게 해요. **난수를 안 써요**(연차·종목으로 정해요) — 시즌 초 난수
-   * 소비를 바꾸면 밸런스 시뮬이 흔들리니까요. 자기 완결이라 game.js 이름표에 안 기대요. */
-  const RIVAL_NAMES = ["강태풍", "이대포", "박홈런", "최강속", "정교타", "김일발", "윤노히", "장수호", "임쾌속", "조폭투", "한방망", "서수문"];
-  function makeTitleLeaders() {
-    const out = {}; const y = S.proYear || 1, L = RIVAL_NAMES.length;
-    // 종목마다 라이벌 4명 — 색인을 3씩 벌려 한 종목 안에서 안 겹쳐요. 난수는 안 써요.
-    Object.keys(TITLES).forEach((m, i) => { out[m] = [0, 1, 2, 3].map((r) => RIVAL_NAMES[(y * 5 + i * 7 + r * 3) % L]); });
-    return out;
-  }
   const titleMetric = (st, m) => (m === "avg" ? (st.hits || 0) / Math.max(st.ab || 0, 1)
     : m === "era" ? ((st.er || 0) * 9) / Math.max(st.ip || 0, 1) : (st[m] || 0));
   const myTitles = () => Object.entries(TITLES).filter(([, t]) => t.pos === S.pos && (!t.role || t.role === S.role));
-  /* 내 성적이 기준선을 넘긴 타이틀들. era는 낮을수록 좋아요. 비율 타이틀은 최소 출장을 요구해요. */
-  function titlesWon(stats, bar) {
-    if (!bar) return [];
-    const tot = (S.season && S.season.total) || 144;
+  /* 이번 시즌 딴 타이틀 — 개인 기록 순위(라이벌 필드)에서 그 종목 1위면 받아요.
+   * 화면에서 보던 👑이 곧 수상 결과예요. 비율 타이틀은 최소 출장을 요구해요. */
+  function titlesWon(stats) {
+    // 실제 게임은 initSeason에서 race를 깔아요. race가 없으면(밸런스 시뮬 하네스처럼
+    // 시즌을 손으로 세운 경우) 라이벌 필드를 되감지 않고 조용히 넘어가요 — 그쪽은 수상을 안 봐요.
+    if (!S.season || !Array.isArray(S.season.race)) return [];
+    const tot = S.season.total || 144;
     const out = [];
     for (const [id, t] of myTitles()) {
-      const b = bar[t.metric]; if (b == null) continue;
       if (t.metric === "avg" && (stats.ab || 0) < tot * 2) continue;
       if (t.metric === "era" && (stats.ip || 0) < tot * 0.9) continue;
-      const v = titleMetric(stats, t.metric);
-      if (t.higher ? v >= b : (v <= b && v > 0)) out.push({ id, v });
+      if (t.metric === "era" && titleMetric(stats, "era") <= 0) continue;
+      if (raceTop(t.metric)) out.push({ id, v: titleMetric(stats, t.metric) });
     }
     return out;
   }
@@ -1353,7 +1441,7 @@ window.Career = (() => {
     /* team·league — **그 시즌에 뛴 소속**을 결산 시점에 그냥 적어요. 여기 적힌 값이 정본이에요.
      * league는 나중에 생긴 필드라 옛 기록에는 없어요. 그건 읽는 쪽(playedAt)이 S.moves에서
      * 역산해 메워요 — 세이브는 고치지 않아요(클라우드 동기화와 부딪혀요). */
-    const wonTitles = titlesWon(raw, S.season && S.season.titleBar);   // 🏅 이번 시즌 딴 타이틀
+    const wonTitles = titlesWon(raw);   // 🏅 이번 시즌 딴 타이틀 — 개인 기록 순위 1위
     if (wonTitles.length) S.career.titles = (S.career.titles || []).concat(wonTitles.map((w) => ({ id: w.id, y: S.proYear })));
     const mileBefore = careerCounts(S.career.seasons);   // 이번 시즌을 더하기 전 통산
     S.career.seasons.push({ y: S.proYear, age: S.age, war, line, rank, champ, awards, titles: wonTitles.map((w) => w.id), role: S.role, team: S.team, league: S.league, raw });
@@ -1499,10 +1587,16 @@ window.Career = (() => {
       <div class="draft-team">${at.team}${leagueTagOf(at.league)} <span class="team-str">${strLabel(teamStrOf(at.team))}</span> · ${s.line} · WAR ${s.war.toFixed(1)}</div>
       ${movedAfter ? `<div class="hint next-club">➡️ 다음 시즌 소속 — ${cur.flag} ${cur.name} · <b>${S.team}</b></div>` : ""}
       ${(S.moves || []).length ? `<div class="hint">🔁 이적 이력 — ${S.moves.map((m) => `${m.type === "post" ? "🌏 " : ""}${m.y}년차 ${m.from}→${m.to}${m.inSeason ? " (시즌 중)" : ""}`).join(" · ")}</div>` : ""}
-      ${S.lastStandings ? `<div class="hint">📊 최종 순위</div>${S.lastStandings}` : ""}
-      <table class="season-table season-career"><thead><tr><th>시즌</th><th>나이</th><th>성적</th><th>WAR</th></tr></thead><tbody>${rows}</tbody></table>
-      ${moreHint}
-      ${milestoneHTML()}
+      <div class="rec-tabs">
+        <button type="button" class="rec-tab on" data-p="0">📊 팀 순위</button>
+        <button type="button" class="rec-tab" data-p="1">📅 시즌별</button>
+        <button type="button" class="rec-tab" data-p="2">🏛️ 통산</button>
+      </div>
+      <div class="rec-panes" id="rec-panes">
+        <div class="rec-pane on">${S.lastStandings || `<div class="hint">최종 순위표가 없어요</div>`}</div>
+        <div class="rec-pane"><table class="season-table season-career"><thead><tr><th>시즌</th><th>나이</th><th>성적</th><th>WAR</th></tr></thead><tbody>${rows}</tbody></table>${moreHint}</div>
+        <div class="rec-pane">${milestoneHTML()}</div>
+      </div>
       <div class="draft-summary">
         통산 ${S.career.seasons.length}시즌 · WAR ${S.career.warSum.toFixed(1)} · 🏆 우승 ${S.career.rings}회 · MVP ${S.career.mvp} · GG ${S.career.gg}${S.career.roy ? " · 신인왕" : ""}<br/>
         ${forcedRetire ? "구단에서 은퇴식을 준비하고 있어요…" : overall() < 42 ? "⚠️ 기량 하락이 눈에 띄어요. 은퇴를 고민할 때일지도." : "다음 시즌도 달릴 수 있어요!"}
@@ -1578,8 +1672,33 @@ window.Career = (() => {
       rh.textContent = rebirthHint();
       act.appendChild(rh);
     }
+    wireRecordTabs();
     if (window.Ads) window.Ads.display($("ad-career"));
     show("screen-career");
+  }
+
+  /* 📊 결산의 팀순위·시즌별·통산을 탭 하나로 접어요 — 세 표가 세로로 길어서 스크롤이 버거웠어요.
+   * 탭 버튼으로도, 판을 좌우로 스와이프해서도 넘겨요 (폰에서 자연스럽게). */
+  function wireRecordTabs() {
+    const panes = $("rec-panes"); if (!panes) return;
+    const tabs = Array.from(document.querySelectorAll(".rec-tab"));
+    const boxes = Array.from(panes.querySelectorAll(".rec-pane"));
+    let cur = 0;
+    const go = (i) => {
+      cur = Math.max(0, Math.min(boxes.length - 1, i));
+      tabs.forEach((t, k) => t.classList.toggle("on", k === cur));
+      boxes.forEach((b, k) => b.classList.toggle("on", k === cur));
+    };
+    tabs.forEach((t) => (t.onclick = () => go(+t.dataset.p)));
+    // 좌우 스와이프 — 가로 이동이 세로보다 크고 40px을 넘으면 판을 넘겨요.
+    let x0 = null, y0 = null;
+    panes.addEventListener("touchstart", (e) => { x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; }, { passive: true });
+    panes.addEventListener("touchend", (e) => {
+      if (x0 == null) return;
+      const dx = e.changedTouches[0].clientX - x0, dy = e.changedTouches[0].clientY - y0;
+      if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy)) go(cur + (dx < 0 ? 1 : -1));
+      x0 = y0 = null;
+    }, { passive: true });
   }
 
   /* ---------- 이적 (FA 계약 · 트레이드 요청) ----------
@@ -2699,6 +2818,9 @@ window.Career = (() => {
       playedAt,
       // ⚡ 실전 성장 — 확률·무게 산식을 테스트가 그대로 굴려 볼 수 있게 열어 둬요
       MATCH_GROW, growWeightOf, growWhyOf, growPOf, matchGrowth,
+      // 🏅 개인 기록 순위 — 라이벌 필드·시뮬·순위·수상 판정을 테스트가 그대로 굴려요
+      TITLES, titleMetric, myTitles, titlesWon, RACE_ANCHOR, RACE_COUNTS,
+      rollRace, raceStep, raceRank, raceTop, ensureRace,
       state: () => S,
     },
     enterPro,
