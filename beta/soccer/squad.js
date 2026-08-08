@@ -225,31 +225,51 @@ window.WingerSquad = (() => {
    * 말은 상황마다 여러 개를 두고 **그 주에 맞춰 골라요.** 하나뿐이면 벤치가
    * 이어질 때 같은 문장이 계속 나와서 사람이 아니라 안내문이 됩니다.
    * 같은 주에는 다시 그려도 같은 말이에요 — 라운드를 키로 고릅니다. */
+  /* 말에 **다음에 뭘 하라는 한마디**를 붙여요. {w}는 지금 붙잡아야 할 능력치예요.
+   * 숫자 줄("실력 3번째 · 선발 확률 53%")은 뺐습니다 — 감독은 확률을 읽어 주지
+   * 않아요(제보: "숫자 줄은 적지 마.. 그냥 컨디션 조절해, 슛 연습해 이런 식으로"). */
   const COACH_FAR = [
-    "아직 순번이 있어. 훈련장에서 증명하고 오게.",
-    "네 앞에 몇 명이 있네. 실력으로 밀어내는 수밖에 없어.",
-    "조급해하지 마. 다만 지금은 네 앞에 사람이 있어.",
+    "아직 순번이 있어. {w} 연습부터 하고 오게.",
+    "네 앞에 몇 명이 있네. {w}{를} 더 갈고닦아.",
+    "조급해하지 마. 다만 지금은 네 앞에 사람이 있어 — {w}부터 붙이자.",
   ];
   const COACH_NEAR = [
-    "네 앞에 딱 한 명이야. 조금만 더 하면 넘어.",
-    "간발의 차였어. 다음엔 네가 될 수도 있고.",
-    "고민 많이 했네. 저 친구를 넘는 건 시간문제야.",
+    "네 앞에 딱 한 명이야. {w}만 조금 더 올리면 넘어.",
+    "간발의 차였어. {w} 연습 한 번만 더 하고 오게.",
+    "저 친구를 넘는 건 시간문제야. {w}{를} 붙여.",
   ];
   const COACH_COND = [
-    "몸이 덜 올라왔더군. 오늘은 쉬어.",
-    "훈련장에서 보니 다리가 무겁더라. 무리시킬 수 없지.",
-    "실력은 알아. 그런데 지금 몸 상태로는 못 내보내.",
+    "몸이 덜 올라왔더군. 오늘은 쉬고 컨디션부터 올리게.",
+    "훈련장에서 보니 다리가 무겁더라. 무리시킬 수 없지 — 푹 쉬어.",
+    "실력은 알아. 그런데 이 몸으로는 못 내보내. 컨디션 조절해.",
   ];
   const COACH_FORM = [
-    "요즘 경기가 아쉬웠어. 벤치에서 한번 보고 있게.",
+    "요즘 경기가 아쉬웠어. {w} 감각부터 되찾자.",
     "실력은 알지만 최근 경기력이 안 올라와. 다시 보여주게.",
-    "지금은 흐름이 안 좋아. 한 주 끊고 가자.",
+    "지금은 흐름이 안 좋아. 한 주 끊고 {w}에 집중해.",
   ];
   const COACH_ROT = [
-    "오늘은 다른 친구를 써보려고 하네. 다음 주에 보자.",
+    "오늘은 다른 친구를 써보려고 하네. 컨디션 잘 챙기고 있게.",
     "체력을 아껴두게. 곧 쓸 일이 있어.",
-    "자네가 못해서가 아니야. 오늘은 이렇게 가보지.",
+    "자네가 못해서가 아니야. 훈련장에서 {w}이나 좀 다듬고 있게.",
   ];
+
+  /* 지금 붙잡아야 할 능력치 — 포지션 주력이 평균보다 처졌으면 그것부터,
+   * 아니면 가장 낮은 칸이에요. 감독이 "슛 연습해"라고 할 때 그 슛이 실제로
+   * 내가 제일 아쉬운 자리여야 말이 조언이 됩니다. */
+  // 받침이 있으면 을/이, 없으면 를/가 — 마지막 글자의 한글 코드로 봅니다
+  const hasJong = (word) => {
+    const c = word.charCodeAt(word.length - 1) - 0xac00;
+    return c >= 0 && c <= 11171 && c % 28 !== 0;
+  };
+
+  function weakSpot() {
+    const main = STAT_DEFS.find((d) => d.key === (POS_INFO[S.pos] || {}).stat);
+    const avg = STAT_DEFS.reduce((a, d) => a + (S.stats[d.key] || 0), 0) / STAT_DEFS.length;
+    if (main && (S.stats[main.key] || 0) < avg) return main;
+    return STAT_DEFS.slice().sort((a, b) => (S.stats[a.key] || 0) - (S.stats[b.key] || 0))[0];
+  }
+
   function benchReason(L) {
     const b = L.bonus;
     const pool = L.rank > L.slots + 1 ? COACH_FAR
@@ -258,13 +278,15 @@ window.WingerSquad = (() => {
       : b.form <= -1.5 ? COACH_FORM
       : COACH_ROT;
     const week = (S.activity && S.activity.week) || 0;
-    const say = pool[Math.abs(week + L.rank) % pool.length];
-    /* 아래 한 줄은 **상태**예요(무엇이 어떻다), 위의 말이 **이유**고요.
-     * 숫자를 아예 없애면 훈련해도 가까워지는지 알 수가 없어서 남겨 둡니다. */
-    return `<div class="coach-say">🗣️ 감독 — “${say}”</div>`
-      + `<div class="bench-stat">${posName(S.pos)} ${L.slots}자리 · 실력 ${L.rank}번째`
-      + ` · 선발 확률 ${Math.round(L.odds * 100)}%</div>`;
+    const w = weakSpot();
+    /* 조사는 능력치 이름의 받침을 보고 골라요 — "수비을(를)"처럼 적으면
+     * 감독의 말이 아니라 안내문이 됩니다. */
+    const say = pool[Math.abs(week + L.rank) % pool.length]
+      .replace(/\{w\}/g, `${w.emoji} ${w.name}`)
+      .replace(/\{를\}/g, hasJong(w.name) ? "을" : "를");
+    return `<div class="coach-say">🗣️ 감독 — “${say}”</div>`;
   }
+
 
 
   /* 🪑 벤치 주 — 경기를 못 뛴 대신 능력치 하나가 올라요.

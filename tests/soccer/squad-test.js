@@ -497,8 +497,10 @@ guard("⑮ 선발 확률의 근거", () => {
   const L1 = Squad.myLine();
   const inSlot = Squad.benchReason(L1).replace(/<[^>]+>/g, " ");
   console.log(`   순번 ${L1.rank}/${L1.of} (자리 ${L1.slots}) — "${inSlot.trim()}"`);
-  check(/🗣️ 감독 — “.+”/.test(Squad.benchReason(L1).replace(/<[^>]+>/g, " ")),
+  check(/🗣️ 감독 — “.+”/.test(inSlot),
     "이유를 감독의 말로 알려준다 — 산식을 읽어 주지 않아요");
+  check(!/\d/.test(inSlot),
+    `벤치 카드에 숫자를 적지 않는다 ("${inSlot.trim()}") — 감독은 확률을 읽어 주지 않아요`);
   if (L1.rank <= L1.slots) {
     check(!/넘|순번|앞에/.test(inSlot),
       "실력이 선발권인데 앉은 날에는 '넘어라'라고 하지 않는다 — 넘을 앞사람이 없어요");
@@ -518,6 +520,13 @@ guard("⑮ 선발 확률의 근거", () => {
     says.add(Squad.benchReason(Squad.myLine()).match(/“([^”]+)”/)[1]);
   }
   check(says.size >= 2, `벤치가 이어져도 같은 말만 하지 않는다 (6주에 ${says.size}가지)`);
+  /* 말마다 **다음에 뭘 하라**가 붙어 있어야 해요. 하나라도 빠지면 그 주에는
+   * "그냥 안 뽑았다"만 듣고 끝나요 — 확률을 지웠으니 방향은 말이 줘야 합니다. */
+  const ACT = /연습|다듬|쉬|컨디션|집중|올리|붙여|되찾|아껴|보여주|갈고닦/;
+  const noAct = [...says].filter((t) => !ACT.test(t));
+  check(noAct.length === 0, `말마다 뭘 하라는 한마디가 붙는다 (없는 말 ${noAct.length}개${noAct.length ? ` — "${noAct[0]}"` : ""})`);
+  const withNum = [...says].filter((t) => /\d/.test(t));
+  check(withNum.length === 0, `말에 숫자가 없다 (섞인 말 ${withNum.length}개)`);
   if (st.activity) st.activity.week = 3;
   const twice = [0, 1].map(() => Squad.benchReason(Squad.myLine()).match(/“([^”]+)”/)[1]);
   check(twice[0] === twice[1], "같은 주에는 다시 그려도 같은 말이다");

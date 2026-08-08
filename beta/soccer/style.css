@@ -414,9 +414,8 @@ body {
 .bench-card { text-align: center; padding: .6rem .4rem; }
 .bench-card .draft-emoji { font-size: 2.4rem; }
 .bench-card .tour-line { color: var(--dim); font-size: .82rem; margin: .3rem 0 .5rem; }
-/* 🗣️ 감독 한마디 — 이유는 말로, 숫자는 그 아래 한 줄로 갈라 놨어요 */
-.coach-say { color: var(--text); font-size: .9rem; line-height: 1.55; margin: .35rem .2rem .3rem; }
-.bench-stat { color: var(--dim); font-size: .76rem; margin-bottom: .5rem; }
+/* 🗣️ 감독 한마디 — 벤치인 이유는 숫자가 아니라 말로 전해요 */
+.coach-say { color: var(--text); font-size: .9rem; line-height: 1.55; margin: .4rem .2rem .55rem; }
 /* ⭐ 별 옆의 재능 수치 — 각성 한 번이 얼마나 움직였는지 보여줘요 */
 .tal-num { margin-left: .25em; font-size: .68em; color: var(--dim); }
 /* 👥 스쿼드 레이어 — base.css의 .av-modal 껍데기를 빌려 씁니다 */
