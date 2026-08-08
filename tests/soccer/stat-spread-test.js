@@ -42,6 +42,8 @@ const parts = {
    * 같이 안 떼어 오면 ReferenceError로 죽습니다(조용히 통과하지는 않아요).
    * 이 검사들은 칭호가 없는 상태(S.buffs 없음)를 보니 배수는 전부 1이 나와요 —
    * 칭호가 붙었을 때의 동작은 tests/soccer/buff-test.js가 봅니다. */
+  // 재능이 능력치마다 따로 붙어요 — ratingOf가 STAT_KEYS를 훑어요
+  statKeys: grab(GAME, /const STAT_KEYS = \[[^\]]*\];/),
   goalScale: grab(GAME, /const GOAL_SCALE = [^;]+;/),
   buffFns: grab(GAME, /const HOT_FORM_BAR = [\s\S]*?const buffMul = [^;]+;/),
   contrib: grab(GAME, /function matchContribution\(rating\) \{[\s\S]*?\n\}/),
@@ -58,7 +60,8 @@ const mkEngine = (ratingSrc) => new Function(
   `${parts.posInfo} ${parts.clutchScale} ${parts.transLv} ${parts.clutch}
    ${parts.leagues} ${parts.leagueOf}
    ${parts.fanCap} ${parts.ratingDiv}
-   ${parts.goalScale}
+   ${parts.statKeys}
+  ${parts.goalScale}
   ${parts.buffFns}
    ${ratingSrc}
    ${parts.poisson}

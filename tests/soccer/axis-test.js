@@ -39,6 +39,8 @@ const parts = {
   /* 🔥 승부처 성공이 무엇으로 남는지는 포지션이 정해요(극장골/도움/차단).
    * info 블록이 momentKind()를 부르니 같이 떼어 와야 굴러가요. */
   momentKind: grab(GAME, /const MOMENT_KIND = \{[^}]*\};\nconst momentKind = [^;]+;/),
+  // 재능이 능력치마다 따로 붙어요 — ratingOf가 STAT_KEYS를 훑어요
+  statKeys: grab(GAME, /const STAT_KEYS = \[[^\]]*\];/),
   goalScale: grab(GAME, /const GOAL_SCALE = [^;]+;/),
   buffFns: grab(GAME, /const HOT_FORM_BAR = [\s\S]*?const buffMul = [^;]+;/),
   matchContribution: grab(GAME, /function matchContribution\(rating\) \{[\s\S]*?\n\}/),
@@ -209,6 +211,7 @@ check(/act\.hypeSum \+=/.test(SRC) && /act\.cbHype \+=/.test(SRC),
 const seasonFn = new Function("S", "clamp", "rand", "condition", "fandom", `
   ${parts.posInfo} ${parts.clutchScale} ${parts.transLv} ${parts.clutch}
   ${parts.momentKind}
+  ${parts.statKeys}
   ${parts.goalScale}
   ${parts.buffFns}
   ${parts.poissonish} ${parts.matchContribution} ${parts.autoRes}

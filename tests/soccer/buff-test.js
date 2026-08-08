@@ -40,6 +40,8 @@ const SRC = fs.readFileSync(path.join(DIR, "career.js"), "utf8");
 const GAME = fs.readFileSync(path.join(DIR, "game.js"), "utf8");
 
 const parts = {
+  // 재능이 능력치마다 따로 붙어요 — ratingOf가 STAT_KEYS를 훑어요
+  statKeys: grab(GAME, /const STAT_KEYS = \[[^\]]*\];/),
   goalScale: grab(GAME, /const GOAL_SCALE = [^;]+;/),
   buffFns: grab(GAME, /const HOT_FORM_BAR = [\s\S]*?const buffMul = [^;]+;/),
   posInfo: grab(GAME, /const POS_INFO = \{[\s\S]*?\n\};/),
@@ -60,7 +62,8 @@ const parts = {
 const missing = Object.entries(parts).filter(([, v]) => !v).map(([k]) => k);
 if (missing.length) { console.log(`❌ 소스에서 못 찾았어요: ${missing.join(", ")}`); process.exit(1); }
 
-const B = new Function(`${parts.goalScale}
+const B = new Function(`${parts.statKeys}
+  ${parts.goalScale}
   ${parts.buffFns}
   return { SEASON_TITLES, BUFF_CAP, AWARD_BUFF, HOT_FORM_BAR, seasonTitleOf, activeBuffs, buffSum, buffMul };`)();
 
@@ -157,6 +160,7 @@ guard("④ 수상 ↔ 칭호", () => {
 
 /* ---------- ⑤⑥⑦ 경기에 실제로 붙는가 ---------- */
 const engine = (extra) => new Function("S", "clamp", "rand", `
+  ${parts.statKeys}
   ${parts.goalScale}
   ${extra || parts.buffFns}
   ${parts.posInfo} ${parts.clutchScale} ${parts.transLv} ${parts.clutch}

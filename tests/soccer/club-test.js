@@ -45,6 +45,8 @@ const parts = {
   /* 🔥 승부처 성공이 무엇으로 남는지는 포지션이 정해요(극장골/도움/차단).
    * info 블록이 momentKind()를 부르니 같이 떼어 와야 굴러가요. */
   momentKind: grab(GAME, /const MOMENT_KIND = \{[^}]*\};\nconst momentKind = [^;]+;/),
+  // 재능이 능력치마다 따로 붙어요 — ratingOf가 STAT_KEYS를 훑어요
+  statKeys: grab(GAME, /const STAT_KEYS = \[[^\]]*\];/),
   goalScale: grab(GAME, /const GOAL_SCALE = [^;]+;/),
   buffFns: grab(GAME, /const HOT_FORM_BAR = [\s\S]*?const buffMul = [^;]+;/),
   matchContribution: grab(GAME, /function matchContribution\(rating\) \{[\s\S]*?\n\}/),
@@ -153,6 +155,7 @@ guard("기본 전력", () => {
  * 그 S를 클로저로 잡게 감쌌어요. */
 const mateFn = new Function("S", "rating", "clamp", "oppStr", `
   ${parts.momentKind}
+  ${parts.statKeys}
   ${parts.goalScale}
   ${parts.poissonish}
   ${leagueSrc}
@@ -165,6 +168,7 @@ const mateFn = new Function("S", "rating", "clamp", "oppStr", `
  * 팀 골을 고정값으로 두고 전력만 움직입니다. */
 const oppFn = new Function("S", "rating", "defStat", "clamp", "rand", "oppStr", "teamGoals", `
   ${parts.momentKind}
+  ${parts.statKeys}
   ${parts.goalScale}
   ${parts.poissonish}
   ${leagueSrc}
@@ -211,9 +215,13 @@ guard("실점", () => {
  * (b) 평균을 ±3%로 대조해요 — 사람이 읽을 수 있는 눈금이에요. */
 const contribFn = new Function("S", "clamp", "Math", `
   ${parts.momentKind}
+  ${parts.statKeys}
   ${parts.goalScale}
   ${parts.buffFns}
   ${parts.poissonish}
+  /* matchContribution이 이제 축마다 그 능력치의 재능(clutch)을 달고 가요 —
+   * 슛 별을 올리면 골이 늘도록. 같이 안 떼어 오면 ReferenceError로 죽어요. */
+  ${parts.clutchScale} ${parts.transLv} ${parts.clutch}
   ${leagueSrc}
   ${clubSrc}
   ${parts.matchContribution}
@@ -266,6 +274,7 @@ guard("전력이 내 기록에 안 닿는다", () => {
 const seasonFn = new Function("S", "clamp", "rand", "randInt", "pick", `
   ${parts.posInfo} ${parts.clutchScale} ${parts.transLv} ${parts.clutch}
   ${parts.momentKind}
+  ${parts.statKeys}
   ${parts.goalScale}
   ${parts.buffFns}
   ${parts.poissonish} ${parts.matchContribution} ${parts.autoRes}

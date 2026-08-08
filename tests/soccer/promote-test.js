@@ -503,6 +503,84 @@ guard("👑 시작 리그", () => {
   check(!!hook && /startLeague/.test(hook), "호출부가 startLeague를 넘긴다");
 }
 
+/* ---------- ⑩ 리그 1위인데 승격이 안 될 때, 이유가 화면에 남는가 ----------
+ *
+ * 제보(스크린샷): 세리에B로 **이적한 첫 시즌에 리그 1위**를 했는데 승격도 우승도
+ * 아무 일이 안 일어났고, 결산 화면에 설명도 없었다.
+ *
+ * 원인 둘이 겹쳐 있었다.
+ *  ① 정착 기간(PROMO_SETTLE)이 leagueSince를 봤다. 그 값은 **이적으로 리그가
+ *     바뀔 때도 새로 선다** — 이적해서 우승해도 못 올라갔다. 이적은 내가 고른
+ *     길이고 거기서 1위를 했으면 올라가는 게 맞다. 막을 것은 "승격 직후 연속
+ *     승격"뿐이라, 승격으로 올라온 시즌(promoSince)만 보게 했다.
+ *  ② 막히면 그냥 null을 돌려줘서 **결산이 조용했다.** 이제 이유를 담아 돌려준다.
+ */
+console.log("=== ⑩ 1위인데 승격이 막힐 때 ===");
+guard("승격 게이트", () => {
+  const apply = T.applyPromotion;
+  const SETTLE = T.PROMO_SETTLE, GAP = T.PROMO_GAP;
+  check(typeof apply === "function" && SETTLE > 0 && GAP > 0,
+    `applyPromotion·문턱을 꺼냈다 (정착 ${SETTLE}시즌 · 승점 차 ${GAP})`);
+
+  /* 사다리 중간 리그에서 1위인 표를 만들어요. 세리에B(id 10)는 이탈리아 사다리의
+   * 아래 칸이라 위로 갈 데가 있어요 — 제보와 같은 자리예요. */
+  const LG = 10;
+  const setup = (over) => {
+    const st = T.state();
+    st.league = LG;
+    st.group = CLUBS[LG][0].name;
+    st.clubStr = CLUBS[LG][0].str;
+    st.proYear = 5;
+    st.leagueSince = 5;                 // 올해 이 리그에 왔다 (이적이든 승격이든)
+    delete st.promoSince;
+    Object.assign(st, over);
+    // 내가 1위 · 2위와 승점 차 12 (문턱 8 이상)
+    st.table = { y: st.proYear, league: LG, rows: CLUBS[LG].map((c, i) => ({
+      name: c.name, str: c.str,
+      w: i === 0 ? 14 : 8, d: 0, l: i === 0 ? 2 : 8,
+    })) };
+    st.table.rows[0].name = st.group;
+    return st;
+  };
+
+  // ① 이적으로 온 첫 시즌 — 1위면 올라가야 해요
+  setup({});
+  const moved = apply();
+  console.log(`   이적 첫 시즌 1위 → ${moved ? moved.kind : "아무 일 없음"}`);
+  check(!!moved && moved.kind === "up",
+    `이적한 첫 시즌에 1위를 하면 승격한다 (${moved ? moved.kind : "null"}) — 제보의 그 자리예요`);
+
+  // ② 승격으로 온 직후 — 연속 승격은 막히고, 그 사실이 값에 남아요
+  setup({ promoSince: 5 });
+  const held = apply();
+  console.log(`   승격 직후 1위 → ${held ? `${held.kind}(${held.why})` : "아무 일 없음"}`);
+  check(!!held && held.kind === "held" && held.why === "settle",
+    `승격 직후에는 연속 승격이 막힌다 (${held ? held.kind : "null"})`);
+  check(!!held && held.left >= 1, `몇 시즌 더 버티면 되는지 알려준다 (${held ? held.left : "?"}시즌)`);
+  check(!!held && held.rank === 1, "1위였다는 사실이 값에 남는다");
+
+  // ③ 정착 기간이 지났으면 열려요
+  setup({ promoSince: 5 - SETTLE });
+  const opened = apply();
+  check(!!opened && opened.kind === "up",
+    `정착 기간(${SETTLE}시즌)이 지나면 승격이 열린다 (${opened ? opened.kind : "null"})`);
+
+  // ④ 승점 차가 모자라면 그 이유가 남아요
+  const st = setup({});
+  st.table.rows[1].w = 13; st.table.rows[1].l = 3;   // 2위와 승점 차 3
+  const gap = apply();
+  console.log(`   1위지만 승점 차 부족 → ${gap ? `${gap.kind}(${gap.why} ${gap.gap}점)` : "아무 일 없음"}`);
+  check(!!gap && gap.kind === "held" && gap.why === "gap",
+    `승점 차가 모자라면 그 이유가 남는다 (${gap ? gap.why : "null"})`);
+  check(!!gap && gap.gap < GAP && gap.need === GAP,
+    `모자란 승점과 문턱을 같이 알려준다 (${gap ? `${gap.gap} < ${gap.need}` : "?"})`);
+
+  // ⑤ 막힌 경우에는 리그가 안 바뀌어요 — 값만 돌려주고 상태는 건드리지 않아야 해요
+  setup({ promoSince: 5 });
+  apply();
+  check(T.state().league === LG, `막힌 경우 리그가 그대로다 (${T.state().league})`);
+});
+
 console.log(fail ? `\n❌ ${fail}건 실패` : "\n✅ 통과");
 w.close();
 process.exit(fail ? 1 : 0);

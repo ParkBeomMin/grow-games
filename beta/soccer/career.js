@@ -41,8 +41,16 @@ window.WingerCareer = (() => {
     const all = (stats.shoot + stats.pass + stats.dribble + stats.defense + stats.stamina) / 5;
     const low = Math.min(stats.shoot, stats.pass, stats.dribble, stats.defense, stats.stamina);
     const weak = Math.max(0, all * WEAK_BAR - low) * WEAK_PEN;
+    /* ⭐ 재능은 **그 능력치가 하는 일에** 붙어요.
+     *
+     * 예전에는 `… * clutch(main)` 하나였어요 — 주 스탯의 별만 평점에 작용하고,
+     * 나머지 넷의 별은 훈련 효율 말고는 아무 데도 안 쓰였습니다. "각 스탯에 따라
+     * 달라져야 하는 거 아냐?"라는 물음이 정확히 그 자리예요.
+     * 이제 각 항이 자기 별을 달고 갑니다 — 전체 평균 항은 다섯 별의 평균으로요. */
+    const talAvg = STAT_KEYS.reduce((a, k) => a + clutch(k), 0) / STAT_KEYS.length;
     const myScore =
-      (all * 0.50 + stats[main] * 0.14 + stats.stamina * 0.10 - weak) * clutch(main) +
+      (all * 0.50 * talAvg + stats[main] * 0.14 * clutch(main)
+        + stats.stamina * 0.10 * clutch("stamina") - weak) +
       condition / 8 + Math.min((fandom || 0) / 45, FAN_CAP) + rand(-5, 5) + 20;
     /* 🎖️ 시즌 칭호(👑 리그의 지배자·🏆 챔피언·🏅 발롱도르)가 평점에 붙어요.
      * clamp **안쪽**에서 더해요 — 밖에서 더하면 상한 10이 안 지켜집니다. */
@@ -568,7 +576,14 @@ window.WingerCareer = (() => {
      * 면제는 **프로 데뷔 시즌 한 번뿐**이에요. 갓 입단한 선수의 첫 시즌이
      * 강등으로 끝나는 건 과하니까요. (이 함수는 시즌 기록을 쌓기 전에 돌아서,
      * years가 비어 있으면 그게 데뷔 시즌이에요) */
-    const sinceHere = S.leagueSince == null ? 99 : S.proYear - S.leagueSince;
+    /* ⚠️ 정착 기간은 **승격으로 올라온 경우에만** 걸어요.
+     *
+     * 예전에는 leagueSince를 봤는데, 그 값은 **이적으로 리그가 바뀔 때도** 새로
+     * 섭니다(moveToClub). 그래서 세리에B로 이적해 그 시즌 리그 1위를 했는데
+     * 승격도 우승도 아무 일이 안 일어났어요(제보). 이적은 내가 고른 길이고,
+     * 거기서 1위를 했으면 올라가는 게 맞아요 — 막을 것은 "승격 직후 연속 승격"뿐입니다.
+     * 옛 세이브에는 promoSince가 없어요(= 승격으로 온 적 없음) → 면제. */
+    const sinceHere = S.promoSince == null ? 99 : S.proYear - S.promoSince;
     // 세이브에 career가 없으면(있을 수 없는 상태) 면제를 켜지 않아요 — 조용히 규칙이 죽는 걸 막아요
     const debutSeason = !!(S.career && Array.isArray(S.career.years) && S.career.years.length === 0);
 
@@ -585,9 +600,18 @@ window.WingerCareer = (() => {
 
     let to = null, kind = null;
     if (rank === 1 && at < ladder.length - 1) {
-      if (sinceHere < PROMO_SETTLE) return null;      // 갓 올라온 리그에서 또 올라가진 않아요
+      /* 1위인데 못 올라가는 두 경우 — **왜 아무 일도 안 일어났는지 화면에 남겨요.**
+       * 예전에는 그냥 null을 돌려줘서, 리그 1위를 하고도 결산이 조용했습니다. */
       const me = rows[0], second = rows[1];
-      if (me.pts - (second ? second.pts : 0) >= PROMO_GAP) { to = ladder[at + 1]; kind = "up"; }
+      const gap = me.pts - (second ? second.pts : 0);
+      if (sinceHere < PROMO_SETTLE) {
+        return { kind: "held", why: "settle", from: leagueOf(S).name, rank,
+          left: PROMO_SETTLE - sinceHere };
+      }
+      if (gap < PROMO_GAP) {
+        return { kind: "held", why: "gap", from: leagueOf(S).name, rank, gap, need: PROMO_GAP };
+      }
+      to = ladder[at + 1]; kind = "up";
     } else if (rank === rows.length && at > 0) {
       // 사다리 안에서만 내려가요. 맨 아래(K리그3)는 갈 데가 없어요.
       if (debutSeason) return null;                   // 데뷔 시즌 한 번만 면제예요
@@ -610,7 +634,9 @@ window.WingerCareer = (() => {
     swapLeagues(fromId, to, kind);
     S.league = to;
     S.table = null;                          // 새 리그에서 표를 다시 만들어요
-    S.leagueSince = S.proYear;               // 이 리그에 들어온 시즌 — 연속 승격을 막아요
+    S.leagueSince = S.proYear;               // 이 리그에 들어온 시즌
+    // 승격으로 올라온 시즌만 따로 남겨요 — 정착 기간은 이것만 봅니다(이적은 면제)
+    if (kind === "up") S.promoSince = S.proYear;
     /* 승격은 **떠나는 리그에서 1위**를 했다는 뜻이라 그 리그 기준으로 줘요.
      * 도착 리그 기준으로 주면 올라간 보상을 미리 당겨 받는 셈이 됩니다. */
     let prize = 0;
@@ -991,7 +1017,7 @@ window.WingerCareer = (() => {
     for (const d of STAT_DEFS) {
       const v = Math.round(S.stats[d.key]);
       const tv = S.talents[d.key], tl = transLv(d.key);
-      const stars = "⭐".repeat(talentStars(tv)) + (isTalentMax(tv) ? (tl ? ` <span class="tr">✨${tl}</span>` : " MAX") : "");
+      const stars = talentStarStr(tv) + (isTalentMax(tv) ? (tl ? ` <span class="tr">✨${tl}</span>` : " MAX") : "");
       const row = document.createElement("div");
       row.className = "stat-row";
       row.innerHTML = `
@@ -1630,6 +1656,7 @@ window.WingerCareer = (() => {
     if (move) {
       proLog(move.kind === "title" ? `🏆 ${move.from} 우승!! 리그 정상에 섰어요`
         : move.kind === "up" ? `🔺 리그 우승! ${move.from} → ${move.to} 승격!!`
+        : move.kind === "held" ? `🥇 ${move.from} 1위! 다만 이번엔 승격이 안 열렸어요`
         : `🔻 최하위… ${move.from} → ${move.to} 강등`);
     }
     S.career.sales += sales;
@@ -1670,7 +1697,10 @@ window.WingerCareer = (() => {
     if (move && move.kind === "down") nextBuffs.push("revenge");
     S.buffs = nextBuffs;
     S.buffY = S.proYear + 1;
-    S.career.years.push({ y: S.proYear, hype: Math.round(hype * 10) / 10, wins, sales, dFan, awards, goals: gg, assists: ga, defense: gd, apps, avg: avgRating, club: S.group, league: leaguePlayed, rank: finalRank, teams: finalTeams, promo: move ? move.kind : null, promoTo: move ? move.to : null, prize: move && move.prize ? move.prize : 0 });
+    S.career.years.push({ y: S.proYear, hype: Math.round(hype * 10) / 10, wins, sales, dFan, awards, goals: gg, assists: ga, defense: gd, apps, avg: avgRating, club: S.group, league: leaguePlayed, rank: finalRank, teams: finalTeams, promo: move ? move.kind : null, promoTo: move ? move.to : null, prize: move && move.prize ? move.prize : 0,
+      // 1위인데 못 올라간 경우의 이유 — 결산 화면이 이걸 읽어 말로 적어요
+      heldWhy: move && move.why || null, heldLeft: move && move.left || null,
+      heldGap: move && move.gap != null ? move.gap : null, heldNeed: move && move.need || null });
     /* 리그·나라·순위를 함께 남겨요. 나라별 리그를 11개 만들어 놓고 **어느 리그에서
      * 몇 시즌을 뛰는지** 데이터가 없었어요 — "새 리그가 실제로 쓰이나"를 물을 수가
      * 없었습니다. 지금은 시뮬레이션으로만 판단하고 있어요. */
@@ -1854,6 +1884,12 @@ window.WingerCareer = (() => {
       ${y.promo ? `<div class="hint">${
         y.promo === "title" ? `🏆 <b>${y.promoTo} 우승!</b> 리그 정상에 섰어요${y.prize ? ` · 💰 우승 상금 +${y.prize}만` : ""}`
         : y.promo === "up" ? `🔺 <b>리그 우승!</b> ${(y.y || 0) + 1}시즌부터 <b>${y.promoTo}</b>에서 뜁니다${y.prize ? ` · 💰 우승 상금 +${y.prize}만` : ""}`
+        /* 1위인데 못 올라간 경우 — 왜인지 반드시 적어요. 예전에는 아무 말도 없어서
+         * "1위를 했는데 왜 아무 일도 안 일어나지?"가 됐습니다(제보). */
+        : y.promo === "held" ? `🥇 <b>리그 1위!</b> 다만 ${
+            y.heldWhy === "settle"
+              ? `승격한 지 얼마 안 돼 이번엔 못 올라가요 — ${y.heldLeft || 1}시즌만 더 버티면 열려요`
+              : `2위와 승점 차가 ${y.heldGap}점이라 승격 문턱(${y.heldNeed}점)에 모자랐어요`}`
         : `🔻 최하위로 강등… ${(y.y || 0) + 1}시즌부터 <b>${y.promoTo}</b>에서 다시 시작해요`}</div>` : ""}
       ${y.club && y.club !== S.group ? `<div class="hint">🔁 <b>${S.group}</b>로 이적했어요 — ${(y.y || 0) + 1}시즌부터 새 팀에서 뜁니다</div>` : ""}
       ${moveNote ? `<div class="hint learn">${moveNote}</div>` : ""}
@@ -2807,7 +2843,7 @@ window.WingerCareer = (() => {
       RATE, RATE_RESULT, RATE_CONCEDE, ratingParts, matchRating, ratingWhyHTML,
       RACE_POS, rollRace, raceAdvance, raceRate, raceConceded,
       LEAGUES, leagueOf, barOf, CLUBS, clubStrOf, debutClubs, DEBUT_POOL, weakestClub,
-      cupEntry, cupName, CUP_SPOTS, myTableRank,
+      cupEntry, cupName, CUP_SPOTS, myTableRank, applyPromotion, PROMO_SETTLE, PROMO_GAP,
       TRANSFER_MIN_YEAR, PROMOTE_HYPE, OFFERS_PER_LEAGUE, transferFee, transferOffers, canTransfer,
       DOWNGRADE_FEE, LOYALTY_FEE, leftBefore, moveLog, careerScore, shortClub, clubCell,
       clubOfYear, fillClubs,

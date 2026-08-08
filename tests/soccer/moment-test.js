@@ -38,6 +38,8 @@ const check = (ok, msg) => { console.log(`${ok ? "✅" : "❌"} ${msg}`); if (!o
 const guard = (label, fn) => { try { fn(); } catch (e) { check(false, `${label} — ${e.message}`); } };
 
 const parts = {
+  // 재능이 능력치마다 따로 붙어요 — ratingOf가 STAT_KEYS를 훑어요
+  statKeys: grab(GAME, /const STAT_KEYS = \[[^\]]*\];/),
   goalScale: grab(GAME, /const GOAL_SCALE = [^;]+;/),
   posInfo: grab(GAME, /const POS_INFO = \{[\s\S]*?\n\};/),
   clutchScale: grab(GAME, /const CLUTCH_SCALE = [^;]+;/),
@@ -119,6 +121,7 @@ guard("③④⑤ 미니게임", () => {
 
 /* ---------- ②⑥⑦ 실제로 굴려서 ---------- */
 const play = (kindSrc) => new Function("S", "clamp", "rand", "N", `
+  ${parts.statKeys}
   ${parts.goalScale}\n${parts.posInfo}\n${parts.clutchScale}\n${parts.transLv}\n${parts.clutch}
   ${parts.poissonish}\n${parts.buffFns}\n${parts.contrib}\n${parts.autoRes}
   ${kindSrc}

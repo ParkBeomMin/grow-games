@@ -450,7 +450,7 @@ function renderRoll() {
     fill: "rgba(95, 168, 255, 0.28)",
   });
   $("roll-stars").innerHTML = STAT_DEFS
-    .map((d) => `${d.emoji} ${d.name} ${"⭐".repeat(talentStars(pendingRoll.talents[d.key]))}`)
+    .map((d) => `${d.emoji} ${d.name} ${talentStarStr(pendingRoll.talents[d.key])}`)
     .join(" · ") + `<br/>⭐ = 잠재력 — 별이 많은 능력치일수록 훈련 효율이 높아요`;
 }
 $("btn-reroll")?.addEventListener("click", () => {
@@ -733,6 +733,18 @@ function transcendTitle(n) {
   return "";
 }
 const talentStars = (t) => clamp(Math.round(((t - 0.6) / (TALENT_MAX - 0.6)) * 5), 1, 5);
+// 능력치 키 다섯 — 재능 평균처럼 "전부"를 훑을 때 써요
+const STAT_KEYS = ["shoot", "pass", "dribble", "defense", "stamina"];
+/* ⭐ 별 그림 — **반칸까지** 그려요.
+ *
+ * 별 다섯 칸으로 재능 0.6~1.8을 나누면 한 칸이 0.24예요. 각성 한 번의 상승은
+ * 평균 0.225라 **성공해도 별이 그대로**인 경우가 흔했습니다(제보: "별이 4개에서
+ * 각성 성공했는데 그대로 4개야"). 재능은 분명히 올랐는데 화면에 안 보인 거예요.
+ * 반칸(0.12)까지 그리면 각성 한 번이 최소 한 칸 반을 움직여 반드시 눈에 띕니다. */
+function talentStarStr(t) {
+  const half = clamp(Math.round(((t - 0.6) / (TALENT_MAX - 0.6)) * 10), 1, 10);
+  return "⭐".repeat(Math.floor(half / 2)) + (half % 2 ? "✩" : "");
+}
 const isTalentMax = (t) => t >= TALENT_MAX - 1e-9;
 // 재능 MAX 이후 — 상한까지 채운 스탯으로 초월에 도전해요.
 function transcend(key, d, v, logFn) {
@@ -797,9 +809,13 @@ function awakenTalent(key, logFn) {
   const awakenOk = Math.random() < p;
   if (window.Stats) Stats.log("awaken", { key, lv: Math.round(S.talents[key] * 100) / 100, ok: awakenOk });
   if (awakenOk) {
+    const before = S.talents[key];
     S.talents[key] = Math.min(S.talents[key] + rand(0.15, 0.3), TALENT_MAX);
     S.stats[key] = resetStat(key, 45, 60);
-    logFn(`🔮✨ ${d.name} 재능 각성 성공!! 잠재력이 한 단계 피어났어요 (수치 ${Math.round(S.stats[key])}부터 재도전)`);
+    /* 재능 수치를 같이 적어요. 별 그림만으로는 반칸이 움직였는지 헷갈려요 —
+     * "성공했는데 별이 그대로"라는 제보가 여기서 나왔습니다. */
+    logFn(`🔮✨ ${d.name} 재능 각성 성공!! ⭐ ${before.toFixed(2)} → ${S.talents[key].toFixed(2)}`
+      + ` (수치 ${Math.round(S.stats[key])}부터 재도전)`);
     if (window.Fx) Fx.celebrate("awaken", `⭐ ${d.name} 각성 성공!`, ".awaken-btn");
   } else if (Math.random() < 0.1) {
     S.talents[key] = Math.max(S.talents[key] - 0.1, 0.8);
@@ -1256,7 +1272,7 @@ function renderMain() {
   for (const d of STAT_DEFS) {
     const v = Math.round(S.stats[d.key]);
     const tv = S.talents[d.key], tl = transLv(d.key);
-    const stars = "⭐".repeat(talentStars(tv)) + (isTalentMax(tv) ? (tl ? ` <span class="tr">✨${tl}</span>` : " MAX") : "");
+    const stars = talentStarStr(tv) + (isTalentMax(tv) ? (tl ? ` <span class="tr">✨${tl}</span>` : " MAX") : "");
     const row = document.createElement("div");
     row.className = "stat-row";
     row.innerHTML = `
@@ -1552,9 +1568,14 @@ function matchContribution(rating) {
   const D = { df: 2.3, mf: 1.2, wg: 0.5, fw: 0.45 };
   /* 🎖️ 시즌 칭호가 여기서 경기에 들어와요 — 리그도 컵도 이 함수를 통해 골·도움·
    * 수비를 뽑으니, 한 자리에 얹으면 모든 경기에 같은 규칙으로 붙습니다. */
-  const gLam = (G[S.pos] ?? 0.4) * perf * (0.55 + shootF) * buffMul("g") * GOAL_SCALE;
-  const aLam = (A[S.pos] ?? 0.4) * perf * (0.55 + passF) * buffMul("a") * GOAL_SCALE;
-  const dLam = (D[S.pos] ?? 0.6) * perf * (0.55 + defF) * buffMul("d") * GOAL_SCALE;
+  /* ⭐ 재능도 **그 축이 쓰는 능력치의 별**을 달고 가요. 슛 별을 올리면 골이 늘고,
+   * 패스 별을 올리면 도움이 늘어요. 예전에는 주 스탯의 별 하나만 평점에 붙어서,
+   * 나머지 넷의 별은 훈련 효율 말고는 경기에 아무 영향이 없었습니다. */
+  const gTal = isWg ? (clutch("shoot") * 0.6 + clutch("dribble") * 0.4) : clutch("shoot");
+  const aTal = isWg ? (clutch("pass") * 0.6 + clutch("dribble") * 0.4) : clutch("pass");
+  const gLam = (G[S.pos] ?? 0.4) * perf * (0.55 + shootF) * gTal * buffMul("g") * GOAL_SCALE;
+  const aLam = (A[S.pos] ?? 0.4) * perf * (0.55 + passF) * aTal * buffMul("a") * GOAL_SCALE;
+  const dLam = (D[S.pos] ?? 0.6) * perf * (0.55 + defF) * clutch("defense") * buffMul("d") * GOAL_SCALE;
   return { g: poissonish(gLam), a: poissonish(aLam), def: poissonish(dLam) };
 }
 /* 동료 득점 — 예전에는 팀 득점이 내 골 + 내 도움뿐이라 동료가 넣는 골이 없었어요.

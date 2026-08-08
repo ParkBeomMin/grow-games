@@ -43,6 +43,8 @@ const check = (ok, msg) => { console.log(`${ok ? "✅" : "❌"} ${msg}`); if (!o
 const guard = (label, fn) => { try { fn(); } catch (e) { check(false, `${label} — ${e.message}`); } };
 
 const parts = {
+  // 재능이 능력치마다 따로 붙어요 — ratingOf가 STAT_KEYS를 훑어요
+  statKeys: grab(GAME, /const STAT_KEYS = \[[^\]]*\];/),
   goalScale: grab(GAME, /const GOAL_SCALE = [^;]+;/),
   buffFns: grab(GAME, /const HOT_FORM_BAR = [\s\S]*?const buffMul = [^;]+;/),
   posInfo: grab(GAME, /const POS_INFO = \{[\s\S]*?\n\};/),
@@ -73,6 +75,7 @@ if (missing.length) { console.log(`❌ 소스에서 못 찾았어요: ${missing.
 const mkMatch = (mateSrc, concSrc) => new Function("S", "oppStr", "clamp", "rand", "randInt", "pick", `
   ${parts.posInfo} ${parts.clutchScale} ${parts.transLv} ${parts.clutch}
   ${parts.leagues} ${parts.leagueOf} ${parts.clubStrOf}
+  ${parts.statKeys}
   ${parts.goalScale}
   ${parts.buffFns} ${parts.poissonish} ${parts.contrib} ${parts.autoRes}
   ${parts.fanCap} ${parts.ratingDiv} ${parts.ratingOf}
@@ -156,7 +159,8 @@ guard("⑤ 상대 전력", () => {
 // ---------- ⑥ 동료 골의 반응 ----------
 guard("⑥ 동료 골", () => {
   const mateOnly = new Function("S", "rating", "oppStr", "clamp", `
-    ${parts.goalScale}
+    ${parts.statKeys}
+  ${parts.goalScale}
     ${parts.leagues} ${parts.leagueOf} ${parts.clubStrOf} ${parts.poissonish}
     ${parts.tmTbl} ${parts.mates}
     return teammateGoals(rating, oppStr);`);

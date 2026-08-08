@@ -19,6 +19,8 @@ const C = fs.readFileSync(`${BASE}/career.js`, "utf8");
 const grab = (s, re) => { const m = s.match(re); return m ? m[0] : null; };
 
 const parts = {
+  // 재능이 능력치마다 따로 붙어요 — ratingOf가 STAT_KEYS를 훑어요
+  statKeys: grab(GAME, /const STAT_KEYS = \[[^\]]*\];/),
   goalScale: grab(GAME, /const GOAL_SCALE = [^;]+;/),
   roles: grab(G, /const RACE_ROLES = \[[\s\S]*?\n\];/),
   lam: grab(G, /const raceLam = \([\s\S]*?;\n/),
