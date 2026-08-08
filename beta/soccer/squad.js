@@ -196,17 +196,47 @@ window.WingerSquad = (() => {
   /* 내 자리 경쟁 — 같은 포지션에서 몇 등인가, 선발 자리는 몇 개인가.
    * odds — 흔들림(±FORM_SWING)과 컨디션을 감안한 **이번 경기 선발 확률**이에요.
    * 순번만 보여주면 "3/3인데 왜 벤치야?"가 되니, 경합 중이라는 걸 숫자로 알려줘요. */
+  /* ⚠️ 확률은 **부를 때마다 같은 값**이 나와야 해요.
+   *
+   * 예전에는 Math.random으로 400번 굴려서 냈어요. 그러면 같은 상태인데도 HUD
+   * 버튼과 스쿼드 레이어가 다른 숫자를 적고, 레이어를 다시 열 때마다 값이
+   * 흔들립니다(제보: "HUD에 보이는 선발 확률이랑 눌러서 보이는 게 다르네.
+   * 누를 때마다 확률이 바뀌네"). 게임의 무작위는 **경기 한 번**에만 있어야지
+   * 그 확률을 읽는 행위에 있으면 안 돼요 — 화면이 흔들리면 훈련이 얼마나
+   * 도움이 됐는지 비교할 수가 없습니다.
+   *
+   * 그래서 씨앗을 **입력에서** 뽑아 굴려요. 실력·컨디션·폼이 그대로면 언제
+   * 물어봐도 같은 답이고, 하나라도 움직이면 답도 움직여요. */
+  const seedOf = (line, bonus) => {
+    let h = 2166136261;
+    const mix = (v) => { h = Math.imul(h ^ (Math.round(v * 100) >>> 0), 16777619) >>> 0; };
+    for (const x of line) mix(x.str);
+    mix(bonus); mix(FORMATION[S.pos]); mix(line.length);
+    return h >>> 0;
+  };
+  const rngFrom = (seed) => () => {
+    seed = (seed + 0x6d2b79f5) >>> 0;
+    let t = seed;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+
   function myLine() {
     const sq = ensureSquad();
     const line = sq.filter((x) => x.pos === S.pos).sort((a, b) => b.str - a.str);
     const rank = line.findIndex((x) => x.me) + 1;
+    const bonus = myBonus();
+    const nextU = rngFrom(seedOf(line, bonus.total));
     let hit = 0;
-    const N = 400;
+    const N = 1200;   // 씨앗이 고정이라 늘려도 공짜예요 — 1%p 안쪽으로 잡힙니다
     for (let i = 0; i < N; i++) {
-      const roll = line.map((x) => ({ x, v: lineupScore(x) })).sort((a, b) => b.v - a.v);
+      const roll = line
+        .map((x) => ({ x, v: x.str + (nextU() * 2 - 1) * FORM_SWING + (x.me ? bonus.total : 0) }))
+        .sort((a, b) => b.v - a.v);
       if (roll.slice(0, FORMATION[S.pos]).some((e) => e.x.me)) hit++;
     }
-    return { rank, of: line.length, slots: FORMATION[S.pos], line, odds: hit / N, bonus: myBonus() };
+    return { rank, of: line.length, slots: FORMATION[S.pos], line, odds: hit / N, bonus };
   }
 
   /* 왜 앉았는지 / 왜 뽑혔는지 한 줄 — **화면 세 군데가 이 함수 하나를 써요.**

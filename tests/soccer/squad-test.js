@@ -462,6 +462,22 @@ guard("⑮ 선발 확률의 근거", () => {
   const setD = (d) => { for (const k of Object.keys(st.stats)) st.stats[k] = base[k] + d; };
   const odds = () => Squad.myLine().odds;
 
+  /* ── 같은 상태면 몇 번을 물어도 같은 답인가.
+   * 제보: "HUD에 보이는 선발 확률이랑 눌러서 보이는 게 다르네. 누를 때마다 바뀌네."
+   * 확률을 Math.random으로 그 자리에서 굴려서 냈기 때문이었어요. 화면이 흔들리면
+   * 훈련이 얼마나 도움이 됐는지 비교할 수가 없습니다. */
+  const shots = [];
+  for (let i = 0; i < 8; i++) shots.push(Squad.myLine().odds);
+  const spread = Math.max(...shots) - Math.min(...shots);
+  console.log(`   같은 상태로 8번 — ${[...new Set(shots.map((v) => Math.round(v * 100)))].join("%, ")}%`);
+  check(spread === 0, `부를 때마다 같은 확률이 나온다 (폭 ${Math.round(spread * 100)}%p) — HUD와 레이어가 같은 숫자를 적어야 해요`);
+  const before = Squad.myLine().odds;
+  st.condition = Math.min(100, st.condition + 30);
+  const after = Squad.myLine().odds;
+  st.condition = 60;
+  check(after !== before,
+    `그렇다고 굳어 있지는 않다 — 컨디션을 올리면 값이 움직인다 (${Math.round(before * 100)}% → ${Math.round(after * 100)}%)`);
+
   // ── 실력 (컨디션·폼 고정)
   setD(-9); const sLow = odds();
   setD(9); const sHigh = odds();
