@@ -450,7 +450,8 @@ function renderRoll() {
     fill: "rgba(95, 168, 255, 0.28)",
   });
   $("roll-stars").innerHTML = STAT_DEFS
-    .map((d) => `${d.emoji} ${d.name} ${talentStarStr(pendingRoll.talents[d.key])}`)
+    // 이 줄은 텍스트로만 쓰여서 태그가 못 들어가요 — 별만 그려요
+    .map((d) => `${d.emoji} ${d.name} ${"⭐".repeat(talentStars(pendingRoll.talents[d.key]))}`)
     .join(" · ") + `<br/>⭐ = 잠재력 — 별이 많은 능력치일수록 훈련 효율이 높아요`;
 }
 $("btn-reroll")?.addEventListener("click", () => {
@@ -735,15 +736,16 @@ function transcendTitle(n) {
 const talentStars = (t) => clamp(Math.round(((t - 0.6) / (TALENT_MAX - 0.6)) * 5), 1, 5);
 // 능력치 키 다섯 — 재능 평균처럼 "전부"를 훑을 때 써요
 const STAT_KEYS = ["shoot", "pass", "dribble", "defense", "stamina"];
-/* ⭐ 별 그림 — **반칸까지** 그려요.
+/* ⭐ 별 그림 — 별 다섯 칸 **옆에 재능 수치**를 적어요.
  *
- * 별 다섯 칸으로 재능 0.6~1.8을 나누면 한 칸이 0.24예요. 각성 한 번의 상승은
- * 평균 0.225라 **성공해도 별이 그대로**인 경우가 흔했습니다(제보: "별이 4개에서
- * 각성 성공했는데 그대로 4개야"). 재능은 분명히 올랐는데 화면에 안 보인 거예요.
- * 반칸(0.12)까지 그리면 각성 한 번이 최소 한 칸 반을 움직여 반드시 눈에 띕니다. */
+ * 별 다섯 칸으로 재능 0.6~1.8을 나누면 한 칸이 0.24인데, 각성 한 번의 상승은
+ * 평균 0.225라 **성공해도 별이 그대로**인 경우가 흔했어요(제보: "별이 4개에서
+ * 각성 성공했는데 그대로 4개야"). 반칸(✩)으로 쪼개 봤지만 "빈 별은 안 해도
+ * 되지 않을까"라는 제보가 이어졌습니다 — 눈에 지저분했어요.
+ * 숫자를 한 칸 붙이는 게 가장 정직해요. 별은 한눈에 보는 눈금이고,
+ * 수치는 각성 한 번이 얼마나 움직였는지를 정확히 보여줍니다. */
 function talentStarStr(t) {
-  const half = clamp(Math.round(((t - 0.6) / (TALENT_MAX - 0.6)) * 10), 1, 10);
-  return "⭐".repeat(Math.floor(half / 2)) + (half % 2 ? "✩" : "");
+  return `${"⭐".repeat(talentStars(t))}<span class="tal-num">${(t || 0).toFixed(2)}</span>`;
 }
 const isTalentMax = (t) => t >= TALENT_MAX - 1e-9;
 // 재능 MAX 이후 — 상한까지 채운 스탯으로 초월에 도전해요.

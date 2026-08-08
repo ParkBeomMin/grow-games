@@ -206,7 +206,28 @@ window.WingerSquad = (() => {
       + `<tr class="sq-sep"><td colspan="4">🪑 벤치 ${bench.length}</td></tr>${group(bench)}</tbody></table>`;
   }
 
+  /* 👥 명단 레이어 — 준비 화면에 펼쳐 두면 자리를 너무 먹어요(제보).
+   * base.css의 .av-overlay/.av-modal을 그대로 빌려 써요 — 8종이 같이 쓰는
+   * 모달 껍데기라 여기서 새로 만들지 않습니다. */
+  function openSquad() {
+    if (document.querySelector(".squad-overlay")) return;
+    const wrap = document.createElement("div");
+    wrap.className = "av-overlay squad-overlay";
+    const L = myLine();
+    wrap.innerHTML = `<div class="av-modal squad-modal">
+      <div class="av-title">👥 ${S.group} 스쿼드</div>
+      ${squadHTML()}
+      <div class="av-actions"><button class="btn btn-primary" id="btn-squad-close">닫기</button></div>
+    </div>`;
+    // 바깥을 눌러도 닫혀요 — 모달 안을 누를 때는 안 닫히게 대상까지 봅니다
+    wrap.addEventListener("click", (ev) => { if (ev.target === wrap) wrap.remove(); });
+    document.body.appendChild(wrap);
+    document.getElementById("btn-squad-close").onclick = () => wrap.remove();
+    void L;
+  }
+
   return {
+    openSquad,
     ensureSquads, ensureSquad, squadOf, startingXI, startingXIOf, leagueFaces,
     isStarter, myLine, benchTurn, creditMateGoals, markApps, resetSeason, squadHTML,
     FORMATION, BENCH, SQUAD_SIZE, BENCH_GAIN, SCORE_W,

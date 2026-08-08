@@ -246,6 +246,36 @@ guard("⑦ 이적", () => {
   check(Squad.ensureSquad().filter((x) => x.me).length === 1, "새 팀에서도 나는 한 줄이다");
 });
 
+/* ---------- ⑩ 명단은 레이어로 뜬다 ----------
+ * "스쿼드도 펼쳐 보고 이러면 너무 길게 차지해서 어디에 버튼으로 두고 레이어
+ * 띄워서 보여줄까" — 준비 화면에 접이식으로 붙어 있던 걸 버튼 + 레이어로 옮겼다.
+ * 버튼에는 **선발인지 벤치인지**만 적는다. 그게 매 경기 알아야 하는 한 줄이다. */
+guard("⑩ 명단 레이어", () => {
+  S().camp = 3; S().activity = null; S().pendingShow = false;
+  S().group = w.__get("CLUBS")[S().league][0].name;   // 리그 명단 안의 클럽으로 되돌려요
+  Career.refreshPro();
+  const btn = $("btn-squad-pro");
+  check(!!btn && !btn.hidden, "준비 화면 HUD에 스쿼드 버튼이 있다");
+  check(!w.document.getElementById("pro-squad"),
+    "준비 화면에 펼쳐진 명단 상자가 더는 없다 — 자리를 안 먹어요");
+  console.log(`   버튼 문구 "${btn ? btn.textContent : ""}"`);
+  check(!!btn && /선발|벤치/.test(btn.textContent),
+    `버튼이 선발인지 벤치인지 말한다 (${btn ? btn.textContent : ""})`);
+
+  check(!w.document.querySelector(".squad-overlay"), "누르기 전에는 레이어가 없다");
+  btn.click();
+  const layer = w.document.querySelector(".squad-overlay");
+  check(!!layer, "누르면 레이어가 뜬다");
+  const txt = layer ? layer.textContent.replace(/\s+/g, " ") : "";
+  check(/선발 11/.test(txt) && /벤치/.test(txt), `레이어에 선발 11과 벤치가 있다`);
+  check(txt.includes(S().name), "레이어에 내 이름이 있다");
+  btn.click();
+  check(w.document.querySelectorAll(".squad-overlay").length === 1,
+    "이미 열려 있으면 겹쳐 열리지 않는다");
+  w.document.getElementById("btn-squad-close").click();
+  check(!w.document.querySelector(".squad-overlay"), "닫기를 누르면 사라진다");
+});
+
 console.log(fail ? `\n❌ ${fail}건 실패` : "\n✅ 통과");
 w.close();
 process.exit(fail ? 1 : 0);

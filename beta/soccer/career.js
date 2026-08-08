@@ -1006,17 +1006,18 @@ window.WingerCareer = (() => {
       tbl.hidden = true;
     }
 
-    /* 👥 우리 팀 명단 — 선발 11 + 벤치. 내가 몇 번째인지가 여기서 보여요. */
-    const sqBox = $("pro-squad");
-    if (sqBox && window.WingerSquad && isPro() && S.group) {
-      sqBox.hidden = false;
+    /* 👥 스쿼드는 레이어로 띄워요(버튼은 HUD에). 여기서는 **선발인지 벤치인지만**
+     * 버튼에 적어요 — 그게 매 경기 알아야 하는 한 줄이고, 명단 전체는 눌러서 봐요. */
+    const sqBtn = $("btn-squad-pro");
+    if (sqBtn && window.WingerSquad && isPro() && S.group) {
+      sqBtn.hidden = false;
       const L = WingerSquad.myLine();
-      $("pro-squad-sum").textContent = WingerSquad.isStarter()
-        ? `👥 스쿼드 — ✅ 선발 (${POS_INFO[S.pos].name} ${L.rank}/${L.slots})`
-        : `👥 스쿼드 — 🪑 벤치 (${POS_INFO[S.pos].name} ${L.rank}번째 · ${L.slots}자리)`;
-      $("pro-squad-body").innerHTML = WingerSquad.squadHTML();
-    } else if (sqBox) {
-      sqBox.hidden = true;
+      sqBtn.textContent = WingerSquad.isStarter()
+        ? `👥 선발 ${L.rank}/${L.slots}`
+        : `🪑 벤치 ${L.rank}번`;
+      sqBtn.onclick = () => WingerSquad.openSquad();
+    } else if (sqBtn) {
+      sqBtn.hidden = true;
     }
 
     /* 🥇 개인 순위 — 시즌 중에만 보여줘요. 득점왕 경쟁이 눈에 보여야
