@@ -131,14 +131,16 @@ window.WingerCamp = (() => {
    * "누르자마자 훈련이 처리된 것처럼" 보였습니다(제보).
    * 그래서 화면 한가운데 레이어로 띄우고, **첫 탭이 있어야 시간이 흐르게** 했어요 —
    * 준비가 안 된 채로 3초가 지나가는 일이 없어야 해요. */
+  // 🤖 자동으로 처리할 때의 연타 수 — 체력이 좋을수록 잘 치는 것으로 봐요
+  const autoTaps = () =>
+    Math.round(TAP_TARGET * clamp(0.45 + (S.stats.stamina || 40) / 260, 0.35, 0.95));
+
   function startTap() {
-    if (typeof autoMiniOn === "function" && autoMiniOn()) {
-      /* 🤖 자동 미니게임을 켠 사람에게는 능력치로 대신 굴려줘요.
-       * 연타는 손이 빠른 사람이 유리한 장치라, 자동 쪽이 손해만 보면 안 됩니다. */
-      const auto = Math.round(TAP_TARGET * clamp(0.45 + (S.stats.stamina || 40) / 260, 0.35, 0.95));
-      finishTap(auto);
-      return;
-    }
+    /* ⚠️ 여기서 자동 미니게임 설정(autoMiniOn)을 보고 **바로 끝내지 않아요.**
+     * 그건 "경기"에 대한 설정인데 특훈은 경기가 아니고, 무엇보다 연타를 하겠다고
+     * 누른 사람에게 아무것도 안 보여주고 끝내면 그냥 먹통으로 읽혀요
+     * (제보: "집중훈련 누르면 그냥 바로 훈련 완료된 걸로 나오는데").
+     * 자동을 켠 사람에게는 레이어 안에 🤖 버튼을 하나 더 둬서 고르게 합니다. */
     if (document.querySelector(".tap-overlay")) return;
     const wrap = document.createElement("div");
     wrap.className = "av-overlay tap-overlay";
@@ -150,6 +152,7 @@ window.WingerCamp = (() => {
         <span class="ct-emoji">👟</span>
         <span class="ct-count" id="camp-tap-count">0</span>
       </button>
+      <div class="av-actions"><button class="btn btn-ghost" id="btn-tap-auto">🤖 자동으로 맡기기</button></div>
     </div>`;
     document.body.appendChild(wrap);
 
@@ -188,6 +191,14 @@ window.WingerCamp = (() => {
       btn.classList.add("hit");
     };
     btn.addEventListener("pointerdown", onTap);
+    document.getElementById("btn-tap-auto").onclick = () => {
+      if (done) return;
+      done = true;
+      if (tick) clearInterval(tick);
+      btn.removeEventListener("pointerdown", onTap);
+      wrap.remove();
+      finishTap(Math.max(taps, autoTaps()));
+    };
   }
 
   function finishTap(taps) {

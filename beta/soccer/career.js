@@ -1257,6 +1257,12 @@ window.WingerCareer = (() => {
     else if (res === "D") act.teamD = (act.teamD || 0) + 1;
     else act.teamL = (act.teamL || 0) + 1;
     S.fandom = Math.max(0, (S.fandom || 0) - randInt(0, 3));   // 안 뛰면 조금씩 잊혀요
+    /* ⚠️ **경기를 치렀다는 표시를 여기서도 내려야 해요.** 이 줄이 없으면 벤치인 주에
+     * `pendingShow`가 켜진 채로 남고, 다음 준비 화면이 "훈련 2회 남음"이라고 적어
+     * 놓고도 훈련 버튼 여섯 개를 전부 잠가 버려요. 눌러도 아무 일이 안 나서 화면이
+     * 통째로 먹통으로 읽힙니다(제보: "벤치일 때 누르면 반응 없는데").
+     * 뛴 주에는 proMatchFinalize가 같은 일을 해요 — 벤치 갈래만 빠져 있었습니다. */
+    S.pendingShow = false;
     proLog(`🪑 ${act.opp}전 결장 — 훈련장에서 ${grew.name} +${grew.gain.toFixed(1)}`);
     save();
 

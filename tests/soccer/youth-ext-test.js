@@ -135,6 +135,10 @@ function runCamp(P) {
     const effort = $("btn-camp-effort");
     if (!effort) return false;
     effort.click();
+    /* 💪 노력은 연타 레이어를 띄워요 — 3초를 기다리는 대신 레이어 안의
+     * "🤖 자동으로 맡기기"로 넘깁니다. 연타 자체는 camp-test가 봐요. */
+    const auto = $("btn-tap-auto");
+    if (auto) auto.click();
   }
   return active() !== "screen-camp";
 }

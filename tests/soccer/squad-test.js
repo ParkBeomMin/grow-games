@@ -389,6 +389,29 @@ guard("⑬ 벤치 경기 진행", () => {
     next.click();
     check(active() === "screen-pro", `다음을 누르면 준비 화면으로 돌아온다 (${active()})`);
   }
+
+  /* ⑭ 벤치 다음 주에 훈련이 돌아오는가 — 두 번째 제보의 자리.
+   *
+   * "벤치일 때 누르면 반응 없는데." 화면 전환은 고쳤는데도 같은 말이 또 나왔다.
+   * 이번엔 **그다음 준비 화면**이었다. 벤치 갈래가 pendingShow(경기 대기 표시)를
+   * 안 내려서, 화면은 "훈련 2회 남음"이라고 적어 놓고 훈련 버튼 여섯 개를 전부
+   * 잠가 뒀다. 눌러도 아무 일이 없으니 먹통으로 읽힌다.
+   *
+   * 그래서 **버튼이 실제로 눌리는지**까지 본다 — 있느냐가 아니라 먹느냐다. */
+  check(S().pendingShow === false,
+    `벤치 주가 끝나면 '경기 대기' 표시가 내려간다 (pendingShow=${S().pendingShow})`);
+  const acts = [...w.document.querySelectorAll("#pro-actions .action-btn")]
+    .filter((b) => !b.classList.contains("ad-slot") && !b.classList.contains("go-game"));
+  const locked = acts.filter((b) => b.disabled).length;
+  check(acts.length > 0 && locked === 0,
+    `벤치 다음 주에 훈련 버튼이 살아 있다 (${acts.length}개 중 잠긴 것 ${locked}개)`);
+  if (acts.length && !locked) {
+    const camp0 = S().camp, sum0 = Object.values(S().stats).reduce((a, b) => a + b, 0);
+    acts[0].click();
+    const moved = S().camp !== camp0
+      || Math.abs(Object.values(S().stats).reduce((a, b) => a + b, 0) - sum0) > 1e-9;
+    check(moved, `훈련 버튼을 누르면 실제로 뭔가 일어난다 (훈련 ${camp0} → ${S().camp})`);
+  }
 });
 
 console.log(fail ? `\n❌ ${fail}건 실패` : "\n✅ 통과");

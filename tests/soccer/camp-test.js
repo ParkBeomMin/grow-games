@@ -198,7 +198,15 @@ guard("①⑥⑦ 특훈 화면", () => {
     stat.click();
     const effort = $("btn-camp-effort"), gamble = $("btn-camp-gamble");
     check(!!effort && !!gamble, `${t + 1}회차 — 💪 노력과 🎲 도박이 둘 다 있다`);
-    if (t % 2 === 0) effort.click(); else { gamble.click(); gambles++; }
+    if (t % 2 === 0) {
+      effort.click();
+      // 💪 노력은 연타 레이어를 띄워요. 여기서는 3초를 기다리는 대신
+      // 레이어 안의 "🤖 자동으로 맡기기"로 회차를 넘깁니다 (연타 자체는 ⑨가 봐요)
+      const auto = $("btn-tap-auto");
+      check(!!auto, `${t + 1}회차 — 💪를 누르면 연타 레이어가 뜬다`);
+      if (!auto) return;
+      auto.click();
+    } else { gamble.click(); gambles++; }
   }
   console.log(`   여섯 회차 진행 (노력 ${C.CAMP_TURNS - gambles}회 · 도박 ${gambles}회)`);
   const after = w.__get("S").stats;
