@@ -387,3 +387,20 @@ body {
 .ct-btn.hit { animation: ct-pop .09s ease-out; }
 .ct-btn:disabled { opacity: .5; }
 @keyframes ct-pop { from { transform: scale(1); } 50% { transform: scale(.96); } to { transform: scale(1); } }
+
+/* 👥 스쿼드 — 선발 11 + 벤치 */
+.squad-table { width: 100%; font-size: .74rem; }
+.squad-table td, .squad-table th { padding: .16rem .2rem; }
+.squad-table .sq-pos { color: var(--dim); }
+.squad-table .sq-str { text-align: right; color: var(--cream); width: 2.6em; }
+.squad-table .sq-rec { text-align: right; color: var(--dim); white-space: nowrap; }
+.squad-table tr.me td { color: var(--accent); font-weight: 600; }
+.squad-table tr.sq-sep td {
+  padding-top: .4rem; color: var(--dim); font-size: .72rem; border-bottom: 1px solid var(--line);
+}
+.sq-note { font-size: .76rem; margin-bottom: .35rem; color: var(--text); }
+
+/* 🪑 벤치인 주의 결과 화면 */
+.bench-card { text-align: center; padding: .6rem .4rem; }
+.bench-card .draft-emoji { font-size: 2.4rem; }
+.bench-card .tour-line { color: var(--dim); font-size: .82rem; margin: .3rem 0 .5rem; }

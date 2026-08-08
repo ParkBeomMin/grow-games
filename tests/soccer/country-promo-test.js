@@ -21,8 +21,6 @@ const grab = (src, re) => { const m = src.match(re); return m ? m[0] : null; };
 const parts = {
   tiers: grab(SRC, /const COUNTRY_TIERS = \{[\s\S]*?\n  \};/),
   ladderOf: grab(SRC, /const ladderOf = \(id\) => \{[\s\S]*?\n  \};/),
-  gap: grab(SRC, /const PROMO_GAP = [^;]+;/),
-  settle: grab(SRC, /const PROMO_SETTLE = [^;]+;/),
   apply: grab(SRC, /function applyPromotion\(\) \{[\s\S]*?\n  \}/),
   /* 승강은 이제 리그 명단을 실제로 맞바꿔요 — 그 조각도 함께 떼어 와야 돌아갑니다. */
   swap: grab(SRC, /function swapLeagues\(fromId, toId, kind\) \{[\s\S]*?\n  \}/),
@@ -61,8 +59,6 @@ const PRE = (tiers, apply) => `${parts.leagues}
    const myTableRank = () => rankIn;
    ${tiers}
    ${parts.ladderOf}
-   ${parts.gap}
-   ${parts.settle}
    ${parts.prizes}
    ${parts.traits}
    ${parts.clubsIn}
@@ -82,8 +78,6 @@ const makeApply = () => new Function(
    const myTableRank = () => rankIn;
    ${parts.tiers}
    ${parts.ladderOf}
-   ${parts.gap}
-   ${parts.settle}
    ${parts.prizes}
    ${parts.traits}
    ${parts.clubsIn}
@@ -184,37 +178,38 @@ const brokenApply = new Function("S", "rowsIn", "rankIn", "clamp",
 check(brokenApply(state(2), table(12), 1, clampFn) === null,
   `변이 검증 — 잉글랜드 사다리를 비우면 ${NM(2)} 1위에 아무 일도 안 일어난다`);
 
-/* ── 정착 기간이 강등을 막지 않는가
+/* ── 이적 직후에도 승강이 그대로 굴러가는가
  *
- * 제보: "프리미어리그 와서 팀이 꼴찌했던 것 같은데 강등을 안 한 것 같다."
- * PROMO_SETTLE(2시즌)이 승격과 강등 **둘 다**에 걸려 있었고, leagueSince는
- * 이적으로 리그가 바뀔 때도 새로 선다(moveToClub). 그래서 상위 리그로 이적하면
- * 꼴찌를 해도 두 시즌 동안 안 내려갔다.
+ * 제보 둘이 같은 자리에서 나왔다.
+ *  "프리미어리그 와서 팀이 꼴찌했던 것 같은데 강등을 안 한 것 같다."
+ *  "세리에B 리그 1위면 리그 우승에 상위 리그로 올라가야 하는 거 아냐?"
  *
- * 소스 주석에는 처음부터 "강등에는 안 걸어요"라고 적혀 있었다 —
- * 문서와 코드가 어긋난 채로 남아 있던 자리다. */
-const SETTLE = new Function(`${parts.settle} return PROMO_SETTLE;`)();
+ * 원인은 정착 기간(PROMO_SETTLE)이었다. leagueSince는 **이적으로 리그가 바뀔
+ * 때도 새로 서서**(moveToClub), 이적하면 두 시즌 동안 올라가지도 내려가지도
+ * 않았다. 강등 쪽은 먼저 걷어냈고, 승격 쪽도 이제 걷어냈다 —
+ * **"승격은 뭐든 상관없이 1위하면 되어야 해."** */
 const justMoved = () => {
   const S = state(3);
-  S.leagueSince = S.proYear;          // 방금 이적해 왔어요 (정착 0시즌)
+  S.leagueSince = S.proYear;          // 방금 이적해 왔어요
   return S;
 };
 const movedDown = apply(justMoved(), table(0), 6);
 check(movedDown.move && movedDown.move.kind === "down",
-  `이적 직후 시즌이라도 꼴찌면 강등된다 (정착 0/${SETTLE}시즌 · ${movedDown.move ? movedDown.move.to : "안 일어남"})`);
-// 반대로 승격은 여전히 정착 기간을 지킨다 — 연속 승격을 막는 게 이 상수의 목적이에요
+  `이적 직후 시즌이라도 꼴찌면 강등된다 (${movedDown.move ? movedDown.move.to : "안 일어남"})`);
 const movedUp = apply((() => { const S = state(2); S.leagueSince = S.proYear; return S; })(), table(20), 1);
-check(!movedUp.move,
-  `이적 직후에는 1위여도 승격은 안 된다 (연속 승격 방지 · ${movedUp.move ? movedUp.move.to : "안 일어남"})`);
+check(!!movedUp.move && movedUp.move.kind === "up",
+  `이적 직후여도 1위면 승격한다 (${movedUp.move ? movedUp.move.to : "안 일어남"})`);
 // 데뷔 시즌은 한 번만 면제된다
 const rookie = state(3); rookie.career = { years: [] };
 const rookieDown = apply(rookie, table(0), 6);
 check(!rookieDown.move, `프로 데뷔 시즌은 꼴찌여도 면제된다 (${rookieDown.move ? rookieDown.move.to : "안 일어남"})`);
 
 /* 변이 검증 — 강등에도 정착 기간을 다시 걸면 위 검사가 무너져야 한다. */
+/* 변이 검증 — 강등에 정착 기간을 다시 걸면 위 검사가 무너져야 한다.
+ * 상수는 이제 소스에 없으니 여기서 옛 규칙을 그대로 적어 되살린다(대조군). */
 const settleBack = parts.apply.replace(
   "if (debutSeason) return null;",
-  "if (sinceHere < PROMO_SETTLE) return null;"
+  "if (S.leagueSince != null && S.proYear - S.leagueSince < 2) return null;"
 );
 if (settleBack === parts.apply) { console.log("❌ 변이 치환이 안 됐어요"); process.exit(1); }
 const settleBackRun = new Function(
@@ -227,8 +222,6 @@ const settleBackRun = new Function(
    const myTableRank = () => rankIn;
    ${parts.tiers}
    ${parts.ladderOf}
-   ${parts.gap}
-   ${parts.settle}
    ${parts.prizes}
    ${parts.traits}
    ${parts.clubsIn}

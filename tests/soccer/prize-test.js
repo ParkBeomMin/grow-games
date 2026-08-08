@@ -34,8 +34,6 @@ const parts = {
   roster: grab(SRC, /const leagueRoster = \(id\) => clubsIn\(id, S\);/),
   tiers: grab(SRC, /const COUNTRY_TIERS = \{[\s\S]*?\n  \};/),
   ladderOf: grab(SRC, /const ladderOf = \(id\) => \{[\s\S]*?\n  \};/),
-  gap: grab(SRC, /const PROMO_GAP = [^;]+;/),
-  settle: grab(SRC, /const PROMO_SETTLE = [^;]+;/),
   leagues: grab(GAME, /const LEAGUES = \[[\s\S]*?\n\];/),
   clubs: grab(GAME, /const CLUBS = \{[\s\S]*?\n\};/),
   clubsIn: grab(GAME, /function clubsIn\(id, st\) \{[\s\S]*?\n\}/),
@@ -68,8 +66,6 @@ const run = new Function(
    ${parts.tiers}
    ${parts.ladderOf}
    ${parts.title}\n${parts.promo}\n${parts.cup}\n${parts.cupRound}\n${parts.prizeOf}
-   ${parts.gap}
-   ${parts.settle}
    ${parts.clubsIn}
    ${parts.clubStrOf}
    ${parts.trait}\n${parts.traitOf}\n${parts.traitMul}
