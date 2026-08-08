@@ -34,7 +34,9 @@ window.WingerCareer = (() => {
    *   지금 (종합 0.50 · 주스탯 0.14 · 체력 0.10 · 약점 페널티)
    *     몰빵 117골 · 도움 24 · 수비 20   |   균형 51골 · 도움 27 · 수비 22
    *   → 전문화는 여전히 골에서 크게 이기지만, 도움·수비는 균형이 가져가요. */
-  function ratingOf(stats, pos, condition, fandom) {
+  /* penalty — **리그 벌점**을 밖에서 넘길 수 있어요. 안 넘기면 지금 리그 것이에요.
+   * 🌏 월드컵은 클럽 리그가 아니라 0을 넘겨요 — 난이도는 국가 전력이 싣습니다. */
+  function ratingOf(stats, pos, condition, fandom, penalty) {
     const WEAK_BAR = 0.75;   // 평균의 이만큼에 못 미치는 칸이 약점이에요
     const WEAK_PEN = 0.45;
     const main = POS_INFO[pos].stat;
@@ -54,7 +56,8 @@ window.WingerCareer = (() => {
       condition / 8 + Math.min((fandom || 0) / 45, FAN_CAP) + rand(-5, 5) + 20;
     /* 🎖️ 시즌 칭호(👑 리그의 지배자·🏆 챔피언·🏅 발롱도르)가 평점에 붙어요.
      * clamp **안쪽**에서 더해요 — 밖에서 더하면 상한 10이 안 지켜집니다. */
-    const rating = clamp(myScore / RATING_DIV - leagueOf(S).penalty + buffSum("rate"), 1, 10);
+    const pen = penalty == null ? leagueOf(S).penalty : penalty;
+    const rating = clamp(myScore / RATING_DIV - pen + buffSum("rate"), 1, 10);
     return rating;
   }
 
@@ -550,14 +553,17 @@ window.WingerCareer = (() => {
    *
    * 가중 카운터가 없던 옛 세이브는 지금까지 쌓인 트로피를 1부 기준(×1)으로 세고
    * 이어붙여요. 0에서 시작하면 새 우승 하나 때문에 지난 우승이 통째로 사라집니다. */
-  function addTrophy(title, leagueId) {
+  /* weight — 커리어 점수에 실을 가중치를 밖에서 정할 수 있어요.
+   * 🌏 월드컵 우승은 **0**을 넘겨요. 점수는 SCORE_W.wc 한 곳으로 몰아서
+   * 손잡이를 하나로 유지합니다 — 양쪽에 실리면 조절할 곳이 둘이 돼요. */
+  function addTrophy(title, leagueId, weight) {
     S.trophies = S.trophies || [];
     if (S.trophies.includes(title)) return false;
     S.trophies.push(title);
     S.career = S.career || {};
     const before = S.career.ringW != null ? S.career.ringW : S.trophies.length - 1;
     const lg = LEAGUES.find((l) => l.id === leagueId) || leagueOf(S);
-    S.career.ringW = before + lg.prestige;
+    S.career.ringW = before + (weight == null ? lg.prestige : weight);
     return true;
   }
 
@@ -893,6 +899,9 @@ window.WingerCareer = (() => {
 
   function afterPrep() {
     if (S.camp > 0) { renderPrep(); return; }
+    /* 🌏 월드컵 훈련 턴이 끝났어요 — 경기 시작 버튼만 남겨요.
+     * 상태는 S.wc.ready 하나뿐이라 대회가 끝나면(S.wc = null) 같이 사라집니다. */
+    if (S.wc) { S.wc.ready = true; save(); renderPrep(); show("screen-pro"); return; }
     /* 🏆 컵 준비가 끝나면 **시작 버튼**을 띄워요. 리그 경기도 준비가 끝나면
      * "경기하러 가기"를 누르는데, 컵만 마지막 훈련을 누르는 순간 그대로 8강으로
      * 넘어갔어요 — 훈련하려던 손이 그대로 경기 시작이 됩니다.
@@ -970,6 +979,18 @@ window.WingerCareer = (() => {
   $("pro-cond-num").textContent = Math.round(S.condition);
     $("pro-cond-bar").style.width = `${S.condition}%`;
 
+    /* 🌏 월드컵 — 테마는 **S.wc에서 파생**시켜요(켜고 끄는 게 아니라). 끄는 쪽을
+     * 한 경로라도 놓치면 리그로 돌아왔는데 화면이 월드컵인 채로 남는데, CSS는
+     * 이 저장소의 자동 검증 사각지대라 기계가 못 잡아요. 파생이면 자기 복구형입니다.
+     * 초대장은 후반기 준비 화면에서 문턱을 넘는 순간 떠요(래칫 — 한 번 넘으면 안 뺏겨요). */
+    if (window.WingerWorldCup && isPro()) {
+      WingerWorldCup.themeSync();
+      /* ⚠️ 초대장을 띄운 뒤에도 **렌더를 계속해요.** 여기서 return 하면 준비 화면이
+       * 반쯤 그려진 채로 남아, 오버레이를 닫았을 때 훈련 버튼이 없는 화면을 봅니다.
+       * 오버레이는 위에 뜨는 모달이지 화면을 대신하는 게 아니에요. */
+      WingerWorldCup.checkInvite();
+    }
+
     /* 🎖️ 이번 시즌 칭호 — 지난 시즌에 받아 온 거예요. 효과가 경기에 붙으니
      * 경기 화면으로 가기 전에 항상 보여야 해요. 없으면 줄 자체를 감춰요. */
     const buffs = activeBuffs(S);
@@ -980,6 +1001,15 @@ window.WingerCareer = (() => {
         ? `<span class="buff-head">🎖️ ${S.proYear}시즌 칭호</span>`
           + buffs.map((t) => `<span class="buff-chip" title="${t.need}">${t.name}<b>${t.desc}</b></span>`).join("")
         : "";
+    }
+
+    /* 🌏 월드컵 배지 — 월드컵 시즌에만 한 줄. 남은 리그가 "월드컵을 향한 일정"으로
+     * 읽히게 하는 것이 이 줄의 일이에요. */
+    const wcBox = $("pro-wc");
+    if (wcBox) {
+      const html = (window.WingerWorldCup && isPro()) ? WingerWorldCup.badgeHTML() : "";
+      wcBox.hidden = !html;
+      wcBox.innerHTML = html;
     }
 
     /* 🏆 리그 순위표 — 시즌 중에만 보여줘요. 접어둬서 훈련 화면이 길어지지 않게 합니다.
@@ -1064,6 +1094,11 @@ window.WingerCareer = (() => {
       stats.appendChild(row);
     }
 
+    if (S.wc) {
+      $("pro-camp-title").textContent = S.wc.ready
+        ? `🌏 대표팀 훈련 완료 — 경기를 시작하세요!`
+        : `🌏 월드컵 소집 중 — 대표팀 훈련 ${S.camp}회 남음`;
+    } else
     $("pro-camp-title").textContent = S.pendingShow
       ? (S.activity.week === 0
         ? `⚽ ${cbLabel(S.activity.cb)} 리그 준비 완료 — 경기를 시작하세요!`
@@ -1103,6 +1138,15 @@ window.WingerCareer = (() => {
     rest.innerHTML = `<span class="a-emoji">🛌</span>휴식 <span class="a-sub">컨디션 회복</span>`;
     rest.onclick = () => prepAction(null);
     box.appendChild(rest);
+
+    /* 🌏 월드컵 훈련 턴이 끝났으면 훈련을 잠그고 경기 버튼만 남겨요.
+     * 컵의 cupReady와 같은 자리·같은 모양이에요. */
+    if (S.wc && S.wc.ready && window.WingerWorldCup) {
+      box.querySelectorAll(".action-btn").forEach((b) => {
+        if (!b.classList.contains("ad-slot")) b.disabled = true;
+      });
+      box.appendChild(WingerWorldCup.startButton(seasonEnd));
+    }
 
     /* 🏆 컵 준비가 끝났으면 훈련을 잠그고 시작 버튼만 남겨요.
      * 리그의 "경기하러 가기"와 같은 자리·같은 모양이에요. */
@@ -1297,7 +1341,7 @@ window.WingerCareer = (() => {
       nextFn = () => { S.camp = CUP_CAMP; S.cupPrep = true; save(); renderPrep(); show("screen-pro"); };
     } else {
       nextLabel = "🏁 시즌 결산";
-      nextFn = finishYear;
+      nextFn = seasonEnd;
     }
     const btn = $("btn-stage-next");
     if (btn) {
@@ -1464,7 +1508,7 @@ window.WingerCareer = (() => {
       nextFn = () => { S.camp = CUP_CAMP; S.cupPrep = true; save(); renderPrep(); show("screen-pro"); };
     } else {
       nextLabel = "🏁 시즌 결산";
-      nextFn = finishYear;
+      nextFn = seasonEnd;
     }
     return { resultHTML, nextLabel, nextFn };
   }
@@ -1543,7 +1587,7 @@ window.WingerCareer = (() => {
     const opp = cupDraw();
     /* 대진이 비었어요 — 있을 수 없는 상태지만, 예전에는 여기서 **없는 함수**
      * (cupFinish)를 불러 그 자리에서 죽었습니다. 컵을 접고 결산으로 보내요. */
-    if (!opp) { S.cup = null; save(); finishYear(); return; }
+    if (!opp) { S.cup = null; save(); seasonEnd(); return; }
     S.cup.opp = opp;
     save();
     $("stage-title").textContent = `🏆 ${S.cup.name} ${rounds[S.cup.round]}`;
@@ -1629,7 +1673,7 @@ window.WingerCareer = (() => {
       return {
         resultHTML: head + `<div class="tour-line">💧 ${label}에서 탈락${pk}…</div>`
           + `<div class="tour-pts">💰 대회 수당 +${money}만</div>`,
-        nextLabel: "🏁 시즌 결산", nextFn: finishYear,
+        nextLabel: "🏁 시즌 결산", nextFn: seasonEnd,
       };
     }
     S.cup.round += 1;
@@ -1655,7 +1699,7 @@ window.WingerCareer = (() => {
     return {
       resultHTML: (head || "") + `<div class="tour-line">🏆 <b>${name} 우승!!</b>${pk || ""}</div>`
         + `<div class="tour-pts">💰 우승 상금 +${money}만 · ⭐ 명성 +${fan}</div>`,
-      nextLabel: "🏁 시즌 결산", nextFn: finishYear,
+      nextLabel: "🏁 시즌 결산", nextFn: seasonEnd,
     };
   }
 
@@ -1669,6 +1713,17 @@ window.WingerCareer = (() => {
   }
 
   // ---------- 시즌 결산 ----------
+  /* 🌏 시즌의 끝 — **단일 관문**이에요.
+   *
+   * finishYear로 들어가는 입구가 다섯 곳이나 됩니다(리그 종료·벤치 주 종료·컵 탈락·
+   * 컵 우승·컵 대진 방어). 다섯 곳에 각각 월드컵 분기를 심으면 **반드시 하나가 샙니다** —
+   * v2.48.0이 정확히 그 사고였어요(벤치 갈래에만 pendingShow 해제가 빠졌습니다).
+   * 그래서 다섯 입구를 이 함수 하나로 모으고, 월드컵 여부는 여기서만 봅니다. */
+  function seasonEnd() {
+    if (window.WingerWorldCup && WingerWorldCup.due()) { WingerWorldCup.enter(finishYear); return; }
+    finishYear();
+  }
+
   function finishYear() {
     const act = S.activity;
     const agePen = S.proYear >= DECLINE_FROM ? (S.proYear - DECLINE_FROM + 1) * 0.8 : 0;
@@ -2923,6 +2978,15 @@ window.WingerCareer = (() => {
   $("btn-hof-back")?.addEventListener("click", () => show("screen-title"));
   $("btn-battle-back")?.addEventListener("click", () => show(battleReturn));
 
+  /* 🌏 월드컵에 필요한 도구만 넘겨요. worldcup.js는 career.js 안쪽을 모르고,
+   * career.js는 대회 진행을 모르는 채로 서로를 부릅니다. */
+  if (window.WingerWorldCup) {
+    WingerWorldCup.init({
+      proLog, queueFx, addTrophy, ratingOf, matchRating,
+      renderPrep, leagueOf,
+    });
+  }
+
   return {
     onEnding,
     refreshPro: renderPrep,
@@ -2932,6 +2996,9 @@ window.WingerCareer = (() => {
       /* 🏆 컵을 치르던 중에 앱을 닫았으면 거기서 이어요. 이 줄이 없으면
        * 남은 라운드가 통째로 사라지고 트로피도 못 받아요 — 컵은 시즌 끝의
        * 세 판이라 중간에 끊기면 그 시즌이 그냥 없어진 것처럼 보입니다. */
+      /* 🌏 월드컵을 치르던 중이었으면 준비 화면으로 돌아와요. 경기는 원자적이라
+       * (중간 상태를 저장하지 않아요) S.camp와 S.wc.ready가 상태를 다 담습니다. */
+      if (S.wc && window.WingerWorldCup && WingerWorldCup.resume(finishYear)) return;
       if (S.cup && window.SoccerCup) { cupMatch(); return; }
       if (S.camp > 0 || S.activity || S.pendingShow) { renderPrep(); show("screen-pro"); }
       else if (S.career && S.career.years.length) yearReport();

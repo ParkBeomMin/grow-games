@@ -43,14 +43,14 @@ const parts = {
   goalScale: grab(GAME, /const GOAL_SCALE = [^;]+;/),
   buffFns: grab(GAME, /const HOT_FORM_BAR = [\s\S]*?const buffMul = [^;]+;/),
   matchContribution: grab(GAME, /function matchContribution\(rating\) \{[\s\S]*?\n\}/),
-  deriveOppGoals: grab(GAME, /const CONC_BASE = [\s\S]*?function deriveOppGoals\(rating, defStat, oppStr, teamGoals\) \{[\s\S]*?\n\}/),
+  deriveOppGoals: grab(GAME, /const CONC_BASE = [\s\S]*?function deriveOppGoals\([^)]*\) \{[\s\S]*?\n\}/),
   autoRes: grab(GAME, /function autoRes\(stat\) \{[\s\S]*?\n\}/),
   // MatchSim.run — cfg 구조 분해 · 이벤트(evs) 생성부 · 결과 res · info 블록
   cfgPick: grab(GAME, /const \{ home, away[^;]*\} = cfg;/),
   evsBlock: grab(GAME, /const evs = \[\];[\s\S]*?evs\.sort\([^;]*\);/),
   resLine: grab(GAME, /const res = h > a \? [^;]+;/),
   infoBlock: grab(GAME, /const info = \{[\s\S]*?\n {6}\};/),
-  ratingOf: grab(SRC, /function ratingOf\(stats, pos, condition, fandom\) \{[\s\S]*?\n {2}\}/),
+  ratingOf: grab(SRC, /function ratingOf\([^)]*\) \{[\s\S]*?\n {2}\}/),
 };
 const missing = Object.entries(parts).filter(([, v]) => !v).map(([k]) => k);
 if (missing.length) { console.log(`❌ 산식을 못 찾았어요: ${missing.join(", ")}`); process.exit(1); }
@@ -65,7 +65,7 @@ const consts = [
 ].filter(Boolean).join(" ");
 const mateSrc = [
   grab(GAME, /const TEAMMATE_GOALS = \{[^}]*\};/),
-  grab(GAME, /const MATE_SCALE = [\s\S]*?function teammateGoals\(rating, oppStr\) \{[\s\S]*?\n\}/),
+  grab(GAME, /const MATE_SCALE = [\s\S]*?function teammateGoals\([^)]*\) \{[\s\S]*?\n\}/),
 ].filter(Boolean).join("\n");
 /* 리그 티어도 같은 규칙으로 '있으면 넣는다'. ratingOf가 리그 페널티를 빼기 때문에
  * 없으면 ReferenceError가 난다. 아래 stateOf는 league를 안 넣으니 1부(penalty 0)라

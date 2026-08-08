@@ -56,7 +56,7 @@ const parts = {
   infoBlock: grab(GAME, /const info = \{[\s\S]*?\n {6}\};/),
   fanCap: grab(SRC, /const FAN_CAP = [^;]+;/),
   ratingDiv: grab(SRC, /const RATING_DIV = [^;]+;/),
-  ratingOf: grab(SRC, /function ratingOf\(stats, pos, condition, fandom\) \{[\s\S]*?\n {2}\}/),
+  ratingOf: grab(SRC, /function ratingOf\([^)]*\) \{[\s\S]*?\n {2}\}/),
   posAxisTable: grab(SRC, /const POS_AXIS = \{[\s\S]*?\n {2}\};/),
   axisK: grab(SRC, /const AXIS_K = [^;]+;/),
   axisOff: grab(SRC, /const AXIS_OFF = [^;]+;/),
@@ -218,17 +218,27 @@ guard("리그격", () => {
  * 기존 5종 테스트(rating·position·team·axis·curve)가 전부 1부 기준이라,
  * 여기가 깨지면 그쪽도 같이 무너져요. */
 {
-  const baseRatingOf = parts.ratingOf.replace(/\s*-\s*leagueOf\([^)]*\)\.penalty/, "");
+  /* 🌏 월드컵이 리그 벌점 대신 0을 넘길 수 있게 되면서 산식이 지역 변수를 거쳐요
+   * (`const pen = penalty == null ? leagueOf(S).penalty : penalty;` → `- pen`).
+   * 그래도 **기본값이 리그 벌점**이라는 계약과 **clamp 안쪽에서 뺀다**는 계약은
+   * 그대로예요. 둘 다 여기서 지킵니다 — 인자가 열렸다고 계약이 느슨해지면 안 돼요. */
+  check(/penalty\s*==\s*null\s*\?\s*leagueOf\([^)]*\)\.penalty/.test(parts.ratingOf),
+    "안 넘기면 지금 리그의 벌점을 쓴다 (기본값이 리그 벌점이다)");
+  /* '리그 도입 전' 산식을 만들려면 **벌점을 읽는 줄과 빼는 줄을 둘 다** 걷어내야 해요.
+   * 지역 변수만 남기면 leagueOf가 없는 샌드박스에서 그 줄이 그대로 터집니다. */
+  const baseRatingOf = parts.ratingOf
+    .replace(/\s*const pen = [^;]*;/, "")
+    .replace(/\s*-\s*pen\b/, "");
   const baseHype = parts.hype.replace(/\s*\*\s*leagueOf\([^)]*\)\.prestige/, "");
   check(baseRatingOf !== parts.ratingOf, "평점 산식에 리그 페널티 항이 들어 있다 (clamp 안쪽에서 빼요)");
   check(baseHype !== parts.hype, "hype 산식에 리그격 항이 들어 있다");
   // clamp 바깥에서 빼면 하한 1이 안 지켜져요 — 페널티가 clamp 인자 안에 있는지 봐요
-  check(/clamp\([^;]*leagueOf\([^;]*\)\.penalty[^;]*,\s*1,\s*10\)/.test(parts.ratingOf),
+  check(/clamp\([^;]*-\s*pen\b[^;]*,\s*1,\s*10\)/.test(parts.ratingOf),
     "페널티를 clamp 안쪽에서 뺀다 (밖에서 빼면 평점 하한 1이 안 지켜져요)");
 
   const baseRatingFn = new Function("S", "clamp", "rand", `
     ${parts.posInfo} ${parts.clutchScale} ${parts.transLv} ${parts.clutch}
-    ${parts.fanCap} ${parts.ratingDiv} ${baseRatingOf}
+    ${parts.statKeys} ${parts.buffFns} ${parts.fanCap} ${parts.ratingDiv} ${baseRatingOf}
     return ratingOf(S.stats, S.pos, S.condition, S.fandom);
   `);
   const baseHypeFn = new Function("S", "act", "clamp", `

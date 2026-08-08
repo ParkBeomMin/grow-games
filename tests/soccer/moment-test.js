@@ -59,7 +59,7 @@ const parts = {
   leagueOf: grab(GAME, /function leagueOf\(st\) \{[\s\S]*?\n\}/),
   fanCap: grab(SRC, /const FAN_CAP = [^;]+;/),
   ratingDiv: grab(SRC, /const RATING_DIV = [^;]+;/),
-  ratingOf: grab(SRC, /function ratingOf\(stats, pos, condition, fandom\) \{[\s\S]*?\n {2}\}/),
+  ratingOf: grab(SRC, /function ratingOf\([^)]*\) \{[\s\S]*?\n {2}\}/),
 };
 const missing = Object.entries(parts).filter(([, v]) => !v).map(([k]) => k);
 if (missing.length) { console.log(`❌ 소스에서 못 찾았어요: ${missing.join(", ")}`); process.exit(1); }

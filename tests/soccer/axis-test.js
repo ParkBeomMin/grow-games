@@ -54,7 +54,7 @@ const parts = {
   /* ⚠️ myScore 한 줄만 뽑으면 안 돼요 — 산식이 같은 함수 안의 all·low·weak를 봅니다.
    * ratingOf 본문을 통째로 가져와요(rating 선언과 return이 그 안에 있어요). */
   ratingBody: (() => {
-    const fn = grab(SRC, /function ratingOf\(stats, pos, condition, fandom\) \{[\s\S]*?\n {2}\}/);
+    const fn = grab(SRC, /function ratingOf\([^)]*\) \{[\s\S]*?\n {2}\}/);
     return fn ? fn.replace(/^\s*function ratingOf\([^)]*\) \{/, "").replace(/\n {2}\}$/, "") : null;
   })(),
   cbPerYear: grab(SRC, /const CB_PER_YEAR = [^;]+;/),

@@ -127,6 +127,13 @@ window.WingerSquad = (() => {
    * 여지를 남기고, 잘하고 있으면 그게 자리를 지켜 줍니다. */
   const COND_MID = 60, COND_DIV = 10, COND_CAP = 4;   // 컨디션 20 → -4 · 100 → +4
   const FORM_MID = 6.5, FORM_MUL = 1.5, FORM_CAP = 3; // 평균 평점 4.5 → -3 · 8.5 → +3
+  /* 🤝 클럽 감독의 신뢰 — 🌏 월드컵 유망주 와일드카드에서 갈린 결과예요.
+   * 대회를 다녀오면 마이너스, 클럽에 남으면 플러스가 **다음 시즌 한 해만** 실려요.
+   * 시즌 번호를 함께 저장해서 지나면 저절로 무효라 지우는 코드가 없습니다
+   * (S.wc.ready와 같은 원리 — 잊을 대상을 만들지 않아요). */
+  const trustOf = () =>
+    (S.clubTrust && S.clubTrust.y === S.proYear) ? (S.clubTrust.v || 0) : 0;
+
   function myBonus() {
     const cond = clamp((S.condition - COND_MID) / COND_DIV, -COND_CAP, COND_CAP);
     /* 최근 폼 — 이번 시즌 평균 평점이에요. 한 경기도 안 뛴 주에는 0(중립)이라
@@ -135,7 +142,8 @@ window.WingerSquad = (() => {
     const apps = (act && act.apps) || 0;
     const avg = apps ? (act.ratingSum || 0) / apps : null;
     const form = avg == null ? 0 : clamp((avg - FORM_MID) * FORM_MUL, -FORM_CAP, FORM_CAP);
-    return { cond, form, avg, total: cond + form };
+    const trust = trustOf();
+    return { cond, form, avg, trust, total: cond + form + trust };
   }
   const lineupScore = (x) => x.str + rand(-FORM_SWING, FORM_SWING) + (x.me ? myBonus().total : 0);
 

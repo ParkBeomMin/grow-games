@@ -55,7 +55,7 @@ const parts = {
   leagueOf: grab(GAME, /function leagueOf\(st\) \{[\s\S]*?\n\}/),
   fanCap: grab(SRC, /const FAN_CAP = [^;]+;/),
   ratingDiv: grab(SRC, /const RATING_DIV = [^;]+;/),
-  ratingOf: grab(SRC, /function ratingOf\(stats, pos, condition, fandom\) \{[\s\S]*?\n {2}\}/),
+  ratingOf: grab(SRC, /function ratingOf\([^)]*\) \{[\s\S]*?\n {2}\}/),
   // 결산이 칭호를 정하는 블록 — 실제로 굴려서 수상 → 칭호 대응을 본다
   decide: grab(SRC, /const nextBuffs = \[\];[\s\S]*?S\.buffY = S\.proYear \+ 1;/),
 };

@@ -37,7 +37,7 @@ const parts = {
   leagueOf: grab(GAME, /function leagueOf\(st\) \{[\s\S]*?\n\}/),
   fanCap: grab(SRC, /const FAN_CAP = [^;]+;/),
   ratingDiv: grab(SRC, /const RATING_DIV = [^;]+;/),
-  ratingOf: grab(SRC, /function ratingOf\(stats, pos, condition, fandom\) \{[\s\S]*?\n {2}\}/),
+  ratingOf: grab(SRC, /function ratingOf\([^)]*\) \{[\s\S]*?\n {2}\}/),
   /* 🎖️ 시즌 칭호 — matchContribution·ratingOf·autoRes가 buffMul/buffSum을 봐요.
    * 같이 안 떼어 오면 ReferenceError로 죽습니다(조용히 통과하지는 않아요).
    * 이 검사들은 칭호가 없는 상태(S.buffs 없음)를 보니 배수는 전부 1이 나와요 —

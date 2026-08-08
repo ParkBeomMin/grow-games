@@ -31,7 +31,7 @@ const parts = {
   /* ⚠️ myScore만 뽑으면 안 돼요 — 산식이 같은 함수 안의 all·low·weak를 봅니다.
    * ratingOf 본문을 통째로 가져와서 그 안의 계산을 그대로 굴려요. */
   ratingBody: (() => {
-    const fn = grab(SRC, /function ratingOf\(stats, pos, condition, fandom\) \{[\s\S]*?\n  \}/);
+    const fn = grab(SRC, /function ratingOf\([^)]*\) \{[\s\S]*?\n  \}/);
     return fn ? fn.replace(/^\s*function ratingOf\([^)]*\) \{/, "").replace(/\n  \}$/, "") : null;
   })(),
   /* 🎖️ 시즌 칭호 — matchContribution·ratingOf·autoRes가 buffMul/buffSum을 봐요.

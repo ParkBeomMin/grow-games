@@ -87,6 +87,10 @@ const restBtn = () => Array.from(w.document.querySelectorAll("#pro-actions .acti
 function playSeason() {
   let g = 0;
   while (g++ < 800) {
+    /* 📨 월드컵 초대장 — 시즌 한복판에 뜨는 모달이에요(3·7·11·15시즌).
+     * 실제 사람이 누르는 것과 같은 버튼을 눌러 치웁니다. */
+    const inv = w.document.querySelector(".wc-overlay button");
+    if (inv) { inv.click(); continue; }
     const id = active();
     if (id === "screen-career") return true;
     if (id === "screen-stage") {

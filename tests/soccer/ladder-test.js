@@ -61,7 +61,7 @@ const parts = {
   infoBlock: grab(GAME, /const info = \{[\s\S]*?\n {6}\};/),
   fanCap: grab(SRC, /const FAN_CAP = [^;]+;/),
   ratingDiv: grab(SRC, /const RATING_DIV = [^;]+;/),
-  ratingOf: grab(SRC, /function ratingOf\(stats, pos, condition, fandom\) \{[\s\S]*?\n {2}\}/),
+  ratingOf: grab(SRC, /function ratingOf\([^)]*\) \{[\s\S]*?\n {2}\}/),
   posAxisTable: grab(SRC, /const POS_AXIS = \{[\s\S]*?\n {2}\};/),
   axisK: grab(SRC, /const AXIS_K = [^;]+;/),
   axisOff: grab(SRC, /const AXIS_OFF = [^;]+;/),

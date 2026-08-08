@@ -552,12 +552,33 @@ const AWARD_BUFF = {
 };
 const seasonTitleOf = (id) => SEASON_TITLES.find((t) => t.id === id) || null;
 
+/* 🌏 월드컵 소집 기간에만 붙는 임시 버프.
+ *
+ * ⚠️ **세이브에 안 남고, 끄는 코드도 없어요.** S.wc(진행 중인 대회)가 있을 때만
+ * 목록에 끼어들었다가 대회가 끝나(S.wc = null) 저절로 사라집니다 — 해제를 잊을
+ * 대상 자체가 없는 구조예요.
+ *
+ * 별도 배수(WC_TRAIN_MUL 같은 것)를 만들지 않고 **버프 체계 안에** 넣은 이유:
+ * 훈련 버프에는 이미 BUFF_CAP.train(+30%) 상한이 있고, 그 상한은 "한 번 앞서간
+ * 커리어가 영원히 앞서가는 것"을 막으려고 둔 거예요. 대회 경로만 그걸 비껴가면
+ * 상한이 반쪽이 되고, 훈련 효율을 조정할 때 봐야 할 손잡이가 둘로 늘어납니다.
+ * 🌟 신인왕(+15%)을 이미 달고 있으면 합이 상한에 걸려 월드컵 몫이 덜 실려요 —
+ * 그게 상한이 있는 이유고, 의도된 동작입니다. */
+const WC_CAMP_BUFF = {
+  id: "wcCamp", name: "🌏 대표팀 훈련장", need: "월드컵 소집 기간",
+  eff: { train: 0.3 }, desc: "훈련 상승폭 +30%",
+};
+
 /* 이번 시즌에 살아 있는 칭호. buffY가 지금 시즌과 같을 때만 들어요 —
  * 지난 시즌 것이 그대로 남으면 "한 번 잘하면 평생 간다"가 됩니다. */
 function activeBuffs(st) {
   const S0 = st || (typeof S !== "undefined" ? S : null);
-  if (!S0 || !Array.isArray(S0.buffs) || S0.buffY !== S0.proYear) return [];
-  return S0.buffs.map(seasonTitleOf).filter(Boolean);
+  if (!S0) return [];
+  const out = (Array.isArray(S0.buffs) && S0.buffY === S0.proYear)
+    ? S0.buffs.map(seasonTitleOf).filter(Boolean) : [];
+  // 🌏 대회 중에만 — 시즌 칭호가 하나도 없어도 이건 붙어야 해서 위 갈래 밖에 둬요
+  if (S0.wc) out.push(WC_CAMP_BUFF);
+  return out;
 }
 /* 종류별 합계. g·a·d·train은 배수(1 + 합), rate·moment는 그대로 더해요. */
 function buffSum(kind, st) {
@@ -1607,11 +1628,15 @@ const MATE_SCALE = 1.7;    // 동료 골 전체 크기
 const MATE_EDGE = 3.0;     // 전력 차가 동료 골에 실리는 정도
 const MATE_FORM = 0.05;    // 내 경기력이 거드는 정도 — 작게 둡니다
 const MATE_FLOOR = 0.15;   // 아무리 전력이 뒤져도 동료가 아예 못 넣지는 않아요
-function teammateGoals(rating, oppStr) {
+/* myStr — **우리 전력**을 밖에서 넘길 수 있어요. 안 넘기면 소속 클럽이에요(기존 동작).
+ * 🌏 월드컵은 클럽이 아니라 국가로 뛰니 이 인자가 필요합니다. 산식을 worldcup.js에
+ * 베끼지 않는 이유예요 — 베끼면 다음에 GOAL_SCALE을 만질 때 한쪽만 옛 눈금으로 남아요. */
+function teammateGoals(rating, oppStr, myStr) {
   /* 상대를 모르면 **우리 전력과 같다**고 봐요(대등한 경기). 예전에는 리그 평균 70을
    * 기본값으로 뒀는데, 그러면 K리그3(전력 45) 팀은 상대를 모를 때마다 전력 70과
    * 붙는 셈이라 승률이 18%까지 떨어졌어요 — 자기 리그에서 뛰는데도요. */
-  const edge = (clubStrOf(S) - (oppStr == null ? clubStrOf(S) : oppStr)) / 100;
+  const us = myStr == null ? clubStrOf(S) : myStr;
+  const edge = (us - (oppStr == null ? us : oppStr)) / 100;
   const form = clamp((rating - 6.5) * MATE_FORM, -0.3, 0.3);
   /* 바닥을 0이 아니라 0.15로 둬요. 전력이 50이나 뒤지면 1 + edge×2.2가 음수가 돼서
    * 동료 골 기댓값이 **정확히 0**이 됩니다 — 최약체 팀은 나 말고 아무도 못 넣는
@@ -1636,8 +1661,9 @@ const CONC_EDGE = 3.4;     // 전력 차가 실점에 실리는 정도 — 여�
 const CONC_FORM = 0.05;    // 내 평점이 실점을 줄이는 정도
 const CONC_DEF = 400;      // 내 수비 능력치가 실점을 줄이는 정도 (나누는 값이라 클수록 약해요)
 const CONC_CAP = 5;        // 한 경기 실점 상한 — 8:5 같은 스코어가 나오지 않게
-function deriveOppGoals(rating, defStat, oppStr, teamGoals) {
-  const edge = ((oppStr == null ? clubStrOf(S) : oppStr) - clubStrOf(S)) / 100;   // 모르면 대등한 경기
+function deriveOppGoals(rating, defStat, oppStr, teamGoals, myStr) {
+  const us = myStr == null ? clubStrOf(S) : myStr;                                // 🌏 월드컵은 국가 전력을 넘겨요
+  const edge = ((oppStr == null ? us : oppStr) - us) / 100;                        // 모르면 대등한 경기
   const balance = Math.max(0.15, (1 + edge * CONC_EDGE)
     * (1 - (rating - 6.5) * CONC_FORM - ((defStat || 40) - 60) / CONC_DEF));
   const lam = (CONC_BASE * GOAL_SCALE + Math.max(0, teamGoals || 0) * CONC_MIX) * balance;

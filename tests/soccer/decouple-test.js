@@ -56,14 +56,14 @@ const parts = {
   autoRes: grab(GAME, /function autoRes\(stat\) \{[\s\S]*?\n\}/),
   clubStrOf: grab(GAME, /function clubStrOf\(st\) \{[\s\S]*?\n\}/),
   tmTbl: grab(GAME, /const TEAMMATE_GOALS = \{[\s\S]*?\};/),
-  mates: grab(GAME, /const MATE_SCALE = [\s\S]*?function teammateGoals\(rating, oppStr\) \{[\s\S]*?\n\}/),
-  conc: grab(GAME, /const CONC_BASE = [\s\S]*?function deriveOppGoals\(rating, defStat, oppStr, teamGoals\) \{[\s\S]*?\n\}/),
+  mates: grab(GAME, /const MATE_SCALE = [\s\S]*?function teammateGoals\([^)]*\) \{[\s\S]*?\n\}/),
+  conc: grab(GAME, /const CONC_BASE = [\s\S]*?function deriveOppGoals\([^)]*\) \{[\s\S]*?\n\}/),
   concCap: grab(GAME, /const CONC_CAP = [^;]+;/),
   leagues: grab(GAME, /const LEAGUES = \[[\s\S]*?\n\];/),
   leagueOf: grab(GAME, /function leagueOf\(st\) \{[\s\S]*?\n\}/),
   fanCap: grab(SRC, /const FAN_CAP = [^;]+;/),
   ratingDiv: grab(SRC, /const RATING_DIV = [^;]+;/),
-  ratingOf: grab(SRC, /function ratingOf\(stats, pos, condition, fandom\) \{[\s\S]*?\n {2}\}/),
+  ratingOf: grab(SRC, /function ratingOf\([^)]*\) \{[\s\S]*?\n {2}\}/),
 };
 const missing = Object.entries(parts).filter(([, v]) => !v).map(([k]) => k);
 if (missing.length) { console.log(`❌ 소스에서 못 찾았어요: ${missing.join(", ")}`); process.exit(1); }

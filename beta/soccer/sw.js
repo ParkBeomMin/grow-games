@@ -1,6 +1,6 @@
 /* soccer 서비스워커 — 네트워크 우선, 실패 시 캐시 (오프라인 플레이) */
-const CACHE = "soccer-v3";   // 👥 squad.js·🔥 camp.js 추가 + 항상 재검증으로 바꾸며 올렸어요
-const ASSETS = ["./", "./index.html", "./style.css", "./game.js", "./cup.js", "./career.js", "./squad.js", "./camp.js", "./manifest.webmanifest", "../base.css", "../radar.js", "../timing.js", "../match.js", "../help.js"];
+const CACHE = "soccer-v4";   // 🌏 worldcup.js 추가   // 👥 squad.js·🔥 camp.js 추가 + 항상 재검증으로 바꾸며 올렸어요
+const ASSETS = ["./", "./index.html", "./style.css", "./game.js", "./cup.js", "./career.js", "./squad.js", "./camp.js", "./worldcup.js", "./manifest.webmanifest", "../base.css", "../radar.js", "../timing.js", "../match.js", "../help.js"];
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));
 });
