@@ -46,6 +46,9 @@ const parts = {
    * 같이 안 떼어 오면 ReferenceError로 죽습니다(조용히 통과하지는 않아요).
    * 이 검사들은 칭호가 없는 상태(S.buffs 없음)를 보니 배수는 전부 1이 나와요 —
    * 칭호가 붙었을 때의 동작은 tests/soccer/buff-test.js가 봅니다. */
+  /* 🔥 승부처 성공이 무엇으로 남는지는 포지션이 정해요(극장골/도움/차단).
+   * info 블록이 momentKind()를 부르니 같이 떼어 와야 굴러가요. */
+  momentKind: grab(GAME, /const MOMENT_KIND = \{[^}]*\};\nconst momentKind = [^;]+;/),
   goalScale: grab(GAME, /const GOAL_SCALE = [^;]+;/),
   buffFns: grab(GAME, /const HOT_FORM_BAR = [\s\S]*?const buffMul = [^;]+;/),
   matchContribution: grab(GAME, /function matchContribution\(rating\) \{[\s\S]*?\n\}/),
@@ -180,6 +183,7 @@ guard("⑤ leagueOf", () => {
  * 팀 스코어(h·a·res)는 이 검사가 안 보는 값이라 자리만 채워요. */
 const seasonFn = new Function("S", "clamp", "rand", `
   ${parts.posInfo} ${parts.clutchScale} ${parts.transLv} ${parts.clutch}
+  ${parts.momentKind}
   ${parts.goalScale}
   ${parts.buffFns}
   ${parts.poissonish} ${parts.matchContribution} ${parts.autoRes}
@@ -306,7 +310,11 @@ guard("⑧⑨ 목표 사다리", () => {
    * 늘면서 같은 리그의 tier가 밀려(유로파 4 → 잉글랜드 2부 9) 검사가 엉뚱한 리그를
    * 지목했다. id는 옛 세이브가 가리키는 값이라 안 움직인다 — 여기 기준으로 삼기 좋다.
    *   5 한국 3부 · 4 한국 2부 · 1 한국 1부 · 2 잉글랜드 2부(옛 유로파) · 3 잉글랜드 1부(옛 챔스) */
-  const WANT = { 70: [5], 90: [4], 110: [1, 2], 130: [2], 150: [3] };  // 허용하는 리그 id
+  /* 130이 [2, 11] 둘 다인 이유: 실측값이 챔피언십 1.724 · 세리에A 1.737로 **0.8% 차이**예요.
+   * 리그가 5개에서 11개로 늘면서 위쪽 칸이 촘촘해졌고, 이 정도면 통계적으로 같은
+   * 자리입니다. 한쪽만 정답으로 못 박으면 표본이 흔들릴 때마다 빨간불이 떠요.
+   * (110이 [1, 2]인 것도 같은 이유 — 설계 문서가 둘 다 허용해요.) */
+  const WANT = { 70: [5], 90: [4], 110: [1, 2], 130: [2, 11], 150: [3] };  // 허용하는 리그 id
   const t0 = Date.now();
   const grid = {};
   for (const stat of STATS) grid[stat] = sorted.map((l) => rates(stat, l.id).mvp);

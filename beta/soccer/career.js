@@ -55,10 +55,10 @@ window.WingerCareer = (() => {
    * n은 정규화 계수예요. 수비수는 시즌 수비 성공이 68회인데 공격수는 골이 31개라,
    * 그대로 더하면 포지션이 곧 유불리가 됩니다. 시뮬레이션으로 잡은 값이에요. */
   const POS_AXIS = {
-    fw: { g: 1.0, a: 0.5, d: 0.15, n: 0.98 },
-    wg: { g: 0.8, a: 0.8, d: 0.15, n: 1.08 },
-    mf: { g: 0.5, a: 1.0, d: 0.30, n: 1.04 },
-    df: { g: 2.0, a: 1.0, d: 0.55, n: 0.655 },
+    fw: { g: 1.0, a: 0.5, d: 0.15, n: 0.94 },
+    wg: { g: 0.8, a: 0.8, d: 0.15, n: 1.02 },
+    mf: { g: 0.5, a: 1.0, d: 0.30, n: 0.86 },
+    df: { g: 2.0, a: 1.0, d: 0.55, n: 0.87 },
   };
   const AXIS_K = 3.00;
   /* 경기 수를 12 → 38로 올리면서 시즌 축이 3.23배가 됐어요. log가 AXIS_K(3.00)로
@@ -75,8 +75,10 @@ window.WingerCareer = (() => {
    *   AXIS_OFF 4.4 → 능력치 90에서 MVP 45.5% (밴드 8~25%) · 너무 헐거움
    *   AXIS_OFF 5.0 → 3.0 / 17.4 / 57.1 / 81.2 / 92.2% (능력치 70~150) ✔ 전부 밴드 안
    *   AXIS_OFF 5.4 → 능력치 110에서 32.2% (밴드 45~72%) · 너무 빡빡함
+   * 그 뒤 승부처 보상을 포지션별로 나누면서(극장골/도움/차단) 축이 또 움직여
+   * 4.8로 다시 잡았어요 — 2.6 / 17.6 / 61.2 / 86.1 / 95.6%.
    * **생산량을 바꿀 때 이 값을 같이 안 옮기면 수상이 통째로 사라지거나 쏟아져요.** */
-  const AXIS_OFF = 5.0;
+  const AXIS_OFF = 4.8;
 
   /* ---------- ⭐ 경기 평점 — 실제 축구 평점처럼 ----------
    *
@@ -866,8 +868,14 @@ window.WingerCareer = (() => {
       proLog(`🏷️ 칭호 승급 — ${titleAt(idx)}! 명성 +${fan} · 수당 ×${titlePayMul(idx).toFixed(2)}`);
       if (window.Fx) Fx.celebrate("award", `🏷️ ${titleAt(idx)}!`);
     } else {
-      // 내려갈 때는 명성을 깎지 않아요 — 이미 노쇠 벌점이 따로 걸려 있어요
-      proLog(`🕯️ 기량이 떨어졌어요 — ${titleAt(idx)} · 수당 ×${titlePayMul(idx).toFixed(2)}`);
+      /* 내려갈 때는 명성을 깎지 않아요 — 이미 노쇠 벌점이 따로 걸려 있어요.
+       *
+       * ⚠️ 문구가 상황을 봐야 해요. 🔮각성·🌠초월은 능력치를 30~60으로 되돌리는
+       * **투자**인데, 거기에 "기량이 떨어졌어요"가 뜨면 잘하려고 한 행동에 벌을
+       * 주는 것처럼 읽혀요(제보). 각성 직후에는 다시 만드는 중이라고 적어요. */
+      proLog(S.awakenAt === S.stages
+        ? `🔮 각성으로 몸을 다시 만드는 중이에요 — 지금은 ${titleAt(idx)} · 수당 ×${titlePayMul(idx).toFixed(2)}`
+        : `🕯️ 기량이 떨어졌어요 — ${titleAt(idx)} · 수당 ×${titlePayMul(idx).toFixed(2)}`);
     }
     save();
   }
@@ -881,7 +889,11 @@ window.WingerCareer = (() => {
       + `${traitOf(S).tag ? ` · ${traitOf(S).tag}` : ""} · ${S.proYear}/${CAREER_MAX}시즌`
       /* 🏷️ 칭호 — 경쟁자들에게 붙는 것과 **같은 자**로 잽니다. 내 종합만 덩그러니
        * 있으면 그 숫자가 이 리그에서 어느 급인지 알 길이 없어요. */
-      + ` · 종합 ${Math.round(overall())} ${titleOf(overall())}`;
+      /* 최고 클래스를 같이 적어요. 각성으로 능력치를 되돌리면 클래스가 내려가는데,
+       * 지금 값만 보이면 "여기까지 갔었다"가 통째로 사라져 손해만 남아 보여요. */
+      + ` · 종합 ${Math.round(overall())} ${titleOf(overall())}`
+      + `${S.career && S.career.bestTitle != null && S.career.bestTitle > titleIdx(overall())
+          ? ` (최고 ${titleAt(S.career.bestTitle)})` : ""}`;
     $("pro-turn").textContent = S.activity
       ? `${cbLabel(S.activity.cb)} · R${S.activity.week}/${S.activity.weekTotal} · MOM ${S.activity.wins}회`
       : `시즌 준비 ${3 - S.camp}/3`;
@@ -1596,7 +1608,6 @@ window.WingerCareer = (() => {
       proLog(move.kind === "title" ? `🏆 ${move.from} 우승!! 리그 정상에 섰어요`
         : move.kind === "up" ? `🔺 리그 우승! ${move.from} → ${move.to} 승격!!`
         : `🔻 최하위… ${move.from} → ${move.to} 강등`);
-      if (move.kind === "title" && window.Fx) Fx.celebrate("champion", `🏆 ${move.from} 우승!`);
     }
     S.career.sales += sales;
     const gg = act.goals || 0, ga = act.assists || 0, gd = act.defense || 0, apps = act.apps || 0;
@@ -1607,10 +1618,18 @@ window.WingerCareer = (() => {
     S.career.teamW = (S.career.teamW || 0) + (act.teamW || 0);
     S.career.teamD = (S.career.teamD || 0) + (act.teamD || 0);
     S.career.teamL = (S.career.teamL || 0) + (act.teamL || 0);
-    /* 수상은 하나씩 띄워요. 한 번에 합쳐 부르면 연출이 겹쳐서 뭘 받았는지 안 보여요
-     * — ⚾ 더 드래프트에서 2.11.2에 같은 문제를 고쳤습니다. */
-    if (awards.length && window.Fx) {
-      awards.forEach((a, i) => setTimeout(() => Fx.celebrate("award", `🎖️ ${a}!`), i * 1700));
+    /* 연출은 하나씩 줄 세워요. 한 번에 부르면 겹쳐서 뭘 받았는지 안 보여요
+     * — ⚾ 더 드래프트에서 2.11.2에 같은 문제를 고쳤습니다.
+     *
+     * ⚠️ 🏆 우승 연출이 이 줄 밖(applyPromotion)에서 **즉시** 터지고 있었어요.
+     * 수상은 0ms부터 1700ms 간격으로 뜨니 첫 상과 정확히 겹쳤습니다(제보).
+     * 우승도 같은 줄에 세워서 앞에 놓아요 — 제일 큰 소식이 먼저 와야 하고요. */
+    const fxQueue = [];
+    if (move && move.kind === "title") fxQueue.push(["champion", `🏆 ${move.from} 우승!`]);
+    else if (move && move.kind === "up") fxQueue.push(["champion", `🔺 ${move.to} 승격!`]);
+    for (const a of awards) fxQueue.push(["award", `🎖️ ${a}!`]);
+    if (fxQueue.length && window.Fx) {
+      fxQueue.forEach(([kind, text], i) => setTimeout(() => Fx.celebrate(kind, text), i * 1700));
     }
     /* club·league — 그 시즌에 뛴 소속을 결산 시점에 그냥 적어요. 여기 적힌 값이 정본이에요.
      * 이 필드가 생기기 전에 쌓인 옛 항목에는 club이 없어요. 그건 읽는 쪽(fillClubs)이
@@ -1920,7 +1939,7 @@ window.WingerCareer = (() => {
    * 능력치 90 중앙 6.60 · 상위1% 7.49 / 능력치 110 중앙 7.37 · 상위1% 8.03.
    * 프리미어리그 7.60은 **능력치 110의 좋은 시즌**이라야 닿고, 능력치 70은
    * 아무리 잘해도 못 닿아요 — tests/soccer/transfer-test.js가 그걸 지킵니다. */
-  const PROMOTE_HYPE = { 5: 0, 4: 2.5, 1: 4.5, 6: 5.45, 8: 5.76, 7: 6.07, 9: 6.37, 10: 6.68, 2: 6.99, 11: 7.29, 3: 7.60 };
+  const PROMOTE_HYPE = { 5: 0, 4: 2.5, 1: 4.5, 6: 5.45, 8: 5.81, 7: 6.18, 9: 6.54, 10: 6.91, 2: 7.27, 11: 7.64, 3: 8.00 };
   const OFFERS_PER_LEAGUE = 2;               // 리그마다 제안 수
 
   /* 계약금 — 리그 격과 클럽 전력에서 뽑아요. 격은 거듭제곱(FEE_PRESTIGE_POW)으로 실어요.

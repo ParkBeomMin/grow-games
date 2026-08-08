@@ -376,14 +376,38 @@ guard("⑨ 승급과 효과", () => {
   check(!/칭호 승급/.test(logs()), "같은 칭호로 다시 그려도 알림이 두 번 뜨지 않는다");
 
   // 노쇠 — 내려갈 때는 알려주되 명성을 깎지 않아요
-  const fanAtTop = S.fandom;
   S.proLog = [];
+  delete S.awakenAt;
+  const fanAtTop = S.fandom;
   setOvr(45);
   Career.refreshPro();
   const down = logs();
   console.log(`=== ⑨ 강등 로그 — "${down.slice(0, 70)}" ===`);
   check(/기량이 떨어졌어요/.test(down), "기량이 떨어지면 내려왔다고 알려준다");
-  check(S.fandom === fanAtTop, `내려갈 때 명성을 깎지 않는다 (${Math.round(fanAtTop)} → ${Math.round(S.fandom)})`);
+
+  /* 🔮 각성 직후에는 말이 달라야 해요. 능력치를 30~60으로 되돌리는 **투자**인데
+   * "기량이 떨어졌어요"가 뜨면 잘하려고 한 행동에 벌을 주는 것처럼 읽혀요(제보). */
+  S.proLog = [];
+  setOvr(110);
+  Career.refreshPro();          // 다시 올려놓고
+  S.proLog = [];
+  S.awakenAt = S.stages;        // 각성으로 되돌린 표시
+  setOvr(50);
+  Career.refreshPro();
+  const awk = logs();
+  console.log(`=== ⑨ 각성 직후 로그 — "${awk.slice(0, 70)}" ===`);
+  check(/각성으로 몸을 다시 만드는 중/.test(awk),
+    `각성으로 내려간 거면 그렇게 말한다 ("${awk.slice(0, 50)}")`);
+  check(!/기량이 떨어졌어요/.test(awk), "각성인데 '기량이 떨어졌다'고 하지 않는다");
+  delete S.awakenAt;
+  /* ⚠️ 위에서 각성 문구를 보려고 한 번 올렸다 내렸어요 — 올릴 때 승급 명성이 붙어요.
+   * 그래서 '내려간 그 순간'만 떼어 봅니다. */
+  const beforeDrop = S.fandom;
+  S.awakenAt = null;
+  setOvr(35);
+  Career.refreshPro();
+  check(S.fandom === beforeDrop,
+    `내려갈 때 명성을 깎지 않는다 (${Math.round(beforeDrop)} → ${Math.round(S.fandom)})`);
 
   // 커리어 최고 칭호는 남아요 — 은퇴식이 이걸 씁니다
   check(S.career.bestTitle > S.titleIdx,

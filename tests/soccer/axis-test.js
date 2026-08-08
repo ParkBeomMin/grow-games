@@ -36,6 +36,9 @@ const parts = {
    * 같이 안 떼어 오면 ReferenceError로 죽습니다(조용히 통과하지는 않아요).
    * 이 검사들은 칭호가 없는 상태(S.buffs 없음)를 보니 배수는 전부 1이 나와요 —
    * 칭호가 붙었을 때의 동작은 tests/soccer/buff-test.js가 봅니다. */
+  /* 🔥 승부처 성공이 무엇으로 남는지는 포지션이 정해요(극장골/도움/차단).
+   * info 블록이 momentKind()를 부르니 같이 떼어 와야 굴러가요. */
+  momentKind: grab(GAME, /const MOMENT_KIND = \{[^}]*\};\nconst momentKind = [^;]+;/),
   goalScale: grab(GAME, /const GOAL_SCALE = [^;]+;/),
   buffFns: grab(GAME, /const HOT_FORM_BAR = [\s\S]*?const buffMul = [^;]+;/),
   matchContribution: grab(GAME, /function matchContribution\(rating\) \{[\s\S]*?\n\}/),
@@ -101,10 +104,10 @@ check(axisMissing.length === 0,
  *    골 가중치가 큰 수비수가 다시 앞서 나갔습니다(hype 편차 0.71).
  *    아래 값은 그 상태에서 다시 잰 거예요 — 편차 0.71 → 0.16. */
 const SPEC = {
-  fw: { g: 1.0, a: 0.5, d: 0.15, n: 0.98 },
-  wg: { g: 0.8, a: 0.8, d: 0.15, n: 1.08 },
-  mf: { g: 0.5, a: 1.0, d: 0.30, n: 1.04 },
-  df: { g: 2.0, a: 1.0, d: 0.55, n: 0.655 },
+  fw: { g: 1.0, a: 0.5, d: 0.15, n: 0.94 },
+  wg: { g: 0.8, a: 0.8, d: 0.15, n: 1.02 },
+  mf: { g: 0.5, a: 1.0, d: 0.30, n: 0.86 },
+  df: { g: 2.0, a: 1.0, d: 0.55, n: 0.87 },
 };
 
 const table = axisParts.POS_AXIS ? new Function(`${axisParts.POS_AXIS} return POS_AXIS;`)() : null;
@@ -205,6 +208,7 @@ check(/act\.hypeSum \+=/.test(SRC) && /act\.cbHype \+=/.test(SRC),
  * 팀 스코어(h·a·res)는 이 테스트가 안 보는 값이라 자리만 채운다. */
 const seasonFn = new Function("S", "clamp", "rand", "condition", "fandom", `
   ${parts.posInfo} ${parts.clutchScale} ${parts.transLv} ${parts.clutch}
+  ${parts.momentKind}
   ${parts.goalScale}
   ${parts.buffFns}
   ${parts.poissonish} ${parts.matchContribution} ${parts.autoRes}

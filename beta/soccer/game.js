@@ -920,7 +920,14 @@ function gearBonus(key) {
   return GEAR_TIERS.reduce((sum, t) => sum + (S.gear[`${key}-${t.n}`] ? t.bonus : 0), 0);
 }
 /* 각성·초월로 능력치를 되돌릴 때 쓰는 값. 장비 몫을 얹고 상한을 넘지 않게 잘라요. */
-const resetStat = (key, lo, hi) => clamp(randInt(lo, hi) + gearBonus(key), 0, statCap(key));
+/* 🔮각성·🌠초월로 능력치를 되돌릴 때 쓰는 자리예요.
+ * 되돌린 시점을 남겨 둬요 — 클래스가 내려간 이유가 노쇠인지 각성인지 화면이
+ * 구분해서 말해야 해요(career.js checkTitle). 능력치를 낮추는 유일한 통로라
+ * 여기 한 줄이면 됩니다. */
+const resetStat = (key, lo, hi) => {
+  S.awakenAt = S.stages;
+  return clamp(randInt(lo, hi) + gearBonus(key), 0, statCap(key));
+};
 
 let shopReturn = "screen-main";
 function statDefs() { return Array.isArray(STAT_DEFS) ? STAT_DEFS : STAT_DEFS[S.pos]; }
@@ -1671,65 +1678,130 @@ function autoRes(stat) {
   }
 }
 
+/* 🔥 승부처 미니게임 — **포지션마다 오는 장면이 달라요.**
+ *
+ * 예전에는 여덟 개를 포지션과 무관하게 뽑았어요. 수비수한테 "🎯 슛 찬스!
+ * 초록 존에서 슈팅!"이 뜨고, 성공하면 극장골이 됐습니다(제보).
+ * 장치(Timing)는 그대로 재사용하되 **어떤 장면인지와 어느 능력치로 겨루는지**를
+ * 포지션에 맞춰요 — 수비수는 커트·1:1 수비·위험 감지·걷어내기가 옵니다. */
+const MINI_POOL = {
+  fw: ["bar", "hold", "drop", "target"],      // 마무리 계열
+  wg: ["duel", "odd", "bar", "target"],       // 돌파·침투
+  mf: ["seq", "odd", "duel", "target"],       // 연계·탈압박
+  df: ["react", "duel", "odd", "hold"],       // 커트·1:1 수비·위험 감지·걷어내기
+};
+/* 장면 문구와 결과 대사. df는 같은 장치라도 수비 장면이라 따로 적어요.
+ * stat — 그 장면에서 겨루는 능력치예요(수비수의 1:1은 드리블이 아니라 수비). */
+const MINI_SPEC = {
+  bar: {
+    stat: "pos", label: "🎯 슛 찬스! 초록 존에서 슈팅!", button: "슛! ⚽",
+    txt: { ok: "✨ 침착하게 마무리했어요", great: "💫 완벽한 타이밍, 골망을 흔드는 슛!!", bad: "😱 급하게 차다 골대를 벗어났어요" },
+  },
+  hold: {
+    stat: "stamina", label: "💪 강슛 장전! 꾹 눌러 파워를 모으고 초록 존에서 슛!", button: "슛! ⚽",
+    txt: { ok: "⚽ 알맞은 파워로 정확한 슛!", great: "💥 완벽하게 실은 강슛, 골키퍼도 손 못 써!!", bad: "😵 힘이 과해 크로스바를 넘겼어요" },
+    df: {
+      stat: "defense", label: "🧹 걷어내기! 꾹 눌러 힘을 모으고 초록 존에서 클리어!", button: "클리어! 🧹",
+      txt: { ok: "🧹 안전하게 걷어냈어요", great: "💨 완벽한 클리어, 위험지역을 통째로 비웠다!!", bad: "😵 어설픈 클리어가 상대에게 갔어요" },
+    },
+  },
+  seq: {
+    stat: "pass", label: "🎯 패스 연계! 순서를 기억했다가 그대로!",
+    txt: { ok: "🎯 패스 연계를 정확히 이어갔어요", great: "🌟 원터치 연계로 수비를 완전히 무너뜨렸다!!", bad: "🙈 연계 타이밍이 어긋났어요" },
+  },
+  react: {
+    stat: "defense", label: "🛡️ 결정적 순간! 신호가 켜지면 즉시 반응!", button: "커트!! 🛡️",
+    txt: { ok: "🛡️ 결정적 순간에 바로 반응했어요", great: "⚡ 번개 같은 반응으로 실점을 막았다!!", bad: "😵 한 박자 늦어 뒷공간을 내줬어요" },
+  },
+  target: {
+    stat: "pos", label: "🎯 슛 찬스 러시! 튀어나오는 기회를 놓치지 말고 탭!", icon: "⚽",
+    txt: { ok: "✨ 침착하게 마무리했어요", great: "💫 완벽한 타이밍, 골망을 흔드는 슛!!", bad: "😱 급하게 차다 골대를 벗어났어요" },
+    mf: {
+      stat: "pass", label: "🎯 전진 패스 길! 열리는 공간을 놓치지 말고 탭!", icon: "🎯",
+      txt: { ok: "🎯 정확한 전진 패스", great: "🌟 한 번에 수비를 가르는 침투 패스!!", bad: "🙈 패스 길을 놓쳤어요" },
+    },
+  },
+  drop: {
+    stat: "pos", label: "⚽ 트래핑! 떨어지는 공을 초록 존에서 딱 잡아 슛!", icon: "⚽",
+    txt: { ok: "✨ 침착하게 마무리했어요", great: "💫 완벽한 트래핑에서 이어진 슛!!", bad: "😱 트래핑이 길어 기회를 놓쳤어요" },
+  },
+  odd: {
+    stat: "dribble", label: "👀 수비 빈틈 포착! 다른 하나를 빠르게 찾아 탭!",
+    txt: { ok: "🧠 빈틈을 찾아냈어요", great: "🎯 완벽하게 파고들어 수비를 벗겨냈다!!", bad: "🙈 빈틈을 못 찾고 막혔어요" },
+    df: {
+      stat: "defense", label: "👀 위험 감지! 다른 하나를 빠르게 찾아 탭!",
+      txt: { ok: "🧠 위험을 미리 읽었어요", great: "🎯 완벽하게 읽어내 공격을 통째로 지웠다!!", bad: "🙈 한 박자 늦어 침투를 허용했어요" },
+    },
+  },
+  duel: {
+    stat: "dribble", label: "🧠 1:1 드리블! 수비수를 어디로 제칠까?", choices: ["왼쪽", "가운데", "오른쪽"],
+    txt: { ok: "🧠 수비수의 무게중심을 뺏었어요", great: "🎯 완벽한 페인트로 제쳐냈다!!", bad: "🙈 수비수에게 공을 뺏겼어요" },
+    mf: {
+      stat: "dribble", label: "🧠 탈압박! 어느 쪽으로 빠져나갈까?", choices: ["왼쪽", "가운데", "오른쪽"],
+      txt: { ok: "🧠 압박을 벗어났어요", great: "🎯 완벽한 턴으로 압박을 통째로 벗겨냈다!!", bad: "🙈 압박에 걸려 공을 뺏겼어요" },
+    },
+    df: {
+      stat: "defense", label: "🛡️ 1:1 수비! 상대를 어느 쪽으로 몰까?", choices: ["왼쪽", "가운데", "오른쪽"],
+      txt: { ok: "🛡️ 방향을 잘 좁혔어요", great: "🎯 완벽하게 몰아붙여 공을 뺏어냈다!!", bad: "🙈 방향을 잘못 읽어 제쳐졌어요" },
+    },
+  },
+};
+/* 포지션 변형이 있으면 그걸, 없으면 기본을 써요. stat "pos"는 내 포지션 주 스탯이에요. */
+function miniSpec(mech) {
+  const base = MINI_SPEC[mech] || MINI_SPEC.bar;
+  const spec = Object.assign({}, base, base[S.pos] || {});
+  const key = spec.stat === "pos" ? POS_INFO[S.pos].stat : spec.stat;
+  return { spec, val: S.stats[key] || 40 };
+}
+
 function playRandomMini(container, cb) {
-  const posStat = POS_INFO[S.pos].stat;
-  const mech = pick(["bar", "hold", "seq", "react", "duel", "target", "drop", "odd"]);
+  const mech = pick(MINI_POOL[S.pos] || MINI_POOL.fw);
+  const { spec, val } = miniSpec(mech);
+  const T = spec.txt;
+  if (autoMiniOn()) { cb(autoRes(val), T); return; }
+  const done = (res) => cb(res, T);
   if (mech === "bar") {
-    if (autoMiniOn()) { cb(autoRes(S.stats[posStat]), SOCCER_BAR); return; }
-    window.Timing.play(container, {
-      label: "🎯 슛 찬스! 초록 존에서 슈팅!",
-      button: "슛! ⚽",
-      zonePct: miniZone(S.stats[posStat]),
-    }, (res) => cb(res, SOCCER_BAR));
+    window.Timing.play(container, { label: spec.label, button: spec.button, zonePct: miniZone(val) }, done);
   } else if (mech === "hold") {
-    if (autoMiniOn()) { cb(autoRes(S.stats.stamina), SOCCER_HOLD); return; }
-    window.Timing.hold(container, {
-      label: "💪 강슛 장전! 꾹 눌러 파워를 모으고 초록 존에서 슛!",
-      button: "슛! ⚽",
-      zonePct: miniZone(S.stats.stamina),
-    }, (res) => cb(res, SOCCER_HOLD));
+    window.Timing.hold(container, { label: spec.label, button: spec.button, zonePct: miniZone(val) }, done);
   } else if (mech === "seq") {
-    if (autoMiniOn()) { cb(autoRes(S.stats.pass), SOCCER_SEQ); return; }
     window.Timing.sequence(container, {
-      label: "🎯 패스 연계! 순서를 기억했다가 그대로!",
-      icons: ["⚽", "🎯", "🏃", "🥅"],
-      showMs: 900 + S.stats.pass * 6 + (S.condition - 50) * 3,
-    }, (res) => cb(res, SOCCER_SEQ));
+      label: spec.label, icons: ["⚽", "🎯", "🏃", "🥅"],
+      showMs: 900 + val * 6 + (S.condition - 50) * 3,
+    }, done);
   } else if (mech === "react") {
-    if (autoMiniOn()) { cb(autoRes(S.stats.defense), SOCCER_REACT); return; }
     window.Timing.reaction(container, {
-      label: "🛡️ 결정적 순간! 신호가 켜지면 즉시 반응!",
-      button: "커트!! 🛡️",
-      perfectMs: 300 + S.stats.defense * 1.5,
-      goodMs: 700 + S.stats.defense * 2.5,
-    }, (res) => cb(res, SOCCER_REACT));
+      label: spec.label, button: spec.button,
+      perfectMs: 300 + val * 1.5, goodMs: 700 + val * 2.5,
+    }, done);
   } else if (mech === "target") {
-    if (autoMiniOn()) { cb(autoRes(S.stats[posStat]), SOCCER_REACT); return; }
     window.Timing.target(container, {
-      label: "🎯 슛 찬스 러시! 튀어나오는 기회를 놓치지 말고 탭!",
-      icon: "⚽", count: 3, lifeMs: 800 + Math.min(S.stats[posStat], 130) * 3,
-    }, (res) => cb(res, SOCCER_REACT));
+      label: spec.label, icon: spec.icon, count: 3, lifeMs: 800 + Math.min(val, 130) * 3,
+    }, done);
   } else if (mech === "drop") {
-    if (autoMiniOn()) { cb(autoRes(S.stats[posStat]), SOCCER_BAR); return; }
-    window.Timing.drop(container, {
-      label: "⚽ 트래핑! 떨어지는 공을 초록 존에서 딱 잡아 슛!",
-      icon: "⚽", zonePct: miniZone(S.stats[posStat]),
-    }, (res) => cb(res, SOCCER_BAR));
+    window.Timing.drop(container, { label: spec.label, icon: spec.icon, zonePct: miniZone(val) }, done);
   } else if (mech === "odd") {
-    if (autoMiniOn()) { cb(autoRes(S.stats.dribble), SOCCER_DUEL); return; }
     window.Timing.odd(container, {
-      label: "👀 수비 빈틈 포착! 다른 하나를 빠르게 찾아 탭!",
-      rounds: 2, sets: [["🧍", "🏃"], ["🥅", "⚽"], ["🟩", "🟢"]],
-    }, (res) => cb(res, SOCCER_DUEL));
+      label: spec.label, rounds: 2, sets: [["🧍", "🏃"], ["🥅", "⚽"], ["🟩", "🟢"]],
+    }, done);
   } else {
-    if (autoMiniOn()) { cb(autoRes(S.stats.dribble), SOCCER_DUEL); return; }
     window.Timing.duel(container, {
-      label: "🧠 1:1 드리블! 수비수를 어디로 제칠까?",
-      choices: ["왼쪽", "가운데", "오른쪽"],
-      hintChance: clamp((S.stats.dribble - 40) / 80 + (S.condition - 50) / 400, 0, 0.9),
-    }, (res) => cb(res, SOCCER_DUEL));
+      label: spec.label, choices: spec.choices,
+      hintChance: clamp((val - 40) / 80 + (S.condition - 50) / 400, 0, 0.9),
+    }, done);
   }
 }
+
+/* 🔥 승부처 성공이 무엇으로 남는가 — 포지션이 정해요.
+ *   g 극장골 · a 결정적 패스(도움) · d 실점 차단
+ * 실제 축구에서도 수비수의 결정적 장면은 골이 아니라 차단이에요. */
+const MOMENT_KIND = { fw: "g", wg: "g", mf: "a", df: "d" };
+const momentKind = () => MOMENT_KIND[S && S.pos] || "g";
+const MOMENT_FEED = {
+  g: (me) => `🌟 극장골!! ${me}, 결정적인 한 방을 꽂아요!`,
+  a: (me) => `🎯 결정적인 패스!! ${me}의 침투 패스가 골로 이어집니다!`,
+  d: (me, opp) => `🛡️ 결정적인 차단!! ${me}이(가) ${opp}의 마지막 공격을 지워냅니다!`,
+};
 
 // ---------- 경기 시뮬레이션 뷰 (스코어보드 + 미니 필드 + 중계) ----------
 // 유스/프로 경기 공통. #stage-card 안에 렌더하고 #btn-stage-next를 재사용해요.
@@ -1830,9 +1902,13 @@ const MatchSim = (() => {
       btn.textContent = "🔥 승부처!";
       playRandomMini($("stage-moment"), (res, mtype) => {
         if (res === "perfect") {
-          h += 1; setScore(); flash("atk");
+          /* 🔥 승부처 성공이 **무엇으로 남는지는 포지션이 정해요.**
+           * 공격수는 극장골, 미드필더는 결정적 패스, 수비수는 실점 차단이에요. */
+          const kind = momentKind();
+          if (kind === "d") { a = Math.max(0, a - 1); setScore(); flash("def"); }
+          else { h += 1; setScore(); flash("atk"); }
           feed(mtype.great, "good");
-          feed(`🌟 극장골!! ${myName}, 결정적인 한 방을 꽂아요!`, "good");
+          feed(MOMENT_FEED[kind](myName, away), "good");
         } else if (res === "miss") {
           a += 1; setScore(); flash("def");
           feed(mtype.bad, "bad");
@@ -1851,10 +1927,20 @@ const MatchSim = (() => {
       finished = true;
       clearInterval(timer);
       const res = h > a ? "W" : h < a ? "L" : "D";
+      /* ⚠️ 승부처 성공이 붙는 자리가 포지션마다 달라요.
+       *
+       * 예전에는 포지션과 무관하게 **내 골 +1**이었어요. 그런데 ⚽ 득점 눈금
+       * (GOAL_SCALE 0.33)이 들어가면서 산식이 뽑는 골이 확 줄어, 이 한 골이
+       * 득점의 대부분을 차지하게 됐습니다 — 실측: 극장골이 차지하는 비중이
+       * 공격수 68% · 미드필더 81% · **수비수 95%**.
+       * 제보로 확인된 화면: 슛 36 · 수비 95인 수비수가 6경기 6골로 득점 2위.
+       * 중계도 "번개 같은 반응으로 실점을 막았다"고 해놓고 바로 다음 줄에
+       * "극장골!!"이라 적어, 화면 안에서 스스로 모순이었어요. */
       const info = {
         home, away,
-        myGoals: goals + (momentRes === "perfect" ? 1 : 0),
-        assists, defense,
+        myGoals: goals + (momentRes === "perfect" && momentKind() === "g" ? 1 : 0),
+        assists: assists + (momentRes === "perfect" && momentKind() === "a" ? 1 : 0),
+        defense: defense + (momentRes === "perfect" && momentKind() === "d" ? 1 : 0),
         teamGoals: h, oppGoals: a, res, momentRes,
         mateGoals,     // 이 경기에서 골을 넣은 우리 팀 선수 이름 (개인 순위에 올라가요)
       };
@@ -2170,6 +2256,7 @@ function showEnding(survivedFinal, lastRound) {
    * 호출부에서 다시 계산하면 엔딩 분기와 어긋날 수 있으니 여기서 플래그만 세워 넘겨요.
    * 📹 세미프로 입단(semiPro)도 같은 방식이에요 — 사다리 맨 아래에서 프로가 시작돼요. */
   let emoji, title, teamLine, msg, canExtend = false, scoutPro = false, semiPro = false, bigClub = false;
+  let callupWeak = false;   // 💜 1군 콜업 대기 — 그 리그 최약체에서 출발해요
   const bottom = bottomLeague();
   // 유스 국적이 정하는 데뷔 리그. 모르는 값이면 한국 1부로 막아요.
   const homeLeague = leagueOf({ league: (m && m.home) || 1 });
@@ -2197,8 +2284,14 @@ function showEnding(survivedFinal, lastRound) {
       + `${homeLeague.penalty > 0 ? ` — 평점 -${homeLeague.penalty.toFixed(2)}을 안고 뛰는 무대예요.` : "."}`;
   } else if (lastRound === 3) {
     emoji = "💜"; title = "1군 콜업 대기";
-    teamLine = "2군 계약 → 콜업 약속";
-    msg = "아쉽게 1군 계약은 놓쳤지만, 구단이 곧 콜업을 약속했어요.";
+    /* ⚠️ 예전에는 🌟 프로 계약 성공과 **기계적으로 완전히 같았어요** — 같은 리그의
+     * 아무 클럽에서 시작했습니다. 화면만 "2군 계약"이라 적혀 있었죠(제보).
+     * 콜업을 기다리는 처지니 그 리그 **최약체**에서 출발해요. 팀 성적이 내 활약에서
+     * 갈라진 뒤로는 이 차이가 승률로 실제로 체감됩니다(전력 45 vs 95 → 승률 44%p 차). */
+    callupWeak = true;
+    teamLine = `${homeLeague.flag} ${homeLeague.name} 최하위권 2군 계약`;
+    msg = `아쉽게 1군 계약은 놓쳤지만, 구단이 곧 콜업을 약속했어요. `
+      + `${homeLeague.name} 최하위권 팀이라 출발은 불리하지만, 여기서 프로 커리어가 시작돼요.`;
   } else if (lastRound === 2 && score >= SCOUT_SCORE) {
     emoji = "📞"; title = "타 구단 스카우트!";
     teamLine = "K리그 최하위권 클럽 입단";
@@ -2278,7 +2371,7 @@ function showEnding(survivedFinal, lastRound) {
       survivedFinal || lastRound === 3 || scoutPro || semiPro,
       bigClub,
       {
-        keepSave: canExtend, weakestClub: scoutPro,
+        keepSave: canExtend, weakestClub: scoutPro || callupWeak,
         /* 📹 세미프로는 사다리 맨 아래, 👑는 잉글랜드 2부, 그 밖에는 유스 국적의 리그예요.
          * 📞 타 구단 스카우트도 같은 리그의 최약체로 가요. */
         startLeague: semiPro ? bottom.id : bigClub ? europa.id : homeLeague.id,

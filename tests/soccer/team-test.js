@@ -35,6 +35,9 @@ const parts = {
    * 같이 안 떼어 오면 ReferenceError로 죽습니다(조용히 통과하지는 않아요).
    * 이 검사들은 칭호가 없는 상태(S.buffs 없음)를 보니 배수는 전부 1이 나와요 —
    * 칭호가 붙었을 때의 동작은 tests/soccer/buff-test.js가 봅니다. */
+  /* 🔥 승부처 성공이 무엇으로 남는지는 포지션이 정해요(극장골/도움/차단).
+   * info 블록이 momentKind()를 부르니 같이 떼어 와야 굴러가요. */
+  momentKind: grab(GAME, /const MOMENT_KIND = \{[^}]*\};\nconst momentKind = [^;]+;/),
   goalScale: grab(GAME, /const GOAL_SCALE = [^;]+;/),
   buffFns: grab(GAME, /const HOT_FORM_BAR = [\s\S]*?const buffMul = [^;]+;/),
   matchContribution: grab(GAME, /function matchContribution\(rating\) \{[\s\S]*?\n\}/),
@@ -82,6 +85,7 @@ const clubSrc = [
 const tableFn = new Function(`${mateSrc}\n  return TEAMMATE_GOALS;`);
 // 동료 골 수 한 판 — 없으면 ReferenceError: teammateGoals is not defined
 const mateFn = new Function("S", "rating", "clamp", `
+  ${parts.momentKind}
   ${parts.goalScale}
   ${parts.poissonish}
   ${leagueSrc}
@@ -99,6 +103,7 @@ const simFn = new Function("S", "clamp", "rand", "randInt", "pick", `
   ${leagueSrc}
   ${clubSrc}
   ${consts}
+  ${parts.momentKind}
   ${parts.goalScale}
   ${parts.buffFns}
   ${parts.ratingOf}
@@ -220,13 +225,24 @@ guard("포지션별 팀 승률", () => {
 guard("내 기록 분리", () => {
   const n = 4000;
   let bad = 0, mateSum = 0, mineSum = 0;
+  /* ⚠️ 승부처 성공(perfect) 한 칸이 **포지션마다 다른 자리**에 붙어요 —
+   * 공격수·윙어는 골, 미드필더는 도움, 수비수는 수비. 예전에는 포지션과 무관하게
+   * 골이었는데, 득점 눈금(GOAL_SCALE)이 들어간 뒤로 그 한 골이 수비수 득점의
+   * 95%를 차지했어요(슛 36인 수비수가 6경기 6골로 득점 2위 — 제보).
+   * 여기서 볼 건 "동료 골이 내 기록에 안 섞이는가"지, 승부처가 어디 붙는지가 아니에요. */
+  const MK = { fw: "g", wg: "g", mf: "a", df: "d" };
   for (let i = 0; i < n; i++) {
     const pos = POS[i % POS.length];
     const { info, mine } = playMatch(pos, 90);
-    const bonus = info.momentRes === "perfect" ? 1 : 0;
-    if (info.myGoals !== mine.g + bonus || info.assists !== mine.a) bad++;
+    const ok = info.momentRes === "perfect" ? 1 : 0;
+    const kind = MK[pos];
+    const wantG = mine.g + (ok && kind === "g" ? 1 : 0);
+    const wantA = mine.a + (ok && kind === "a" ? 1 : 0);
+    if (info.myGoals !== wantG || info.assists !== wantA) bad++;
     mineSum += info.myGoals + info.assists;
-    mateSum += info.teamGoals - bonus - mine.g - mine.a;
+    // 수비수의 승부처는 팀 골이 아니라 실점 차단이라 팀 스코어에 안 얹혀요
+    const teamBonus = ok && kind !== "d" ? 1 : 0;
+    mateSum += info.teamGoals - teamBonus - mine.g - mine.a;
   }
   check(bad === 0,
     `동료 골이 info.myGoals·assists에 섞이지 않는다 (${n}경기, 어긋난 경기 ${bad}건)`);
