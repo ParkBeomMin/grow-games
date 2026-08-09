@@ -32,6 +32,7 @@ const check = (ok, msg) => { console.log(`${ok ? "✅" : "❌"} ${msg}`); if (!o
 const guard = (label, fn) => { try { fn(); } catch (e) { check(false, `${label} — ${e.message}`); } };
 
 const WCSRC = fs.readFileSync(path.join(DIR, "worldcup.js"), "utf8");
+const CAREER = fs.readFileSync(path.join(DIR, "career.js"), "utf8");
 const GAME = fs.readFileSync(path.join(DIR, "game.js"), "utf8");
 
 // ---------- ① 문턱을 어디서 읽는가 ----------
@@ -271,6 +272,31 @@ guard("⑤-b 깜짝 발탁", () => {
     if (s3.wc) { far++; s3.wc = null; }
   }
   check(far === 0, `사정권 밖(문턱 -${GAP + 4})에서는 한 번도 안 뽑힌다 (${far}/40)`);
+});
+
+// ---------- ⑤-c 결산이 월드컵을 말하는가 ----------
+console.log("=== ⑤-c 뽑히든 안 뽑히든 결산에 한 줄 ===");
+guard("⑤-c 결산 한 줄", () => {
+  /* 이 줄이 없으면 컵이 끝나고 **아무 말 없이** 결산으로 넘어와서, 플레이어는
+   * "발탁이 안 돼서 그런 건가?"만 하게 돼요(제보). 미발탁도 결과예요. */
+  check(/WingerWorldCup\.reportLine\(\)/.test(CAREER),
+    "결산 카드가 월드컵 한 줄을 그린다 — 없으면 아무 말 없이 넘어가요");
+
+  const cases = [
+    [{ y: 7, result: "none" }, /문턱/, "미발탁이면 문턱을 알려준다"],
+    [{ y: 7, result: "none", stay: true }, /고사|클럽에 남/, "고사했으면 그렇게 말한다"],
+    [{ y: 7, result: "group", g: 2, a: 1, apps: 3, champ: "🇧🇷 브라질" }, /조별리그 탈락/, "조별 탈락도 남는다"],
+    [{ y: 7, result: "group", g: 2, a: 1, apps: 3, champ: "🇧🇷 브라질" }, /우승 🇧🇷/, "내가 못 든 대회의 우승국이 적힌다"],
+    [{ y: 7, result: "champion", g: 5, a: 2, apps: 5, awards: ["boot"], champ: "🇰🇷 대한민국" }, /🥇 골든부츠/, "대회 수상이 적힌다"],
+  ];
+  const st = setup(7, 2, barAt(7) - 12);
+  for (const [h, re, msg] of cases) {
+    st.wcHist = [h];
+    const line = WC.reportLine();
+    check(re.test(line), `${msg} — "${line}"`);
+  }
+  st.wcHist = [];
+  check(WC.reportLine() === "", "그 시즌에 월드컵이 없었으면 줄도 없다");
 });
 
 // ---------- ⑥ 와일드카드는 3시즌에만 ----------

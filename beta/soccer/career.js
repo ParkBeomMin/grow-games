@@ -2073,6 +2073,12 @@ window.WingerCareer = (() => {
         : y.promo === "up" ? `🔺 <b>리그 우승!</b> ${(y.y || 0) + 1}시즌부터 <b>${y.promoTo}</b>에서 뜁니다${y.prize ? ` · 💰 우승 상금 +${y.prize}만` : ""}`
         : `🔻 최하위로 강등… ${(y.y || 0) + 1}시즌부터 <b>${y.promoTo}</b>에서 다시 시작해요`}</div>` : ""}
       ${y.club && y.club !== S.group ? `<div class="hint">🔁 <b>${S.group}</b>로 이적했어요 — ${(y.y || 0) + 1}시즌부터 새 팀에서 뜁니다</div>` : ""}
+      ${/* 🌏 월드컵 — **뽑혔든 안 뽑혔든** 한 줄이 있어야 해요.
+          이게 없으면 컵이 끝나고 아무 말 없이 결산으로 넘어와서, 플레이어는
+          "발탁이 안 돼서 그런 건가?"만 하게 됩니다(제보). 미발탁도 결과예요.
+          reportLine이 문턱·깜짝 발탁 가능성·우승국까지 담아 줍니다. */
+        (window.WingerWorldCup && WingerWorldCup.reportLine())
+          ? `<div class="hint wc-report">${WingerWorldCup.reportLine()}</div>` : ""}
       ${moveNote ? `<div class="hint learn">${moveNote}</div>` : ""}
       ${/* 🎖️ 이 시즌에 받은 칭호 — 다음 시즌 경기에 붙어요. 결산에서 보여줘야
           "이번 시즌을 잘 치르면 다음 시즌이 편해진다"가 눈에 들어와요. */

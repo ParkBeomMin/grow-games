@@ -536,3 +536,5 @@ body.wc-mode .rank-table thead th { background: rgba(242, 193, 78, .12); color: 
 .rec-tab.on { background: var(--field); border-color: var(--accent); color: var(--accent); }
 .wc-hist td, .wc-hist th { white-space: nowrap; }
 .wc-rec-champ { font-size: .74rem; color: var(--dim); }
+/* 🌏 결산의 월드컵 한 줄 */
+.hint.wc-report { color: var(--accent); }
