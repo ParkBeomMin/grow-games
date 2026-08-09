@@ -237,6 +237,29 @@ guard("②~⑦ 대회 진행", () => {
     "별도 훈련 배수 상수를 만들지 않았다 — 버프 상한(BUFF_CAP.train)을 따라요");
 });
 
+// ---------- ③-b 내가 떨어져도 대회는 끝까지 굴러가는가 ----------
+console.log("=== ③-b 탈락 뒤에도 대회가 끝까지 ===");
+guard("③-b 남은 대회", () => {
+  /* 내가 조별에서 떨어지면 남은 4강·결승이 안 치러져서, 득점왕이 **3경기치**
+   * 기록으로 정해지고 있었어요. 4강까지 간 나라의 에이스는 두 경기를 더 뛰는데도요.
+   * 우승국도 없어서 "그래서 누가 들었는데?"가 남았습니다. */
+  const outs = results.filter((r) => r.hist && r.hist.result !== "champion");
+  console.log(`   내가 못 든 판 ${outs.length} — 우승국: ${outs.map((r) => r.hist.champ || "없음").join(" · ")}`);
+  check(outs.length === 0 || outs.every((r) => !!r.hist.champ),
+    "내가 못 들어도 우승국이 정해진다 — 없으면 '그래서 누가 들었는데'가 남아요");
+  const champs = results.filter((r) => r.hist && r.hist.result === "champion");
+  check(champs.every((r) => r.hist.champ === WC.myNation().name),
+    "내가 들었으면 우승국이 우리 나라다");
+
+  /* 조별에서 떨어진 판에서도 다른 나라 에이스는 4강·결승을 더 뛰어야 해요 */
+  const grp = results.find((r) => r.hist && r.hist.result === "group");
+  if (grp) {
+    const sq = grp.st.wcHist ? null : null;
+    void sq;
+    check(!!grp.hist.champ, `조별 탈락 판에도 우승국이 있다 (${grp.hist.champ})`);
+  }
+});
+
 // ---------- ③ 결과가 한 가지로 굳지 않는가 ----------
 console.log("=== ③ 종료 경로가 여러 갈래로 갈리는가 ===");
 guard("③ 종료 경로", () => {

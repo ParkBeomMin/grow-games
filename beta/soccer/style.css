@@ -523,3 +523,6 @@ body.wc-mode .rank-table thead th { background: rgba(242, 193, 78, .12); color: 
 /* 🏆 토너먼트 대진표 */
 .wc-bracket .wc-vs { color: var(--dim); font-size: .7rem; }
 .wc-bracket td { white-space: nowrap; }
+/* 🏆 이번 대회 우승국 — 내가 못 들었을 때 누가 들었는지 */
+.wc-champ { font-size: .86rem; color: var(--dim); margin: .3rem 0; }
+.wc-champ b { color: var(--accent); }

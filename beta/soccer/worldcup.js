@@ -568,15 +568,69 @@ window.WingerWorldCup = (() => {
 
   /* 🥇 대회 개인 순위표 — 리그 개인 순위와 같은 모양이에요 */
   function raceHTML() {
+    const w = wc() || {};
     const rows = faces();
     if (!rows.length) return recordHTML();
     const line = (e, i) => `<tr class="${e.p.me ? "me" : ""}"><td>${i + 1}</td>`
       + `<td>${e.p.name}${e.p.me ? " <b>(나)</b>" : ""}<span class="wc-nat">${e.nat}`
-      + `${e.out ? " · 탈락" : ""}</span></td>`
+      /* 대회가 끝났으면 🏆 우승국만 표시해요. 진행 중일 때만 탈락을 적습니다 —
+       * 끝난 뒤엔 우승국 말고 다 탈락이라 아무 말도 안 하는 것과 같아요. */
+      + `${w.champ ? (e.nat === w.champ ? " · 🏆 우승" : "") : (e.out ? " · 탈락" : "")}</span></td>`
       + `<td>${e.p.g || 0}</td><td>${e.p.a || 0}</td></tr>`;
     return `<table class="rank-table season-standings"><thead>
         <tr><th>#</th><th>선수 · 국가</th><th>⚽</th><th>🅰️</th></tr></thead>
       <tbody>${rows.map(line).join("")}</tbody></table>` + recordHTML();
+  }
+
+  /* 🏁 **내가 떨어져도 대회는 끝까지 굴러요.**
+   *
+   * 제보: "조별리그에서 탈락하고 나서 바로 수상 내역 나오는데, 결승까지 시뮬레이션
+   * 돌고 나서 나온 수상 내역이 맞나? 결승 우승한 국가도 보여줘야 할 듯."
+   *
+   * 맞아요. 내가 조별에서 떨어지면 남은 4강·결승이 안 치러져서, 득점왕이 **3경기치**
+   * 기록으로 정해지고 있었어요. 4강까지 간 나라의 에이스는 두 경기를 더 뛰는데도요.
+   * 우승국도 없어서 "그래서 누가 들었는데?"가 남았습니다.
+   *
+   * 내가 치른 경기는 **실제 결과를 그대로** 쓰고, 안 치른 경기만 전력으로 굴려요.
+   * 대진은 조별 성적으로 짭니다: 우리 조 1위 × 반대 조 2위 / 우리 조 2위 × 반대 조 1위. */
+  const KO_EDGE = 0.03;      // 전력 1 차이가 단판 승률에 실리는 정도
+  function playOutRest() {
+    const w = wc();
+    if (!w) return null;
+    const meName = myNation().name;
+    const A = w.myGroup.slice().sort((a, b) => (b.pts - a.pts) || (b.gd - a.gd)).slice(0, 2);
+    const B = w.others.slice().sort((a, b) => b.str - a.str).slice(0, 2);
+    if (A.length < 2 || B.length < 2) return null;
+    const pairs = [[A[0], B[1]], [A[1], B[0]]];
+    const alive = new Set([].concat(...pairs).map((t) => t.name));
+    w.natOut = Object.keys(w.squads || {}).filter((n) => !alive.has(n));
+
+    const winBy = (x, y) => (Math.random() < clamp(0.5 + (x.str - y.str) * KO_EDGE, 0.1, 0.9) ? x : y);
+    const mySemi = (w.path || []).find((p) => p.stage === "semi");
+    const myFinal = (w.path || []).find((p) => p.stage === "final");
+    /* 내가 치른 토너먼트 경기 수만큼은 이미 굴렸어요 — 남은 만큼만 더 굴립니다 */
+    let left = 2 - (mySemi ? 1 : 0) - (myFinal ? 1 : 0);
+
+    const semiWin = pairs.map(([x, y]) => {
+      const meIn = x.name === meName || y.name === meName;
+      if (meIn && mySemi) return mySemi.win ? (x.name === meName ? x : y) : (x.name === meName ? y : x);
+      return winBy(x, y);
+    });
+    if (left > 0) { advanceOthers(); left -= 1; }        // 4강 라운드
+    w.natOut = Object.keys(w.squads || {})
+      .filter((n) => !semiWin.some((t) => t.name === n));
+
+    const [f1, f2] = semiWin;
+    let champ;
+    if ((f1.name === meName || f2.name === meName) && myFinal) {
+      champ = myFinal.win ? (f1.name === meName ? f1 : f2) : (f1.name === meName ? f2 : f1);
+    } else champ = winBy(f1, f2);
+    if (left > 0) { advanceOthers(); left -= 1; }        // 결승 라운드
+    /* ⚠️ 여기서 natOut을 "우승국 빼고 전부"로 두면 안 돼요 — 대회가 끝난 뒤
+     * 순위표에 **모두가 탈락**으로 보입니다. 그건 정보가 아니에요.
+     * 대신 우승국만 따로 기억해서 🏆를 붙여요. */
+    w.champ = champ.name;
+    return { champ: champ.name, runner: (champ === f1 ? f2 : f1).name };
   }
 
   /* 🏆 대회 수상 — 끝나고 한 번만 정해요.
@@ -911,10 +965,12 @@ window.WingerWorldCup = (() => {
     if (w.stage === "semi") {
       // 대진표가 지난 경기를 기억해야 "내가 어디쯤 와 있나"가 보여요
       w.path = (w.path || []).concat([{ stage: "semi", opp: w.opp, win: res === "W" }]);
+      void 0;
       if (res !== "W") return endTournament("semi", onDone, "4강에서 멈췄어요");
       w.stage = "final";
       return toCamp(onDone, "결승");
     }
+    w.path = (w.path || []).concat([{ stage: "final", opp: w.opp, win: res === "W" }]);
     return endTournament(res === "W" ? "champion" : "final", onDone,
       res === "W" ? "월드컵을 들어올렸어요!!" : "결승에서 아쉽게 졌어요");
   }
@@ -954,6 +1010,10 @@ window.WingerWorldCup = (() => {
        * 몰아서 손잡이를 하나로 유지합니다(양쪽에 실리면 조절할 곳이 둘이 돼요). */
       CTX.addTrophy(`${S.proYear}시즌 월드컵 우승`, null, 0);
     }
+    /* ⚠️ **수상보다 먼저 대회를 끝까지 굴려요.** 내가 떨어져도 4강·결승은 열리고,
+     * 거기까지 간 나라의 에이스는 두 경기를 더 뜁니다. 안 굴리면 득점왕이
+     * 3경기치 기록으로 정해져요. */
+    const fin = playOutRest();
     /* 🏆 대회 수상 — **끝나고 한 번만** 정해요. 조건을 나중에 다시 계산하면
      * 화면에 뜬 상과 기록이 어긋납니다(AWARD_BUFF와 같은 이유). */
     const awards = decideAwards();
@@ -969,6 +1029,7 @@ window.WingerWorldCup = (() => {
     S.wcHist = hist().concat([{
       y: S.proYear, result, g: w.g, a: w.a, apps: w.apps,
       awards: mine.map((a) => a.id),
+      champ: fin ? fin.champ : (result === "champion" ? myNation().name : null),
     }]);
     CTX.proLog(`🌏 월드컵 ${LABEL[result]} — ${msg} (상금 +${prize}만 · 명성 +${fame + awFame})`);
 
@@ -976,6 +1037,8 @@ window.WingerWorldCup = (() => {
         <div class="draft-emoji">${EMOJI[result]}</div>
         <div class="draft-title">${LABEL[result]}</div>
         <div class="tour-line">${nat.name} · ${msg}</div>
+        ${fin && result !== "champion"
+          ? `<div class="wc-champ">🏆 이번 대회 우승 — <b>${fin.champ}</b> (준우승 ${fin.runner})</div>` : ""}
         <div class="tour-pts">⚽ ${w.g}골 🅰️ ${w.a}도움 · ${w.apps}경기
           ${prize ? ` · 💰 상금 +${prize}만` : ""} · ⭐ 명성 +${fame + awFame}</div>
         ${awards.length ? `<div class="wc-awards">${awards.map((a) =>
@@ -1018,7 +1081,8 @@ window.WingerWorldCup = (() => {
         + (d > 0 && d <= LUCK_GAP ? ` · 🎲 깜짝 발탁도 비껴갔어요 (문턱까지 ${d})` : "");
     }
     const aw = (h.awards || []).map((id) => (id === "boot" ? "🥇 골든부츠" : "🏅 골든볼")).join(" · ");
-    return `🌏 월드컵 ${LABEL[h.result]} — ${h.apps}경기 ⚽${h.g} 🅰️${h.a}${aw ? ` · ${aw}` : ""}`;
+    return `🌏 월드컵 ${LABEL[h.result]} — ${h.apps}경기 ⚽${h.g} 🅰️${h.a}${aw ? ` · ${aw}` : ""}`
+      + (h.champ && h.result !== "champion" ? ` (우승 ${h.champ})` : "");
   }
 
   return {
@@ -1032,6 +1096,7 @@ window.WingerWorldCup = (() => {
       TRUST_GO, TRUST_STAY, PRIZE, FAME, AWARD_FAME,
       natSquadOf, xiOf, ensureSquads, advanceOthers, creditMates, cutNations, faces, matesOf,
       decideAwards, faceScore, FACE_N, NAT_G0, NAT_GK, ACE_W, SCORE_W, mySquad, markAce,
+      playOutRest, KO_EDGE,
       LUCK_GAP, LUCK_MAX, luckP,
       NAT_SPREAD, ACE_DIV, ACE_LO, ACE_HI, natStr, teamStr, NAT_MEAN,
       FIRST_WC, WC_CYCLE, CAMP_FIRST, CAMP_BETWEEN, GROUP_GAMES,
