@@ -511,3 +511,10 @@ body.wc-mode .rank-table thead th { background: rgba(242, 193, 78, .12); color: 
 .wc-rec-row b { color: var(--accent); }
 .wc-rec-next { color: var(--sky); margin-top: .2rem; }
 .wc-rec-note { color: var(--dim); font-size: .74rem; margin-top: .35rem; }
+/* 🥇 대회 개인 순위 · 🏆 수상 */
+.wc-nat { display: block; font-size: .68rem; color: var(--dim); }
+.wc-awards { margin-top: .5rem; }
+.wc-award { font-size: .84rem; line-height: 1.7; color: var(--dim); }
+.wc-award.me { color: var(--accent); font-weight: 600; }
+.wc-award b { color: var(--text); }
+.wc-award.me b { color: var(--accent); }

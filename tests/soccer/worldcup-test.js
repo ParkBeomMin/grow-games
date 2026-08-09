@@ -272,10 +272,18 @@ guard("⑨ 화면 전환", () => {
     `리그 이름이 안 남아 있다 — "${sum}"`);
 
   const race = txt("pro-race-sum") + " " + txt("pro-race-body");
-  console.log(`   개인 순위 자리 — "${txt("pro-race-body").slice(0, 60)}"`);
-  check(/월드컵 기록/.test(race), "개인 순위 자리가 대회 기록을 본다");
+  console.log(`   개인 순위 자리 — "${txt("pro-race-body").slice(0, 70)}"`);
+  check(/월드컵 개인 순위/.test(race), "개인 순위 자리가 대회 개인 순위를 본다");
   check(/리그와 따로/.test(race),
     "리그와 따로 쌓인다고 적혀 있다 — 화면이 그렇게 안 보이면 그게 곧 제보가 돼요");
+  /* 🥇 나 혼자 있는 표는 순위가 아니에요 — 다른 나라 얼굴이 같이 있어야 경쟁이 됩니다 */
+  const rows = $("pro-race-body").querySelectorAll("tbody tr").length;
+  const others = $("pro-race-body").querySelectorAll("tbody tr:not(.me)").length;
+  console.log(`   순위표 ${rows}줄 (나 말고 ${others}명)`);
+  check(rows >= 6, `참가국 얼굴이 다 올라온다 (${rows}줄)`);
+  check(others >= 5, `다른 나라 선수가 함께 있다 (${others}명) — 나 혼자면 순위가 아니라 내 기록이에요`);
+  check($("pro-race-body").querySelectorAll("tbody tr.me").length === 1,
+    "내 줄은 하나뿐이다 — 우리 나라 얼굴은 나 자신이라 두 줄이 되면 명단이 갈린 거예요");
 
   const sq = $("btn-squad-pro");
   console.log(`   HUD 버튼 — "${sq ? sq.textContent : "없음"}"`);
@@ -293,7 +301,7 @@ guard("⑨ 화면 전환", () => {
   const back = txt("pro-table-sum");
   console.log(`   대회 뒤 순위표 자리 — "${back.slice(0, 50)}"`);
   check(!/🌏/.test(back), "대회가 끝나면 순위표 자리가 리그로 돌아온다");
-  check(!/월드컵 기록/.test(txt("pro-race-sum")), "개인 순위 자리도 리그로 돌아온다");
+  check(!/월드컵/.test(txt("pro-race-sum")), "개인 순위 자리도 리그로 돌아온다");
   const sq2 = $("btn-squad-pro");
   check(!sq2 || !/우리 조/.test(sq2.textContent), "HUD 버튼도 돌아온다");
 });

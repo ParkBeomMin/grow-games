@@ -184,6 +184,9 @@ window.WingerWorldCup = (() => {
    * (3,000~5,000만)급이되 장비 곡선을 부수지는 않는 자리예요. */
   const PRIZE = { champion: 5000, final: 2000, semi: 1000, group: 0, game: 100 };
   const FAME = { call: 40, round: 40, champion: 250 };
+  /* 대회 개인상 — 우승(250)보다는 아래, 라운드 통과(40)보다는 위예요.
+   * 팀 성적과 다른 축이라 우승 없이도 이름을 남길 수 있어야 합니다. */
+  const AWARD_FAME = { boot: 120, ball: 150 };
 
   // ---------- 상태 ----------
 
@@ -345,11 +348,94 @@ window.WingerWorldCup = (() => {
    * 다른 숫자"가 되는 표가 하나 늘어납니다 — 이 저장소의 단골 병이에요. */
   const rollMates = () => Array.from({ length: 6 }, () => randomPlayerName(null));
 
+  /* 🥇 대회 개인 순위 — **참가국마다 얼굴 하나씩**이에요.
+   *
+   * 제보: "월드컵 기록은 다른 나라 선수들도 보여야 할 것 같은데."
+   * 맞아요 — 나 혼자 있는 표는 순위가 아니라 그냥 내 기록이에요.
+   *
+   * ⚠️ 우리 나라의 얼굴은 **나 자신**입니다. 따로 만들면 "대한민국 대표로 두 명이
+   * 순위표에 있는" 표가 되고, 그러면 또 명단이 둘로 갈려요. 이 저장소의 단골 병이라
+   * 처음부터 하나로 둡니다. (대표팀 동료 6명은 중계에 이름을 빌려줄 뿐 순위에는
+   * 안 올라와요 — 리그 개인 순위가 8명만 보여주는 것과 같은 눈금이에요.)
+   *
+   * 골 기댓값은 국가 전력을 따라요. 실측으로 내 골(종합 120에서 5경기 3.7골)과
+   * 같은 자리에 놓았어요 — 한쪽만 후하면 순위표가 늘 같은 얼굴이 됩니다. */
+  const FACE_G0 = 0.35, FACE_GK = 0.035;    // 전력 74 → 0.35골/경기 · 90 → 0.91
+  const FACE_A = 0.6;                        // 도움은 골의 이만큼
+  function rollFaces(myGroup, others) {
+    const me = myNation();
+    const out = [{ name: S.name, nat: me.name, str: natStr(me), me: true, g: 0, a: 0, apps: 0 }];
+    for (const t of myGroup.concat(others)) {
+      if (t.name === me.name) continue;
+      out.push({ name: randomPlayerName(null), nat: t.name, str: t.str, g: 0, a: 0, apps: 0 });
+    }
+    return out;
+  }
+  /* 내가 한 경기를 치를 때 **다른 얼굴들도 자기 경기를 치러요.**
+   * 안 굴리면 순위표가 나만 오르는 표가 되고, 그건 경쟁이 아니에요. */
+  function advanceFaces() {
+    const w = wc();
+    if (!w || !Array.isArray(w.race)) return;
+    for (const f of w.race) {
+      if (f.me || f.out) continue;
+      const lam = Math.max(0.05, FACE_G0 + (f.str - 74) * FACE_GK);
+      f.g += poissonish(lam);
+      f.a += poissonish(lam * FACE_A);
+      f.apps += 1;
+    }
+  }
+  /* 조별리그가 끝나면 **떨어진 나라의 얼굴은 거기서 멈춰요.**
+   * 우리 조는 실제 승점으로, 반대 조는 전력 상위 둘이 올라간 걸로 봐요. */
+  function cutFaces() {
+    const w = wc();
+    if (!w || !Array.isArray(w.race)) return;
+    const up = new Set();
+    w.myGroup.slice().sort((a, b) => (b.pts - a.pts) || (b.gd - a.gd)).slice(0, 2)
+      .forEach((t) => up.add(t.name));
+    w.others.slice().sort((a, b) => b.str - a.str).slice(0, 2).forEach((t) => up.add(t.name));
+    for (const f of w.race) if (!up.has(f.nat)) f.out = true;
+  }
+  const faceScore = (f) => f.g * 2 + f.a;    // 골든볼 판정의 뼈대 — 아래에서 평점이 얹혀요
+
+  /* 🥇 대회 개인 순위표 — 리그 개인 순위와 같은 모양이에요 */
+  function raceHTML() {
+    const w = wc();
+    if (!w || !Array.isArray(w.race)) return recordHTML();
+    const rows = w.race.slice().sort((a, b) => (b.g - a.g) || (b.a - a.a) || (b.str - a.str));
+    const line = (f, i) => `<tr class="${f.me ? "me" : ""}"><td>${i + 1}</td>`
+      + `<td>${f.name}${f.me ? " <b>(나)</b>" : ""}<span class="wc-nat">${f.nat}</span>`
+      + `${f.out ? `<span class="ch-res r-l">탈락</span>` : ""}</td>`
+      + `<td>${f.g}</td><td>${f.a}</td></tr>`;
+    return `<table class="rank-table season-standings"><thead>
+        <tr><th>#</th><th>선수 · 국가</th><th>⚽</th><th>🅰️</th></tr></thead>
+      <tbody>${rows.map(line).join("")}</tbody></table>` + recordHTML();
+  }
+
+  /* 🏆 대회 수상 — 끝나고 한 번만 정해요.
+   *   🥇 골든부츠  득점 1위
+   *   🏅 골든볼    대회 최우수 선수 (골·도움 + 평균 평점)
+   * 리그 수상(발롱도르·리그MVP)과 **다른 축**이에요 — 4년에 한 번뿐인 무대의 상입니다. */
+  function decideAwards() {
+    const w = wc();
+    if (!w || !Array.isArray(w.race) || !w.race.length) return [];
+    const myAvg = w.apps ? w.ratingSum / w.apps : 0;
+    const boot = w.race.slice().sort((a, b) => (b.g - a.g) || (b.a - a.a))[0];
+    /* 골든볼은 기여에 **평점**이 얹혀요. 다른 얼굴은 평점을 안 굴리니 전력에서
+     * 뽑은 값을 대신 씁니다 — 대회 안에서만 쓰는 눈금이에요. */
+    const ballOf = (f) => faceScore(f) + (f.me ? myAvg : 5.5 + (f.str - 80) * 0.12) * 0.8;
+    const ball = w.race.slice().sort((a, b) => ballOf(b) - ballOf(a))[0];
+    const out = [];
+    if (boot) out.push({ id: "boot", name: "🥇 골든부츠", who: boot.name, nat: boot.nat, me: !!boot.me, val: `${boot.g}골` });
+    if (ball) out.push({ id: "ball", name: "🏅 골든볼", who: ball.name, nat: ball.nat, me: !!ball.me, val: `${ball.g}골 ${ball.a}도움` });
+    return out;
+  }
+
   function startTournament(onDone) {
     const { myGroup, others } = rollGroups();
     S.wc = {
       y: S.proYear, stage: "group", gIdx: 0, ready: false,
       myGroup, others, opp: null, mates: rollMates(), started: null,
+      race: rollFaces(myGroup, others),
       g: 0, a: 0, d: 0, apps: 0, ratingSum: 0,
       done: onDone ? undefined : undefined,
     };
@@ -520,6 +606,11 @@ window.WingerWorldCup = (() => {
     w.g += info.myGoals; w.a += info.assists; w.d += info.defense;
     w.apps += 1;
     w.ratingSum += clamp(CTX.matchRating(info, S.pos, 0) / 10, 1, 10);
+    if (Array.isArray(w.race)) {
+      const meRow = w.race.find((f) => f.me);
+      if (meRow) { meRow.g = w.g; meRow.a = w.a; meRow.apps = w.apps; }
+    }
+    advanceFaces();                 // 다른 나라 얼굴들도 자기 경기를 치러요
     S.money = (S.money || 0) + PRIZE.game;
 
     const head = `<div class="ms-final ${info.res === "W" ? "win" : info.res === "L" ? "lose" : ""}">`
@@ -609,6 +700,7 @@ window.WingerWorldCup = (() => {
       /* 조별리그 종료 — 상위 2팀이 올라가요 */
       const rank = w.myGroup.slice().sort((a, b) => (b.pts - a.pts) || (b.gd - a.gd))
         .findIndex((x) => x.me) + 1;
+      cutFaces();                   // 떨어진 나라의 얼굴은 거기서 멈춰요
       if (rank > 2) return endTournament("group", onDone, `조 ${rank}위로 조별리그에서 멈췄어요`);
       w.stage = "semi";
       return toCamp(onDone, "4강");
@@ -657,15 +749,34 @@ window.WingerWorldCup = (() => {
        * 몰아서 손잡이를 하나로 유지합니다(양쪽에 실리면 조절할 곳이 둘이 돼요). */
       CTX.addTrophy(`${S.proYear}시즌 월드컵 우승`, null, 0);
     }
-    S.wcHist = hist().concat([{ y: S.proYear, result, g: w.g, a: w.a, apps: w.apps }]);
-    CTX.proLog(`🌏 월드컵 ${LABEL[result]} — ${msg} (상금 +${prize}만 · 명성 +${fame})`);
+    /* 🏆 대회 수상 — **끝나고 한 번만** 정해요. 조건을 나중에 다시 계산하면
+     * 화면에 뜬 상과 기록이 어긋납니다(AWARD_BUFF와 같은 이유). */
+    const awards = decideAwards();
+    const mine = awards.filter((a) => a.me);
+    let awFame = 0;
+    for (const a of mine) {
+      awFame += AWARD_FAME[a.id] || 0;
+      S.career[a.id === "boot" ? "wcBoot" : "wcBall"] =
+        (S.career[a.id === "boot" ? "wcBoot" : "wcBall"] || 0) + 1;
+      CTX.proLog(`🏆 월드컵 ${a.name} 수상! (${a.val})`);
+    }
+    S.fandom = (S.fandom || 0) + awFame;
+    S.wcHist = hist().concat([{
+      y: S.proYear, result, g: w.g, a: w.a, apps: w.apps,
+      awards: mine.map((a) => a.id),
+    }]);
+    CTX.proLog(`🌏 월드컵 ${LABEL[result]} — ${msg} (상금 +${prize}만 · 명성 +${fame + awFame})`);
 
     const html = `<div class="wc-card ${result === "champion" ? "champ" : ""}">
         <div class="draft-emoji">${EMOJI[result]}</div>
         <div class="draft-title">${LABEL[result]}</div>
         <div class="tour-line">${nat.name} · ${msg}</div>
         <div class="tour-pts">⚽ ${w.g}골 🅰️ ${w.a}도움 · ${w.apps}경기
-          ${prize ? ` · 💰 상금 +${prize}만` : ""} · ⭐ 명성 +${fame}</div>
+          ${prize ? ` · 💰 상금 +${prize}만` : ""} · ⭐ 명성 +${fame + awFame}</div>
+        ${awards.length ? `<div class="wc-awards">${awards.map((a) =>
+          `<div class="wc-award${a.me ? " me" : ""}">${a.name} — <b>${a.who}</b>`
+          + `<span class="wc-nat">${a.nat}</span> ${a.val}${a.me ? " 🎉" : ""}</div>`).join("")}</div>` : ""}
+        ${raceHTML()}
       </div>`;
     if (result === "champion" && CTX.queueFx) {
       CTX.queueFx([["celebrate", "champion", `🏆 ${S.proYear}시즌 월드컵 우승!`, ".wc-card"]]);
@@ -698,16 +809,18 @@ window.WingerWorldCup = (() => {
       return h.stay ? "🌏 월드컵 — 대표팀 소집을 고사하고 클럽에 남았어요"
         : `🌏 월드컵 — ${myNation().name} 소집 문턱(종합 ${wildOpen(S) ? wildBar() : callBar()})에 닿지 못했어요`;
     }
-    return `🌏 월드컵 ${LABEL[h.result]} — ${h.apps}경기 ⚽${h.g} 🅰️${h.a}`;
+    const aw = (h.awards || []).map((id) => (id === "boot" ? "🥇 골든부츠" : "🏅 골든볼")).join(" · ");
+    return `🌏 월드컵 ${LABEL[h.result]} — ${h.apps}경기 ⚽${h.g} 🅰️${h.a}${aw ? ` · ${aw}` : ""}`;
   }
 
   return {
     init, due, enter, resume, checkInvite, badgeHTML, startButton, themeSync, reportLine,
-    groupTableHTML, groupSumText, recordHTML, openGroup, active: () => !!wc(),
+    groupTableHTML, groupSumText, recordHTML, raceHTML, openGroup, active: () => !!wc(),
     isWcYear, callBar, wildBar, myNation,
     _t: {
       NATIONS, wildBar, classBar, BAR_NAT_K, BAR_WOBBLE, WILD_GAP, barSeed,
-      TRUST_GO, TRUST_STAY, PRIZE, FAME,
+      TRUST_GO, TRUST_STAY, PRIZE, FAME, AWARD_FAME,
+      rollFaces, advanceFaces, cutFaces, decideAwards, faceScore, FACE_G0, FACE_GK,
       NAT_SPREAD, ACE_DIV, ACE_LO, ACE_HI, natStr, teamStr, NAT_MEAN,
       FIRST_WC, WC_CYCLE, CAMP_FIRST, CAMP_BETWEEN, GROUP_GAMES,
       wildOpen, rollGroups, wcAfterMatch, endTournament, MARKET_NATION,

@@ -1071,8 +1071,8 @@ window.WingerCareer = (() => {
      * 보이면 그게 곧 제보가 됩니다). */
     if (S.wc && window.WingerWorldCup) {
       race.hidden = false;
-      $("pro-race-sum").textContent = "🌏 월드컵 기록";
-      $("pro-race-body").innerHTML = WingerWorldCup.recordHTML();
+      $("pro-race-sum").textContent = "🥇 월드컵 개인 순위";
+      $("pro-race-body").innerHTML = WingerWorldCup.raceHTML();
     } else if (S.activity && Array.isArray(S.activity.race)) {
       race.hidden = false;
       renderRace();
@@ -2521,6 +2521,10 @@ window.WingerCareer = (() => {
      * ⚠️ 트로피 가중(addTrophy)에는 **0**을 넘겨요 — 점수가 양쪽에 실리면
      * 조절할 손잡이가 둘이 됩니다. 여기 하나로 몰아 둡니다. */
     wc: 320,
+    /* 🏆 대회 개인상 — 팀 성적과 **다른 축**이에요. 우승 없이도 이름을 남길 수
+     * 있어야 해서 따로 셉니다. 골든볼이 리그MVP(90×격)보다 위, 발롱도르(220)보다
+     * 아래예요 — 4년에 한 번뿐이지만 한 대회의 상이니까요. */
+    wcBall: 150, wcBoot: 100,
   };
 
   /* 가장 높이 오른 리그의 격. 시즌 기록에 남은 리그를 전부 훑어요 —
@@ -2549,7 +2553,7 @@ window.WingerCareer = (() => {
       (c.years ? c.years.length : 0) * W.year +
       Math.max(0, peakPrestige() - 1) * W.peak +
       (S.center ? W.center : 0) + transTotal() * W.trans +
-      (c.wcWin || 0) * W.wc
+      (c.wcWin || 0) * W.wc + (c.wcBall || 0) * W.wcBall + (c.wcBoot || 0) * W.wcBoot
     );
   }
 
@@ -2660,6 +2664,8 @@ window.WingerCareer = (() => {
       /* 🌏 월드컵 — 우승은 물론이고 **출전**도 적어요. 4년에 한 번뿐이라
        * 나갔다는 것만으로도 커리어의 한 줄입니다. */
       (c.wcWin || 0) ? `🌏월드컵 우승 ${c.wcWin}` : "",
+      (c.wcBall || 0) ? `🏅골든볼 ${c.wcBall}` : "",
+      (c.wcBoot || 0) ? `🥇골든부츠 ${c.wcBoot}` : "",
       (c.wcApps || 0) ? `🌏월드컵 ${c.wcApps}회 출전` : "",
     ].filter(Boolean).join(" · ");
     const years = (c.years || []).length;
@@ -2706,6 +2712,7 @@ window.WingerCareer = (() => {
       grade: gradeOfScore(score) + (transTotal() ? ` · ${transcendTitle(transTotal())}` : "")
         + ((c.wcWin || 0) ? ` · 🌏 월드컵 챔피언` : ""),
       wcWin: c.wcWin || 0, wcApps: c.wcApps || 0,
+      wcBall: c.wcBall || 0, wcBoot: c.wcBoot || 0,
       nextGrade: nextGrade(score),
     };
     const hof = loadHof();
@@ -2803,7 +2810,9 @@ window.WingerCareer = (() => {
             e.leagues ? `<div class="hof-lg">🌍 ${e.leagues}</div>` : ""}
           ${/* 🌏 월드컵 — 이 필드도 나중에 생겼어요. 없으면 줄 자체를 안 그려요. */
             e.wcApps ? `<div class="hof-lg">🌏 월드컵 ${e.wcApps}회`
-              + `${e.wcWin ? ` · 🏆 우승 ${e.wcWin}` : ""}</div>` : ""}
+              + `${e.wcWin ? ` · 🏆 우승 ${e.wcWin}` : ""}`
+              + `${e.wcBall ? ` · 🏅 골든볼 ${e.wcBall}` : ""}`
+              + `${e.wcBoot ? ` · 🥇 골든부츠 ${e.wcBoot}` : ""}</div>` : ""}
         </div>`;
       box.appendChild(div);
     });

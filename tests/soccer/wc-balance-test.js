@@ -42,6 +42,7 @@ const P={
   groupN:    grab(WC,/const GROUP_N = [^;]+;/,"GROUP_N"),
   groupG:    grab(WC,/const GROUP_GAMES = [^;]+;/,"GROUP_GAMES"),
   rivals:    grab(WC,/function rollGroupRivals\(info\) \{[\s\S]*?\n {2}\}/,"rollGroupRivals"),
+  face:      grab(WC,/const FACE_G0 = [^;]+;/,"FACE_G0·FACE_GK"),
 };
 const F=new Function("OVR","POS","NAT_C","seedShuffle","K","ACE",`
   const S = { pos: POS, stats: {}, condition: 75, fandom: 300, talents: {}, trans: {}, buffs: [], buffY: -1, proYear: 7 };
@@ -53,7 +54,7 @@ const F=new Function("OVR","POS","NAT_C","seedShuffle","K","ACE",`
   ${P.goalScale} ${P.poisson} ${P.tmGoals} ${P.mate} ${P.conc}
   ${P.contrib} ${P.posInfo} ${P.clutchScale} ${P.transLv} ${P.clutch}
   ${P.buffFns} ${P.fanCap} ${P.ratingDiv} ${P.ratingOf}
-  ${P.nations} ${P.groupN} ${P.groupG}
+  ${P.nations} ${P.groupN} ${P.groupG} ${P.face}
   /* 국가 전력을 평균 쪽으로 K만큼 좁혀 봐요 (K=1이면 지금 그대로) */
   const MEAN = NATIONS.reduce((a,n)=>a+n.str,0)/NATIONS.length;
   for (const n of NATIONS) n.str = MEAN + (n.str - MEAN) * K;
@@ -76,10 +77,15 @@ const F=new Function("OVR","POS","NAT_C","seedShuffle","K","ACE",`
       .concat(pool.slice(0,GROUP_N-1).map(n=>({name:n.name,str:n.str,pts:0,gd:0})));
     const others = pool.slice(GROUP_N-1,7).map(n=>({name:n.name,str:n.str}));
     let myG=0, apps=0;
+    /* 🥇 다른 나라 얼굴들 — 참가국마다 하나씩. 우리 나라 자리는 나예요. */
+    const faces = myGroup.concat(others).filter(t=>t.name!==me.name)
+      .map(t=>({str:t.str, nat:t.name, g:0, out:false}));
+    const rollFaces = () => { for(const f of faces) if(!f.out)
+      f.g += poissonish(Math.max(0.05, FACE_G0 + (f.str - 74) * FACE_GK)); };
     for(let g=0; g<GROUP_GAMES; g++){
       const rivals = myGroup.filter(x=>!x.me);
       const opp = rivals[g % rivals.length];
-      const r = match(opp.str); apps++; myG += r.myG;
+      const r = match(opp.str); apps++; myG += r.myG; rollFaces();
       const meRow = myGroup.find(x=>x.me);
       meRow.pts += r.res==="W"?3:r.res==="D"?1:0;
       meRow.gd  += r.tg - r.og;
@@ -87,17 +93,25 @@ const F=new Function("OVR","POS","NAT_C","seedShuffle","K","ACE",`
       const wc = () => ({ myGroup, opp: opp.name });
       ${P.rivals.replace('function rollGroupRivals(info) {','(function(info){').replace(/\n {2}\}$/,'})(info);')}
     }
+    // 조별 종료 — 떨어진 나라의 얼굴은 멈춰요
+    {
+      const up=new Set();
+      myGroup.slice().sort((a,b)=>(b.pts-a.pts)||(b.gd-a.gd)).slice(0,2).forEach(t=>up.add(t.name));
+      others.slice().sort((a,b)=>b.str-a.str).slice(0,2).forEach(t=>up.add(t.name));
+      for(const f of faces) if(!up.has(f.nat)) f.out = true;
+    }
+    const boot = () => myG >= Math.max(0, ...faces.map(f=>f.g));
     const rank = myGroup.slice().sort((a,b)=>(b.pts-a.pts)||(b.gd-a.gd)).findIndex(x=>x.me)+1;
-    if(rank>2) return {result:"group", myG, apps};
+    if(rank>2) return {result:"group", myG, apps, boot: boot()};
     const pool2 = others.slice().sort((a,b)=>b.str-a.str);
     const semiOpp = pool2[1]||pool2[0];
-    let r = match(semiOpp.str); apps++; myG += r.myG;
+    let r = match(semiOpp.str); apps++; myG += r.myG; rollFaces();
     if(r.res==="D") r.res = Math.random()<0.5?"W":"L";
-    if(r.res!=="W") return {result:"semi", myG, apps};
+    if(r.res!=="W") return {result:"semi", myG, apps, boot: boot()};
     const finOpp = pool2[0];
-    let f = match(finOpp.str); apps++; myG += f.myG;
-    if(f.res==="D") f.res = Math.random()<0.5?"W":"L";
-    return {result: f.res==="W"?"champion":"final", myG, apps};
+    let fm = match(finOpp.str); apps++; myG += fm.myG; rollFaces();
+    if(fm.res==="D") fm.res = Math.random()<0.5?"W":"L";
+    return {result: fm.res==="W"?"champion":"final", myG, apps, boot: boot()};
   }
   return tournament;
 `);
@@ -113,18 +127,19 @@ const N = Number(process.argv[2] || 6000);
 console.log(`   국가 전력 압축 ${K} · 에이스 나눗값 ${ACE}`);
 const NATS=[["kr","🇰🇷 한국(최약체급)"],["br","🇧🇷 브라질(최강체급)"]];
 console.log(`\n=== 대회 ${N.toLocaleString()}판 × 칸 (공격수) ===`);
-console.log("국가                    종합 |  우승 |  결승 |  4강 | 조별탈락 | 평균골");
+console.log("국가                    종합 |  우승 |  결승 |  4강 | 조별탈락 | 평균골 | 🥇득점왕");
 const win = {};
 for (const [c, label] of NATS) {
   win[c] = {};
   for (const ovr of [80, 100, 120, 140]) {
     const run = F(ovr, "fw", c, shuffle, K, ACE);
-    const cnt = { champion: 0, final: 0, semi: 0, group: 0 }; let g = 0;
-    for (let i = 0; i < N; i++) { const r = run(); cnt[r.result]++; g += r.myG; }
+    const cnt = { champion: 0, final: 0, semi: 0, group: 0 }; let g = 0, boot = 0;
+    for (let i = 0; i < N; i++) { const r = run(); cnt[r.result]++; g += r.myG; if (r.boot) boot++; }
+    win[c][ovr + "_boot"] = boot / N;
     win[c][ovr] = cnt.champion / N;
     win[c][ovr + "_group"] = cnt.group / N;
     const p = (k) => `${(cnt[k] / N * 100).toFixed(0)}%`.padStart(5);
-    console.log(`${label.padEnd(24)}${String(ovr).padStart(4)} | ${p("champion")} | ${p("final")} | ${p("semi")} | ${p("group").padStart(7)} | ${(g / N).toFixed(1)}`);
+    console.log(`${label.padEnd(24)}${String(ovr).padStart(4)} | ${p("champion")} | ${p("final")} | ${p("semi")} | ${p("group").padStart(7)} | ${(g / N).toFixed(1)} | ${`${Math.round(boot / N * 100)}%`.padStart(6)}`);
   }
 }
 const pct = (v) => `${Math.round(v * 100)}%`;
@@ -148,6 +163,16 @@ for (const ovr of [80, 100, 120, 140]) {
   const bar = ovr <= 80 ? 3.0 : 2.0;
   check(ratio <= bar,
     `종합 ${ovr}: 최강 국가와 최약 국가의 우승률 차가 ${bar}배 이내다 (${ratio.toFixed(1)}배 — ${pct(a)} vs ${pct(b)})`);
+}
+
+/* ②-b 🥇 득점왕 — 8명 중 하나라 운만으로는 12.5%예요.
+ * 실력이 그 위로 끌어올려야 "대회 득점왕"이 업적이 됩니다. */
+for (const [c, label] of NATS) {
+  const b0 = win[c]["80_boot"], b1 = win[c]["120_boot"], b2 = win[c]["140_boot"];
+  check(b0 < b1 && b1 < b2, `${label}: 득점왕 확률이 종합 순서대로 오른다 (${pct(b0)} < ${pct(b1)} < ${pct(b2)})`);
+  check(b0 <= 0.2, `${label}: 종합 80으로는 득점왕이 어렵다 (${pct(b0)}) — 8명 중 하나라 운만으로 12.5%예요`);
+  check(b2 >= 0.3, `${label}: 종합 140이면 절반쯤 가져간다 (${pct(b2)}) — 주인공이 최고일 때는 최고여야 해요`);
+  check(b2 <= 0.75, `${label}: 그래도 확정은 아니다 (${pct(b2)})`);
 }
 
 /* ③ 천장과 바닥 — 승부차기 운이 있어 아무리 세도 확정은 없고,
