@@ -278,10 +278,32 @@ guard("⑨ 화면 전환", () => {
     "리그와 따로 쌓인다고 적혀 있다 — 화면이 그렇게 안 보이면 그게 곧 제보가 돼요");
   /* 🥇 나 혼자 있는 표는 순위가 아니에요 — 다른 나라 얼굴이 같이 있어야 경쟁이 됩니다 */
   const rows = $("pro-race-body").querySelectorAll("tbody tr").length;
-  const others = $("pro-race-body").querySelectorAll("tbody tr:not(.me)").length;
-  console.log(`   순위표 ${rows}줄 (나 말고 ${others}명)`);
-  check(rows >= 6, `참가국 얼굴이 다 올라온다 (${rows}줄)`);
-  check(others >= 5, `다른 나라 선수가 함께 있다 (${others}명) — 나 혼자면 순위가 아니라 내 기록이에요`);
+  const otherRows = $("pro-race-body").querySelectorAll("tbody tr:not(.me)").length;
+  console.log(`   순위표 ${rows}줄 (나 말고 ${otherRows}명)`);
+  check(rows >= 6, `참가국 선수가 다 올라온다 (${rows}줄)`);
+  check(otherRows >= 5, `다른 나라 선수가 함께 있다 (${otherRows}명) — 나 혼자면 순위가 아니라 내 기록이에요`);
+
+  /* 🥇 **순위표의 사람이 실제 명단에 있는 사람인가.**
+   * 처음엔 나라마다 지어낸 얼굴 하나씩이었고, 중계에 이름을 빌려주는 동료들과
+   * 서로 모르는 사이였어요 — 이 저장소가 계속 싸워 온 "명단이 둘로 갈린다"입니다. */
+  const natSq = st.wc.squads || {};
+  const natN = Object.keys(natSq).length;
+  const sizes = Object.values(natSq).map((l) => l.length);
+  console.log(`   참가국 명단 ${natN}개국 × ${sizes[0] || 0}명`);
+  check(natN >= 8, `참가국이 다 명단을 갖는다 (${natN}개국)`);
+  check(sizes.every((n) => n >= 11), `나라마다 11명 이상이다 (최소 ${Math.min(...sizes)}명)`);
+  const everyone = new Set(Object.values(natSq).flat().map((x) => x.name));
+  const shown = [...$("pro-race-body").querySelectorAll("tbody tr td:nth-child(2)")]
+    .map((td) => td.textContent.replace(/\(나\)/, "").split("🇦")[0].trim());
+  const ghosts = WC.faces().filter((e) => !everyone.has(e.p.name));
+  check(ghosts.length === 0, `순위표에 명단 밖 사람이 없다 (유령 ${ghosts.length}명)`);
+  /* 중계에 이름을 빌려주는 동료도 같은 명단에서 나와야 해요 */
+  const mates = WC.matesOf();
+  const outside = mates.filter((n) => !everyone.has(n));
+  console.log(`   중계용 동료 ${mates.length}명 — 명단 밖 ${outside.length}명`);
+  check(outside.length === 0,
+    "중계에 뜨는 동료도 명단 안 사람이다 — 따로 지어내면 순위표 어디에도 없는 유령이 돼요");
+  void shown;
   check($("pro-race-body").querySelectorAll("tbody tr.me").length === 1,
     "내 줄은 하나뿐이다 — 우리 나라 얼굴은 나 자신이라 두 줄이 되면 명단이 갈린 거예요");
 
@@ -294,17 +316,19 @@ guard("⑨ 화면 전환", () => {
    * 채워도 다 0이라 아무것도 안 지켜집니다. 세 경기를 치른 자리로 놓아요. */
   st.wc.g = 4; st.wc.a = 2; st.wc.apps = 3;
   const before = { g: st.wc.g, a: st.wc.a, apps: st.wc.apps };
-  delete st.wc.race;                       // 옛 세이브 흉내
+  delete st.wc.squads; delete st.wc.mates;   // 옛 세이브 흉내
   Career.refreshPro();
   const backRows = $("pro-race-body").querySelectorAll("tbody tr").length;
-  console.log(`   race 없는 세이브 — 다시 그리니 ${backRows}줄`);
-  check(backRows >= 6, `개인 순위가 없던 세이브도 읽는 쪽에서 채워진다 (${backRows}줄)`);
-  const meRow = (st.wc.race || []).find((f) => f.me);
+  console.log(`   명단 없는 세이브 — 다시 그리니 ${backRows}줄`);
+  check(backRows >= 6, `명단이 없던 세이브도 읽는 쪽에서 채워진다 (${backRows}줄)`);
+  const mine = WC._t.mySquad();
+  const meRow = mine.find((x) => x.me);
   check(!!meRow && meRow.g === before.g && meRow.apps === before.apps,
     `채울 때 내 기록은 그대로 옮겨진다 (⚽${meRow ? meRow.g : "?"} · ${meRow ? meRow.apps : "?"}경기)`);
-  const played = (st.wc.race || []).filter((f) => !f.me && f.apps > 0).length;
+  const others = Object.keys(st.wc.squads || {}).filter((n) => n !== WC.myNation().name);
+  const played = others.filter((n) => st.wc.squads[n].some((x) => (x.apps || 0) > 0)).length;
   check(before.apps === 0 || played > 0,
-    `다른 얼굴들도 그동안 치른 경기만큼 굴려 둔다 (${played}명) — 0골로 시작하면 내가 늘 1위예요`);
+    `다른 나라도 그동안 치른 경기만큼 굴려 둔다 (${played}개국) — 0골로 시작하면 내가 늘 1위예요`);
 
   const sq = $("btn-squad-pro");
   console.log(`   HUD 버튼 — "${sq ? sq.textContent : "없음"}"`);

@@ -244,6 +244,16 @@ guard("⑤-b 깜짝 발탁", () => {
     if (s2.wc) { called++; s2.wc = null; } else missed++;
   }
   console.log(`   문턱 -2에서 60번 — 발탁 ${called} · 미발탁 ${missed}`);
+  /* 뽑혔으면 소집 카드가 그걸 말해야 해요 — 아무 말 없으면 "왜 갑자기 뽑혔지"가 됩니다 */
+  const s4 = setup(7, 2, barAt(7) - 1);
+  s4.wcCall = undefined; s4.wcHist = []; s4.wcLucky = undefined;
+  for (let i = 0; i < 40 && !s4.wc; i++) { s4.wcHist = []; WC.enter(() => {}); }
+  if (s4.wc) {
+    check(s4.wcLucky === 7, `깜짝 발탁이면 표시가 남는다 (wcLucky=${s4.wcLucky})`);
+    const card = ($("stage-card") || {}).textContent || "";
+    check(/깜짝 발탁/.test(card), `소집 카드가 깜짝 발탁이라고 말한다`);
+    s4.wc = null;
+  }
   check(called > 0, `문턱 아래인데 뽑히는 판이 있다 (${called}/60)`);
   check(missed > 0, `그렇다고 늘 뽑히지는 않는다 (${missed}/60)`);
 
