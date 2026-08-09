@@ -544,7 +544,7 @@ function setOverall(P, target) {
 function makeSoccerWc(kind) {
   const YEAR = kind === "rookie" ? 3 : 7;
   log(`🌏 월드컵 — ${kind === "rookie" ? "🌱 유망주 와일드카드" : kind === "invite" ? "📨 초대장 직전"
-    : kind === "luck" ? "🎲 깜짝 발탁 구간" : "🏆 대회 진행 중"}`);
+    : kind === "luck" ? "🎲 깜짝 발탁 구간" : kind === "lucked" ? "🎲 깜짝 발탁으로 승선" : "🏆 대회 진행 중"}`);
   for (const seed of seeds(kind === "live" ? 10 : 8)) {
     let P;
     try {
@@ -561,12 +561,19 @@ function makeSoccerWc(kind) {
        * 만들려다 종합 87이 되어 정식 발탁 세이브가 나왔어요. */
       if (kind === "live") setOverall(P, BAR + 22);
 
-      if (kind === "live") {
+      if (kind === "live" || kind === "lucked") {
+        /* 🎲 "이미 깜짝 발탁된" 자리는 종합을 **문턱 코앞에 붙들어 둔 채로** 시즌을
+         * 끝내야 만들어져요. 그냥 두면 후반기 훈련으로 문턱을 넘어 정식 발탁이 됩니다.
+         * 그래서 대회가 열릴 때까지 매 번 종합을 제자리로 돌려놔요 — 세이브를 만드는
+         * 동안만 쓰는 손이고, 뜬 세이브 자체는 사람이 플레이한 것과 같은 모양이에요. */
+        const hold = kind === "lucked" ? BAR - 2 : null;
+        if (hold != null) { st.wcCall = undefined; setOverall(P, hold); }
         /* 대회가 실제로 열릴 때까지 굴려요. 초대장은 도중에 눌러 치웁니다 —
          * 이 시나리오가 보여줄 건 초대장이 아니라 **대회 안**이니까요. */
         let ok = false;
         for (let g = 0; g < 3000; g++) {
           if (st.wc) { ok = true; break; }
+          if (hold != null && Math.abs(P.get("overall")() - hold) > 0.9) setOverall(P, hold);
           const inv = P.w.document.querySelector(".wc-overlay button");
           if (inv) { inv.click(); continue; }
           const id = P.active();
@@ -584,12 +591,25 @@ function makeSoccerWc(kind) {
           if (!doAct(P, "#pro-actions .action-btn", "pos")) break;
         }
         if (!ok) throw new Error("대회가 안 열렸어요");
+        if (kind === "lucked" && st.wcLucky !== YEAR) throw new Error("깜짝 발탁이 아니라 정식 발탁이에요");
         P.get("save")();
+        const lucked = kind === "lucked";
         add({
-          id: "soccer-wc-live", game: "soccer", url: "soccer/", emoji: "🏆",
-          title: `월드컵 진행 중 — ${WC.myNation().name} 조별리그`,
-          state: `${st.group} · ${YEAR}시즌 · 종합 ${Math.round(P.get("overall")())} · ${WC.myNation().name} 대표팀`,
-          check: "🌏 <b>대회 기간 동안 화면의 결이 바뀌어요</b> — 색과 헤더가 월드컵 테마로 "
+          id: lucked ? "soccer-wc-lucked" : "soccer-wc-live",
+          game: "soccer", url: "soccer/", emoji: lucked ? "🎲" : "🏆",
+          title: lucked ? `깜짝 발탁으로 승선 — 문턱 ${BAR}인데 종합 ${Math.round(P.get("overall")())}`
+            : `월드컵 진행 중 — ${WC.myNation().name} 조별리그`,
+          state: `${st.group} · ${YEAR}시즌 · 종합 ${Math.round(P.get("overall")())}`
+            + `${lucked ? ` (문턱 ${BAR} — 🎲 깜짝 발탁)` : ""} · ${WC.myNation().name} 대표팀`,
+          check: (lucked
+            ? "🎲 <b>문턱에 못 미쳤는데 뽑힌 자리예요.</b> 종합이 소집 문턱 아래인 채로 "
+              + "대회를 뛰고 있습니다 — 준비 화면 배지에 <b>🎲 깜짝 발탁으로 승선했어요</b>가 "
+              + "적혀 있는지 봐주세요. 소집 카드는 한 번 스치고 마니, 대회 내내 남는 줄이 "
+              + "있어야 \"왜 문턱도 안 됐는데 뛰고 있지\"가 안 돼요.<br>"
+              + "실력이 모자란 채로 나갔으니 <b>조별리그가 버거울 거예요</b> — 그게 이 발탁의 값이에요. "
+              + "🥇 개인 순위에서 다른 나라 에이스들과 얼마나 벌어지는지 봐주세요.<br><br>"
+            : "")
+            + "🌏 <b>대회 기간 동안 화면의 결이 바뀌어요</b> — 색과 헤더가 월드컵 테마로 "
             + "갈아입습니다. <b>이건 기계가 못 보는 부분이라 눈으로 확인해 주셔야 해요.</b><br>"
             + "연전이 아니에요 — <b>경기 사이에 훈련 턴</b>이 있고, 그동안 대표팀 훈련장에서 "
             + "<b>훈련이 잘 돼요</b>(화면 위 칩 줄에 🌏 대표팀 훈련장이 떠요).<br>"
@@ -1948,6 +1968,7 @@ if (want("soccer-wc-invite", "soccer")) makeSoccerWc("invite");
 if (want("soccer-wc-rookie", "soccer")) makeSoccerWc("rookie");
 if (want("soccer-wc-live", "soccer")) makeSoccerWc("live");
 if (want("soccer-wc-luck", "soccer")) makeSoccerWc("luck");
+if (want("soccer-wc-lucked", "soccer")) makeSoccerWc("lucked");
 if (want("soccer-final", "soccer")) makeSoccerFinal();
 if (want("soccer-veteran", "soccer")) makeSoccerVeteran();
 if (want("soccer-judge", "soccer")) makeSoccerJudge();

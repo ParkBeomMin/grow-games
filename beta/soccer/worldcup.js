@@ -314,7 +314,12 @@ window.WingerWorldCup = (() => {
    * 읽히게 하는 것이 이 배지의 일이에요. */
   function badgeHTML() {
     if (!S || !isWcYear(S.proYear)) return "";
-    if (wc()) return `<div class="wc-badge">🌏 월드컵 진행 중 — 대표팀 훈련장에서 훈련이 잘 돼요</div>`;
+    /* 대회 중 배지 — **어떻게 승선했는지**도 적어요. 🎲 깜짝 발탁은 소집 카드에서
+     * 한 번 스치고 마는데, 그 한 번을 놓치면 "왜 문턱도 안 됐는데 뛰고 있지"가 됩니다. */
+    if (wc()) {
+      return `<div class="wc-badge">🌏 월드컵 진행 중 — 대표팀 훈련장에서 훈련이 잘 돼요`
+        + `${S.wcLucky === S.proYear ? `<br/>🎲 <b>깜짝 발탁</b>으로 승선했어요 — 문턱 아래에서 이름이 올랐습니다` : ""}</div>`;
+    }
     const stayed = hist().some((h) => h.y === S.proYear && h.stay);
     if (stayed) return `<div class="wc-badge dim">⚽ 이번 월드컵은 고사했어요 — 클럽에 집중해요</div>`;
     if (playedThisYear()) return "";

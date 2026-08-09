@@ -252,6 +252,11 @@ guard("⑤-b 깜짝 발탁", () => {
     check(s4.wcLucky === 7, `깜짝 발탁이면 표시가 남는다 (wcLucky=${s4.wcLucky})`);
     const card = ($("stage-card") || {}).textContent || "";
     check(/깜짝 발탁/.test(card), `소집 카드가 깜짝 발탁이라고 말한다`);
+    /* 소집 카드는 **한 번 스치고 말아요.** 대회 내내 남는 줄이 없으면
+     * "왜 문턱도 안 됐는데 뛰고 있지"가 됩니다. */
+    const badge2 = WC.badgeHTML().replace(/<[^>]+>/g, " ");
+    console.log(`   대회 중 배지 — "${badge2.replace(/\s+/g, " ").trim()}"`);
+    check(/깜짝 발탁/.test(badge2), "대회 중 배지에도 깜짝 발탁으로 승선했다고 남는다");
     s4.wc = null;
   }
   check(called > 0, `문턱 아래인데 뽑히는 판이 있다 (${called}/60)`);
