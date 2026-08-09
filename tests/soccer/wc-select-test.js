@@ -292,11 +292,47 @@ guard("⑤-c 결산 한 줄", () => {
   const st = setup(7, 2, barAt(7) - 12);
   for (const [h, re, msg] of cases) {
     st.wcHist = [h];
-    const line = WC.reportLine();
-    check(re.test(line), `${msg} — "${line}"`);
+    const line = WC.reportLine().replace(/<[^>]+>/g, " ");
+    check(re.test(line), `${msg}`);
   }
   st.wcHist = [];
   check(WC.reportLine() === "", "그 시즌에 월드컵이 없었으면 줄도 없다");
+
+  /* 🗣️ **감독이 한마디 하는 걸로** 적어요 — 이 게임에서 판정을 알려 주는
+   * 목소리는 하나예요(유스 트라이아웃·🪑 벤치와 같은 자리). */
+  const sit = [
+    ["미발탁", { y: 7, result: "none" }],
+    ["고사", { y: 7, result: "none", stay: true }],
+    ["조별 탈락", { y: 7, result: "group", g: 0, a: 0, apps: 3, champ: "🇧🇷 브라질" }],
+    ["4강", { y: 7, result: "semi", g: 3, a: 2, apps: 4, champ: "🇧🇷 브라질" }],
+    ["준우승", { y: 7, result: "final", g: 5, a: 1, apps: 5, champ: "🇧🇷 브라질" }],
+    ["우승", { y: 7, result: "champion", g: 7, a: 2, apps: 5, champ: "🇰🇷 대한민국" }],
+  ];
+  const quote = () => (WC.reportLine().match(/“([^”]+)”/) || [])[1] || "";
+  const says = [];
+  for (const [label, h] of sit) {
+    st.wcHist = [h];
+    const q = quote();
+    says.push(q);
+    check(/🗣️/.test(WC.reportLine()) && !!q, `${label} — 감독이 말한다: "${q.slice(0, 34)}"`);
+  }
+  check(new Set(says).size === says.length, "상황마다 다른 말을 한다 — 같은 문장을 돌려 쓰면 사람이 아니에요");
+
+  /* 조별 탈락은 **내가 잘했는지**로 말이 갈려요 — 팀이 멈춘 것과 내가 못한 건
+   * 다른 이야기예요(팀 성적을 내 활약에서 떼어낸 것과 같은 눈금). */
+  st.wcHist = [{ y: 7, result: "group", g: 0, a: 0, apps: 3, champ: "🇧🇷 브라질" }];
+  const badSay = quote();
+  st.wcHist = [{ y: 7, result: "group", g: 4, a: 1, apps: 3, champ: "🇧🇷 브라질" }];
+  const goodSay = quote();
+  console.log(`   조별 탈락 — 부진 "${badSay}" / 활약 "${goodSay}"`);
+  check(badSay !== goodSay, "같은 조별 탈락이어도 내가 잘했으면 다르게 말한다");
+
+  // 숫자는 말이 아니라 아래 사실 줄에 있어요 — 감독은 성적표를 읽지 않아요
+  st.wcHist = [{ y: 7, result: "semi", g: 3, a: 2, apps: 4, champ: "🇧🇷 브라질" }];
+  const say2 = quote();
+  check(!/[0-9]/.test(say2), `감독의 말에는 숫자가 없다 — "${say2}"`);
+  check(/경기/.test(WC.reportLine().replace(/<[^>]+>/g, " ")), "기록은 아래 사실 줄에 남는다");
+
 });
 
 // ---------- ⑥ 와일드카드는 3시즌에만 ----------
@@ -312,8 +348,10 @@ guard("⑥ 3시즌 한정", () => {
 
   setup(7, 2, wildAt(3) + 3);
   check(!invite(), `7시즌에는 같은 종합으로 초대장이 안 뜬다 — 와일드카드는 첫 대회에만이에요`);
-  const st = S();
-  st.wcCall = undefined;
+  /* 🎲 깜짝 발탁 사정권 안이면 가끔 뽑혀요 — 그건 ⑤-b가 보는 자리고,
+   * 여기서는 **와일드카드가 안 열린다**만 봐야 하니 사정권 밖으로 내려요. */
+  const st = setup(7, 2, barAt(7) - WC._t.LUCK_GAP - 5);
+  st.wcCall = undefined; st.wcHist = [];
   let done = false;
   WC.enter(() => { done = true; });
   check(!st.wc && done, "7시즌에 문턱 아래면 대회가 안 열린다");

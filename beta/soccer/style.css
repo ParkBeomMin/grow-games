@@ -536,5 +536,7 @@ body.wc-mode .rank-table thead th { background: rgba(242, 193, 78, .12); color: 
 .rec-tab.on { background: var(--field); border-color: var(--accent); color: var(--accent); }
 .wc-hist td, .wc-hist th { white-space: nowrap; }
 .wc-rec-champ { font-size: .74rem; color: var(--dim); }
-/* 🌏 결산의 월드컵 한 줄 */
-.hint.wc-report { color: var(--accent); }
+/* 🌏 결산의 월드컵 — 감독 한마디 블록 */
+.wc-report { margin: .5rem 0; }
+/* 🌏 결산의 대표팀 감독 한마디 아래 사실 줄 */
+.wc-fact { font-size: .78rem; color: var(--dim); margin-top: .2rem; }

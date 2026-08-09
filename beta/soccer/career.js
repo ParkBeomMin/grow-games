@@ -2078,7 +2078,7 @@ window.WingerCareer = (() => {
           "발탁이 안 돼서 그런 건가?"만 하게 됩니다(제보). 미발탁도 결과예요.
           reportLine이 문턱·깜짝 발탁 가능성·우승국까지 담아 줍니다. */
         (window.WingerWorldCup && WingerWorldCup.reportLine())
-          ? `<div class="hint wc-report">${WingerWorldCup.reportLine()}</div>` : ""}
+          ? `<div class="wc-report">${WingerWorldCup.reportLine()}</div>` : ""}
       ${moveNote ? `<div class="hint learn">${moveNote}</div>` : ""}
       ${/* 🎖️ 이 시즌에 받은 칭호 — 다음 시즌 경기에 붙어요. 결산에서 보여줘야
           "이번 시즌을 잘 치르면 다음 시즌이 편해진다"가 눈에 들어와요. */

@@ -1069,20 +1069,92 @@ window.WingerWorldCup = (() => {
     return true;
   }
 
-  // 결산에 남길 한 줄
+  /* 🗣️ 결산의 월드컵 — **대표팀 감독이 한마디 하는 걸로** 적어요.
+   *
+   * 제보: "결산화면에서 국가대표 감독이 의견을 말하는 것처럼 바꾸자."
+   * 이 게임에서 선수에게 판정을 알려 주는 목소리는 하나예요 — 유스 트라이아웃의
+   * 🗣️ 감독 한마디, 🪑 벤치의 클럽 감독. 대표팀도 같은 자리에 세웁니다.
+   *
+   * 말은 상황마다 여러 개를 두고 **시즌으로 골라요.** 하나뿐이면 네 번의 대회가
+   * 같은 문장을 네 번 반복해요. 숫자(경기·골·우승국)는 말 아래 작은 줄로 갈라
+   * 둡니다 — 감독은 성적표를 읽지 않아요. */
+  const SAY_FAR = [
+    "아직 자네를 부를 자리가 아니었네. 더 크게 만들어 오게.",
+    "명단을 짜며 자네 이름은 안 나왔어. 솔직히 말하는 게 예의겠지.",
+    "지금은 앞에 선 사람이 많아. 그 줄을 줄이는 건 자네 몫이야.",
+  ];
+  const SAY_NEAR = [
+    "회의 탁자에 자네 이름이 올랐네. 마지막에 다른 친구로 갔어.",
+    "정말 아슬아슬했어. 한 끗이었네.",
+    "이번엔 못 불렀지만, 다음엔 먼저 자네를 볼 걸세.",
+  ];
+  const SAY_STAY = [
+    "클럽을 택했더군. 이해하네. 준비됐을 때 다시 부르지.",
+    "지금은 자네 자리를 지키는 게 맞아. 그것도 선수의 일이야.",
+  ];
+  const SAY_GROUP = [
+    "조별에서 멈췄네. 자네 탓만은 아니야.",
+    "여기서 끝날 팀은 아니었는데. 다음을 준비하지.",
+    "짧게 끝났어. 그래도 이 무대를 밟은 건 남을 걸세.",
+  ];
+  const SAY_GROUP_OK = [
+    "팀은 멈췄지만 자네는 제 몫을 했어. 기억해 두겠네.",
+    "이 성적으로 조별 탈락이라니, 자네한테는 미안한 대회야.",
+  ];
+  const SAY_SEMI = [
+    "네 번째 팀으로 돌아왔군. 잘 싸웠어.",
+    "여기까지 온 게 어딘가. 고개 들게.",
+  ];
+  const SAY_FINAL = [
+    "한 걸음이었네. 그 한 걸음이 제일 멀지.",
+    "은메달은 목에 걸어도 무겁더군. 다음엔 색을 바꾸세.",
+  ];
+  const SAY_CHAMP = [
+    "우리가 해냈어. 자네가 있어서 가능했네.",
+    "이 트로피는 오래 갈 걸세. 자네 이름과 함께.",
+  ];
+  const SAY_AWARD = {
+    boot: "이 대회 최고의 골잡이였어.",
+    ball: "이 대회 최고의 선수였네. 누가 봐도.",
+  };
+
   function reportLine() {
+    if (!S || !isWcYear(S.proYear)) return "";
     const h = hist().filter((x) => x.y === S.proYear)[0];
     if (!h) return "";
+    const nat = myNation();
+    const pick = (pool, off) => pool[Math.abs(S.proYear + (off || 0)) % pool.length];
+    const bar0 = wildOpen(S) ? wildBar() : callBar();
+    const d = bar0 - Math.round(overall());
+    const aw = h.awards || [];
+
+    let say, fact;
     if (h.result === "none") {
-      if (h.stay) return "🌏 월드컵 — 대표팀 소집을 고사하고 클럽에 남았어요";
-      const bar0 = wildOpen(S) ? wildBar() : callBar();
-      const d = bar0 - Math.round(overall());
-      return `🌏 월드컵 — ${myNation().name} 소집 문턱(종합 ${bar0})에 닿지 못했어요`
-        + (d > 0 && d <= LUCK_GAP ? ` · 🎲 깜짝 발탁도 비껴갔어요 (문턱까지 ${d})` : "");
+      if (h.stay) {
+        say = pick(SAY_STAY);
+        fact = `${nat.name} 소집을 고사하고 클럽에 남았어요`;
+      } else {
+        const near = d > 0 && d <= LUCK_GAP;
+        say = pick(near ? SAY_NEAR : SAY_FAR);
+        fact = `${nat.name} 소집 문턱 종합 ${bar0}`
+          + (d > 0 ? ` · 지금 ${Math.round(overall())} (${d} 남음)` : "")
+          + (near ? ` · 🎲 깜짝 발탁도 비껴갔어요` : "");
+      }
+    } else {
+      /* 조별 탈락은 **내가 잘했는지**로 말이 갈려요 — 팀이 멈춘 것과 내가 못한 건
+       * 다른 이야기입니다(팀 성적을 내 활약에서 떼어낸 것과 같은 눈금이에요). */
+      const good = (h.g || 0) >= 2 || aw.length;
+      say = h.result === "champion" ? pick(SAY_CHAMP)
+        : h.result === "final" ? pick(SAY_FINAL)
+        : h.result === "semi" ? pick(SAY_SEMI)
+        : pick(good ? SAY_GROUP_OK : SAY_GROUP);
+      if (aw.length) say += ` ${SAY_AWARD[aw[0]]}`;
+      fact = `${LABEL[h.result]} · ${h.apps}경기 ⚽${h.g} 🅰️${h.a}`
+        + (aw.length ? ` · ${aw.map((id) => (id === "boot" ? "🥇 골든부츠" : "🏅 골든볼")).join(" · ")}` : "")
+        + (h.champ && h.result !== "champion" ? ` · 우승 ${h.champ}` : "");
     }
-    const aw = (h.awards || []).map((id) => (id === "boot" ? "🥇 골든부츠" : "🏅 골든볼")).join(" · ");
-    return `🌏 월드컵 ${LABEL[h.result]} — ${h.apps}경기 ⚽${h.g} 🅰️${h.a}${aw ? ` · ${aw}` : ""}`
-      + (h.champ && h.result !== "champion" ? ` (우승 ${h.champ})` : "");
+    return `<div class="coach-say">🗣️ ${nat.name} 대표팀 감독 — “${say}”</div>`
+      + `<div class="wc-fact">🌏 ${fact}</div>`;
   }
 
   return {
