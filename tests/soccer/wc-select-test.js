@@ -37,9 +37,9 @@ const GAME = fs.readFileSync(path.join(DIR, "game.js"), "utf8");
 // ---------- ① 문턱을 어디서 읽는가 ----------
 console.log("=== ① 문턱이 클래스와 한 몸인가 ===");
 guard("① 문턱 출처", () => {
-  const body = (WCSRC.match(/function callBar\(\) \{[\s\S]*?\n {2}\}/) || [""])[0];
+  const body = (WCSRC.match(/function classBar\(\) \{[\s\S]*?\n {2}\}/) || [""])[0];
   check(/PLAYER_TITLES/.test(body) && /CALL_TITLE/.test(body),
-    "문턱을 PLAYER_TITLES에서 CALL_TITLE로 찾아 읽는다 — 여기에 78을 적어 두면 클래스를 바꿨을 때 화면과 판정이 갈려요");
+    "문턱의 기준점을 PLAYER_TITLES에서 CALL_TITLE로 찾아 읽는다 — 여기에 78을 적어 두면 클래스를 바꿨을 때 화면과 판정이 갈려요");
   check(/const CALL_TITLE = .국가대표 후보./.test(WCSRC), "찾는 이름이 🎖️국가대표 후보다");
   const row = GAME.match(/\[(\d+), "🎖️ 국가대표 후보"\]/);
   check(!!row, `game.js에 🎖️국가대표 후보 줄이 있다 (문턱 ${row ? row[1] : "?"})`);
@@ -71,10 +71,10 @@ const Career = w.WingerCareer, WC = w.WingerWorldCup, Squad = w.WingerSquad;
 check(!!WC && !!Career && !!Squad, "worldcup.js·career.js·squad.js가 로드된다");
 if (!WC || !Career || !Squad) { console.log("\n❌ 실패"); process.exit(1); }
 const S = () => Career._t.state();
-const BAR = WC.callBar();
-const WILD = WC._t.WILD_BAR;
-console.log(`   문턱 ${BAR} · 🌱 와일드카드 ${WILD} (3시즌만)`);
-check(WILD < BAR, `와일드카드 문턱이 더 낮다 (${WILD} < ${BAR})`);
+/* ⚠️ 문턱은 이제 **국적과 시즌마다 달라요.** 여기서 한 번 읽어 상수처럼 쓰면
+ * 시나리오마다 어긋납니다 — 쓰는 자리에서 그때그때 물어봐요. */
+const barAt = (y) => WC.callBar(y);
+const wildAt = (y) => WC.wildBar(y);
 
 /* 프로 상태를 실제 버튼으로 만들고, 시즌·반기·종합을 원하는 자리에 놓는다. */
 function setup(year, cb, ovr) {
@@ -104,11 +104,63 @@ function setOvr(target) {
 const overlay = () => w.document.querySelector(".wc-overlay");
 const invite = () => { Career.refreshPro(); return overlay(); };
 
+// ---------- ①-b 문턱이 소집 때마다 조금씩 달라지는가 ----------
+console.log("=== ①-b 문턱은 고정이 아니다 ===");
+guard("①-b 움직이는 문턱", () => {
+  const cls = WC._t.classBar();
+  const MK = [["k", "🇰🇷"], ["jp", "🇯🇵"], ["br", "🇧🇷"], ["af", "🏴"], ["eu", "🇮🇹"]];
+  const bars = {};
+  for (const [m] of MK) {
+    w.__set("S", { market: m, proYear: 7 });
+    bars[m] = [3, 7, 11, 15].map((y) => WC.callBar(y));
+  }
+  MK.forEach(([m, f]) => console.log(`   ${f} ${bars[m].join(" · ")} (기준점 ${cls})`));
+
+  /* ① 국가마다 다르다 — 강한 나라일수록 문이 좁아요. 이게 밸런스 고리예요:
+   * 대회에서 유리한 만큼 들어가기가 어렵습니다. */
+  const kr = bars.k[1], br = bars.br[1];
+  check(br > kr, `강한 나라일수록 문턱이 높다 (🇧🇷 ${br} > 🇰🇷 ${kr})`);
+  check(br - kr >= 4, `그 차이가 체감된다 (${br - kr})`);
+  check(br - kr <= 12, `그렇다고 벽은 아니다 (${br - kr}) — 유스 선택이 사형선고가 되면 안 돼요`);
+
+  /* ② 세대마다 흔들린다 */
+  const wob = MK.some(([m]) => new Set(bars[m]).size > 1);
+  check(wob, "같은 나라라도 대회마다 문턱이 조금씩 다르다 — 세대가 두꺼울 때가 있어요");
+
+  /* ③ 그래도 기준점 근처를 벗어나진 않는다 */
+  const all = MK.flatMap(([m]) => bars[m]);
+  const lo = Math.min(...all), hi = Math.max(...all);
+  check(hi - lo <= 14, `전체 폭이 과하지 않다 (${lo} ~ ${hi})`);
+  check(lo >= cls - 10 && hi <= cls + 10, `기준점(${cls}) 근처에 머문다 (${lo} ~ ${hi})`);
+
+  /* ④ ⚠️ 무작위가 아니다 — 다시 물어봐도 같은 값이어야 해요.
+   * Math.random이면 준비 화면을 다시 그릴 때마다 문턱이 달라져서 배지 숫자를
+   * 믿을 수 없게 됩니다(👥 선발 확률에서 이미 같은 사고가 났어요). */
+  w.__set("S", { market: "k", proYear: 7 });
+  const shots = [...Array(12)].map(() => WC.callBar(7));
+  check(new Set(shots).size === 1, `같은 시즌에 몇 번을 물어도 같은 값이다 (${[...new Set(shots)].join(",")})`);
+  check(!/Math\.random/.test((WCSRC.match(/function callBar\([\s\S]*?\n {2}\}/) || [""])[0]),
+    "문턱 산식에 Math.random이 없다");
+
+  /* ⑤ 🌱 와일드카드도 같이 움직인다 */
+  const gap = WC.callBar(3) - WC.wildBar(3);
+  check(gap === WC._t.WILD_GAP && gap > 0, `와일드카드는 문턱에서 ${gap} 아래로 따라 움직인다`);
+
+  /* ⑥ 화면이 그 이유를 말하는가 — 숫자만 보이면 "왜 지난번이랑 다르지"가 돼요 */
+  w.__set("S", w.__get('newState(MARKETS[0], "fw", "테스트")'));
+  Career.onEnding(true, false); $("btn-go-debut").click();
+  const st = S();
+  st.proYear = 7; st.activity = null;
+  const badge = WC.badgeHTML().replace(/<[^>]+>/g, "");
+  console.log(`   배지 — "${badge.trim()}"`);
+  check(/대표팀|대한민국|🇰🇷/.test(badge), "배지가 어느 나라 문턱인지 알려준다");
+});
+
 // ---------- ②③ 초대장과 래칫 ----------
 console.log("=== ②③ 초대장은 후반기에 뜨고, 한 번 뜨면 안 뺏긴다 ===");
 guard("②③ 래칫", () => {
-  setup(7, 1, BAR + 6);
-  check(!invite(), `전반기에는 초대장이 안 뜬다 (종합 ${Math.round(w.__get("overall")())} ≥ ${BAR})`);
+  setup(7, 1, barAt(7) + 6);
+  check(!invite(), `전반기에는 초대장이 안 뜬다 (종합 ${Math.round(w.__get("overall")())} ≥ ${barAt(7)})`);
   check(S().wcCall !== 7, "전반기에는 발탁도 안 잠긴다");
 
   S().activity.cb = 2;
@@ -133,7 +185,7 @@ guard("②③ 래칫", () => {
 // ---------- ④⑤ 늦깎이 합류와 미달 ----------
 console.log("=== ④⑤ 늦깎이 합류 / 문턱 미달 ===");
 guard("④ 늦깎이", () => {
-  setup(7, 2, BAR + 4);
+  setup(7, 2, barAt(7) + 4);
   S().wcCall = undefined;                       // 초대장을 못 받은 채로 시즌 끝
   let done = false;
   WC.enter(() => { done = true; });
@@ -141,11 +193,11 @@ guard("④ 늦깎이", () => {
   S().wc = null;
 });
 guard("⑤ 미달", () => {
-  const st = setup(7, 2, BAR - 8);
+  const st = setup(7, 2, barAt(7) - 8);
   st.wcCall = undefined;
   let done = false;
   WC.enter(() => { done = true; });
-  check(!st.wc, `문턱에 못 미치면 대회가 안 열린다 (종합 ${Math.round(w.__get("overall")())} < ${BAR})`);
+  check(!st.wc, `문턱에 못 미치면 대회가 안 열린다 (종합 ${Math.round(w.__get("overall")())} < ${barAt(7)})`);
   check(done, "결산으로 넘어간다");
   const h = (st.wcHist || []).filter((x) => x.y === 7)[0];
   check(!!h && h.result === "none", `기록에 'none'이 남는다 (${h ? h.result : "없음"}) — 결산 한 줄과 통계의 근거예요`);
@@ -155,15 +207,15 @@ guard("⑤ 미달", () => {
 // ---------- ⑥ 와일드카드는 3시즌에만 ----------
 console.log("=== ⑥ 유망주 와일드카드는 첫 대회에만 ===");
 guard("⑥ 3시즌 한정", () => {
-  setup(3, 2, WILD + 3);
+  setup(3, 2, wildAt(3) + 3);
   const ov = invite();
-  check(!!ov, `3시즌에 문턱(${BAR}) 아래여도 초대장이 뜬다 (종합 ${Math.round(w.__get("overall")())})`);
+  check(!!ov, `3시즌에 문턱(${barAt(3)}) 아래여도 초대장이 뜬다 (종합 ${Math.round(w.__get("overall")())})`);
   check(!!ov && !!ov.querySelector("#btn-wc-stay"), "와일드카드에는 두 선택지가 있다");
   check(/와일드카드/.test(ov.textContent), "유망주 와일드카드라고 적혀 있다");
   check(/감독/.test(ov.textContent), "클럽 감독의 말로 대가를 알려준다");
   ov.remove();
 
-  setup(7, 2, WILD + 3);
+  setup(7, 2, wildAt(3) + 3);
   check(!invite(), `7시즌에는 같은 종합으로 초대장이 안 뜬다 — 와일드카드는 첫 대회에만이에요`);
   const st = S();
   st.wcCall = undefined;
@@ -180,7 +232,7 @@ guard("⑦⑧⑨ 클럽 신뢰", () => {
     return b.trust || 0;
   };
   // 다녀온다
-  setup(3, 2, WILD + 3);
+  setup(3, 2, wildAt(3) + 3);
   let ov = invite();
   ov.querySelector("#btn-wc-go").click();
   const go = S();
@@ -196,7 +248,7 @@ guard("⑦⑧⑨ 클럽 신뢰", () => {
   check(tGone === 0, `그다음 시즌에는 저절로 사라진다 (${tGone}) — 지우는 코드가 없어요`);
 
   // 남는다
-  setup(3, 2, WILD + 3);
+  setup(3, 2, wildAt(3) + 3);
   ov = invite();
   ov.querySelector("#btn-wc-stay").click();
   const stay = S();
@@ -228,8 +280,8 @@ guard("⑩ 변이", () => {
     if (wcCall === proYear) return true;
     return ovr >= bar;`);
   const lowAfterAwaken = 40;
-  check(withRatchet(lowAfterAwaken, BAR, 7, 7) === true, "래칫이 있으면 각성 뒤에도 발탁이다");
-  check(broken(lowAfterAwaken, BAR, 7, 7) === false,
+  check(withRatchet(lowAfterAwaken, barAt(7), 7, 7) === true, "래칫이 있으면 각성 뒤에도 발탁이다");
+  check(broken(lowAfterAwaken, barAt(7), 7, 7) === false,
     "래칫을 빼면 각성 뒤에 발탁이 사라진다 — ③이 그걸 막고 있어요");
 });
 

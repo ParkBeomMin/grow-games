@@ -551,7 +551,8 @@ function makeSoccerWc(kind) {
       soccerDebut(P, "pro", "pos", 0);
       const WC = P.w.WingerWorldCup;
       if (!WC) throw new Error("worldcup.js가 안 실렸어요");
-      const BAR = WC.callBar(), WILD = WC._t.WILD_BAR;
+      // 문턱은 국적·시즌마다 달라요 — 만들 시즌 것을 물어봐요
+      const BAR = WC.callBar(YEAR), WILD = WC.wildBar(YEAR);
       soccerToYear(P, YEAR);
       const st = P.state();
       /* ⚠️ 종합은 **멈출 자리에 다 온 뒤에** 놓아요. 먼저 놓으면 그 뒤 시즌을

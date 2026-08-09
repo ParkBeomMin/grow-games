@@ -50,15 +50,55 @@ window.WingerWorldCup = (() => {
   const FIRST_WC = 3, WC_CYCLE = 4;
   const isWcYear = (y) => y >= FIRST_WC && (y - FIRST_WC) % WC_CYCLE === 0;
 
-  /* 발탁 문턱은 **클래스 문턱을 그대로 읽어요.** 여기에 78을 적어 두면 클래스
+  /* 문턱의 **기준점**은 클래스 문턱을 그대로 읽어요. 여기에 78을 적어 두면 클래스
    * 밸런스를 바꿨을 때 화면의 🎖️국가대표 후보와 실제 발탁이 어긋납니다 —
    * "표시와 판정이 서로 다른 것을 본다"가 이 저장소의 단골 병이에요. */
   const CALL_TITLE = "국가대표 후보";
-  function callBar() {
+  function classBar() {
     const row = (typeof PLAYER_TITLES !== "undefined" ? PLAYER_TITLES : [])
       .find((t) => String(t[1]).includes(CALL_TITLE));
     return row ? row[0] : 78;
   }
+
+  /* 🎚️ 문턱은 **소집 때마다 조금씩 달라요.**
+   *
+   * 제보: "소집 문턱은 지금 무조건 고정인가?? 선수들 기량 보고 소집 때마다 조금씩
+   * 바뀌면 좋겠는데." 맞는 말이에요 — 대표팀 문은 내가 잘하는가만이 아니라
+   * **그 나라에 지금 누가 있는가**로 열립니다.
+   *
+   * 두 가지가 문턱을 움직여요.
+   *   ① 국가 전력 — 🇧🇷 브라질이면 앞에 선 사람이 많아 문이 좁고, 약체면 넓어요.
+   *      이게 밸런스 고리를 하나 만듭니다: **강한 나라는 대회에서 유리한 만큼
+   *      들어가기가 어려워요.** 유스 선택이 유불리 하나로만 기울지 않게 됩니다.
+   *   ② 세대 — 대회마다 ±2쯤 흔들려요. "이번 세대는 유난히 두껍다"가 생깁니다.
+   *
+   * ⚠️ 흔들림은 **무작위가 아니라 시즌·국가에서 뽑은 고정값**이에요. Math.random을
+   * 쓰면 준비 화면을 다시 그릴 때마다 문턱이 달라져서 배지에 적힌 숫자를 믿을 수
+   * 없게 됩니다 — 👥 선발 확률에서 이미 같은 사고가 났어요.
+   * 그래서 배지에 **나라 이름을 같이** 적어요. 숫자만 보이면 "왜 지난번이랑
+   * 다르지?"가 되니, 이유가 화면에 있어야 합니다. */
+  const BAR_NAT_K = 0.5;      // 국가 전력이 문턱에 실리는 정도 (🇧🇷 +3.5 · 🇰🇷 -3.5쯤)
+  const BAR_WOBBLE = 2;       // 세대마다 흔들리는 폭
+  const WILD_GAP = 10;        // 🌱 와일드카드는 문턱에서 이만큼 아래
+
+  const barSeed = (year, code) => {
+    let h = 2166136261;
+    const mix = (v) => { h = Math.imul(h ^ (v >>> 0), 16777619) >>> 0; };
+    mix(year * 7919);
+    for (let i = 0; i < code.length; i++) mix(code.charCodeAt(i));
+    return (h >>> 0) / 4294967296;
+  };
+
+  function callBar(year) {
+    const base = classBar();
+    const y = year == null ? ((S && S.proYear) || 1) : year;
+    const nat = myNation();
+    if (!nat) return base;
+    const natAdj = (nat.str - NAT_MEAN) * BAR_NAT_K;
+    const wob = (barSeed(y, nat.c) * 2 - 1) * BAR_WOBBLE;
+    return Math.round(base + natAdj + wob);
+  }
+  const wildBar = (year) => callBar(year) - WILD_GAP;
 
   /* 🌱 유망주 와일드카드 — **3시즌에만** 열리는 낮은 문턱이에요.
    *
@@ -66,7 +106,6 @@ window.WingerWorldCup = (() => {
    * 간판 기능을 처음 봅니다. 3시즌은 아직 아무도 도달할 수 없는 시기라 문턱이
    * 문지기가 아니라 벽이에요. 그래서 첫 대회만 특별 취급합니다 —
    * **거의 모두가 한 번은 맛보고, 그 뒤 7·11·15는 순수하게 실력으로.** */
-  const WILD_BAR = 68;
   const wildOpen = (S0) => S0.proYear === FIRST_WC;
 
   /* 🤝 클럽 감독의 신뢰 — 와일드카드를 받아들일지 정할 때의 대가예요.
@@ -181,7 +220,7 @@ window.WingerWorldCup = (() => {
     const ovr = overall();
     const bar = callBar();
     if (ovr >= bar) { openInvite(false); return true; }
-    if (wildOpen(S) && ovr >= WILD_BAR) { openInvite(true); return true; }
+    if (wildOpen(S) && ovr >= wildBar()) { openInvite(true); return true; }
     return false;
   }
 
@@ -252,10 +291,12 @@ window.WingerWorldCup = (() => {
     if (stayed) return `<div class="wc-badge dim">⚽ 이번 월드컵은 고사했어요 — 클럽에 집중해요</div>`;
     if (playedThisYear()) return "";
     if (called()) return `<div class="wc-badge">📨 월드컵 명단 승선 — 시즌이 끝나면 소집돼요</div>`;
-    const bar = wildOpen(S) ? WILD_BAR : callBar();
+    const bar = wildOpen(S) ? wildBar() : callBar();
     const ovr = Math.round(overall());
-    return `<div class="wc-badge dim">🌏 올해는 월드컵의 해 — 소집 문턱 종합 ${bar}`
-      + ` <b>(지금 ${ovr})</b>${wildOpen(S) ? " · 🌱 유망주 와일드카드" : ""}</div>`;
+    /* 나라를 같이 적어요 — 문턱이 대회마다 달라지니, 숫자만 보이면
+     * "왜 지난번이랑 다르지?"가 됩니다. 이유가 화면에 있어야 해요. */
+    return `<div class="wc-badge dim">🌏 올해는 월드컵의 해 — ${myNation().name} 소집 문턱 <b>종합 ${bar}</b>`
+      + ` (지금 ${ovr})${wildOpen(S) ? " · 🌱 유망주 와일드카드" : ""}</div>`;
   }
 
   // ---------- 시즌 끝 관문 ----------
@@ -269,7 +310,7 @@ window.WingerWorldCup = (() => {
      * 관문(seasonEnd)이 due()로 한 번 거르지만 여기서도 막습니다 — 고사해 놓고
      * 늦깎이 발탁으로 들어가는 뒷문이 생기면 그 선택이 선택이 아니게 돼요. */
     if (playedThisYear() || wc()) { onDone(); return; }
-    const bar = wildOpen(S) ? WILD_BAR : callBar();
+    const bar = wildOpen(S) ? wildBar() : callBar();
     const ovr = overall();
     /* 초대장을 받았으면 종합이 떨어졌어도 들어가요(래칫). 못 받았어도 지금
      * 문턱을 넘으면 늦깎이로 합류합니다. */
@@ -655,7 +696,7 @@ window.WingerWorldCup = (() => {
     if (!h) return "";
     if (h.result === "none") {
       return h.stay ? "🌏 월드컵 — 대표팀 소집을 고사하고 클럽에 남았어요"
-        : `🌏 월드컵 — 소집 문턱(종합 ${wildOpen(S) ? WILD_BAR : callBar()})에 닿지 못했어요`;
+        : `🌏 월드컵 — ${myNation().name} 소집 문턱(종합 ${wildOpen(S) ? wildBar() : callBar()})에 닿지 못했어요`;
     }
     return `🌏 월드컵 ${LABEL[h.result]} — ${h.apps}경기 ⚽${h.g} 🅰️${h.a}`;
   }
@@ -663,9 +704,10 @@ window.WingerWorldCup = (() => {
   return {
     init, due, enter, resume, checkInvite, badgeHTML, startButton, themeSync, reportLine,
     groupTableHTML, groupSumText, recordHTML, openGroup, active: () => !!wc(),
-    isWcYear, callBar, myNation,
+    isWcYear, callBar, wildBar, myNation,
     _t: {
-      NATIONS, WILD_BAR, TRUST_GO, TRUST_STAY, PRIZE, FAME,
+      NATIONS, wildBar, classBar, BAR_NAT_K, BAR_WOBBLE, WILD_GAP, barSeed,
+      TRUST_GO, TRUST_STAY, PRIZE, FAME,
       NAT_SPREAD, ACE_DIV, ACE_LO, ACE_HI, natStr, teamStr, NAT_MEAN,
       FIRST_WC, WC_CYCLE, CAMP_FIRST, CAMP_BETWEEN, GROUP_GAMES,
       wildOpen, rollGroups, wcAfterMatch, endTournament, MARKET_NATION,
