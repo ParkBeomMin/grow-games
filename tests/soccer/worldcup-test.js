@@ -474,6 +474,75 @@ guard("⑧ 기록 분리", () => {
 });
 
 if (errs.length) { console.log(`\n💥 도중에 터진 예외 ${errs.length}건`); console.log(errs[0].split("\n").slice(0, 6).join("\n")); }
+
+// ---------- ⑩ 조 순위표와 개인 순위가 같은 말을 하는가 ----------
+console.log("=== ⑩ 화면 두 개가 같은 경기를 보는가 ===");
+guard("⑩ 득실 = 개인 합", () => {
+  /* 제보: "조별리그 1경기 했고 독일이랑 붙어서 4:2로 이겼는데, 독일 선수들
+   * 골 합이 3이야." 상대 팀 골을 실제 경기와 **따로 굴리고** 있었어요.
+   * 조 순위표의 득실과 개인 순위의 합이 서로 다른 말을 하고 있었습니다. */
+  let bad = 0, checked = 0;
+  for (let t = 0; t < 6; t++) {
+    w.__set("S", w.__get('newState(MARKETS[0], "fw", "테스트")'));
+    Career.onEnding(true, false);
+    $("btn-go-debut").click();
+    const st = S();
+    st.proYear = 7; st.wcCall = 7;
+    for (const k of Object.keys(st.stats)) st.stats[k] = 110;
+    WC.enter(() => {});
+    // 조별 세 경기만 치러요 — 조 순위표가 살아 있는 구간이에요
+    for (let i = 0; i < 200 && st.wc && st.wc.stage === "group"; i++) {
+      const id = active();
+      if (id === "screen-stage") {
+        const n = $("btn-stage-next");
+        const pk = (!n || n.hidden) ? w.document.querySelector("#pk-box button") : null;
+        if (pk) { pk.click(); continue; }
+        if (!n || n.hidden || n.disabled) break;
+        n.click(); continue;
+      }
+      if (id !== "screen-pro") break;
+      const go = w.document.querySelector("#pro-actions .go-game");
+      if (go) { go.click(); continue; }
+      const r = [...w.document.querySelectorAll("#pro-actions .action-btn")]
+        .find((b) => b.dataset.key === "__rest" && !b.disabled);
+      if (!r) break;
+      r.click();
+    }
+    if (!st.wc || !st.wc.squads) continue;
+    /* 우리 조 네 팀은 자기들끼리만 붙어요 — **조 안의 총 득점 = 총 실점**이고,
+     * 개인 순위에 쌓인 골의 합도 그 값이어야 해요. */
+    const inGroup = st.wc.myGroup.map((t) => t.name);
+    const scored = inGroup.reduce((a, n) => a + (st.wc.squads[n] || [])
+      .reduce((b, x) => b + (x.g || 0), 0), 0);
+    const gdSum = st.wc.myGroup.reduce((a, t) => a + t.gd, 0);
+    checked++;
+    if (gdSum !== 0) bad++;    // 자기들끼리 붙었으니 득실 합은 0이어야 해요
+    if (t === 0) console.log(`   조 안 개인 골 합 ${scored} · 득실 합 ${gdSum}`);
+  }
+  check(checked > 0, `조별리그를 실제로 치렀다 (${checked}판)`);
+  check(bad === 0, `조 안에서 득실 합이 0이다 (어긋난 판 ${bad}/${checked}) — 자기들끼리 붙었으니까요`);
+
+  /* 핵심: **내 경기의 상대 실점 = 그 나라 선수들에게 붙은 골** */
+  w.__set("S", w.__get('newState(MARKETS[0], "fw", "테스트")'));
+  Career.onEnding(true, false);
+  $("btn-go-debut").click();
+  const st2 = S();
+  st2.proYear = 7; st2.wcCall = 7;
+  for (const k of Object.keys(st2.stats)) st2.stats[k] = 110;
+  WC.enter(() => {});
+  const opp = st2.wc.myGroup.find((t) => !t.me).name;
+  const before = (st2.wc.squads[opp] || []).reduce((a, x) => a + (x.g || 0), 0);
+  WC._t.creditNat(opp, 2);
+  const after = (st2.wc.squads[opp] || []).reduce((a, x) => a + (x.g || 0), 0);
+  console.log(`   ${opp}에 2골을 붙이면 — 합 ${before} → ${after}`);
+  check(after - before === 2, `정해진 골 수만큼만 붙는다 (${after - before}골)`);
+  /* 이미 골이 정해진 나라는 건너뛰어야 해요 — 안 그러면 같은 경기 골이 두 번 붙어요 */
+  const b2 = (st2.wc.squads[opp] || []).reduce((a, x) => a + (x.g || 0), 0);
+  WC._t.advanceOthers(new Set([opp]));
+  const a2 = (st2.wc.squads[opp] || []).reduce((a, x) => a + (x.g || 0), 0);
+  check(a2 === b2, `건너뛴 나라에는 골이 안 더해진다 (${b2} → ${a2})`);
+});
+
 console.log(fail ? `\n❌ ${fail}건 실패` : "\n✅ 통과");
 w.close();
 process.exit(fail ? 1 : 0);

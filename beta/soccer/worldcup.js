@@ -492,28 +492,44 @@ window.WingerWorldCup = (() => {
   }
   const mySquad = () => (ensureSquads() || {})[myNation().name] || [];
 
+  /* 한 나라의 **정해진 골 수**를 그 나라 선발에게 배분해요.
+   *
+   * ⚠️ 이게 있어야 화면이 한 몸이 됩니다. 예전에는 상대 팀 골도 그냥 굴렸어요 —
+   * 그래서 **4:2로 이겼는데 개인 순위의 독일 선수 골 합이 3**이 됐습니다(제보).
+   * 조 순위표의 득실과 개인 순위의 합이 서로 다른 말을 하고 있었어요.
+   * 이제 실제 경기에서 나온 골만 사람에게 붙습니다. */
+  function creditNat(natName, goals) {
+    const sq = (wc() || {}).squads || {};
+    const list = sq[natName];
+    if (!list) return;
+    const xi = xiOf(list);
+    for (const x of xi) x.apps = (x.apps || 0) + 1;
+    for (let i = 0; i < goals; i++) {
+      const who = pickFrom(xi);
+      if (who) who.g = (who.g || 0) + 1;
+      const asst = pickFrom(xi.filter((x) => x !== who));
+      if (asst && Math.random() < 0.6) asst.a = (asst.a || 0) + 1;
+    }
+  }
+
   /* 내가 한 경기를 치를 때 **다른 나라도 자기 경기를 치러요.**
    * 안 굴리면 순위표가 나만 오르는 표가 되고, 그건 경쟁이 아니에요.
-   * 조별에서 떨어진 나라는 out 표시가 붙어 거기서 멈춥니다. */
-  function advanceOthers() {
+   *
+   * 단, **이미 실제 경기에서 골이 정해진 나라는 건너뜁니다**(skip) — 내 상대와,
+   * 우리 조에서 자기들끼리 붙은 두 팀이 거기 들어가요. 안 건너뛰면 같은 경기의
+   * 골이 두 번 붙어서 순위표가 조 순위표와 다른 말을 합니다. */
+  function advanceOthers(skip) {
     const w = wc();
     const sq = w && w.squads;
     if (!sq) return;
     const meName = myNation().name;
+    const done = skip instanceof Set ? skip : new Set(skip || []);
     const strOf = {};
     for (const t of (w.myGroup || []).concat(w.others || [])) strOf[t.name] = t.str;
     for (const nat of Object.keys(sq)) {
-      if (nat === meName) continue;
+      if (nat === meName || done.has(nat)) continue;
       if ((w.natOut || []).includes(nat)) continue;
-      const xi = xiOf(sq[nat]);
-      for (const x of xi) x.apps = (x.apps || 0) + 1;
-      const goals = poissonish(Math.max(0.1, NAT_G0 + ((strOf[nat] || 80) - 74) * NAT_GK) * GOAL_SCALE * 3);
-      for (let i = 0; i < goals; i++) {
-        const who = pickFrom(xi);
-        if (who) who.g = (who.g || 0) + 1;
-        const asst = pickFrom(xi.filter((x) => x !== who));
-        if (asst && Math.random() < 0.6) asst.a = (asst.a || 0) + 1;
-      }
+      creditNat(nat, poissonish(Math.max(0.1, NAT_G0 + ((strOf[nat] || 80) - 74) * NAT_GK) * GOAL_SCALE * 3));
     }
   }
   /* 우리 팀 동료가 넣은 골 — **이름으로 그 선수에게 적립해요.**
@@ -876,7 +892,12 @@ window.WingerWorldCup = (() => {
     const meRow = mySquad().find((x) => x.me);
     if (meRow) { meRow.g = w.g; meRow.a = w.a; meRow.apps = w.apps; meRow.str = overall(); }
     creditMates(info.mateGoals);    // 동료 골은 그 선수 기록에 쌓여요
-    advanceOthers();                // 다른 나라도 자기 경기를 치러요
+    /* ⚠️ **상대 팀은 이 경기에서 실제로 넣은 만큼만** 쌓여요. 따로 굴리면
+     * "4:2로 이겼는데 상대 선수 골 합이 3"이 됩니다(제보). */
+    w.credited = [];
+    creditNat(w.opp, info.oppGoals);
+    if (w.stage === "group") rollGroupRivals(info);   // 조의 다른 경기도 같은 라운드를 치러요
+    advanceOthers(new Set([w.opp].concat(w.credited || [])));
     S.money = (S.money || 0) + PRIZE.game;
 
     const head = `<div class="ms-final ${info.res === "W" ? "win" : info.res === "L" ? "lose" : ""}">`
@@ -887,7 +908,6 @@ window.WingerWorldCup = (() => {
       const me = w.myGroup.find((x) => x.me);
       me.pts += info.res === "W" ? 3 : info.res === "D" ? 1 : 0;
       me.gd += info.teamGoals - info.oppGoals;
-      rollGroupRivals(info);       // 조의 다른 경기도 같은 라운드를 치러요
       CTX.proLog(`🌏 월드컵 ${stageLabel()} vs ${w.opp} — ${info.teamGoals}:${info.oppGoals}`);
       const step = wcAfterMatch(info.res, onDone);
       return { resultHTML: head + tableHTML2() + step.html, nextLabel: step.label, nextFn: step.fn };
@@ -947,6 +967,10 @@ window.WingerWorldCup = (() => {
       a.pts += ga > gb ? 3 : ga === gb ? 1 : 0;
       b.pts += gb > ga ? 3 : ga === gb ? 1 : 0;
       a.gd += ga - gb; b.gd += gb - ga;
+      /* 그 경기의 골도 **사람에게** 붙여요 — 조 순위표의 득실과 개인 순위의
+       * 합이 어긋나면 두 표가 서로 다른 말을 하게 됩니다. */
+      creditNat(a.name, ga); creditNat(b.name, gb);
+      w.credited = [a.name, b.name];
     }
   }
 
@@ -1175,7 +1199,7 @@ window.WingerWorldCup = (() => {
     _t: {
       NATIONS, wildBar, classBar, BAR_NAT_K, BAR_WOBBLE, WILD_GAP, barSeed,
       TRUST_GO, TRUST_STAY, PRIZE, FAME, AWARD_FAME,
-      natSquadOf, xiOf, ensureSquads, advanceOthers, creditMates, cutNations, faces, matesOf,
+      natSquadOf, xiOf, ensureSquads, advanceOthers, creditNat, creditMates, cutNations, faces, matesOf,
       decideAwards, faceScore, FACE_N, NAT_G0, NAT_GK, ACE_W, SCORE_W, mySquad, markAce,
       playOutRest, KO_EDGE,
       LUCK_GAP, LUCK_MAX, luckP,
