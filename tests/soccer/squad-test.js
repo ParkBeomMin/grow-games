@@ -233,8 +233,28 @@ guard("⑥ 개인 순위와 같은 사람", () => {
   const ghosts = race.filter((r) => !(all[r.club] || []).some((x) => x.name === r.name));
   check(ghosts.length === 0,
     `여덟 명 전부 그 클럽 명단에 있는 사람이다 (유령 ${ghosts.length}명${ghosts.length ? ` — ${ghosts.map((g) => `${g.name}(${g.club})`).join(", ")}` : ""})`);
+  /* ⚠️ **클럽 할당량은 없어요.** 예전에는 "클럽마다 최소 한 명"을 먼저 채웠는데,
+   * 그러면 강팀 3순위보다 못한 약팀 1순위가 자리를 차지해서 표에 평범한 선수가
+   * 섞여요. 이건 개인 기록 순위지 클럽을 고르게 보여주는 표가 아닙니다
+   * (제보: "개인기록에는 나라마다 한자리는 필요없어" → "리그에서도 동일하게").
+   * 우리 클럽 한 자리만 남겨요 — 동료 골이 이 표에 쌓이는 배선이 거기 걸려 있어요. */
   const clubs = new Set(race.map((r) => r.club));
-  check(clubs.size >= 4, `여러 클럽에서 고르게 나온다 (${clubs.size}개 클럽)`);
+  console.log(`   ${clubs.size}개 클럽에서 나왔어요 (할당량 없이 실력 순)`);
+  /* 자리(포지션)는 고르게 뽑아요 — 부문상이 득점왕·도움왕·철벽상으로 나뉘어
+   * 있어서 여덟이 전부 공격수면 철벽상을 공격수가 받아요. 그러니 "리그 전체
+   * 상위권"이 아니라 **그 포지션의 상위권**에서 뽑혔는지를 봐요. */
+  const byPos = {};
+  for (const x of Object.values(all).flat()) {
+    if (x.me) continue;
+    (byPos[x.pos] ||= []).push(x.str);
+  }
+  for (const k of Object.keys(byPos)) byPos[k].sort((a, b) => b - a);
+  const off = race.filter((r) => r.club !== S().group)
+    .filter((r) => { const l = byPos[r.pos] || []; return r.pop < (l[5] != null ? l[5] : 0) - 1; });
+  check(off.length === 0,
+    `우리 클럽 몫 말고는 그 포지션 상위권에서 뽑힌다 (벗어난 사람 ${off.length}명`
+    + `${off.length ? ` — ${off.map((r) => `${r.name}(${r.pos} ${Math.round(r.pop)})`).join(", ")}` : ""})`);
+  check(mine.length === 1, `우리 클럽 자리는 하나다 (${mine.length}명) — 동료 골이 쌓일 자리예요`);
 });
 
 // ---------- ⑦ 클럽이 바뀌면 새로 ----------

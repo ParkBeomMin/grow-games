@@ -178,25 +178,52 @@ window.WingerSquad = (() => {
   /* 🥇 개인 순위에 올릴 리그의 얼굴들 — **각 클럽의 선발 중 실력 상위**예요.
    * 예전에는 이름을 새로 지어 8명을 만들었어요. 그러면 개인 순위에 뜬 그 선수가
    * 어느 팀 명단에도 없는 유령이 됩니다. 이제 실제 사람 중에서 뽑아요. */
-  function leagueFaces(n) {
+  /* 🥇 개인 순위에 올릴 사람 — **리그에서 제일 잘하는 선수들**이에요.
+   *
+   * ⚠️ 예전에는 "클럽마다 최소 한 명"을 먼저 채웠어요. 그러면 강팀 3순위보다
+   * 못한 약팀 1순위가 자리를 차지해서, 표에 평범한 선수가 섞입니다.
+   * 이건 **개인 기록 순위**예요 — 클럽을 고르게 보여주는 표가 아니라 잘하는
+   * 사람이 오르는 표입니다(제보: "개인기록에는 나라마다 한자리는 필요없어",
+   * 이어서 "리그에서 개인기록도 동일하게"). 🌏 월드컵도 같은 규칙이에요.
+   *
+   * 대신 **자리(포지션)는 고르게** 뽑아요. 부문상이 득점왕·도움왕·철벽상으로
+   * 나뉘어 있어서, 여덟이 전부 공격수면 철벽상을 공격수가 받게 됩니다.
+   * need로 포지션별 필요 수를 넘기면 그 안에서 실력 순으로 채워요.
+   * 안 넘기면 그냥 실력 순 n명이에요. */
+  function leagueFaces(n, need) {
     const all = [];
     for (const club of Object.keys(ensureSquads())) {
-      const xi = startingXIOf(club).filter((x) => !x.me).sort((a, b) => b.str - a.str);
-      xi.forEach((x, i) => all.push({ club, player: x, seed: x.str - i * 2 }));
+      for (const x of startingXIOf(club)) {
+        if (x.me) continue;
+        all.push({ club, player: x });
+      }
     }
-    all.sort((a, b) => b.seed - a.seed);
-    /* 클럽마다 최소 한 명씩 먼저 넣고, 남는 자리를 실력 순으로 채워요 —
-     * 안 그러면 강팀 선수만 표를 채워서 "리그 경쟁"이 아니라 "그 팀 명단"이 돼요. */
-    const out = [], used = new Set(), byClub = new Set();
+    all.sort((a, b) => b.player.str - a.player.str);
+    if (!need) return all.slice(0, n);
+    const out = [], left = Object.assign({}, need);
+    /* ⚠️ **우리 클럽에서 한 명은 넣어요.** 클럽 할당량을 없애는 게 이 변경의
+     * 전부인데, 여기만은 남깁니다 — 중계에 뜬 동료 골이 개인 순위에 쌓이는
+     * 배선(applyMateGoals)이 "우리 클럽 선수가 표에 있느냐"에 걸려 있어요.
+     * 없으면 내가 도움을 준 골이 표 어디에도 안 남습니다. */
+    const mineTop = all.find((c) => c.club === S.group);
+    if (mineTop) {
+      out.push(mineTop);
+      const p0 = mineTop.player.pos;
+      if (left[p0]) left[p0] -= 1;
+    }
     for (const cand of all) {
-      if (byClub.has(cand.club)) continue;
-      out.push(cand); used.add(cand.player); byClub.add(cand.club);
+      if (out.includes(cand)) continue;
+      const p = cand.player.pos;
+      if (!left[p]) continue;
+      left[p] -= 1;
+      out.push(cand);
       if (out.length >= n) break;
     }
+    // 자리가 남으면 실력 순으로 마저 채워요
     for (const cand of all) {
       if (out.length >= n) break;
-      if (used.has(cand.player)) continue;
-      out.push(cand); used.add(cand.player);
+      if (out.includes(cand)) continue;
+      out.push(cand);
     }
     return out.slice(0, n);
   }

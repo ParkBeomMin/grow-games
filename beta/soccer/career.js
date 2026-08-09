@@ -658,7 +658,15 @@ window.WingerCareer = (() => {
      * 생산량(pop)도 그 선수의 실력을 그대로 씁니다. 역할(RACE_ROLES)은 포지션에
      * 맞는 것을 골라요 — 센터백에게 스트라이커 생산량을 물리면 안 되니까요.
      * squad.js가 없는 옛 캐시에서는 예전처럼 이름을 지어 씁니다. */
-    const faces = window.WingerSquad ? WingerSquad.leagueFaces(RACE_ROLES.length) : [];
+    /* 역할마다 필요한 포지션 수를 세어 넘겨요 — 부문상이 득점왕·도움왕·철벽상으로
+     * 나뉘어 있어서, 여덟이 전부 공격수면 철벽상을 공격수가 받게 됩니다.
+     * 그 안에서는 **클럽을 안 가리고 실력 순**이에요(개인 기록 순위니까요). */
+    const need = {};
+    for (const r of RACE_ROLES) {
+      const p = RACE_POS[r.key] || "mf";
+      need[p] = (need[p] || 0) + 1;
+    }
+    const faces = window.WingerSquad ? WingerSquad.leagueFaces(RACE_ROLES.length, need) : [];
     if (faces.length === RACE_ROLES.length) {
       const byPos = {};
       for (const r of RACE_ROLES) (byPos[RACE_POS[r.key] || "mf"] ||= []).push(r);
