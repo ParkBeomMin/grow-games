@@ -316,10 +316,10 @@ window.WingerWorldCup = (() => {
     if (!S || !isWcYear(S.proYear)) return "";
     /* 대회 중 배지 — **어떻게 승선했는지**도 적어요. 🎲 깜짝 발탁은 소집 카드에서
      * 한 번 스치고 마는데, 그 한 번을 놓치면 "왜 문턱도 안 됐는데 뛰고 있지"가 됩니다. */
-    if (wc()) {
-      return `<div class="wc-badge">🌏 월드컵 진행 중 — 대표팀 훈련장에서 훈련이 잘 돼요`
-        + `${S.wcLucky === S.proYear ? `<br/>🎲 <b>깜짝 발탁</b>으로 승선했어요 — 문턱 아래에서 이름이 올랐습니다` : ""}</div>`;
-    }
+    /* ⚠️ 대회 중에는 **어떻게 뽑혔는지 안 적어요.** 소집 카드에서 한 번 말하면
+     * 충분하고, 대회 내내 "너는 깜짝 발탁이었다"를 붙여 두면 뛰는 내내 그 얘기예요
+     * (제보: "월드컵 발탁된 이후에 깜짝 발탁으로 선정되었다 이런 얘기는 빼자"). */
+    if (wc()) return `<div class="wc-badge">🌏 월드컵 진행 중 — 대표팀 훈련장에서 훈련이 잘 돼요</div>`;
     const stayed = hist().some((h) => h.y === S.proYear && h.stay);
     if (stayed) return `<div class="wc-badge dim">⚽ 이번 월드컵은 고사했어요 — 클럽에 집중해요</div>`;
     if (playedThisYear()) return "";
@@ -415,7 +415,11 @@ window.WingerWorldCup = (() => {
    *   · 동료가 넣은 골은 **그 선수 기록에 쌓여** 순위표에 그대로 올라와요
    *   · 다른 나라도 자기 경기를 치르고, 그 골은 그 나라 선수에게 배분돼요
    * 순위표는 이 명단 하나에서만 뽑습니다 — 표가 둘일 자리가 없어요. */
-  const FACE_N = 8;                          // 순위표에 보여줄 사람 수
+  /* 순위표에 보여줄 사람 수. **참가국 수(8)보다 커야** 해요 —
+   * 8이면 나라마다 한 자리씩으로 딱 차서, 우리 팀 동료가 아무리 많이 넣어도
+   * 표에 못 올라옵니다(제보: "우리팀 선수가 골 많이 넣으면 그 선수도 나오고 이런거").
+   * 나라별 한 자리를 채우고 남는 두 자리를 **득점 순으로** 줍니다. */
+  const FACE_N = 10;
   const NAT_G0 = 1.15, NAT_GK = 0.055;       // 한 나라가 한 경기에 넣는 골 (전력 74 → 1.15)
 
   const sqLib = () => window.WingerSquad;
@@ -715,7 +719,11 @@ window.WingerWorldCup = (() => {
     const w = wc();
     if (!w) return "";
     const me = myNation().name;
-    const second = w.myGroup.slice().sort((a, b) => (b.pts - a.pts) || (b.gd - a.gd))[1];
+    /* ⚠️ 반대쪽 4강에 서는 우리 조 대표는 **내가 아닌 쪽**이에요.
+     * 그냥 "조 2위"를 쓰면 내가 2위로 올라간 대회에서 **두 줄 다 우리 나라**가
+     * 됩니다(제보 스크린샷: 4강 두 경기가 모두 🇰🇷 대한민국). */
+    const adv = w.myGroup.slice().sort((a, b) => (b.pts - a.pts) || (b.gd - a.gd)).slice(0, 2);
+    const second = adv.find((t) => t.name !== me) || adv[1];
     const pool = w.others.slice().sort((a, b) => b.str - a.str);
     const semiOpp = (pool[1] || pool[0] || {}).name || "-";
     const finOpp = (pool[0] || {}).name || "-";
@@ -723,6 +731,7 @@ window.WingerWorldCup = (() => {
     const row = (label, a, b, state) => `<tr class="${state === "now" ? "me" : ""}">`
       + `<td>${label}</td><td>${a}</td><td class="wc-vs">vs</td><td>${b}</td>`
       + `<td>${state === "now" ? "지금" : state === "win" ? "승" : state === "lose" ? "패" : "—"}</td></tr>`;
+    // 중립 구장이라 홈/원정이 없어요 — 헤더도 그렇게 적어요
     const semiMine = done("semi");
     const rows = [
       row("4강", me, semiOpp, semiMine ? (semiMine.win ? "win" : "lose") : (w.stage === "semi" ? "now" : "")),
@@ -731,7 +740,7 @@ window.WingerWorldCup = (() => {
         w.stage === "final" ? "now" : ""),
     ];
     return `<table class="rank-table season-standings wc-bracket"><thead>
-        <tr><th>라운드</th><th>홈</th><th></th><th>원정</th><th></th></tr></thead>
+        <tr><th>라운드</th><th>대진</th><th></th><th></th><th></th></tr></thead>
       <tbody>${rows.join("")}</tbody></table>`;
   }
   // 순위표 자리에 들어갈 것 — 조별리그면 조 순위, 토너먼트면 대진표

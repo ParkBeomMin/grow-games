@@ -302,6 +302,13 @@ guard("⑨ 화면 전환", () => {
   console.log(`   4강 — "${semiSum}" / "${semiBody.slice(0, 60)}"`);
   check(/4강/.test(semiSum), "요약줄이 4강이라고 말한다");
   check(/4강/.test(semiBody) && /결승/.test(semiBody), "순위표 자리가 대진표로 바뀐다");
+  /* ⚠️ 반대쪽 4강에 서는 우리 조 대표는 **내가 아닌 쪽**이에요. 그냥 "조 2위"를
+   * 쓰면 내가 2위로 올라간 대회에서 두 줄 다 우리 나라가 됩니다(제보 스크린샷). */
+  const semiRows = [...$("pro-table-body").querySelectorAll("tbody tr")].slice(0, 2);
+  const nat0 = WC.myNation().name;
+  const mineIn = semiRows.filter((r) => r.textContent.includes(nat0)).length;
+  console.log(`   4강 두 줄 중 우리 나라가 든 줄 — ${mineIn}`);
+  check(mineIn === 1, `4강 두 경기에 우리 나라가 한 번만 나온다 (${mineIn}번)`);
   check(!/승점/.test(semiBody), "끝난 조 순위를 계속 보여주지 않는다");
   st.wc.stage = "final";
   Career.refreshPro();
@@ -348,6 +355,30 @@ guard("⑨ 화면 전환", () => {
   check(outside.length === 0,
     "중계에 뜨는 동료도 명단 안 사람이다 — 따로 지어내면 순위표 어디에도 없는 유령이 돼요");
   void shown;
+
+  /* 🥇 **우리 팀 동료도 많이 넣으면 표에 올라와야 해요.**
+   * 자리 수가 참가국 수와 같으면 나라마다 한 자리씩으로 딱 차서, 동료가 아무리
+   * 넣어도 못 올라옵니다(제보: "우리팀 선수가 골 많이 넣으면 그 선수도 나오고 이런거"). */
+  const mates0 = WC._t.mySquad().filter((x) => !x.me);
+  check(mates0.length > 0, "우리 나라 명단에 동료가 있다");
+  const star = mates0[0];
+  star.g = 99;                       // 대회를 통째로 지배한 동료
+  const shownNames = WC.faces().map((e) => e.p.name);
+  console.log(`   동료 ${star.name}가 99골 → 순위표 ${shownNames.indexOf(star.name) + 1}위`);
+  check(shownNames.includes(star.name),
+    "많이 넣은 동료가 순위표에 올라온다 — 자리가 참가국 수와 같으면 절대 못 올라와요");
+  check(WC._t.FACE_N > 8, `보여줄 자리(${WC._t.FACE_N})가 참가국 수(8)보다 많다`);
+  const mineShown = WC.faces().filter((e) => e.nat === WC.myNation().name).length;
+  check(mineShown >= 2, `우리 나라에서 둘 이상 올라올 수 있다 (${mineShown}명)`);
+  star.g = 0;
+
+  /* 🌏 대회 중 배지에는 **어떻게 뽑혔는지 안 적어요.** 소집 카드에서 한 번
+   * 말하면 충분하고, 대회 내내 "너는 깜짝 발탁이었다"를 붙이면 뛰는 내내 그 얘기예요. */
+  st.wcLucky = st.proYear;
+  const inBadge = WC.badgeHTML().replace(/<[^>]+>/g, " ");
+  console.log(`   대회 중 배지 — "${inBadge.trim()}"`);
+  check(!/깜짝 발탁/.test(inBadge), "대회 중 배지에 깜짝 발탁 얘기가 없다");
+
   check($("pro-race-body").querySelectorAll("tbody tr.me").length === 1,
     "내 줄은 하나뿐이다 — 우리 나라 얼굴은 나 자신이라 두 줄이 되면 명단이 갈린 거예요");
 
