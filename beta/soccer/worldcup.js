@@ -416,7 +416,7 @@ window.WingerWorldCup = (() => {
   const sqLib = () => window.WingerSquad;
   function natSquadOf(str, mine) {
     const L = sqLib();
-    return L && L._t && L._t.rollSquad ? L._t.rollSquad(str, !!mine) : [];
+    return L && L._t && L._t.rollSquad ? markAce(L._t.rollSquad(str, !!mine), !!mine) : [];
   }
   // 그 명단의 선발 11 — squad.js의 포메이션을 그대로 써요
   function xiOf(list) {
@@ -430,16 +430,30 @@ window.WingerWorldCup = (() => {
   }
   /* 골을 넣을 사람 — 선발 중에서 포지션 가중으로. squad.js의 pickScorer와 같은 눈금이에요 */
   const SCORE_W = { fw: 1.0, wg: 0.75, mf: 0.4, df: 0.12 };
+  /* 🌟 나라마다 **에이스가 한 명** 있어요. 대표팀 골은 실제로 한둘에게 몰립니다.
+   * 이게 없으면 상대 골이 11명에게 고르게 흩어져 개인 최다 득점자가 낮아지고,
+   * 내 골은 다 나에게 쌓이니 **득점왕이 너무 쉬워져요** (실측: 종합 80에서 23%).
+   * 8명 중 하나면 운만으로 12.5%인 자리라 그 근처가 맞습니다. */
+  const ACE_W = 2.6;
+  const wOf = (x) => (SCORE_W[x.pos] || 0.4) * (x.str / 70) * (x.ace ? ACE_W : 1);
   function pickFrom(xi) {
     if (!xi.length) return null;
     let total = 0;
-    for (const x of xi) total += (SCORE_W[x.pos] || 0.4) * (x.str / 70);
+    for (const x of xi) total += wOf(x);
     let r = Math.random() * total;
     for (const x of xi) {
-      r -= (SCORE_W[x.pos] || 0.4) * (x.str / 70);
+      r -= wOf(x);
       if (r <= 0) return x;
     }
     return xi[xi.length - 1];
+  }
+  // 그 나라에서 가장 잘하는 공격수를 에이스로 세워요 (내 나라는 내가 주인공이라 안 세워요)
+  function markAce(list, mine) {
+    if (mine) return list;
+    const fw = list.filter((x) => x.pos === "fw").sort((a, b) => b.str - a.str)[0]
+      || list.slice().sort((a, b) => b.str - a.str)[0];
+    if (fw) fw.ace = true;
+    return list;
   }
 
   /* 참가국 명단을 꾸려요. **읽는 쪽에서 채웁니다** — 이 필드는 나중에 생겨서
@@ -977,7 +991,7 @@ window.WingerWorldCup = (() => {
       NATIONS, wildBar, classBar, BAR_NAT_K, BAR_WOBBLE, WILD_GAP, barSeed,
       TRUST_GO, TRUST_STAY, PRIZE, FAME, AWARD_FAME,
       natSquadOf, xiOf, ensureSquads, advanceOthers, creditMates, cutNations, faces, matesOf,
-      decideAwards, faceScore, FACE_N, NAT_G0, NAT_GK, mySquad,
+      decideAwards, faceScore, FACE_N, NAT_G0, NAT_GK, ACE_W, SCORE_W, mySquad, markAce,
       LUCK_GAP, LUCK_MAX, luckP,
       NAT_SPREAD, ACE_DIV, ACE_LO, ACE_HI, natStr, teamStr, NAT_MEAN,
       FIRST_WC, WC_CYCLE, CAMP_FIRST, CAMP_BETWEEN, GROUP_GAMES,

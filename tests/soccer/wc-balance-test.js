@@ -42,7 +42,10 @@ const P={
   groupN:    grab(WC,/const GROUP_N = [^;]+;/,"GROUP_N"),
   groupG:    grab(WC,/const GROUP_GAMES = [^;]+;/,"GROUP_GAMES"),
   rivals:    grab(WC,/function rollGroupRivals\(info\) \{[\s\S]*?\n {2}\}/,"rollGroupRivals"),
-  face:      grab(WC,/const FACE_G0 = [^;]+;/,"FACE_G0·FACE_GK"),
+  natG:      grab(WC,/const NAT_G0 = [^;]+;/,"NAT_G0·NAT_GK"),
+  scoreW:    grab(WC,/const SCORE_W = \{[^}]*\};/,"SCORE_W"),
+  aceW:      grab(WC,/const ACE_W = [^;]+;/,"ACE_W"),
+  formation: grab(fs.readFileSync(D+"/squad.js","utf8"),/const FORMATION = \{[^}]*\};/,"FORMATION"),
 };
 const F=new Function("OVR","POS","NAT_C","seedShuffle","K","ACE",`
   const S = { pos: POS, stats: {}, condition: 75, fandom: 300, talents: {}, trans: {}, buffs: [], buffY: -1, proYear: 7 };
@@ -54,7 +57,7 @@ const F=new Function("OVR","POS","NAT_C","seedShuffle","K","ACE",`
   ${P.goalScale} ${P.poisson} ${P.tmGoals} ${P.mate} ${P.conc}
   ${P.contrib} ${P.posInfo} ${P.clutchScale} ${P.transLv} ${P.clutch}
   ${P.buffFns} ${P.fanCap} ${P.ratingDiv} ${P.ratingOf}
-  ${P.nations} ${P.groupN} ${P.groupG} ${P.face}
+  ${P.nations} ${P.groupN} ${P.groupG} ${P.natG} ${P.scoreW} ${P.aceW} ${P.formation}
   /* 국가 전력을 평균 쪽으로 K만큼 좁혀 봐요 (K=1이면 지금 그대로) */
   const MEAN = NATIONS.reduce((a,n)=>a+n.str,0)/NATIONS.length;
   for (const n of NATIONS) n.str = MEAN + (n.str - MEAN) * K;
@@ -77,11 +80,23 @@ const F=new Function("OVR","POS","NAT_C","seedShuffle","K","ACE",`
       .concat(pool.slice(0,GROUP_N-1).map(n=>({name:n.name,str:n.str,pts:0,gd:0})));
     const others = pool.slice(GROUP_N-1,7).map(n=>({name:n.name,str:n.str}));
     let myG=0, apps=0;
-    /* 🥇 다른 나라 얼굴들 — 참가국마다 하나씩. 우리 나라 자리는 나예요. */
-    const faces = myGroup.concat(others).filter(t=>t.name!==me.name)
-      .map(t=>({str:t.str, nat:t.name, g:0, out:false}));
-    const rollFaces = () => { for(const f of faces) if(!f.out)
-      f.g += poissonish(Math.max(0.05, FACE_G0 + (f.str - 74) * FACE_GK)); };
+    /* 🥇 다른 나라는 **선발 11명**에게 골을 나눠 가져요 — 실제 구현과 같은 눈금이에요.
+     * 순위표에 오르는 건 그중 최다 득점자라, 여기서도 최댓값을 봅니다. */
+    const slots = [];
+    for (const p0 of Object.keys(FORMATION)) for (let i=0;i<FORMATION[p0];i++) slots.push(p0);
+    const wOf = (p0) => SCORE_W[p0] || 0.4;
+
+    const nats = myGroup.concat(others).filter(t=>t.name!==me.name)
+      .map(t=>{ const sq=slots.map(p0=>({w:wOf(p0), g:0}));
+        /* 🌟 나라마다 에이스 한 명 — 실제 구현과 같은 눈금이에요 */
+        const ace=sq.filter((_,i)=>slots[i]==="fw")[0]||sq[0]; if(ace) ace.w*=ACE_W;
+        return {str:t.str, nat:t.name, out:false, sq}; });
+    const rollFaces = () => { for(const n of nats){ if(n.out) continue;
+      const G = poissonish(Math.max(0.1, NAT_G0 + (n.str - 74) * NAT_GK) * GOAL_SCALE * 3);
+      const tw = n.sq.reduce((a,pl)=>a+pl.w,0);
+      for(let i=0;i<G;i++){ let r=Math.random()*tw;
+        for(const pl of n.sq){ r-=pl.w; if(r<=0){ pl.g++; break; } } } } };
+    const topG = () => Math.max(0, ...nats.map(n=>Math.max(0, ...n.sq.map(pl=>pl.g))));
     for(let g=0; g<GROUP_GAMES; g++){
       const rivals = myGroup.filter(x=>!x.me);
       const opp = rivals[g % rivals.length];
@@ -98,9 +113,9 @@ const F=new Function("OVR","POS","NAT_C","seedShuffle","K","ACE",`
       const up=new Set();
       myGroup.slice().sort((a,b)=>(b.pts-a.pts)||(b.gd-a.gd)).slice(0,2).forEach(t=>up.add(t.name));
       others.slice().sort((a,b)=>b.str-a.str).slice(0,2).forEach(t=>up.add(t.name));
-      for(const f of faces) if(!up.has(f.nat)) f.out = true;
+      for(const n of nats) if(!up.has(n.nat)) n.out = true;
     }
-    const boot = () => myG >= Math.max(0, ...faces.map(f=>f.g));
+    const boot = () => myG >= topG();
     const rank = myGroup.slice().sort((a,b)=>(b.pts-a.pts)||(b.gd-a.gd)).findIndex(x=>x.me)+1;
     if(rank>2) return {result:"group", myG, apps, boot: boot()};
     const pool2 = others.slice().sort((a,b)=>b.str-a.str);
