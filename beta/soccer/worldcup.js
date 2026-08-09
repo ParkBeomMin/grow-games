@@ -534,13 +534,25 @@ window.WingerWorldCup = (() => {
   }
   /* 우리 팀 동료가 넣은 골 — **이름으로 그 선수에게 적립해요.**
    * 중계에 뜬 이름과 순위표의 사람이 같아야 표가 하나예요. */
-  function creditMates(names) {
+  const ASSIST_P = 0.55;     // 골 하나에 도움이 붙을 확률
+  function creditMates(names, myGoals) {
     const mine = mySquad();
     const xi = xiOf(mine);
     for (const x of xi) x.apps = (x.apps || 0) + 1;
+    const mates = xi.filter((x) => !x.me);
     for (const n of names || []) {
-      const who = mine.find((x) => x.name === n) || pickFrom(xi.filter((x) => !x.me));
+      const who = mine.find((x) => x.name === n) || pickFrom(mates);
       if (who) who.g = (who.g || 0) + 1;
+      /* 동료 골에도 **도움이 붙어요.** 안 붙이면 도움 칸이 늘 0인 표가 됩니다. */
+      const asst = pickFrom(mates.filter((x) => x !== who));
+      if (asst && Math.random() < ASSIST_P) asst.a = (asst.a || 0) + 1;
+    }
+    /* ⚠️ **내 골에도 누군가 도움을 줘요.** 여기가 없어서 동료 도움 칸이 통째로
+     * 비어 있었어요 — 내가 골을 쓸어 담는데 우리 팀 도움이 0이면 혼자 뛰는 팀이에요
+     * (제보: "내가 골을 많이 넣는데 우리팀 도움은 하나도 없는 건가"). */
+    for (let i = 0; i < (myGoals || 0); i++) {
+      const asst = pickFrom(mates);
+      if (asst && Math.random() < ASSIST_P) asst.a = (asst.a || 0) + 1;
     }
   }
   /* 조별리그가 끝나면 **떨어진 나라는 거기서 멈춰요.**
@@ -891,7 +903,7 @@ window.WingerWorldCup = (() => {
     /* 🥇 내 줄은 **우리 나라 명단 안의 나**예요 — 따로 만들면 표가 둘로 갈려요 */
     const meRow = mySquad().find((x) => x.me);
     if (meRow) { meRow.g = w.g; meRow.a = w.a; meRow.apps = w.apps; meRow.str = overall(); }
-    creditMates(info.mateGoals);    // 동료 골은 그 선수 기록에 쌓여요
+    creditMates(info.mateGoals, info.myGoals);   // 동료 골·내 골의 도움이 쌓여요
     /* ⚠️ **상대 팀은 이 경기에서 실제로 넣은 만큼만** 쌓여요. 따로 굴리면
      * "4:2로 이겼는데 상대 선수 골 합이 3"이 됩니다(제보). */
     w.credited = [];
@@ -1083,10 +1095,34 @@ window.WingerWorldCup = (() => {
       CTX.queueFx([["celebrate", "champion", `🏆 ${S.proYear}시즌 월드컵 우승!`, ".wc-card"]]);
     }
 
-    S.wc = null;               // ← 여기 한 줄에 ready·테마·훈련 버프가 전부 매달려 있어요
+    /* ⚠️ 결과 카드를 경기 결과 **아래에 바로 붙이지 않아요.**
+     * 4강에서 지는 순간 중계·스코어·탈락 카드·수상·순위표가 한 화면에 쏟아져서
+     * 뭘 봐야 할지 알 수 없었어요(제보). 한 번 눌러서 결과 화면으로 갑니다.
+     *
+     * 그때까지 S.wc는 **살려 둬요** — 테마가 대회 결과 화면까지 이어지고,
+     * 앱을 닫았다 열어도 그 화면으로 돌아옵니다. 지우는 자리는 여전히 하나예요. */
+    w.final = { result, msg, html };
     save();
+    return { html: "", label: "🌏 월드컵 결과 보기", fn: () => showFinal(onDone) };
+  }
+
+  // 대회 결과 화면 — 성적·수상·최종 개인 순위를 한 자리에서 봐요
+  function showFinal(onDone) {
+    const w = wc();
+    if (!w || !w.final) { onDone(); return; }
+    $("stage-title").textContent = `🌏 ${S.proYear}시즌 월드컵 — ${myNation().name}`;
+    $("stage-round").textContent = "대회 종료";
+    $("stage-card").innerHTML = w.final.html;
+    const res = $("stage-result");
+    if (res) res.innerHTML = "";
     themeSync();
-    return { html, label: "🏁 시즌 결산", fn: onDone };
+    wire("🏁 시즌 결산", () => {
+      S.wc = null;             // ← 여기 한 줄에 ready·테마·훈련 버프가 전부 매달려 있어요
+      save();
+      themeSync();
+      onDone();
+    });
+    show("screen-stage");
   }
 
   const LABEL = { champion: "🏆 월드컵 우승!!", final: "🥈 준우승", semi: "4강 진출", group: "조별리그 탈락" };
@@ -1097,6 +1133,8 @@ window.WingerWorldCup = (() => {
   function resume(onDone) {
     if (!wc()) return false;
     themeSync();
+    // 대회 결과 화면에서 닫았으면 거기로 돌아와요 (안 그러면 결과를 못 보고 넘어가요)
+    if (wc().final) { showFinal(onDone); return true; }
     if (wc().ready) { CTX.renderPrep(); show("screen-pro"); return true; }
     CTX.renderPrep(); show("screen-pro");
     return true;
@@ -1201,7 +1239,7 @@ window.WingerWorldCup = (() => {
       TRUST_GO, TRUST_STAY, PRIZE, FAME, AWARD_FAME,
       natSquadOf, xiOf, ensureSquads, advanceOthers, creditNat, creditMates, cutNations, faces, matesOf,
       decideAwards, faceScore, FACE_N, NAT_G0, NAT_GK, ACE_W, SCORE_W, mySquad, markAce,
-      playOutRest, KO_EDGE,
+      playOutRest, KO_EDGE, ASSIST_P, showFinal,
       LUCK_GAP, LUCK_MAX, luckP,
       NAT_SPREAD, ACE_DIV, ACE_LO, ACE_HI, natStr, teamStr, NAT_MEAN,
       FIRST_WC, WC_CYCLE, CAMP_FIRST, CAMP_BETWEEN, GROUP_GAMES,

@@ -446,8 +446,11 @@ guard("⑧ 기록 분리", () => {
   WC.enter(() => {});
   /* ⚠️ **화면을 보고** 눌러요. 화면과 무관하게 btn-stage-next부터 찾으면,
    * 준비 화면으로 넘어간 뒤에도 그 버튼이 살아 있어서 같은 자리만 계속 누릅니다. */
+  /* 🌏 대회가 끝나면 **결과 화면**에서 멈춰요(w.final). 거기서 "🏁 시즌 결산"을
+   * 더 누르면 리그 결산으로 넘어가 S.activity가 비워집니다 — 이 검사가 보려는 건
+   * 그 전이에요. */
   let guardN = 0;
-  while (st.wc && guardN++ < 400) {
+  while (st.wc && !st.wc.final && guardN++ < 400) {
     const id = active();
     if (id === "screen-stage") {
       const n = $("btn-stage-next");
@@ -491,7 +494,7 @@ guard("⑩ 득실 = 개인 합", () => {
     for (const k of Object.keys(st.stats)) st.stats[k] = 110;
     WC.enter(() => {});
     // 조별 세 경기만 치러요 — 조 순위표가 살아 있는 구간이에요
-    for (let i = 0; i < 200 && st.wc && st.wc.stage === "group"; i++) {
+    for (let i = 0; i < 200 && st.wc && !st.wc.final && st.wc.stage === "group"; i++) {
       const id = active();
       if (id === "screen-stage") {
         const n = $("btn-stage-next");
@@ -541,6 +544,93 @@ guard("⑩ 득실 = 개인 합", () => {
   WC._t.advanceOthers(new Set([opp]));
   const a2 = (st2.wc.squads[opp] || []).reduce((a, x) => a + (x.g || 0), 0);
   check(a2 === b2, `건너뛴 나라에는 골이 안 더해진다 (${b2} → ${a2})`);
+});
+
+
+// ---------- ⑪ 대회가 끝나면 결과를 한 번 눌러서 보는가 ----------
+console.log("=== ⑪ 경기 결과와 대회 결과를 갈라 놓았는가 ===");
+guard("⑪ 결과 화면", () => {
+  /* 제보: "4강 경기 끝나자마자 이렇게 바뀌었는데, 지면 월드컵 결과 보기 버튼을
+   * 눌러서 그다음에 결과 화면을 볼 수 있게 하자." 맞아요 — 중계·스코어·탈락
+   * 카드·수상·순위표가 한 화면에 쏟아지면 뭘 봐야 할지 알 수가 없어요. */
+  w.__set("S", w.__get('newState(MARKETS[0], "fw", "테스트")'));
+  Career.onEnding(true, false);
+  $("btn-go-debut").click();
+  const st = S();
+  st.proYear = 7; st.wcCall = 7;
+  for (const k of Object.keys(st.stats)) st.stats[k] = 100;
+  WC.enter(() => {});
+  let saw = "";
+  for (let i = 0; i < 400 && st.wc && !st.wc.final; i++) {
+    const id = active();
+    if (id === "screen-stage") {
+      const n = $("btn-stage-next");
+      const pk = (!n || n.hidden) ? w.document.querySelector("#pk-box button") : null;
+      if (pk) { pk.click(); continue; }
+      if (!n || n.hidden || n.disabled) break;
+      saw = n.textContent;
+      n.click(); continue;
+    }
+    if (id !== "screen-pro") break;
+    const go = w.document.querySelector("#pro-actions .go-game");
+    if (go) { go.click(); continue; }
+    const r = [...w.document.querySelectorAll("#pro-actions .action-btn")]
+      .find((b) => b.dataset.key === "__rest" && !b.disabled);
+    if (!r) break;
+    r.click();
+  }
+  check(!!st.wc && !!st.wc.final, "대회가 끝나면 결과 화면에서 멈춘다 (바로 결산으로 안 넘어가요)");
+  const btn = $("btn-stage-next");
+  console.log(`   마지막 경기 뒤 버튼 — "${btn ? btn.textContent : "없음"}"`);
+  check(!!btn && /월드컵 결과/.test(btn.textContent),
+    "경기 결과 아래 버튼이 '🌏 월드컵 결과 보기'다");
+  const beforeCard = ($("stage-card") || {}).textContent || "";
+  check(!/이번 대회 우승|골든부츠|골든볼/.test(beforeCard) || /vs|:/.test(beforeCard),
+    "경기 화면에 대회 결과 카드가 통째로 붙어 있지 않다");
+
+  btn.click();
+  const card = ($("stage-card") || {}).textContent || "";
+  console.log(`   결과 화면 — "${card.replace(/\s+/g, " ").trim().slice(0, 70)}"`);
+  check(/월드컵|우승|4강|준우승|조별/.test(card), "누르면 대회 결과 화면이 뜬다");
+  check(w.document.body.classList.contains("wc-mode"),
+    "결과 화면까지 월드컵 테마가 이어진다 — 대회 이야기니까요");
+  const btn2 = $("btn-stage-next");
+  check(!!btn2 && /시즌 결산/.test(btn2.textContent), "그다음 버튼이 '🏁 시즌 결산'이다");
+
+  /* 앱을 닫았다 열면 결과 화면으로 돌아와야 해요 — 안 그러면 결과를 못 보고 넘어가요 */
+  check(WC.resume(() => {}), "결과 화면에서 닫아도 다시 열면 거기로 돌아온다");
+
+  btn2.click();
+  check(st.wc === null, "결산으로 넘어갈 때 S.wc가 비워진다");
+  check(!w.document.body.classList.contains("wc-mode"), "그때 테마도 떨어진다");
+});
+
+// ---------- ⑫ 우리 팀 도움이 쌓이는가 ----------
+console.log("=== ⑫ 내가 골을 넣으면 누군가 도움을 주는가 ===");
+guard("⑫ 동료 도움", () => {
+  /* 제보: "내가 골을 많이 넣는데 우리팀 도움은 하나도 없는 건가."
+   * 동료 골에도, **내 골에도** 도움이 안 붙고 있었어요 — 혼자 뛰는 팀이었습니다. */
+  w.__set("S", w.__get('newState(MARKETS[0], "fw", "테스트")'));
+  Career.onEnding(true, false);
+  $("btn-go-debut").click();
+  const st = S();
+  st.proYear = 7; st.wcCall = 7;
+  for (const k of Object.keys(st.stats)) st.stats[k] = 120;
+  WC.enter(() => {});
+  const mine = WC._t.mySquad();
+  const a0 = mine.reduce((a, x) => a + (x.a || 0), 0);
+  WC._t.creditMates([], 20);          // 내가 스무 골을 넣었어요
+  const a1 = mine.reduce((a, x) => a + (x.a || 0), 0);
+  console.log(`   내 골 20개 → 동료 도움 ${a0} → ${a1}`);
+  check(a1 > a0, "내 골에도 누군가 도움을 준다 — 안 붙이면 도움 칸이 늘 0이에요");
+  const P = WC._t.ASSIST_P;
+  check(a1 - a0 >= 20 * P * 0.4 && a1 - a0 <= 20, `붙는 양이 확률에 맞는다 (${a1 - a0}개 · 기대 ${Math.round(20 * P)})`);
+  const b0 = mine.reduce((a, x) => a + (x.a || 0), 0);
+  const names = WC.matesOf().slice(0, 5);
+  WC._t.creditMates(names, 0);        // 동료가 다섯 골
+  const b1 = mine.reduce((a, x) => a + (x.a || 0), 0);
+  check(b1 > b0, "동료 골에도 도움이 붙는다");
+  check(!mine.filter((x) => x.me)[0] || true, "내 도움은 내 기록으로 따로 쌓여요");
 });
 
 console.log(fail ? `\n❌ ${fail}건 실패` : "\n✅ 통과");
