@@ -1028,7 +1028,7 @@ window.WingerCareer = (() => {
     if (S.wc && window.WingerWorldCup) {
       tbl.hidden = false;
       $("pro-table-sum").textContent = WingerWorldCup.groupSumText();
-      $("pro-table-body").innerHTML = WingerWorldCup.groupTableHTML();
+      $("pro-table-body").innerHTML = WingerWorldCup.tableHTML();   // 조별리그면 조 순위, 토너먼트면 대진표
     } else if (tableReady()) {
       tbl.hidden = false;
       const rows = tableRows();

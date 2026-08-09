@@ -603,7 +603,7 @@ window.WingerWorldCup = (() => {
     const { myGroup, others } = rollGroups();
     S.wc = {
       y: S.proYear, stage: "group", gIdx: 0, ready: false,
-      myGroup, others, opp: null, mates: [], started: null, natOut: [],
+      myGroup, others, opp: null, mates: [], started: null, natOut: [], path: [],
       g: 0, a: 0, d: 0, apps: 0, ratingSum: 0,
       done: onDone ? undefined : undefined,
     };
@@ -651,6 +651,38 @@ window.WingerWorldCup = (() => {
   /* 🌏 대회 중에는 준비 화면의 세 자리가 **월드컵을 봐야 해요.**
    * 리그 순위표·리그 개인 순위·클럽 선발 확률이 그대로 떠 있으면 화면이 딴 데를
    * 보고 있는 겁니다 — "표시와 판정이 서로 다른 것을 본다"의 사촌이에요. */
+  /* 🏆 토너먼트 대진표 — 조별리그가 끝나면 순위표 자리가 **여기로 바뀌어요.**
+   * 이미 끝난 조 순위를 계속 보여주면 화면이 지난 일을 보고 있는 거예요.
+   *
+   * 반대쪽 4강(우리 조 2위 vs 반대 조 1위)은 우리가 안 치르는 경기라 결과를
+   * 굴리지 않아요 — 결승 상대는 어차피 nextOpponent()가 정합니다. 대진의 모양만
+   * 보여줘서 "내가 어디쯤 와 있나"를 알 수 있게 해요. */
+  function bracketHTML() {
+    const w = wc();
+    if (!w) return "";
+    const me = myNation().name;
+    const second = w.myGroup.slice().sort((a, b) => (b.pts - a.pts) || (b.gd - a.gd))[1];
+    const pool = w.others.slice().sort((a, b) => b.str - a.str);
+    const semiOpp = (pool[1] || pool[0] || {}).name || "-";
+    const finOpp = (pool[0] || {}).name || "-";
+    const done = (st) => (w.path || []).find((p) => p.stage === st);
+    const row = (label, a, b, state) => `<tr class="${state === "now" ? "me" : ""}">`
+      + `<td>${label}</td><td>${a}</td><td class="wc-vs">vs</td><td>${b}</td>`
+      + `<td>${state === "now" ? "지금" : state === "win" ? "승" : state === "lose" ? "패" : "—"}</td></tr>`;
+    const semiMine = done("semi");
+    const rows = [
+      row("4강", me, semiOpp, semiMine ? (semiMine.win ? "win" : "lose") : (w.stage === "semi" ? "now" : "")),
+      row("4강", (second || {}).name || "-", finOpp, ""),
+      row("결승", w.stage === "final" ? me : "4강 승자", w.stage === "final" ? finOpp : "4강 승자",
+        w.stage === "final" ? "now" : ""),
+    ];
+    return `<table class="rank-table season-standings wc-bracket"><thead>
+        <tr><th>라운드</th><th>홈</th><th></th><th>원정</th><th></th></tr></thead>
+      <tbody>${rows.join("")}</tbody></table>`;
+  }
+  // 순위표 자리에 들어갈 것 — 조별리그면 조 순위, 토너먼트면 대진표
+  const tableHTML2 = () => (wc() && wc().stage !== "group" ? bracketHTML() : groupTableHTML());
+
   function groupSumText() {
     const w = wc();
     if (!w) return "";
@@ -692,7 +724,7 @@ window.WingerWorldCup = (() => {
     wrap.innerHTML = `<div class="av-modal squad-modal">
       <div class="av-title">🌏 ${S.proYear}시즌 월드컵</div>
       <div class="sq-note">${groupSumText()}</div>
-      ${groupTableHTML()}
+      ${tableHTML2()}
       ${recordHTML()}
       <div class="av-actions"><button class="btn btn-primary" id="btn-wcg-close">닫기</button></div>
     </div>`;
@@ -795,7 +827,7 @@ window.WingerWorldCup = (() => {
       rollGroupRivals(info);       // 조의 다른 경기도 같은 라운드를 치러요
       CTX.proLog(`🌏 월드컵 ${stageLabel()} vs ${w.opp} — ${info.teamGoals}:${info.oppGoals}`);
       const step = wcAfterMatch(info.res, onDone);
-      return { resultHTML: head + groupTableHTML() + step.html, nextLabel: step.label, nextFn: step.fn };
+      return { resultHTML: head + tableHTML2() + step.html, nextLabel: step.label, nextFn: step.fn };
     }
 
     /* 토너먼트에 무승부는 없어요 — 승부차기는 컵의 것을 그대로 재사용합니다.
@@ -877,6 +909,8 @@ window.WingerWorldCup = (() => {
       return toCamp(onDone, "4강");
     }
     if (w.stage === "semi") {
+      // 대진표가 지난 경기를 기억해야 "내가 어디쯤 와 있나"가 보여요
+      w.path = (w.path || []).concat([{ stage: "semi", opp: w.opp, win: res === "W" }]);
       if (res !== "W") return endTournament("semi", onDone, "4강에서 멈췄어요");
       w.stage = "final";
       return toCamp(onDone, "결승");
@@ -989,7 +1023,8 @@ window.WingerWorldCup = (() => {
 
   return {
     init, due, enter, resume, checkInvite, badgeHTML, startButton, themeSync, reportLine,
-    groupTableHTML, groupSumText, recordHTML, raceHTML, openGroup, matesOf, faces,
+    groupTableHTML, bracketHTML, tableHTML: tableHTML2, groupSumText, recordHTML,
+    raceHTML, openGroup, matesOf, faces,
     active: () => !!wc(),
     isWcYear, callBar, wildBar, luckP, myNation,
     _t: {

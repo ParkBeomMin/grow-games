@@ -268,6 +268,27 @@ guard("⑨ 화면 전환", () => {
   console.log(`   순위표 자리 — "${sum}"`);
   check(/월드컵|조별리그|4강|결승/.test(sum) || /🌏/.test(sum),
     "순위표 자리가 우리 조를 본다 (리그 순위표가 아니라)");
+
+  /* 🏆 조별리그가 끝나면 **대진표로 바뀌어야 해요.** 이미 끝난 조 순위를 계속
+   * 보여주면 화면이 지난 일을 보고 있는 겁니다. */
+  const groupBody = txt("pro-table-body");
+  check(/승점/.test(groupBody), "조별리그 중에는 조 순위(승점)를 본다");
+  st.wc.stage = "semi";
+  Career.refreshPro();
+  const semiSum = txt("pro-table-sum"), semiBody = txt("pro-table-body");
+  console.log(`   4강 — "${semiSum}" / "${semiBody.slice(0, 60)}"`);
+  check(/4강/.test(semiSum), "요약줄이 4강이라고 말한다");
+  check(/4강/.test(semiBody) && /결승/.test(semiBody), "순위표 자리가 대진표로 바뀐다");
+  check(!/승점/.test(semiBody), "끝난 조 순위를 계속 보여주지 않는다");
+  st.wc.stage = "final";
+  Career.refreshPro();
+  const finBody = txt("pro-table-body");
+  console.log(`   결승 — "${finBody.slice(0, 60)}"`);
+  check(/결승/.test(txt("pro-table-sum")), "결승에서는 결승이라고 말한다");
+  check(/지금/.test(finBody), "대진표가 지금 어느 경기인지 짚어 준다");
+  st.wc.stage = "group";
+  Career.refreshPro();
+  check(/승점/.test(txt("pro-table-body")), "조별리그로 되돌리면 조 순위로 돌아온다");
   check(!/리그1|리그2|리그3|챔피언십|세리에/.test(sum),
     `리그 이름이 안 남아 있다 — "${sum}"`);
 
