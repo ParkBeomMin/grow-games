@@ -518,3 +518,5 @@ body.wc-mode .rank-table thead th { background: rgba(242, 193, 78, .12); color: 
 .wc-award.me { color: var(--accent); font-weight: 600; }
 .wc-award b { color: var(--text); }
 .wc-award.me b { color: var(--accent); }
+/* 🎲 깜짝 발탁 — 소집 카드의 한 줄 */
+.wc-lucky { color: var(--accent); font-size: .88rem; margin: .3rem 0; }

@@ -193,7 +193,7 @@ guard("④ 늦깎이", () => {
   S().wc = null;
 });
 guard("⑤ 미달", () => {
-  const st = setup(7, 2, barAt(7) - 8);
+  const st = setup(7, 2, barAt(7) - WC._t.LUCK_GAP - 5);   // 🎲 깜짝 발탁 사정권 밖
   st.wcCall = undefined;
   let done = false;
   WC.enter(() => { done = true; });
@@ -202,6 +202,60 @@ guard("⑤ 미달", () => {
   const h = (st.wcHist || []).filter((x) => x.y === 7)[0];
   check(!!h && h.result === "none", `기록에 'none'이 남는다 (${h ? h.result : "없음"}) — 결산 한 줄과 통계의 근거예요`);
   check(/문턱/.test(WC.reportLine()), `결산 문구가 문턱을 알려준다 — "${WC.reportLine()}"`);
+});
+
+// ---------- ⑤-b 🎲 깜짝 발탁 ----------
+console.log("=== ⑤-b 문턱 아래에서도 가끔 이름이 올라오는가 ===");
+guard("⑤-b 깜짝 발탁", () => {
+  const P = WC.luckP, GAP = WC._t.LUCK_GAP;
+  const bar = 80;
+  const curve = [];
+  for (let d = 0; d <= GAP + 2; d++) curve.push([d, P(bar - d, bar)]);
+  console.log(`   문턱까지 ${curve.filter(([d]) => d <= GAP + 1).map(([d, p]) => `${d}→${Math.round(p * 100)}%`).join(" · ")}`);
+
+  /* ⚠️ 방향이 핵심이에요 — 문턱을 넘은 사람은 **여전히 100%**입니다.
+   * 확률 판정을 뺐던 이유가 "78인데 왜 안 뽑혀"였는데, 그걸 되살리면 안 돼요. */
+  check(P(bar, bar) === 0 && P(bar + 5, bar) === 0,
+    "문턱을 넘으면 도박이 없다 — 넘은 사람은 100% 뽑혀요 (여기가 확률이 되면 안 돼요)");
+  check(P(bar - 1, bar) > 0, `문턱 코앞에서는 가능성이 있다 (${Math.round(P(bar - 1, bar) * 100)}%)`);
+  check(P(bar - GAP - 1, bar) === 0, `너무 멀면 없다 (문턱 -${GAP + 1})`);
+  // 가까울수록 높아야 훈련이 헛되지 않아요
+  let mono = true;
+  for (let d = 2; d <= GAP; d++) if (P(bar - d, bar) > P(bar - d + 1, bar)) mono = false;
+  check(mono, "문턱에 가까울수록 확률이 높다 — 훈련이 헛되지 않아야 해요");
+  check(P(bar - 1, bar) <= 0.5, `코앞이어도 절반을 안 넘는다 (${Math.round(P(bar - 1, bar) * 100)}%) — 문턱이 의미를 잃으면 안 돼요`);
+
+  /* 배지가 확률을 **미리** 말하는가 — 감춘 도박은 버그로 읽혀요 */
+  const st = setup(7, 2, barAt(7) - 3);
+  st.wcCall = undefined;
+  const badge = WC.badgeHTML().replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+  console.log(`   배지 — "${badge.trim()}"`);
+  check(/깜짝 발탁/.test(badge), "배지가 깜짝 발탁을 미리 알려준다");
+  check(/%/.test(badge), "확률을 숫자로 적는다 — 감춘 도박은 버그로 읽혀요");
+  check(/문턱까지/.test(badge), "문턱까지 얼마나 남았는지도 적는다");
+
+  /* 실제로 굴러가는가 — 사정권에서 여러 번 굴려 둘 다 나오는지 */
+  let called = 0, missed = 0;
+  for (let i = 0; i < 60; i++) {
+    const s2 = setup(7, 2, barAt(7) - 2);
+    s2.wcCall = undefined; s2.wcHist = [];
+    let done = false;
+    WC.enter(() => { done = true; });
+    if (s2.wc) { called++; s2.wc = null; } else missed++;
+  }
+  console.log(`   문턱 -2에서 60번 — 발탁 ${called} · 미발탁 ${missed}`);
+  check(called > 0, `문턱 아래인데 뽑히는 판이 있다 (${called}/60)`);
+  check(missed > 0, `그렇다고 늘 뽑히지는 않는다 (${missed}/60)`);
+
+  /* 사정권 밖은 한 번도 안 뽑혀야 해요 */
+  let far = 0;
+  for (let i = 0; i < 40; i++) {
+    const s3 = setup(7, 2, barAt(7) - GAP - 4);
+    s3.wcCall = undefined; s3.wcHist = [];
+    WC.enter(() => {});
+    if (s3.wc) { far++; s3.wc = null; }
+  }
+  check(far === 0, `사정권 밖(문턱 -${GAP + 4})에서는 한 번도 안 뽑힌다 (${far}/40)`);
 });
 
 // ---------- ⑥ 와일드카드는 3시즌에만 ----------

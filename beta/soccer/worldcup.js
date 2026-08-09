@@ -100,6 +100,31 @@ window.WingerWorldCup = (() => {
   }
   const wildBar = (year) => callBar(year) - WILD_GAP;
 
+  /* 🎲 깜짝 발탁 — **문턱 아래에서도 가끔 이름이 올라와요.**
+   *
+   * 제보: "종합 문턱에 안 되더라도 3시즌은 와일드카드로 뽑잖아. 다른 시즌 때는
+   * 낮은 확률로 소집시키는 건 어때??"
+   *
+   * ⚠️ 방향이 중요해요. 설계 때 확률 판정을 뺀 이유는 **문턱을 넘었는데 떨어지는**
+   * 일을 막으려는 거였어요 — "78인데 왜 안 뽑혀"는 반드시 제보가 됩니다.
+   * 이건 반대예요. 문턱 아래에서 **가끔 올라오는 것**이라 빼앗는 게 아니라 얹는
+   * 거고, 넘은 사람은 여전히 100% 뽑혀요. 방향만 지키면 아쉬움이 아니라 선물이에요.
+   *
+   * 그래도 "지난번엔 72로 뽑혔는데 이번엔 74인데 왜 안 뽑혀"는 남아요. 그래서
+   * **확률을 미리 화면에 적습니다.** 감춘 도박은 버그로 읽히고, 적어 둔 도박은
+   * 이야기가 돼요(🎲 무리한 특훈이 같은 이유로 확률을 적어요).
+   *
+   * 문턱에 가까울수록 확률이 높아요 — 훈련이 헛되지 않아야 하니까요.
+   * 굴리는 건 **시즌 끝에 딱 한 번**이에요(각성처럼 한 번의 결정). 준비 화면에서
+   * 다시 그릴 때마다 굴리면 될 때까지 새로고침하는 게임이 됩니다. */
+  const LUCK_GAP = 8;        // 문턱에서 이만큼 아래까지가 사정권
+  const LUCK_MAX = 0.35;     // 문턱 코앞(1 차이)일 때의 확률
+  function luckP(ovr, bar) {
+    const d = bar - ovr;
+    if (d <= 0 || d > LUCK_GAP) return 0;
+    return LUCK_MAX * Math.pow(1 - (d - 1) / LUCK_GAP, 1.6);
+  }
+
   /* 🌱 유망주 와일드카드 — **3시즌에만** 열리는 낮은 문턱이에요.
    *
    * 3시즌 도달률이 5~20%라, 이게 없으면 대부분의 플레이어는 시즌 일곱 개를 지나야
@@ -298,8 +323,11 @@ window.WingerWorldCup = (() => {
     const ovr = Math.round(overall());
     /* 나라를 같이 적어요 — 문턱이 대회마다 달라지니, 숫자만 보이면
      * "왜 지난번이랑 다르지?"가 됩니다. 이유가 화면에 있어야 해요. */
+    const p = luckP(ovr, bar);
     return `<div class="wc-badge dim">🌏 올해는 월드컵의 해 — ${myNation().name} 소집 문턱 <b>종합 ${bar}</b>`
-      + ` (지금 ${ovr})${wildOpen(S) ? " · 🌱 유망주 와일드카드" : ""}</div>`;
+      + ` (지금 ${ovr})${wildOpen(S) ? " · 🌱 유망주 와일드카드" : ""}`
+      /* 도박은 **미리 적어야** 이야기가 돼요. 감추면 버그로 읽힙니다. */
+      + `${p > 0 ? `<br/>🎲 문턱까지 <b>${bar - ovr}</b> — 깜짝 발탁 가능성 <b>${Math.round(p * 100)}%</b>` : ""}</div>`;
   }
 
   // ---------- 시즌 끝 관문 ----------
@@ -317,14 +345,26 @@ window.WingerWorldCup = (() => {
     const ovr = overall();
     /* 초대장을 받았으면 종합이 떨어졌어도 들어가요(래칫). 못 받았어도 지금
      * 문턱을 넘으면 늦깎이로 합류합니다. */
+    /* 🎲 깜짝 발탁 — 문턱 아래일 때 **여기서 딱 한 번** 굴려요.
+     * 각성처럼 한 번의 결정이라 Math.random이 맞아요 — 확률을 '읽는' 자리가
+     * 아니라 '거는' 자리입니다(배지가 읽는 자리고, 거기는 산식이라 안 흔들려요). */
+    let lucky = false;
     if (!called() && ovr < bar) {
-      S.wcHist = hist().concat([{ y: S.proYear, result: "none", g: 0, a: 0, apps: 0 }]);
-      CTX.proLog(`🌏 이번 월드컵은 TV로 봤어요 — 소집 문턱은 종합 ${bar}예요 (지금 ${Math.round(ovr)})`);
-      save();
-      onDone();
-      return;
+      const p = luckP(ovr, bar);
+      lucky = p > 0 && Math.random() < p;
+      if (!lucky) {
+        S.wcHist = hist().concat([{ y: S.proYear, result: "none", g: 0, a: 0, apps: 0 }]);
+        CTX.proLog(p > 0
+          ? `🌏 이번 월드컵은 TV로 봤어요 — 깜짝 발탁(${Math.round(p * 100)}%)도 비껴갔어요`
+          : `🌏 이번 월드컵은 TV로 봤어요 — 소집 문턱은 종합 ${bar}예요 (지금 ${Math.round(ovr)})`);
+        save();
+        onDone();
+        return;
+      }
+      CTX.proLog(`🎲 깜짝 발탁! 명단 발표 직전에 이름이 올랐어요 (가능성 ${Math.round(p * 100)}%)`);
     }
     if (!called()) lockCall(wildOpen(S) && ovr < callBar());
+    if (lucky) S.wcLucky = S.proYear;
     startTournament(onDone);
   }
 
@@ -457,6 +497,8 @@ window.WingerWorldCup = (() => {
       <div class="wc-card">
         <div class="draft-emoji">🌏</div>
         <div class="draft-title">대표팀에 합류했어요</div>
+        ${S.wcLucky === S.proYear
+          ? `<div class="wc-lucky">🎲 <b>깜짝 발탁</b> — 명단 발표 직전에 이름이 올랐어요</div>` : ""}
         <div class="tour-line">소집 기간이라 몸을 만들었어요 — <b>컨디션 80 회복</b><br/>
           대표팀 훈련장에서는 <b>훈련이 잘 돼요</b></div>
         ${groupTableHTML()}
@@ -806,8 +848,11 @@ window.WingerWorldCup = (() => {
     const h = hist().filter((x) => x.y === S.proYear)[0];
     if (!h) return "";
     if (h.result === "none") {
-      return h.stay ? "🌏 월드컵 — 대표팀 소집을 고사하고 클럽에 남았어요"
-        : `🌏 월드컵 — ${myNation().name} 소집 문턱(종합 ${wildOpen(S) ? wildBar() : callBar()})에 닿지 못했어요`;
+      if (h.stay) return "🌏 월드컵 — 대표팀 소집을 고사하고 클럽에 남았어요";
+      const bar0 = wildOpen(S) ? wildBar() : callBar();
+      const d = bar0 - Math.round(overall());
+      return `🌏 월드컵 — ${myNation().name} 소집 문턱(종합 ${bar0})에 닿지 못했어요`
+        + (d > 0 && d <= LUCK_GAP ? ` · 🎲 깜짝 발탁도 비껴갔어요 (문턱까지 ${d})` : "");
     }
     const aw = (h.awards || []).map((id) => (id === "boot" ? "🥇 골든부츠" : "🏅 골든볼")).join(" · ");
     return `🌏 월드컵 ${LABEL[h.result]} — ${h.apps}경기 ⚽${h.g} 🅰️${h.a}${aw ? ` · ${aw}` : ""}`;
@@ -816,11 +861,12 @@ window.WingerWorldCup = (() => {
   return {
     init, due, enter, resume, checkInvite, badgeHTML, startButton, themeSync, reportLine,
     groupTableHTML, groupSumText, recordHTML, raceHTML, openGroup, active: () => !!wc(),
-    isWcYear, callBar, wildBar, myNation,
+    isWcYear, callBar, wildBar, luckP, myNation,
     _t: {
       NATIONS, wildBar, classBar, BAR_NAT_K, BAR_WOBBLE, WILD_GAP, barSeed,
       TRUST_GO, TRUST_STAY, PRIZE, FAME, AWARD_FAME,
       rollFaces, advanceFaces, cutFaces, decideAwards, faceScore, FACE_G0, FACE_GK,
+      LUCK_GAP, LUCK_MAX, luckP,
       NAT_SPREAD, ACE_DIV, ACE_LO, ACE_HI, natStr, teamStr, NAT_MEAN,
       FIRST_WC, WC_CYCLE, CAMP_FIRST, CAMP_BETWEEN, GROUP_GAMES,
       wildOpen, rollGroups, wcAfterMatch, endTournament, MARKET_NATION,
