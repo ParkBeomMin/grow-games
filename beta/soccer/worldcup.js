@@ -572,59 +572,57 @@ window.WingerWorldCup = (() => {
     w.natOut = Object.keys(w.squads || {}).filter((n) => !up.has(n));
   }
 
-  /* 순위표에 올릴 얼굴 — **나라마다 최소 한 명**씩 먼저 넣고 남는 자리를 득점 순으로.
-   * 안 그러면 강한 나라 선수만 표를 채워서 "대회 순위"가 아니라 "그 나라 명단"이 돼요
-   * (squad.js의 leagueFaces가 같은 이유로 같은 규칙을 씁니다). */
+  /* 순위표에 올릴 사람 — **순수하게 기록 순**이에요.
+   *
+   * 한때는 "나라마다 최소 한 명"을 먼저 채웠어요(리그의 leagueFaces가 클럽마다
+   * 한 명씩 넣는 걸 그대로 가져왔습니다). 그런데 이건 **개인 기록 순위**예요 —
+   * 나라를 고르게 보여주는 표가 아니라 잘한 사람이 위에 오는 표입니다
+   * (제보: "개인기록에는 나라마다 한자리는 필요없어. 선수 개인들의 기록이
+   * 보여지는 거고, 시뮬레이션 돌고 나서 각 개인들의 기록에 따라 보여지면 돼").
+   *
+   * 참가국 8개 × 16명, **128명 전부**가 후보예요. 정렬은 골 3점 + 도움 1점.
+   * 내가 순위 밖이면 아래에 따로 핀으로 붙여요 — 리그 개인 순위와 같은 방식이에요. */
   function faces() {
     const w = wc();
     const sq = ensureSquads();
     if (!sq) return [];
-    const meName = myNation().name;
     const all = [];
     for (const nat of Object.keys(sq)) {
       for (const x of sq[nat]) all.push({ p: x, nat, out: (w.natOut || []).includes(nat) });
     }
     const key = (e) => (e.p.g || 0) * 3 + (e.p.a || 0);
-    all.sort((a, b) => key(b) - key(a) || b.p.str - a.p.str);
-    const out = [], used = new Set(), byNat = new Set();
-    const meRow = all.find((e) => e.p.me);
-    if (meRow) { out.push(meRow); used.add(meRow.p); byNat.add(meName); }
-    /* 🇰🇷 **우리 나라에는 한 자리를 더 보장해요.**
-     * 나라마다 한 자리씩 채우면 우리 자리는 나로 차 버려서, 동료는 아무리 잘해도
-     * 다른 나라 선수들에게 밀립니다(제보: "내가 1골 2도움 했는데 우리 팀 선수가
-     * 개인 기록 랭킹에 안 보여서"). 팀 골의 대부분을 내가 넣는 게임이라 동료는
-     * 구조적으로 뒤처지는데, 그렇다고 우리 팀 이야기가 화면에서 사라지면 안 돼요.
-     * 기여가 0이면 안 넣어요 — 빈 줄은 정보가 아니에요. */
-    const mate = all.find((e) => e.nat === meName && !e.p.me && key(e) > 0);
-    if (mate) { out.push(mate); used.add(mate.p); }
-    for (const e of all) {
-      if (byNat.has(e.nat) || used.has(e.p)) continue;
-      out.push(e); used.add(e.p); byNat.add(e.nat);
-      if (out.length >= FACE_N) break;
-    }
-    for (const e of all) {
-      if (out.length >= FACE_N) break;
-      if (used.has(e.p)) continue;
-      out.push(e); used.add(e.p);
-    }
-    return out.sort((a, b) => (b.p.g || 0) - (a.p.g || 0) || (b.p.a || 0) - (a.p.a || 0));
+    all.sort((a, b) => key(b) - key(a) || (b.p.g || 0) - (a.p.g || 0) || b.p.str - a.p.str);
+    return all;
   }
+  // 화면에 그릴 줄 — 상위 N명, 내가 밖이면 내 줄을 따로 알려줘요
+  function faceRows() {
+    const all = faces();
+    const top = all.slice(0, FACE_N);
+    const myAt = all.findIndex((e) => e.p.me);
+    return { top, all, myAt, pinned: myAt >= FACE_N ? all[myAt] : null };
+  }
+
   const faceScore = (e) => (e.p.g || 0) * 2 + (e.p.a || 0);
 
   /* 🥇 대회 개인 순위표 — 리그 개인 순위와 같은 모양이에요 */
   function raceHTML() {
     const w = wc() || {};
-    const rows = faces();
-    if (!rows.length) return recordHTML();
+    const { top, myAt, pinned } = faceRows();
+    if (!top.length) return recordHTML();
     const line = (e, i) => `<tr class="${e.p.me ? "me" : ""}"><td>${i + 1}</td>`
       + `<td>${e.p.name}${e.p.me ? " <b>(나)</b>" : ""}<span class="wc-nat">${e.nat}`
       /* 대회가 끝났으면 🏆 우승국만 표시해요. 진행 중일 때만 탈락을 적습니다 —
        * 끝난 뒤엔 우승국 말고 다 탈락이라 아무 말도 안 하는 것과 같아요. */
       + `${w.champ ? (e.nat === w.champ ? " · 🏆 우승" : "") : (e.out ? " · 탈락" : "")}</span></td>`
       + `<td>${e.p.g || 0}</td><td>${e.p.a || 0}</td></tr>`;
+    /* 내가 순위 밖이면 아래에 붙여요 — 내 줄이 아예 없으면 "나는 몇 등이지"를
+     * 알 방법이 없어요(리그 개인 순위·평점 순위표와 같은 방식이에요). */
+    const pin = pinned
+      ? `<tr class="hof-gap-row"><td colspan="4">⋯</td></tr>${line(pinned, myAt)}`
+      : "";
     return `<table class="rank-table season-standings"><thead>
         <tr><th>#</th><th>선수 · 국가</th><th>⚽</th><th>🅰️</th></tr></thead>
-      <tbody>${rows.map(line).join("")}</tbody></table>` + recordHTML();
+      <tbody>${top.map(line).join("")}${pin}</tbody></table>` + recordHTML();
   }
 
   /* 🏁 **내가 떨어져도 대회는 끝까지 굴러요.**
@@ -1244,13 +1242,14 @@ window.WingerWorldCup = (() => {
   return {
     init, due, enter, resume, checkInvite, badgeHTML, startButton, themeSync, reportLine,
     groupTableHTML, bracketHTML, tableHTML: tableHTML2, groupSumText, recordHTML,
-    raceHTML, openGroup, matesOf, faces,
+    raceHTML, openGroup, matesOf, faces, faceRows,
     active: () => !!wc(),
     isWcYear, callBar, wildBar, luckP, myNation,
     _t: {
       NATIONS, wildBar, classBar, BAR_NAT_K, BAR_WOBBLE, WILD_GAP, barSeed,
       TRUST_GO, TRUST_STAY, PRIZE, FAME, AWARD_FAME,
-      natSquadOf, xiOf, ensureSquads, advanceOthers, creditNat, creditMates, cutNations, faces, matesOf,
+      natSquadOf, xiOf, ensureSquads, advanceOthers, creditNat, creditMates, cutNations,
+      faces, faceRows, matesOf,
       decideAwards, faceScore, FACE_N, NAT_G0, NAT_GK, ACE_W, SCORE_W, mySquad, markAce,
       playOutRest, KO_EDGE, ASSIST_P, showFinal,
       LUCK_GAP, LUCK_MAX, luckP,

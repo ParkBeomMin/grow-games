@@ -356,37 +356,39 @@ guard("⑨ 화면 전환", () => {
     "중계에 뜨는 동료도 명단 안 사람이다 — 따로 지어내면 순위표 어디에도 없는 유령이 돼요");
   void shown;
 
-  /* 🥇 **우리 팀 동료도 많이 넣으면 표에 올라와야 해요.**
-   * 자리 수가 참가국 수와 같으면 나라마다 한 자리씩으로 딱 차서, 동료가 아무리
-   * 넣어도 못 올라옵니다(제보: "우리팀 선수가 골 많이 넣으면 그 선수도 나오고 이런거"). */
-  const mates0 = WC._t.mySquad().filter((x) => !x.me);
-  check(mates0.length > 0, "우리 나라 명단에 동료가 있다");
-  const star = mates0[0];
-  star.g = 99;                       // 대회를 통째로 지배한 동료
-  const shownNames = WC.faces().map((e) => e.p.name);
-  console.log(`   동료 ${star.name}가 99골 → 순위표 ${shownNames.indexOf(star.name) + 1}위`);
-  check(shownNames.includes(star.name),
-    "많이 넣은 동료가 순위표에 올라온다 — 자리가 참가국 수와 같으면 절대 못 올라와요");
-  check(WC._t.FACE_N > 8, `보여줄 자리(${WC._t.FACE_N})가 참가국 수(8)보다 많다`);
-  const mineShown = WC.faces().filter((e) => e.nat === WC.myNation().name).length;
-  check(mineShown >= 2, `우리 나라에서 둘 이상 올라올 수 있다 (${mineShown}명)`);
-  star.g = 0;
+  /* 🥇 **개인 기록 순위**예요 — 나라를 고르게 보여주는 표가 아니라
+   * 잘한 사람이 위에 오는 표입니다. 참가국 8개 × 16명, 128명 전부가 후보예요. */
+  const cand = WC.faces();
+  console.log(`   후보 ${cand.length}명 · 화면에 ${WC.faceRows().top.length}줄`);
+  check(cand.length >= 8 * 11, `참가국 선수 전부가 후보다 (${cand.length}명)`);
+  const keyOf = (e) => (e.p.g || 0) * 3 + (e.p.a || 0);
+  let desc = true;
+  for (let i = 1; i < cand.length; i++) if (keyOf(cand[i]) > keyOf(cand[i - 1])) desc = false;
+  check(desc, "순위가 기록 순으로 정렬돼 있다 (골 3점 + 도움 1점)");
 
-  /* 🇰🇷 **우리 나라에는 한 자리를 더 보장해요.** 나라마다 한 자리씩 채우면 우리
-   * 자리는 나로 차 버려서, 동료는 조금 넣어서는 절대 못 올라와요 — 팀 골의
-   * 대부분을 내가 넣는 게임이라 구조적으로 뒤처지거든요. 그렇다고 우리 팀
-   * 이야기가 화면에서 사라지면 안 됩니다. */
-  const mates1 = WC._t.mySquad().filter((x) => !x.me);
-  mates1.forEach((x) => { x.g = 0; x.a = 0; });
-  mates1[0].a = 1;                        // 딱 도움 하나만 있는 동료
-  const rows1 = WC.faces();
-  const mineRows = rows1.filter((e) => e.nat === WC.myNation().name);
-  console.log(`   동료가 도움 하나뿐일 때 — 우리 나라 ${mineRows.length}줄 (${mineRows.map((e) => e.p.name).join(", ")})`);
-  check(mineRows.length >= 2, `기여가 조금이라도 있으면 동료가 표에 남는다 (${mineRows.length}줄)`);
-  /* 기여가 0이면 안 넣어요 — 빈 줄은 정보가 아니에요 */
-  mates1.forEach((x) => { x.g = 0; x.a = 0; });
-  const only = WC.faces().filter((e) => e.nat === WC.myNation().name);
-  check(only.length === 1, `아무도 기여가 없으면 나만 남는다 (${only.length}줄)`);
+  /* 나라별 자리 보장은 **없어요.** 한 나라가 여럿 올라올 수 있어야 개인 순위예요. */
+  const mates2 = WC._t.mySquad().filter((x) => !x.me);
+  mates2.slice(0, 3).forEach((x, i) => { x.g = 40 - i; });
+  const top2 = WC.faceRows().top;
+  const mineTop = top2.filter((e) => e.nat === WC.myNation().name).length;
+  console.log(`   우리 팀 셋이 40·39·38골 → 상위 ${top2.length}줄 중 우리 나라 ${mineTop}줄`);
+  check(mineTop >= 4, `한 나라가 여럿 올라올 수 있다 (${mineTop}줄) — 나라별 한 자리 규칙이 없어야 해요`);
+  check(top2.slice(0, 3).every((e) => e.nat === WC.myNation().name),
+    "많이 넣으면 위쪽을 우리 팀이 채운다");
+  mates2.forEach((x) => { x.g = 0; x.a = 0; });
+
+  /* 내가 순위 밖이면 **아래에 핀으로** 붙어요 — 없으면 "나는 몇 등이지"를 알 수 없어요 */
+  const others2 = Object.keys(st.wc.squads).filter((n) => n !== WC.myNation().name);
+  others2.forEach((n) => st.wc.squads[n].slice(0, 3).forEach((x) => { x.g = 30; }));
+  const rows2 = WC.faceRows();
+  console.log(`   내가 ${rows2.myAt + 1}위 → 핀 ${rows2.pinned ? "붙음" : "없음"}`);
+  check(rows2.myAt >= WC._t.FACE_N, "다른 나라가 쓸어 담으면 나는 순위 밖으로 밀린다");
+  check(!!rows2.pinned, "그때 내 줄이 핀으로 남는다");
+  Career.refreshPro();
+  const html2 = $("pro-race-body").innerHTML;
+  check(/hof-gap-row/.test(html2) && /⋯/.test(html2), "화면에도 ⋯ 구분선과 함께 내 줄이 붙는다");
+  check($("pro-race-body").querySelectorAll("tbody tr.me").length === 1, "내 줄은 그래도 하나뿐이다");
+  others2.forEach((n) => st.wc.squads[n].forEach((x) => { x.g = 0; }));
 
   /* 🌏 대회 중 배지에는 **어떻게 뽑혔는지 안 적어요.** 소집 카드에서 한 번
    * 말하면 충분하고, 대회 내내 "너는 깜짝 발탁이었다"를 붙이면 뛰는 내내 그 얘기예요. */
