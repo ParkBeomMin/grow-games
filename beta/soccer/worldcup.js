@@ -456,11 +456,16 @@ window.WingerWorldCup = (() => {
     }
     return xi[xi.length - 1];
   }
-  // 그 나라에서 가장 잘하는 공격수를 에이스로 세워요 (내 나라는 내가 주인공이라 안 세워요)
+  /* 그 나라에서 가장 잘하는 공격수를 에이스로 세워요.
+   *
+   * ⚠️ **우리 나라에도 세웁니다**(나는 빼고). 예전엔 "내가 주인공이니까"라며 안
+   * 세웠는데, 그러면 동료 골이 열한 명에게 고루 흩어져서 **아무도 순위표에
+   * 못 올라와요**(제보: "내가 1골 2도움 했는데 우리 팀 선수가 개인 기록 랭킹에
+   * 안 보여서"). 실제 대표팀에도 나 말고 한 명은 더 넣는 사람이 있어요. */
   function markAce(list, mine) {
-    if (mine) return list;
-    const fw = list.filter((x) => x.pos === "fw").sort((a, b) => b.str - a.str)[0]
-      || list.slice().sort((a, b) => b.str - a.str)[0];
+    const pool = mine ? list.filter((x) => !x.me) : list;
+    const fw = pool.filter((x) => x.pos === "fw").sort((a, b) => b.str - a.str)[0]
+      || pool.slice().sort((a, b) => b.str - a.str)[0];
     if (fw) fw.ace = true;
     return list;
   }
@@ -584,6 +589,14 @@ window.WingerWorldCup = (() => {
     const out = [], used = new Set(), byNat = new Set();
     const meRow = all.find((e) => e.p.me);
     if (meRow) { out.push(meRow); used.add(meRow.p); byNat.add(meName); }
+    /* 🇰🇷 **우리 나라에는 한 자리를 더 보장해요.**
+     * 나라마다 한 자리씩 채우면 우리 자리는 나로 차 버려서, 동료는 아무리 잘해도
+     * 다른 나라 선수들에게 밀립니다(제보: "내가 1골 2도움 했는데 우리 팀 선수가
+     * 개인 기록 랭킹에 안 보여서"). 팀 골의 대부분을 내가 넣는 게임이라 동료는
+     * 구조적으로 뒤처지는데, 그렇다고 우리 팀 이야기가 화면에서 사라지면 안 돼요.
+     * 기여가 0이면 안 넣어요 — 빈 줄은 정보가 아니에요. */
+    const mate = all.find((e) => e.nat === meName && !e.p.me && key(e) > 0);
+    if (mate) { out.push(mate); used.add(mate.p); }
     for (const e of all) {
       if (byNat.has(e.nat) || used.has(e.p)) continue;
       out.push(e); used.add(e.p); byNat.add(e.nat);

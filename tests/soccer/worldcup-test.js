@@ -372,6 +372,22 @@ guard("⑨ 화면 전환", () => {
   check(mineShown >= 2, `우리 나라에서 둘 이상 올라올 수 있다 (${mineShown}명)`);
   star.g = 0;
 
+  /* 🇰🇷 **우리 나라에는 한 자리를 더 보장해요.** 나라마다 한 자리씩 채우면 우리
+   * 자리는 나로 차 버려서, 동료는 조금 넣어서는 절대 못 올라와요 — 팀 골의
+   * 대부분을 내가 넣는 게임이라 구조적으로 뒤처지거든요. 그렇다고 우리 팀
+   * 이야기가 화면에서 사라지면 안 됩니다. */
+  const mates1 = WC._t.mySquad().filter((x) => !x.me);
+  mates1.forEach((x) => { x.g = 0; x.a = 0; });
+  mates1[0].a = 1;                        // 딱 도움 하나만 있는 동료
+  const rows1 = WC.faces();
+  const mineRows = rows1.filter((e) => e.nat === WC.myNation().name);
+  console.log(`   동료가 도움 하나뿐일 때 — 우리 나라 ${mineRows.length}줄 (${mineRows.map((e) => e.p.name).join(", ")})`);
+  check(mineRows.length >= 2, `기여가 조금이라도 있으면 동료가 표에 남는다 (${mineRows.length}줄)`);
+  /* 기여가 0이면 안 넣어요 — 빈 줄은 정보가 아니에요 */
+  mates1.forEach((x) => { x.g = 0; x.a = 0; });
+  const only = WC.faces().filter((e) => e.nat === WC.myNation().name);
+  check(only.length === 1, `아무도 기여가 없으면 나만 남는다 (${only.length}줄)`);
+
   /* 🌏 대회 중 배지에는 **어떻게 뽑혔는지 안 적어요.** 소집 카드에서 한 번
    * 말하면 충분하고, 대회 내내 "너는 깜짝 발탁이었다"를 붙이면 뛰는 내내 그 얘기예요. */
   st.wcLucky = st.proYear;
