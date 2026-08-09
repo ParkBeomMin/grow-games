@@ -337,6 +337,42 @@ guard("⑦⑧⑨ 클럽 신뢰", () => {
   check(/고사|클럽에 남/.test(WC.reportLine()), `결산 문구가 고사를 알려준다 — "${WC.reportLine()}"`);
 });
 
+// ---------- ⑨-b 📊 기록 화면의 🌏 월드컵 탭 ----------
+console.log("=== ⑨-b 기록 화면에서 월드컵을 볼 수 있는가 ===");
+guard("⑨-b 기록 탭", () => {
+  setup(11, 2, barAt(11) + 5);
+  const st = S();
+  /* 미발탁·4강·우승을 섞어 둬요 — 셋 다 한 줄로 남아야 기록이에요 */
+  st.wcHist = [
+    { y: 3, result: "none" },
+    { y: 7, result: "semi", g: 4, a: 2, apps: 4, awards: ["boot"], champ: "🇧🇷 브라질" },
+    { y: 11, result: "champion", g: 6, a: 1, apps: 5, awards: ["boot", "ball"], champ: "🇰🇷 대한민국" },
+  ];
+  st.career.wcWin = 1; st.career.wcApps = 2; st.career.wcBoot = 2; st.career.wcBall = 1;
+  w.__get("openRecord")("screen-pro");
+  const tabs = [...$("record-tabs").querySelectorAll(".rec-tab")];
+  console.log(`   탭 — ${tabs.map((b) => b.textContent).join(" | ")}`);
+  check(tabs.length === 2, `탭이 둘이다 (${tabs.length})`);
+  check(/월드컵/.test(tabs[1] ? tabs[1].textContent : ""), "두 번째가 🌏 월드컵이다");
+  tabs[1].click();
+  const body = $("record-card").textContent.replace(/\s+/g, " ");
+  console.log(`   월드컵 탭 — "${body.trim().slice(0, 90)}"`);
+  check(/출전 2회/.test(body), "출전 횟수가 요약된다 (미발탁은 안 세요)");
+  check(/골든부츠 2/.test(body) && /골든볼 1/.test(body), "대회 수상이 요약된다");
+  const rows = $("record-card").querySelectorAll("tbody tr");
+  check(rows.length === 3, `대회마다 한 줄 (${rows.length}줄) — 미발탁도 기록이에요`);
+  check(/미발탁/.test(body), "뽑히지 못한 대회도 남는다");
+  check(/🇧🇷 브라질/.test(body), "내가 못 든 대회의 우승국이 적힌다");
+  check(/4년에 한 번/.test(body), "왜 기록이 드문지 알려준다");
+
+  /* 월드컵을 한 번도 안 겪었으면 탭 줄이 없어야 해요 — 빈 탭은 "여기 뭔가 있나"만 남겨요 */
+  st.wcHist = [];
+  w.__get("openRecord")("screen-pro");
+  check($("record-tabs").hidden, "월드컵을 겪은 적이 없으면 탭 줄을 감춘다");
+  const plain = $("record-card").textContent;
+  check(/유스 기록/.test(plain), "그때는 커리어 기록만 보인다");
+});
+
 // ---------- ⑩ 변이 검증 ----------
 console.log("=== ⑩ 변이 검증 ===");
 guard("⑩ 변이", () => {

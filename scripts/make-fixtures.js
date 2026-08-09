@@ -509,11 +509,17 @@ function soccerToYear(P, year) {
   }
 }
 // 전반기 막바지까지만 굴려요 (후반기에 들어가면 초대장이 바로 떠 버려요)
-function soccerToLateFirstHalf(P) {
-  for (let g = 0; g < 600; g++) {
+function soccerToLateFirstHalf(P, stopCb, backOff, hold) {
+  const CB = stopCb || 1, BACK = backOff == null ? 3 : backOff;
+  for (let g = 0; g < 900; g++) {
     const st = P.state();
-    if (st.activity && st.activity.cb === 1 && st.activity.week >= st.activity.weekTotal - 3) return true;
-    if (P.w.document.querySelector(".wc-overlay button")) return false;   // 벌써 떴으면 실패
+    /* 🎲 종합을 **붙들어 둬요.** 안 그러면 후반기를 지나는 동안 훈련으로 문턱을
+     * 넘어 📨 초대장이 뜨고, 래칫이라 그대로 정식 발탁이 됩니다 —
+     * "문턱 아래에서 굴려 보는 자리"를 만들려던 게 통째로 어긋나요. */
+    if (hold != null && Math.abs(P.get("overall")() - hold) > 0.9) setOverall(P, hold);
+    if (st.activity && st.activity.cb === CB && st.activity.week >= st.activity.weekTotal - BACK) return true;
+    const ov = P.w.document.querySelector(".wc-overlay button");
+    if (ov) { if (CB === 1) return false; ov.click(); continue; }
     const id = P.active();
     if (id === "screen-stage") {
       const n = P.$("btn-stage-next");
@@ -628,7 +634,14 @@ function makeSoccerWc(kind) {
         return;
       }
 
-      if (!soccerToLateFirstHalf(P)) throw new Error("전반기 막바지에 못 멈췄어요");
+      /* 🎲 깜짝 발탁은 판정이 **시즌 끝**이라 후반기 막바지에서 멈춰요 —
+       * 전반기에 멈춰 두면 확인하려고 스무 경기를 눌러야 합니다. */
+      const lateCb = kind === "luck" ? 2 : 1;
+      if (kind === "luck") setOverall(P, BAR - 2);
+      if (!soccerToLateFirstHalf(P, lateCb, 1, kind === "luck" ? BAR - 2 : null)) {
+        throw new Error(`${lateCb === 1 ? "전" : "후"}반기 막바지에 못 멈췄어요`);
+      }
+      if (kind === "luck" && st.wcCall === YEAR) throw new Error("정식 발탁이 돼 버렸어요");
       /* 🎲 깜짝 발탁은 **문턱 코앞**(1~2 아래)이 제일 잘 보여요 — 확률이 28~35%라
        * 뽑히기도 하고 안 뽑히기도 합니다. 그 흔들림 자체가 확인 항목이에요. */
       setOverall(P, kind === "rookie" ? WILD + 3 : kind === "luck" ? BAR - 2 : BAR + 5);
@@ -648,14 +661,15 @@ function makeSoccerWc(kind) {
         title: wild ? "유망주 와일드카드 — 가느냐 남느냐"
           : luck ? `깜짝 발탁 — 문턱까지 ${BAR - ovr}, 가능성 ${P_LUCK}%`
           : "월드컵 초대장 — 소집 직전",
-        state: `${st.group} · ${P.get("leagueOf")(st).name} · ${YEAR}시즌 전반기 막바지`
+        state: `${st.group} · ${P.get("leagueOf")(st).name} · ${YEAR}시즌 ${luck ? "후" : "전"}반기 막바지`
           + ` · 종합 ${ovr} (문턱 ${wild ? `${WILD} 와일드카드` : BAR}${luck ? ` · 🎲 ${P_LUCK}%` : ""})`,
         check: luck
           ? `🎲 <b>문턱에 못 미쳐도 가끔 이름이 올라와요.</b> 지금 종합 ${ovr}, 문턱 ${BAR} — `
             + `준비 화면 배지에 <b>깜짝 발탁 가능성 ${P_LUCK}%</b>가 적혀 있는지 먼저 봐주세요.<br>`
             + "감춘 도박은 버그로 읽혀서, 확률을 <b>미리</b> 적어 뒀어요.<br>"
             + "굴리는 건 <b>시즌 끝에 딱 한 번</b>이에요 — 준비 화면을 다시 그릴 때마다 굴리면 "
-            + "될 때까지 새로고침하는 게임이 되니까요. 시즌(리그 → 컵)을 끝까지 진행해 보세요.<br>"
+            + "될 때까지 새로고침하는 게임이 되니까요. <b>남은 경기가 한두 판</b>이라 "
+            + "금방 판정까지 가요(컵에 나가면 세 판 더).<br>"
             + "뽑히면 소집 카드에 <b>🎲 깜짝 발탁</b> 한 줄이, 놓치면 결산에 "
             + "<b>깜짝 발탁도 비껴갔어요</b>가 떠요. <b>훈련으로 종합을 올리면 확률이 오르는지</b>도 "
             + "같이 봐주세요 — 문턱에 가까울수록 높아지거든요."
@@ -675,7 +689,7 @@ function makeSoccerWc(kind) {
             + "시즌(리그 → 컵)이 끝나면 대표팀에 합류합니다.",
         steps: [
           "게임이 열리면 <b>이어하기</b> → 선수 카드",
-          luck ? `준비 화면 배지의 <b>🎲 깜짝 발탁 가능성 ${P_LUCK}%</b> 확인`
+          luck ? `준비 화면 배지의 <b>🎲 깜짝 발탁 가능성 ${P_LUCK}%</b> 확인 — 남은 경기가 한두 판이에요`
                : "전반기 남은 경기를 치러 <b>후반기</b>로 넘어가기",
           wild ? "📨 초대장에서 <b>🌏 다녀오겠습니다 / ⚽ 클럽에 남겠습니다</b>를 골라 보기"
                : luck ? "훈련으로 종합을 올려 <b>확률이 오르는지</b> 확인"

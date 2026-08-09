@@ -526,3 +526,13 @@ body.wc-mode .rank-table thead th { background: rgba(242, 193, 78, .12); color: 
 /* 🏆 이번 대회 우승국 — 내가 못 들었을 때 누가 들었는지 */
 .wc-champ { font-size: .86rem; color: var(--dim); margin: .3rem 0; }
 .wc-champ b { color: var(--accent); }
+/* 📊 기록 화면 탭 */
+.rec-tabs { display: flex; gap: 6px; margin-bottom: 10px; }
+.rec-tab {
+  flex: 1; padding: 8px 6px; border-radius: 10px; cursor: pointer;
+  background: var(--bg2); border: 1px solid var(--line); color: var(--dim);
+  font-family: "Jua", sans-serif; font-size: .92rem;
+}
+.rec-tab.on { background: var(--field); border-color: var(--accent); color: var(--accent); }
+.wc-hist td, .wc-hist th { white-space: nowrap; }
+.wc-rec-champ { font-size: .74rem; color: var(--dim); }

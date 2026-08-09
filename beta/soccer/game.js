@@ -1049,12 +1049,70 @@ function renderShop() {
 
 // ---------- 커리어 기록 ----------
 let recordReturn = "screen-main";
+/* 📊 기록 화면의 탭 — 커리어와 🌏 월드컵을 갈라요.
+ *
+ * 제보: "기록에서 월드컵 출전 기록도 볼 수 있으면 좋겠어. 탭으로 추가해서
+ * 보게 하면 될 듯." 맞아요 — 한 카드에 다 밀어 넣으면 스크롤만 길어져요.
+ * 월드컵은 4년에 한 번이라 커리어 기록과 성격도 다릅니다. */
+let recordTab = "career";
 function openRecord(returnTo) {
   recordReturn = returnTo || "screen-main";
+  recordTab = "career";
   renderRecord();
   show("screen-record");
 }
+function renderRecordTabs() {
+  const box = $("record-tabs");
+  if (!box) return;
+  /* 월드컵을 한 번도 안 겪었으면 탭 줄 자체를 감춰요 — 빈 탭은 "여기 뭔가 있나"만
+   * 남기고 아무것도 안 알려줘요. 미발탁 기록("none")도 겪은 것으로 봐요. */
+  const has = Array.isArray(S.wcHist) && S.wcHist.length;
+  box.hidden = !has;
+  if (!has) { recordTab = "career"; return; }
+  const tabs = [["career", "⚽ 커리어"], ["wc", "🌏 월드컵"]];
+  box.innerHTML = tabs.map(([id, name]) =>
+    `<button class="rec-tab${recordTab === id ? " on" : ""}" data-tab="${id}">${name}</button>`).join("");
+  box.querySelectorAll(".rec-tab").forEach((b) => {
+    b.onclick = () => { recordTab = b.dataset.tab; renderRecord(); };
+  });
+}
+/* 🌏 월드컵 기록 — 대회마다 한 줄. 미발탁도 남겨요("TV로 봤어요"가 기록이에요). */
+function wcRecordHTML() {
+  const list = (S.wcHist || []).slice().sort((a, b) => a.y - b.y);
+  const LAB = { champion: "🏆 우승", final: "🥈 준우승", semi: "🎖️ 4강", group: "💧 조별 탈락", none: "— 미발탁" };
+  const c = S.career || {};
+  const played = list.filter((h) => h.result !== "none");
+  const rows = list.map((h) => {
+    const aw = (h.awards || []).map((id) => (id === "boot" ? "🥇" : "🏅")).join("");
+    return `<tr class="${h.result === "champion" ? "me" : ""}"><td>${h.y}</td>`
+      + `<td>${LAB[h.result] || h.result}${aw ? ` <b>${aw}</b>` : ""}</td>`
+      + `<td>${h.result === "none" ? "-" : `${h.apps}경기`}</td>`
+      + `<td>${h.result === "none" ? "-" : `⚽${h.g} 🅰️${h.a}`}</td>`
+      + `<td class="wc-rec-champ">${h.champ || "-"}</td></tr>`;
+  }).join("");
+  const sum = played.length
+    ? `출전 ${played.length}회 · ⚽ ${played.reduce((a, h) => a + h.g, 0)}골`
+      + ` · 🅰️ ${played.reduce((a, h) => a + h.a, 0)}도움`
+      + `${c.wcWin ? ` · 🏆 우승 ${c.wcWin}` : ""}`
+      + `${c.wcBall ? ` · 🏅 골든볼 ${c.wcBall}` : ""}`
+      + `${c.wcBoot ? ` · 🥇 골든부츠 ${c.wcBoot}` : ""}`
+    : "아직 대표팀에 뽑힌 적이 없어요";
+  const nat = (window.WingerWorldCup && WingerWorldCup.myNation)
+    ? WingerWorldCup.myNation().name : "";
+  return `<div class="draft-emoji">🌏</div>
+    <div class="draft-title">${nat} 대표팀</div>
+    <div class="draft-team">${sum}</div>
+    <div class="draft-summary">
+      <table class="rank-table season-standings wc-hist"><thead>
+        <tr><th>시즌</th><th>성적</th><th>출전</th><th>기록</th><th>우승국</th></tr></thead>
+        <tbody>${rows}</tbody></table>
+      <div class="wc-rec-note">월드컵은 <b>4년에 한 번</b>이에요 — 3·7·11·15시즌에 열려요.<br/>
+        이 기록은 리그와 따로 쌓여요.</div>
+    </div>`;
+}
 function renderRecord() {
+  renderRecordTabs();
+  if (recordTab === "wc") { $("record-card").innerHTML = wcRecordHTML(); return; }
   const m = marketOf();
   const trophyLine = S.trophies && S.trophies.length ? `🏆 ${S.trophies.join(", ")}` : "🏆 대회 1위 경력 없음";
   const y = S.youth || { g: 0, a: 0, def: 0 };
