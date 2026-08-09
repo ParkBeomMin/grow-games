@@ -1023,7 +1023,13 @@ window.WingerCareer = (() => {
      * 2.28.0에 넣은 "시즌 준비 중에도 순위표를 보여준다"가 내내 죽어 있었습니다.
      * 개인 순위를 붙이면서 같은 자리에 걸려 드러났어요. */
     if (isPro() && !tableReady()) { initTable(); save(); }
-    if (tableReady()) {
+    /* 🌏 대회 중에는 이 자리가 **우리 조**를 봐요. 리그 순위표가 그대로 떠 있으면
+     * 화면이 딴 데를 보고 있는 겁니다 — 지금 치르는 건 리그가 아니에요. */
+    if (S.wc && window.WingerWorldCup) {
+      tbl.hidden = false;
+      $("pro-table-sum").textContent = WingerWorldCup.groupSumText();
+      $("pro-table-body").innerHTML = WingerWorldCup.groupTableHTML();
+    } else if (tableReady()) {
       tbl.hidden = false;
       const rows = tableRows();
       const me = rows.find((r) => r.name === S.group);
@@ -1039,7 +1045,13 @@ window.WingerCareer = (() => {
     /* 👥 스쿼드는 레이어로 띄워요(버튼은 HUD에). 여기서는 **선발인지 벤치인지만**
      * 버튼에 적어요 — 그게 매 경기 알아야 하는 한 줄이고, 명단 전체는 눌러서 봐요. */
     const sqBtn = $("btn-squad-pro");
-    if (sqBtn && window.WingerSquad && isPro() && S.group) {
+    /* 🌏 대회 중에는 **클럽 선발 확률이 아무 의미가 없어요** — 지금 뛰는 건
+     * 대표팀이니까요. 같은 자리를 우리 조로 바꿔 씁니다. */
+    if (sqBtn && S.wc && window.WingerWorldCup) {
+      sqBtn.hidden = false;
+      sqBtn.textContent = "🌏 우리 조";
+      sqBtn.onclick = () => WingerWorldCup.openGroup();
+    } else if (sqBtn && window.WingerSquad && isPro() && S.group) {
       sqBtn.hidden = false;
       /* 준비 화면에서는 **확정이 아니라 확률**을 보여줘요. 선발은 경기 시작 때
        * 다시 뽑히니, 여기서 "선발"이라고 못 박으면 화면이 거짓말을 하게 돼요. */
@@ -1054,7 +1066,14 @@ window.WingerCareer = (() => {
      * "한 골 더"에 이유가 생겨요. 부문상이 이 표 1위한테 갑니다. */
     const race = $("pro-race");
     ensureRace();                     // 옛 세이브에도 명단을 채워요
-    if (S.activity && Array.isArray(S.activity.race)) {
+    /* 🌏 대회 중에는 **대회 개인 기록**을 봐요. 리그 득점왕 표를 그대로 두면
+     * 국대 골이 거기 섞인 것처럼 읽혀요(실제로는 안 섞이지만, 화면이 그렇게
+     * 보이면 그게 곧 제보가 됩니다). */
+    if (S.wc && window.WingerWorldCup) {
+      race.hidden = false;
+      $("pro-race-sum").textContent = "🌏 월드컵 기록";
+      $("pro-race-body").innerHTML = WingerWorldCup.recordHTML();
+    } else if (S.activity && Array.isArray(S.activity.race)) {
       race.hidden = false;
       renderRace();
     } else if (isPro()) {

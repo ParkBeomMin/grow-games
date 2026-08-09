@@ -350,6 +350,59 @@ window.WingerWorldCup = (() => {
       </tbody></table>`;
   }
 
+  /* 🌏 대회 중에는 준비 화면의 세 자리가 **월드컵을 봐야 해요.**
+   * 리그 순위표·리그 개인 순위·클럽 선발 확률이 그대로 떠 있으면 화면이 딴 데를
+   * 보고 있는 겁니다 — "표시와 판정이 서로 다른 것을 본다"의 사촌이에요. */
+  function groupSumText() {
+    const w = wc();
+    if (!w) return "";
+    const me = w.myGroup.find((x) => x.me);
+    const rank = w.myGroup.slice().sort((a, b) => (b.pts - a.pts) || (b.gd - a.gd))
+      .findIndex((x) => x.me) + 1;
+    const stage = w.stage === "group"
+      ? `조별리그 ${Math.min(w.gIdx + 1, GROUP_GAMES)}/${GROUP_GAMES}차전`
+      : w.stage === "semi" ? "4강" : "결승";
+    return `🌏 ${myNation().name} — ${stage}`
+      + (w.stage === "group" ? ` · 조 ${rank}위 · 승점 ${me.pts}` : "");
+  }
+
+  /* 대회 개인 기록 — 리그 개인 순위 자리에 들어가요.
+   * 리그 득점왕 표를 그대로 두면 국대 골이 거기 섞인 것처럼 읽혀요(실제로는
+   * 안 섞이지만, 화면이 그렇게 보이면 그게 곧 버그 제보가 됩니다). */
+  function recordHTML() {
+    const w = wc();
+    if (!w) return "";
+    const avg = w.apps ? (w.ratingSum / w.apps).toFixed(1) : "-";
+    const next = w.stage === "group" && w.gIdx < GROUP_GAMES
+      ? nextOpponent().name
+      : w.stage !== "group" ? nextOpponent().name : null;
+    return `<div class="wc-rec">
+      <div class="wc-rec-row"><b>${w.apps}</b>경기 · <b>⚽ ${w.g}</b>골 · <b>🅰️ ${w.a}</b>도움`
+      + ` · <b>🛡️ ${w.d}</b>수비 · 평균 평점 <b>${avg}</b></div>
+      ${next ? `<div class="wc-rec-next">다음 상대 — ${next}</div>` : ""}
+      <div class="wc-rec-note">이 기록은 <b>리그와 따로</b> 쌓여요 — 리그 득점왕 경쟁에는 안 섞입니다.</div>
+    </div>`;
+  }
+
+  // 👥 자리의 버튼 — 대회 중에는 우리 조를 보여줘요
+  function openGroup() {
+    if (document.querySelector(".wc-group-overlay")) return;
+    const w = wc();
+    if (!w) return;
+    const wrap = document.createElement("div");
+    wrap.className = "av-overlay wc-group-overlay";
+    wrap.innerHTML = `<div class="av-modal squad-modal">
+      <div class="av-title">🌏 ${S.proYear}시즌 월드컵</div>
+      <div class="sq-note">${groupSumText()}</div>
+      ${groupTableHTML()}
+      ${recordHTML()}
+      <div class="av-actions"><button class="btn btn-primary" id="btn-wcg-close">닫기</button></div>
+    </div>`;
+    wrap.addEventListener("click", (ev) => { if (ev.target === wrap) wrap.remove(); });
+    document.body.appendChild(wrap);
+    document.getElementById("btn-wcg-close").onclick = () => wrap.remove();
+  }
+
   const wire = (label, fn) => {
     const btn = $("btn-stage-next");
     if (!btn) return;
@@ -609,6 +662,7 @@ window.WingerWorldCup = (() => {
 
   return {
     init, due, enter, resume, checkInvite, badgeHTML, startButton, themeSync, reportLine,
+    groupTableHTML, groupSumText, recordHTML, openGroup, active: () => !!wc(),
     isWcYear, callBar, myNation,
     _t: {
       NATIONS, WILD_BAR, TRUST_GO, TRUST_STAY, PRIZE, FAME,

@@ -247,6 +247,57 @@ guard("③ 종료 경로", () => {
     "모든 결과가 정해진 넷 중 하나다");
 });
 
+// ---------- ⑨ 준비 화면이 대회를 보는가 ----------
+console.log("=== ⑨ 대회 중 준비 화면의 세 자리 ===");
+guard("⑨ 화면 전환", () => {
+  /* 대회 중에 리그 순위표·리그 개인 순위·클럽 선발 확률이 그대로 떠 있으면
+   * 화면이 딴 데를 보고 있는 거예요 — 지금 치르는 건 리그가 아닙니다. */
+  w.__set("S", w.__get('newState(MARKETS[0], "fw", "테스트")'));
+  Career.onEnding(true, false);
+  $("btn-go-debut").click();
+  const st = S();
+  st.proYear = 7;
+  for (const k of Object.keys(st.stats)) st.stats[k] = 120;
+  st.wcCall = 7;
+  WC.enter(() => {});
+  check(!!st.wc, "대회가 열렸다");
+  Career.refreshPro();
+
+  const txt = (id) => (($(id) || {}).textContent || "").replace(/\s+/g, " ").trim();
+  const sum = txt("pro-table-sum");
+  console.log(`   순위표 자리 — "${sum}"`);
+  check(/월드컵|조별리그|4강|결승/.test(sum) || /🌏/.test(sum),
+    "순위표 자리가 우리 조를 본다 (리그 순위표가 아니라)");
+  check(!/리그1|리그2|리그3|챔피언십|세리에/.test(sum),
+    `리그 이름이 안 남아 있다 — "${sum}"`);
+
+  const race = txt("pro-race-sum") + " " + txt("pro-race-body");
+  console.log(`   개인 순위 자리 — "${txt("pro-race-body").slice(0, 60)}"`);
+  check(/월드컵 기록/.test(race), "개인 순위 자리가 대회 기록을 본다");
+  check(/리그와 따로/.test(race),
+    "리그와 따로 쌓인다고 적혀 있다 — 화면이 그렇게 안 보이면 그게 곧 제보가 돼요");
+
+  const sq = $("btn-squad-pro");
+  console.log(`   HUD 버튼 — "${sq ? sq.textContent : "없음"}"`);
+  check(!!sq && !sq.hidden && /우리 조/.test(sq.textContent),
+    "HUD의 선발 확률 버튼이 우리 조로 바뀐다 — 대회 중에는 클럽 선발 확률이 아무 의미가 없어요");
+  sq.click();
+  const ov = w.document.querySelector(".wc-group-overlay");
+  check(!!ov, "누르면 조 편성 레이어가 열린다");
+  check(!!ov && /승점/.test(ov.textContent), "레이어에 조 순위(승점)가 있다");
+  if (ov) ov.remove();
+
+  // 대회가 끝나면 세 자리가 다 리그로 돌아와야 해요
+  st.wc = null;
+  Career.refreshPro();
+  const back = txt("pro-table-sum");
+  console.log(`   대회 뒤 순위표 자리 — "${back.slice(0, 50)}"`);
+  check(!/🌏/.test(back), "대회가 끝나면 순위표 자리가 리그로 돌아온다");
+  check(!/월드컵 기록/.test(txt("pro-race-sum")), "개인 순위 자리도 리그로 돌아온다");
+  const sq2 = $("btn-squad-pro");
+  check(!sq2 || !/우리 조/.test(sq2.textContent), "HUD 버튼도 돌아온다");
+});
+
 // ---------- ⑧ 월드컵 기록이 리그로 새지 않는가 ----------
 console.log("=== ⑧ 월드컵 골이 리그 기록에 새는가 ===");
 guard("⑧ 기록 분리", () => {

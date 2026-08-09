@@ -506,3 +506,8 @@ body.wc-mode .rank-table thead th { background: rgba(242, 193, 78, .12); color: 
 /* 와일드카드는 선택지가 둘이라 세로로 쌓아요 — 한 줄에 두면 글자가 접혀요
  * (🔥 1년 특훈에서 세 개를 한 줄에 뒀다가 같은 지적을 받았어요) */
 .wc-invite .av-actions { flex-direction: column; }
+/* 🌏 대회 개인 기록 — 리그 개인 순위 자리에 들어가요 */
+.wc-rec { font-size: .84rem; line-height: 1.7; }
+.wc-rec-row b { color: var(--accent); }
+.wc-rec-next { color: var(--sky); margin-top: .2rem; }
+.wc-rec-note { color: var(--dim); font-size: .74rem; margin-top: .35rem; }
