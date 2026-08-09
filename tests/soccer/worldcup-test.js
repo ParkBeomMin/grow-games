@@ -285,6 +285,27 @@ guard("⑨ 화면 전환", () => {
   check($("pro-race-body").querySelectorAll("tbody tr.me").length === 1,
     "내 줄은 하나뿐이다 — 우리 나라 얼굴은 나 자신이라 두 줄이 되면 명단이 갈린 거예요");
 
+  /* ⚠️ **개인 순위가 없는 세이브도 떠야 해요.**
+   * 이 저장소는 세이브를 마이그레이션하지 않아요 — 새 필드는 읽는 쪽이 기본값을
+   * 줍니다. race는 나중에 생긴 필드라, 그 전에 대회를 시작한 사람에게는 없어요.
+   * 그대로 두면 대회가 끝날 때까지 순위표가 안 뜹니다(제보: "개인순위 아직 안
+   * 보이는데 캐싱인가" — 캐시가 아니라 이 자리였어요). */
+  /* 대회 **한복판**에서 업데이트를 받은 사람이 진짜 상황이에요 — 0경기째면
+   * 채워도 다 0이라 아무것도 안 지켜집니다. 세 경기를 치른 자리로 놓아요. */
+  st.wc.g = 4; st.wc.a = 2; st.wc.apps = 3;
+  const before = { g: st.wc.g, a: st.wc.a, apps: st.wc.apps };
+  delete st.wc.race;                       // 옛 세이브 흉내
+  Career.refreshPro();
+  const backRows = $("pro-race-body").querySelectorAll("tbody tr").length;
+  console.log(`   race 없는 세이브 — 다시 그리니 ${backRows}줄`);
+  check(backRows >= 6, `개인 순위가 없던 세이브도 읽는 쪽에서 채워진다 (${backRows}줄)`);
+  const meRow = (st.wc.race || []).find((f) => f.me);
+  check(!!meRow && meRow.g === before.g && meRow.apps === before.apps,
+    `채울 때 내 기록은 그대로 옮겨진다 (⚽${meRow ? meRow.g : "?"} · ${meRow ? meRow.apps : "?"}경기)`);
+  const played = (st.wc.race || []).filter((f) => !f.me && f.apps > 0).length;
+  check(before.apps === 0 || played > 0,
+    `다른 얼굴들도 그동안 치른 경기만큼 굴려 둔다 (${played}명) — 0골로 시작하면 내가 늘 1위예요`);
+
   const sq = $("btn-squad-pro");
   console.log(`   HUD 버튼 — "${sq ? sq.textContent : "없음"}"`);
   check(!!sq && !sq.hidden && /우리 조/.test(sq.textContent),

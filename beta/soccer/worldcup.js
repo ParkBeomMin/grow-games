@@ -411,6 +411,24 @@ window.WingerWorldCup = (() => {
     }
     return out;
   }
+  /* ⚠️ 개인 순위가 없는 세이브를 **읽는 쪽에서 채워요.**
+   *
+   * 이 저장소는 세이브를 마이그레이션하지 않아요 — 새 필드는 읽는 쪽이 기본값을
+   * 줍니다. 개인 순위(race)는 나중에 생긴 필드라, **그 전에 대회를 시작한 세이브**에는
+   * 없어요. 그대로 두면 대회가 끝날 때까지 순위표가 안 뜹니다(제보: "개인순위 아직
+   * 안 보이는데 캐싱인가" — 캐시가 아니라 이 자리였어요).
+   * 이미 치른 경기 수만큼 다른 얼굴들도 굴려서 **자연스러운 자리**에 놓아요. */
+  function ensureFaces() {
+    const w = wc();
+    if (!w || Array.isArray(w.race)) return;
+    w.race = rollFaces(w.myGroup || [], w.others || []);
+    const me = w.race.find((f) => f.me);
+    if (me) { me.g = w.g || 0; me.a = w.a || 0; me.apps = w.apps || 0; }
+    for (let i = 0; i < (w.apps || 0); i++) advanceFaces();
+    if (w.stage !== "group") cutFaces();
+    save();
+  }
+
   /* 내가 한 경기를 치를 때 **다른 얼굴들도 자기 경기를 치러요.**
    * 안 굴리면 순위표가 나만 오르는 표가 되고, 그건 경쟁이 아니에요. */
   function advanceFaces() {
@@ -439,6 +457,7 @@ window.WingerWorldCup = (() => {
 
   /* 🥇 대회 개인 순위표 — 리그 개인 순위와 같은 모양이에요 */
   function raceHTML() {
+    ensureFaces();
     const w = wc();
     if (!w || !Array.isArray(w.race)) return recordHTML();
     const rows = w.race.slice().sort((a, b) => (b.g - a.g) || (b.a - a.a) || (b.str - a.str));
@@ -456,6 +475,7 @@ window.WingerWorldCup = (() => {
    *   🏅 골든볼    대회 최우수 선수 (골·도움 + 평균 평점)
    * 리그 수상(발롱도르·리그MVP)과 **다른 축**이에요 — 4년에 한 번뿐인 무대의 상입니다. */
   function decideAwards() {
+    ensureFaces();
     const w = wc();
     if (!w || !Array.isArray(w.race) || !w.race.length) return [];
     const myAvg = w.apps ? w.ratingSum / w.apps : 0;
@@ -648,6 +668,7 @@ window.WingerWorldCup = (() => {
     w.g += info.myGoals; w.a += info.assists; w.d += info.defense;
     w.apps += 1;
     w.ratingSum += clamp(CTX.matchRating(info, S.pos, 0) / 10, 1, 10);
+    ensureFaces();
     if (Array.isArray(w.race)) {
       const meRow = w.race.find((f) => f.me);
       if (meRow) { meRow.g = w.g; meRow.a = w.a; meRow.apps = w.apps; }
@@ -865,7 +886,7 @@ window.WingerWorldCup = (() => {
     _t: {
       NATIONS, wildBar, classBar, BAR_NAT_K, BAR_WOBBLE, WILD_GAP, barSeed,
       TRUST_GO, TRUST_STAY, PRIZE, FAME, AWARD_FAME,
-      rollFaces, advanceFaces, cutFaces, decideAwards, faceScore, FACE_G0, FACE_GK,
+      rollFaces, advanceFaces, cutFaces, ensureFaces, decideAwards, faceScore, FACE_G0, FACE_GK,
       LUCK_GAP, LUCK_MAX, luckP,
       NAT_SPREAD, ACE_DIV, ACE_LO, ACE_HI, natStr, teamStr, NAT_MEAN,
       FIRST_WC, WC_CYCLE, CAMP_FIRST, CAMP_BETWEEN, GROUP_GAMES,
