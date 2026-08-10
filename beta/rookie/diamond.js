@@ -107,9 +107,9 @@
       put(P.mound, 0);
       void ball.offsetWidth;                              // 리플로우 — 전환이 붙게
       seq = setTimeout(() => {
-        put(P.home, 170);                                 // ⚾ 투구
+        put(P.home, 330);                                 // ⚾ 투구 (던지는 게 보이게 천천히)
         if (!to || (to[0] === P.home[0] && to[1] === P.home[1])) return;
-        seq = setTimeout(() => put(to, farMs || 520), 190);  // 🏏 타구
+        seq = setTimeout(() => put(to, farMs || 900), 360);  // 🏏 타구 — 맞고 나서 뻗어요
       }, 16);
     };
     const rest = () => {
@@ -170,7 +170,7 @@
           const n = sum[1];
           const mine = /우리 타선|뽑아/.test(t);
           clearBases(); outs = 0;
-          pitch(HIT.single, 620); flash("dia-score");
+          pitch(HIT.single, 1000); flash("dia-score");
           note(`${mine ? "우리" : "상대"} ${n}점`);
           paint();
           return;
@@ -179,21 +179,21 @@
 
         let runs = 0;
         if (/홈런/.test(t)) {
-          runs = advance(3, false) + 1; clearBases(); pitch(HIT.homer, 760); flash("dia-score"); note("홈런!");
+          runs = advance(3, false) + 1; clearBases(); pitch(HIT.homer, 1300); flash("dia-score"); note("홈런!");
         } else if (/3루타|삼루타/.test(t)) {
-          runs = advance(3, false); on.b3 = true; pitch(HIT.triple, 600); note("3루타");
+          runs = advance(3, false); on.b3 = true; pitch(HIT.triple, 1050); note("3루타");
         } else if (/2루타|이루타/.test(t)) {
-          runs = advance(2, true); pitch(HIT.double, 580); note("2루타");
+          runs = advance(2, true); pitch(HIT.double, 1000); note("2루타");
         } else if (/안타|출루|밀어친|적시타/.test(t)) {
-          runs = advance(1, true); pitch(HIT.single, 520); note("안타");
+          runs = advance(1, true); pitch(HIT.single, 880); note("안타");
         } else if (/볼넷|사구|몸에 맞/.test(t)) {
           runs = advance(1, true); pitch(null); note("볼넷");
         } else if (/병살/.test(t)) {
-          outs = Math.min(3, outs + 2); pitch(HIT.infield, 380); flash("dia-out"); note("병살");
+          outs = Math.min(3, outs + 2); pitch(HIT.infield, 620); flash("dia-out"); note("병살");
         } else if (/삼진/.test(t)) {
           outs = Math.min(3, outs + 1); pitch(null); flash("dia-out"); note("삼진");
         } else if (/아웃|땅볼|뜬공|범타|플라이|잡아냈|물러납/.test(t)) {
-          outs = Math.min(3, outs + 1); pitch(HIT.infield, 380); flash("dia-out"); note("아웃");
+          outs = Math.min(3, outs + 1); pitch(HIT.infield, 620); flash("dia-out"); note("아웃");
         } else if (/도루/.test(t)) {
           runs = advance(1, false); note("도루");
         } else {
