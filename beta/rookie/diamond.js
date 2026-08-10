@@ -22,17 +22,17 @@
     return `
       <div class="dia" id="dia">
         <svg class="dia-field" viewBox="0 0 100 100" aria-hidden="true">
-          <path class="dia-dirt" d="M50 88 L88 50 L50 12 L12 50 Z" />
-          <path class="dia-chalk" d="M50 88 L88 50 M50 88 L12 50" />
-          <rect class="dia-base" data-b="b2" x="44" y="6"  width="12" height="12" rx="1.5" transform="rotate(45 50 12)" />
-          <rect class="dia-base" data-b="b3" x="6"  y="44" width="12" height="12" rx="1.5" transform="rotate(45 12 50)" />
-          <rect class="dia-base" data-b="b1" x="82" y="44" width="12" height="12" rx="1.5" transform="rotate(45 88 50)" />
-          <polygon class="dia-home" points="50,95 56,89 56,82 44,82 44,89" />
+          <polygon class="dia-dirt" points="50,82 82,50 50,18 18,50" />
+          <path class="dia-chalk" d="M50 82 L82 50 M50 82 L18 50" />
+          <polygon class="dia-base" data-b="b2" points="50,11 57,18 50,25 43,18" />
+          <polygon class="dia-base" data-b="b3" points="18,43 25,50 18,57 11,50" />
+          <polygon class="dia-base" data-b="b1" points="82,43 89,50 82,57 75,50" />
+          <polygon class="dia-home" points="50,92 55,87 55,81 45,81 45,87" />
         </svg>
         <div class="dia-info">
           <div class="dia-inn" id="dia-inn">경기 준비</div>
-          <div class="dia-outs" id="dia-outs"><i></i><i></i></div>
-          <div class="dia-note" id="dia-note"></div>
+          <div class="dia-outs" id="dia-outs"><b>아웃</b><i></i><i></i><i></i></div>
+          <div class="dia-note" id="dia-note">중계를 기다리는 중…</div>
         </div>
       </div>`;
   }
@@ -98,6 +98,15 @@
           const label = `${inn[1]}회${inn[2]}`;
           const cur = box.querySelector("#dia-inn");
           if (cur && cur.textContent !== label) api.half(label);
+        }
+        // 경기가 끝나면 계기판도 끝나요 — 끝난 뒤에도 "9회초"로 남아 있으면 거짓말이에요
+        if (/경기 종료|경기 끝|경기가 끝/.test(t)) {
+          clearBases(); outs = 0; paint();
+          box.classList.add("dia-done");
+          const el = box.querySelector("#dia-inn");
+          if (el) el.textContent = "경기 종료";
+          note("");
+          return;
         }
         let runs = 0;
         // 위기 등판처럼 "주자가 이미 쌓여 있다"고 말하는 줄 — 말한 만큼 세워 둬요
