@@ -898,8 +898,14 @@ window.WingerWorldCup = (() => {
     const w = wc();
     if (!w) return "";
     const avg = w.apps ? (w.ratingSum / w.apps).toFixed(1) : "-";
-    const next = w.stage === "group" && w.gIdx < GROUP_GAMES
-      ? nextOpponent().name
+    /* 🏁 **대회가 끝났으면 다음 상대가 없어요.**
+     * 우승 화면 맨 아래에 "다음 상대 — 🇫🇷 프랑스"가 적혀 있었어요(제보) —
+     * 트로피를 든 화면에서 다음 경기를 안내하고 있었습니다.
+     * w.final은 결과 카드가 만들어졌다는 뜻이고, w.champ는 우승국이 정해졌다는
+     * 뜻이에요. 둘 중 하나라도 있으면 대회는 끝난 거예요. */
+    const over = !!(w.final || w.champ);
+    const next = over ? null
+      : w.stage === "group" && w.gIdx < GROUP_GAMES ? nextOpponent().name
       : w.stage !== "group" ? nextOpponent().name : null;
     return `<div class="wc-rec">
       <div class="wc-rec-row"><b>${w.apps}</b>경기 · <b>⚽ ${w.g}</b>골 · <b>🅰️ ${w.a}</b>도움`
@@ -1155,6 +1161,10 @@ window.WingerWorldCup = (() => {
     S.career.wcApps = (S.career.wcApps || 0) + 1;
     if (result === "champion") {
       S.career.wcWin = (S.career.wcWin || 0) + 1;
+      /* 🏆 우승국은 나예요. 여기서 안 적으면 playOutRest가 안 도는 우승 경로에서만
+       * w.champ가 비어서, 순위표는 "🏆 우승" 표시를 못 하고 기록 줄은 다음 상대를
+       * 안내합니다(제보: 우승 화면인데 "다음 상대 — 🇫🇷 프랑스"). */
+      w.champ = nat.name;
       /* 트로피는 남기되 **커리어 점수 가중치는 0**이에요 — 점수는 W.wc 한 곳으로
        * 몰아서 손잡이를 하나로 유지합니다(양쪽에 실리면 조절할 곳이 둘이 돼요). */
       CTX.addTrophy(`${S.proYear}시즌 월드컵 우승`, null, 0);

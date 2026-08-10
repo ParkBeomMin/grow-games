@@ -1,5 +1,5 @@
 /* soccer 서비스워커 — 네트워크 우선, 실패 시 캐시 (오프라인 플레이) */
-const CACHE = "soccer-v11";  // 🥇 개막 전 개인 순위  // 🧯 이어하던 세이브 개인 순위 메우기   // 🥇 리그 전 선발 개인 순위   // 🛡️ 대회 수비 부문   // 📈 동료 성장·노쇠   // 🎉 fever.js 추가   // 🏛️ 명예의 전당 달 탭·헌액 카드   // 🌏 worldcup.js   // 👥 squad.js·🔥 camp.js + 항상 재검증
+const CACHE = "soccer-v12";  // 🐛 출전 수 두 번 세던 것 · 우승 화면 다음 상대  // 🥇 개막 전 개인 순위  // 🧯 이어하던 세이브 개인 순위 메우기   // 🥇 리그 전 선발 개인 순위   // 🛡️ 대회 수비 부문   // 📈 동료 성장·노쇠   // 🎉 fever.js 추가   // 🏛️ 명예의 전당 달 탭·헌액 카드   // 🌏 worldcup.js   // 👥 squad.js·🔥 camp.js + 항상 재검증
 const ASSETS = ["./", "./index.html", "./style.css", "./game.js", "./cup.js", "./career.js", "./squad.js", "./fever.js", "./camp.js", "./worldcup.js", "./manifest.webmanifest", "../base.css", "../radar.js", "../timing.js", "../match.js", "../help.js"];
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));

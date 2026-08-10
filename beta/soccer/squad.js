@@ -261,7 +261,15 @@ window.WingerSquad = (() => {
   function leagueXI() {
     const sq = ensureSquads();
     const out = [];
-    for (const club of Object.keys(sq)) for (const x of startingXIOf(club)) out.push({ club, p: x });
+    for (const club of Object.keys(sq)) {
+      /* 우리 팀은 **그 경기에 실제로 뛴 11명**(matchXI)이에요. 다른 팀은 실력 순
+       * 선발을 써요 — 내가 못 보는 경기니까요.
+       * 이걸 안 나누면 출전 수가 두 벌로 세어져요: leagueRound가 실력 순 11명에게,
+       * markApps가 진짜 선발 11명에게 각각 세서 우리 팀만 두 배가 됩니다
+       * (제보: "김우진은 어떻게 경기수가 20이지"). */
+      const line = (S && club === S.group) ? matchXI() : startingXIOf(club);
+      for (const x of line) out.push({ club, p: x });
+    }
     return out;
   }
   const ensureSquad = () => squadOf(S.group);        // 우리 팀

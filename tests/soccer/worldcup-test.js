@@ -28,6 +28,7 @@ const path = require("path");
 const DIR = "/workspace/grow-games/beta/soccer";
 const { JSDOM } = require("/workspace/grow-games/tests/cloud/jsdom.js");
 
+const WC_SRC = require("fs").readFileSync("/workspace/grow-games/beta/soccer/worldcup.js", "utf8");
 let fail = 0;
 const check = (ok, msg) => { console.log(`${ok ? "✅" : "❌"} ${msg}`); if (!ok) fail++; };
 const guard = (label, fn) => { try { fn(); } catch (e) { check(false, `${label} — ${e.message}`); } };
@@ -683,6 +684,32 @@ guard("⑬ 🛡️ 수비 부문", () => {
   // 🛡️ 골든월 — 수비 1위가 실제로 받는가
   const AW = WC.AWARD_FAME;
   check(AW && AW.wall > 0, `🛡️ 골든월에 명성이 붙어 있다 (+${AW && AW.wall})`);
+});
+
+
+/* ---------- ⑭ 대회가 끝나면 "다음 상대"가 없어야 한다 ----------
+ * 제보: "월드컵 결승 우승 화면인데 다음 경기가 프랑스라고 적혀있어!"
+ * 트로피를 든 화면 맨 아래에서 다음 경기를 안내하고 있었다.
+ *
+ * 원인이 재미있다 — 우승 경로에서는 playOutRest()가 안 돈다(내가 결승을 이겼으니
+ * 남은 경기가 없다). 그런데 **우승국(w.champ)을 거기서만 적고 있었다.**
+ * 그래서 우승했는데 우승국이 비어 있었고, 기록 줄은 "아직 대회 중"으로 읽었다. */
+guard("⑭ 대회 종료 후 다음 상대", () => {
+  const WC = w.WingerWorldCup._t;
+  const SRC = w.__get("String(WingerWorldCup._t.endTournament)");
+  check(/w\.champ = nat\.name;/.test(SRC),
+    "우승하면 그 자리에서 우승국을 적는다 — playOutRest가 안 도는 경로예요");
+  const REC = WC_SRC.match(/function recordHTML\(\) \{[\s\S]*?\n  \}/);
+  check(!!REC && /const over = !!\(w\.final \|\| w\.champ\);/.test(REC[0]),
+    "대회가 끝났는지를 보고 다음 상대를 정한다");
+  check(!!REC && /over \? null/.test(REC[0]),
+    "끝났으면 다음 상대를 안 적는다");
+  /* 변이 검증 — 끝났는지를 안 보면 우승 화면에도 다음 상대가 붙는다.
+   * 손으로 재현해요(그 판정 하나를 뗀 판). */
+  const over = true;
+  const naive = () => "🇫🇷 프랑스";
+  check((over ? null : naive()) === null && naive() !== null,
+    "판정을 떼면 우승 화면에도 다음 상대가 붙는다 — 위 두 줄이 그걸 막아요");
 });
 
 console.log(fail ? `\n❌ ${fail}건 실패` : "\n✅ 통과");

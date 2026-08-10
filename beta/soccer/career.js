@@ -1319,9 +1319,15 @@ window.WingerCareer = (() => {
     /* 🪑 선발은 **경기마다 다시 뽑아요.** 실력이 주지만 그날 몸 상태와 흔들림이
      * 얹혀서, 경계에 있으면 이번 주에 뛰고 다음 주에 앉을 수 있어요. */
     if (window.WingerSquad) {
-      WingerSquad.rollLineup();
+      /* 🪑 선발은 **그 라운드에 한 번만** 뽑아요.
+       * 이 화면은 다시 들어올 수 있어요(앱을 껐다 켜거나 중간에 나갔다 오면
+       * S.pendingShow가 살아 있어서 "경기하러 가기"가 또 떠요). 그때마다 다시
+       * 굴리면 같은 라운드의 선발이 계속 바뀝니다. */
+      if (act.xiWeek !== act.week) WingerSquad.rollLineup();
       if (!WingerSquad.isStarter()) { benchShow(act); return; }
-      WingerSquad.markApps();
+      /* ⚠️ **출전 수는 여기서 세지 않아요.** 화면을 열 때 세면 다시 들어올 때마다
+       * 또 세어져서, 12라운드인데 동료 출전 수가 20이 됩니다(제보: "김우진은
+       * 어떻게 경기수가 20이지"). 내 출전 수(act.apps)와 **같은 자리**에서 세요. */
     }
     $("stage-title").textContent = `⚽ ${S.proYear}시즌 ${cbLabel(act.cb)} — ${S.group}`;
     $("stage-round").textContent = `R${act.week + 1}/${act.weekTotal} 리그 · vs ${act.opp}`;
@@ -1459,6 +1465,9 @@ window.WingerCareer = (() => {
       + (info.momentRes === "perfect" ? 0.5 : info.momentRes === "miss" ? -0.5 : 0);
 
     act.apps = (act.apps || 0) + 1;
+    /* 👥 동료 출전 수는 **leagueRound가 세요** — 리그 전 선발을 한 바퀴 돌면서
+     * 거기서 한 번만 셉니다. 여기서 markApps를 또 부르면 우리 팀만 두 번 세어져요
+     * (제보: "김우진은 어떻게 경기수가 20이지" — 12라운드에 20경기였습니다). */
     // 시즌 평균 평점 — 기록 화면에 보여줘요
     act.ratingSum = (act.ratingSum || 0) + clamp(myRankScore / 10, 1, 10);
     act.goals = (act.goals || 0) + info.myGoals;
