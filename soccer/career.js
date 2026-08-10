@@ -639,55 +639,14 @@ window.WingerCareer = (() => {
 
   /* ---------- 🥇 개인 순위 (득점·도움·수비) ----------
    *
-   * 시즌 내내 같은 8명이 함께 쌓아요. 부문상은 이 표의 1위에게 갑니다 —
+   * 리그의 모든 선발이 시즌 내내 함께 쌓아요. 부문상은 이 표의 1위에게 갑니다 —
    * 화면에 보이는 경쟁이 곧 수상 판정이에요. 예전에는 랜덤 문턱이라
    * 표와 수상이 서로 모르는 사이였습니다. */
   /* 경쟁자의 포지션 — 평점을 나와 **같은 산식**으로 매기려면 필요해요.
    * (수비수의 수비 성공과 공격수의 골이 같은 표에서 공정하게 겨루도록) */
   const RACE_POS = { st: "fw", st2: "fw", wg: "wg", am: "mf", mf: "mf", cb: "df", cb2: "df", ut: "mf" };
 
-  function rollRace() {
-    /* ⚠️ oppClubs가 아니라 leagueClubs예요 — 내 클럽을 빼고 뽑으면
-     * **우리 팀 선수가 순위표에 한 번도 안 나와요.** 실제로 그랬습니다. */
-    /* 👥 경쟁자 여덟 명을 **리그의 실제 선수 중에서** 뽑아요.
-     *
-     * 예전에는 이름을 새로 지어 여덟을 만들었어요. 그러면 개인 순위 1위가
-     * 어느 팀 명단에도 없는 유령이 됩니다 — 중계에 뜨는 동료, 개인 순위의
-     * 그 선수, 명단 화면의 그 줄이 서로 모르는 사이가 되는 이 저장소의 단골 병이에요.
-     *
-     * 생산량(pop)도 그 선수의 실력을 그대로 씁니다. 역할(RACE_ROLES)은 포지션에
-     * 맞는 것을 골라요 — 센터백에게 스트라이커 생산량을 물리면 안 되니까요.
-     * squad.js가 없는 옛 캐시에서는 예전처럼 이름을 지어 씁니다. */
-    /* ⚠️ **자리 배분도 안 해요.** 클럽 할당량에 이어 포지션 할당량도 걷어냅니다
-     * (제보: "포지션별 실력순 8명도 필요없는데??"). 그냥 리그에서 제일 잘하는
-     * 여덟이에요 — 여덟이 다 공격수인 리그도 있을 수 있죠.
-     *
-     * 대신 **역할은 그 선수의 포지션에서 뽑아요.** 예전엔 여덟 역할을 미리 정해
-     * 두고 사람에게 끼워 맞췄는데, 자리 배분을 없애면 공격수가 센터백 역할을
-     * 받아 수비 생산량을 굴리게 됩니다 — 표에 "스트라이커인데 수비 1위"가 떠요. */
-    const faces = window.WingerSquad ? WingerSquad.leagueFaces(RACE_ROLES.length) : [];
-    if (faces.length === RACE_ROLES.length) {
-      const roleByPos = { fw: ["st", "st2"], wg: ["wg"], mf: ["am", "mf", "ut"], df: ["cb", "cb2"] };
-      return faces.map(({ club, player }) => {
-        const keys = roleByPos[player.pos] || ["ut"];
-        /* ⚠️ 고를 키를 **먼저 정해요.** find의 술어 안에서 pick을 부르면 원소마다
-         * 다시 굴려져서, 운 나쁘면 아무것도 못 찾고 첫 역할(스트라이커)로 떨어져요 —
-         * 실제로 수비수가 "스트라이커"로 표에 떴습니다(160명 중 25명). */
-        const want = pick(keys);
-        const role = RACE_ROLES.find((r) => r.key === want) || RACE_ROLES[0];
-        return {
-          name: player.name, role: role.name, key: role.key, pos: player.pos,
-          pop: clamp(player.str, 40, 95), club, g: 0, a: 0, d: 0, rate: 0, mom: 0,
-        };
-      });
-    }
-    const clubs = shuffle(leagueClubs(S));
-    return RACE_ROLES.map((r, i) => ({
-      name: randomPlayerName(Math.random() < 0.5 ? null : MARKETS.find((m) => m.id === "eu")),
-      role: r.name, key: r.key, pos: RACE_POS[r.key] || "mf", pop: rand(52, 88),
-      club: clubs[i % clubs.length], g: 0, a: 0, d: 0, rate: 0, mom: 0,
-    }));
-  }
+
 
   /* 진행 중이던 세이브에는 경쟁자 명단이 없어요 — 시즌 시작(initActivity)에만
    * 만들어지거든요. 그대로 두면 순위표가 아예 안 뜨고, 시즌이 끝날 때까지
@@ -696,51 +655,91 @@ window.WingerCareer = (() => {
    * 그릴 때 비어 있으면 채워 넣되, **이미 치른 경기 수만큼 미리 굴려 둬요.**
    * 0골에서 시작하면 내가 20골인데 1위가 0골인 표가 나와서 경쟁이 안 됩니다.
    * (평점 칸도 같은 방식으로 메워요) */
-  function ensureRace() {
+  /* 개인 순위가 **명단 한 벌**을 보게 되면서, 옛 세이브에는 그 기록이 없어요.
+   * 마이그레이션은 안 해요 — 읽는 쪽에서 **이미 치른 라운드만큼 다시 굴려** 메웁니다
+   * (g/a/d/평점을 메우던 방식 그대로예요). 한 시즌에 한 번만 돌아요.
+   *
+   * 옛 세이브의 act.race(여덟 명)는 그냥 버려요. 같은 사람의 기록이 두 벌로 남는
+   * 것이 이 저장소가 계속 앓아 온 병이라, 여기서 한 벌로 정리합니다. */
+  function ensureLeagueRecords() {
     const act = S.activity;
-    if (!act) return;
-    if (Array.isArray(act.race)) {
-      /* 명단은 있는데 새 칸(포지션·평점·MOM)이 없는 세이브. 마이그레이션은 안 하지만
-       * 읽는 쪽에서 기본값을 줘요 — 안 그러면 평점 칸이 전부 0.00으로 뜹니다.
-       * 평점은 이미 치른 경기 수만큼 굴려서 메워요(g/a/d를 메우던 방식 그대로). */
-      if (act.race.length && act.race[0].rate == null) {
-        for (const r of act.race) {
-          r.pos = r.pos || RACE_POS[r.key] || "mf";
-          r.rate = 0; r.mom = 0;
-        }
-        for (let i = 0; i < (act.apps || 0); i++) raceRate(null);
-        save();
-      }
-      return;
-    }
-    act.race = rollRace();
+    if (!act || !window.WingerSquad) return;
+    if (act.raceFilled) return;
+    act.raceFilled = true;
+    if (act.race) delete act.race;
     const played = act.apps || 0;
-    for (let i = 0; i < played; i++) { raceAdvance(); raceRate(null); }
+    /* ⚠️ **우리 팀은 빼고** 비어 있는지 봐요. 우리 팀 선발은 markApps로 출전 수가
+     * 이미 쌓여 있어서, 전체로 보면 "비어 있지 않다"가 나옵니다 — 그러면 다른
+     * 클럽 88명이 영원히 0으로 남아요(이어하던 세이브에서 실제로 그랬습니다:
+     * 41경기를 치렀는데 기록 있는 사람이 우리 팀 14명뿐이었어요). */
+    /* ⚠️ **우리 팀은 빼고** 비어 있는지 봐요. 우리 팀 선발은 markApps로 출전 수가
+     * 이미 쌓여 있어서, 전체로 보면 "비어 있지 않다"가 나옵니다 — 그러면 다른
+     * 클럽 88명이 영원히 0으로 남아요(이어하던 세이브에서 실제로 그랬습니다:
+     * 41경기를 치렀는데 기록 있는 사람이 우리 팀 14명뿐이었어요). */
+    const xi = WingerSquad.leagueXI();
+    const blank = xi.every(({ club, p }) => club === S.group || !(p.apps || 0));
+    if (played && blank) {
+      const skip = new Set(xi.filter(({ p }) => (p.apps || 0) > 0).map(({ p }) => p));
+      for (let i = 0; i < played; i++) leagueRound(null, skip);
+    }
     save();
   }
 
-  /* 한 경기치를 경쟁자들에게 쌓아요. 리그 격이 생산량에 실려요.
-   * **그 라운드 몫을 돌려줍니다** — 평점을 나와 같은 산식으로 매기려면
-   * 시즌 누계가 아니라 그 경기에 한 일이 필요해요. */
-  function raceAdvance() {
-    const race = S.activity && S.activity.race;
-    if (!Array.isArray(race)) return [];
-    const pres = leagueOf(S).prestige;
-    return race.map((r) => {
-      const def = RACE_ROLES.find((x) => x.key === r.key) || RACE_ROLES[0];
-      const dg = poissonish(raceLam(def.g, r.pop, pres));
-      const da = poissonish(raceLam(def.a, r.pop, pres));
-      const dd = poissonish(raceLam(def.d, r.pop, pres));
-      r.g += dg; r.a += da; r.d += dd;
-      return { r, dg, da, dd };
-    });
+  /* 🥇 한 라운드 — **리그의 모든 선발**이 자기 경기를 치러요.
+   *
+   * 예전에는 시즌 초에 뽑은 여덟 명만 굴렸어요. 그러면 다른 클럽의 아홉 번째
+   * 선수는 아무리 잘해도 표에 못 올라옵니다 — 명단 화면에는 있는데 순위표에는
+   * 없는 사람이 88명이었어요(제보: "전체 리그 선수들 대상으로 다 해야 해").
+   *
+   * 기록은 **명단 한 벌에만** 쌓아요(S.squads). 예전에는 같은 사람의 기록이
+   * race와 squads 두 벌로 있어서 우리 팀만 손으로 맞춰 주고 있었습니다.
+   *
+   * 우리 팀은 여기서 **굴리지 않아요** — 내가 뛴 그 경기의 값(중계에 뜬 골)이
+   * applyMateGoals로 들어옵니다. 굴리면 같은 라운드를 두 번 세요.
+   * 🌏 월드컵의 advanceOthers(skip)와 같은 규칙이에요.
+   *
+   * 역할은 포지션에서 정해요 — 센터백에게 스트라이커 생산량을 물리면 안 되니까요. */
+  const ROLE_BY_POS = { fw: ["st", "st2"], wg: ["wg"], mf: ["am", "mf", "ut"], df: ["cb", "cb2"] };
+  const roleOf = (x) => {
+    if (!x.role) {
+      const keys = ROLE_BY_POS[x.pos] || ["ut"];
+      const want = pick(keys);
+      x.role = (RACE_ROLES.find((r) => r.key === want) || RACE_ROLES[0]).key;
+    }
+    return RACE_ROLES.find((r) => r.key === x.role) || RACE_ROLES[0];
+  };
+  function leagueRound(roundRes, skip) {
+    if (!window.WingerSquad) return [];
+    const out = [];
+    for (const { club, p } of WingerSquad.leagueXI()) {
+      if (p.me) continue;                       // 내 기록은 S.activity에 따로 쌓여요
+      /* 🧯 옛 세이브를 메울 때는 **이미 기록이 있는 사람을 건너뛰어요.**
+       * 우리 팀 동료는 markApps·동료 골로 진짜 기록이 쌓여 있어서, 여기서 또
+       * 돌리면 출전 수가 두 배가 됩니다. 건너뛸 사람은 메우기 **전에** 정해요 —
+       * 돌면서 정하면 첫 바퀴에 생긴 기록 때문에 둘째 바퀴부터 다 건너뜁니다. */
+      if (skip && skip.has(p)) continue;
+      const mine = club === S.group;
+      p.apps = (p.apps || 0) + 1;
+      const def = roleOf(p);
+      const pop = clamp(p.str, 40, 95);
+      /* 우리 팀은 굴리지 않아요. 그래도 **평점은 매겨야** 해요 —
+       * 안 그러면 우리 팀 동료만 ⭐ 평점 순위에서 통째로 빠집니다. */
+      const dg = mine ? 0 : poissonish(raceLam(def.g, pop));
+      const da = mine ? 0 : poissonish(raceLam(def.a, pop));
+      const dd = mine ? 0 : poissonish(raceLam(def.d, pop));
+      p.g = (p.g || 0) + dg; p.a = (p.a || 0) + da; p.d = (p.d || 0) + dd;
+      const res = (roundRes && roundRes[club]) || pick(["W", "D", "L"]);
+      const info = { myGoals: dg, assists: da, defense: dd, res, oppGoals: raceConceded(res) };
+      const score = matchRating(info, p.pos || "mf", 0);
+      p.rate = (p.rate || 0) + clamp(score / 10, 1, 10);
+      out.push({ p, club, score, res, role: def.name });
+    }
+    return out;
   }
 
-  // 우리 팀 소속 경쟁자 이름 — 경기 중 '동료의 골'에 붙일 이름이에요
-  const mateNames = () => {
-    const race = S.activity && S.activity.race;
-    return Array.isArray(race) ? race.filter((r) => r.club === S.group).map((r) => r.name) : [];
-  };
+  // 우리 팀 선발 이름 — 경기 중 '동료의 골'에 붙일 이름이에요
+  const mateNames = () => (window.WingerSquad
+    ? WingerSquad.startingXI().filter((x) => !x.me).map((x) => x.name) : []);
 
   /* 경기에서 동료가 넣은 골을 그 선수의 시즌 기록으로 옮겨요.
    *
@@ -748,26 +747,19 @@ window.WingerCareer = (() => {
    * 골만 세야 화면(중계)과 표(개인 순위)가 같은 것을 봅니다. 그래서 굴린 값(dg)을
    * 물리고 중계에 뜬 골 수로 바꿔요 — 안 그러면 같은 라운드를 두 번 세게 됩니다.
    * 다른 클럽 선수는 내가 볼 수 없는 경기라 굴린 값을 그대로 써요. */
-  function applyMateGoals(deltas, names) {
-    if (!Array.isArray(deltas)) return deltas;
-    const got = {};
-    for (const n of names || []) got[n] = (got[n] || 0) + 1;
-    for (const d of deltas) {
-      if (!d || !d.r || d.r.club !== S.group) continue;
-      d.r.g -= d.dg;                 // 굴린 몫을 물려요
-      d.dg = got[d.r.name] || 0;     // 중계에 뜬 만큼만
-      d.r.g += d.dg;
+  /* 중계에 뜬 동료 골을 그 선수의 시즌 기록으로 옮겨요.
+   *
+   * 우리 팀 선수는 **나와 같은 경기를 뛴 사람**이에요. 그 경기에서 실제로 나온
+   * 골만 세야 화면(중계)과 표(개인 순위)가 같은 것을 봅니다.
+   * 이제 기록이 명단 한 벌뿐이라 여기 한 곳만 고치면 돼요 —
+   * 예전에는 race와 squads 두 벌을 손으로 맞추고 있었습니다. */
+  function applyMateGoals(names) {
+    if (!window.WingerSquad) return;
+    const mine = WingerSquad.squadOf(S.group);
+    for (const n of names || []) {
+      const who = mine.find((x) => x.name === n && !x.me);
+      if (who) who.g = (who.g || 0) + 1;
     }
-    /* 👥 명단 화면의 기록도 같이 채워요. 이름이 같은 사람이라 개인 순위와
-     * 팀 명단이 서로 다른 숫자를 보여주면 안 돼요. */
-    if (window.WingerSquad) {
-      const mine = WingerSquad.squadOf(S.group);
-      for (const n of names || []) {
-        const who = mine.find((x) => x.name === n);
-        if (who) who.g += 1;
-      }
-    }
-    return deltas;
   }
 
   /* 경쟁자 실점 — 소속 클럽의 그 라운드 결과에서 짐작해요. 실제로 굴리지는
@@ -781,56 +773,70 @@ window.WingerCareer = (() => {
    * 아래 폭이 그 평균과 맞아요 (0.5 / 1.0 / 2.5). */
   const raceConceded = (res) => (res === "W" ? randInt(0, 1) : res === "L" ? randInt(1, 4) : randInt(0, 2));
 
-  /* 경쟁자들의 그 라운드 평점. **나와 똑같은 matchRating을 씁니다** —
-   * 예전에는 개인 순위 명단(act.race)과 평점표 명단(act.rivals)이 아예 다른
-   * 8명이었어요. 득점 1위가 평점표에 안 보이는 게 당연했습니다.
-   * roundRes가 없으면(옛 세이브 메우기) 결과를 무작위로 굴려요. */
-  function raceRate(roundRes, deltas) {
-    const race = S.activity && S.activity.race;
-    if (!Array.isArray(race)) return [];
-    const ds = deltas || race.map((r) => ({ r, dg: 0, da: 0, dd: 0 }));
-    return ds.map(({ r, dg, da, dd }) => {
-      const res = (roundRes && roundRes[r.club]) || pick(["W", "D", "L"]);
-      const info = { myGoals: dg, assists: da, defense: dd, res, oppGoals: raceConceded(res) };
-      const score = matchRating(info, r.pos || "mf", 0);
-      r.rate = (r.rate || 0) + clamp(score / 10, 1, 10);
-      return { r, score, res };
-    });
-  }
+
 
   /* 나를 끼워 정렬한 순위.
    * key — "g" 득점 · "a" 도움 · "d" 수비 · "p" 공격포인트 · "r" 평균평점 · "m" MOM */
   function raceRank(key) {
     const act = S.activity;
-    const race = (act && act.race) || [];
     const apps = (act && act.apps) || 0;
-    const avg = (x) => (apps ? (x.rate || 0) / apps : 0);
+    /* ⚠️ 평균 평점은 **그 사람이 뛴 경기 수**로 나눠요. 예전에는 경쟁자도 내
+     * 출전 수로 나눴는데, 이제 사람마다 출전 수가 달라요(로테이션·부상 없이도
+     * 선발이 매 경기 다시 뽑히니까요). 남의 경기 수로 나누면 벤치를 오간 선수의
+     * 평균이 실제보다 낮게 뜹니다. */
+    const avgOf = (x, n) => (n ? (x.rate || 0) / n : 0);
     const val = (x) => key === "p" ? (x.g || 0) + (x.a || 0)
-      : key === "r" ? avg(x)
-      // MOM은 내 줄이 act.wins, 경쟁자는 r.mom에 쌓여요 — 같은 이름으로 읽어요
+      : key === "r" ? x.avg
+      // MOM은 내 줄이 act.wins, 다른 선수는 mom에 쌓여요 — 같은 이름으로 읽어요
       : key === "m" ? (x.m != null ? x.m : x.mom || 0)
       : x[key] || 0;
     const me = { name: S.name, club: S.group, role: null, me: true,
       g: (act && act.goals) || 0, a: (act && act.assists) || 0, d: (act && act.defense) || 0,
-      rate: (act && act.ratingSum) || 0, m: (act && act.wins) || 0 };
-    /* 🥇 **우리 팀 동료도 기록이 좋으면 올라와요.**
+      rate: (act && act.ratingSum) || 0, m: (act && act.wins) || 0, apps,
+      pop: clamp(overall(), 40, 95) };
+    /* 🥇 **리그의 모든 선수**가 이 표에 들어와요.
      *
-     * 경쟁자 여덟은 시즌 초에 실력으로 뽑혀요. 그러면 실력은 평범한데 그 시즌에
-     * 잘한 동료가 표에 낄 자리가 없습니다(제보: "동료 기록이 좋으면 나올 수도
-     * 있는 거지??"). 동료 골은 중계에서 실제로 나온 값이라 **진짜 기록**이에요 —
-     * 명단(👥)에 이미 쌓여 있으니 여기서 같이 세워 줍니다.
-     * 이미 경쟁자로 뽑힌 사람은 두 번 안 넣어요 — 표가 둘로 갈리면 안 되니까요. */
-    const inRace = new Set(race.map((r) => r.name));
-    const mates = (window.WingerSquad ? WingerSquad.squadOf(S.group) : [])
-      .filter((x) => !x.me && !inRace.has(x.name) && ((x.g || 0) || (x.a || 0) || (x.d || 0)))
-      .map((x) => ({
-        name: x.name, club: S.group, role: null, pos: x.pos, pop: clamp(x.str, 40, 95),
-        g: x.g || 0, a: x.a || 0, d: x.d || 0, rate: 0, mom: 0,
-      }));
-    return race.concat(mates).concat([me]).map((x) => ({ ...x, avg: avg(x), v: val(x) }))
-      // 동점이면 내 줄을 앞에 둬요 — 실제로도 공동 득점왕은 둘 다 받아요
-      .sort((x, y) => y.v - x.v || (x.me ? -1 : 1));
+     * 예전에는 시즌 초에 실력으로 뽑은 여덟 명만 굴려서, 다른 클럽의 아홉 번째
+     * 선수는 아무리 잘해도 못 올라왔어요 — 명단 화면에는 있는데 순위표에는 없는
+     * 사람이 88명이었습니다(제보: "전체 리그 선수들 대상으로 다 해야 해").
+     * 이제 기록이 명단 한 벌에만 있으니 여기서 그대로 읽어 세워요. */
+    const sq = window.WingerSquad ? WingerSquad.ensureSquads() : {};
+    /* 표에 들어오는 사람 — **지금 선발이거나, 이번 시즌에 한 경기라도 뛴 사람.**
+     * 한 번도 안 뛴 벤치까지 넣으면 0으로 채운 줄이 수십 개 붙어서 표가 아니게 되고,
+     * 반대로 출전 기록만 보면 **개막 직후에 나 혼자만 뜹니다**(실제로 그랬어요).
+     * 로테이션으로 벤치에 앉은 사람도 그동안의 기록은 그대로 남아요. */
+    const inXI = new Set();
+    if (window.WingerSquad) for (const { p } of WingerSquad.leagueXI()) inXI.add(p);
+    const others = [];
+    for (const club of Object.keys(sq)) {
+      for (const x of sq[club]) {
+        if (x.me) continue;
+        if (!inXI.has(x) && !(x.apps || 0)) continue;
+        /* 역할 이름(스트라이커·센터백…)은 명단 줄에 적힌 키에서 꺼내요.
+         * 아직 한 경기도 안 뛴 사람은 키가 없어서 포지션에서 정해 줍니다. */
+        const rl = RACE_ROLES.find((r) => r.key === x.role);
+        const R = rl || roleOf(x);
+        others.push({ name: x.name, club, role: R.name, key: R.key, pos: x.pos, pop: clamp(x.str, 40, 95),
+          g: x.g || 0, a: x.a || 0, d: x.d || 0, rate: x.rate || 0, mom: x.mom || 0, apps: x.apps || 0 });
+      }
+    }
+    const rows = others.concat([me]).map((x) => ({ ...x, avg: avgOf(x, x.apps), v: 0 }))
+      .map((x) => ({ ...x, v: val(x) }));
+    /* 개막 전에는 실력 순으로 세워요.
+     *
+     * 기록 순으로 두면 전부 0이라 아무렇게나 늘어서고, 동점 규칙 때문에
+     * **내가 1위**로 뜹니다 — 한 경기도 안 뛰었는데 득점왕처럼 보여요.
+     *
+     * ⚠️ "아무도 기록이 없으면"으로 판정하면 안 돼요. 결산을 안 거치고 넘어온
+     * 옛 세이브에는 **지난 시즌 기록이 남아 있어서**(실측: 69명 중 12명) 그 판정이
+     * 거짓이 됩니다. **시즌이 진행 중인가(act)**를 직접 봐요. */
+    if (!act || rows.every((x) => !(x.apps || 0))) {
+      return rows.sort((x, y) => (y.pop || 0) - (x.pop || 0));
+    }
+    // 동점이면 내 줄을 앞에 둬요 — 실제로도 공동 득점왕은 둘 다 받아요
+    return rows.sort((x, y) => y.v - x.v || (x.me ? -1 : 1));
   }
+
   // 내가 그 부문 1위인가 — 부문상 판정이 이걸 봐요
   const raceTop = (key) => { const r = raceRank(key)[0]; return !!(r && r.me); };
 
@@ -866,9 +872,11 @@ window.WingerCareer = (() => {
      * 내 줄은 종합, 경쟁자는 pop을 종합 눈금으로 옮긴 값(raceStr)을 씁니다. */
     const pres = leagueOf(S).prestige;
     const strOf = (r) => (r.me ? overall() : raceStr(r.pop, pres));
+    // 개막 전에는 👑을 안 붙여요 — 시즌이 시작도 안 했는데 1위는 없어요
+    const opening = !S.activity || ranked.every((x) => !(x.apps || 0));
     const line = (r, i) => `<tr class="${r.me ? "me" : ""}"><td>${i + 1}</td>`
       + `<td>${r.name}<span class="ch-club"><b class="ch-title">${titleOf(strOf(r))}</b> · ${r.club || "-"}${r.role ? ` · ${r.role}` : ""}</span></td>`
-      + `<td class="rc-v">${i === 0 ? "👑" : ""}${raceValue(r, raceKey)}</td></tr>`;
+      + `<td class="rc-v">${!opening && i === 0 ? "👑" : ""}${raceValue(r, raceKey)}</td></tr>`;
     const myIdx = ranked.findIndex((x) => x.me);
     const shown = ranked.slice(0, 5);
     const pinned = myIdx >= 5
@@ -880,7 +888,9 @@ window.WingerCareer = (() => {
       + `<table class="rank-table season-standings race-table">`
       + `<thead><tr><th>#</th><th>선수</th><th>${raceUnit(raceKey)}</th></tr></thead>`
       + `<tbody>${shown.map(line).join("")}${pinned}</tbody></table>`
-      + `<div class="race-note">👑 이 부문 1위 — 시즌이 끝나면 부문상을 받아요</div>`;
+      + (opening
+        ? `<div class="race-note">개막 전이라 실력 순이에요</div>`
+        : `<div class="race-note">👑 이 부문 1위 — 시즌이 끝나면 부문상을 받아요</div>`);
   }
 
   /* 표를 그리고 탭을 배선해요. 탭을 누르면 정렬만 바꿔 다시 그립니다 —
@@ -895,8 +905,14 @@ window.WingerCareer = (() => {
       const mine = list.findIndex((x) => x.me) + 1;
       const top = list[0];
       const me = list[mine - 1];
-      sum.textContent = `🥇 개인 순위 — ${raceLabel(raceKey)} ${mine}위 (${me ? raceValue(me, raceKey) : 0})`
-        + `${top && !top.me ? ` · 1위 ${top.name} ${raceValue(top, raceKey)}` : " · 내가 1위!"}`;
+      /* 개막 전에는 순위를 말하지 않아요 — 시즌이 시작도 안 했는데 "1위"는 거짓말이에요 */
+      sum.textContent = (!S.activity || list.every((x) => !(x.apps || 0)))
+        /* "선발 N명"은 **지금 선발**을 세요 — 표에는 지난 시즌 기록만 남은
+         * 로테이션 선수도 섞여 있어서, 표 줄 수로 세면 숫자가 들쭉날쭉해요. */
+        ? `🥇 개인 순위 — 개막 전 (리그 선발 ${window.WingerSquad
+            ? Math.max(0, WingerSquad.leagueXI().length - 1) : 0}명)`
+        : `🥇 개인 순위 — ${raceLabel(raceKey)} ${mine}위 (${me ? raceValue(me, raceKey) : 0})`
+          + `${top && !top.me ? ` · 1위 ${top.name} ${raceValue(top, raceKey)}` : " · 내가 1위!"}`;
     }
     for (const b of body.querySelectorAll(".race-tab")) {
       b.onclick = (ev) => { ev.preventDefault(); raceKey = b.dataset.k; renderRace(); };
@@ -904,7 +920,9 @@ window.WingerCareer = (() => {
   }
 
   function initActivity() {
-    // 👥 새 시즌 — 동료들의 시즌 기록을 비워요 (명단은 그대로)
+    /* 👥 새 시즌 — 동료들의 시즌 기록을 비워요 (명단은 그대로).
+     * 결산에서 이미 비웠지만, **결산을 안 거친 옛 세이브**를 위해 여기도 남겨 둬요.
+     * 두 번 불러도 같은 결과라 안전합니다. */
     if (window.WingerSquad) WingerSquad.resetSeason();
     initTable();
     S.activity = {
@@ -913,9 +931,9 @@ window.WingerCareer = (() => {
       wins: 0, sales: 0, hypeSum: 0, cbHype: 0, cbWins: 0,
       goals: 0, assists: 0, defense: 0, apps: 0, teamW: 0, teamD: 0, teamL: 0,
       opp: pick(oppClubs(S)),
-      /* 🥇 경쟁자 8명 — 개인 순위도, 경기 후 평점표도 이 명단 하나를 써요.
+      /* 🥇 경쟁자 — 개인 순위도, 경기 후 평점표도 **리그 명단 한 벌**을 써요.
        * 예전에는 명단이 둘(rivals · race)로 갈려 있어서 득점왕이 평점표에 없었어요. */
-      race: rollRace(),
+      raceFilled: true,        // 기록은 명단(S.squads)에 쌓아요 — 여기엔 안 둡니다
     };
   }
 
@@ -1087,27 +1105,34 @@ window.WingerCareer = (() => {
     /* 🥇 개인 순위 — 시즌 중에만 보여줘요. 득점왕 경쟁이 눈에 보여야
      * "한 골 더"에 이유가 생겨요. 부문상이 이 표 1위한테 갑니다. */
     const race = $("pro-race");
-    ensureRace();                     // 옛 세이브에도 명단을 채워요
+    ensureLeagueRecords();            // 옛 세이브에도 명단 기록을 채워요
     /* 🌏 대회 중에는 **대회 개인 기록**을 봐요. 리그 득점왕 표를 그대로 두면
      * 국대 골이 거기 섞인 것처럼 읽혀요(실제로는 안 섞이지만, 화면이 그렇게
      * 보이면 그게 곧 제보가 됩니다). */
     if (S.wc && window.WingerWorldCup) {
       race.hidden = false;
       $("pro-race-sum").textContent = "🥇 월드컵 개인 순위";
-      $("pro-race-body").innerHTML = WingerWorldCup.raceHTML();
-    } else if (S.activity && Array.isArray(S.activity.race)) {
+      const drawWcRace = () => {
+        $("pro-race-body").innerHTML = WingerWorldCup.raceHTML();
+        /* 부문 탭은 그릴 때마다 새로 만들어져요 — 그릴 때마다 다시 물려 줘야
+         * 두 번째 클릭부터 죽지 않아요(리그 개인 순위와 같은 방식이에요). */
+        WingerWorldCup.wireFaceTabs($("pro-race-body"), drawWcRace);
+      };
+      drawWcRace();
+    } else if (S.activity && S.activity.apps != null) {
       race.hidden = false;
+      ensureLeagueRecords();
       renderRace();
     } else if (isPro()) {
       /* 🥇 시즌 준비 중에는 S.activity가 아예 없어요 — 시즌이 시작될 때 만들어지거든요.
        * 그대로 두면 준비 화면 내내 개인 순위가 **통째로 사라져** "왜 안 보이지"가 됩니다.
-       * 리그 순위표도 같은 이유로 준비 중 표시를 따로 넣었어요(개막 전 6팀).
-       * 여기서는 무엇을 겨루게 되는지만 알려 줍니다. */
+       *
+       * 여기에 "시즌이 시작되면 …와 겨뤄요" 같은 안내를 적어 뒀었는데, 굳이 없어도
+       * 되는 문구였어요(제보). 이제 개인 순위가 **리그 명단**을 읽으니 개막 전에도
+       * 표를 그대로 그릴 수 있습니다 — 설명 대신 **누구와 겨루는지 보여줘요.**
+       * 아직 아무 기록도 없으니 그때는 실력 순으로 세웁니다(raceRank). */
       race.hidden = false;
-      $("pro-race-sum").textContent = "🥇 개인 순위 — 개막 전";
-      $("pro-race-body").innerHTML = `<p class="race-title">시즌이 시작되면 리그의 다른 8명과 `
-        + `득점·도움을 겨뤄요.<br/>골든부츠·플레이메이커·철벽상·공격포인트왕은 `
-        + `<b>이 표에서 1위</b>면 받습니다.</p>`;
+      renderRace();
     } else {
       race.hidden = true;
     }
@@ -1294,9 +1319,15 @@ window.WingerCareer = (() => {
     /* 🪑 선발은 **경기마다 다시 뽑아요.** 실력이 주지만 그날 몸 상태와 흔들림이
      * 얹혀서, 경계에 있으면 이번 주에 뛰고 다음 주에 앉을 수 있어요. */
     if (window.WingerSquad) {
-      WingerSquad.rollLineup();
+      /* 🪑 선발은 **그 라운드에 한 번만** 뽑아요.
+       * 이 화면은 다시 들어올 수 있어요(앱을 껐다 켜거나 중간에 나갔다 오면
+       * S.pendingShow가 살아 있어서 "경기하러 가기"가 또 떠요). 그때마다 다시
+       * 굴리면 같은 라운드의 선발이 계속 바뀝니다. */
+      if (act.xiWeek !== act.week) WingerSquad.rollLineup();
       if (!WingerSquad.isStarter()) { benchShow(act); return; }
-      WingerSquad.markApps();
+      /* ⚠️ **출전 수는 여기서 세지 않아요.** 화면을 열 때 세면 다시 들어올 때마다
+       * 또 세어져서, 12라운드인데 동료 출전 수가 20이 됩니다(제보: "김우진은
+       * 어떻게 경기수가 20이지"). 내 출전 수(act.apps)와 **같은 자리**에서 세요. */
     }
     $("stage-title").textContent = `⚽ ${S.proYear}시즌 ${cbLabel(act.cb)} — ${S.group}`;
     $("stage-round").textContent = `R${act.week + 1}/${act.weekTotal} 리그 · vs ${act.opp}`;
@@ -1309,7 +1340,7 @@ window.WingerCareer = (() => {
     const oppStr = clubStrByName(act.opp, S);
     const mates = teammateGoals(rating, oppStr);
     const oppGoals = deriveOppGoals(rating, S.stats.defense, oppStr, c.g + c.a + mates);
-    ensureRace();   // 명단이 있어야 동료 이름으로 골을 넣어요
+    ensureLeagueRecords();   // 명단이 있어야 동료 이름으로 골을 넣어요
     MatchSim.run({
       home: S.group, away: act.opp, myName: S.name,
       goals: c.g, assists: c.a, defense: c.def, oppGoals, rating, mateCount: mates,
@@ -1332,8 +1363,8 @@ window.WingerCareer = (() => {
     const conceded = deriveOppGoals(6.5, S.stats.defense, oppStr, mates);
     const res = mates > conceded ? "W" : mates < conceded ? "L" : "D";
     const roundRes = recordRound(act.opp, res);
-    ensureRace();
-    raceRate(roundRes, raceAdvance());          // 경쟁자들은 그 라운드를 치러요
+    ensureLeagueRecords();
+    leagueRound(roundRes);                      // 리그 전 선발이 그 라운드를 치러요
     const grew = WingerSquad.benchTurn();
     const L = WingerSquad.myLine();
 
@@ -1403,28 +1434,40 @@ window.WingerCareer = (() => {
      * 라이벌 점수가 그걸 볼 수 있어요. 예전에는 순위 행을 다 만든 뒤에 굴려서
      * 둘이 같은 라운드를 보면서도 서로 모르는 사이였습니다. */
     const roundRes = recordRound(act.opp, info.res);
-    ensureRace();                       // 옛 세이브면 여기서 먼저 채워요
-    // 🥇 경쟁자들도 그 라운드를 치러요. 우리 팀 동료는 방금 그 경기 결과를 씁니다.
-    const scored = raceRate(roundRes, applyMateGoals(raceAdvance(), info.mateGoals));
+    ensureLeagueRecords();              // 옛 세이브면 여기서 먼저 채워요
+    /* 🥇 리그 전 선발이 그 라운드를 치러요. 우리 팀은 굴리지 않고,
+     * 중계에 실제로 뜬 동료 골을 바로 이어서 얹습니다(같은 라운드를 두 번 세지 않아요). */
+    const scored = leagueRound(roundRes);
+    applyMateGoals(info.mateGoals);
     const rows = [
       { name: S.name, club: S.group, score: myRankScore, me: true, res: info.res },
-      /* 라이벌 줄이 개인 순위와 **같은 8명**이에요. 예전에는 명단이 둘로 갈려 있어서
+      /* 라이벌 줄이 개인 순위와 **같은 명단**이에요. 예전에는 명단이 둘로 갈려 있어서
        * 득점 1위가 경기 후 평점표에 아예 안 나왔습니다.
        * res는 그 라운드 소속 클럽의 결과예요 — 내가 이긴 팀 선수는 같이 떨어져요. */
-      ...scored.map(({ r, score, res }) => ({
-        name: r.name, club: r.club, role: r.role, res, score,
+      ...scored.map(({ p, club, role, score, res }) => ({
+        name: p.name, club, role, res, score,
       })),
     ].sort((a, b) => b.score - a.score);
     const rank = rows.findIndex((r) => r.me) + 1;
     const won = rank === 1;
+    /* 표가 9줄에서 67줄이 됐어요(리그 전 선발). "3위 안"을 그대로 두면 사실상
+     * 닿을 수 없는 문턱이 되니, 예전과 **같은 비율**(상위 3분의 1)로 봅니다. */
+    const topThird = rank <= Math.ceil(rows.length / 3);
     // 🏅 MOM 횟수도 명단에 쌓아요 — 개인 순위에서 "이 선수가 몇 번 최고였나"를 봐요
-    if (!won) { const top = scored.find(({ score }) => score === rows[0].score); if (top) top.r.mom = (top.r.mom || 0) + 1; }
-    /* 기준점이 5위가 아니라 5.5위인 이유: 경쟁자 8명이 리그 격을 타면서
-     * 내 평균 순위가 5.4~6.5위가 됐어요. 5위를 기준으로 두면 반기 내내
-     * 마이너스만 쌓여서 반기 공격포인트가 늘 바닥을 칩니다. */
-    const hypeDelta = (5.5 - rank) * 0.35 + (info.momentRes === "perfect" ? 0.5 : info.momentRes === "miss" ? -0.5 : 0);
+    if (!won) { const top = scored.find(({ score }) => score === rows[0].score); if (top) top.p.mom = (top.p.mom || 0) + 1; }
+    /* 표가 **9줄에서 67줄로** 늘었어요(리그 전 선발). 순위를 그대로 빼면
+     * 눈금이 통째로 무너지니, **가운데에서 얼마나 떨어졌나를 비율로** 봅니다.
+     * 폭은 예전과 같게 맞췄어요 — 예전엔 (5.5 − 순위) × 0.35라 대략 ±1.4였습니다.
+     * 이렇게 두면 앞으로 리그 규모가 또 바뀌어도 눈금이 안 흔들려요. */
+    const mid = (rows.length + 1) / 2;
+    const HYPE_SPAN = 2.8;
+    const hypeDelta = ((mid - rank) / Math.max(1, rows.length - 1)) * HYPE_SPAN
+      + (info.momentRes === "perfect" ? 0.5 : info.momentRes === "miss" ? -0.5 : 0);
 
     act.apps = (act.apps || 0) + 1;
+    /* 👥 동료 출전 수는 **leagueRound가 세요** — 리그 전 선발을 한 바퀴 돌면서
+     * 거기서 한 번만 셉니다. 여기서 markApps를 또 부르면 우리 팀만 두 번 세어져요
+     * (제보: "김우진은 어떻게 경기수가 20이지" — 12라운드에 20경기였습니다). */
     // 시즌 평균 평점 — 기록 화면에 보여줘요
     act.ratingSum = (act.ratingSum || 0) + clamp(myRankScore / 10, 1, 10);
     act.goals = (act.goals || 0) + info.myGoals;
@@ -1441,7 +1484,7 @@ window.WingerCareer = (() => {
     if (won) {
       act.wins += 1; act.cbWins += 1; S.career.wins += 1;
       pay += 100; dFan = randInt(10, 18);
-    } else if (rank <= 3) {
+    } else if (topThird) {
       dFan = randInt(4, 9);
     } else {
       dFan = randInt(-3, 3);
@@ -1489,7 +1532,7 @@ window.WingerCareer = (() => {
     const didAxis = posAxis({ goals: info.myGoals, assists: info.assists, defense: info.defense }, S.pos);
     const growP = clamp(
       0.06
-      + (rank <= 3 ? 0.06 : 0)
+      + (topThird ? 0.06 : 0)
       + (info.momentRes === "perfect" ? 0.05 : 0)
       + (info.res === "W" ? 0.03 : info.res === "L" ? -0.02 : 0)
       + Math.min(0.05, didAxis * 0.03),
@@ -1835,14 +1878,22 @@ window.WingerCareer = (() => {
      * 상을 쓸어 담지만 값어치(prestige)가 작고, 상위 리그에서는 하나도 어렵습니다 —
      * bar를 따로 곱하면 같은 축을 두 번 거는 셈이라 여기서는 안 씁니다.
      *
-     * 옛 세이브에는 race가 없어요(시즌 중에 갱신됐을 수 있어요). 그때는
-     * 부문상을 건너뜁니다 — 없는 경쟁을 이겼다고 할 수는 없어요. */
-    if (Array.isArray(act.race) && act.race.length) {
+     * 한 경기도 안 치른 시즌에는 부문상을 건너뜁니다 —
+     * 없는 경쟁을 이겼다고 할 수는 없어요. */
+    if ((act.apps || 0) > 0 && window.WingerSquad) {
+      ensureLeagueRecords();
       if (raceTop("g")) awards.push("골든부츠");
       if (raceTop("a")) awards.push("플레이메이커");
       if (raceTop("d")) awards.push("철벽상");
       if (raceTop("p")) awards.push("공격포인트왕");
     }
+    /* 📕 **여기서 그 시즌 기록을 닫아요.**
+     * 예전에는 다음 시즌이 시작될 때(initActivity) 지웠어요. 그러면 결산과
+     * 다음 시즌 준비 화면 사이 내내 개인 순위에 **지난 시즌 기록이 그대로** 남아서,
+     * 개막 전인데 득점왕이 있는 표가 뜹니다(제보로 확인했어요 — 69명 중 12명에게
+     * 지난 시즌 출전 기록이 남아 있었습니다).
+     * 부문상 판정(바로 위)이 끝난 다음이라 상은 그대로 나가요. */
+    if (window.WingerSquad) WingerSquad.resetSeason();
     /* 🏅 발롱도르 — 리그 최고를 넘어 세계 최고예요.
      * 리그MVP를 받은 시즌 중에서도, 리그격(prestige)을 곱한 값이 문턱을 넘어야 해요.
      * 하부 리그에서 아무리 잘해도 안 되고, 빅클럽에서 압도해야 닿습니다. */
@@ -2574,7 +2625,7 @@ window.WingerCareer = (() => {
     /* 🏆 대회 개인상 — 팀 성적과 **다른 축**이에요. 우승 없이도 이름을 남길 수
      * 있어야 해서 따로 셉니다. 골든볼이 리그MVP(90×격)보다 위, 발롱도르(220)보다
      * 아래예요 — 4년에 한 번뿐이지만 한 대회의 상이니까요. */
-    wcBall: 150, wcBoot: 100,
+    wcBall: 150, wcBoot: 100, wcWall: 100,
   };
 
   /* 가장 높이 오른 리그의 격. 시즌 기록에 남은 리그를 전부 훑어요 —
@@ -2604,6 +2655,7 @@ window.WingerCareer = (() => {
       Math.max(0, peakPrestige() - 1) * W.peak +
       (S.center ? W.center : 0) + transTotal() * W.trans +
       (c.wcWin || 0) * W.wc + (c.wcBall || 0) * W.wcBall + (c.wcBoot || 0) * W.wcBoot
+      + (c.wcWall || 0) * W.wcWall
     );
   }
 
@@ -2748,6 +2800,7 @@ window.WingerCareer = (() => {
       (c.wcWin || 0) ? `🌏월드컵 우승 ${c.wcWin}` : "",
       (c.wcBall || 0) ? `🏅골든볼 ${c.wcBall}` : "",
       (c.wcBoot || 0) ? `🥇골든부츠 ${c.wcBoot}` : "",
+      (c.wcWall || 0) ? `🛡️골든월 ${c.wcWall}` : "",
       (c.wcApps || 0) ? `🌏월드컵 ${c.wcApps}회 출전` : "",
     ].filter(Boolean).join(" · ");
     const years = (c.years || []).length;
@@ -2800,7 +2853,7 @@ window.WingerCareer = (() => {
       grade: gradeOfScore(score) + (transTotal() ? ` · ${transcendTitle(transTotal())}` : "")
         + ((c.wcWin || 0) ? ` · 🌏 월드컵 챔피언` : ""),
       wcWin: c.wcWin || 0, wcApps: c.wcApps || 0,
-      wcBall: c.wcBall || 0, wcBoot: c.wcBoot || 0,
+      wcBall: c.wcBall || 0, wcBoot: c.wcBoot || 0, wcWall: c.wcWall || 0,
       nextGrade: nextGrade(score),
     };
     const hof = loadHof();
@@ -2950,7 +3003,8 @@ window.WingerCareer = (() => {
             e.wcApps ? `<div class="hof-lg">🌏 월드컵 ${e.wcApps}회`
               + `${e.wcWin ? ` · 🏆 우승 ${e.wcWin}` : ""}`
               + `${e.wcBall ? ` · 🏅 골든볼 ${e.wcBall}` : ""}`
-              + `${e.wcBoot ? ` · 🥇 골든부츠 ${e.wcBoot}` : ""}</div>` : ""}
+              + `${e.wcBoot ? ` · 🥇 골든부츠 ${e.wcBoot}` : ""}`
+              + `${e.wcWall ? ` · 🛡️ 골든월 ${e.wcWall}` : ""}</div>` : ""}
         </div>
         <div class="hof-more">›</div>`;
       // 카드를 누르면 그 선수의 커리어를 펼쳐요 (제보: "명전에서 선수 클릭 시 기록을 레이어로")
@@ -2987,6 +3041,7 @@ window.WingerCareer = (() => {
       e.wcWin ? `🏆 우승 ${e.wcWin}` : "",
       e.wcBall ? `🏅 골든볼 ${e.wcBall}` : "",
       e.wcBoot ? `🥇 골든부츠 ${e.wcBoot}` : "",
+      e.wcWall ? `🛡️ 골든월 ${e.wcWall}` : "",
     ].filter(Boolean).join(" · ");
     const wrap = document.createElement("div");
     wrap.className = "av-overlay hof-overlay";
@@ -3227,7 +3282,7 @@ window.WingerCareer = (() => {
    * career.js는 대회 진행을 모르는 채로 서로를 부릅니다. */
   if (window.WingerWorldCup) {
     WingerWorldCup.init({
-      proLog, queueFx, addTrophy, ratingOf, matchRating,
+      proLog, queueFx, addTrophy, ratingOf, matchRating, raceConceded,
       renderPrep, leagueOf,
     });
   }
@@ -3254,7 +3309,8 @@ window.WingerCareer = (() => {
     _t: {
       ratingOf, FAN_CAP, RATING_DIV, POS_AXIS, posAxis, AXIS_K, AXIS_OFF,
       RATE, RATE_RESULT, RATE_CONCEDE, ratingParts, matchRating, ratingWhyHTML,
-      RACE_POS, rollRace, raceAdvance, raceRate, raceConceded,
+      RACE_POS, leagueRound, ensureLeagueRecords, raceConceded, applyMateGoals, mateNames,
+      raceRank, raceTop,
       LEAGUES, leagueOf, barOf, CLUBS, clubStrOf, debutClubs, DEBUT_POOL, weakestClub,
       cupEntry, cupName, CUP_SPOTS, myTableRank, applyPromotion,
       TRANSFER_MIN_YEAR, PROMOTE_HYPE, OFFERS_PER_LEAGUE, transferFee, transferOffers, canTransfer,

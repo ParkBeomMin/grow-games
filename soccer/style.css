@@ -608,3 +608,5 @@ body.fever-on #app { padding-top: 2.6rem; }
 .sq-age .sq-surge { color: #6ee7a0; font-weight: 500; }
 /* 결산의 팀 소식 한 줄 */
 .squad-news { color: var(--cream); }
+/* 🌏 대회 개인 순위의 부문 탭 — 리그 개인 순위(.race-tabs) 결을 그대로 써요 */
+.wc-face-tabs { margin-bottom: .4rem; }
