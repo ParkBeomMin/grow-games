@@ -585,12 +585,29 @@ function activeBuffs(st) {
     ? S0.buffs.map(seasonTitleOf).filter(Boolean) : [];
   // 🌏 대회 중에만 — 시즌 칭호가 하나도 없어도 이건 붙어야 해서 위 갈래 밖에 둬요
   if (S0.wc) out.push(WC_CAMP_BUFF);
+  /* 🎉 피버 타임 — 운영자가 연 기간 동안 모두에게 (fever.js)
+   * `typeof window`까지 보는 이유: 이 저장소의 검사는 소스에서 함수를 떼어다
+   * **브라우저 밖에서** 굴려요. 그냥 window를 쓰면 activeBuffs를 떼어 쓰는
+   * 검사 13종이 ReferenceError로 죽습니다(실제로 한 번 그랬어요). */
+  const fv = typeof window !== "undefined" && window.WingerFever && window.WingerFever.buff();
+  if (fv) out.push(fv);
   return out;
 }
-/* 종류별 합계. g·a·d·train은 배수(1 + 합), rate·moment는 그대로 더해요. */
+/* 종류별 합계. g·a·d·train은 배수(1 + 합), rate·moment는 그대로 더해요.
+ *
+ * 🎉 피버 타임만 **상한 밖에서** 더해요. 상한은 "한 번 앞서간 커리어가 영원히
+ * 앞서가는 것"을 막는 장치인데, 피버는 커리어가 쌓은 게 아니라 운영자가 모두에게
+ * 준 것이고 기간이 지나면 사라져요. 안 그러면 칭호를 많이 단 사람에게는
+ * 이벤트가 아무 일도 안 일어납니다 — 잘하는 사람만 이벤트에서 소외돼요.
+ * 대신 fever.js가 읽을 때 스스로 상한(FEVER_CAP)을 겁니다. */
 function buffSum(kind, st) {
-  const sum = activeBuffs(st).reduce((a, t) => a + (t.eff[kind] || 0), 0);
-  return Math.min(sum, BUFF_CAP[kind] != null ? BUFF_CAP[kind] : 1);
+  const list = activeBuffs(st);
+  let sum = 0, bonus = 0;
+  for (const t of list) {
+    const v = t.eff[kind] || 0;
+    if (t.id === "fever") bonus += v; else sum += v;
+  }
+  return Math.min(sum, BUFF_CAP[kind] != null ? BUFF_CAP[kind] : 1) + bonus;
 }
 const buffMul = (kind, st) => 1 + buffSum(kind, st);
 
@@ -700,6 +717,10 @@ function show(id) {
   $(id).classList.add("active");
   window.scrollTo(0, 0);
   if (!show._silent) history.pushState({ s: id }, "");
+  /* 🎉 피버 타임 — **화면이 바뀔 때마다** 다시 봐요. 정적 파일이라 서버가 먼저
+   * 말을 걸 수 없어서, 이미 켜 둔 화면에서도 다음 화면으로 넘어가는 순간
+   * 배너가 뜨게 하는 자리예요. 네트워크는 안 씁니다(구간만 보고 판정해요). */
+  if (window.WingerFever) WingerFever.tick();
 }
 
 const BACK_SAFE = ["screen-title", "screen-agency", "screen-position", "screen-name", "screen-hof", "screen-battle"];

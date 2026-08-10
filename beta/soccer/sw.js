@@ -1,6 +1,6 @@
 /* soccer 서비스워커 — 네트워크 우선, 실패 시 캐시 (오프라인 플레이) */
-const CACHE = "soccer-v5";   // 🏛️ 명예의 전당 달 탭·헌액 카드   // 🌏 worldcup.js   // 👥 squad.js·🔥 camp.js + 항상 재검증
-const ASSETS = ["./", "./index.html", "./style.css", "./game.js", "./cup.js", "./career.js", "./squad.js", "./camp.js", "./worldcup.js", "./manifest.webmanifest", "../base.css", "../radar.js", "../timing.js", "../match.js", "../help.js"];
+const CACHE = "soccer-v6";   // 🎉 fever.js 추가   // 🏛️ 명예의 전당 달 탭·헌액 카드   // 🌏 worldcup.js   // 👥 squad.js·🔥 camp.js + 항상 재검증
+const ASSETS = ["./", "./index.html", "./style.css", "./game.js", "./cup.js", "./career.js", "./squad.js", "./fever.js", "./camp.js", "./worldcup.js", "./manifest.webmanifest", "../base.css", "../radar.js", "../timing.js", "../match.js", "../help.js"];
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));
 });
