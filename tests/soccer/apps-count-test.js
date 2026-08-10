@@ -111,6 +111,28 @@ check(mateMax() <= round(),
   `동료 출전 수가 치러진 라운드 수를 안 넘는다 (동료 ${mateMax()} ≤ 라운드 ${round()})`);
 check(myApps() <= round(), `내 출전 수도 라운드 수 안이다 (나 ${myApps()} ≤ ${round()})`);
 
+console.log("=== ①-b 내 줄도 같이 오른다 ===");
+/* 제보: "10경기에서 방금 경기 한판 했는데 그대로 10경기네"
+ * 출전 수를 세는 자리를 leagueRound 한 곳으로 모으면서, 거기서 나를 건너뛰게 됐어요
+ * (내 기록은 S.activity에 쌓이니까요). 그래서 **명단의 내 줄만 얼어붙었습니다.**
+ * 명단 줄은 S.activity를 비춰 보여줘야 해요 — 한 벌에서 오면 안 어긋나요. */
+const meRow = () => Squad.squadOf(S().group).find((x) => x.me) || {};
+console.log(`   내 줄 — ${meRow().apps}경기 ⚽${meRow().g} · S.activity ${myApps()}경기 ⚽${(S().activity || {}).goals}`);
+check((meRow().apps || 0) === myApps(),
+  `명단의 내 줄이 내 출전 수와 같다 (${meRow().apps} = ${myApps()})`);
+check((meRow().g || 0) === ((S().activity || {}).goals || 0),
+  `내 골도 같다 (${meRow().g} = ${(S().activity || {}).goals})`);
+
+console.log("=== ①-c 한 클럽에 같은 이름이 없다 ===");
+{
+  let dup = 0;
+  for (const club of Object.keys(Squad.ensureSquads())) {
+    const names = Squad.squadOf(club).map((x) => x.name);
+    dup += names.length - new Set(names).size;
+  }
+  check(dup === 0, `한 클럽 안에 동명이인이 없다 (겹친 이름 ${dup})`);
+}
+
 console.log("=== ②③ 경기 화면에 다시 들어가도 ===");
 // 지금 경기를 끝내고, 다음 라운드의 "경기하러 가기"가 뜰 때까지 밀어요
 for (let i = 0; i < 400 && !(active() === "screen-pro" && goBtn()); i++) {
@@ -140,6 +162,27 @@ if (active() === "screen-pro" && goBtn()) {
   check((S().activity.xi || []).join(",") === xi0, "③ 그 라운드 선발도 그대로다");
 } else {
   check(false, `경기 직전 상태에 못 닿았어요 (화면 ${active()})`);
+}
+
+console.log("=== ⑤ 이미 부풀어 있는 기록을 바로잡는가 ===");
+/* 제보 화면: 26라운드 시즌인데 동료가 47경기. 2.50.0 전에는 우리 팀 출전 수를
+ * 두 곳에서 세서 최대 두 배가 됐어요. 그 시즌을 이어서 하는 사람은 시즌이 끝날
+ * 때까지 그 숫자를 봅니다 — 읽는 쪽에서 한 번 깎아요. */
+{
+  const act = S().activity;
+  const rounds = ((act.cb || 1) - 1) * 19 + (act.week || 0);
+  const mate = Squad.squadOf(S().group).find((x) => !x.me);
+  mate.apps = rounds + 21;                 // 부풀어 있던 상태를 그대로 재현해요
+  act.appsFixed = false;                   // 아직 안 바로잡은 세이브
+  w.WingerCareer._t.ensureLeagueRecords();
+  console.log(`   ${mate.name} ${rounds + 21}경기 → ${mate.apps}경기 (이번 시즌 ${rounds}라운드)`);
+  check(mate.apps === rounds, `치러진 라운드 수로 깎인다 (${mate.apps} = ${rounds})`);
+  check(act.appsFixed === true, "한 번만 돌게 도장을 찍는다");
+  // 골·도움은 안 건드려요 — 그쪽은 두 번 안 셌어요
+  const g0 = mate.g;
+  act.appsFixed = false; mate.apps = rounds + 5;
+  w.WingerCareer._t.ensureLeagueRecords();
+  check(mate.g === g0, "골은 안 건드린다 — 출전 수만 두 곳에서 셌어요");
 }
 
 console.log("=== ④ 변이 검증 ===");
