@@ -664,16 +664,15 @@ window.WingerCareer = (() => {
   function ensureLeagueRecords() {
     const act = S.activity;
     if (!act || !window.WingerSquad) return;
+    /* 🧯 출전 수 바로잡기는 **따로 도장을 찍어요.** 2.50.0에서 시작한 시즌은
+     * raceFilled가 이미 찍혀 있어서, 그 안에 두면 영영 안 돌아요. */
+    if (!act.appsFixed) { act.appsFixed = true; repairApps(); save(); }
     if (act.raceFilled) return;
     act.raceFilled = true;
     if (act.race) delete act.race;
     const played = act.apps || 0;
-    /* ⚠️ **우리 팀은 빼고** 비어 있는지 봐요. 우리 팀 선발은 markApps로 출전 수가
-     * 이미 쌓여 있어서, 전체로 보면 "비어 있지 않다"가 나옵니다 — 그러면 다른
-     * 클럽 88명이 영원히 0으로 남아요(이어하던 세이브에서 실제로 그랬습니다:
-     * 41경기를 치렀는데 기록 있는 사람이 우리 팀 14명뿐이었어요). */
-    /* ⚠️ **우리 팀은 빼고** 비어 있는지 봐요. 우리 팀 선발은 markApps로 출전 수가
-     * 이미 쌓여 있어서, 전체로 보면 "비어 있지 않다"가 나옵니다 — 그러면 다른
+    /* ⚠️ **우리 팀은 빼고** 비어 있는지 봐요. 우리 팀 선발은 출전 수가 이미
+     * 쌓여 있어서, 전체로 보면 "비어 있지 않다"가 나옵니다 — 그러면 다른
      * 클럽 88명이 영원히 0으로 남아요(이어하던 세이브에서 실제로 그랬습니다:
      * 41경기를 치렀는데 기록 있는 사람이 우리 팀 14명뿐이었어요). */
     const xi = WingerSquad.leagueXI();
@@ -683,6 +682,32 @@ window.WingerCareer = (() => {
       for (let i = 0; i < played; i++) leagueRound(null, skip);
     }
     save();
+  }
+
+  /* 🧯 출전 수가 **치러진 라운드보다 많은** 줄을 바로잡아요.
+   *
+   * 2.50.0 전에는 우리 팀 출전 수를 두 곳에서 세서 최대 두 배가 됐어요
+   * (제보: 26라운드 시즌인데 동료가 47경기). 그 시즌을 이어서 하는 사람은
+   * 시즌이 끝날 때까지 그 숫자를 보게 됩니다.
+   *
+   * 세이브를 고치지 않는 게 규칙이지만, 이건 **틀린 값을 지우는 것**이라
+   * 읽는 쪽에서 한 번만 깎아요. 진짜 값은 알 수 없으니 **가능한 최대치**(치러진
+   * 라운드 수)로 맞춥니다 — 넘을 수 없는 숫자니까요.
+   * 골·도움·수비는 안 건드려요. 그쪽은 두 번 안 셌어요(출전 수만 두 곳에서 셌습니다). */
+  function repairApps() {
+    const act = S.activity;
+    if (!act || !window.WingerSquad) return;
+    const rounds = ((act.cb || 1) - 1) * WEEKS_PER_CB + (act.week || 0);
+    if (rounds <= 0) return;
+    let fixed = 0;
+    const sq = S.squads || {};
+    for (const club of Object.keys(sq)) {
+      for (const x of sq[club]) {
+        if (x.me) continue;
+        if ((x.apps || 0) > rounds) { x.apps = rounds; fixed += 1; }
+      }
+    }
+    if (fixed) proLog(`🧯 출전 기록을 바로잡았어요 (${fixed}명 · 이번 시즌 ${rounds}라운드)`);
   }
 
   /* 🥇 한 라운드 — **리그의 모든 선발**이 자기 경기를 치러요.

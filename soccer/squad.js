@@ -116,9 +116,18 @@ window.WingerSquad = (() => {
     for (let i = 0; i < BENCH; i++) need[POS_KEYS[i % POS_KEYS.length]] += 1;
     if (mine) need[S.pos] = Math.max(need[S.pos], FORMATION[S.pos] + 1);   // 내 자리엔 경쟁자가 있어야 해요
 
-    const list = [];
+    /* 한 클럽에 **같은 이름을 두지 않아요.** 이름이 656조합이라 16명 안에서도
+     * 겹칩니다 — 실제로 한 팀에 김우진이 둘이었어요(제보 화면). 기록이 서로 다른데
+     * 이름이 같으면 "얘는 왜 경기 수가 다르지"가 되고, 이름으로 사람을 찾는 코드
+     * (동료 골 적립)도 엉뚱한 사람을 집어요. */
+    const list = [], used = new Set();
     for (const p of POS_KEYS) {
-      for (let i = 0; i < need[p]; i++) list.push(rollPlayer(base, p));
+      for (let i = 0; i < need[p]; i++) {
+        let x = rollPlayer(base, p);
+        for (let t = 0; t < 12 && used.has(x.name); t++) x = rollPlayer(base, p, x.age);
+        used.add(x.name);
+        list.push(x);
+      }
     }
     if (mine) {
       /* 내 자리 하나를 나로 바꿔요. 스쿼드에는 **나도 한 줄로** 들어가야
@@ -249,8 +258,19 @@ window.WingerSquad = (() => {
   }
   // 내 줄의 실력·이름은 늘 지금 값이에요 (훈련·각성·개명으로 계속 움직여요)
   function refreshMe() {
+    const act = S.activity;
     for (const x of (S.squads && S.squads[S.group]) || []) {
-      if (x.me) { x.str = overall(); x.name = S.name; }
+      if (!x.me) continue;
+      x.str = overall(); x.name = S.name;
+      /* 📊 **내 기록은 S.activity가 진짜예요.** 명단 줄은 그걸 비춰 보여줄 뿐이에요.
+       * 예전에는 markApps가 내 줄의 출전 수도 같이 셌는데, 출전 수를 세는 자리를
+       * leagueRound 한 곳으로 모으면서 거기서 나를 건너뛰게 됐어요(내 기록은
+       * S.activity에 쌓이니까요). 그러니 **명단의 내 줄만 얼어붙었습니다** —
+       * 경기를 해도 10경기 그대로였어요(제보). 한 벌에서 비춰 오면 안 어긋나요. */
+      if (act) {
+        x.apps = act.apps || 0;
+        x.g = act.goals || 0; x.a = act.assists || 0; x.d = act.defense || 0;
+      }
     }
   }
   const squadOf = (club) => ensureSquads()[club] || [];
