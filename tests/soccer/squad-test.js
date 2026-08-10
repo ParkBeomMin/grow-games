@@ -242,20 +242,24 @@ guard("⑥ 개인 순위와 같은 사람", () => {
    * 우리 클럽 한 자리만 남겨요 — 동료 골이 이 표에 쌓이는 배선이 거기 걸려 있어요. */
   const clubs = new Set(race.map((r) => r.club));
   console.log(`   ${clubs.size}개 클럽에서 나왔어요 (할당량 없이 실력 순)`);
-  /* 자리(포지션)는 고르게 뽑아요 — 부문상이 득점왕·도움왕·철벽상으로 나뉘어
-   * 있어서 여덟이 전부 공격수면 철벽상을 공격수가 받아요. 그러니 "리그 전체
-   * 상위권"이 아니라 **그 포지션의 상위권**에서 뽑혔는지를 봐요. */
-  const byPos = {};
-  for (const x of Object.values(all).flat()) {
-    if (x.me) continue;
-    (byPos[x.pos] ||= []).push(x.str);
-  }
-  for (const k of Object.keys(byPos)) byPos[k].sort((a, b) => b - a);
-  const off = race.filter((r) => r.club !== S().group)
-    .filter((r) => { const l = byPos[r.pos] || []; return r.pop < (l[5] != null ? l[5] : 0) - 1; });
-  check(off.length === 0,
-    `우리 클럽 몫 말고는 그 포지션 상위권에서 뽑힌다 (벗어난 사람 ${off.length}명`
-    + `${off.length ? ` — ${off.map((r) => `${r.name}(${r.pos} ${Math.round(r.pop)})`).join(", ")}` : ""})`);
+  /* 자리(포지션) 할당량도 **없어요.** 클럽 할당량에 이어 이것도 걷어냈습니다 —
+   * 그냥 리그에서 제일 잘하는 여덟이에요(제보: "포지션별 실력순 8명도 필요없는데??"). */
+  const pool = Object.values(all).flat().filter((x) => !x.me)
+    .map((x) => x.str).sort((a, b) => b - a);
+  const cut = pool[race.length - 1];
+  const below = race.filter((r) => r.pop < cut - 1);
+  console.log(`   리그 ${race.length}위 선 ${Math.round(cut)} · 그 아래에서 뽑힌 사람 ${below.length}명`);
+  check(below.length === 0, `자리를 안 가리고 실력 순으로 뽑는다 (아래에서 뽑힌 사람 ${below.length}명)`);
+
+  /* 대신 **역할은 그 선수의 포지션에서** 나와야 해요. 자리 배분을 없앤 채로
+   * 역할을 미리 정해 두고 끼워 맞추면, 수비수가 "스트라이커"로 표에 떠요
+   * (실제로 났습니다 — find의 술어 안에서 난수를 굴려 못 찾으면 첫 역할로
+   * 떨어졌어요. 160명 중 25명이 어긋났습니다). */
+  const OKROLE = { fw: ["st", "st2"], wg: ["wg"], mf: ["am", "mf", "ut"], df: ["cb", "cb2"] };
+  const wrong = race.filter((r) => !(OKROLE[r.pos] || []).includes(r.key));
+  check(wrong.length === 0,
+    `역할이 포지션과 맞는다 (어긋난 사람 ${wrong.length}명`
+    + `${wrong.length ? ` — ${wrong.map((r) => `${r.name} ${r.role}(${r.pos})`).join(", ")}` : ""})`);
   /* 우리 클럽 자리를 강제로 챙기지 않아요 — 실력 순으로 들면 들고, 아니면 없어요 */
   const myPool = (all[S().group] || []).filter((x) => !x.me).map((x) => x.str);
   const myBest = myPool.length ? Math.max(...myPool) : 0;

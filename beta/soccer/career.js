@@ -658,23 +658,23 @@ window.WingerCareer = (() => {
      * 생산량(pop)도 그 선수의 실력을 그대로 씁니다. 역할(RACE_ROLES)은 포지션에
      * 맞는 것을 골라요 — 센터백에게 스트라이커 생산량을 물리면 안 되니까요.
      * squad.js가 없는 옛 캐시에서는 예전처럼 이름을 지어 씁니다. */
-    /* 역할마다 필요한 포지션 수를 세어 넘겨요 — 부문상이 득점왕·도움왕·철벽상으로
-     * 나뉘어 있어서, 여덟이 전부 공격수면 철벽상을 공격수가 받게 됩니다.
-     * 그 안에서는 **클럽을 안 가리고 실력 순**이에요(개인 기록 순위니까요). */
-    const need = {};
-    for (const r of RACE_ROLES) {
-      const p = RACE_POS[r.key] || "mf";
-      need[p] = (need[p] || 0) + 1;
-    }
-    const faces = window.WingerSquad ? WingerSquad.leagueFaces(RACE_ROLES.length, need) : [];
+    /* ⚠️ **자리 배분도 안 해요.** 클럽 할당량에 이어 포지션 할당량도 걷어냅니다
+     * (제보: "포지션별 실력순 8명도 필요없는데??"). 그냥 리그에서 제일 잘하는
+     * 여덟이에요 — 여덟이 다 공격수인 리그도 있을 수 있죠.
+     *
+     * 대신 **역할은 그 선수의 포지션에서 뽑아요.** 예전엔 여덟 역할을 미리 정해
+     * 두고 사람에게 끼워 맞췄는데, 자리 배분을 없애면 공격수가 센터백 역할을
+     * 받아 수비 생산량을 굴리게 됩니다 — 표에 "스트라이커인데 수비 1위"가 떠요. */
+    const faces = window.WingerSquad ? WingerSquad.leagueFaces(RACE_ROLES.length) : [];
     if (faces.length === RACE_ROLES.length) {
-      const byPos = {};
-      for (const r of RACE_ROLES) (byPos[RACE_POS[r.key] || "mf"] ||= []).push(r);
-      const left = RACE_ROLES.slice();
+      const roleByPos = { fw: ["st", "st2"], wg: ["wg"], mf: ["am", "mf", "ut"], df: ["cb", "cb2"] };
       return faces.map(({ club, player }) => {
-        const fit = (byPos[player.pos] || []).filter((r) => left.includes(r));
-        const role = fit.length ? pick(fit) : left[0];
-        left.splice(left.indexOf(role), 1);
+        const keys = roleByPos[player.pos] || ["ut"];
+        /* ⚠️ 고를 키를 **먼저 정해요.** find의 술어 안에서 pick을 부르면 원소마다
+         * 다시 굴려져서, 운 나쁘면 아무것도 못 찾고 첫 역할(스트라이커)로 떨어져요 —
+         * 실제로 수비수가 "스트라이커"로 표에 떴습니다(160명 중 25명). */
+        const want = pick(keys);
+        const role = RACE_ROLES.find((r) => r.key === want) || RACE_ROLES[0];
         return {
           name: player.name, role: role.name, key: role.key, pos: player.pos,
           pop: clamp(player.str, 40, 95), club, g: 0, a: 0, d: 0, rate: 0, mom: 0,
@@ -813,7 +813,21 @@ window.WingerCareer = (() => {
     const me = { name: S.name, club: S.group, role: null, me: true,
       g: (act && act.goals) || 0, a: (act && act.assists) || 0, d: (act && act.defense) || 0,
       rate: (act && act.ratingSum) || 0, m: (act && act.wins) || 0 };
-    return race.concat([me]).map((x) => ({ ...x, avg: avg(x), v: val(x) }))
+    /* 🥇 **우리 팀 동료도 기록이 좋으면 올라와요.**
+     *
+     * 경쟁자 여덟은 시즌 초에 실력으로 뽑혀요. 그러면 실력은 평범한데 그 시즌에
+     * 잘한 동료가 표에 낄 자리가 없습니다(제보: "동료 기록이 좋으면 나올 수도
+     * 있는 거지??"). 동료 골은 중계에서 실제로 나온 값이라 **진짜 기록**이에요 —
+     * 명단(👥)에 이미 쌓여 있으니 여기서 같이 세워 줍니다.
+     * 이미 경쟁자로 뽑힌 사람은 두 번 안 넣어요 — 표가 둘로 갈리면 안 되니까요. */
+    const inRace = new Set(race.map((r) => r.name));
+    const mates = (window.WingerSquad ? WingerSquad.squadOf(S.group) : [])
+      .filter((x) => !x.me && !inRace.has(x.name) && ((x.g || 0) || (x.a || 0) || (x.d || 0)))
+      .map((x) => ({
+        name: x.name, club: S.group, role: null, pos: x.pos, pop: clamp(x.str, 40, 95),
+        g: x.g || 0, a: x.a || 0, d: x.d || 0, rate: 0, mom: 0,
+      }));
+    return race.concat(mates).concat([me]).map((x) => ({ ...x, avg: avg(x), v: val(x) }))
       // 동점이면 내 줄을 앞에 둬요 — 실제로도 공동 득점왕은 둘 다 받아요
       .sort((x, y) => y.v - x.v || (x.me ? -1 : 1));
   }
