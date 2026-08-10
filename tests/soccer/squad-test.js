@@ -615,6 +615,57 @@ guard("⑮ 선발 확률의 근거", () => {
     "벤치 카드가 문장을 직접 만들지 않고 benchReason 하나를 쓴다");
 });
 
+// ---------- ⑯ 부문 1위는 포지션이 아니라 숫자로 정해지는가 ----------
+console.log("=== ⑯ 공격수가 수비 1위면 철벽상을 받는가 ===");
+guard("⑯ 부문 1위", () => {
+  /* 제보: "공격수인데 만약 수비 횟수가 젤 많으면 수비쪽에서도 1위로 되는 게 맞지."
+   * 맞아요 — 부문상은 그 숫자의 1위에게 갑니다. 포지션은 **생산량**에만 관여해요
+   * (공격수가 센터백 생산량을 굴리면 안 되니까). 누가 받느냐는 순수하게 기록이에요. */
+  const SRC = fs.readFileSync(path.join(DIR, "career.js"), "utf8");
+  const rank = (SRC.match(/function raceRank\(key\) \{[\s\S]*?\n {2}\}/) || [""])[0];
+  /* 정렬 키(val)만 봐요 — 줄을 만드는 자리에는 pos가 들어가도 되지만,
+   * **누가 위인지 정하는 산식**에는 들어가면 안 돼요. */
+  const val = (rank.match(/const val = [\s\S]*?;\n/) || [""])[0];
+  console.log(`   정렬 키 — ${val.replace(/\s+/g, " ").trim().slice(0, 80)}`);
+  check(!!val && !/\bpos\b|role/.test(val), "순위를 정하는 산식이 포지션·역할을 안 본다");
+  const top = (SRC.match(/const raceTop = [^;]+;/) || [""])[0];
+  check(/raceRank\(key\)\[0\]/.test(top), "부문 1위는 그 표의 첫 줄이다");
+
+  // 실제로 굴려 봐요 — 공격수인 내가 수비를 잔뜩 쌓으면 수비 탭에서 1위여야 해요
+  const st = S();
+  st.pos = "fw";
+  st.activity = st.activity || { cb: 1, cbTotal: 2, week: 5, weekTotal: 19, wins: 0, sales: 0,
+    hypeSum: 0, cbHype: 0, cbWins: 0, goals: 0, assists: 0, defense: 0, apps: 5, teamW: 0,
+    teamD: 0, teamL: 0, ratingSum: 30, opp: "테스트 FC", race: Career._t.rollRace() };
+  st.activity.defense = 9999;
+  Career.refreshPro();
+  const sum = ($("pro-race-sum") || {}).textContent || "";
+  // 수비 탭으로 옮겨요 (탭 자체가 실제 버튼이에요)
+  const tab = [...w.document.querySelectorAll("#pro-race-body .race-tab")]
+    .find((b) => /수비|🛡/.test(b.textContent));
+  if (tab) {
+    tab.click();
+    const first = w.document.querySelector("#pro-race-body tbody tr");
+    console.log(`   수비 탭 1위 — "${first ? first.textContent.replace(/\s+/g, " ").trim() : "없음"}"`);
+    check(!!first && first.classList.contains("me"),
+      "공격수여도 수비 숫자가 1위면 그 부문 1위다 — 포지션이 막지 않아요");
+    /* 반대도 봐야 계약이에요 — 숫자가 밀리면 공격수든 수비수든 1위가 아니어야 해요 */
+    const rival = (st.activity.race || []).find((r) => r.pos === "df") || (st.activity.race || [])[0];
+    if (rival) {
+      rival.d = 99999;
+      tab.click();
+      const first2 = w.document.querySelector("#pro-race-body tbody tr");
+      console.log(`   상대가 더 쌓으면 1위 — "${first2 ? first2.textContent.replace(/\s+/g, " ").trim().slice(0, 40) : "없음"}"`);
+      check(!!first2 && !first2.classList.contains("me"),
+        "숫자가 밀리면 1위가 아니다 — 자리로 받는 상이 아니에요");
+      rival.d = 0;
+    }
+  } else {
+    check(false, "수비 탭을 찾았다");
+  }
+  void sum;
+});
+
 console.log(fail ? `\n❌ ${fail}건 실패` : "\n✅ 통과");
 w.close();
 process.exit(fail ? 1 : 0);
