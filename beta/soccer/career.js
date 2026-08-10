@@ -1094,7 +1094,13 @@ window.WingerCareer = (() => {
     if (S.wc && window.WingerWorldCup) {
       race.hidden = false;
       $("pro-race-sum").textContent = "🥇 월드컵 개인 순위";
-      $("pro-race-body").innerHTML = WingerWorldCup.raceHTML();
+      const drawWcRace = () => {
+        $("pro-race-body").innerHTML = WingerWorldCup.raceHTML();
+        /* 부문 탭은 그릴 때마다 새로 만들어져요 — 그릴 때마다 다시 물려 줘야
+         * 두 번째 클릭부터 죽지 않아요(리그 개인 순위와 같은 방식이에요). */
+        WingerWorldCup.wireFaceTabs($("pro-race-body"), drawWcRace);
+      };
+      drawWcRace();
     } else if (S.activity && Array.isArray(S.activity.race)) {
       race.hidden = false;
       renderRace();
@@ -2574,7 +2580,7 @@ window.WingerCareer = (() => {
     /* 🏆 대회 개인상 — 팀 성적과 **다른 축**이에요. 우승 없이도 이름을 남길 수
      * 있어야 해서 따로 셉니다. 골든볼이 리그MVP(90×격)보다 위, 발롱도르(220)보다
      * 아래예요 — 4년에 한 번뿐이지만 한 대회의 상이니까요. */
-    wcBall: 150, wcBoot: 100,
+    wcBall: 150, wcBoot: 100, wcWall: 100,
   };
 
   /* 가장 높이 오른 리그의 격. 시즌 기록에 남은 리그를 전부 훑어요 —
@@ -2604,6 +2610,7 @@ window.WingerCareer = (() => {
       Math.max(0, peakPrestige() - 1) * W.peak +
       (S.center ? W.center : 0) + transTotal() * W.trans +
       (c.wcWin || 0) * W.wc + (c.wcBall || 0) * W.wcBall + (c.wcBoot || 0) * W.wcBoot
+      + (c.wcWall || 0) * W.wcWall
     );
   }
 
@@ -2748,6 +2755,7 @@ window.WingerCareer = (() => {
       (c.wcWin || 0) ? `🌏월드컵 우승 ${c.wcWin}` : "",
       (c.wcBall || 0) ? `🏅골든볼 ${c.wcBall}` : "",
       (c.wcBoot || 0) ? `🥇골든부츠 ${c.wcBoot}` : "",
+      (c.wcWall || 0) ? `🛡️골든월 ${c.wcWall}` : "",
       (c.wcApps || 0) ? `🌏월드컵 ${c.wcApps}회 출전` : "",
     ].filter(Boolean).join(" · ");
     const years = (c.years || []).length;
@@ -2800,7 +2808,7 @@ window.WingerCareer = (() => {
       grade: gradeOfScore(score) + (transTotal() ? ` · ${transcendTitle(transTotal())}` : "")
         + ((c.wcWin || 0) ? ` · 🌏 월드컵 챔피언` : ""),
       wcWin: c.wcWin || 0, wcApps: c.wcApps || 0,
-      wcBall: c.wcBall || 0, wcBoot: c.wcBoot || 0,
+      wcBall: c.wcBall || 0, wcBoot: c.wcBoot || 0, wcWall: c.wcWall || 0,
       nextGrade: nextGrade(score),
     };
     const hof = loadHof();
@@ -2950,7 +2958,8 @@ window.WingerCareer = (() => {
             e.wcApps ? `<div class="hof-lg">🌏 월드컵 ${e.wcApps}회`
               + `${e.wcWin ? ` · 🏆 우승 ${e.wcWin}` : ""}`
               + `${e.wcBall ? ` · 🏅 골든볼 ${e.wcBall}` : ""}`
-              + `${e.wcBoot ? ` · 🥇 골든부츠 ${e.wcBoot}` : ""}</div>` : ""}
+              + `${e.wcBoot ? ` · 🥇 골든부츠 ${e.wcBoot}` : ""}`
+              + `${e.wcWall ? ` · 🛡️ 골든월 ${e.wcWall}` : ""}</div>` : ""}
         </div>
         <div class="hof-more">›</div>`;
       // 카드를 누르면 그 선수의 커리어를 펼쳐요 (제보: "명전에서 선수 클릭 시 기록을 레이어로")
@@ -2987,6 +2996,7 @@ window.WingerCareer = (() => {
       e.wcWin ? `🏆 우승 ${e.wcWin}` : "",
       e.wcBall ? `🏅 골든볼 ${e.wcBall}` : "",
       e.wcBoot ? `🥇 골든부츠 ${e.wcBoot}` : "",
+      e.wcWall ? `🛡️ 골든월 ${e.wcWall}` : "",
     ].filter(Boolean).join(" · ");
     const wrap = document.createElement("div");
     wrap.className = "av-overlay hof-overlay";

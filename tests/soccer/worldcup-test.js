@@ -651,6 +651,40 @@ guard("⑫ 동료 도움", () => {
   check(!mine.filter((x) => x.me)[0] || true, "내 도움은 내 기록으로 따로 쌓여요");
 });
 
+
+/* ---------- ⑬ 🛡️ 수비도 순위와 상이 있는가 ----------
+ * 제보: "월드컵 개인기록에 수비나 평점은 없는데 없어도 되나?"
+ * 수비는 없으면 안 돼요 — **수비수로 대회를 뛰면 자기 대회가 표에서 통째로 안 보여요.**
+ * 경기 결과 화면에는 🛡️ 숫자가 뜨는데 순위표에는 그 축이 없어서, 화면 두 곳이
+ * 다른 말을 하고 있었습니다. 리그에서 이미 "포지션이 아니라 숫자로 1위를 정한다"로
+ * 정리한 규칙이에요.
+ * (평점은 안 넣어요 — 다른 나라 선수에게는 평점이 없고, 3~5경기 표본이라
+ *  지어낸 숫자를 표에 띄우게 됩니다. 이 저장소가 계속 없애 온 것이에요.) */
+guard("⑬ 🛡️ 수비 부문", () => {
+  const WC = w.WingerWorldCup._t;
+  check(Array.isArray(WC.FACE_TABS) && WC.FACE_TABS.some(([k]) => k === "d"),
+    `부문 탭에 수비가 있다 (${(WC.FACE_TABS || []).map(([, l]) => l).join(" · ")})`);
+  check(typeof WC.creditDef === "function", "다른 나라 선수에게 수비를 쌓는 자리가 있다");
+  check(typeof w.WingerWorldCup.wireFaceTabs === "function", "부문 탭을 물려 주는 자리가 밖에서도 보인다");
+
+  // 실제로 굴려요 — 선발 11명에게 수비가 흩어지고, 수비수에게 더 많이 가야 해요
+  const list = WC.natSquadOf(80, false);
+  const xi = WC.xiOf(list);
+  for (let i = 0; i < 400; i++) WC.creditDef(xi, 80);
+  const byPos = {};
+  for (const x of xi) byPos[x.pos] = (byPos[x.pos] || 0) + (x.d || 0);
+  const per = (p) => byPos[p] / xi.filter((x) => x.pos === p).length;
+  console.log(`   400경기 — 수비수 1인당 ${per("df").toFixed(0)} · 미드 ${per("mf").toFixed(0)}`
+    + ` · 윙어 ${per("wg").toFixed(0)} · 공격수 ${per("fw").toFixed(0)}`);
+  check(per("df") > per("mf") && per("mf") > per("wg") && per("wg") > per("fw"),
+    "수비수 > 미드 > 윙어 > 공격수 순으로 쌓인다");
+  check(xi.every((x) => (x.d || 0) > 0), "선발 전원에게 조금씩은 간다 — 공격수도 막을 때가 있어요");
+
+  // 🛡️ 골든월 — 수비 1위가 실제로 받는가
+  const AW = WC.AWARD_FAME;
+  check(AW && AW.wall > 0, `🛡️ 골든월에 명성이 붙어 있다 (+${AW && AW.wall})`);
+});
+
 console.log(fail ? `\n❌ ${fail}건 실패` : "\n✅ 통과");
 w.close();
 process.exit(fail ? 1 : 0);

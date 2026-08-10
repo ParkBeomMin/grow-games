@@ -211,7 +211,8 @@ window.WingerWorldCup = (() => {
   const FAME = { call: 40, round: 40, champion: 250 };
   /* 대회 개인상 — 우승(250)보다는 아래, 라운드 통과(40)보다는 위예요.
    * 팀 성적과 다른 축이라 우승 없이도 이름을 남길 수 있어야 합니다. */
-  const AWARD_FAME = { boot: 120, ball: 150 };
+  const AWARD_FAME = { boot: 120, ball: 150, wall: 110 };
+  const AW_NAME = { boot: "🥇 골든부츠", ball: "🏅 골든볼", wall: "🛡️ 골든월" };
 
   // ---------- 상태 ----------
 
@@ -439,6 +440,20 @@ window.WingerWorldCup = (() => {
   }
   /* 골을 넣을 사람 — 선발 중에서 포지션 가중으로. squad.js의 pickScorer와 같은 눈금이에요 */
   const SCORE_W = { fw: 1.0, wg: 0.75, mf: 0.4, df: 0.12 };
+  /* 🛡️ 수비를 해낼 사람 — 위를 뒤집은 가중이에요.
+   *
+   * 왜 필요한가: 대회 개인 순위가 ⚽·🅰️ 두 칸뿐이라, **수비수로 월드컵을 뛰면
+   * 자기 대회가 표에서 통째로 안 보였어요.** 경기 결과 화면에는 🛡️ 숫자가 뜨는데
+   * 순위표에는 그 축이 아예 없어서, 화면 두 곳이 다른 말을 하고 있었습니다.
+   * 리그에서 "포지션이 아니라 숫자로 1위를 정한다"로 이미 정리한 규칙이에요.
+   *
+   * 눈금(DEF_G0·DEF_GK)은 실측으로 잡았어요 — 아래 주석과 wc-balance-test 참고. */
+  const DEF_W = { df: 1.0, mf: 0.55, wg: 0.22, fw: 0.1 };
+  /* 한 나라가 한 경기에 해내는 수비 성공 (전력 74 → DEF_G0).
+   * 종합 120 수비수가 5경기에서 🛡️ 10회쯤 쌓으니(matchContribution 실측),
+   * 다른 나라 최고 수비수도 그 언저리에 오도록 맞춰요 — 안 그러면 상이 그냥 내 것이거나
+   * 아예 못 닿는 것이 됩니다. */
+  const DEF_G0 = 5.6, DEF_GK = 0.05;
   /* 🌟 나라마다 **에이스가 한 명** 있어요. 대표팀 골은 실제로 한둘에게 몰립니다.
    * 이게 없으면 상대 골이 11명에게 고르게 흩어져 개인 최다 득점자가 낮아지고,
    * 내 골은 다 나에게 쌓이니 **득점왕이 너무 쉬워져요** (실측: 종합 80에서 23%).
@@ -515,6 +530,25 @@ window.WingerWorldCup = (() => {
       const asst = pickFrom(xi.filter((x) => x !== who));
       if (asst && Math.random() < 0.6) asst.a = (asst.a || 0) + 1;
     }
+    creditDef(xi, natStrOf(natName));
+  }
+
+  /* 🛡️ 그 경기의 수비를 선발에게 나눠요. 골과 같은 자리에서 같은 횟수만큼 도는
+   * 게 중요해요 — 따로 굴리면 "출전 수는 3인데 수비는 5경기치"가 됩니다. */
+  function creditDef(xi, str) {
+    const n = poissonish(Math.max(0.2, DEF_G0 + ((str || 80) - 74) * DEF_GK));
+    let total = 0;
+    for (const x of xi) total += DEF_W[x.pos] || 0.3;
+    for (let i = 0; i < n; i++) {
+      let r = Math.random() * total;
+      for (const x of xi) { r -= DEF_W[x.pos] || 0.3; if (r <= 0) { x.d = (x.d || 0) + 1; break; } }
+    }
+  }
+  // 순위표·조 순위표가 쓰는 그 전력을 그대로 봐요 (따로 지어내지 않아요)
+  function natStrOf(natName) {
+    const w = wc() || {};
+    const t = (w.myGroup || []).concat(w.others || []).find((x) => x.name === natName);
+    return t ? t.str : 80;
   }
 
   /* 내가 한 경기를 치를 때 **다른 나라도 자기 경기를 치러요.**
@@ -559,6 +593,9 @@ window.WingerWorldCup = (() => {
       const asst = pickFrom(mates);
       if (asst && Math.random() < ASSIST_P) asst.a = (asst.a || 0) + 1;
     }
+    /* 🛡️ 우리 나라 수비도 동료에게 쌓여요. **내 줄은 빼요** — 내 수비는 실제
+     * 경기에서 나온 값(w.d)이 그대로 들어가니, 여기서 또 굴리면 두 번 세요. */
+    creditDef(mates, natStrOf(myNation().name));
   }
   /* 조별리그가 끝나면 **떨어진 나라는 거기서 멈춰요.**
    * 우리 조는 실제 승점으로, 반대 조는 전력 상위 둘이 올라간 걸로 봐요. */
@@ -582,7 +619,7 @@ window.WingerWorldCup = (() => {
    *
    * 참가국 8개 × 16명, **128명 전부**가 후보예요. 정렬은 골 3점 + 도움 1점.
    * 내가 순위 밖이면 아래에 따로 핀으로 붙여요 — 리그 개인 순위와 같은 방식이에요. */
-  function faces() {
+  function faces(k) {
     const w = wc();
     const sq = ensureSquads();
     if (!sq) return [];
@@ -590,13 +627,24 @@ window.WingerWorldCup = (() => {
     for (const nat of Object.keys(sq)) {
       for (const x of sq[nat]) all.push({ p: x, nat, out: (w.natOut || []).includes(nat) });
     }
-    const key = (e) => (e.p.g || 0) * 3 + (e.p.a || 0);
-    all.sort((a, b) => key(b) - key(a) || (b.p.g || 0) - (a.p.g || 0) || b.p.str - a.p.str);
+    const key = FACE_KEY[k] || FACE_KEY.p;
+    all.sort((a, b) => key(b.p) - key(a.p) || (b.p.g || 0) - (a.p.g || 0) || b.p.str - a.p.str);
     return all;
   }
+  /* 부문 — 리그 개인 순위와 같은 결이에요. **포지션이 아니라 숫자로** 줄을 세워요.
+   * 공격수가 수비를 제일 많이 했으면 🛡️ 1위가 되는 게 맞습니다(리그에서 정한 규칙). */
+  const FACE_TABS = [["p", "📈 공격P", "골+도움"], ["g", "⚽ 득점", "골"], ["a", "🅰️ 도움", "도움"], ["d", "🛡️ 수비", "수비"]];
+  const FACE_KEY = {
+    p: (x) => (x.g || 0) * 3 + (x.a || 0),
+    g: (x) => x.g || 0,
+    a: (x) => x.a || 0,
+    d: (x) => x.d || 0,
+  };
+  const FACE_VAL = { p: (x) => `${x.g || 0}⚽ ${x.a || 0}🅰️`, g: (x) => x.g || 0, a: (x) => x.a || 0, d: (x) => x.d || 0 };
+  let faceTab = "p";
   // 화면에 그릴 줄 — 상위 N명, 내가 밖이면 내 줄을 따로 알려줘요
-  function faceRows() {
-    const all = faces();
+  function faceRows(k) {
+    const all = faces(k || faceTab);
     const top = all.slice(0, FACE_N);
     const myAt = all.findIndex((e) => e.p.me);
     return { top, all, myAt, pinned: myAt >= FACE_N ? all[myAt] : null };
@@ -609,20 +657,33 @@ window.WingerWorldCup = (() => {
     const w = wc() || {};
     const { top, myAt, pinned } = faceRows();
     if (!top.length) return recordHTML();
+    const unit = (FACE_TABS.find(([k]) => k === faceTab) || FACE_TABS[0])[2];
+    const val = FACE_VAL[faceTab] || FACE_VAL.p;
     const line = (e, i) => `<tr class="${e.p.me ? "me" : ""}"><td>${i + 1}</td>`
       + `<td>${e.p.name}${e.p.me ? " <b>(나)</b>" : ""}<span class="wc-nat">${e.nat}`
       /* 대회가 끝났으면 🏆 우승국만 표시해요. 진행 중일 때만 탈락을 적습니다 —
        * 끝난 뒤엔 우승국 말고 다 탈락이라 아무 말도 안 하는 것과 같아요. */
       + `${w.champ ? (e.nat === w.champ ? " · 🏆 우승" : "") : (e.out ? " · 탈락" : "")}</span></td>`
-      + `<td>${e.p.g || 0}</td><td>${e.p.a || 0}</td></tr>`;
+      + `<td>${val(e.p)}</td></tr>`;
     /* 내가 순위 밖이면 아래에 붙여요 — 내 줄이 아예 없으면 "나는 몇 등이지"를
      * 알 방법이 없어요(리그 개인 순위·평점 순위표와 같은 방식이에요). */
     const pin = pinned
-      ? `<tr class="hof-gap-row"><td colspan="4">⋯</td></tr>${line(pinned, myAt)}`
+      ? `<tr class="hof-gap-row"><td colspan="3">⋯</td></tr>${line(pinned, myAt)}`
       : "";
-    return `<table class="rank-table season-standings"><thead>
-        <tr><th>#</th><th>선수 · 국가</th><th>⚽</th><th>🅰️</th></tr></thead>
+    /* 부문 탭 — 리그 개인 순위와 같은 껍데기(.race-tabs)를 빌려 써요.
+     * 한 표에 칸을 다 늘어놓으면 좁은 화면에서 숫자가 뭉갭니다(리그에서 겪었어요). */
+    const tabs = `<div class="race-tabs wc-face-tabs">${FACE_TABS.map(([k, label]) =>
+      `<button type="button" class="race-tab${k === faceTab ? " on" : ""}" data-fk="${k}">${label}</button>`).join("")}</div>`;
+    return tabs + `<table class="rank-table season-standings"><thead>
+        <tr><th>#</th><th>선수 · 국가</th><th>${unit}</th></tr></thead>
       <tbody>${top.map(line).join("")}${pin}</tbody></table>` + recordHTML();
+  }
+  /* 탭을 누르면 그 자리에서 다시 그려요. 화면을 그린 쪽이 이걸 한 번 불러 줍니다. */
+  function wireFaceTabs(box, redraw) {
+    if (!box) return;
+    for (const b of box.querySelectorAll(".wc-face-tabs .race-tab")) {
+      b.onclick = (ev) => { ev.preventDefault(); faceTab = b.dataset.fk; redraw(); };
+    }
   }
 
   /* 🏁 **내가 떨어져도 대회는 끝까지 굴러요.**
@@ -679,6 +740,7 @@ window.WingerWorldCup = (() => {
   /* 🏆 대회 수상 — 끝나고 한 번만 정해요.
    *   🥇 골든부츠  득점 1위
    *   🏅 골든볼    대회 최우수 선수 (골·도움 + 평균 평점)
+   *   🛡️ 골든월    수비 1위 — 수비수에게도 들 것이 하나는 있어야 해요
    * 리그 수상(발롱도르·리그MVP)과 **다른 축**이에요 — 4년에 한 번뿐인 무대의 상입니다. */
   function decideAwards() {
     const w = wc();
@@ -693,6 +755,10 @@ window.WingerWorldCup = (() => {
     const out = [];
     if (boot) out.push({ id: "boot", name: "🥇 골든부츠", who: boot.p.name, nat: boot.nat, me: !!boot.p.me, val: `${boot.p.g || 0}골` });
     if (ball) out.push({ id: "ball", name: "🏅 골든볼", who: ball.p.name, nat: ball.nat, me: !!ball.p.me, val: `${ball.p.g || 0}골 ${ball.p.a || 0}도움` });
+    /* 🛡️ 수비수에게도 들 것이 하나는 있어야 해요. 이게 없으면 대회 내내 1위를 해도
+     * 아무 일도 안 일어납니다 — 리그에는 🛡️ 리그 최고 수비수가 이미 있어요. */
+    const wall = rows.slice().sort((a, b) => (b.p.d || 0) - (a.p.d || 0) || (b.p.apps || 0) - (a.p.apps || 0))[0];
+    if (wall && (wall.p.d || 0) > 0) out.push({ id: "wall", name: "🛡️ 골든월", who: wall.p.name, nat: wall.nat, me: !!wall.p.me, val: `수비 ${wall.p.d || 0}회` });
     return out;
   }
 
@@ -913,7 +979,7 @@ window.WingerWorldCup = (() => {
     w.ratingSum += clamp(CTX.matchRating(info, S.pos, 0) / 10, 1, 10);
     /* 🥇 내 줄은 **우리 나라 명단 안의 나**예요 — 따로 만들면 표가 둘로 갈려요 */
     const meRow = mySquad().find((x) => x.me);
-    if (meRow) { meRow.g = w.g; meRow.a = w.a; meRow.apps = w.apps; meRow.str = overall(); }
+    if (meRow) { meRow.g = w.g; meRow.a = w.a; meRow.d = w.d; meRow.apps = w.apps; meRow.str = overall(); }
     creditMates(info.mateGoals, info.myGoals);   // 동료 골·내 골의 도움이 쌓여요
     /* ⚠️ **상대 팀은 이 경기에서 실제로 넣은 만큼만** 쌓여요. 따로 굴리면
      * "4:2로 이겼는데 상대 선수 골 합이 3"이 됩니다(제보). */
@@ -1077,8 +1143,8 @@ window.WingerWorldCup = (() => {
     let awFame = 0;
     for (const a of mine) {
       awFame += AWARD_FAME[a.id] || 0;
-      S.career[a.id === "boot" ? "wcBoot" : "wcBall"] =
-        (S.career[a.id === "boot" ? "wcBoot" : "wcBall"] || 0) + 1;
+      const ck = a.id === "boot" ? "wcBoot" : a.id === "wall" ? "wcWall" : "wcBall";
+      S.career[ck] = (S.career[ck] || 0) + 1;
       CTX.proLog(`🏆 월드컵 ${a.name} 수상! (${a.val})`);
     }
     S.fandom = (S.fandom || 0) + awFame;
@@ -1100,7 +1166,7 @@ window.WingerWorldCup = (() => {
         ${awards.length ? `<div class="wc-awards">${awards.map((a) =>
           `<div class="wc-award${a.me ? " me" : ""}">${a.name} — <b>${a.who}</b>`
           + `<span class="wc-nat">${a.nat}</span> ${a.val}${a.me ? " 🎉" : ""}</div>`).join("")}</div>` : ""}
-        ${raceHTML()}
+        <div id="wc-final-race">${raceHTML()}</div>
       </div>`;
     if (result === "champion" && CTX.queueFx) {
       CTX.queueFx([["celebrate", "champion", `🏆 ${S.proYear}시즌 월드컵 우승!`, ".wc-card"]]);
@@ -1126,6 +1192,16 @@ window.WingerWorldCup = (() => {
     $("stage-card").innerHTML = w.final.html;
     const res = $("stage-result");
     if (res) res.innerHTML = "";
+    /* 부문 탭 — 결과 카드는 **저장해 둔 HTML**이라(w.final.html) 탭만 눌러서
+     * 카드를 통째로 다시 만들면 안 돼요. 순위표 칸 하나만 갈아 끼웁니다.
+     * S.wc는 "🏁 시즌 결산"을 누를 때까지 살아 있어서 다시 그릴 수 있어요. */
+    const drawRace = () => {
+      const box = $("wc-final-race");
+      if (!box) return;
+      box.innerHTML = raceHTML();
+      wireFaceTabs(box, drawRace);
+    };
+    drawRace();
     themeSync();
     wire("🏁 시즌 결산", () => {
       S.wc = null;             // ← 여기 한 줄에 ready·테마·훈련 버프가 전부 매달려 있어요
@@ -1232,7 +1308,7 @@ window.WingerWorldCup = (() => {
         : pick(good ? SAY_GROUP_OK : SAY_GROUP);
       if (aw.length) say += ` ${SAY_AWARD[aw[0]]}`;
       fact = `${LABEL[h.result]} · ${h.apps}경기 ⚽${h.g} 🅰️${h.a}`
-        + (aw.length ? ` · ${aw.map((id) => (id === "boot" ? "🥇 골든부츠" : "🏅 골든볼")).join(" · ")}` : "")
+        + (aw.length ? ` · ${aw.map((id) => AW_NAME[id] || id).join(" · ")}` : "")
         + (h.champ && h.result !== "champion" ? ` · 우승 ${h.champ}` : "");
     }
     return `<div class="coach-say">🗣️ ${nat.name} 대표팀 감독 — “${say}”</div>`
@@ -1242,15 +1318,16 @@ window.WingerWorldCup = (() => {
   return {
     init, due, enter, resume, checkInvite, badgeHTML, startButton, themeSync, reportLine,
     groupTableHTML, bracketHTML, tableHTML: tableHTML2, groupSumText, recordHTML,
-    raceHTML, openGroup, matesOf, faces, faceRows,
+    raceHTML, wireFaceTabs, openGroup, matesOf, faces, faceRows,
     active: () => !!wc(),
     isWcYear, callBar, wildBar, luckP, myNation,
     _t: {
       NATIONS, wildBar, classBar, BAR_NAT_K, BAR_WOBBLE, WILD_GAP, barSeed,
       TRUST_GO, TRUST_STAY, PRIZE, FAME, AWARD_FAME,
       natSquadOf, xiOf, ensureSquads, advanceOthers, creditNat, creditMates, cutNations,
-      faces, faceRows, matesOf,
-      decideAwards, faceScore, FACE_N, NAT_G0, NAT_GK, ACE_W, SCORE_W, mySquad, markAce,
+      faces, faceRows, matesOf, wireFaceTabs,
+      decideAwards, faceScore, FACE_N, NAT_G0, NAT_GK, ACE_W, SCORE_W, DEF_W, DEF_G0, DEF_GK,
+      creditDef, FACE_TABS, FACE_KEY, mySquad, markAce,
       playOutRest, KO_EDGE, ASSIST_P, showFinal,
       LUCK_GAP, LUCK_MAX, luckP,
       NAT_SPREAD, ACE_DIV, ACE_LO, ACE_HI, natStr, teamStr, NAT_MEAN,

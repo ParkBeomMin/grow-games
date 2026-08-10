@@ -1117,6 +1117,7 @@ function wcRecordHTML() {
       + `${c.wcWin ? ` · 🏆 우승 ${c.wcWin}` : ""}`
       + `${c.wcBall ? ` · 🏅 골든볼 ${c.wcBall}` : ""}`
       + `${c.wcBoot ? ` · 🥇 골든부츠 ${c.wcBoot}` : ""}`
+      + `${c.wcWall ? ` · 🛡️ 골든월 ${c.wcWall}` : ""}`
     : "아직 대표팀에 뽑힌 적이 없어요";
   const nat = (window.WingerWorldCup && WingerWorldCup.myNation)
     ? WingerWorldCup.myNation().name : "";
