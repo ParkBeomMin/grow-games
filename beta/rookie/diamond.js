@@ -1,38 +1,61 @@
-/* ⚾ 더 드래프트 — 다이아몬드 계기판 (야구 전용, 다른 게임과 공유하지 않아요)
+/* ⚾ 더 드래프트 — 경기장 화면 (야구 전용, 다른 게임과 공유하지 않아요)
  *
- * 스코어보드와 중계 피드 사이에 붙어요. 주자·아웃카운트를 **한눈에** 보여주는 게 목적이에요 —
- * "만루 2아웃"을 글로 읽는 것과 베이스 세 개가 켜진 걸 보는 건 체감이 달라요.
+ * 스코어보드와 중계 피드 사이에 붙는 **야구장 뷰**예요. 외야 잔디·내야 흙·파울라인을
+ * 그리고, 주자가 베이스에 서고, 타구가 실제로 날아가요. 더 윙어의 경기장과 같은 결이에요.
  *
  * ⚠️ 이 게임은 타석 단위로 이닝을 굴리지 않아요(경기 성적을 뭉쳐서 냅니다).
- * 그래서 주자 상태를 지어내지 않고 **중계 피드가 말한 것만** 따라가요 —
- * "안타!"가 뜨면 주자가 나가고, "삼진"이면 아웃이 올라가요. 화면에 보이는 말과
- * 그림이 늘 일치해요. 피드가 없는 자리에서는 그냥 비어 있어요.
+ * 그래서 주자를 지어내지 않고 **중계 피드가 말한 것만** 따라가요 — "안타!"가 뜨면
+ * 주자가 1루에 서고 공이 외야로 날아가요. 화면의 말과 그림이 늘 일치해요.
  *
- * 모션: transform·opacity만 써요(레이아웃 속성 애니메이션 금지). 140~220ms.
- * prefers-reduced-motion이면 전환을 끕니다.
+ * 모션: transform·opacity만 써요(레이아웃 속성 애니메이션 금지).
+ * SVG 도형에는 CSS transform-box를 걸지 않아요 — 좌표계가 싸워서 도형이 날아간 적이 있어요.
+ * prefers-reduced-motion이면 공이 순간이동하고 번쩍임을 끕니다.
  */
 (function () {
   "use strict";
 
-  const BASES = ["b1", "b2", "b3"];   // 1루·2루·3루
+  // 그라운드 좌표 (viewBox 200×132). 홈은 아래, 2루는 위.
+  const P = {
+    home: [100, 116], b1: [139, 79], b2: [100, 42], b3: [61, 79],
+    mound: [100, 79],
+  };
+  const BASES = ["b1", "b2", "b3"];
+  // 타구가 날아갈 자리 — 사건마다 달라요
+  const HIT = {
+    homer: [100, 14], triple: [156, 34], double: [52, 36],
+    single: [140, 52], infield: [118, 88], catcher: [100, 126], steal: [100, 42],
+  };
 
-  /* 내야를 인라인 SVG로 그려요 — 베이스는 실제로 마름모, 홈플레이트는 오각형이라
-   * 도형이 정답이에요(아이콘보다 테마·크기 대응이 좋아요). 색은 CSS가 정해요(fill=currentColor 등). */
   function html() {
     return `
       <div class="dia" id="dia">
-        <svg class="dia-field" viewBox="0 0 100 100" aria-hidden="true">
-          <polygon class="dia-dirt" points="50,82 82,50 50,18 18,50" />
-          <path class="dia-chalk" d="M50 82 L82 50 M50 82 L18 50" />
-          <polygon class="dia-base" data-b="b2" points="50,11 57,18 50,25 43,18" />
-          <polygon class="dia-base" data-b="b3" points="18,43 25,50 18,57 11,50" />
-          <polygon class="dia-base" data-b="b1" points="82,43 89,50 82,57 75,50" />
-          <polygon class="dia-home" points="50,92 55,87 55,81 45,81 45,87" />
+        <svg class="dia-park" viewBox="0 0 200 132" aria-hidden="true">
+          <!-- 외야 잔디 (파울선 안쪽) + 펜스 -->
+          <path class="dia-grass" d="M100,116 L26,46 Q100,-2 174,46 Z" />
+          <path class="dia-fence" d="M26,46 Q100,-2 174,46" />
+          <!-- 내야 흙 -->
+          <polygon class="dia-dirt" points="100,124 147,79 100,34 53,79" />
+          <!-- 파울라인 (분필) -->
+          <path class="dia-chalk" d="M100,116 L26,46 M100,116 L174,46" />
+          <!-- 베이스패스 -->
+          <path class="dia-path" d="M100,116 L139,79 L100,42 L61,79 Z" />
+          <circle class="dia-mound" cx="100" cy="79" r="7" />
+          <!-- 베이스 -->
+          <polygon class="dia-base" data-b="b2" points="100,36 106,42 100,48 94,42" />
+          <polygon class="dia-base" data-b="b3" points="61,73 67,79 61,85 55,79" />
+          <polygon class="dia-base" data-b="b1" points="139,73 145,79 139,85 133,79" />
+          <polygon class="dia-plate" points="100,122 105,117 105,112 95,112 95,117" />
+          <!-- 주자 (켜질 때만 보여요) -->
+          <text class="dia-run" data-r="b1" x="139" y="72">🏃</text>
+          <text class="dia-run" data-r="b2" x="100" y="35">🏃</text>
+          <text class="dia-run" data-r="b3" x="61" y="72">🏃</text>
+          <!-- 타구 -->
+          <text class="dia-ball" id="dia-ball" x="0" y="0">⚾</text>
         </svg>
-        <div class="dia-info">
-          <div class="dia-inn" id="dia-inn">경기 준비</div>
-          <div class="dia-outs" id="dia-outs"><b>아웃</b><i></i><i></i><i></i></div>
-          <div class="dia-note" id="dia-note">중계를 기다리는 중…</div>
+        <div class="dia-bar">
+          <span class="dia-inn" id="dia-inn">경기 준비</span>
+          <span class="dia-outs" id="dia-outs"><b>아웃</b><i></i><i></i><i></i></span>
+          <span class="dia-note" id="dia-note">중계를 기다리는 중…</span>
         </div>
       </div>`;
   }
@@ -41,29 +64,38 @@
     if (!root) return null;
     root.innerHTML = html();
     const box = root.querySelector(".dia");
+    const ball = box.querySelector("#dia-ball");
     const on = { b1: false, b2: false, b3: false };
     let outs = 0;
 
     const paint = () => {
       for (const b of BASES) {
-        const el = box.querySelector(`[data-b="${b}"]`);
-        if (el) el.classList.toggle("on", !!on[b]);
+        const base = box.querySelector(`[data-b="${b}"]`);
+        const run = box.querySelector(`[data-r="${b}"]`);
+        if (base) base.classList.toggle("on", !!on[b]);
+        if (run) run.classList.toggle("on", !!on[b]);
       }
-      const dots = box.querySelectorAll(".dia-outs i");
-      dots.forEach((d, i) => d.classList.toggle("on", i < outs));
+      box.querySelectorAll(".dia-outs i").forEach((d, i) => d.classList.toggle("on", i < outs));
     };
-    // 득점·홈런처럼 큰 순간에 한 번 번쩍 (끝없이 도는 연출은 두지 않아요)
+    // 타구를 날려요 — transform만 움직여요(좌표 속성을 건드리면 애니메이션이 안 붙어요)
+    const fly = (to) => {
+      if (!ball || !to) return;
+      ball.classList.add("on");
+      ball.style.transform = `translate(${to[0]}px, ${to[1]}px)`;
+    };
+    const rest = () => {
+      if (!ball) return;
+      ball.classList.remove("on");
+      ball.style.transform = `translate(${P.mound[0]}px, ${P.mound[1]}px)`;
+    };
     const flash = (cls) => {
       box.classList.remove("dia-score", "dia-out");
-      void box.offsetWidth;                       // 리플로우로 애니메이션 재시작
+      void box.offsetWidth;
       box.classList.add(cls);
     };
-    const note = (txt) => {
-      const el = box.querySelector("#dia-note");
-      if (el) el.textContent = txt || "";
-    };
+    const note = (t) => { const el = box.querySelector("#dia-note"); if (el) el.textContent = t || ""; };
+    const setInn = (t) => { const el = box.querySelector("#dia-inn"); if (el && t) el.textContent = t; };
 
-    /* 주자를 n루만큼 밀어요. 넘어간 주자는 득점이에요. batter=true면 타자도 올라타요. */
     function advance(n, batter) {
       let runs = 0;
       for (let i = BASES.length - 1; i >= 0; i--) {
@@ -75,59 +107,52 @@
       if (batter) { if (n - 1 >= BASES.length) runs++; else on[BASES[n - 1]] = true; }
       return runs;
     }
-    function clearBases() { for (const b of BASES) on[b] = false; }
+    const clearBases = () => { for (const b of BASES) on[b] = false; };
 
     const api = {
       el: box,
-      /* 반이닝이 바뀌면 주자·아웃을 비워요. */
-      half(label) {
-        clearBases(); outs = 0; note(""); paint();
-        const el = box.querySelector("#dia-inn");
-        if (el && label) el.textContent = label;
-      },
-      inning(label) {
-        const el = box.querySelector("#dia-inn");
-        if (el && label) el.textContent = label;
-      },
-      /* 중계 한 줄을 읽고 그대로 반영해요 — 없는 상태를 지어내지 않아요. */
+      half(label) { clearBases(); outs = 0; note(""); rest(); paint(); setInn(label); },
+      inning(label) { setInn(label); },
       say(text) {
         if (!text) return;
         const t = String(text);
+        // 경기가 끝나면 계기판도 끝나요 — 끝난 뒤에도 "9회초"로 남아 있으면 거짓말이에요
+        if (/경기 종료|경기 끝|경기가 끝/.test(t)) {
+          clearBases(); outs = 0; rest(); paint();
+          box.classList.add("dia-done"); setInn("경기 종료"); note("");
+          return;
+        }
         const inn = t.match(/(\d+)\s*회\s*(초|말)/);
         if (inn) {
           const label = `${inn[1]}회${inn[2]}`;
           const cur = box.querySelector("#dia-inn");
           if (cur && cur.textContent !== label) api.half(label);
         }
-        // 경기가 끝나면 계기판도 끝나요 — 끝난 뒤에도 "9회초"로 남아 있으면 거짓말이에요
-        if (/경기 종료|경기 끝|경기가 끝/.test(t)) {
-          clearBases(); outs = 0; paint();
-          box.classList.add("dia-done");
-          const el = box.querySelector("#dia-inn");
-          if (el) el.textContent = "경기 종료";
-          note("");
-          return;
-        }
-        let runs = 0;
-        // 위기 등판처럼 "주자가 이미 쌓여 있다"고 말하는 줄 — 말한 만큼 세워 둬요
+        // 주자가 이미 쌓여 있다고 말하는 줄 — 말한 만큼 세워 둬요
         if (/만루/.test(t)) { on.b1 = on.b2 = on.b3 = true; note("만루"); paint(); return; }
-        if (/주자가 쌓이|주자 만루|위기!/.test(t)) { on.b1 = true; on.b2 = true; note("주자 1·2루"); paint(); return; }
-        if (/홈런/.test(t)) {                       // 홈런 — 주자 전원 + 타자 득점
-          runs = advance(3, false) + 1; clearBases(); flash("dia-score"); note("홈런!");
+        if (/주자가 쌓이|위기!/.test(t)) { on.b1 = on.b2 = true; note("주자 1·2루"); paint(); return; }
+
+        let runs = 0;
+        if (/홈런/.test(t)) {
+          runs = advance(3, false) + 1; clearBases(); fly(HIT.homer); flash("dia-score"); note("홈런!");
         } else if (/3루타|삼루타/.test(t)) {
-          runs = advance(3, false); on.b3 = true; note("3루타");
+          runs = advance(3, false); on.b3 = true; fly(HIT.triple); note("3루타");
         } else if (/2루타|이루타/.test(t)) {
-          runs = advance(2, true); note("2루타");
+          runs = advance(2, true); fly(HIT.double); note("2루타");
         } else if (/안타|출루|밀어친|적시타/.test(t)) {
-          runs = advance(1, true); note("안타");
+          runs = advance(1, true); fly(HIT.single); note("안타");
         } else if (/볼넷|사구|몸에 맞/.test(t)) {
-          runs = advance(1, true); note("볼넷");
+          runs = advance(1, true); fly(HIT.catcher); note("볼넷");
         } else if (/병살/.test(t)) {
-          outs = Math.min(3, outs + 2); flash("dia-out"); note("병살");
-        } else if (/삼진|아웃|땅볼|뜬공|범타|플라이|잡아냈|막았/.test(t)) {
-          outs = Math.min(3, outs + 1); flash("dia-out"); note("아웃");
+          outs = Math.min(3, outs + 2); fly(HIT.infield); flash("dia-out"); note("병살");
+        } else if (/삼진/.test(t)) {
+          outs = Math.min(3, outs + 1); fly(HIT.catcher); flash("dia-out"); note("삼진");
+        } else if (/아웃|땅볼|뜬공|범타|플라이|잡아냈|물러납/.test(t)) {
+          outs = Math.min(3, outs + 1); fly(HIT.infield); flash("dia-out"); note("아웃");
         } else if (/도루/.test(t)) {
-          runs = advance(1, false); note("도루");
+          runs = advance(1, false); fly(HIT.steal); note("도루");
+        } else {
+          paint(); return;                       // 모르는 줄은 화면을 안 건드려요
         }
         if (runs > 0) flash("dia-score");
         if (outs >= 3) { clearBases(); outs = 0; note("이닝 종료"); }
@@ -135,6 +160,7 @@
       },
       reset() { api.half(null); },
     };
+    rest();
     paint();
     return api;
   }

@@ -320,48 +320,73 @@
 .rec-pane.on { display: block; animation: rec-fade .18s ease; }
 @keyframes rec-fade { from { opacity: .3; } to { opacity: 1; } }
 
-/* ⚾ 다이아몬드 계기판 — 스코어보드와 중계 사이. 주자·아웃을 한눈에 보여줘요.
- * 내야는 인라인 SVG(diamond.js)로 그려요 — 베이스·홈플레이트를 polygon 좌표로 직접 찍어요.
- * ⚠️ SVG에 CSS transform(transform-box·transform-origin)을 걸지 않아요. 도형의 좌표계와
- *    싸워서 베이스가 필드 밖으로 날아갔던 자리예요. 회전이 필요하면 좌표로 그립니다.
+/* ⚾ 경기장 화면 — 스코어보드와 중계 사이. 외야 잔디·내야 흙·주자·타구를 보여줘요.
+ * 도형은 인라인 SVG(diamond.js)의 polygon/path 좌표로 직접 찍어요.
+ * ⚠️ SVG 도형에 CSS transform-box·transform-origin을 걸지 않아요 — 도형 좌표계와 싸워서
+ *    베이스가 필드 밖으로 날아갔던 자리예요. 공만 transform으로 움직입니다.
  * 색은 base.css의 테마 변수만 써요. */
 .dia {
-  display: flex; align-items: center; gap: 12px;
-  margin: 8px 0; padding: 9px 12px;
+  margin: 8px 0; padding: 8px 8px 6px;
   border: 1px solid var(--line); border-radius: 12px;
-  background: var(--bg2);
+  background: var(--bg2); transition: opacity .18s ease;
+}
+.dia-park { display: block; width: 100%; height: auto; }
+
+/* 그라운드 */
+.dia-grass { fill: var(--field); stroke: none; }
+.dia-fence { fill: none; stroke: var(--line); stroke-width: 2.5; }
+.dia-dirt { fill: var(--sand); opacity: .22; }
+.dia-chalk { fill: none; stroke: var(--cream); stroke-width: 1.4; opacity: .38; stroke-linecap: round; }
+.dia-path { fill: none; stroke: var(--sand); stroke-width: 2.2; opacity: .35; }
+.dia-mound { fill: var(--sand); opacity: .35; }
+.dia-plate { fill: var(--cream); opacity: .75; }
+
+/* 베이스 — 주자가 있으면 금빛으로 켜져요 */
+.dia-base { fill: var(--cream); opacity: .55; transition: fill .18s ease, opacity .18s ease; }
+.dia-base.on { fill: var(--accent); opacity: 1; filter: drop-shadow(0 0 5px var(--accent)); }
+
+/* 주자 — 베이스에 서 있는 사람. 없으면 안 보여요 */
+.dia-run {
+  font-size: 11px; text-anchor: middle; opacity: 0;
   transition: opacity .18s ease;
+  pointer-events: none;
 }
-.dia-field { width: 58px; height: 58px; flex: 0 0 auto; display: block; }
-.dia-dirt { fill: var(--sand); opacity: .14; stroke: var(--line); stroke-width: 2; }
-.dia-chalk { stroke: var(--cream); stroke-width: 1.5; opacity: .28; fill: none; stroke-linecap: round; }
-.dia-home { fill: var(--cream); opacity: .5; }
-.dia-base {
-  fill: var(--field); stroke: var(--line); stroke-width: 2;
-  transition: fill .18s ease, stroke .18s ease;
+.dia-run.on { opacity: 1; }
+
+/* 타구 — transform으로만 날아가요 (좌표 속성은 안 건드려요) */
+.dia-ball {
+  font-size: 11px; text-anchor: middle; dominant-baseline: middle;
+  opacity: .35;
+  transition: transform .5s cubic-bezier(.22, .9, .3, 1), opacity .2s ease;
 }
-/* 주자가 있으면 베이스가 금빛으로 켜져요 (도형이라 크기 대신 색·발광으로 말해요) */
-.dia-base.on { fill: var(--accent); stroke: var(--accent); filter: drop-shadow(0 0 5px var(--accent)); }
-.dia-info { flex: 1 1 auto; min-width: 0; }
-.dia-inn { font-size: .85rem; font-weight: 700; color: var(--text); }
-.dia-outs { display: flex; align-items: center; gap: 5px; margin-top: 6px; }
+.dia-ball.on { opacity: 1; }
+
+/* 아래 정보 줄 */
+.dia-bar {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  margin-top: 6px; padding: 0 2px;
+}
+.dia-inn { font-size: .82rem; font-weight: 700; color: var(--text); }
+.dia-outs { display: inline-flex; align-items: center; gap: 4px; }
 .dia-outs b { font-size: .68rem; font-weight: 400; color: var(--dim); margin-right: 2px; }
 .dia-outs i {
-  width: 9px; height: 9px; border-radius: 50%;
+  width: 8px; height: 8px; border-radius: 50%;
   border: 1px solid var(--line); background: transparent;
   transition: transform .18s ease, background-color .18s ease;
 }
 .dia-outs i.on { background: var(--accent2); border-color: var(--accent2); transform: scale(1.15); }
-.dia-note { margin-top: 5px; font-size: .74rem; color: var(--dim); min-height: 1em; }
+.dia-note { margin-left: auto; font-size: .74rem; color: var(--dim); }
+
 /* 경기가 끝나면 조용히 물러나요 */
 .dia.dia-done { opacity: .45; }
 .dia.dia-done .dia-outs { display: none; }
+
 /* 큰 순간에 한 번만 번쩍 — 끝없이 도는 연출은 두지 않아요 */
-.dia-score { animation: dia-flash-score .42s ease; }
+.dia-score { animation: dia-flash-score .45s ease; }
 .dia-out { animation: dia-flash-out .3s ease; }
 @keyframes dia-flash-score {
   0% { box-shadow: inset 0 0 0 0 transparent; }
-  35% { box-shadow: inset 0 0 26px var(--accent); }
+  35% { box-shadow: inset 0 0 30px var(--accent); }
   100% { box-shadow: inset 0 0 0 0 transparent; }
 }
 @keyframes dia-flash-out {
@@ -370,6 +395,7 @@
   100% { box-shadow: inset 0 0 0 0 transparent; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .dia, .dia-base, .dia-outs i { transition: none; }
+  .dia, .dia-base, .dia-run, .dia-outs i { transition: none; }
+  .dia-ball { transition: none; }
   .dia-score, .dia-out { animation: none; }
 }
