@@ -377,6 +377,11 @@ grant select on public.stats_summary, public.stats_choices, public.stats_daily t
      * 따로 잠겨 있어야 해요. */
     const FEVER_GAME = "soccer";
     const FEVER_ID = "soccer-fever";
+    /* [키, 이름, 단위, **화면 숫자 ÷ 이 값 = 게임이 쓰는 값**]
+     *
+     * ⚠️ 넣는 쪽과 빼는 쪽이 같은 자를 써야 해요. 처음엔 빼는 쪽만 `mul * 100`으로
+     * 나눠서, 훈련 30(%)을 저장하면 0.003이 되고 다시 열면 0.3으로 보였습니다(제보).
+     * 이제 이 값 하나만 봐요 — 두 자리에 다른 식이 있으면 반드시 어긋나요. */
     const FEVER_EFFS = [
       ["train", "훈련 상승폭", "%", 100],
       ["moment", "승부처 성공", "%p", 100],
@@ -385,6 +390,9 @@ grant select on public.stats_summary, public.stats_choices, public.stats_daily t
       ["d", "수비", "%", 100],
       ["rate", "경기 평점", "점", 1],
     ];
+    // 화면 ↔ 저장값. 소수 둘째 자리까지만 남겨요(0.30000000000000004 방지)
+    const toField = (v, mul) => Math.round((v || 0) * mul * 100) / 100;
+    const toBoost = (v, mul) => Math.round((Number(v) / mul) * 10000) / 10000;
     let FEVER_ROW = null;
 
     /* datetime-local은 **로컬 시각 문자열**이에요. 표준시로 바꿔 보내고,
@@ -428,7 +436,7 @@ grant select on public.stats_summary, public.stats_choices, public.stats_daily t
         </div>
         <div class="fv-grid" style="margin-top:10px">
           ${FEVER_EFFS.map(([k, label, unit, mul]) =>
-            field(`fv-e-${k}`, `${label} (${unit})`, eff[k] != null ? Math.round(eff[k] * mul * 100) / 100 : 0, "number")).join("")}
+            field(`fv-e-${k}`, `${label} (${unit})`, toField(eff[k], mul), "number")).join("")}
         </div>
         <div class="fv-btns">
           ${field("fv-pw", "관리 비밀번호", "", "password")}
@@ -478,7 +486,7 @@ grant select on public.stats_summary, public.stats_choices, public.stats_daily t
         if (!from || !to) return msg("시작과 종료를 정해주세요", true);
         const boost = {};
         for (const [k, , , mul] of FEVER_EFFS) {
-          const v = Number($(`fv-e-${k}`).value) / (mul * 100);
+          const v = toBoost($(`fv-e-${k}`).value, mul);
           if (Number.isFinite(v) && v > 0) boost[k] = v;
         }
         msg("저장하는 중…");
