@@ -328,9 +328,9 @@ window.Career = (() => {
       others: leagueTeams().filter((t) => t !== S.team).map((name) => ({ name, w: 0, l: 0, str: teamStrOf(name) })),
       stats: S.pos === "batter" ? { ab: 0, hits: 0, hr: 0, sb: 0 } : { ip: 0, k: 0, er: 0, wins: 0, saves: 0, g: 0 },
     };
-    // 🏅 개인 기록 순위 — 이번 시즌 라이벌 필드. 자체 시드로만 굴려요(전역 난수 안 씀).
+    // 🔗 통합 리그 — 팀마다 로스터를 세워요. 팀 순위·개인 기록이 여기서 같이 나와요(전역 난수 안 씀).
     S.season.raceSeed = ((S.proYear || 1) * 2654435761) >>> 0;
-    S.season.race = rollRace();
+    S.season.lg = buildLeagueState();
     save();
   }
 
@@ -342,11 +342,6 @@ window.Career = (() => {
    * ⚠️ 라이벌 시뮬은 **전역 Math.random을 절대 안 써요.** S.season.raceSeed에서 갈라낸
    * 자체 시드 PRNG로만 굴려요. 정규시즌 마지막 경기부터 도는 밸런스 시뮬(post-mech ⑤)이
    * 이 난수에 흔들리면 안 되니까요. 그래서 재현·테스트도 쉬워요. */
-  const RACE_ANCHOR = {
-    batter: { hits: 185, hr: 48, sb: 70, avg: 0.333 },
-    pitcher: { wins: 15, k: 415, saves: 42, era: 2.5 },
-  };
-  const RACE_COUNTS = { batter: ["hits", "hr", "sb"], pitcher: ["wins", "k", "saves"] };
   let raceKey = null;   // 지금 보고 있는 순위 탭 (저장 안 해요 — 화면 상태예요)
 
   /* 🌍 라이벌 이름 풀 — **다른 유저가 만든 선수 이름**을 끌어와 리그를 채워요(match.js·Supabase).
@@ -384,62 +379,76 @@ window.Career = (() => {
     return arr.slice(0, n);
   }
 
-  // 크누스 포아송 — 평균 mean으로 정수 하나. rng는 넘겨받은 시드 PRNG예요(전역 난수 아님).
-  function racePoisson(rng, mean) {
-    if (mean <= 0) return 0;
-    const L = Math.exp(-mean); let k = 0, p = 1;
-    do { k++; p *= rng(); } while (p > L);
-    return k - 1;
-  }
-  // 종목 지터를 비율 스탯(타율·자책)엔 좁게 눌러요 — 안 그러면 타율이 .27~.44로 튀어요.
-  const rateJit = (j) => 1 + (j - 0.985) * 0.4;
-
-  /* 이번 시즌 라이벌 필드를 만들어요. 다른 팀마다 간판 선수(내 시점과 같은 타자/투수)를
-   * 한 명씩 세우고, 각자의 시즌 목표치(누적은 경기마다 쌓고, 비율은 고정)를 잡아요. */
+  /* 리그 로스터·경기 시뮬은 sim.js(RookieSim)가 맡아요 — 여기선 게임에 물리는 일만 해요. */
   const squadLib = () => (typeof window !== "undefined" ? window.RookieSquad : null);
-  function rollRace() {
-    const cls = S.pos;
-    const others = leagueTeams().filter((t) => t !== S.team);
-    const seed = (S.proYear || 1);
-    const RS = squadLib();
-    const book = RS ? RS.build(others.concat([S.team]), teamStrOf, seed) : null;
-    const counts = RACE_COUNTS[cls], anch = RACE_ANCHOR[cls];
-    const poolNames = pickRivalNames(others.length, seed);   // 🌍 유저 이름 풀 (없으면 [])
-    return others.map((team, i) => {
-      const star = book ? book[team][cls]
-        : { name: fallbackName(team, seed, i), pop: clamp((teamStrOf(team) - 0.34) / 0.30, 0.4, 1), jit: {} };
-      const pop = star.pop, popF = 0.55 + 0.5 * pop;
-      const jit = (k) => star.jit[k] || 1;
-      const rate = {};
-      for (const k of counts) rate[k] = (anch[k] * popF * jit(k)) / (S.season.total || 144);
-      const r = { name: poolNames[i] || star.name, team, pop, rate };   // 풀 이름 우선, 없으면 별명
-      for (const k of counts) r[k] = 0;
-      if (cls === "batter") r.avg = +(anch.avg * (0.88 + 0.13 * pop) * rateJit(jit("avg"))).toFixed(3);
-      else r.era = +(anch.era * (1.35 - 0.5 * pop) * rateJit(jit("era"))).toFixed(2);
-      return r;
-    });
+  const simLib = () => (typeof window !== "undefined" ? window.RookieSim : null);
+  /* 🔗 통합 리그 — 팀마다 로스터(타자9+투수6)를 세워요. 팀 순위와 개인 기록이 여기 하나에서 나와요.
+   * 내 팀의 첫 타자/투수 자리는 **나**예요(me:true) — 내 능력치가 우리 팀 전력에 들어가요. */
+  function buildLeagueState() {
+    const RS = simLib(); if (!RS) return null;
+    const teams = leagueTeams();
+    const seed = ((S.proYear || 1) * 2654435761) >>> 0;
+    /* 🌍 유저 이름 풀을 로스터 전체에 뿌려요. 모자라면 squad.js 별명(강태풍·문홈런)으로 채워요
+     * — 안 채우면 "한백 코메츠 타자9" 같은 자리표가 그대로 화면에 떠요. */
+    const need = teams.length * 15;
+    const pool = pickRivalNames(need, (S.proYear || 1));
+    const SQ = squadLib();
+    if (SQ && pool.length < need) {
+      const rng = SQ._mulberry32((seed ^ 0x5f356495) >>> 0);
+      const seen = new Set(pool);
+      let guard = 0;
+      while (pool.length < need && guard++ < need * 40) {
+        const n = SQ.nameFrom(rng);
+        if (!seen.has(n)) { seen.add(n); pool.push(n); }
+      }
+      while (pool.length < need) pool.push(SQ.nameFrom(rng));   // 별명이 동나면 중복도 허용
+    }
+    const lg = RS.buildLeague(teams, teamStrOf, seed, { batters: pool, pitchers: pool.slice(teams.length * 9) });
+    const mine = lg.teams.find((t) => t.name === S.team);
+    if (mine) {
+      const slot = S.pos === "batter" ? mine.batters[0] : mine.pitchers[0];
+      slot.me = true;
+      slot.name = S.name;
+      slot.skill = clamp(0.55 + (overall() - 55) / 95, 0.5, 1.7);   // 내 기량이 우리 팀 전력에 반영돼요
+      // 내 자리가 바뀌었으니 팀 레이팅을 다시 계산해요
+      mine.off = mine.batters.reduce((s, b) => s + b.skill, 0) / mine.batters.length;
+      mine.def = mine.pitchers.slice(0, 5).reduce((s, p) => s + p.skill, 0) / 5;
+    }
+    return lg;
   }
-  // squad.js가 아직 없을 때(옛 캐시·시뮬 하네스)만 쓰는 이름 — 전역 난수 안 써요.
-  function fallbackName(team, seed, i) {
-    const P = ["강태풍", "이대포", "박홈런", "최강속", "정교타", "김일발", "윤노히", "장수호", "임쾌속", "조폭투"];
-    return P[(hashStr(team) + seed * 7 + i * 3) % P.length];
+  /* 라운드로빈 일정 (circle method) — 10팀이면 한 바퀴가 9경기일, 16바퀴면 144경기예요.
+   * 내 상대도 여기서 나와요(nextOpp) — 순위표와 내 일정이 어긋나지 않아요. */
+  function roundPairs(teams, round) {
+    const n = teams.length, rot = teams.slice(1), m = rot.length;
+    const pairs = [[teams[0], rot[round % m]]];
+    for (let i = 1; i < n / 2; i++) {
+      pairs.push([rot[(round + i) % m], rot[((round - i) % m + m) % m]]);
+    }
+    return pairs;
   }
-  function hashStr(s) {
-    let h = 0;
-    for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
-    return h;
-  }
-
-  /* 경기 한 판만큼 라이벌 기록을 굴려요 (finishProGame에서 sn.game을 올린 직후에 불러요).
-   * 시드는 (raceSeed, 그 경기 번호)로 갈라내서 언제 불러도 같은 결과가 나와요. */
-  function raceStep() {
-    const sn = S.season; if (!sn || !Array.isArray(sn.race)) return;
-    const counts = RACE_COUNTS[S.pos];
-    const g = sn.game;
-    const seed = ((sn.raceSeed >>> 0) ^ Math.imul(g, 2654435761)) >>> 0;
-    const RS = squadLib();
-    const rng = RS ? RS._mulberry32(seed) : mulberry(seed);
-    for (const r of sn.race) for (const k of counts) r[k] += racePoisson(rng, r.rate[k]);
+  /* 🔗 그날 리그 전체를 한 경기씩 굴려요 (finishProGame에서 sn.game을 올린 직후).
+   * 내가 뛴 경기는 실제 결과(win)가 정본이라 그 짝만 못 박고, 나머지 짝은 시뮬이 정해요.
+   * 시드는 (raceSeed, 경기 번호)라 언제 불러도 같은 결과예요 — 전역 난수는 안 써요. */
+  function raceStep(win) {
+    const sn = S.season, RS = simLib();
+    if (!sn || !sn.lg || !RS) return;
+    const teams = leagueTeams(), g = sn.game;
+    const rng = RS._mulberry32((((sn.raceSeed >>> 0) ^ Math.imul(g, 2654435761)) >>> 0) || 1);
+    const byName = {};
+    for (const t of sn.lg.teams) byName[t.name] = t;
+    for (const [a, b] of roundPairs(teams, (g - 1) % (teams.length - 1))) {
+      const A = byName[a], B = byName[b];
+      if (!A || !B) continue;
+      const iAmA = a === S.team, iAmB = b === S.team;
+      // 내 경기면 실제 승패를 못 박아요. 아니면 시뮬이 정해요.
+      const forced = iAmA ? (win ? "A" : "B") : iAmB ? (win ? "B" : "A") : null;
+      RS.simGame(A, B, rng, forced);
+    }
+    // 순위표·가을야구가 읽는 others에 시뮬 결과를 옮겨요 (내 팀 승패는 teamW/teamL이 정본)
+    for (const o of sn.others) {
+      const t = byName[o.name];
+      if (t) { o.w = t.w; o.l = t.l; }
+    }
   }
   // squad.js 없을 때를 위한 최소 PRNG (같은 식).
   function mulberry(a) {
@@ -450,28 +459,48 @@ window.Career = (() => {
       return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
     };
   }
-  /* 옛 세이브(시즌 중인데 race가 없음)나 시뮬 하네스를 위해 지금 경기 수까지 되감아요. */
+  /* 리그는 initSeason이 깔아요. 여기선 **시즌 첫 경기 전**에만 늦게 세워줘요.
+   *
+   * ⚠️ 시즌 도중인 옛 세이브는 **되감지 않아요.** 지나간 경기를 전부 다시 굴리면
+   * (144일 × 5경기) 화면을 그릴 때마다 수백 경기를 시뮬해서 게임이 기어갑니다 —
+   * 실제로 밸런스 시뮬이 여기서 멈춰 섰어요. 마이그레이션도 안 하는 게 이 저장소 규칙이라,
+   * 진행 중이던 시즌은 개인 기록 순위를 쉬고 **다음 시즌부터** 자연스럽게 붙어요. */
   function ensureRace() {
-    const sn = S.season; if (!sn) return;
-    if (Array.isArray(sn.race)) return;
-    if (sn.raceSeed == null) sn.raceSeed = (S.proYear || 1) * 2654435761 >>> 0;
-    sn.race = rollRace();
-    const upto = sn.game || 0, save0 = sn.game;
-    for (let g = 1; g <= upto; g++) { sn.game = g; raceStep(); }
-    sn.game = save0;
+    const sn = S.season;
+    if (!sn || sn.lg || (sn.game || 0) > 0) return;
+    if (sn.raceSeed == null) sn.raceSeed = ((S.proYear || 1) * 2654435761) >>> 0;
+    sn.lg = buildLeagueState();
   }
 
-  // 나 + 라이벌을 한 종목으로 줄세워요. era만 낮은 게 위, 나머지는 큰 게 위. 동률은 내가 위(공동 수상).
+  /* 나 + 리그 전체 선수를 한 종목으로 줄세워요. era만 낮은 게 위. 동률은 내가 위(공동 수상).
+   * 규정 타석·이닝을 못 채운 선수는 비율 부문(타율·자책)에서 빠져요. */
   function raceRank(metric) {
     const sn = S.season; if (!sn) return [];
     ensureRace();
+    if (!sn.lg) return [];
+    const RS = simLib();
+    const tot = sn.total || 144;
+    const bat = metric === "hits" || metric === "hr" || metric === "sb" || metric === "avg";
+    const pool = [];
+    for (const t of sn.lg.teams) {
+      const arr = bat ? t.batters : t.pitchers;
+      for (const p of arr) {
+        if (p.me) continue;                                   // 내 자리는 실제 성적으로 아래에서 넣어요
+        if (metric === "avg" && p.ab < tot * 2) continue;      // 규정 타석
+        if (metric === "era" && (p.role !== "sp" || p.ip < tot * 0.9)) continue;   // 규정 이닝·선발만
+        if (metric === "saves" && p.role !== "cl") continue;   // 세이브는 마무리만
+        if ((metric === "wins" || metric === "k") && p.role !== "sp") continue;
+        const v = metric === "avg" ? RS.avgOf(p) : metric === "era" ? RS.eraOf(p) : (p[metric] || 0);
+        pool.push({ name: p.name, team: t.name, v });
+      }
+    }
+    // 내 줄 — 실제 플레이로 쌓인 성적이 정본이에요
+    const myOk = metric === "avg" ? (sn.stats.ab || 0) >= tot * 2
+      : metric === "era" ? (sn.stats.ip || 0) >= tot * 0.9 && titleMetric(sn.stats, "era") > 0 : true;
+    if (myOk) pool.push({ name: S.name, team: S.team, me: true, v: titleMetric(sn.stats, metric) });
     const higher = !(metric === "era");
-    const valOf = (x) => (metric === "avg" || metric === "era") ? (x.me ? titleMetric(sn.stats, metric) : x[metric])
-      : (x.me ? (sn.stats[metric] || 0) : (x[metric] || 0));
-    const me = { name: S.name, team: S.team, me: true };
-    const field = (sn.race || []).concat([me]).map((x) => ({ ...x, v: valOf(x) }));
-    field.sort((a, b) => (higher ? b.v - a.v : a.v - b.v) || (a.me ? -1 : b.me ? 1 : 0));
-    return field;
+    pool.sort((a, b) => (higher ? b.v - a.v : a.v - b.v) || (a.me ? -1 : b.me ? 1 : 0));
+    return pool;
   }
   const raceTop = (metric) => { const r = raceRank(metric); return r.length && r[0].me; };
   const raceFmt = (m, x) => (m === "avg" ? x.toFixed(3) : m === "era" ? x.toFixed(2) : Math.round(x));
@@ -544,8 +573,16 @@ window.Career = (() => {
     }
   }
 
+  /* 다음 상대 — 리그가 있으면 **일정표**에서 가져와요(순위표와 내 일정이 어긋나지 않아요).
+   * 옛 세이브·리그 없는 경우는 예전 규칙(3경기마다 순회) 그대로예요. */
   function nextOpp() {
-    return S.season.others[Math.floor(S.season.game / 3) % S.season.others.length].name;
+    const sn = S.season;
+    if (sn.lg) {
+      const teams = leagueTeams();
+      const pair = roundPairs(teams, sn.game % (teams.length - 1)).find((p) => p[0] === S.team || p[1] === S.team);
+      if (pair) return pair[0] === S.team ? pair[1] : pair[0];
+    }
+    return sn.others[Math.floor(sn.game / 3) % sn.others.length].name;
   }
 
   function teamWinP() {
@@ -913,10 +950,10 @@ window.Career = (() => {
     const sn = S.season;
     sn.game += 1;
     if (win) sn.teamW += 1; else sn.teamL += 1;
-    for (const o of sn.others) {
-      if (Math.random() < o.str) o.w += 1; else o.l += 1;
-    }
-    raceStep();                       // 🏅 라이벌들도 이번 경기만큼 기록을 쌓아요 (자체 시드)
+    /* 🔗 그날 리그 전체가 같이 한 경기씩 굴러가요 — 순위표와 개인 기록이 한 시뮬에서 나와요.
+     * 리그가 없는 옛 세이브·시뮬 하네스는 예전처럼 팀 전력으로 굴려요(난수 소비도 그대로). */
+    if (sn.lg) raceStep(win);
+    else for (const o of sn.others) { if (Math.random() < o.str) o.w += 1; else o.l += 1; }
     const t = sn.stats;
     if (perf) {
       if (S.pos === "batter") {
@@ -1284,9 +1321,9 @@ window.Career = (() => {
   /* 이번 시즌 딴 타이틀 — 개인 기록 순위(라이벌 필드)에서 그 종목 1위면 받아요.
    * 화면에서 보던 👑이 곧 수상 결과예요. 비율 타이틀은 최소 출장을 요구해요. */
   function titlesWon(stats) {
-    // 실제 게임은 initSeason에서 race를 깔아요. race가 없으면(밸런스 시뮬 하네스처럼
-    // 시즌을 손으로 세운 경우) 라이벌 필드를 되감지 않고 조용히 넘어가요 — 그쪽은 수상을 안 봐요.
-    if (!S.season || !Array.isArray(S.season.race)) return [];
+    // 실제 게임은 initSeason에서 리그를 깔아요. 리그가 없으면(밸런스 시뮬 하네스처럼
+    // 시즌을 손으로 세운 경우) 되감지 않고 조용히 넘어가요 — 그쪽은 수상을 안 봐요.
+    if (!S.season || !S.season.lg) return [];
     const tot = S.season.total || 144;
     const out = [];
     for (const [id, t] of myTitles()) {
@@ -2856,8 +2893,8 @@ window.Career = (() => {
       // ⚡ 실전 성장 — 확률·무게 산식을 테스트가 그대로 굴려 볼 수 있게 열어 둬요
       MATCH_GROW, growWeightOf, growWhyOf, growPOf, matchGrowth,
       // 🏅 개인 기록 순위 — 라이벌 필드·시뮬·순위·수상 판정을 테스트가 그대로 굴려요
-      TITLES, titleMetric, myTitles, titlesWon, RACE_ANCHOR, RACE_COUNTS,
-      rollRace, raceStep, raceRank, raceTop, ensureRace,
+      TITLES, titleMetric, myTitles, titlesWon,
+      buildLeagueState, roundPairs, raceStep, raceRank, raceTop, ensureRace,
       state: () => S,
     },
     enterPro,

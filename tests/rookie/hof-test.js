@@ -189,10 +189,8 @@ const CAREER_CONSTS = [
   ["titleMetric", /  const titleMetric = [^;]+;/],
   ["myTitles", /  const myTitles = [^;]+;/],
   // 🏅 개인 기록 순위 — finishSeason(titlesWon→raceTop)·finishProGame(raceStep)가 부름
-  ["RACE_ANCHOR", /  const RACE_ANCHOR = \{[\s\S]*?\n  \};/],
-  ["RACE_COUNTS", /  const RACE_COUNTS = \{[^\n]*\};/],
-  ["rateJit", /  const rateJit = [^;]+;/],
   ["squadLib", /  const squadLib = [^;]+;/],
+  ["simLib", /  const simLib = [^;]+;/],
   ["raceTop", /  const raceTop = [^\n]+;/],
   // 🌍 라이벌 이름 풀 — rollRace가 pickRivalNames를 부르니 스텁으로 새면 안 돼요
   ["RIVAL_POOL_KEY", /  const RIVAL_POOL_KEY = [^;]+;/],
@@ -221,14 +219,12 @@ const CAREER_FNS = [
   // 🏛️ 통산 마일스톤 — finishSeason(careerCounts·newMilestones)·careerScore(mileScore)·seasonReport(milestoneHTML)가 부름
   "  function careerCounts(seasons) {",
   // 🏅 개인 기록 순위 — 라이벌 필드 시뮬·순위·수상 판정 (스텁으로 새면 수상이 조용히 0이 돼요)
-  "  function racePoisson(rng, mean) {",
   "  function mulberry(a) {",
-  "  function rollRace() {",
-  "  function fallbackName(team, seed, i) {",
-  "  function hashStr(s) {",
   "  function readRivalPool() {",
   "  function pickRivalNames(n, seed) {",
-  "  function raceStep() {",
+  "  function buildLeagueState() {",
+  "  function roundPairs(teams, round) {",
+  "  function raceStep(win) {",
   "  function ensureRace() {",
   "  function raceRank(metric) {",
   "  function titlesWon(stats) {",

@@ -184,24 +184,28 @@ guard("시즌 타이틀", () => {
     const b = SRC.indexOf("\n  }", SRC.indexOf(toAfter, a)) + 4;
     return SRC.slice(a, b);
   };
-  const titleBlock = between("const TITLES = {", "function titlesWon");     // TITLES..titlesWon
-  const raceBlock = between("const RACE_ANCHOR = {", "function raceHTML");   // RACE_ANCHOR..raceHTML
+  const titleBlock = between("const TITLES = {", "function titlesWon");         // TITLES..titlesWon
+  const raceBlock = between("const RIVAL_POOL_KEY = ", "function raceHTML");     // 이름 풀..raceRank
   const gauss = (rnd, m, sd) => { const u = Math.max(1e-9, rnd()), v = rnd(); return m + sd * Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); };
-  // 10개 팀 · 전력은 A(강)→J(약)로 벌려 둬요. squad.js 없이 fallback 이름 경로를 타요.
+  // 10개 팀 · 전력은 A(강)→J(약)로 벌려 둬요. 실제 sim.js·squad.js를 물려서 굴려요.
   const TEAMS = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"];
   const STR = {}; TEAMS.forEach((t, i) => (STR[t] = 0.62 - i * 0.024));   // 0.62..0.404
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const leagueTeams = () => TEAMS;
   const teamStrOf = (name) => STR[name];
-  const mk = (S) => new Function("S", "clamp", "leagueTeams", "teamStrOf",
+  const win = {};
+  new Function("window", require("fs").readFileSync(`${BASE}/squad.js`, "utf8"))(win);
+  new Function("window", require("fs").readFileSync(`${BASE}/sim.js`, "utf8"))(win);
+  const mk = (S) => new Function("S", "clamp", "leagueTeams", "teamStrOf", "overall", "window", "localStorage",
     titleBlock + "\n" + raceBlock +
-    "\n return { TITLES, titleMetric, myTitles, titlesWon, rollRace, raceStep, raceRank, raceTop, ensureRace, setRivalPool: (a) => { rivalPool = a; } };"
-  )(S, clamp, leagueTeams, teamStrOf);
-  // 한 시즌을 끝까지 굴려요 — race를 깔고 144경기만큼 raceStep을 밟아요.
+    "\n return { TITLES, titleMetric, myTitles, titlesWon, buildLeagueState, roundPairs, raceStep, raceRank, raceTop, ensureRace, setRivalPool: (a) => { rivalPool = a; } };"
+  )(S, clamp, leagueTeams, teamStrOf, () => 120, win, undefined);
+  // 한 시즌을 끝까지 굴려요 — 리그를 깔고 144경기만큼 그날 리그를 다 굴려요.
   const runField = (api, S) => {
     S.season.raceSeed = ((S.proYear || 1) * 2654435761) >>> 0;
-    S.season.race = api.rollRace();
-    for (let g = 1; g <= S.season.total; g++) { S.season.game = g; api.raceStep(); }
+    S.season.others = TEAMS.filter((t) => t !== S.team).map((name) => ({ name, w: 0, l: 0 }));
+    S.season.lg = api.buildLeagueState();
+    for (let g = 1; g <= S.season.total; g++) { S.season.game = g; api.raceStep(g % 2 === 0); }
   };
 
   const S0 = { pos: "batter", team: "A", role: "4번 타자", proYear: 1, season: { total: 144, game: 0, stats: {} } };
@@ -211,35 +215,46 @@ guard("시즌 타이틀", () => {
   check(T0.era.higher === false, "평균자책왕은 낮을수록 좋다 (higher=false)");
   check(!!T0.hits && T0.hits.pos === "batter", "최다안타 타이틀이 생겼다 (안타 순위를 볼 수 있게)");
 
-  // ── 라이벌 필드 — 팀마다 간판 선수 한 명씩, 내 시점(타자/투수)과 같은 종목 ──
-  const field = api0.rollRace();
-  check(field.length === TEAMS.length - 1, `라이벌은 내 팀을 뺀 ${TEAMS.length - 1}팀의 간판 선수다 (${field.length}명)`);
-  check(field.every((r) => r.team !== "A" && typeof r.name === "string" && r.name.length > 0), "라이벌마다 소속 팀과 이름이 붙는다");
-  check(field.every((r) => "hits" in r && "hr" in r && "sb" in r && "avg" in r), "타자 라이벌은 안타·홈런·도루·타율을 다 갖는다");
+  // ── 🔗 통합 리그 — 팀마다 로스터(타자9+투수6)를 세우고, 내 자리가 우리 팀에 들어간다 ──
+  S0.season.others = TEAMS.filter((t) => t !== "A").map((name) => ({ name, w: 0, l: 0 }));
+  const lg0 = api0.buildLeagueState();
+  check(lg0 && lg0.teams.length === TEAMS.length, `리그가 ${TEAMS.length}팀 전부를 세운다`);
+  check(lg0.teams.every((t) => t.batters.length === 9 && t.pitchers.length === 6), "팀마다 타자 9명·투수 6명을 세운다");
+  const myTeam = lg0.teams.find((t) => t.name === "A");
+  check(myTeam.batters.some((b) => b.me), "내 팀 로스터에 내 자리가 들어간다 (내 기량이 팀 전력에 반영)");
 
-  // 🌍 유저 이름 풀이 있으면 라이벌 이름을 거기서 가져온다 (스탯은 그대로 — 이름만 오버레이)
-  const poolApi = mk({ pos: "batter", team: "A", role: "4번 타자", proYear: 1, season: { total: 144, game: 0, stats: {} } });
-  poolApi.setRivalPool(["김유저", "이유저", "박유저", "최유저", "정유저", "강유저", "윤유저", "장유저", "임유저"]);
-  const poolField = poolApi.rollRace();
-  check(poolField.every((r) => r.name.endsWith("유저")), "풀이 있으면 라이벌 이름을 유저 풀에서 가져온다");
-  check(new Set(poolField.map((r) => r.name)).size === poolField.length, "라이벌 이름이 서로 겹치지 않는다");
-  check(poolField.every((r) => typeof r.pop === "number" && r.rate), "이름만 바뀌고 스탯(pop·rate)은 그대로다");
+  // 일정표 — 라운드마다 모든 팀이 딱 한 번씩 붙는다 (한쪽만 경기가 몰리면 순위가 망가져요)
+  const pairs = api0.roundPairs(TEAMS, 0);
+  const seen = pairs.flat();
+  check(pairs.length === TEAMS.length / 2 && new Set(seen).size === TEAMS.length,
+    `한 경기일에 ${TEAMS.length}팀이 겹치지 않고 ${TEAMS.length / 2}경기를 치른다`);
 
-  // ── 시뮬 — 144경기를 밟으면 라이벌 기록이 쌓이고, 강한 팀 선수가 더 잘한다 ──
+  // 🌍 유저 이름 풀이 있으면 로스터 이름을 거기서 가져온다
+  const poolApi = mk({ pos: "batter", team: "A", role: "4번 타자", proYear: 1, season: { total: 144, game: 0, stats: {}, others: [] } });
+  poolApi.setRivalPool(Array.from({ length: 200 }, (_, i) => `유저${i}`));
+  const poolLg = poolApi.buildLeagueState();
+  const poolNames = poolLg.teams.flatMap((t) => t.batters.filter((b) => !b.me).map((b) => b.name));
+  check(poolNames.every((n) => n.startsWith("유저")), "풀이 있으면 로스터 이름을 유저 풀에서 가져온다");
+
+  // ── 시뮬 — 144경기를 밟으면 순위와 개인 기록이 같이 나온다 ──
   runField(api0, S0);
-  const sorted = S0.season.race.slice().sort((a, b) => b.hr - a.hr);
-  check(sorted[0].hr > 30 && sorted[0].hr < 75, `홈런 1위 라이벌이 현실적인 범위다 (${sorted[0].hr}홈런)`);
-  const strong = S0.season.race.find((r) => r.team === "B"), weak = S0.season.race.find((r) => r.team === "J");
-  check(strong.pop > weak.pop, `강팀(B) 간판이 약팀(J)보다 강하다 (pop ${strong.pop.toFixed(2)} > ${weak.pop.toFixed(2)})`);
+  const teams = S0.season.lg.teams;
+  check(teams.every((t) => t.w + t.l === S0.season.total),
+    `모든 팀이 정확히 ${S0.season.total}경기를 치른다 (${teams.map((t) => t.w + t.l).join("/")})`);
+  const strongT = teams.find((t) => t.name === "B"), weakT = teams.find((t) => t.name === "J");
+  check(strongT.w > weakT.w, `강팀(B ${strongT.w}승)이 약팀(J ${weakT.w}승)보다 많이 이긴다 — 순위가 로스터에서 나온다`);
+  const allHr = teams.flatMap((t) => t.batters.map((b) => b.hr));
+  check(Math.max.apply(null, allHr) > 25 && Math.max.apply(null, allHr) < 80,
+    `홈런 1위가 현실적인 범위다 (${Math.max.apply(null, allHr)}홈런)`);
 
-  // ── 순위 — 나 + 라이벌을 한 종목으로 줄세운다 (era만 낮은 게 위, 동률은 내가 위) ──
+  // ── 순위 — 나 + 리그 전체 선수를 한 종목으로 줄세운다 (동률은 내가 위) ──
   S0.season.stats = { ab: 600, hits: 300, hr: 99, sb: 99 };   // 압도적이면 1위
-  check(api0.raceTop("hr"), "내 홈런이 라이벌 전부를 앞서면 그 부문 1위다");
+  check(api0.raceTop("hr"), "내 홈런이 리그 전체를 앞서면 그 부문 1위다");
   const ranked = api0.raceRank("hr");
-  check(ranked[0].me && ranked.length === TEAMS.length, "순위표에 나와 라이벌이 함께 줄선다");
+  check(ranked[0].me && ranked.length > TEAMS.length, `순위표에 리그 전체 선수가 줄선다 (${ranked.length}명 — 팀당 1명이 아니라)`);
   check(ranked.every((x, i) => i === 0 || ranked[i - 1].v >= x.v), "홈런 순위는 큰 값이 위로 정렬된다");
   S0.season.stats = { ab: 600, hits: 120, hr: 1, sb: 1 };     // 형편없으면 1위 아님
-  check(!api0.raceTop("hr"), "내 성적이 라이벌보다 낮으면 그 부문 1위가 아니다");
+  check(!api0.raceTop("hr"), "내 성적이 리그 전체보다 낮으면 그 부문 1위가 아니다");
 
   // ── 게이팅 — 타율은 최소 타석, 자책은 최소 이닝을 요구한다 ──
   const Sbat = { pos: "batter", team: "A", role: "4번 타자", proYear: 3, season: { total: 144, game: 0, stats: {} } };
@@ -283,8 +298,8 @@ guard("시즌 타이틀", () => {
   }
 
   // 배선
-  check(/S\.season\.race = rollRace\(\)/.test(SRC), "initSeason이 이번 시즌 라이벌 필드를 만든다");
-  check(/raceStep\(\);/.test(SRC), "finishProGame이 매 경기 라이벌 기록을 굴린다");
+  check(/S\.season\.lg = buildLeagueState\(\)/.test(SRC), "initSeason이 이번 시즌 리그 로스터를 세운다");
+  check(/if \(sn\.lg\) raceStep\(win\);/.test(SRC), "finishProGame이 매 경기 리그 전체를 한 경기씩 굴린다 (내 승패를 물려서)");
   check(/titlesWon\(raw\)/.test(SRC), "finishSeason이 최종 성적으로 타이틀을 판정한다 (개인 기록 순위 1위)");
   check(/standingsHTML\(\) \+ raceHTML\(\)/.test(SRC), "프로 화면 순위표 아래에 개인 기록 순위가 붙는다");
   check(/TITLES\[tt\.id\]/.test(SRC), "mileScore가 통산 타이틀 가치를 얹는다");

@@ -113,10 +113,13 @@
     if (won && close && rng() < PIT.saveGate) team.pitchers[PIT.rot].saves++;   // 마무리 세이브
   }
 
-  function simGame(A, B, rng) {
+  /* forced — 'A'/'B'면 그 팀이 이긴 걸로 못 박아요. 내가 뛴 경기는 실제 결과(미니게임)가
+   * 정본이라, 시뮬이 그걸 덮지 않게 하려고요. 점수는 승패에 맞게 뒤집어 맞춰요. */
+  function simGame(A, B, rng, forced) {
     const eA = LG_RUNS * A.off / B.def, eB = LG_RUNS * B.off / A.def;
     let rA = poisson(rng, eA), rB = poisson(rng, eB);
     if (rA === rB) { if (rng() < 0.5) rA++; else rB++; }   // 무승부 없음 (연장)
+    if (forced && ((forced === "A") !== (rA > rB))) { const t = rA; rA = rB; rB = t; }
     const aWin = rA > rB;
     if (aWin) { A.w++; B.l++; } else { B.w++; A.l++; }
     const close = Math.abs(rA - rB) <= PIT.closeMargin;
