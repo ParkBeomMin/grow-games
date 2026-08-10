@@ -1404,7 +1404,8 @@ window.WingerCareer = (() => {
      * 통째로 먹통으로 읽힙니다(제보: "벤치일 때 누르면 반응 없는데").
      * 뛴 주에는 proMatchFinalize가 같은 일을 해요 — 벤치 갈래만 빠져 있었습니다. */
     S.pendingShow = false;
-    proLog(`🪑 ${act.opp}전 결장 — 훈련장에서 ${grew.name} +${grew.gain.toFixed(1)}`);
+    proLog(`🪑 ${act.opp}전 결장 — 훈련장에서 ${grew.name} +${grew.gain.toFixed(1)}`
+      + ` · 🛌 컨디션 ${Math.round(grew.cond)}`);
     save();
 
     $("stage-title").textContent = `⚽ ${S.proYear}시즌 ${cbLabel(act.cb)} — ${S.group}`;
@@ -1417,7 +1418,7 @@ window.WingerCareer = (() => {
         <div class="ms-final ${res === "W" ? "win" : res === "L" ? "lose" : ""}">
           ${S.group} ${mates} : ${conceded} ${act.opp} · ${RES_LABEL[res]} (나 없이)</div>
         <div class="tour-pts">${grew.emoji} 훈련장에서 <b>${grew.name} +${grew.gain.toFixed(1)}</b>
-          · 🩹 컨디션 회복</div>
+          · 🛌 컨디션 <b>${Math.round(grew.cond)}</b></div>
       </div>`;
     /* ⚠️ #stage-result는 건드리지 않아요 — 그 요소는 **MatchSim이 경기 화면을
      * 그릴 때 만드는** 것이라, 벤치 화면(여기)에서는 아직 없습니다.

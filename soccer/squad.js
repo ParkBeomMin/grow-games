@@ -579,14 +579,23 @@ window.WingerSquad = (() => {
   /* 🪑 벤치 주 — 경기를 못 뛴 대신 능력치 하나가 올라요.
    * 결장이 곧 성장 정지가 되면 벤치는 그냥 벌이 되고, 그건 이탈로 이어져요. */
   const BENCH_GAIN = [1.6, 3.2];
+  const BENCH_COND = [70, 100];      // 🛌 한 주 쉬면 몸이 이만큼 돌아와요
   function benchTurn() {
     const defs = Array.isArray(STAT_DEFS) ? STAT_DEFS : STAT_DEFS[S.pos];
     const pool = defs.filter((d) => S.stats[d.key] < statCap(d.key));
     const d = pick(pool.length ? pool : defs);
     const gain = Math.round(rand(BENCH_GAIN[0], BENCH_GAIN[1]) * S.talents[d.key] * 10) / 10;
     S.stats[d.key] = clamp(S.stats[d.key] + gain, 0, statCap(d.key));
-    S.condition = clamp(S.condition + randInt(4, 10), 0, 100);   // 안 뛰었으니 몸은 쉬어요
-    return { key: d.key, name: d.name, emoji: d.emoji, gain };
+    /* 🛌 **벤치인 주는 제대로 쉬어요 — 컨디션이 70~100으로 올라갑니다.**
+     *
+     * 예전에는 +4~10이었어요. 그런데 감독이 나를 빼는 이유가 대개 "몸이 상해서"인데
+     * (🛌 보호 로테이션), 쉬고도 컨디션이 30에서 38이 되면 그다음 주에도 또 빠져요 —
+     * 한 번 바닥나면 계속 벤치인 늪이 됩니다.
+     * 이제 한 주 쉬면 몸이 돌아와요. 벤치가 벌이 아니라 **회복**이 되는 거예요.
+     *
+     * 지금보다 낮게 만들지는 않아요 — 컨디션 95인데 쉬었다고 72가 되면 이상하죠. */
+    S.condition = clamp(Math.max(S.condition, randInt(BENCH_COND[0], BENCH_COND[1])), 0, 100);
+    return { key: d.key, name: d.name, emoji: d.emoji, gain, cond: S.condition };
   }
 
   /* 동료 골을 넣을 사람 — **선발 중에서** 포지션 가중으로 뽑아요.
@@ -720,7 +729,7 @@ window.WingerSquad = (() => {
     isStarter, myLine, benchReason, myBonus, restP, benchTurn, creditMateGoals, markApps, resetSeason, squadHTML,
     ageSquads, newsLine, ageCurve, leagueXI,
     FORMATION, BENCH, SQUAD_SIZE, BENCH_GAIN, SCORE_W, REST_BAR, REST_MAX,
-    AGE_MIN, AGE_MAX, PEAK_AGE, RETIRE_AGE, SLUMP_P, SURGE_P, STR_SPREAD, MEAN_CURVE,
+    AGE_MIN, AGE_MAX, PEAK_AGE, RETIRE_AGE, SLUMP_P, SURGE_P, STR_SPREAD, MEAN_CURVE, BENCH_COND,
     _t: { rollSquad, pickScorer, rollPlayer, strOfRow, moveMe, backfillAges },
   };
 })();
