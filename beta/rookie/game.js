@@ -1221,6 +1221,48 @@ function startTournament(name) {
   show("screen-tournament");
 }
 
+/* 🧾 이닝 요약 한 줄을 **타석 시퀀스**로 펼쳐요 (sim.js의 playInning).
+ *
+ * 점수·승패는 이미 밸런스가 잡힌 모델이 정해요. 여기서는 그 결과를 **바꾸지 않고**
+ * "그 N점이 어떻게 났는지"만 채워 넣어요 — playInning이 **목표 득점과 정확히 같은**
+ * 이닝만 돌려주거든요. 그래서 누가 1루에 있다가 홈을 밟았는지가 기록으로 남고,
+ * 경기장 화면이 진짜 주자 상태로 움직여요.
+ *
+ * 못 만들면(null) 예전 요약 한 줄로 조용히 떨어져요 — 화면이 비지 않아요. */
+function paLines(inn, half, runs, cls, lineup, seed, fallback) {
+  const RS = window.RookieSim;
+  const one = [{ inn, half, text: fallback, cls }];
+  if (!RS || !RS.playInning) return one;
+  const rng = RS._mulberry32((((seed >>> 0) ^ Math.imul(inn, 2654435761) ^ (half === "초" ? 17 : 71)) >>> 0) || 1);
+  const pas = RS.playInning(runs, rng, lineup, 0);
+  if (!pas || !pas.length) return one;
+  return pas.map((p) => ({
+    inn, half,
+    text: `${p.who}, ${p.text}` + (p.scored.length ? ` — ${p.scored.join("·")} 홈인! ⚾` : ""),
+    cls: p.scored.length ? cls : (p.kind === "out" ? "" : cls),
+    pa: p,                    // 경기장 화면이 이 상태를 그대로 읽어요 (글 파싱 안 해요)
+  }));
+}
+/* 이닝·용도별 시드 — 같은 경기를 다시 그려도 같은 타석 시퀀스가 나와요.
+ * 전역 Math.random을 여기서 쓰지 않아요 (밸런스 시뮬 보호). */
+function seedOf(i, kind) {
+  const st = (window.Career && Career._t && Career._t.state) ? Career._t.state() : null;
+  const g = (st && st.season && st.season.game) || 0;
+  const y = (st && st.proYear) || 0;
+  return (Math.imul(g + 1, 2654435761) ^ Math.imul(i + 1, 40503) ^ Math.imul(kind, 2246822519) ^ (y * 7919)) >>> 0;
+}
+/* 그 이닝 타순 — 리그 로스터가 있으면 실제 선수 이름, 없으면 번호 타순이에요. */
+function lineupOf(mine) {
+  const st = (window.Career && Career._t && Career._t.state) ? Career._t.state() : null;
+  const lg = st && st.season && st.season.lg;
+  if (lg && lg.teams) {
+    const team = mine ? lg.teams.find((t) => t.name === st.team)
+      : lg.teams.find((t) => t.name !== st.team);
+    if (team && team.batters) return team.batters.map((b) => b.name);
+  }
+  return null;
+}
+
 function playTourGame() {
   const r = regionOf();
   const roundName = ROUNDS[tour.round];
@@ -1353,10 +1395,10 @@ function batterStory(win, perf, interactive) {
     addRuns(ourInn, ourTotal8 - hrTotal, 0, 7);
     addRuns(oppInn, ourTotal8 + 1, 0, 8);
     for (let i = 0; i < 9; i++) {
-      if (oppInn[i] > 0) events.push({ inn: i + 1, half: "초", text: `상대가 ${oppInn[i]}점을 냈어요 😬`, cls: "bad" });
+      if (oppInn[i] > 0) events.push(...paLines(i + 1, "초", oppInn[i], "bad", lineupOf(false), seedOf(i, 1), `상대가 ${oppInn[i]}점을 냈어요 😬`));
       if (i < 8) {
         const extra = ourInn[i] - contrib[i];
-        if (extra > 0) events.push({ inn: i + 1, half: "말", text: `우리 타선이 ${extra}점을 뽑아냅니다! 🔥`, cls: "good" });
+        if (extra > 0) events.push(...paLines(i + 1, "말", extra, "good", lineupOf(true), seedOf(i, 2), `우리 타선이 ${extra}점을 뽑아냅니다! 🔥`));
       }
     }
     return { ourInn, oppInn, events, moment: { half: "말" } };
@@ -1369,7 +1411,7 @@ function batterStory(win, perf, interactive) {
   addRuns(ourInn, targetOur - hrTotal);
   addRuns(oppInn, targetOpp);
   for (let i = 0; i < 9; i++) {
-    if (oppInn[i] > 0) events.push({ inn: i + 1, half: "초", text: `상대가 ${oppInn[i]}점을 냈어요 😬`, cls: "bad" });
+    if (oppInn[i] > 0) events.push(...paLines(i + 1, "초", oppInn[i], "bad", lineupOf(false), seedOf(i, 5), `상대가 ${oppInn[i]}점을 냈어요 😬`));
     const extra = ourInn[i] - contrib[i];
     if (extra > 0) events.push({ inn: i + 1, half: "말", text: `우리 타선이 ${extra}점을 뽑아냅니다! 🔥`, cls: "good" });
   }
@@ -1399,14 +1441,14 @@ function pitcherStory(win, perf, interactive) {
       const bullpen = randInt(0, 1);
       for (let i = 0; i < bullpen; i++) oppInn[randInt(ip, 7)]++;
       for (let i = ip; i < 8; i++) {
-        if (oppInn[i] > 0) events.push({ inn: i + 1, half: "초", text: `불펜이 ${oppInn[i]}점을 내줬어요 💦`, cls: "bad" });
+        if (oppInn[i] > 0) events.push(...paLines(i + 1, "초", oppInn[i], "bad", lineupOf(false), seedOf(i, 3), `불펜이 ${oppInn[i]}점을 내줬어요 💦`));
       }
     }
     // 9회초 시작 시점에 1점 앞선 리드, 마지막 위기를 유저가 직접 막음
     const oppTotal8 = oppInn.slice(0, 8).reduce((a, b) => a + b, 0);
     addRuns(ourInn, oppTotal8 + 1, 0, 7);
     for (let i = 0; i < 8; i++) {
-      if (ourInn[i] > 0) events.push({ inn: i + 1, half: "말", text: `우리 타선이 ${ourInn[i]}점 지원! 🔥`, cls: "good" });
+      if (ourInn[i] > 0) events.push(...paLines(i + 1, "말", ourInn[i], "good", lineupOf(true), seedOf(i, 4), `우리 타선이 ${ourInn[i]}점 지원! 🔥`));
     }
     return { ourInn, oppInn, events, moment: { half: "초" } };
   }
@@ -1849,7 +1891,8 @@ function renderGameSim(cfg) {
       if (f.cls) div.className = f.cls;
       div.textContent = f.text;
       $("pbp").appendChild(div);
-      if (dia) dia.say(f.text);      // ⚾ 같은 줄을 다이아몬드도 읽어요 (말과 그림이 일치)
+      // ⚾ 경기장 화면 — 타석 기록(pa)이 있으면 **엔진 상태를 그대로** 받아요(글 파싱보다 정확).
+      if (dia) { if (f.pa) dia.state(f.pa); else dia.say(f.text); }
     }
     const pbp = $("pbp");
     pbp.scrollTop = pbp.scrollHeight;

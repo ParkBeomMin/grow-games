@@ -165,8 +165,78 @@
     return pool.map((x) => ({ ...x, v: x[metric] || 0 })).sort((a, b) => b.v - a.v);
   }
 
+  /* ---------- 🧾 타석 단위 이닝 재현 (play-by-play) ----------
+   * 이 게임의 점수·승패는 이미 밸런스가 잡힌 모델이 정해요. 여기서는 그 결과를 **바꾸지 않고**,
+   * "그 이닝에 N점이 어떻게 났는지"를 타석 시퀀스로 채워 넣어요.
+   *   · 득점 합계가 목표(runsTarget)와 **정확히 같을 때까지만** 채택해요 → 총점이 안 흔들려요.
+   *   · 그래서 누가 1루에 있다가 홈을 밟았는지를 엔진이 알게 돼요(다이아몬드가 진짜로 움직여요).
+   * 난수는 넘겨받은 시드 PRNG만 써요 — 전역 Math.random을 쓰지 않아요. */
+  const PA_KINDS = [
+    { k: "homer",  p: 0.030, adv: 4, hit: true },
+    { k: "triple", p: 0.006, adv: 3, hit: true },
+    { k: "double", p: 0.052, adv: 2, hit: true },
+    { k: "single", p: 0.150, adv: 1, hit: true },
+    { k: "walk",   p: 0.082, adv: 1, hit: false },
+    { k: "out",    p: 0.680, adv: 0, hit: false },
+  ];
+  const PA_TEXT = {
+    homer: ["담장을 넘기는 홈런", "큼지막한 아치", "완벽하게 걷어올린 홈런"],
+    triple: ["우중간을 가르는 3루타", "펜스를 맞히는 3루타"],
+    double: ["좌중간 2루타", "빠지는 2루타", "가르는 2루타"],
+    single: ["중전 안타", "좌전 안타", "우전 안타", "빗맞은 내야안타"],
+    walk: ["볼넷", "풀카운트 끝 볼넷", "몸에 맞는 공"],
+    out: ["삼진", "유격수 땅볼", "중견수 뜬공", "2루수 땅볼", "루킹 삼진", "1루수 파울플라이"],
+  };
+
+  function onePA(rng) {
+    let r = rng(), acc = 0;
+    for (const d of PA_KINDS) { acc += d.p; if (r < acc) return d; }
+    return PA_KINDS[PA_KINDS.length - 1];
+  }
+  /* 한 이닝을 굴려 봐요 — 3아웃까지. 반환은 타석 목록과 그 이닝 득점이에요. */
+  function tryInning(rng, lineup, startIdx) {
+    const bases = [null, null, null];      // 1·2·3루에 선 주자 이름
+    let outs = 0, runs = 0, i = startIdx;
+    const pas = [];
+    while (outs < 3 && pas.length < 20) {
+      const who = lineup[i % lineup.length]; i++;
+      const d = onePA(rng);
+      const scored = [];
+      if (d.adv === 0) {
+        outs++;
+      } else {
+        for (let b = 2; b >= 0; b--) {                    // 앞선 주자부터 밀어요
+          if (!bases[b]) continue;
+          const to = b + d.adv;
+          if (to >= 3) { scored.push(bases[b]); runs++; } else { bases[to] = bases[b]; }
+          bases[b] = null;
+        }
+        if (d.adv >= 4) { scored.push(who); runs++; }      // 홈런 — 타자도 홈인
+        else bases[d.adv - 1] = who;
+      }
+      pas.push({
+        who, kind: d.k, outs, runs,
+        scored: scored.slice(),
+        bases: bases.slice(),
+        text: PA_TEXT[d.k][Math.floor(rng() * PA_TEXT[d.k].length)],
+      });
+    }
+    return { pas, runs };
+  }
+  /* 목표 득점과 **정확히 같은** 이닝이 나올 때까지 다시 굴려요.
+   * 못 맞추면 null을 돌려줘요 — 부르는 쪽이 예전처럼 요약 한 줄로 떨어지면 돼요(안전). */
+  function playInning(runsTarget, rng, lineup, startIdx) {
+    const names = (lineup && lineup.length) ? lineup : ["1번타자", "2번타자", "3번타자", "4번타자", "5번타자", "6번타자", "7번타자", "8번타자", "9번타자"];
+    for (let t = 0; t < 400; t++) {
+      const got = tryInning(rng, names, startIdx || 0);
+      if (got.runs === runsTarget) return got.pas;
+    }
+    return null;
+  }
+
   window.RookieSim = {
     buildLeague, simSeason, simGame, leaders, avgOf, eraOf,
+    playInning, tryInning, PA_KINDS, PA_TEXT,
     _c: { LG_RUNS, WIN_SPREAD, BAT, PIT, teamRating }, _mulberry32: mulberry32,
   };
 })();

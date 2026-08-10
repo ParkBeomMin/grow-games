@@ -143,6 +143,21 @@
       el: box,
       half(label) { clearBases(); outs = 0; note(""); rest(); paint(); setInn(label); },
       inning(label) { setInn(label); },
+      /* 🧾 엔진이 준 타석 기록을 그대로 반영해요 — 글을 파싱하지 않아요(가장 정확한 길).
+       * pa = { who, kind, outs, scored[], bases[3] } — sim.js의 playInning이 만든 것. */
+      state(pa) {
+        if (!pa) return;
+        for (let i = 0; i < BASES.length; i++) on[BASES[i]] = !!(pa.bases && pa.bases[i]);
+        outs = Math.min(3, pa.outs || 0);
+        const K = { homer: "홈런!", triple: "3루타", double: "2루타", single: "안타", walk: "볼넷", out: "아웃" };
+        const dest = { homer: HIT.homer, triple: HIT.triple, double: HIT.double, single: HIT.single, out: HIT.infield }[pa.kind];
+        const ms = { homer: 1300, triple: 1050, double: 1000, single: 880, out: 620 }[pa.kind];
+        pitch(dest || null, ms);
+        if (pa.scored && pa.scored.length) { flash("dia-score"); note(`${pa.scored.join("·")} 홈인!`); }
+        else { if (pa.kind === "out") flash("dia-out"); note(K[pa.kind] || ""); }
+        if (outs >= 3) { clearBases(); note("이닝 종료"); }   // 3아웃이면 주자도 물러나요
+        paint();
+      },
       say(text) {
         if (!text) return;
         const t = String(text);
