@@ -32,7 +32,7 @@ const parts = {
   ratePartsFn: grab(/function ratingParts\(info, pos, momAdj\) \{[\s\S]*?\n  \}/),
   rateFn: grab(/function matchRating\(info, pos, momAdj\) \{[\s\S]*?\n  \}/),
   conceded: grab(/const raceConceded = [^;]+;/),
-  raceRate: grab(/function leagueRound\(roundRes\) \{[\s\S]*?\n  \}/),
+  raceRate: grab(/function leagueRound\([^)]*\) \{[\s\S]*?\n  \}/),
   racePos: grab(/const RACE_POS = \{[^}]*\};/),
 };
 const missing = Object.entries(parts).filter(([, v]) => !v).map(([k]) => k);

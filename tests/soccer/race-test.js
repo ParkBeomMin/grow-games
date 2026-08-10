@@ -29,7 +29,7 @@ const parts = {
   /* ⚠️ `[^;]+;`로 자르면 안 돼요 — 화살표 함수 **본문 안의 첫 세미콜론**에서 끊깁니다.
    * 오늘 stats 페이지의 esc에서도 같은 자리에 걸렸어요. 끝나는 모양으로 잡습니다. */
   top: grab(C, /const raceTop = \(key\) => \{[\s\S]*?\};/),
-  advance: grab(C, /function leagueRound\(roundRes\) \{[\s\S]*?\n  \}/),
+  advance: grab(C, /function leagueRound\([^)]*\) \{[\s\S]*?\n  \}/),
   awardBlk: grab(C, /if \(\(act\.apps \|\| 0\) > 0 && window\.WingerSquad\) \{[\s\S]*?\n    \}/),
   initAct: grab(C, /function initActivity\(\) \{[\s\S]*?\n  \}/),
 };
@@ -172,7 +172,7 @@ check(!!PHASE_SET && !!IS_PRO && PHASE_SET.split('"')[1] === IS_PRO.split('"')[1
   `넣는 값과 비교하는 값이 같다 (${PHASE_SET} ↔ ${IS_PRO})`);
 
 const ENSURE = grab(C, /function ensureLeagueRecords\(\) \{[\s\S]*?\n  \}/);
-check(!!ENSURE && /act\.apps/.test(ENSURE) && /leagueRound\(null\)/.test(ENSURE),
+check(!!ENSURE && /act\.apps/.test(ENSURE) && /leagueRound\(null, skip\)/.test(ENSURE),
   "옛 세이브를 채울 때 **이미 치른 경기 수만큼** 미리 굴린다 — 0골에서 시작하면 경쟁이 안 돼요");
 check(!!ENSURE && /act\.raceFilled/.test(ENSURE),
   "한 번만 채운다 — 화면을 그릴 때마다 다시 굴리면 기록이 눈덩이처럼 불어나요");
@@ -193,7 +193,7 @@ check(!!FINAL && /\.\.\.scored\.map/.test(FINAL) && !/act\.rivals/.test(FINAL),
 check(!/rollRivals\(|fillRivals\(|act\.rivals\.|act\.rivals =/.test(C),
   "소스에 옛 라이벌 명단을 쓰는 코드가 없다 — 남아 있으면 명단이 다시 갈라져요");
 /* 평점·MOM이 명단에 쌓이는지 — 개인 순위의 ⭐/🏅 칸 근거다 */
-const RATEFN = grab(C, /function leagueRound\(roundRes\) \{[\s\S]*?\n  \}/);
+const RATEFN = grab(C, /function leagueRound\([^)]*\) \{[\s\S]*?\n  \}/);
 check(!!RATEFN && /p\.rate = \(p\.rate \|\| 0\) \+ clamp/.test(RATEFN), "선수에게 평점이 누적된다 (⭐ 평균 평점)");
 /* 우리 팀은 **굴리지 않는다** — 중계에 뜬 골이 따로 들어오므로, 굴리면 같은
  * 라운드를 두 번 세게 된다(🌏 월드컵의 skip 규칙과 같다). */

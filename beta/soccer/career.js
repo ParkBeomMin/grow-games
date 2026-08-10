@@ -668,9 +668,20 @@ window.WingerCareer = (() => {
     act.raceFilled = true;
     if (act.race) delete act.race;
     const played = act.apps || 0;
+    /* ⚠️ **우리 팀은 빼고** 비어 있는지 봐요. 우리 팀 선발은 markApps로 출전 수가
+     * 이미 쌓여 있어서, 전체로 보면 "비어 있지 않다"가 나옵니다 — 그러면 다른
+     * 클럽 88명이 영원히 0으로 남아요(이어하던 세이브에서 실제로 그랬습니다:
+     * 41경기를 치렀는데 기록 있는 사람이 우리 팀 14명뿐이었어요). */
+    /* ⚠️ **우리 팀은 빼고** 비어 있는지 봐요. 우리 팀 선발은 markApps로 출전 수가
+     * 이미 쌓여 있어서, 전체로 보면 "비어 있지 않다"가 나옵니다 — 그러면 다른
+     * 클럽 88명이 영원히 0으로 남아요(이어하던 세이브에서 실제로 그랬습니다:
+     * 41경기를 치렀는데 기록 있는 사람이 우리 팀 14명뿐이었어요). */
     const xi = WingerSquad.leagueXI();
-    const blank = xi.every(({ p }) => !(p.apps || 0));
-    if (played && blank) for (let i = 0; i < played; i++) leagueRound(null);
+    const blank = xi.every(({ club, p }) => club === S.group || !(p.apps || 0));
+    if (played && blank) {
+      const skip = new Set(xi.filter(({ p }) => (p.apps || 0) > 0).map(({ p }) => p));
+      for (let i = 0; i < played; i++) leagueRound(null, skip);
+    }
     save();
   }
 
@@ -697,13 +708,18 @@ window.WingerCareer = (() => {
     }
     return RACE_ROLES.find((r) => r.key === x.role) || RACE_ROLES[0];
   };
-  function leagueRound(roundRes) {
+  function leagueRound(roundRes, skip) {
     if (!window.WingerSquad) return [];
     const out = [];
     for (const { club, p } of WingerSquad.leagueXI()) {
       if (p.me) continue;                       // 내 기록은 S.activity에 따로 쌓여요
-      p.apps = (p.apps || 0) + 1;
+      /* 🧯 옛 세이브를 메울 때는 **이미 기록이 있는 사람을 건너뛰어요.**
+       * 우리 팀 동료는 markApps·동료 골로 진짜 기록이 쌓여 있어서, 여기서 또
+       * 돌리면 출전 수가 두 배가 됩니다. 건너뛸 사람은 메우기 **전에** 정해요 —
+       * 돌면서 정하면 첫 바퀴에 생긴 기록 때문에 둘째 바퀴부터 다 건너뜁니다. */
+      if (skip && skip.has(p)) continue;
       const mine = club === S.group;
+      p.apps = (p.apps || 0) + 1;
       const def = roleOf(p);
       const pop = clamp(p.str, 40, 95);
       /* 우리 팀은 굴리지 않아요. 그래도 **평점은 매겨야** 해요 —
