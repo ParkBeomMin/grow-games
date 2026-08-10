@@ -492,6 +492,124 @@ function makeSoccerReport() {
   log("  ❌ 조건에 맞는 상태를 못 만들었어요 (연말 결산)");
 }
 
+/* 📈 동료도 크고 늙어요 — 8시즌을 실제로 치른 명단
+ *
+ * 새 게임의 명단은 나이만 흩어져 있고 아직 아무도 안 자랐어요. 이 기능은
+ * **시즌이 쌓여야** 보이는 거라, 여기까지 실제로 걸어가서 그 상태를 뜹니다. */
+function makeSoccerAging() {
+  log("📈 ⑩ 동료 성장·노쇠 — 8시즌 치른 명단");
+  for (const seed of seeds(20)) {
+    let P;
+    try {
+      P = makePage("soccer", seed);
+      soccerDebut(P, "pro", "pos");
+      let ok = false;
+      for (let y = 1; y <= 8; y++) {
+        if (!playSeason(P, "pos")) break;
+        if (y === 8) { ok = true; break; }
+        const b = nextSeasonBtn(P); if (!b) break; b.click();
+      }
+      const st = P.state();
+      const mine = (st.squads && st.squads[st.group]) || [];
+      const aged = mine.filter((x) => !x.me && x.age != null);
+      const kids = aged.filter((x) => x.age <= 22).length;
+      const olds = aged.filter((x) => x.age >= 32).length;
+      if (ok && P.active() === "screen-career" && aged.length >= 10 && kids >= 1 && olds >= 1) {
+        add({
+          id: "soccer-aging",
+          game: "soccer", url: "soccer/", emoji: "📈",
+          title: "8시즌 뒤의 명단 — 동료도 크고 늙어요",
+          state: `${st.group} · ${P.get("leagueOf")(st).name} · ${st.proYear}시즌`
+            + ` · 🌱 22세 이하 ${kids}명 · 🕯️ 32세 이상 ${olds}명`,
+          check: "결산 화면에 <b>🗞️ 팀 소식</b> 한 줄이 있는지 봐주세요 — 누가 크고, 누가 부진했고, "
+            + "누가 은퇴했는지가 적혀요.<br>"
+            + "시즌을 시작하고 <b>👥 선발 N%</b> 버튼을 눌러 명단을 열면 이름 옆에 <b>나이</b>가 붙어요. "
+            + "🌱는 스물하나 이하, 🕯️는 서른셋 이상이고, 그 시즌에 📉 부진이나 🔥 상승세가 붙은 사람도 보여요.<br>"
+            + "<b>시즌을 몇 번 더 넘겨 보세요.</b> 같은 사람의 실력 숫자가 해마다 달라지고, "
+            + "서른여섯이 되면 떠나고 그 자리에 새 얼굴이 들어옵니다. "
+            + "리그 전체 평균은 그대로예요 — 나가고 들어오는 게 눈금을 붙잡아 줍니다",
+          steps: ["게임이 열리면 <b>이어하기</b> → 선수 카드", "결산 화면의 🗞️ 팀 소식을 보고",
+            "<b>다음 시즌 시작</b> → 👥 버튼으로 명단을 열어보세요"],
+          keys: snapshot(P),
+        });
+        P.close();
+        return;
+      }
+      P.close();
+    } catch (e) {
+      if (P) P.close();
+      log(`  · 시드 ${seed}: ${e.message}`);
+    }
+  }
+  log("  ❌ 조건에 맞는 상태를 못 만들었어요 (동료 성장·노쇠)");
+}
+
+/* 🏛️ 명예의 전당 — 달 탭이 뜨려면 **여러 달**에 걸친 항목이 있어야 해요.
+ *
+ * 항목 자체는 실제로 은퇴 버튼을 눌러 만듭니다(손으로 지어내지 않아요).
+ * 다만 헌액 시각만은 오늘 하루에 몰려서 달이 하나뿐이라, 그 자리에서 **몇 달 전으로
+ * 옮겨 둡니다** — 달 탭이 생기는 걸 보려면 그 수밖에 없어요. 기록 자체는 진짜예요. */
+function makeSoccerHofMonths() {
+  log("🏛️ ⑪ 명예의 전당 — 달 탭");
+  for (const seed of seeds(20)) {
+    let P;
+    try {
+      P = makePage("soccer", seed);
+      P.w.confirm = () => true;                    // 은퇴 확인창에 '예'로 답해요
+      for (let n = 0; n < 3; n++) {
+        soccerDebut(P, "pro", n === 0 ? "pos" : n === 1 ? "shoot" : "pass");
+        for (let y = 1; y <= 2 + n; y++) {
+          if (!playSeason(P, "pos")) break;
+          if (y === 2 + n) break;
+          const b = nextSeasonBtn(P); if (!b) break; b.click();
+        }
+        const retire = Array.from(P.w.document.querySelectorAll("#career-actions .btn"))
+          .find((b) => /은퇴/.test(b.textContent));
+        if (!retire) break;
+        retire.click();
+        // 은퇴식 → 새 선수로 (타이틀 화면으로 돌아가요)
+        P.$("btn-hof-back") && P.$("btn-hof-back").click();
+        P.get("show")("screen-title");
+      }
+      const raw = P.w.localStorage.getItem("grow-hof-v1");
+      const list = raw ? JSON.parse(raw) : [];
+      if (list.length >= 3) {
+        /* 헌액 시각을 이번 달 · 지난달 · 두 달 전으로 흩어 놓아요.
+         * 읽는 쪽은 at이 없으면 id에서 시각을 꺼내니 **둘 다** 옮깁니다. */
+        const now = new Date();
+        list.forEach((e, i) => {
+          const d = new Date(now.getFullYear(), now.getMonth() - i, Math.min(now.getDate(), 12), 12, 0, 0);
+          e.at = d.getTime();
+          e.id = "w" + d.getTime();
+        });
+        P.w.localStorage.setItem("grow-hof-v1", JSON.stringify(list));
+        add({
+          id: "soccer-hof-month",
+          game: "soccer", url: "soccer/", emoji: "🏛️",
+          title: "명예의 전당 — 달 탭과 헌액 카드",
+          state: `헌액 ${list.length}명 · 이번 달 · 지난달 · 두 달 전`,
+          check: "타이틀 화면의 <b>🏛️ 명예의 전당</b>을 눌러주세요.<br>"
+            + "위에 <b>달 탭</b>이 있어요 — [전체][이번 달][지난달][두 달 전]. 탭을 누르면 그 달 사람만 "
+            + "보이고 <b>순위가 1위부터 다시 매겨져요</b>.<br>"
+            + "<b>카드를 누르면</b> 그 선수의 커리어가 레이어로 펼쳐집니다 — 최고 클래스·통산 기록·"
+            + "밟아 온 리그·수상·헌액 날짜. <b>없는 기록은 줄 자체가 안 나와요</b>(0으로 안 적어요).<br>"
+            + "※ 커리어는 실제로 은퇴 버튼을 눌러 만든 진짜 기록이고, <b>헌액 시각만</b> 달 탭을 "
+            + "보이게 하려고 몇 달 전으로 옮겨 뒀어요",
+          steps: ["게임이 열리면 <b>🏛️ 명예의 전당</b>", "달 탭을 눌러 보고", "카드를 눌러 보세요"],
+          keys: snapshot(P),
+        });
+        P.close();
+        return;
+      }
+      P.close();
+    } catch (e) {
+      if (P) P.close();
+      log(`  · 시드 ${seed}: ${e.message}`);
+    }
+  }
+  log("  ❌ 조건에 맞는 상태를 못 만들었어요 (명예의 전당 달 탭)");
+}
+
 /* 🌏 월드컵 — 세 자리를 잡아요.
  *
  *   📨 초대장 직전  전반기 막바지 · 종합이 문턱 위 → 몇 경기 치르면 초대장이 떠요
@@ -1935,6 +2053,7 @@ function* seeds(n) {
  * 그래야 `node scripts/make-fixtures.js soccer-transfer`처럼 하나만 다시 뽑아도
  * 나머지가 안 사라져요. 같은 id는 이번에 뽑은 게 이깁니다. */
 const ORDER = ["soccer-transfer", "soccer-promote", "soccer-youth-ext", "soccer-semipro", "soccer-report",
+  "soccer-aging", "soccer-hof-month",
   "idol-concept", "idol-reveal", "idol-report", "idol-tour", "idol-standings",
   "rookie-posting", "rookie-posting-locked", "rookie-abroad-report", "rookie-cont-series", "rookie-retire"];
 
@@ -2011,6 +2130,8 @@ if (want("soccer-nation-jp", "soccer")) makeSoccerNation(1, {
   trait: "🎓 훈련 +15%",
   check: "어느 능력치를 훈련해도 조금씩 더 오르는지 봐주세요 (한 가지만 빠른 🇧🇷·🇮🇹와 다른 결이에요)",
 });
+if (want("soccer-aging", "soccer")) makeSoccerAging();
+if (want("soccer-hof-month", "soccer")) makeSoccerHofMonths();
 if (want("soccer-promo", "soccer")) makeSoccerPromoRelegation("up");
 if (want("soccer-releg", "soccer")) makeSoccerPromoRelegation("down");
 if (want("idol-concept", "idol")) {
