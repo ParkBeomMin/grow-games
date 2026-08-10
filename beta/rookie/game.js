@@ -1842,6 +1842,11 @@ function playRandomMini(container, cb) {
   }
 }
 
+/* ⏱️ 중계 한 걸음의 간격. 타석마다 주자가 서고 공이 날아가는 걸 보려면 여유가 필요해요 —
+ * 550ms일 때 "회차가 너무 빨리 지나가 주자가 안 보인다"는 제보가 있었어요.
+ * 공 애니메이션이 투구 330ms + 타구 620~1300ms라 그보다 넉넉해야 끝까지 보여요. */
+const STEP_MS = 1500;
+const FEED_MS = 1150;      // 타석 한 줄이 머무는 시간 (공 애니메이션보다 넉넉하게)
 let simTimer = null;
 // 범용 경기 시뮬레이터 — 고교 대회와 프로 리그가 함께 사용
 // cfg: { title, oppName, homeName, perf, story, interactive, preWin, onFinish(win,bonus)→{extra,nextLabel,nextFn} }
@@ -1873,6 +1878,35 @@ function renderGameSim(cfg) {
     <div id="game-result"></div>`;
   // ⚾ 다이아몬드 계기판 — 중계 피드가 말한 것만 따라가요 (없는 주자를 지어내지 않아요)
   const dia = window.RookieDiamond ? window.RookieDiamond.make($("dia-wrap")) : null;
+
+  /* 중계 큐 — 한 줄씩 흘려보내요. 비어야 다음 이닝으로 넘어가요. */
+  const feedQ = [];
+  let feedTimer = null;
+  function showFeed(f) {
+    const div = document.createElement("div");
+    if (f.cls) div.className = f.cls;
+    div.textContent = f.text;
+    $("pbp").appendChild(div);
+    const pbp = $("pbp");
+    pbp.scrollTop = pbp.scrollHeight;
+    // ⚾ 경기장 화면 — 타석 기록(pa)이 있으면 **엔진 상태를 그대로** 받아요(글 파싱보다 정확).
+    if (dia) { if (f.pa) dia.state(f.pa); else dia.say(f.text); }
+  }
+  function drainFeed() {
+    if (feedTimer || !feedQ.length) return;
+    showFeed(feedQ.shift());
+    if (!feedQ.length) return;
+    feedTimer = setInterval(() => {
+      if (!feedQ.length) { clearInterval(feedTimer); feedTimer = null; return; }
+      showFeed(feedQ.shift());
+    }, FEED_MS);
+  }
+  const feedBusy = () => feedQ.length > 0;
+  // ⏩ 빨리 감기·정리용 — 남은 줄을 한 번에 내보내고 타이머를 끊어요
+  function flushFeed() {
+    if (feedTimer) { clearInterval(feedTimer); feedTimer = null; }
+    while (feedQ.length) showFeed(feedQ.shift());
+  }
 
   const evFor = (inn, half) => story.events.filter((e) => e.inn === inn && e.half === half);
   // 경기 중 랜덤 미니게임 — 2~7회 중 한 이닝에 등장 (프로 지정 모먼트가 있으면 생략)
@@ -1909,14 +1943,10 @@ function renderGameSim(cfg) {
       totals[side] += v;
       $(`sb-r-${side}`).textContent = totals[side];
     }
-    for (const f of s.feeds || []) {
-      const div = document.createElement("div");
-      if (f.cls) div.className = f.cls;
-      div.textContent = f.text;
-      $("pbp").appendChild(div);
-      // ⚾ 경기장 화면 — 타석 기록(pa)이 있으면 **엔진 상태를 그대로** 받아요(글 파싱보다 정확).
-      if (dia) { if (f.pa) dia.state(f.pa); else dia.say(f.text); }
-    }
+    /* 한 이닝의 타석이 **한꺼번에 쏟아지면** 마지막 상태만 보여요 (주자가 안 보인다는 제보).
+     * 큐에 넣고 한 줄씩 흘려요 — 큐가 빌 때까지 다음 걸음(tick)은 기다립니다. */
+    for (const f of s.feeds || []) feedQ.push(f);
+    drainFeed();
     const pbp = $("pbp");
     pbp.scrollTop = pbp.scrollHeight;
   }
@@ -1925,13 +1955,16 @@ function renderGameSim(cfg) {
   function beginProMoment(st) {
     momentOn = true;
     clearInterval(simTimer);
+    /* ⚾ 내 타석이 시작돼요. 직전 타석의 타구가 그대로 떠 있으면 **이미 친 것처럼** 보여요 —
+     * 공을 마운드로 되돌려 '이제 던진다' 상태로 맞춰요. */
+    if (dia) { dia.rest(); dia.note("내 타석!"); }
     const i = st.inn;
     const btn = $("btn-tour-next");
     const resume = () => {
       momentOn = false;
       btn.disabled = false;
       btn.textContent = "⏩ 빨리 감기";
-      simTimer = setInterval(tick, 550);
+      simTimer = setInterval(tick, STEP_MS);
     };
     if (st.proMoment === "ab") {
       applyStep({ feeds: [{ text: `🧢 ${i + 1}회말, ${S.name}의 타석!`, cls: "good" }] });
@@ -2029,7 +2062,7 @@ function renderGameSim(cfg) {
       momentOn = false;
       btn.disabled = false;
       btn.textContent = "⏩ 빨리 감기";
-      simTimer = setInterval(tick, 550);
+      simTimer = setInterval(tick, STEP_MS);
     });
   }
 
@@ -2193,6 +2226,8 @@ function renderGameSim(cfg) {
     return true;
   }
   function tick() {
+    // 중계 줄이 아직 흐르는 중이면 다음 이닝으로 안 넘어가요 (타석이 묻히지 않게)
+    if (feedBusy()) return;
     if (idx >= steps.length) { endOfSteps(); return; }
     const st = steps[idx++];
     if (skipBottom9IfLeading(st)) return;
@@ -2201,12 +2236,13 @@ function renderGameSim(cfg) {
     if (st.proMoment) { beginProMoment(st); return; }
     applyStep(st);
   }
-  simTimer = setInterval(tick, 550);
+  simTimer = setInterval(tick, STEP_MS);
   $("btn-tour-next").textContent = "⏩ 빨리 감기";
   $("btn-tour-next").disabled = false;
   $("btn-tour-next").onclick = () => {
     if (momentOn || finished) return;
     clearInterval(simTimer);
+    flushFeed();                 // ⏩ 빨리 감기는 흐르던 중계를 한 번에 쏟아요 (멈춰 있으면 안 돼요)
     while (idx < steps.length) {
       const st = steps[idx++];
       if (skipBottom9IfLeading(st)) return;

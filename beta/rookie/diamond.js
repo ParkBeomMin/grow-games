@@ -219,6 +219,9 @@
         paint();
       },
       reset() { api.half(null); },
+      // 공만 마운드로 되돌려요 (주자·아웃은 그대로 — 내 타석이 시작되는 자리예요)
+      rest() { rest(); },
+      note(t) { note(t); },
     };
     rest();
     paint();
