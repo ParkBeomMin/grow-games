@@ -30,9 +30,19 @@
     return `
       <div class="dia" id="dia">
         <svg class="dia-park" viewBox="0 0 200 132" aria-hidden="true">
-          <!-- 외야 잔디 (파울선 안쪽) + 펜스 -->
+          <!-- 외야 잔디 (파울선 안쪽) + 깎은 줄무늬 + 펜스 -->
+          <defs>
+            <clipPath id="dia-fair"><path d="M100,116 L26,46 Q100,-2 174,46 Z" /></clipPath>
+          </defs>
           <path class="dia-grass" d="M100,116 L26,46 Q100,-2 174,46 Z" />
+          <g clip-path="url(#dia-fair)">
+            <polygon class="dia-mow" points="100,116 50.7,32.6 75.3,24.6" />
+            <polygon class="dia-mow" points="100,116 100,22 124.6,24.6" />
+            <polygon class="dia-mow" points="100,116 149.3,32.6 174,46" />
+          </g>
           <path class="dia-fence" d="M26,46 Q100,-2 174,46" />
+          <!-- 파울폴 -->
+          <path class="dia-pole" d="M26,46 L26,34 M174,46 L174,34" />
           <!-- 내야 흙 -->
           <polygon class="dia-dirt" points="100,124 147,79 100,34 53,79" />
           <!-- 파울라인 (분필) -->

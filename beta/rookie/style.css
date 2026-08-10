@@ -334,7 +334,11 @@
 
 /* 그라운드 */
 .dia-grass { fill: var(--field); stroke: none; }
+/* 깎은 잔디 줄무늬 — 홈에서 부챗살로 퍼져요. 아주 옅게(진하면 그라운드가 어지러워요) */
+.dia-mow { fill: var(--cream); opacity: .045; }
 .dia-fence { fill: none; stroke: var(--line); stroke-width: 2.5; }
+/* 파울폴 — 좌우 끝을 짚어 줘서 그라운드가 '야구장'으로 읽혀요 */
+.dia-pole { stroke: var(--accent); stroke-width: 1.8; opacity: .5; stroke-linecap: round; }
 .dia-dirt { fill: var(--sand); opacity: .22; }
 .dia-chalk { fill: none; stroke: var(--cream); stroke-width: 1.4; opacity: .38; stroke-linecap: round; }
 .dia-path { fill: none; stroke: var(--sand); stroke-width: 2.2; opacity: .35; }
