@@ -270,17 +270,19 @@ guard("시즌 타이틀", () => {
   Spit.season.stats = { ip: 200, k: 999, wins: 99, er: 20 };  // 규정 이닝 + 압도적
   check(apiPit.titlesWon(Spit.season.stats).some((w) => w.id === "era"), "규정 이닝을 채우고 자책이 가장 낮으면 평균자책왕을 딴다");
 
+  /* ⏱️ 표본을 줄였어요 — 타석 단위 시뮬이 붙어 한 시즌이 230ms예요(실제 게임은 한 번에
+   * 5경기 = 1.6ms라 체감 없음). 검사에서만 시즌 수를 줄여 시간을 맞춥니다. */
   // ── win rate 실측 — 엘리트는 시즌당 몇 번, 평범하면 거의 없다 (드물어야 특별) ──
   const seasonTitles = (pos, prof, seed) => {
     const rnd = mulberry32(seed);
     let n = 0;
-    for (let i = 0; i < 40; i++) {
+    for (let i = 0; i < 14; i++) {
       const S = { pos, team: "E", role: pos === "pitcher" ? "선발 투수" : "4번 타자", proYear: seed + i, season: { total: 144, game: 0, stats: {} } };
       const api = mk(S); runField(api, S);
       S.season.stats = prof(rnd);
       n += api.titlesWon(S.season.stats).length;
     }
-    return n / 40;
+    return n / 14;
   };
   const PROF = {
     batElite: (r) => ({ ab: 615, hits: Math.round(gauss(r, 196, 14)), hr: Math.round(gauss(r, 45, 7)), sb: Math.round(gauss(r, 67, 11)) }),
@@ -289,8 +291,8 @@ guard("시즌 타이틀", () => {
     pitLow: (r) => { const ip = gauss(r, 222, 15); return { ip, k: Math.round(gauss(r, 302, 25)), wins: Math.round(gauss(r, 8, 3)), er: ip * Math.max(1.5, gauss(r, 3.4, 0.4)) / 9 }; },
   };
   for (const [pos, hiP, loP] of [["batter", PROF.batElite, PROF.batLow], ["pitcher", PROF.pitElite, PROF.pitLow]]) {
-    let hi = 0, lo = 0; for (let i = 0; i < 8; i++) { hi += seasonTitles(pos, hiP, 3000 + i * 40); lo += seasonTitles(pos, loP, 6000 + i * 40); }
-    hi /= 8; lo /= 8;
+    let hi = 0, lo = 0; for (let i = 0; i < 5; i++) { hi += seasonTitles(pos, hiP, 3000 + i * 40); lo += seasonTitles(pos, loP, 6000 + i * 40); }
+    hi /= 5; lo /= 5;
     console.log(`   ${pos === "batter" ? "타자" : "선발"} 시즌당 타이틀 | 엘리트 ${hi.toFixed(2)} · 평범 ${lo.toFixed(2)}`);
     check(hi >= 0.4 && hi <= 2.2, `${pos} 엘리트는 시즌당 타이틀이 0.4~2.2개다 (${hi.toFixed(2)}) — 특별하되 매 시즌은 아니게`);
     check(lo < 0.4, `${pos} 평범한 성적은 타이틀이 드물다 (${lo.toFixed(2)})`);

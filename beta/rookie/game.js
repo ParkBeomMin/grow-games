@@ -1236,12 +1236,31 @@ function paLines(inn, half, runs, cls, lineup, seed, fallback) {
   const rng = RS._mulberry32((((seed >>> 0) ^ Math.imul(inn, 2654435761) ^ (half === "초" ? 17 : 71)) >>> 0) || 1);
   const pas = RS.playInning(runs, rng, lineup, 0);
   if (!pas || !pas.length) return one;
+  /* 🧾 여기서 본 타석이 **곧 순위표의 기록**이에요 — 중계와 기록이 갈라지지 않게
+   * 바로 적립해요. 내 자리(me)는 건너뛰어요(내 기록은 실제 플레이가 정본). */
+  if (RS.creditPAs) RS.creditPAs(pas, null);
   return pas.map((p) => ({
     inn, half,
     text: `${p.who}, ${p.text}` + (p.scored.length ? ` — ${p.scored.join("·")} 홈인! ⚾` : ""),
     cls: p.scored.length ? cls : (p.kind === "out" ? "" : cls),
     pa: p,                    // 경기장 화면이 이 상태를 그대로 읽어요 (글 파싱 안 해요)
   }));
+}
+/* 득점이 없는 이닝도 타석은 있어요. 중계에는 안 띄우지만 **기록은 쌓아요** —
+ * 안 그러면 내 경기에 나온 선수들만 타석 수가 모자라 순위표가 불공평해져요. */
+function creditQuietInnings(ourInn, oppInn) {
+  const RS = window.RookieSim;
+  if (!RS || !RS.playInning || !RS.creditPAs) return;
+  for (let i = 0; i < 9; i++) {
+    for (const [half, arr, mine, kind] of [["초", oppInn, false, 6], ["말", ourInn, true, 7]]) {
+      if ((arr[i] || 0) > 0) continue;                 // 득점 이닝은 중계 쪽에서 이미 적립했어요
+      const lu = lineupOf(mine);
+      if (!lu) continue;
+      const rng = RS._mulberry32((((seedOf(i, kind)) >>> 0)) || 1);
+      const pas = RS.playInning(0, rng, lu, 0);
+      if (pas) RS.creditPAs(pas, null);
+    }
+  }
 }
 /* 이닝·용도별 시드 — 같은 경기를 다시 그려도 같은 타석 시퀀스가 나와요.
  * 전역 Math.random을 여기서 쓰지 않아요 (밸런스 시뮬 보호). */
@@ -1258,7 +1277,7 @@ function lineupOf(mine) {
   if (lg && lg.teams) {
     const team = mine ? lg.teams.find((t) => t.name === st.team)
       : lg.teams.find((t) => t.name !== st.team);
-    if (team && team.batters) return team.batters.map((b) => b.name);
+    if (team && team.batters) return team.batters;    // 선수 객체 그대로 — 타석이 곧 기록이라
   }
   return null;
 }
@@ -1401,6 +1420,7 @@ function batterStory(win, perf, interactive) {
         if (extra > 0) events.push(...paLines(i + 1, "말", extra, "good", lineupOf(true), seedOf(i, 2), `우리 타선이 ${extra}점을 뽑아냅니다! 🔥`));
       }
     }
+    creditQuietInnings(ourInn, oppInn);
     return { ourInn, oppInn, events, moment: { half: "말" } };
   }
 
@@ -1415,6 +1435,7 @@ function batterStory(win, perf, interactive) {
     const extra = ourInn[i] - contrib[i];
     if (extra > 0) events.push({ inn: i + 1, half: "말", text: `우리 타선이 ${extra}점을 뽑아냅니다! 🔥`, cls: "good" });
   }
+  creditQuietInnings(ourInn, oppInn);
   return { ourInn, oppInn, events };
 }
 
@@ -1450,6 +1471,7 @@ function pitcherStory(win, perf, interactive) {
     for (let i = 0; i < 8; i++) {
       if (ourInn[i] > 0) events.push(...paLines(i + 1, "말", ourInn[i], "good", lineupOf(true), seedOf(i, 4), `우리 타선이 ${ourInn[i]}점 지원! 🔥`));
     }
+    creditQuietInnings(ourInn, oppInn);
     return { ourInn, oppInn, events, moment: { half: "초" } };
   }
 
@@ -1472,6 +1494,7 @@ function pitcherStory(win, perf, interactive) {
   for (let i = 0; i < 9; i++) {
     if (ourInn[i] > 0) events.push({ inn: i + 1, half: "말", text: `우리 타선이 ${ourInn[i]}점 지원! 🔥`, cls: "good" });
   }
+  creditQuietInnings(ourInn, oppInn);
   return { ourInn, oppInn, events };
 }
 

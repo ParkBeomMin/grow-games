@@ -1,6 +1,6 @@
 /* rookie 서비스워커 — 네트워크 우선, 실패 시 캐시 (오프라인 플레이) */
-const CACHE = "rookie-v4";
-const ASSETS = ["./", "./index.html", "./style.css", "./game.js", "./career.js", "./postseason.js", "./manifest.webmanifest", "../base.css", "../timing.js", "../post-stage.js", "../match.js", "../help.js"];
+const CACHE = "rookie-v5";
+const ASSETS = ["./", "./index.html", "./style.css", "./game.js", "./career.js", "./postseason.js", "./squad.js", "./sim.js", "./diamond.js", "./manifest.webmanifest", "../base.css", "../timing.js", "../post-stage.js", "../match.js", "../help.js"];
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));
 });

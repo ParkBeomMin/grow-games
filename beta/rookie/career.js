@@ -442,7 +442,8 @@ window.Career = (() => {
       const iAmA = a === S.team, iAmB = b === S.team;
       // 내 경기면 실제 승패를 못 박아요. 아니면 시뮬이 정해요.
       const forced = iAmA ? (win ? "A" : "B") : iAmB ? (win ? "B" : "A") : null;
-      RS.simGame(A, B, rng, forced);
+      // 내 경기는 중계가 이미 타석을 기록에 적립했어요 → 여기선 승패만 (두 번 세지 않아요)
+      RS.simGame(A, B, rng, forced, !!forced);
     }
     // 순위표·가을야구가 읽는 others에 시뮬 결과를 옮겨요 (내 팀 승패는 teamW/teamL이 정본)
     for (const o of sn.others) {

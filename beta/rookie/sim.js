@@ -115,7 +115,7 @@
 
   /* forced — 'A'/'B'면 그 팀이 이긴 걸로 못 박아요. 내가 뛴 경기는 실제 결과(미니게임)가
    * 정본이라, 시뮬이 그걸 덮지 않게 하려고요. 점수는 승패에 맞게 뒤집어 맞춰요. */
-  function simGame(A, B, rng, forced) {
+  function simGame(A, B, rng, forced, skipStats) {
     const eA = LG_RUNS * A.off / B.def, eB = LG_RUNS * B.off / A.def;
     let rA = poisson(rng, eA), rB = poisson(rng, eB);
     if (rA === rB) { if (rng() < 0.5) rA++; else rB++; }   // 무승부 없음 (연장)
@@ -123,10 +123,37 @@
     const aWin = rA > rB;
     if (aWin) { A.w++; B.l++; } else { B.w++; A.l++; }
     const close = Math.abs(rA - rB) <= PIT.closeMargin;
-    accrueBatting(A, rng); accrueBatting(B, rng);
-    accruePitching(A, aWin, close && aWin, rng);
-    accruePitching(B, !aWin, close && !aWin, rng);
-    return { rA, rB, aWin };
+    /* 🧾 점수는 위에서 정해졌어요. 그 점수를 **타석 단위로 재현**해서 기록을 쌓아요 —
+     * 중계에서 본 타석이 곧 순위표의 기록이에요(따로 굴리지 않아요). */
+    const spA = A.pitchers[A.gi % PIT.rot], spB = B.pitchers[B.gi % PIT.rot];
+    A.gi++; B.gi++; spA.gs++; spB.gs++;
+    const logA = [], logB = [];
+    let iA = 0, iB = 0;
+    const runsA = spreadRuns(rA, rng), runsB = spreadRuns(rB, rng);
+    if (skipStats) {   // 내가 뛴 경기는 중계(game.js)가 이미 타석을 적립했어요 — 두 번 세지 않아요
+      if (aWin && rng() < PIT.winGate) spA.wins++;
+      if (!aWin && rng() < PIT.winGate) spB.wins++;
+      if (close && rng() < PIT.saveGate) (aWin ? A : B).pitchers[PIT.rot].saves++;
+      return { rA, rB, aWin, logA, logB };
+    }
+    const SP_INN = 6;      // 선발은 6이닝까지 — 그 뒤는 불펜이라 개인 기록에 안 붙여요
+    /* 팀 실점은 팀 전력이 정해요. 그 안에서 **그 투수가 팀 평균보다 나은 만큼** 덜 받아요 —
+     * 안 그러면 모든 선발의 자책이 팀 값으로 뭉쳐서 평균자책 순위가 안 생겨요. */
+    const erkA = clamp(A.def / (spA.skill || 1), 0.5, 1.7);
+    const erkB = clamp(B.def / (spB.skill || 1), 0.5, 1.7);
+    for (let inn = 0; inn < 9; inn++) {
+      const pOnA = inn < SP_INN ? spB : null, pOnB = inn < SP_INN ? spA : null;
+      const pa = playInning(runsA[inn], rng, A.batters, iA, pOnA || spB);
+      if (pa) { creditPAs(pa, pOnA, erkB); iA += pa.length; logA.push({ inn: inn + 1, pas: pa }); }
+      const pb = playInning(runsB[inn], rng, B.batters, iB, pOnB || spA);
+      if (pb) { creditPAs(pb, pOnB, erkA); iB += pb.length; logB.push({ inn: inn + 1, pas: pb }); }
+    }
+    if (aWin && rng() < PIT.winGate) spA.wins++;
+    if (!aWin && rng() < PIT.winGate) spB.wins++;
+    if (close && rng() < PIT.saveGate) (aWin ? A : B).pitchers[PIT.rot].saves++;
+    // 도루는 타석 밖 사건이라 따로 굴려요 (타석 재현에는 안 담겨요)
+    for (const t of [A, B]) for (const b of t.batters) if (!b.me) b.sb = (b.sb || 0) + poisson(rng, BAT.sbBase * b.skill);
+    return { rA, rB, aWin, logA, logB };
   }
 
   /* 한 시즌(팀당 games경기)을 굴려요. 10팀이면 서로 균등하게 붙어요.
@@ -171,72 +198,115 @@
    *   · 득점 합계가 목표(runsTarget)와 **정확히 같을 때까지만** 채택해요 → 총점이 안 흔들려요.
    *   · 그래서 누가 1루에 있다가 홈을 밟았는지를 엔진이 알게 돼요(다이아몬드가 진짜로 움직여요).
    * 난수는 넘겨받은 시드 PRNG만 써요 — 전역 Math.random을 쓰지 않아요. */
-  const PA_KINDS = [
-    { k: "homer",  p: 0.030, adv: 4, hit: true },
-    { k: "triple", p: 0.006, adv: 3, hit: true },
-    { k: "double", p: 0.052, adv: 2, hit: true },
-    { k: "single", p: 0.150, adv: 1, hit: true },
-    { k: "walk",   p: 0.082, adv: 1, hit: false },
-    { k: "out",    p: 0.680, adv: 0, hit: false },
-  ];
+  /* 타석 결과 확률 — 타자 skill과 상대 투수 skill의 비로 움직여요.
+   * 스타 타자가 실제로 더 치고, 좋은 투수가 실제로 더 잡아야 순위표가 납득돼요. */
+  /* ⚠️ 홈런 확률이 유난히 낮아 보여도 맞아요. 이닝을 **목표 득점과 정확히 같을 때까지**
+   * 다시 굴리는 방식이라(밸런스 보호), 한 방에 점수를 맞추는 홈런이 자연히 많이 뽑혀요.
+   * 그 편향까지 포함해 실측(sim-test)으로 맞춘 값이에요 — 감으로 올리지 마세요. */
+  const PA_BASE = { hr: 0.0098, triple: 0.004, double: 0.033, single: 0.097, walk: 0.066 };
+  const K_SHARE = 0.34;         // 아웃 중 삼진 비율 (투수 skill로 오르내려요)
+  function paProbs(bs, ps) {
+    const f = clamp((bs || 1) / (ps || 1), 0.78, 1.30);
+    const hr = PA_BASE.hr * Math.pow(f, 2.3);
+    const tr = PA_BASE.triple * f;
+    const db = PA_BASE.double * Math.pow(f, 1.15);
+    const sg = PA_BASE.single * f;
+    const bb = PA_BASE.walk * Math.pow(f, 0.5);
+    const out = Math.max(0.06, 1 - (hr + tr + db + sg + bb));
+    return [["homer", hr, 4], ["triple", tr, 3], ["double", db, 2], ["single", sg, 1], ["walk", bb, 1], ["out", out, 0]];
+  }
   const PA_TEXT = {
     homer: ["담장을 넘기는 홈런", "큼지막한 아치", "완벽하게 걷어올린 홈런"],
     triple: ["우중간을 가르는 3루타", "펜스를 맞히는 3루타"],
     double: ["좌중간 2루타", "빠지는 2루타", "가르는 2루타"],
     single: ["중전 안타", "좌전 안타", "우전 안타", "빗맞은 내야안타"],
     walk: ["볼넷", "풀카운트 끝 볼넷", "몸에 맞는 공"],
-    out: ["삼진", "유격수 땅볼", "중견수 뜬공", "2루수 땅볼", "루킹 삼진", "1루수 파울플라이"],
+    k: ["삼진", "루킹 삼진", "헛스윙 삼진"],
+    out: ["유격수 땅볼", "중견수 뜬공", "2루수 땅볼", "1루수 파울플라이", "3루수 직선타"],
   };
 
-  function onePA(rng) {
-    let r = rng(), acc = 0;
-    for (const d of PA_KINDS) { acc += d.p; if (r < acc) return d; }
-    return PA_KINDS[PA_KINDS.length - 1];
-  }
-  /* 한 이닝을 굴려 봐요 — 3아웃까지. 반환은 타석 목록과 그 이닝 득점이에요. */
-  function tryInning(rng, lineup, startIdx) {
-    const bases = [null, null, null];      // 1·2·3루에 선 주자 이름
-    let outs = 0, runs = 0, i = startIdx;
+  /* 한 이닝을 타석 단위로 굴려요. lineup은 선수 객체 배열(skill·이름), pit은 상대 선발.
+   * 반환의 pas 하나하나가 곧 기록이에요 — 부르는 쪽이 creditPAs로 적립해요. */
+  function tryInning(rng, lineup, startIdx, pit) {
+    const bases = [null, null, null];
+    const ps = (pit && pit.skill) || 1;
+    let outs = 0, runs = 0, i = startIdx || 0;
     const pas = [];
-    while (outs < 3 && pas.length < 20) {
+    while (outs < 3 && pas.length < 22) {
       const who = lineup[i % lineup.length]; i++;
-      const d = onePA(rng);
+      const probs = paProbs(who && who.skill, ps);
+      let r = rng(), acc = 0, kind = "out", adv = 0;
+      for (const [k, p, a] of probs) { acc += p; if (r < acc) { kind = k; adv = a; break; } }
       const scored = [];
-      if (d.adv === 0) {
+      if (adv === 0) {
         outs++;
+        // 아웃 중 일부는 삼진 — 투수가 좋을수록 많아요
+        if (rng() < clamp(K_SHARE * ps, 0.15, 0.62)) kind = "k";
       } else {
-        for (let b = 2; b >= 0; b--) {                    // 앞선 주자부터 밀어요
-          if (!bases[b]) continue;
-          const to = b + d.adv;
-          if (to >= 3) { scored.push(bases[b]); runs++; } else { bases[to] = bases[b]; }
-          bases[b] = null;
+        for (let bI = 2; bI >= 0; bI--) {
+          if (!bases[bI]) continue;
+          const to = bI + adv;
+          if (to >= 3) { scored.push(bases[bI]); runs++; } else { bases[to] = bases[bI]; }
+          bases[bI] = null;
         }
-        if (d.adv >= 4) { scored.push(who); runs++; }      // 홈런 — 타자도 홈인
-        else bases[d.adv - 1] = who;
+        if (adv >= 4) { scored.push(who); runs++; }
+        else bases[adv - 1] = who;
       }
+      const pool = PA_TEXT[kind] || PA_TEXT.out;
       pas.push({
-        who, kind: d.k, outs, runs,
-        scored: scored.slice(),
-        bases: bases.slice(),
-        text: PA_TEXT[d.k][Math.floor(rng() * PA_TEXT[d.k].length)],
+        who: (who && who.name) || String(who), kind, outs, runs,
+        scored: scored.map((x) => (x && x.name) || String(x)),
+        bases: bases.map((x) => (x ? ((x && x.name) || String(x)) : null)),
+        text: pool[Math.floor(rng() * pool.length)],
+        _b: who, _p: pit,
       });
     }
     return { pas, runs };
   }
   /* 목표 득점과 **정확히 같은** 이닝이 나올 때까지 다시 굴려요.
-   * 못 맞추면 null을 돌려줘요 — 부르는 쪽이 예전처럼 요약 한 줄로 떨어지면 돼요(안전). */
-  function playInning(runsTarget, rng, lineup, startIdx) {
-    const names = (lineup && lineup.length) ? lineup : ["1번타자", "2번타자", "3번타자", "4번타자", "5번타자", "6번타자", "7번타자", "8번타자", "9번타자"];
+   * 못 맞추면 null — 부르는 쪽이 예전 요약 한 줄로 떨어지면 돼요(안전). */
+  function playInning(runsTarget, rng, lineup, startIdx, pit) {
+    let names = lineup;
+    if (!names || !names.length) names = ["1번타자", "2번타자", "3번타자", "4번타자", "5번타자", "6번타자", "7번타자", "8번타자", "9번타자"];
+    // 문자열 배열로 들어오면 균일 능력치 선수로 감싸요 (고교 경기 등)
+    if (typeof names[0] === "string") names = names.map((n) => ({ name: n, skill: 1 }));
     for (let t = 0; t < 400; t++) {
-      const got = tryInning(rng, names, startIdx || 0);
+      const got = tryInning(rng, names, startIdx || 0, pit);
       if (got.runs === runsTarget) return got.pas;
     }
     return null;
   }
+  /* 🧾 타석들을 **그대로 기록에 적립**해요 — 중계에서 본 것과 순위표가 100% 같아지는 자리예요.
+   * skipMe면 내 자리(me:true)는 건너뛰어요 — 내 기록은 실제 플레이가 정본이니까요. */
+  function creditPAs(pas, pit, erK) {
+    if (!pas) return;
+    let outs = 0;
+    for (const p of pas) {
+      const b = p._b;
+      if (b && typeof b === "object" && !b.me) {
+        if (p.kind !== "walk") b.ab = (b.ab || 0) + 1;
+        if (p.kind === "single" || p.kind === "double" || p.kind === "triple" || p.kind === "homer") b.hits = (b.hits || 0) + 1;
+        if (p.kind === "homer") b.hr = (b.hr || 0) + 1;
+      }
+      if (p.kind === "k" || p.kind === "out") outs++;
+    }
+    const pitcher = pit || (pas[0] && pas[0]._p);
+    if (pitcher && typeof pitcher === "object" && !pitcher.me) {
+      pitcher.ip = (pitcher.ip || 0) + outs / 3;
+      pitcher.k = (pitcher.k || 0) + pas.filter((p) => p.kind === "k").length;
+      pitcher.er = (pitcher.er || 0) + (pas.length ? pas[pas.length - 1].runs : 0) * (erK || 1);
+    }
+  }
+  // 그 경기 득점을 이닝별로 흩뿌려요 (9이닝). 합계는 그대로예요.
+  function spreadRuns(total, rng, innings) {
+    const n = innings || 9, out = new Array(n).fill(0);
+    for (let i = 0; i < total; i++) out[Math.floor(rng() * n)]++;
+    return out;
+  }
 
   window.RookieSim = {
     buildLeague, simSeason, simGame, leaders, avgOf, eraOf,
-    playInning, tryInning, PA_KINDS, PA_TEXT,
+    playInning, tryInning, creditPAs, spreadRuns, paProbs, PA_TEXT,
     _c: { LG_RUNS, WIN_SPREAD, BAT, PIT, teamRating }, _mulberry32: mulberry32,
   };
 })();
