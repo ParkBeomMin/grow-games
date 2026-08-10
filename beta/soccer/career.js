@@ -792,7 +792,8 @@ window.WingerCareer = (() => {
       : x[key] || 0;
     const me = { name: S.name, club: S.group, role: null, me: true,
       g: (act && act.goals) || 0, a: (act && act.assists) || 0, d: (act && act.defense) || 0,
-      rate: (act && act.ratingSum) || 0, m: (act && act.wins) || 0, apps };
+      rate: (act && act.ratingSum) || 0, m: (act && act.wins) || 0, apps,
+      pop: clamp(overall(), 40, 95) };
     /* 🥇 **리그의 모든 선수**가 이 표에 들어와요.
      *
      * 예전에는 시즌 초에 실력으로 뽑은 여덟 명만 굴려서, 다른 클럽의 아홉 번째
@@ -819,10 +820,21 @@ window.WingerCareer = (() => {
           g: x.g || 0, a: x.a || 0, d: x.d || 0, rate: x.rate || 0, mom: x.mom || 0, apps: x.apps || 0 });
       }
     }
-    return others.concat([me]).map((x) => ({ ...x, avg: avgOf(x, x.apps), v: 0 }))
-      .map((x) => ({ ...x, v: val(x) }))
-      // 동점이면 내 줄을 앞에 둬요 — 실제로도 공동 득점왕은 둘 다 받아요
-      .sort((x, y) => y.v - x.v || (x.me ? -1 : 1));
+    const rows = others.concat([me]).map((x) => ({ ...x, avg: avgOf(x, x.apps), v: 0 }))
+      .map((x) => ({ ...x, v: val(x) }));
+    /* 개막 전에는 실력 순으로 세워요.
+     *
+     * 기록 순으로 두면 전부 0이라 아무렇게나 늘어서고, 동점 규칙 때문에
+     * **내가 1위**로 뜹니다 — 한 경기도 안 뛰었는데 득점왕처럼 보여요.
+     *
+     * ⚠️ "아무도 기록이 없으면"으로 판정하면 안 돼요. 결산을 안 거치고 넘어온
+     * 옛 세이브에는 **지난 시즌 기록이 남아 있어서**(실측: 69명 중 12명) 그 판정이
+     * 거짓이 됩니다. **시즌이 진행 중인가(act)**를 직접 봐요. */
+    if (!act || rows.every((x) => !(x.apps || 0))) {
+      return rows.sort((x, y) => (y.pop || 0) - (x.pop || 0));
+    }
+    // 동점이면 내 줄을 앞에 둬요 — 실제로도 공동 득점왕은 둘 다 받아요
+    return rows.sort((x, y) => y.v - x.v || (x.me ? -1 : 1));
   }
 
   // 내가 그 부문 1위인가 — 부문상 판정이 이걸 봐요
@@ -860,9 +872,11 @@ window.WingerCareer = (() => {
      * 내 줄은 종합, 경쟁자는 pop을 종합 눈금으로 옮긴 값(raceStr)을 씁니다. */
     const pres = leagueOf(S).prestige;
     const strOf = (r) => (r.me ? overall() : raceStr(r.pop, pres));
+    // 개막 전에는 👑을 안 붙여요 — 시즌이 시작도 안 했는데 1위는 없어요
+    const opening = !S.activity || ranked.every((x) => !(x.apps || 0));
     const line = (r, i) => `<tr class="${r.me ? "me" : ""}"><td>${i + 1}</td>`
       + `<td>${r.name}<span class="ch-club"><b class="ch-title">${titleOf(strOf(r))}</b> · ${r.club || "-"}${r.role ? ` · ${r.role}` : ""}</span></td>`
-      + `<td class="rc-v">${i === 0 ? "👑" : ""}${raceValue(r, raceKey)}</td></tr>`;
+      + `<td class="rc-v">${!opening && i === 0 ? "👑" : ""}${raceValue(r, raceKey)}</td></tr>`;
     const myIdx = ranked.findIndex((x) => x.me);
     const shown = ranked.slice(0, 5);
     const pinned = myIdx >= 5
@@ -874,7 +888,9 @@ window.WingerCareer = (() => {
       + `<table class="rank-table season-standings race-table">`
       + `<thead><tr><th>#</th><th>선수</th><th>${raceUnit(raceKey)}</th></tr></thead>`
       + `<tbody>${shown.map(line).join("")}${pinned}</tbody></table>`
-      + `<div class="race-note">👑 이 부문 1위 — 시즌이 끝나면 부문상을 받아요</div>`;
+      + (opening
+        ? `<div class="race-note">개막 전이라 실력 순이에요</div>`
+        : `<div class="race-note">👑 이 부문 1위 — 시즌이 끝나면 부문상을 받아요</div>`);
   }
 
   /* 표를 그리고 탭을 배선해요. 탭을 누르면 정렬만 바꿔 다시 그립니다 —
@@ -889,8 +905,14 @@ window.WingerCareer = (() => {
       const mine = list.findIndex((x) => x.me) + 1;
       const top = list[0];
       const me = list[mine - 1];
-      sum.textContent = `🥇 개인 순위 — ${raceLabel(raceKey)} ${mine}위 (${me ? raceValue(me, raceKey) : 0})`
-        + `${top && !top.me ? ` · 1위 ${top.name} ${raceValue(top, raceKey)}` : " · 내가 1위!"}`;
+      /* 개막 전에는 순위를 말하지 않아요 — 시즌이 시작도 안 했는데 "1위"는 거짓말이에요 */
+      sum.textContent = (!S.activity || list.every((x) => !(x.apps || 0)))
+        /* "선발 N명"은 **지금 선발**을 세요 — 표에는 지난 시즌 기록만 남은
+         * 로테이션 선수도 섞여 있어서, 표 줄 수로 세면 숫자가 들쭉날쭉해요. */
+        ? `🥇 개인 순위 — 개막 전 (리그 선발 ${window.WingerSquad
+            ? Math.max(0, WingerSquad.leagueXI().length - 1) : 0}명)`
+        : `🥇 개인 순위 — ${raceLabel(raceKey)} ${mine}위 (${me ? raceValue(me, raceKey) : 0})`
+          + `${top && !top.me ? ` · 1위 ${top.name} ${raceValue(top, raceKey)}` : " · 내가 1위!"}`;
     }
     for (const b of body.querySelectorAll(".race-tab")) {
       b.onclick = (ev) => { ev.preventDefault(); raceKey = b.dataset.k; renderRace(); };
@@ -898,7 +920,9 @@ window.WingerCareer = (() => {
   }
 
   function initActivity() {
-    // 👥 새 시즌 — 동료들의 시즌 기록을 비워요 (명단은 그대로)
+    /* 👥 새 시즌 — 동료들의 시즌 기록을 비워요 (명단은 그대로).
+     * 결산에서 이미 비웠지만, **결산을 안 거친 옛 세이브**를 위해 여기도 남겨 둬요.
+     * 두 번 불러도 같은 결과라 안전합니다. */
     if (window.WingerSquad) WingerSquad.resetSeason();
     initTable();
     S.activity = {
@@ -1102,19 +1126,13 @@ window.WingerCareer = (() => {
     } else if (isPro()) {
       /* 🥇 시즌 준비 중에는 S.activity가 아예 없어요 — 시즌이 시작될 때 만들어지거든요.
        * 그대로 두면 준비 화면 내내 개인 순위가 **통째로 사라져** "왜 안 보이지"가 됩니다.
-       * 리그 순위표도 같은 이유로 준비 중 표시를 따로 넣었어요(개막 전 6팀).
-       * 여기서는 무엇을 겨루게 되는지만 알려 줍니다. */
+       *
+       * 여기에 "시즌이 시작되면 …와 겨뤄요" 같은 안내를 적어 뒀었는데, 굳이 없어도
+       * 되는 문구였어요(제보). 이제 개인 순위가 **리그 명단**을 읽으니 개막 전에도
+       * 표를 그대로 그릴 수 있습니다 — 설명 대신 **누구와 겨루는지 보여줘요.**
+       * 아직 아무 기록도 없으니 그때는 실력 순으로 세웁니다(raceRank). */
       race.hidden = false;
-      $("pro-race-sum").textContent = "🥇 개인 순위 — 개막 전";
-      /* ⚠️ 여기 숫자를 손으로 적으면 안 돼요 — "다른 8명"이라고 적어 뒀다가
-       * 경쟁자가 리그 전 선발로 바뀐 뒤에도 그대로 남았습니다(제보).
-       * 명단에서 세어서 적어요. */
-      const rivals = window.WingerSquad
-        ? Math.max(0, WingerSquad.leagueXI().length - 1) : 0;
-      $("pro-race-body").innerHTML = `<p class="race-title">시즌이 시작되면 `
-        + `${rivals ? `<b>리그 선발 ${rivals}명</b>과` : "리그의 다른 선수들과"} `
-        + `득점·도움·수비·평점을 겨뤄요.<br/>골든부츠·플레이메이커·철벽상·공격포인트왕은 `
-        + `<b>이 표에서 1위</b>면 받습니다.</p>`;
+      renderRace();
     } else {
       race.hidden = true;
     }
@@ -1860,6 +1878,13 @@ window.WingerCareer = (() => {
       if (raceTop("d")) awards.push("철벽상");
       if (raceTop("p")) awards.push("공격포인트왕");
     }
+    /* 📕 **여기서 그 시즌 기록을 닫아요.**
+     * 예전에는 다음 시즌이 시작될 때(initActivity) 지웠어요. 그러면 결산과
+     * 다음 시즌 준비 화면 사이 내내 개인 순위에 **지난 시즌 기록이 그대로** 남아서,
+     * 개막 전인데 득점왕이 있는 표가 뜹니다(제보로 확인했어요 — 69명 중 12명에게
+     * 지난 시즌 출전 기록이 남아 있었습니다).
+     * 부문상 판정(바로 위)이 끝난 다음이라 상은 그대로 나가요. */
+    if (window.WingerSquad) WingerSquad.resetSeason();
     /* 🏅 발롱도르 — 리그 최고를 넘어 세계 최고예요.
      * 리그MVP를 받은 시즌 중에서도, 리그격(prestige)을 곱한 값이 문턱을 넘어야 해요.
      * 하부 리그에서 아무리 잘해도 안 되고, 빅클럽에서 압도해야 닿습니다. */

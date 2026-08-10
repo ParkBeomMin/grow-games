@@ -69,7 +69,7 @@ check(!!halfReset && !/race/.test(halfReset),
  * tests/soccer/career-column-test.js가 실제 화면으로 봅니다. */
 /* raceRank는 이제 **리그 명단**(WingerSquad)을 읽고, 역할 이름을 RACE_ROLES에서
  * 꺼내요. 둘 다 넘겨 줘야 굴러갑니다 — 안 넘기면 ReferenceError로 죽어요. */
-const rankOf = new Function("S", "key", "window", "WingerSquad", "RACE_ROLES", "clamp", "pick", "roleOf",
+const rankOf = new Function("S", "key", "window", "WingerSquad", "RACE_ROLES", "clamp", "pick", "roleOf", "overall",
   `${parts.rank}${parts.top} return { rank: raceRank(key), top: raceTop(key) };`);
 /* 경쟁자는 이제 **리그 명단**에서 와요. 그래서 명단 모듈을 흉내 낸 것을 넘겨요 —
  * 손으로 지어낸 act.race가 아니라, 게임이 실제로 읽는 그 자리를 채우는 거예요. */
@@ -80,7 +80,8 @@ const mkS = (myGoals, rivalGoals) => ({
 const clampF = (v, a, b) => Math.min(b, Math.max(a, v));
 const pickF = (arr) => arr[0];
 // 게임이 읽는 자리를 그대로 채워 넘겨요
-const RK = (st, key, win) => rankOf(st, key, win, win.WingerSquad, ROLES, clampF, pickF, () => ROLES[0]);
+// 내 줄에 실력(pop)이 담겨요 — 개막 전에는 그걸로 줄을 세워요
+const RK = (st, key, win) => rankOf(st, key, win, win.WingerSquad, ROLES, clampF, pickF, () => ROLES[0], () => 70);
 const mkWin = (rivalGoals) => {
   const rows = rivalGoals.map((g2, i) => ({ name: `상대${i}`, pos: "fw", str: 70, g: g2, a: 0, d: 0, apps: 1 }));
   return { WingerSquad: { ensureSquads: () => ({ X: rows }), leagueXI: () => rows.map((p) => ({ club: "X", p })) } };
@@ -166,16 +167,15 @@ const RENDER = grab(C, /const race = \$\("pro-race"\);[\s\S]*?race\.hidden = tru
 check(!!RENDER, "준비 화면의 개인 순위 렌더 블록을 찾았다");
 check(!!RENDER && /ensureLeagueRecords\(\)/.test(RENDER),
   "그릴 때 기록이 비어 있으면 채운다 (진행 중이던 세이브)");
-/* 화면 문구에 **경쟁자 수를 손으로 적지 않는다.**
- * "리그의 다른 8명과 겨뤄요"라고 적어 뒀다가, 경쟁자가 리그 전 선발로 바뀐 뒤에도
- * 그 문구가 그대로 남아 있었다(제보). 숫자는 명단에서 세어서 적는다. */
-/* ⚠️ 소스 덩어리째로 보면 **주석에 적힌 옛 문구**까지 걸린다(실제로 걸렸다).
- * 화면에 나가는 문자열만 본다. */
-const OPENING = grab(RENDER || "", /<p class="race-title">[\s\S]*?<\/p>`;/) || "";
-check(!!OPENING && !/\d+\s*명과/.test(OPENING),
-  `개막 전 안내에 경쟁자 수가 손으로 적혀 있지 않다 (${OPENING.replace(/\s+/g, " ").slice(0, 80)}…)`);
-check(!!RENDER && /WingerSquad\.leagueXI\(\)\.length/.test(RENDER),
-  "그 수를 명단에서 세어서 적는다 — 숫자를 옮겨 적으면 또 어긋나요");
+/* 개막 전 화면에 **설명 문구를 적지 않는다.**
+ * "시즌이 시작되면 리그의 다른 8명과 겨뤄요"라고 적어 뒀다가 경쟁자가 리그 전
+ * 선발로 바뀐 뒤에도 그대로 남았고(제보 ①), 숫자를 고친 뒤에는 "이런 문구 굳이
+ * 없어도 될 듯"이었다(제보 ②). 이제 개인 순위가 리그 명단을 읽으니 개막 전에도
+ * **표를 그대로 그린다** — 설명 대신 누구와 겨루는지 보여준다. */
+check(!!RENDER && !/race-title/.test(RENDER),
+  "개막 전에 설명 문단을 안 그린다 — 표를 그대로 보여줘요");
+check(!!RENDER && /isPro\(\)\) \{[\s\S]*?renderRace\(\);/.test(RENDER),
+  "개막 전에도 같은 표를 그린다");
 check(!!RENDER && !/S\.phase === "pro"/.test(RENDER),
   '준비 중 분기가 `S.phase === "pro"`를 안 본다 — 실제 값은 "soccer-pro"라 안 걸려요');
 const PHASE_SET = grab(C, /S\.phase = "[^"]+";/);
