@@ -160,10 +160,22 @@ check(/\(act\.apps \|\| 0\) > 0/.test(parts.awardBlk),
  * 그리고 그 준비 중 분기가 `S.phase === "pro"`를 보고 있었는데 실제 값은
  * **"soccer-pro"**라 한 번도 안 돌았다 — 2.28.0에 넣은 "준비 중에도 리그 순위표를
  * 보여준다"까지 내내 죽어 있었다. 문자열을 손으로 비교하는 자리의 전형적인 사고다. */
-const RENDER = grab(C, /const race = \$\("pro-race"\);[\s\S]*?\n    \}/);
+/* ⚠️ `\n    \}`로 끊으면 **첫 갈래**에서 멈춘다 — 개막 전 안내는 세 번째 갈래에
+ * 있어서 통째로 안 잡혔다(실제로 문구 검사가 헛돌았다). 마지막 갈래까지 잡는다. */
+const RENDER = grab(C, /const race = \$\("pro-race"\);[\s\S]*?race\.hidden = true;\n    \}/);
 check(!!RENDER, "준비 화면의 개인 순위 렌더 블록을 찾았다");
 check(!!RENDER && /ensureLeagueRecords\(\)/.test(RENDER),
   "그릴 때 기록이 비어 있으면 채운다 (진행 중이던 세이브)");
+/* 화면 문구에 **경쟁자 수를 손으로 적지 않는다.**
+ * "리그의 다른 8명과 겨뤄요"라고 적어 뒀다가, 경쟁자가 리그 전 선발로 바뀐 뒤에도
+ * 그 문구가 그대로 남아 있었다(제보). 숫자는 명단에서 세어서 적는다. */
+/* ⚠️ 소스 덩어리째로 보면 **주석에 적힌 옛 문구**까지 걸린다(실제로 걸렸다).
+ * 화면에 나가는 문자열만 본다. */
+const OPENING = grab(RENDER || "", /<p class="race-title">[\s\S]*?<\/p>`;/) || "";
+check(!!OPENING && !/\d+\s*명과/.test(OPENING),
+  `개막 전 안내에 경쟁자 수가 손으로 적혀 있지 않다 (${OPENING.replace(/\s+/g, " ").slice(0, 80)}…)`);
+check(!!RENDER && /WingerSquad\.leagueXI\(\)\.length/.test(RENDER),
+  "그 수를 명단에서 세어서 적는다 — 숫자를 옮겨 적으면 또 어긋나요");
 check(!!RENDER && !/S\.phase === "pro"/.test(RENDER),
   '준비 중 분기가 `S.phase === "pro"`를 안 본다 — 실제 값은 "soccer-pro"라 안 걸려요');
 const PHASE_SET = grab(C, /S\.phase = "[^"]+";/);

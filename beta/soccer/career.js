@@ -639,7 +639,7 @@ window.WingerCareer = (() => {
 
   /* ---------- 🥇 개인 순위 (득점·도움·수비) ----------
    *
-   * 시즌 내내 같은 8명이 함께 쌓아요. 부문상은 이 표의 1위에게 갑니다 —
+   * 리그의 모든 선발이 시즌 내내 함께 쌓아요. 부문상은 이 표의 1위에게 갑니다 —
    * 화면에 보이는 경쟁이 곧 수상 판정이에요. 예전에는 랜덤 문턱이라
    * 표와 수상이 서로 모르는 사이였습니다. */
   /* 경쟁자의 포지션 — 평점을 나와 **같은 산식**으로 매기려면 필요해요.
@@ -907,7 +907,7 @@ window.WingerCareer = (() => {
       wins: 0, sales: 0, hypeSum: 0, cbHype: 0, cbWins: 0,
       goals: 0, assists: 0, defense: 0, apps: 0, teamW: 0, teamD: 0, teamL: 0,
       opp: pick(oppClubs(S)),
-      /* 🥇 경쟁자 8명 — 개인 순위도, 경기 후 평점표도 이 명단 하나를 써요.
+      /* 🥇 경쟁자 — 개인 순위도, 경기 후 평점표도 **리그 명단 한 벌**을 써요.
        * 예전에는 명단이 둘(rivals · race)로 갈려 있어서 득점왕이 평점표에 없었어요. */
       raceFilled: true,        // 기록은 명단(S.squads)에 쌓아요 — 여기엔 안 둡니다
     };
@@ -1106,8 +1106,14 @@ window.WingerCareer = (() => {
        * 여기서는 무엇을 겨루게 되는지만 알려 줍니다. */
       race.hidden = false;
       $("pro-race-sum").textContent = "🥇 개인 순위 — 개막 전";
-      $("pro-race-body").innerHTML = `<p class="race-title">시즌이 시작되면 리그의 다른 8명과 `
-        + `득점·도움을 겨뤄요.<br/>골든부츠·플레이메이커·철벽상·공격포인트왕은 `
+      /* ⚠️ 여기 숫자를 손으로 적으면 안 돼요 — "다른 8명"이라고 적어 뒀다가
+       * 경쟁자가 리그 전 선발로 바뀐 뒤에도 그대로 남았습니다(제보).
+       * 명단에서 세어서 적어요. */
+      const rivals = window.WingerSquad
+        ? Math.max(0, WingerSquad.leagueXI().length - 1) : 0;
+      $("pro-race-body").innerHTML = `<p class="race-title">시즌이 시작되면 `
+        + `${rivals ? `<b>리그 선발 ${rivals}명</b>과` : "리그의 다른 선수들과"} `
+        + `득점·도움·수비·평점을 겨뤄요.<br/>골든부츠·플레이메이커·철벽상·공격포인트왕은 `
         + `<b>이 표에서 1위</b>면 받습니다.</p>`;
     } else {
       race.hidden = true;
@@ -1411,7 +1417,7 @@ window.WingerCareer = (() => {
     applyMateGoals(info.mateGoals);
     const rows = [
       { name: S.name, club: S.group, score: myRankScore, me: true, res: info.res },
-      /* 라이벌 줄이 개인 순위와 **같은 8명**이에요. 예전에는 명단이 둘로 갈려 있어서
+      /* 라이벌 줄이 개인 순위와 **같은 명단**이에요. 예전에는 명단이 둘로 갈려 있어서
        * 득점 1위가 경기 후 평점표에 아예 안 나왔습니다.
        * res는 그 라운드 소속 클럽의 결과예요 — 내가 이긴 팀 선수는 같이 떨어져요. */
       ...scored.map(({ p, club, role, score, res }) => ({
