@@ -1766,6 +1766,9 @@ window.WingerCareer = (() => {
   }
 
   function finishYear() {
+    /* 📈 동료들도 한 살 먹어요 — **결산을 그리기 전에** 늙어야 그 시즌 팀 소식을
+     * 결산에 적을 수 있어요. 한 시즌에 한 번만 도는 건 ageSquads가 스스로 지켜요. */
+    if (window.WingerSquad) WingerSquad.ageSquads();
     const act = S.activity;
     const agePen = S.proYear >= DECLINE_FROM ? (S.proYear - DECLINE_FROM + 1) * 0.8 : 0;
     /* 연말 평가는 이제 축이 해요. 예전에는 hypeSum(순위 기반)이라
@@ -2116,6 +2119,10 @@ window.WingerCareer = (() => {
           reportLine이 문턱·깜짝 발탁 가능성·우승국까지 담아 줍니다. */
         (window.WingerWorldCup && WingerWorldCup.reportLine())
           ? `<div class="wc-report">${WingerWorldCup.reportLine()}</div>` : ""}
+      ${/* 🗞️ 팀 소식 — 동료가 크고, 부진하고, 은퇴해요. 이게 없으면 명단이
+          조용히 바뀌어서 "언제 사람이 바뀌었지?"가 됩니다. */
+        (window.WingerSquad && WingerSquad.newsLine())
+          ? `<div class="hint squad-news">${WingerSquad.newsLine()}</div>` : ""}
       ${moveNote ? `<div class="hint learn">${moveNote}</div>` : ""}
       ${/* 🎖️ 이 시즌에 받은 칭호 — 다음 시즌 경기에 붙어요. 결산에서 보여줘야
           "이번 시즌을 잘 치르면 다음 시즌이 편해진다"가 눈에 들어와요. */

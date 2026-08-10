@@ -34,6 +34,79 @@ window.WingerSquad = (() => {
   const POS_KEYS = ["fw", "wg", "mf", "df"];
   const posName = (p) => (POS_INFO[p] || {}).name || p;
 
+  /* ---------- 📈 동료도 크고 늙어요 ----------
+   *
+   * 제보: "우리 팀·다른 팀 선수 능력치가 경기와 시즌을 거치며 변해야 한다.
+   * 내가 각성에 실패하면 실력이 잠깐 줄듯, 다른 선수에게도 같은 일이 있으면 좋겠다."
+   *
+   * 여태 동료의 str은 **시즌 내내, 몇 시즌이 지나도 고정**이었어요. 그래서 몇 해
+   * 지나면 나 혼자 앞서갑니다 — 선발 경쟁이 처음 한 번으로 끝나요.
+   *
+   * ── 어떻게 움직이나 ──
+   * 선수마다 **나이(age)**와 **peak(끝까지 크면 닿을 실력)**를 둬요.
+   * 지금 실력은 `peak × 나이곡선(age)`이에요. 어리면 아직 덜 컸고, 서른을 넘으면
+   * 내려옵니다. 시즌이 바뀔 때 나이를 한 살 먹이고 다시 계산해요.
+   *
+   * ⚠️ **peak을 지금 실력에서 되계산하면 안 돼요.** 처음엔 그렇게 짰는데,
+   * 그러면 열여덟 신인의 peak이 `지금 실력 ÷ 0.68`이 돼서 클럽 전력의 1.47배가
+   * 됩니다. 은퇴한 자리마다 그런 신인이 들어오니 **리그가 계속 부풀어요** —
+   * 실측에서 20시즌에 평균 +13.8이 나왔습니다. 클럽 전력(= 리그 수준)과 명단이
+   * 서로 다른 말을 하기 시작하는 자리예요.
+   *
+   * 그래서 **peak을 클럽 전력 눈금에서 굴리고**, 지금 실력을 `peak × 나이곡선`으로
+   * 내려요. 다만 그냥 굴리면 모두가 곡선만큼 깎여서 평균이 클럽 전력 아래로
+   * 내려가니, 나이 분포의 **평균 곡선(MEAN_CURVE)**으로 한 번 되올려 둡니다.
+   * 그러면 첫 시즌 명단 평균이 정확히 클럽 전력이고, 은퇴·신인이 도는 안정 상태의
+   * 평균 곡선도 거의 같아서(0.8696 vs 0.8671) 시즌이 지나도 제자리예요.
+   *
+   * ── 잠깐 줄어드는 것 ──
+   * 시즌마다 낮은 확률로 📉 부진이나 🔥 상승세가 붙어요. 그 시즌에만 실력이
+   * ±(3~7) 움직이고 다음 시즌엔 사라집니다. 내 각성 실패와 같은 결이에요.
+   *
+   * ── 리그가 흘러가지 않게 ──
+   * 서른다섯이 되거나 실력이 바닥나면 은퇴하고 그 자리에 신인(18~20)이 들어와요.
+   * 신인의 실력도 클럽 전력에서 굴리니, 나가고 들어오는 것이 평균을 붙잡아 줍니다.
+   * 실측(6팀 × 20시즌 × 60판): 리그 평균이 첫 시즌 대비 ±1 안에서 머물러요. */
+  const AGE_MIN = 18, AGE_MAX = 34;      // 처음 명단을 꾸릴 때의 나이 폭
+  const PEAK_AGE = 27;                   // 여기서 peak에 닿아요
+  const YOUNG_FLOOR = 0.68;              // 열여덟의 실력은 peak의 이만큼
+  const DECLINE_K = 0.022;               // 스물일곱을 넘기면 한 해에 이만큼씩 (2.2%)
+  const RETIRE_AGE = 36;
+  /* 나이 곡선 — 열여덟 0.68 → 스물일곱 1.00 → 서른셋 0.87 → 서른다섯 0.82 */
+  function ageCurve(age) {
+    if (age >= PEAK_AGE) return Math.max(0.6, 1 - (age - PEAK_AGE) * DECLINE_K);
+    return YOUNG_FLOOR + (1 - YOUNG_FLOOR) * ((age - AGE_MIN) / (PEAK_AGE - AGE_MIN));
+  }
+  /* 그 시즌에만 붙는 흔들림. 없으면 0이에요(옛 세이브에는 칸 자체가 없어요). */
+  const SLUMP_P = 0.10, SURGE_P = 0.10, FORM_LO = 3, FORM_HI = 7;
+  const formOf = (x) => (x && x.form) || 0;
+  /* 한 줄의 지금 실력 — **여기 한 곳에서만** 정해요.
+   * 나이·peak·그 시즌 폼이 전부 여기로 모여야 화면과 판정이 같은 값을 봅니다. */
+  const strOfRow = (x) => clamp(Math.round((x.peak * ageCurve(x.age) + formOf(x)) * 10) / 10, 25, 99);
+
+  /* 나이 폭(18~34) 전체의 평균 곡선. peak을 이만큼 되올려 둬야 명단 평균이
+   * 클럽 전력에 맞아요. 값을 손으로 적지 않고 **곡선에서 계산해요** — 곡선을
+   * 고치면 여기가 따라옵니다(상수를 두 곳에 두면 반드시 어긋나요). */
+  const MEAN_CURVE = (() => {
+    let sum = 0, n = 0;
+    for (let a = AGE_MIN; a <= AGE_MAX; a++) { sum += ageCurve(a); n++; }
+    return sum / n;
+  })();
+
+  /* 한 명 만들기. `age`를 정해 주면 그 나이로, 안 주면 폭 안에서 굴려요.
+   * peak은 **클럽 전력 눈금**에서 나와요 — 신인이든 노장이든 같은 자로 잽니다. */
+  function rollPlayer(base, pos, age) {
+    const a = age != null ? age : randInt(AGE_MIN, AGE_MAX);
+    const target = clamp(base + rand(-STR_SPREAD, STR_SPREAD), 25, 99);
+    const x = {
+      name: randomPlayerName(Math.random() < 0.55 ? null : MARKETS.find((m) => m.id === "eu")),
+      pos, age: a, peak: Math.round((target / MEAN_CURVE) * 10) / 10, str: 0,
+      g: 0, a: 0, d: 0, apps: 0,
+    };
+    x.str = strOfRow(x);
+    return x;
+  }
+
   /* 클럽 하나의 스쿼드를 꾸려요. base는 그 클럽의 전력이에요.
    * mine이면 내 자리 하나를 나로 바꿔요. */
   function rollSquad(base, mine) {
@@ -45,22 +118,19 @@ window.WingerSquad = (() => {
 
     const list = [];
     for (const p of POS_KEYS) {
-      for (let i = 0; i < need[p]; i++) {
-        list.push({
-          name: randomPlayerName(Math.random() < 0.55 ? null : MARKETS.find((m) => m.id === "eu")),
-          pos: p, str: clamp(base + rand(-STR_SPREAD, STR_SPREAD), 25, 99),
-          g: 0, a: 0, d: 0, apps: 0,
-        });
-      }
+      for (let i = 0; i < need[p]; i++) list.push(rollPlayer(base, p));
     }
     if (mine) {
       /* 내 자리 하나를 나로 바꿔요. 스쿼드에는 **나도 한 줄로** 들어가야
        * 선발 경쟁이 같은 표 안에서 벌어져요. */
       const at = list.findIndex((x) => x.pos === S.pos);
-      list[at] = { me: true, name: S.name, pos: S.pos, str: overall(), g: 0, a: 0, d: 0, apps: 0 };
+      list[at] = meRow();
     }
     return list.slice(0, SQUAD_SIZE);
   }
+  /* 내 줄 — 나이도 peak도 없어요. 내 실력은 훈련·각성·노쇠가 정하고,
+   * refreshMe가 매번 지금 값으로 덮어써요. 여기에 peak을 두면 두 곳이 됩니다. */
+  const meRow = () => ({ me: true, name: S.name, pos: S.pos, str: overall(), g: 0, a: 0, d: 0, apps: 0 });
 
   /* 리그의 **모든 클럽** 명단을 세이브에 둬요. 리그나 내 클럽이 바뀌면 다시 꾸립니다.
    * 옛 세이브에는 아예 없어요 — 마이그레이션하지 않고 여기서 만듭니다.
@@ -68,7 +138,7 @@ window.WingerSquad = (() => {
   function ensureSquads() {
     if (!S || !S.group) return {};
     const lg = leagueOf(S).id;
-    if (!S.squads || S.squadsLeague !== lg || S.squadClub !== S.group) {
+    if (!S.squads || S.squadsLeague !== lg) {
       const out = {};
       for (const c of clubsIn(lg, S)) out[c.name] = rollSquad(c.str, c.name === S.group);
       // 내 클럽이 리그 명단에 없는 옛 세이브 방어 — 없으면 만들어 둬요
@@ -81,9 +151,101 @@ window.WingerSquad = (() => {
        * 채워지니 화면은 멀쩡했지만, 세이브만 열어 보면 내가 꼴찌였어요. */
       refreshMe();
       save();
+    } else if (S.squadClub !== S.group) {
+      /* 🔁 같은 리그 안에서 클럽만 바뀌었어요(이적).
+       *
+       * 예전에는 여기서도 **리그 전체를 다시 꾸렸어요.** 그러면 다른 팀 선수들의
+       * 나이와 성장이 통째로 리셋됩니다 — 몇 시즌 지켜본 유망주가 이적 한 번에
+       * 사라져요. 이제 명단은 그대로 두고 **나만 옮겨 끼웁니다.**
+       * 새 팀에서는 내 포지션의 **가장 약한 선수** 자리를 받아요 — 갓 온 선수가
+       * 주전 자리를 공짜로 받지는 않아요. */
+      moveMe();
+      S.squadClub = S.group;
+      save();
     }
+    backfillAges();
     refreshMe();
     return S.squads;
+  }
+
+  /* 나를 지금 클럽으로 옮겨 끼워요. 다른 팀 명단은 안 건드려요. */
+  function moveMe() {
+    const sq = S.squads || {};
+    for (const club of Object.keys(sq)) {
+      const at = sq[club].findIndex((x) => x.me);
+      if (at < 0) continue;
+      // 내가 있던 자리는 그 클럽의 새 선수가 채워요 — 팀 크기가 줄면 안 돼요
+      sq[club][at] = rollPlayer(clubBase(club), S.pos);
+    }
+    if (!sq[S.group]) { sq[S.group] = rollSquad(clubStrOf(S), true); return; }
+    const mine = sq[S.group];
+    const same = mine.map((x, i) => ({ x, i })).filter((e) => e.x.pos === S.pos)
+      .sort((a, b) => a.x.str - b.x.str);
+    if (same.length) mine[same[0].i] = meRow();
+    else mine.push(meRow());
+  }
+  const clubBase = (club) => {
+    const c = clubsIn(leagueOf(S).id, S).find((x) => x.name === club);
+    return c ? c.str : clubStrOf(S);
+  };
+
+  /* 옛 세이브에는 나이도 peak도 없어요. **마이그레이션하지 않고 읽는 쪽에서** 채워요.
+   * 지금 str을 그대로 두고 거기서 peak을 되계산하니, 채워 넣는 순간 실력이
+   * 안 바뀝니다 — 이어하던 사람의 팀이 갑자기 세지거나 약해지지 않아요. */
+  function backfillAges() {
+    const sq = S.squads || {};
+    for (const club of Object.keys(sq)) {
+      for (const x of sq[club]) {
+        if (x.me || x.age != null) continue;
+        /* 여기서만은 **지금 실력에서 peak을 되계산해요.** 이어하던 사람의 팀이
+         * 나이를 채우는 순간 세지거나 약해지면 안 되니까요 — 지금 실력을
+         * 붙잡아 두는 게 먼저예요. 다음 시즌부터는 자기 곡선을 탑니다. */
+        x.age = randInt(AGE_MIN, AGE_MAX);
+        x.peak = Math.round(((x.str || 60) / ageCurve(x.age)) * 10) / 10;
+      }
+    }
+  }
+
+  /* 📅 한 시즌이 지났어요 — 나이를 먹이고, 그 시즌 폼을 새로 굴리고, 은퇴를 처리해요.
+   * resetSeason이 부릅니다(시즌 기록을 비우는 그 자리 하나). */
+  function ageSquads() {
+    const sq = S.squads || {};
+    /* 한 시즌에 한 번만. 결산에 이르는 길이 여럿이라(리그·컵·월드컵) 겹쳐 불릴 수
+     * 있는데, 두 번 불리면 한 해에 두 살을 먹어요. 시즌 번호를 도장처럼 찍어 둡니다 —
+     * 옛 세이브에는 그 칸이 없어서 자동으로 한 번은 지나갑니다. */
+    if (S.squadAgedY === S.proYear) return S.squadNews || null;
+    S.squadAgedY = S.proYear;
+    backfillAges();
+    const news = { grew: [], fell: [], gone: [], slump: [], surge: [] };
+    for (const club of Object.keys(sq)) {
+      const base = clubBase(club);
+      const list = sq[club];
+      for (let i = 0; i < list.length; i++) {
+        const x = list[i];
+        if (x.me) continue;                       // 내 성장은 훈련·각성·노쇠가 맡아요
+        const before = x.str;
+        x.age = (x.age || AGE_MIN) + 1;
+        // 은퇴 — 자리는 신인이 이어받아요. 나가고 들어오는 게 리그 평균을 붙잡습니다
+        if (x.age >= RETIRE_AGE) {
+          if (club === S.group) news.gone.push({ name: x.name, age: x.age });
+          list[i] = rollPlayer(base, x.pos, randInt(18, 20));
+          continue;
+        }
+        /* 그 시즌에만 붙는 흔들림. 지난 시즌 것은 여기서 지워져요 —
+         * 지우는 코드를 따로 두지 않으려고 매 시즌 새로 굴립니다. */
+        const r = Math.random();
+        x.form = r < SLUMP_P ? -rand(FORM_LO, FORM_HI)
+          : r < SLUMP_P + SURGE_P ? rand(FORM_LO, FORM_HI) : 0;
+        x.str = strOfRow(x);
+        if (club !== S.group) continue;           // 소식은 우리 팀 것만 전해요
+        if (x.form < 0) news.slump.push({ name: x.name, d: x.str - before });
+        else if (x.form > 0) news.surge.push({ name: x.name, d: x.str - before });
+        else if (x.str - before >= 1.5) news.grew.push({ name: x.name, d: x.str - before, age: x.age });
+        else if (before - x.str >= 1.5) news.fell.push({ name: x.name, d: x.str - before, age: x.age });
+      }
+    }
+    S.squadNews = news;
+    return news;
   }
   // 내 줄의 실력·이름은 늘 지금 값이에요 (훈련·각성·개명으로 계속 움직여요)
   function refreshMe() {
@@ -419,12 +581,29 @@ window.WingerSquad = (() => {
   // 선발이 한 경기를 치렀다고 표시해요 (명단 화면의 출전 수)
   function markApps() { for (const x of matchXI()) x.apps += 1; }
 
-  /* 새 시즌 — 리그 전체의 시즌 기록만 비워요. 명단은 그대로예요. */
+  /* 새 시즌 — 리그 전체의 시즌 기록만 비워요. 나이는 여기서 안 먹여요.
+   * 나이는 **시즌이 끝날 때**(finishYear → ageSquads) 먹습니다 — 결산 화면에
+   * 그 시즌의 팀 소식을 적으려면 결산을 그리기 전에 이미 늙어 있어야 해요. */
   function resetSeason() {
     if (!S.squads) return;
     for (const club of Object.keys(S.squads)) {
       for (const x of S.squads[club]) { x.g = 0; x.a = 0; x.d = 0; x.apps = 0; }
     }
+    backfillAges();
+  }
+
+  /* 🗞️ 시즌 결산에 얹는 우리 팀 소식 한 줄. 아무 일도 없었으면 빈 문자열이에요. */
+  function newsLine() {
+    const n = S.squadNews;
+    if (!n) return "";
+    const top = (list, k) => list.slice().sort((a, b) => Math.abs(b.d) - Math.abs(a.d))[k];
+    const bits = [];
+    const g = top(n.surge, 0) || top(n.grew, 0);
+    if (g) bits.push(`📈 ${g.name} ${g.d > 0 ? "+" : ""}${g.d.toFixed(1)}`);
+    const f = top(n.slump, 0) || top(n.fell, 0);
+    if (f) bits.push(`📉 ${f.name} ${f.d.toFixed(1)}`);
+    if (n.gone.length) bits.push(`👋 ${n.gone.map((x) => `${x.name}(${x.age}세)`).join(" · ")} 은퇴`);
+    return bits.length ? `🗞️ 팀 소식 — ${bits.join(" · ")}` : "";
   }
 
   // ---------- 화면 ----------
@@ -432,8 +611,18 @@ window.WingerSquad = (() => {
     const xi = matchXI();
     const inXI = new Set(xi);
     const sq = ensureSquad();
+    /* 📈 나이와 그 시즌 상태를 이름 아래 적어요 — 안 보이면 동료가 크고 늙는 게
+     * 화면에서는 그냥 숫자가 달라진 것으로만 보입니다. 옛 세이브(나이 없음)는
+     * 칸 자체를 안 그려요. */
+    const tag = (x) => {
+      if (x.me || x.age == null) return "";
+      const f = formOf(x);
+      const mark = f < 0 ? ` <b class="sq-slump">📉 부진</b>` : f > 0 ? ` <b class="sq-surge">🔥 상승세</b>` : "";
+      const young = x.age <= 21 ? " 🌱" : x.age >= 33 ? " 🕯️" : "";
+      return `<span class="sq-age">${x.age}세${young}${mark}</span>`;
+    };
     const row = (x) => `<tr class="${x.me ? "me" : ""}">`
-      + `<td>${x.name}${x.me ? " <b>(나)</b>" : ""}</td>`
+      + `<td>${x.name}${x.me ? " <b>(나)</b>" : ""}${tag(x)}</td>`
       + `<td class="sq-pos">${posName(x.pos)}</td>`
       + `<td class="sq-str">${Math.round(x.str)}</td>`
       + `<td class="sq-rec">${x.apps ? `${x.apps}경기 ⚽${x.g}` : "-"}</td></tr>`;
@@ -491,7 +680,9 @@ window.WingerSquad = (() => {
     openSquad, rollLineup, matchXI, FORM_SWING,
     ensureSquads, ensureSquad, squadOf, startingXI, startingXIOf, leagueFaces,
     isStarter, myLine, benchReason, myBonus, restP, benchTurn, creditMateGoals, markApps, resetSeason, squadHTML,
+    ageSquads, newsLine, ageCurve,
     FORMATION, BENCH, SQUAD_SIZE, BENCH_GAIN, SCORE_W, REST_BAR, REST_MAX,
-    _t: { rollSquad, pickScorer },
+    AGE_MIN, AGE_MAX, PEAK_AGE, RETIRE_AGE, SLUMP_P, SURGE_P, STR_SPREAD, MEAN_CURVE,
+    _t: { rollSquad, pickScorer, rollPlayer, strOfRow, moveMe, backfillAges },
   };
 })();

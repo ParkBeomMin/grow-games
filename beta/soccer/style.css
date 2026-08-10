@@ -601,3 +601,10 @@ body.fever-on #app { padding-top: 2.6rem; }
 .fever-modal .fv-big { font-size: 2.6rem; }
 .fever-modal .fv-note { font-size: .84rem; color: var(--dim); margin: .2rem 0 .4rem; }
 .fever-modal .fv-eff-big { font-size: .9rem; color: var(--accent); margin: .2rem 0; }
+
+/* ---------- 📈 동료도 크고 늙어요 ---------- */
+.sq-age { font-size: .68rem; color: var(--dim); margin-left: .3rem; }
+.sq-age .sq-slump { color: #f59e8b; font-weight: 500; }
+.sq-age .sq-surge { color: #6ee7a0; font-weight: 500; }
+/* 결산의 팀 소식 한 줄 */
+.squad-news { color: var(--cream); }
