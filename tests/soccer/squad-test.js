@@ -244,8 +244,11 @@ guard("⑥ 개인 순위와 같은 사람", () => {
   console.log(`   ${clubs.size}개 클럽에서 나왔어요 (할당량 없이 실력 순)`);
   /* 자리(포지션) 할당량도 **없어요.** 클럽 할당량에 이어 이것도 걷어냈습니다 —
    * 그냥 리그에서 제일 잘하는 여덟이에요(제보: "포지션별 실력순 8명도 필요없는데??"). */
-  const pool = Object.values(all).flat().filter((x) => !x.me)
-    .map((x) => x.str).sort((a, b) => b - a);
+  /* ⚠️ 후보는 **선발 11명**이에요 — 벤치는 개인 순위에 안 올라와요.
+   * 명단 16명 전체로 선을 그으면 뽑힐 수 없는 벤치 선수가 기준이 돼서
+   * 가끔 빨간불이 뜹니다(실제로 났어요). */
+  const pool = Object.keys(all).flatMap((c) => Squad.startingXIOf(c))
+    .filter((x) => !x.me).map((x) => x.str).sort((a, b) => b - a);
   const cut = pool[race.length - 1];
   const below = race.filter((r) => r.pop < cut - 1);
   console.log(`   리그 ${race.length}위 선 ${Math.round(cut)} · 그 아래에서 뽑힌 사람 ${below.length}명`);
