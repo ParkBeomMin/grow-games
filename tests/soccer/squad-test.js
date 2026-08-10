@@ -733,6 +733,50 @@ guard("⑰ 보호 로테이션", () => {
   check(!/감독이 뺄 수 있어요/.test(Squad.squadHTML()), "몸이 멀쩡하면 그 줄이 없다");
 });
 
+
+/* ---------- ⑱ 🛌 벤치인 주는 제대로 쉰다 ----------
+ * 요청: "벤치일 때 컨디션 회복은 70% - 100% 되게 하자"
+ *
+ * 예전에는 +4~10이었다. 그런데 감독이 빼는 이유가 대개 "몸이 상해서"인데
+ * (🛌 보호 로테이션), 쉬고도 30이 38이 되면 그다음 주에도 또 빠진다 —
+ * 한 번 바닥나면 계속 벤치인 늪이 된다. 이제 한 주 쉬면 몸이 돌아온다. */
+guard("⑱ 벤치 컨디션 회복", () => {
+  const LO = Squad.BENCH_COND[0], HI = Squad.BENCH_COND[1];
+  console.log(`   회복 구간 ${LO}~${HI}`);
+  const at = (c0) => {
+    const st = S();
+    let lo = 999, hi = 0, sum = 0;
+    for (let i = 0; i < 400; i++) {
+      st.condition = c0;
+      const r = Squad.benchTurn();
+      lo = Math.min(lo, r.cond); hi = Math.max(hi, r.cond); sum += r.cond;
+    }
+    return { lo, hi, avg: sum / 400 };
+  };
+  const low = at(10), mid = at(60), high = at(95);
+  console.log(`   컨디션 10 → ${low.avg.toFixed(0)} (${low.lo}~${low.hi})`
+    + ` · 60 → ${mid.avg.toFixed(0)} (${mid.lo}~${mid.hi})`
+    + ` · 95 → ${high.avg.toFixed(0)} (${high.lo}~${high.hi})`);
+  check(low.lo >= LO && low.hi <= HI, `바닥이어도 ${LO}~${HI}로 돌아온다 (${low.lo}~${low.hi})`);
+  check(mid.lo >= LO, `보통이어도 ${LO} 아래로는 안 간다 (${mid.lo})`);
+  /* 지금보다 낮게 만들지 않아요 — 컨디션 95인데 쉬었다고 72가 되면 이상하죠. */
+  check(high.lo >= 95, `이미 좋으면 안 깎인다 (95 → ${high.lo} 이상)`);
+  check(high.hi <= 100, `100을 안 넘는다 (${high.hi})`);
+  /* 🛌 보호 로테이션의 늪이 실제로 풀리는가 — 한 주 쉬면 다음 주 확률이 0이 된다 */
+  const st = S();
+  st.condition = 5;
+  const before = Squad.restP();
+  Squad.benchTurn();
+  const after = Squad.restP();
+  console.log(`   보호 로테이션 확률 — 쉬기 전 ${Math.round(before * 100)}% → 쉰 뒤 ${Math.round(after * 100)}%`);
+  check(before > 0 && after === 0,
+    `한 주 쉬면 늪에서 빠져나온다 (${Math.round(before * 100)}% → ${Math.round(after * 100)}%)`);
+  // 변이 검증 — 옛 방식(+4~10)이면 바닥에서 못 빠져나온다
+  const old = Math.min(100, 5 + 10);
+  check(old < Squad.REST_BAR,
+    `옛 방식이면 5 → ${old}이라 다음 주에도 또 빠진다 (문턱 ${Squad.REST_BAR})`);
+});
+
 console.log(fail ? `\n❌ ${fail}건 실패` : "\n✅ 통과");
 w.close();
 process.exit(fail ? 1 : 0);
