@@ -49,6 +49,18 @@
     .spark .col:hover .b, .spark .col:focus .b, .spark .col.active .b { filter: brightness(1.25); box-shadow: 0 0 0 2px var(--accent); }
     .sparktip { position: fixed; z-index: 40; background: var(--bg2); border: 1px solid var(--accent); border-radius: 8px; padding: 6px 10px; font-size: .76rem; color: var(--text); white-space: nowrap; box-shadow: 0 6px 18px rgba(0,0,0,.45); transform: translate(-50%, calc(-100% - 8px)); pointer-events: none; display: none; }
     .empty { color: var(--dim); font-size: .85rem; padding: 8px 0; }
+    /* 💡 자동 코멘트 — 숫자만 보고 "그래서 뭐?"를 매번 손으로 따지던 걸 대신해요 */
+    .ins { display: flex; flex-direction: column; gap: 8px; }
+    .ins-row { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: 10px; background: var(--bg); border: 1px solid var(--line); }
+    .ins-row .ico { flex: 0 0 auto; font-size: 1rem; line-height: 1.35; }
+    .ins-row .txt { font-size: .87rem; line-height: 1.5; }
+    .ins-row .txt b { color: var(--text); }
+    .ins-row.warn { border-color: #7a4a2a; }
+    .ins-row.warn .txt b { color: #ffb083; }
+    .ins-row.good { border-color: #2f6b45; }
+    .ins-row.good .txt b { color: #85e3ac; }
+    .ins-row .why { display: block; color: var(--dim); font-size: .8rem; margin-top: 3px; }
+    .ins-note { color: var(--dim); font-size: .78rem; margin-top: 10px; }
     .setup { border-color: var(--accent); }
     .setup pre { background: #0a0f18; border-radius: 10px; padding: 14px; overflow-x: auto; font-size: .74rem; line-height: 1.6; color: #cfe3ff; margin: 10px 0; white-space: pre; }
     .setup .copy { background: var(--accent); color: #3a2a00; border: none; border-radius: 8px; padding: 8px 16px; font-weight: 700; cursor: pointer; }
@@ -125,19 +137,40 @@
       game: "게임 방송", talk: "토크", variety: "예능·챌린지", irl: "야외·일상",
     };
     // 예전 id로 저장된 선택값을 읽기 좋은 이름으로 합쳐요 (id↔이름 혼재 방지)
+    /* 선택지 표시 이름. **id → 이름**과 **옛 이름 → 지금 이름** 둘 다 여기서 접어요.
+     *
+     * ⚠️ 로그에 표시 이름을 남겨 온 게 화근이에요. 이름을 바꾸는 순간 같은 선택지가
+     * 옛 이름·새 이름으로 **쪼개져** 보입니다. 실제로 축구 유스를 나라에 맞추면서
+     * 배경 분포가 9줄로 갈라졌어요(유럽 아카데미 64 / 이탈리아 유스 2 …).
+     * 과거 데이터는 못 고치니 여기서 접고, 앞으로는 게임이 **id를 함께** 남겨요. */
     const CHOICE_ALIAS = {
       seoul: "서울", gyeongin: "인천·경기", chungcheong: "대전·충청",
       honam: "광주·전라", daegu: "대구·경북", busan: "부산·경남",
       sw: "SW엔터", onlyone: "온리원컴퍼니", luna: "루나엔터", byeol: "별빛엔터", garage: "개러지뮤직",
       kospi: "국장", us: "미장", jp: "일본장",
+
+      /* ⚽ 유스 — 2.33.0에서 권역(유럽·아프리카)을 나라로 좁혔어요.
+       * 왼쪽이 로그에 쌓여 있는 값(옛 이름 또는 id), 오른쪽이 지금 이름이에요. */
+      k: "K리그 유스",
+      jp_youth: "J리그 유스", "일본 J리그 유스": "J리그 유스",
+      br: "브라질 유스", "남미 유스": "브라질 유스",
+      af: "잉글랜드 아카데미", "아프리카 유망주": "잉글랜드 아카데미",
+      eu: "이탈리아 유스", "유럽 아카데미": "이탈리아 유스",
+      "국내 유스": "K리그 유스",
     };
     const normChoice = (c) => CHOICE_ALIAS[c] || c;
+    /* ⚠️ 여기에 없는 이벤트는 **영문 그대로** 뜨고, FUNNEL_ORDER에도 없으면
+     * indexOf가 -1이라 **맨 앞으로** 밀려요. 새 이벤트를 남길 때 둘 다 채워야 합니다.
+     * 실제로 transfer·rebirth·tour가 오래 빠져 있었어요. */
     const EVENT_LABEL = {
       visit: "방문", new_player: "새 캐릭터", draft: "드래프트", ending: "서바이벌 결과",
       pro_enter: "프로 입단", debut: "데뷔", season_end: "시즌 결산", year_end: "연말 결산",
       retire: "은퇴", battle: "배틀", bonus: "보너스",
       pwa_install: "📲 앱 설치", pwa_launch: "📲 앱 실행",
       exit: "🚀 Exit(재창업)", decacorn: "👑 데카콘 달성",
+      youth_round: "🎓 유스 라운드", cup: "🏆 컵 대회", promo: "🔺 승격·강등",
+      awaken: "🔮 재능 각성", help: "❓ 도움말 열기", error: "💥 오류",
+      transfer: "💼 이적", tour: "🌏 월드투어", rebirth: "♻️ 환생",
     };
 
     async function getView(name) {
@@ -172,8 +205,234 @@
       return html;
     }
 
+    /* 🌍 리그 이름 — 게임 소스의 LEAGUES와 **id로** 맞춰요.
+     * 이름을 키로 쓰면 리그 이름을 바꿀 때마다 통계가 갈라져요(유스에서 겪었어요).
+     * id는 옛 세이브가 가리키는 값이라 안 바뀝니다. */
+    const LEAGUE_NAME = {
+      soccer: {
+        5: "🇰🇷 K리그3", 4: "🇰🇷 K리그2", 1: "🇰🇷 K리그1",
+        6: "🇯🇵 J2리그", 7: "🇯🇵 J1리그",
+        8: "🇧🇷 브라질 세리에B", 9: "🇧🇷 브라질 세리에A",
+        10: "🇮🇹 세리에B", 11: "🇮🇹 세리에A",
+        2: "🇬🇧 챔피언십", 3: "🇬🇧 프리미어리그",
+      },
+      rookie: { 1: "🇰🇷 KBO", 2: "🇯🇵 열도 리그", 3: "🗽 대륙 리그" },
+    };
+    /* 사다리 순서 — 위로 갈수록 어려운 리그예요. 표를 이 순서로 그려야
+     * "어디까지 올라갔나"가 한눈에 읽혀요(많은 순으로 그리면 사다리가 안 보여요). */
+    const LEAGUE_ORDER = {
+      soccer: [5, 4, 1, 6, 8, 7, 9, 10, 2, 11, 3],
+      rookie: [1, 2, 3],
+    };
+
+    /* 어느 리그에서 뛰었나(시즌 수) · 어디까지 갔나(은퇴 시점 리그).
+     * 뷰가 없으면 아무것도 안 그려요 — 설정 안내는 전체 화면이 맡아요. */
+    function leagueSection(rows, game) {
+      const names = LEAGUE_NAME[game];
+      if (!rows || !names) return "";
+      const mine = rows.filter((r) => r.game === game && names[r.lg]);
+      if (!mine.length) return "";
+      const order = LEAGUE_ORDER[game] || Object.keys(names).map(Number);
+
+      const pickBy = (evs) => {
+        const agg = {};
+        for (const r of mine) if (evs.includes(r.event)) agg[r.lg] = (agg[r.lg] || 0) + r.n;
+        return agg;
+      };
+      const seasons = pickBy(["year_end", "season_end"]);
+      const ends = pickBy(["retire"]);
+
+      let html = "";
+      const sTotal = Object.values(seasons).reduce((a, b) => a + b, 0);
+      if (sTotal) {
+        const max = Math.max(...Object.values(seasons));
+        html += `<section><h2>🌍 어느 리그에서 뛰었나</h2>${
+          order.filter((id) => seasons[id]).map((id) =>
+            bar(`${names[id]} ${fmtPct(pct(seasons[id], sTotal))}`, seasons[id], max)).join("")
+        }<p class="ins-note">치른 시즌 수예요. 사다리 아래에서 위 순서로 놓았어요 — 총 ${sTotal.toLocaleString()}시즌</p></section>`;
+      }
+      const eTotal = Object.values(ends).reduce((a, b) => a + b, 0);
+      if (eTotal) {
+        const max = Math.max(...Object.values(ends));
+        const top = order.filter((id) => ends[id]);
+        const highest = top[top.length - 1];
+        html += `<section><h2>🏁 어디까지 갔나 (은퇴 시점)</h2>${
+          top.map((id) => bar(`${names[id]} ${fmtPct(pct(ends[id], eTotal))}`, ends[id], max)).join("")
+        }<p class="ins-note">은퇴한 ${eTotal.toLocaleString()}명 기준. 가장 높이 간 리그는 <b>${names[highest]}</b>예요.</p></section>`;
+      }
+      return html;
+    }
+
     // 퍼널 막대의 표시 순서예요.
-    const FUNNEL_ORDER = ["visit", "pwa_install", "pwa_launch", "new_player", "draft", "debut", "ending", "pro_enter", "season_end", "year_end", "exit", "decacorn", "retire", "battle", "bonus"];
+    /* 커리어가 흘러가는 순서예요 — 방문 → 시작 → 유스 → 데뷔 → 시즌 → 은퇴.
+     * 여기 없는 이벤트는 맨 앞으로 밀리니 새로 남길 때 꼭 끼워 넣어요. */
+    const FUNNEL_ORDER = ["visit", "pwa_install", "pwa_launch", "new_player", "draft", "youth_round",
+      "ending", "debut", "pro_enter", "season_end", "year_end", "cup", "promo", "transfer", "tour",
+      "exit", "decacorn", "retire", "rebirth", "battle", "bonus", "awaken", "help", "error"];
+
+    /* ─────────────────────────────────────────────────────────────
+     * 💡 자동 코멘트
+     *
+     * 숫자만 늘어놓으면 볼 때마다 "그래서 뭐가 문제지?"를 손으로 따져야 해요.
+     * 전환율·쏠림·추세를 계산해서 **판단과 근거를 문장으로** 답니다.
+     *
+     * 지키는 것 셋:
+     *  ① **문턱은 시리즈 평균에서 뽑아요.** 절대값(예: "완주율 20% 미만이면 나쁨")을
+     *     박아 두면 게임 성격이 달라질 때마다 거짓말을 해요. "다른 게임보다 낮다"는
+     *     항상 말이 됩니다.
+     *  ② **표본이 적으면 판단을 접어요.** 3명 보고 "이탈이 심각합니다"라고 하면
+     *     그 코멘트 전체를 안 믿게 돼요. 대신 "아직 표본이 적어요"라고 적습니다.
+     *  ③ **근거를 같이 적어요.** 분자·분모를 보여주지 않으면 확인할 방법이 없어요.
+     * ───────────────────────────────────────────────────────────── */
+    const MIN_N = 20;                   // 이만큼은 모여야 판단해요
+    const pct = (a, b) => (b ? (a / b) * 100 : 0);
+    const fmtPct = (v) => `${v.toFixed(0)}%`;
+
+    // 게임 하나의 기본 지표
+    function metricsOf(summary, game) {
+      const get = (ev, key) => {
+        const r = summary.find((x) => x.game === game && x.event === ev);
+        return r ? r[key] : 0;
+      };
+      const visitors = get("visit", "players");
+      const started = get("new_player", "total");
+      const retired = get("retire", "total");
+      const battled = get("battle", "players");
+      return {
+        game, visitors, started, retired, battled,
+        startRate: pct(started, visitors),      // 방문자가 실제로 시작하나
+        finishRate: pct(retired, started),      // 시작한 캐릭터가 끝까지 가나
+        battleRate: pct(battled, visitors),     // 대전 기능이 쓰이나
+        revisit: get("visit", "total") / (visitors || 1),  // 방문 일수 / 사람
+      };
+    }
+
+    const row = (kind, ico, txt, why) =>
+      `<div class="ins-row ${kind}"><span class="ico">${ico}</span><span class="txt">${txt}`
+      + `${why ? `<span class="why">${why}</span>` : ""}</span></div>`;
+
+    /* 시리즈 평균과 견줘 한 줄. 표본이 모자라면 null을 돌려줘요(줄을 안 그려요). */
+    function compareLine(label, mine, avg, n, opts) {
+      const o = opts || {};
+      if (n < MIN_N) return null;
+      const gap = mine - avg;
+      const big = Math.abs(gap) >= (o.big || 10);
+      if (!big) {
+        return row("", "➖", `${label} <b>${fmtPct(mine)}</b> — 시리즈 평균(${fmtPct(avg)})과 비슷해요`,
+          o.why);
+      }
+      const better = o.lowerIsBetter ? gap < 0 : gap > 0;
+      return row(better ? "good" : "warn", better ? "🟢" : "🟠",
+        `${label} <b>${fmtPct(mine)}</b> — 시리즈 평균 ${fmtPct(avg)}보다 `
+        + `<b>${Math.abs(gap).toFixed(0)}%p ${gap > 0 ? "높아요" : "낮아요"}</b>`,
+        o.why);
+    }
+
+    /* 선택 쏠림 — 고를 게 여럿인데 하나로 몰리면 나머지가 장식이에요. */
+    function skewLine(choices, game, key, label) {
+      const rows = choices.filter((r) => r.game === game && r[key]);
+      if (!rows.length) return null;
+      const byKey = {};
+      // 배경은 옛 이름을 접어서 세요 — 안 그러면 "몰렸다/고르다"가 통째로 틀려요
+      for (const r of rows) {
+        const k = key === "choice" ? normChoice(r[key]) : (POS[r[key]] || r[key]);
+        byKey[k] = (byKey[k] || 0) + r.n;
+      }
+      const list = Object.entries(byKey).sort((a, b) => b[1] - a[1]);
+      const total = list.reduce((a, x) => a + x[1], 0);
+      if (total < MIN_N || list.length < 2) return null;
+      const [topName, topN] = list[0];
+      const [lowName, lowN] = list[list.length - 1];
+      const share = pct(topN, total), even = 100 / list.length;
+      const detail = `${list.map(([k, v]) => `${k} ${fmtPct(pct(v, total))}`).join(" · ")} (표본 ${total})`;
+      // 고르게 갈리면 2배, 몰리면 그 이상. 선택지 수에 맞춰 문턱이 자동으로 움직여요
+      if (share >= even * 2) {
+        return row("warn", "🟠",
+          `${label}이 <b>${topName}</b>에 몰려 있어요 — ${fmtPct(share)} (고르게면 ${fmtPct(even)})`,
+          `${detail} · 가장 안 고르는 건 ${lowName} ${fmtPct(pct(lowN, total))}`);
+      }
+      return row("good", "🟢", `${label}은 고르게 갈려요 — 1위 ${topName} ${fmtPct(share)}`, detail);
+    }
+
+    /* 최근 추세 — 같은 길이의 앞뒤 구간을 견줘요. */
+    function trendLine(daily, game) {
+      const rows = daily.filter((r) => (game ? r.game === game : true));
+      if (!rows.length) return null;
+      const byDay = {};
+      for (const r of rows) byDay[r.day] = (byDay[r.day] || 0) + (r.visits || 0);
+      const days = Object.keys(byDay).sort();
+      if (days.length < 6) return null;                  // 3+3일은 돼야 견줄 만해요
+      const half = Math.min(7, Math.floor(days.length / 2));
+      const recent = days.slice(-half).reduce((a, d) => a + byDay[d], 0);
+      const before = days.slice(-half * 2, -half).reduce((a, d) => a + byDay[d], 0);
+      if (before < MIN_N) return null;
+      const chg = pct(recent - before, before);
+      const label = `최근 ${half}일 방문 <b>${recent}</b> · 그 전 ${half}일 <b>${before}</b>`;
+      if (Math.abs(chg) < 15) return row("", "➖", `${label} — 거의 그대로예요 (${chg > 0 ? "+" : ""}${chg.toFixed(0)}%)`);
+      return row(chg > 0 ? "good" : "warn", chg > 0 ? "📈" : "📉",
+        `${label} — <b>${chg > 0 ? "+" : ""}${chg.toFixed(0)}%</b>`);
+    }
+
+    function insightSection(state, game) {
+      const all = GAME_KEYS.map((g) => metricsOf(state.summary, g)).filter((m) => m.visitors >= MIN_N);
+      if (!all.length) {
+        return `<section><h2>💡 코멘트</h2><p class="empty">아직 판단할 만큼 데이터가 안 모였어요 (게임당 방문자 ${MIN_N}명부터 봐요).</p></section>`;
+      }
+      const avg = (k) => all.reduce((a, m) => a + m[k], 0) / all.length;
+      const lines = [];
+
+      if (!game) {
+        // ── 전체 화면: 게임끼리 견줘요
+        const byStart = all.slice().sort((a, b) => b.startRate - a.startRate);
+        const byFinish = all.filter((m) => m.started >= MIN_N).sort((a, b) => b.finishRate - a.finishRate);
+        lines.push(trendLine(state.daily, null));
+        if (byStart.length >= 2) {
+          const hi = byStart[0], lo = byStart[byStart.length - 1];
+          lines.push(row(lo.startRate < avg("startRate") - 10 ? "warn" : "", "🎬",
+            `방문자가 실제로 시작하는 비율 — 가장 높은 건 <b>${GAMES[hi.game]} ${fmtPct(hi.startRate)}</b>, `
+            + `가장 낮은 건 <b>${GAMES[lo.game]} ${fmtPct(lo.startRate)}</b>`,
+            `평균 ${fmtPct(avg("startRate"))} · 낮은 쪽은 첫 화면에서 뭘 하는 게임인지 안 읽히는지 봐야 해요`));
+        }
+        if (byFinish.length >= 2) {
+          const hi = byFinish[0], lo = byFinish[byFinish.length - 1];
+          lines.push(row(lo.finishRate < avg("finishRate") - 10 ? "warn" : "", "🏁",
+            `시작한 캐릭터가 은퇴까지 가는 비율 — <b>${GAMES[hi.game]} ${fmtPct(hi.finishRate)}</b> ↔ `
+            + `<b>${GAMES[lo.game]} ${fmtPct(lo.finishRate)}</b>`,
+            `평균 ${fmtPct(avg("finishRate"))} · 낮으면 중간에 지루하거나 벽이 있다는 뜻이에요`));
+        }
+        const revisitLow = all.filter((m) => m.revisit < 1.15);
+        if (revisitLow.length) {
+          lines.push(row("warn", "🔁",
+            `재방문이 거의 없는 게임 — ${revisitLow.map((m) => `<b>${GAMES[m.game]}</b> ${m.revisit.toFixed(2)}회`).join(" · ")}`,
+            `1.00이면 "한 번 열고 다시 안 옴"이에요. 시리즈 평균 ${avg("revisit").toFixed(2)}회`));
+        }
+      } else {
+        // ── 게임 화면: 시리즈 평균과 견줘요
+        const m = metricsOf(state.summary, game);
+        if (m.visitors < MIN_N) {
+          lines.push(row("", "⏳", `아직 표본이 적어요 — 방문자 <b>${m.visitors}명</b>`,
+            `${MIN_N}명부터 판단해요. 적은 표본으로 단정하면 코멘트 전체를 못 믿게 돼요.`));
+        } else {
+          lines.push(trendLine(state.daily, game));
+          lines.push(compareLine("시작 전환율", m.startRate, avg("startRate"), m.visitors,
+            { why: `방문 ${m.visitors}명 중 ${m.started}개 캐릭터 생성` }));
+          lines.push(compareLine("은퇴까지 완주", m.finishRate, avg("finishRate"), m.started,
+            { why: `시작 ${m.started} · 은퇴 ${m.retired}` }));
+          lines.push(compareLine("대전 이용", m.battleRate, avg("battleRate"), m.visitors,
+            { why: `방문자 ${m.visitors}명 중 ${m.battled}명이 대전을 해봤어요` }));
+          lines.push(skewLine(state.choices, game, "choice", "시작 선택"));
+          lines.push(skewLine(state.choices, game, "pos", "포지션·보직"));
+        }
+      }
+
+      const body = lines.filter(Boolean).join("");
+      if (!body) {
+        return `<section><h2>💡 코멘트</h2><p class="empty">견줄 만한 게 아직 없어요 — 표본이 더 모이면 여기에 적어요.</p></section>`;
+      }
+      return `<section><h2>💡 코멘트</h2><div class="ins">${body}</div>`
+        + `<p class="ins-note">문턱은 <b>시리즈 평균</b>에서 뽑아요 — 절대값을 박아 두면 게임 성격이 달라질 때마다 거짓말을 해요. `
+        + `표본 ${MIN_N} 미만이면 판단을 접습니다.</p></section>`;
+    }
 
     function funnelSection(rows, hofByGame, game) {
       const g = rows.filter((r) => r.game === game);
@@ -281,7 +540,15 @@ create or replace view public.stats_daily as
     count(*) filter (where event = 'new_player') as new_players
   from public.events group by 1, 2;
 
-grant select on public.stats_summary, public.stats_choices, public.stats_daily to anon;`;
+-- 🌍 리그 분포 — 어느 리그에서 몇 시즌을 뛰었고, 어디까지 갔나
+create or replace view public.stats_league as
+  select game, event, (data->>'lg')::int lg,
+    count(*)::int n, count(distinct player)::int players
+  from public.events
+  where event in ('year_end', 'season_end', 'retire') and data ? 'lg'
+  group by 1, 2, 3;
+
+grant select on public.stats_summary, public.stats_choices, public.stats_daily, public.stats_league to anon;`;
 
     function setupCard(msg) {
       return `<section class="setup"><h2>⚙️ 통계 뷰 설정이 필요해요</h2>
@@ -331,6 +598,7 @@ grant select on public.stats_summary, public.stats_choices, public.stats_daily t
         ? `<p class="empty" style="margin:-12px 0 20px">ℹ️ 앱 설치(${totalInstall})는 <b>안드로이드·PC에서만</b> 잡혀요 — 아이폰은 '홈 화면에 추가'를 해도 브라우저가 설치 이벤트를 주지 않아요. 앱으로 실행(${totalPwaUsers})은 <b>게임별로</b> 세서, 한 사람이 여러 게임을 설치하면 그만큼 더해집니다. 그래서 실행이 설치보다 클 수 있어요.</p>`
         : ""}`;
 
+      html += insightSection(STATE, null);
       html += dailySection(STATE.daily, null);
 
       if (!summary.length) html = setupCard("뷰는 있는데 아직 수집된 데이터가 없어요.") + html;
@@ -357,6 +625,8 @@ grant select on public.stats_summary, public.stats_choices, public.stats_daily t
       const game = activeGame;
       const parts = [
         feverSection(game),
+        insightSection(STATE, game),
+        leagueSection(STATE.league, game),
         dailySection(STATE.daily, game),
         choiceSection(STATE.choices, game),
         game === "unicorn" ? unicornSection(STATE.hofRows) : "",
@@ -365,7 +635,6 @@ grant select on public.stats_summary, public.stats_choices, public.stats_daily t
       $("panel").innerHTML = parts.join("").trim() || emptyCard(game);
       wireFever(game);
     }
-
 
     // ---------- 🎉 피버 타임 (⚽ 더 윙어 전용) ----------
     /* 이 대시보드에서 **유일하게 쓰는** 자리예요. 나머지는 전부 읽기 전용입니다.
@@ -525,6 +794,10 @@ grant select on public.stats_summary, public.stats_choices, public.stats_daily t
       try { summary = await getView("stats_summary"); } catch { failed = true; }
       try { choices = await getView("stats_choices"); } catch { failed = true; }
       try { daily = await getView("stats_daily"); } catch { failed = true; }
+      /* 🌍 리그 뷰는 **없어도 넘어가요.** 나중에 붙인 뷰라 SQL을 아직 안 돌렸을 수
+       * 있어요 — 여기서 failed로 잡으면 멀쩡한 화면 전체가 "설정이 필요해요"로 덮여요. */
+      let league = [];
+      try { league = await getView("stats_league"); } catch { league = []; }
       await loadFever();          // 🎉 피버 타임 — 집계 뷰와 무관하게 늘 읽어요
       const hofRows = await getHof();
       let hofTotal = null, hofByGame = null;
@@ -547,7 +820,7 @@ grant select on public.stats_summary, public.stats_choices, public.stats_daily t
         return;
       }
 
-      STATE = { summary, choices: choices || [], daily: daily || [], hofRows, hofByGame, hofTotal };
+      STATE = { summary, choices: choices || [], daily: daily || [], league: league || [], hofRows, hofByGame, hofTotal };
       // 새로고침일 땐 보던 탭을 유지하고, 첫 진입이면 해시에서 읽어요.
       activeGame = activeGame || gameFromHash();
 
