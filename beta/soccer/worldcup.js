@@ -526,22 +526,39 @@ window.WingerWorldCup = (() => {
     for (const x of xi) x.apps = (x.apps || 0) + 1;
     for (let i = 0; i < goals; i++) {
       const who = pickFrom(xi);
-      if (who) who.g = (who.g || 0) + 1;
+      if (who) { who.g = (who.g || 0) + 1; who._dg = (who._dg || 0) + 1; }
       const asst = pickFrom(xi.filter((x) => x !== who));
-      if (asst && Math.random() < 0.6) asst.a = (asst.a || 0) + 1;
+      if (asst && Math.random() < 0.6) { asst.a = (asst.a || 0) + 1; asst._da = (asst._da || 0) + 1; }
     }
     creditDef(xi, natStrOf(natName));
+    /* 그 경기 결과를 모르면(다른 나라끼리의 경기) 골 수로 짐작해요 —
+     * 없는 결과를 지어내기보다 그 나라가 실제로 넣은 골을 근거로 씁니다. */
+    creditRate(xi, goals >= 2 ? "W" : goals === 1 ? "D" : "L");
   }
 
   /* 🛡️ 그 경기의 수비를 선발에게 나눠요. 골과 같은 자리에서 같은 횟수만큼 도는
    * 게 중요해요 — 따로 굴리면 "출전 수는 3인데 수비는 5경기치"가 됩니다. */
+  /* ⭐ 그 경기 평점 — **리그와 똑같은 기계**로 매겨요.
+   *
+   * 처음엔 "다른 나라 선수에게는 평점이 없다"고 안 넣었는데, 없는 게 아니라
+   * **안 굴리고 있어서** 없던 거예요. 리그를 전 선수로 돌리면서 같은 산식을
+   * 여기에도 씁니다 — 지어낸 숫자가 아니라 모두가 같은 방식으로 받는 값이에요. */
+  function creditRate(xi, res) {
+    for (const x of xi) {
+      if (x.me) continue;                       // 내 평점은 w.ratingSum에 따로 쌓여요
+      const info = { myGoals: x._dg || 0, assists: x._da || 0, defense: x._dd || 0,
+        res, oppGoals: CTX.raceConceded(res) };
+      x.rate = (x.rate || 0) + clamp(CTX.matchRating(info, x.pos || "mf", 0) / 10, 1, 10);
+      x._dg = 0; x._da = 0; x._dd = 0;
+    }
+  }
   function creditDef(xi, str) {
     const n = poissonish(Math.max(0.2, DEF_G0 + ((str || 80) - 74) * DEF_GK));
     let total = 0;
     for (const x of xi) total += DEF_W[x.pos] || 0.3;
     for (let i = 0; i < n; i++) {
       let r = Math.random() * total;
-      for (const x of xi) { r -= DEF_W[x.pos] || 0.3; if (r <= 0) { x.d = (x.d || 0) + 1; break; } }
+      for (const x of xi) { r -= DEF_W[x.pos] || 0.3; if (r <= 0) { x.d = (x.d || 0) + 1; x._dd = (x._dd || 0) + 1; break; } }
     }
   }
   // 순위표·조 순위표가 쓰는 그 전력을 그대로 봐요 (따로 지어내지 않아요)
@@ -574,7 +591,7 @@ window.WingerWorldCup = (() => {
   /* 우리 팀 동료가 넣은 골 — **이름으로 그 선수에게 적립해요.**
    * 중계에 뜬 이름과 순위표의 사람이 같아야 표가 하나예요. */
   const ASSIST_P = 0.55;     // 골 하나에 도움이 붙을 확률
-  function creditMates(names, myGoals) {
+  function creditMates(names, myGoals, res) {
     const mine = mySquad();
     const xi = xiOf(mine);
     for (const x of xi) x.apps = (x.apps || 0) + 1;
@@ -596,6 +613,11 @@ window.WingerWorldCup = (() => {
     /* 🛡️ 우리 나라 수비도 동료에게 쌓여요. **내 줄은 빼요** — 내 수비는 실제
      * 경기에서 나온 값(w.d)이 그대로 들어가니, 여기서 또 굴리면 두 번 세요. */
     creditDef(mates, natStrOf(myNation().name));
+    for (const n of names || []) {
+      const who = mine.find((x) => x.name === n && !x.me);
+      if (who) who._dg = (who._dg || 0) + 1;
+    }
+    creditRate(mates, res || "D");
   }
   /* 조별리그가 끝나면 **떨어진 나라는 거기서 멈춰요.**
    * 우리 조는 실제 승점으로, 반대 조는 전력 상위 둘이 올라간 걸로 봐요. */
@@ -633,15 +655,20 @@ window.WingerWorldCup = (() => {
   }
   /* 부문 — 리그 개인 순위와 같은 결이에요. **포지션이 아니라 숫자로** 줄을 세워요.
    * 공격수가 수비를 제일 많이 했으면 🛡️ 1위가 되는 게 맞습니다(리그에서 정한 규칙). */
-  const FACE_TABS = [["p", "📈 공격P", "골+도움"], ["g", "⚽ 득점", "골"], ["a", "🅰️ 도움", "도움"], ["d", "🛡️ 수비", "수비"]];
+  const FACE_TABS = [["r", "⭐ 평점", "평균 평점"], ["g", "⚽ 득점", "골"], ["a", "🅰️ 도움", "도움"],
+    ["d", "🛡️ 수비", "수비"], ["p", "📈 공격P", "골+도움"]];
+  // 평균 평점은 **그 선수가 뛴 경기 수**로 나눠요 (탈락한 나라는 3경기, 결승까지 가면 5경기)
+  const faceAvg = (x) => ((x.apps || 0) ? (x.rate || 0) / x.apps : 0);
   const FACE_KEY = {
     p: (x) => (x.g || 0) * 3 + (x.a || 0),
     g: (x) => x.g || 0,
     a: (x) => x.a || 0,
     d: (x) => x.d || 0,
+    r: faceAvg,
   };
-  const FACE_VAL = { p: (x) => `${x.g || 0}⚽ ${x.a || 0}🅰️`, g: (x) => x.g || 0, a: (x) => x.a || 0, d: (x) => x.d || 0 };
-  let faceTab = "p";
+  const FACE_VAL = { p: (x) => `${x.g || 0}⚽ ${x.a || 0}🅰️`, g: (x) => x.g || 0, a: (x) => x.a || 0,
+    d: (x) => x.d || 0, r: (x) => faceAvg(x).toFixed(2) };
+  let faceTab = "r";
   // 화면에 그릴 줄 — 상위 N명, 내가 밖이면 내 줄을 따로 알려줘요
   function faceRows(k) {
     const all = faces(k || faceTab);
@@ -739,22 +766,22 @@ window.WingerWorldCup = (() => {
 
   /* 🏆 대회 수상 — 끝나고 한 번만 정해요.
    *   🥇 골든부츠  득점 1위
-   *   🏅 골든볼    대회 최우수 선수 (골·도움 + 평균 평점)
+   *   🏅 골든볼    평균 평점 1위 — 모두가 같은 산식으로 평점을 받아요
    *   🛡️ 골든월    수비 1위 — 수비수에게도 들 것이 하나는 있어야 해요
    * 리그 수상(발롱도르·리그MVP)과 **다른 축**이에요 — 4년에 한 번뿐인 무대의 상입니다. */
   function decideAwards() {
     const w = wc();
     const rows = faces();
     if (!w || !rows.length) return [];
-    const myAvg = w.apps ? w.ratingSum / w.apps : 0;
     const boot = rows.slice().sort((a, b) => (b.p.g || 0) - (a.p.g || 0) || (b.p.a || 0) - (a.p.a || 0))[0];
-    /* 골든볼은 기여에 **평점**이 얹혀요. 다른 선수는 평점을 안 굴리니 실력에서
-     * 뽑은 값을 대신 씁니다 — 대회 안에서만 쓰는 눈금이에요. */
-    const ballOf = (e) => faceScore(e) + (e.p.me ? myAvg : 5.5 + (e.p.str - 80) * 0.12) * 0.8;
-    const ball = rows.slice().sort((a, b) => ballOf(b) - ballOf(a))[0];
+    /* 🏅 골든볼은 **평점 1위**가 가져가요.
+     * 실제 월드컵의 골든볼은 기자단 투표라 숫자로 정해지지 않지만, 이 게임에는
+     * ⭐ 평점이라는 자가 이미 있고 **모두가 같은 방식으로** 받아요.
+     * 예전에는 기여 + "실력에서 뽑은 가짜 평점"이었어요 — 그건 지어낸 값이었습니다. */
+    const ball = rows.slice().sort((a, b) => faceAvg(b.p) - faceAvg(a.p) || faceScore(b) - faceScore(a))[0];
     const out = [];
     if (boot) out.push({ id: "boot", name: "🥇 골든부츠", who: boot.p.name, nat: boot.nat, me: !!boot.p.me, val: `${boot.p.g || 0}골` });
-    if (ball) out.push({ id: "ball", name: "🏅 골든볼", who: ball.p.name, nat: ball.nat, me: !!ball.p.me, val: `${ball.p.g || 0}골 ${ball.p.a || 0}도움` });
+    if (ball) out.push({ id: "ball", name: "🏅 골든볼", who: ball.p.name, nat: ball.nat, me: !!ball.p.me, val: `평점 ${faceAvg(ball.p).toFixed(2)}` });
     /* 🛡️ 수비수에게도 들 것이 하나는 있어야 해요. 이게 없으면 대회 내내 1위를 해도
      * 아무 일도 안 일어납니다 — 리그에는 🛡️ 리그 최고 수비수가 이미 있어요. */
     const wall = rows.slice().sort((a, b) => (b.p.d || 0) - (a.p.d || 0) || (b.p.apps || 0) - (a.p.apps || 0))[0];
@@ -979,8 +1006,8 @@ window.WingerWorldCup = (() => {
     w.ratingSum += clamp(CTX.matchRating(info, S.pos, 0) / 10, 1, 10);
     /* 🥇 내 줄은 **우리 나라 명단 안의 나**예요 — 따로 만들면 표가 둘로 갈려요 */
     const meRow = mySquad().find((x) => x.me);
-    if (meRow) { meRow.g = w.g; meRow.a = w.a; meRow.d = w.d; meRow.apps = w.apps; meRow.str = overall(); }
-    creditMates(info.mateGoals, info.myGoals);   // 동료 골·내 골의 도움이 쌓여요
+    if (meRow) { meRow.g = w.g; meRow.a = w.a; meRow.d = w.d; meRow.apps = w.apps; meRow.rate = w.ratingSum; meRow.str = overall(); }
+    creditMates(info.mateGoals, info.myGoals, info.res);   // 동료 골·도움·평점이 쌓여요
     /* ⚠️ **상대 팀은 이 경기에서 실제로 넣은 만큼만** 쌓여요. 따로 굴리면
      * "4:2로 이겼는데 상대 선수 골 합이 3"이 됩니다(제보). */
     w.credited = [];
@@ -1327,7 +1354,7 @@ window.WingerWorldCup = (() => {
       natSquadOf, xiOf, ensureSquads, advanceOthers, creditNat, creditMates, cutNations,
       faces, faceRows, matesOf, wireFaceTabs,
       decideAwards, faceScore, FACE_N, NAT_G0, NAT_GK, ACE_W, SCORE_W, DEF_W, DEF_G0, DEF_GK,
-      creditDef, FACE_TABS, FACE_KEY, mySquad, markAce,
+      creditDef, creditRate, faceAvg, FACE_TABS, FACE_KEY, mySquad, markAce,
       playOutRest, KO_EDGE, ASSIST_P, showFinal,
       LUCK_GAP, LUCK_MAX, luckP,
       NAT_SPREAD, ACE_DIV, ACE_LO, ACE_HI, natStr, teamStr, NAT_MEAN,

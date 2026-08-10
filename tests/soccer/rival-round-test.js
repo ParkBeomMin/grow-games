@@ -32,7 +32,7 @@ const parts = {
   ratePartsFn: grab(/function ratingParts\(info, pos, momAdj\) \{[\s\S]*?\n  \}/),
   rateFn: grab(/function matchRating\(info, pos, momAdj\) \{[\s\S]*?\n  \}/),
   conceded: grab(/const raceConceded = [^;]+;/),
-  raceRate: grab(/function raceRate\(roundRes, deltas\) \{[\s\S]*?\n  \}/),
+  raceRate: grab(/function leagueRound\(roundRes\) \{[\s\S]*?\n  \}/),
   racePos: grab(/const RACE_POS = \{[^}]*\};/),
 };
 const missing = Object.entries(parts).filter(([, v]) => !v).map(([k]) => k);
@@ -159,7 +159,8 @@ const buildRows = new Function(
 );
 const built = buildRows(
   { name: "리오", group: "레알 몬테" },
-  [{ r: { name: "밀란 피셔", club: "AC 리베라", role: "에이스" }, score: 70, res: "L" }],
+  // leagueRound가 돌려주는 모양 — 기록이 명단 한 벌에만 남으면서 { p, club, role }이 됐다
+  [{ p: { name: "밀란 피셔", pos: "fw" }, club: "AC 리베라", role: "에이스", score: 70, res: "L" }],
   85, { res: "W" }
 );
 check(built.find((r) => r.me).res === "W", "내 줄에도 결과가 담긴다");
@@ -167,10 +168,14 @@ check(built.find((r) => !r.me).res === "L", "경쟁자 줄에 그 클럽 결과�
 
 /* ── 경쟁자와 내가 **같은 산식**을 쓰는지 — 명단을 합친 이유가 여기 있다.
  * 눈금이 갈리면 득점 1위가 평점표에서 사라지는 예전 증상이 그대로 돌아온다. */
-check(/matchRating\(info, r\.pos \|\| "mf", 0\)/.test(parts.raceRate),
+check(/matchRating\(info, p\.pos \|\| "mf", 0\)/.test(parts.raceRate),
   "경쟁자 평점도 나와 같은 matchRating으로 매긴다");
-check(/roundRes\[r\.club\]/.test(parts.raceRate),
+check(/roundRes\[club\]/.test(parts.raceRate),
   "경쟁자 평점이 그 라운드 소속 클럽 결과를 본다");
+/* 이제 **리그 전 선발**이 이 산식을 지난다 — 예전에는 시즌 초에 뽑은 여덟만
+ * 굴려서, 다른 클럽 아홉 번째 선수는 평점표에 아예 못 올라왔다. */
+check(/WingerSquad\.leagueXI\(\)/.test(parts.raceRate),
+  "리그 전 선발이 이 산식을 지난다 (여덟 명이 아니라)");
 
 console.log(bad ? `\n❌ ${bad}개 실패` : "\n✅ 통과");
 process.exit(bad ? 1 : 0);

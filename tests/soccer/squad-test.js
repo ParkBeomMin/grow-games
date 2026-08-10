@@ -222,11 +222,20 @@ guard("⑥ 개인 순위와 같은 사람", () => {
   Career.refreshPro();
   const rest = w.document.querySelector("#pro-actions .action-btn.rest");
   if (rest) rest.click();
-  const race = (S().activity || {}).race || [];
+  /* 개인 순위는 이제 **리그 명단 한 벌**에서 나와요 — 시즌 초에 여덟을 따로 뽑아
+   * 두던 act.race는 없앴습니다(같은 사람의 기록이 두 벌로 남지 않게).
+   * 그래서 여기서도 화면이 실제로 세우는 그 표를 읽어요. */
   const all = Squad.ensureSquads();
+  const race = Career._t.raceRank("g").filter((r) => !r.me);
   const mine = race.filter((r) => r.club === S().group);
   console.log(`   개인 순위 ${race.length}명 — ${race.map((r) => `${r.name}(${r.club})`).slice(0, 4).join(" · ")} …`);
   check(race.length > 0, `개인 순위 명단이 만들어졌다 (${race.length}명)`);
+  /* 이제 리그의 **모든 선발**이 들어와요. 6팀 × 11명에서 나를 뺀 수예요 —
+   * 예전에는 실력 상위 여덟뿐이라 다른 클럽 아홉 번째 선수는 아무리 잘해도
+   * 표에 못 올라왔습니다(제보: "전체 리그 선수들 대상으로 다 해야 해"). */
+  const xiCount = Object.keys(all).reduce((n2, c) => n2 + Squad.startingXIOf(c).length, 0);
+  check(race.length >= xiCount - 1,
+    `리그 선발 전원이 들어온다 (${race.length}명 · 선발 합계 ${xiCount}명 중 나 제외)`);
   /* 우리 클럽 선수가 꼭 있어야 하지는 **않아요** — 기록이 좋지 않으면 안 보이는
    * 게 맞습니다(제보). 동료 기록은 👥 명단 화면에 그대로 남아요. */
   console.log(`   그중 우리 클럽 ${mine.length}명 (없어도 괜찮아요)`);
@@ -234,7 +243,7 @@ guard("⑥ 개인 순위와 같은 사람", () => {
    * 다른 팀 선수는 어느 명단에도 없는 유령이 됩니다. */
   const ghosts = race.filter((r) => !(all[r.club] || []).some((x) => x.name === r.name));
   check(ghosts.length === 0,
-    `여덟 명 전부 그 클럽 명단에 있는 사람이다 (유령 ${ghosts.length}명${ghosts.length ? ` — ${ghosts.map((g) => `${g.name}(${g.club})`).join(", ")}` : ""})`);
+    `전부 그 클럽 명단에 있는 사람이다 (유령 ${ghosts.length}명${ghosts.length ? ` — ${ghosts.map((g) => `${g.name}(${g.club})`).join(", ")}` : ""})`);
   /* ⚠️ **클럽 할당량은 없어요.** 예전에는 "클럽마다 최소 한 명"을 먼저 채웠는데,
    * 그러면 강팀 3순위보다 못한 약팀 1순위가 자리를 차지해서 표에 평범한 선수가
    * 섞여요. 이건 개인 기록 순위지 클럽을 고르게 보여주는 표가 아닙니다
@@ -269,7 +278,8 @@ guard("⑥ 개인 순위와 같은 사람", () => {
   const cutAll = Object.values(all).flat().filter((x) => !x.me)
     .map((x) => x.str).sort((a, b) => b - a)[race.length - 1] || 0;
   console.log(`   우리 클럽 최고 ${Math.round(myBest)} · 리그 ${race.length}위 선 ${Math.round(cutAll)}`);
-  check(mine.length <= 2, `우리 클럽 자리를 억지로 채우지 않는다 (${mine.length}명)`);
+  check(mine.length === Squad.startingXIOf(S().group).length - 1,
+    `우리 클럽도 선발 전원이 들어온다 (${mine.length}명 · 나 제외) — 자리를 챙기는 게 아니라 리그 전체가 다 들어와서예요`);
 });
 
 // ---------- ⑦ 클럽이 바뀌면 새로 ----------

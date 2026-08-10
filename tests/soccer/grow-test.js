@@ -47,8 +47,11 @@ const drawOnce = new Function(
    return d.key;`
 );
 
+/* 성장 확률은 이제 "상위 3분의 1(topThird)"을 봐요 — 개인 순위표가 9줄에서
+ * 리그 전 선발 67줄로 늘면서, "3위 안"이 사실상 닿을 수 없는 문턱이 됐거든요.
+ * 여기서는 그 참·거짓을 밖에서 넣어 줍니다. */
 const growPOf = new Function(
-  "info", "S", "rank", "clamp",
+  "info", "S", "rank", "topThird", "clamp",
   `${parts.posAxisTbl}
    ${parts.posAxisFn}
    ${parts.didAxis}
@@ -93,7 +96,7 @@ const spread = Math.max(...Object.values(nothing)) / Math.min(...Object.values(n
 check(spread < 2.6, `무득점·무수비 경기는 특정 칸으로 몰리지 않는다 (최대/최소 ${spread.toFixed(2)}배)`);
 
 // ── ⑤ 확률이 결과와 활약을 본다
-const p = (info, rank) => growPOf(info, S, rank, clamp);
+const p = (info, rank) => growPOf(info, S, rank, rank <= 3, clamp);
 const dull = p({ myGoals: 0, assists: 0, defense: 0, res: "L", momentRes: "miss" }, 9);
 const great = p({ myGoals: 2, assists: 1, defense: 1, res: "W", momentRes: "perfect" }, 1);
 console.log(`   확률 — 진 경기 무활약 ${(dull * 100).toFixed(1)}% · 이긴 경기 대활약 ${(great * 100).toFixed(1)}%`);

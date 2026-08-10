@@ -254,6 +254,16 @@ window.WingerSquad = (() => {
     }
   }
   const squadOf = (club) => ensureSquads()[club] || [];
+  /* 🥇 리그 **전 클럽의 선발**을 한 번에 — 개인 순위가 이걸 봐요.
+   * 예전에는 시즌 초에 뽑은 여덟 명만 굴려서, 다른 클럽의 아홉 번째 선수는
+   * 아무리 잘해도 표에 못 올라왔어요. 명단에는 있는데 순위표에는 없는 사람이
+   * 88명이었습니다 — 이 저장소의 단골 병이에요. */
+  function leagueXI() {
+    const sq = ensureSquads();
+    const out = [];
+    for (const club of Object.keys(sq)) for (const x of startingXIOf(club)) out.push({ club, p: x });
+    return out;
+  }
   const ensureSquad = () => squadOf(S.group);        // 우리 팀
 
   /* 선발 11명 — 포지션 자리마다 실력 순이에요. */
@@ -587,7 +597,7 @@ window.WingerSquad = (() => {
   function resetSeason() {
     if (!S.squads) return;
     for (const club of Object.keys(S.squads)) {
-      for (const x of S.squads[club]) { x.g = 0; x.a = 0; x.d = 0; x.apps = 0; }
+      for (const x of S.squads[club]) { x.g = 0; x.a = 0; x.d = 0; x.apps = 0; x.rate = 0; x.mom = 0; }
     }
     backfillAges();
   }
@@ -680,7 +690,7 @@ window.WingerSquad = (() => {
     openSquad, rollLineup, matchXI, FORM_SWING,
     ensureSquads, ensureSquad, squadOf, startingXI, startingXIOf, leagueFaces,
     isStarter, myLine, benchReason, myBonus, restP, benchTurn, creditMateGoals, markApps, resetSeason, squadHTML,
-    ageSquads, newsLine, ageCurve,
+    ageSquads, newsLine, ageCurve, leagueXI,
     FORMATION, BENCH, SQUAD_SIZE, BENCH_GAIN, SCORE_W, REST_BAR, REST_MAX,
     AGE_MIN, AGE_MAX, PEAK_AGE, RETIRE_AGE, SLUMP_P, SURGE_P, STR_SPREAD, MEAN_CURVE,
     _t: { rollSquad, pickScorer, rollPlayer, strOfRow, moveMe, backfillAges },

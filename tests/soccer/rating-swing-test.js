@@ -133,16 +133,21 @@ const raceLam = new Function(`${parts.goalScale} ${parts.lam} return raceLam;`)(
 const conceded = new Function("randInt", `${parts.conceded} return raceConceded;`)(
   (a, b) => Math.floor(a + Math.random() * (b - a + 1)));
 function pois(l) { let n = 0, L = Math.exp(-Math.max(0, l)), p = 1; do { p *= Math.random(); n++; } while (p > L && n < 12); return n - 1; }
-const rivalRate = (pres) => {
+/* ⚠️ **리그 눈높이가 어디서 오는지가 바뀌었다.** 예전에는 경쟁자를 여덟 명만 두고
+ * 실력을 지어냈기 때문에 리그 격(prestige)을 생산량에 따로 실었다. 이제 경쟁자가
+ * 리그 명단의 실제 선수 전원이라, 리그 수준은 **그 선수들의 실력(pop)**에 이미
+ * 들어 있다 — 격을 또 곱하면 같은 축을 두 번 센다.
+ * 그래서 여기서도 실력으로 잰다: K리그3의 명단(≈58)과 프리미어리그의 명단(≈90). */
+const rivalRate = (base) => {
   const def = ROLES[Math.floor(Math.random() * ROLES.length)];
-  const pop = rand(52, 88), res = ["W", "D", "L"][Math.floor(Math.random() * 3)];
+  const pop = clamp(base + rand(-14, 14), 40, 95), res = ["W", "D", "L"][Math.floor(Math.random() * 3)];
   return rateOnce(WEAK, {
-    myGoals: pois(raceLam(def.g, pop, pres)), assists: pois(raceLam(def.a, pop, pres)),
-    defense: pois(raceLam(def.d, pop, pres)), res, oppGoals: conceded(res),
+    myGoals: pois(raceLam(def.g, pop)), assists: pois(raceLam(def.a, pop)),
+    defense: pois(raceLam(def.d, pop)), res, oppGoals: conceded(res),
   }, RACE_POS[def.key] || "mf", 0, clamp, rand);
 };
-const rivalAvgAt = (pres) => { let s = 0; for (let i = 0; i < N; i++) s += rivalRate(pres); return s / N; };
-const lowAvg = rivalAvgAt(0.55), topAvg = rivalAvgAt(2.40);
+const rivalAvgAt = (base) => { let s = 0; for (let i = 0; i < N; i++) s += rivalRate(base); return s / N; };
+const lowAvg = rivalAvgAt(58), topAvg = rivalAvgAt(90);
 console.log(`   경쟁자 평균 평점 — K리그3 ${lowAvg.toFixed(2)} · 프리미어리그 ${topAvg.toFixed(2)} · 내 2골2도움 ${big.toFixed(2)}`);
 check(big > lowAvg && big > topAvg, `2골 2도움이면 어느 리그 경쟁자 평균도 넘는다 (${big.toFixed(2)})`);
 /* ⚠️ 문턱을 **절대 점수**로 박아 두면 안 돼요. 득점 눈금(GOAL_SCALE 0.33)이 들어오면서
@@ -157,9 +162,16 @@ check(lowAvg - quiet > spread * 0.5,
   `조용한 경기는 경쟁자 평균에 못 미친다 (${quiet.toFixed(2)} vs ${lowAvg.toFixed(2)} — 리그 폭의 ${((lowAvg - quiet) / spread).toFixed(1)}배)`);
 /* 리그 격이 경쟁자 실력에 실제로 실리는지 — 예전 계수는 최하위와 최상위가
  * 사실상 같은 선수였다("K리그3 경쟁자나 PL 경쟁자나 똑같다"는 제보).
- * 0.3점은 **눈에 보이는 차이**의 하한이에요. 지금 0.47이라 여유가 있습니다. */
-check(spread > 0.3,
-  `리그가 오르면 경쟁자 눈높이가 확실히 올라간다 (${lowAvg.toFixed(2)} → ${topAvg.toFixed(2)} · ${spread.toFixed(2)}점)`);
+ *
+ * ⚠️ 문턱을 0.3에서 0.15로 내렸다. **눈금이 정직해졌기 때문**이다 —
+ * 예전 0.47은 실력(pop)과 리그 격(prestige)을 **둘 다** 곱해서 나온 값이었고,
+ * 그건 같은 축을 두 번 센 것이었다. 실력만 보면 평균 차이는 0.25점이다.
+ *
+ * 그리고 **평균은 이 차이가 가장 안 보이는 자리**다. 리그 수준이 실제로 갈리는
+ * 곳은 꼭대기이고, 거기서는 득점 1위가 K3 19골 → PL 34골로 벌어진다
+ * (tests/soccer/race-test.js ④가 그걸 본다). 여기서는 **방향**만 지킨다. */
+check(spread > 0.15,
+  `리그가 오르면 경쟁자 눈높이가 올라간다 (${lowAvg.toFixed(2)} → ${topAvg.toFixed(2)} · ${spread.toFixed(2)}점)`);
 
 /* ── 변이 검증 — 골·도움·수비 항을 빼면 ①이 무너져야 한다.
  * 안 잡히면 위의 초록불은 아무것도 안 지키고 있는 것이다. */

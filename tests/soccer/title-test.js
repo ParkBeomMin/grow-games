@@ -322,8 +322,11 @@ guard("④⑤ 화면 표시", () => {
   check(!!rest, "준비 화면에 훈련(휴식) 버튼이 있다");
   if (rest) rest.click();
   const st = Career._t.state();
-  check(!!(st.activity && Array.isArray(st.activity.race)),
-    `마지막 훈련을 마치면 시즌이 시작되고 경쟁자 명단이 생긴다 (${st.activity ? (st.activity.race || []).length : 0}명)`);
+  /* 개인 순위는 이제 **리그 명단 한 벌**에서 나와요(S.squads). 시즌 초에 여덟을
+   * 따로 뽑아 두던 act.race는 없어졌습니다 — 같은 사람의 기록이 두 벌로 남는 걸
+   * 없앤 거예요. 시즌이 시작됐는지는 활동(act.apps)이 생겼는지로 봅니다. */
+  check(!!(st.activity && st.activity.apps != null),
+    `마지막 훈련을 마치면 시즌이 시작된다 (activity ${st.activity ? "있음" : "없음"})`);
   Career.refreshPro();
   const body = $("pro-race-body").innerHTML;
   const rows = Array.from(w.document.querySelectorAll("#pro-race-body .ch-title"))

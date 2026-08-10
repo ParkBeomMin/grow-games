@@ -36,8 +36,11 @@ if (missing.length) { console.log(`❌ 소스에서 못 찾았어요: ${missing.
 
 const rand = () => 0;   // 흔들림을 죽여 순위를 결정적으로 만든다
 
-/* 그 라운드를 치른 경쟁자 8명 — raceRate가 돌려주는 모양 그대로.
- * 점수를 내 점수보다 확실히 높게 둬서 경쟁자가 상위 5칸을 차지하게 한다. */
+/* 그 라운드를 치른 경쟁자들 — leagueRound가 돌려주는 모양 그대로.
+ * 이제 리그 **전 선발**이 돌아오지만, 이 검사가 보는 건 "소속이 줄에 찍히는가"라
+ * 여덟만 세워도 충분하다. 점수를 내 점수보다 높게 둬서 상위 5칸을 차지하게 한다.
+ * ⚠️ 모양이 { r, ... }에서 { p, club, ... }으로 바뀌었다 — 기록이 명단 한 벌에만
+ * 남게 되면서, 돌아오는 것도 그 명단의 줄 자체가 됐다. */
 const RIVALS = [
   { name: "밀란 피셔",   role: "에이스 스트라이커", pop: 88, club: "AC 리베라" },
   { name: "빅토르 라이너", role: "월드클래스 MF",    pop: 86, club: "노르드 유나이티드" },
@@ -48,7 +51,7 @@ const RIVALS = [
   { name: "파블로 세라",  role: "괴물 신인",        pop: 76, club: "노르드 유나이티드" },
   { name: "이준석",      role: "국대 주전",        pop: 74, club: "베르단 SC" },
 ];
-const SCORED = RIVALS.map((r, i) => ({ r, score: 88 - i * 2, res: "D" }));
+const SCORED = RIVALS.map((r, i) => ({ p: { name: r.name, pos: "mf" }, club: r.club, role: r.role, score: 88 - i * 2, res: "D" }));
 
 const run = new Function(
   "S", "scored", "myRankScore", "info", "clamp",
@@ -69,8 +72,8 @@ const check = (ok, msg) => { console.log(`${ok ? "✅" : "❌"} ${msg}`); if (!o
 check(!html.includes("리오"), "상위 5칸이 전부 경쟁자다 (내 줄이 안 섞였다)");
 
 // ① 핵심 — 라이벌 소속이 그대로 찍힌다
-SCORED.slice(0, 5).forEach(({ r }) => {
-  check(html.includes(r.club), `${r.name}의 소속 "${r.club}"이 표에 있다`);
+SCORED.slice(0, 5).forEach(({ p, club }) => {
+  check(html.includes(club), `${p.name}의 소속 "${club}"이 표에 있다`);
 });
 
 // ② 빈 칸("-")이 하나도 없다. 이게 화면에서 실제로 보이던 증상이다
@@ -89,8 +92,8 @@ check(mine.includes("레알 몬테"), "내 줄은 S.group으로 채워진다");
 /* ⚠️ map이 여러 줄이라 한 줄짜리 정규식으로는 안 잡힌다 — 조용히 치환에 실패하면
  * 변이 검증이 "무너지지 않았다"고 말하는 셈이라, 치환이 실제로 됐는지도 확인한다. */
 const brokenRows = parts.rows.replace(
-  /\.\.\.scored\.map\(\(\{ r, score, res \}\) => \(\{[\s\S]*?\}\)\),/,
-  "...scored.map(({ r, score }) => ({ name: r.name, score })),"
+  /\.\.\.scored\.map\(\(\{ p, club, role, score, res \}\) => \(\{[\s\S]*?\}\)\),/,
+  "...scored.map(({ p, score }) => ({ name: p.name, score })),"
 );
 if (brokenRows === parts.rows) { console.log("❌ 변이 치환이 안 됐어요 — 정규식이 소스와 안 맞아요"); process.exit(1); }
 const brokenRun = new Function(
