@@ -767,11 +767,15 @@ window.Career = (() => {
     $("tour-round").textContent = S.role;
     $("tour-card").innerHTML = `
       <div class="relief-score" id="relief-score"></div>
+      <div id="dia-wrap"></div>
       <div class="pbp" id="pbp-pro"></div>
       <div id="game-moment"></div>
       <div id="game-result"></div>`;
     show("screen-tournament");
 
+    // ⚾ 다이아몬드 계기판 — 구원 등판은 주자가 쌓인 위기예요. 눈으로 보여야 긴장이 서요.
+    const dia = window.RookieDiamond ? window.RookieDiamond.make($("dia-wrap")) : null;
+    if (dia) dia.inning(`${inn}회초 · ${S.role}`);
     const box = $("pbp-pro");
     const btn = $("btn-tour-next");
     const setScore = (our, their) => {
@@ -788,6 +792,7 @@ window.Career = (() => {
       d.textContent = text;
       box.appendChild(d);
       box.scrollTop = box.scrollHeight;
+      if (dia) dia.say(text);       // 같은 줄을 다이아몬드도 읽어요
     };
 
     setScore(our0, their0);

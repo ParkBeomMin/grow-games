@@ -1802,9 +1802,12 @@ function renderGameSim(cfg) {
       </tbody>
     </table>
     </div>
+    <div id="dia-wrap"></div>
     <div class="pbp" id="pbp"></div>
     <div id="game-moment"></div>
     <div id="game-result"></div>`;
+  // ⚾ 다이아몬드 계기판 — 중계 피드가 말한 것만 따라가요 (없는 주자를 지어내지 않아요)
+  const dia = window.RookieDiamond ? window.RookieDiamond.make($("dia-wrap")) : null;
 
   const evFor = (inn, half) => story.events.filter((e) => e.inn === inn && e.half === half);
   // 경기 중 랜덤 미니게임 — 2~7회 중 한 이닝에 등장 (프로 지정 모먼트가 있으면 생략)
@@ -1846,6 +1849,7 @@ function renderGameSim(cfg) {
       if (f.cls) div.className = f.cls;
       div.textContent = f.text;
       $("pbp").appendChild(div);
+      if (dia) dia.say(f.text);      // ⚾ 같은 줄을 다이아몬드도 읽어요 (말과 그림이 일치)
     }
     const pbp = $("pbp");
     pbp.scrollTop = pbp.scrollHeight;
