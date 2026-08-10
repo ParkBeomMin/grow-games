@@ -87,16 +87,36 @@
       }
       box.querySelectorAll(".dia-outs i").forEach((d, i) => d.classList.toggle("on", i < outs));
     };
-    // 타구를 날려요 — transform만 움직여요(좌표 속성을 건드리면 애니메이션이 안 붙어요)
-    const fly = (to) => {
-      if (!ball || !to) return;
+    /* 공은 **투수가 던지고 → 타자가 치면 날아가요.** 두 걸음으로 움직여요:
+     *   ① 마운드 → 홈플레이트 (투구, 빠르게)   ② 홈 → 타구 지점 (치면)
+     * transform만 움직여요(좌표 속성을 건드리면 전환이 안 붙어요). 타이머는 늘 정리해요. */
+    let seq = null;
+    const slow = () => !(typeof window !== "undefined" && window.matchMedia
+      && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+    const put = (pt, ms) => {
+      if (!ball) return;
+      ball.style.transition = ms && slow() ? `transform ${ms}ms cubic-bezier(.2,.85,.3,1), opacity .2s ease` : "none";
+      ball.style.transform = `translate(${pt[0]}px, ${pt[1]}px)`;
+    };
+    // 투구부터 시작해서, 맞으면 그 자리로 날려요. to가 없으면 홈(포수)에서 멈춰요.
+    const pitch = (to, farMs) => {
+      if (!ball) return;
+      clearTimeout(seq);
       ball.classList.add("on");
-      ball.style.transform = `translate(${to[0]}px, ${to[1]}px)`;
+      if (!slow()) { put(to || P.home, 0); return; }     // 모션을 줄인 설정이면 바로 그 자리
+      put(P.mound, 0);
+      void ball.offsetWidth;                              // 리플로우 — 전환이 붙게
+      seq = setTimeout(() => {
+        put(P.home, 170);                                 // ⚾ 투구
+        if (!to || (to[0] === P.home[0] && to[1] === P.home[1])) return;
+        seq = setTimeout(() => put(to, farMs || 520), 190);  // 🏏 타구
+      }, 16);
     };
     const rest = () => {
       if (!ball) return;
+      clearTimeout(seq);
       ball.classList.remove("on");
-      ball.style.transform = `translate(${P.mound[0]}px, ${P.mound[1]}px)`;
+      put(P.mound, 0);
     };
     const flash = (cls) => {
       box.classList.remove("dia-score", "dia-out");
@@ -142,25 +162,40 @@
         if (/만루/.test(t)) { on.b1 = on.b2 = on.b3 = true; note("만루"); paint(); return; }
         if (/주자가 쌓이|위기!/.test(t)) { on.b1 = on.b2 = true; note("주자 1·2루"); paint(); return; }
 
+        /* 이닝 요약 줄 — "상대가 2점을 냈어요" 처럼 **한 이닝을 통째로** 말하는 줄이에요.
+         * 타석 하나가 아니라서 주자를 세울 수 없지만, 점수가 났다는 건 보여줘야 해요.
+         * 주자들이 홈을 밟고 이닝이 닫히는 걸로 그려요. */
+        const sum = t.match(/(\d+)\s*(?:점을|실점)/);
+        if (sum && /(냈|뽑아|내줬|실점)/.test(t)) {
+          const n = sum[1];
+          const mine = /우리 타선|뽑아/.test(t);
+          clearBases(); outs = 0;
+          pitch(HIT.single, 620); flash("dia-score");
+          note(`${mine ? "우리" : "상대"} ${n}점`);
+          paint();
+          return;
+        }
+        if (/무실점/.test(t)) { clearBases(); outs = 0; pitch(HIT.catcher); note("무실점"); paint(); return; }
+
         let runs = 0;
         if (/홈런/.test(t)) {
-          runs = advance(3, false) + 1; clearBases(); fly(HIT.homer); flash("dia-score"); note("홈런!");
+          runs = advance(3, false) + 1; clearBases(); pitch(HIT.homer, 760); flash("dia-score"); note("홈런!");
         } else if (/3루타|삼루타/.test(t)) {
-          runs = advance(3, false); on.b3 = true; fly(HIT.triple); note("3루타");
+          runs = advance(3, false); on.b3 = true; pitch(HIT.triple, 600); note("3루타");
         } else if (/2루타|이루타/.test(t)) {
-          runs = advance(2, true); fly(HIT.double); note("2루타");
+          runs = advance(2, true); pitch(HIT.double, 580); note("2루타");
         } else if (/안타|출루|밀어친|적시타/.test(t)) {
-          runs = advance(1, true); fly(HIT.single); note("안타");
+          runs = advance(1, true); pitch(HIT.single, 520); note("안타");
         } else if (/볼넷|사구|몸에 맞/.test(t)) {
-          runs = advance(1, true); fly(HIT.catcher); note("볼넷");
+          runs = advance(1, true); pitch(null); note("볼넷");
         } else if (/병살/.test(t)) {
-          outs = Math.min(3, outs + 2); fly(HIT.infield); flash("dia-out"); note("병살");
+          outs = Math.min(3, outs + 2); pitch(HIT.infield, 380); flash("dia-out"); note("병살");
         } else if (/삼진/.test(t)) {
-          outs = Math.min(3, outs + 1); fly(HIT.catcher); flash("dia-out"); note("삼진");
+          outs = Math.min(3, outs + 1); pitch(null); flash("dia-out"); note("삼진");
         } else if (/아웃|땅볼|뜬공|범타|플라이|잡아냈|물러납/.test(t)) {
-          outs = Math.min(3, outs + 1); fly(HIT.infield); flash("dia-out"); note("아웃");
+          outs = Math.min(3, outs + 1); pitch(HIT.infield, 380); flash("dia-out"); note("아웃");
         } else if (/도루/.test(t)) {
-          runs = advance(1, false); fly(HIT.steal); note("도루");
+          runs = advance(1, false); note("도루");
         } else {
           paint(); return;                       // 모르는 줄은 화면을 안 건드려요
         }
