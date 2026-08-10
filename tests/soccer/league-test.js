@@ -367,5 +367,26 @@ guard("도박 구조", () => {
     `능력치 70: 반대로 ${NAME(1)}의 수상 가치가 ${NAME(3)}보다 높다 (${v70[0].toFixed(2)} > ${v70[2].toFixed(2)})`);
 });
 
+// ---------- ⑧ 🏅 발롱도르 — 리그 격을 두 번 세지 않는가 ----------
+/* 제보: "2부리그에서 뛰고 성적이 엄청 좋았던 것도 아닌 것 같은데 발롱도르를 받았어."
+ *
+ * hype에는 이미 리그 격이 들어 있어요 — log(posAxis × prestige) × AXIS_K.
+ * 그런데 발롱도르 조건이 거기 또 × prestige를 하고 있었습니다. 격이 로그로 한 번,
+ * 선형으로 또 한 번 실려서 **상위 리그에서는 리그MVP만 받으면 사실상 자동**이었어요.
+ * 실측: 🇬🇧 챔피언십에서 2골 6도움 69수비(평점 6.8)로 통과율 100%.
+ *
+ * 이 표에서 지키는 것: 조건이 hype를 그대로 보고, 격을 다시 곱하지 않는다. */
+console.log("=== ⑧ 발롱도르가 리그 격을 두 번 세는가 ===");
+{
+  const cond = grab(SRC, /awards\.includes\("리그MVP"\)[\s\S]{0,160}?\{/);
+  console.log(`   ${cond ? cond.replace(/\s+/g, " ").trim().slice(0, 90) : "못 찾음"}`);
+  check(!!cond, "발롱도르 조건을 소스에서 찾았다");
+  check(!!cond && !/prestige/.test(cond),
+    "조건이 리그 격을 다시 곱하지 않는다 — hype에 이미 들어 있어요");
+  check(!!cond && /\bhype\b/.test(cond), "hype를 그대로 본다");
+  /* hype 자체에는 격이 들어 있어야 해요 — 안 그러면 하부 리그가 유리해져요 */
+  check(/prestige/.test(parts.hype), "hype 산식에는 격이 들어 있다 (거기서 한 번만 세요)");
+}
+
 console.log(fail ? `\n❌ ${fail}건 실패` : "\n✅ 통과");
 process.exit(fail ? 1 : 0);

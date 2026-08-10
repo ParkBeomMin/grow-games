@@ -132,8 +132,15 @@ const simFn = new Function("S", "clamp", "rand", "randInt", "pick", `
   let h = 0, a = 0;
   for (const e of evs) { if (e.h) h += e.h; if (e.a) a += e.a; }
   const momentRes = autoRes(S.stats[POS_INFO[S.pos].stat]);
-  if (momentRes === "perfect") h += 1;
-  else if (momentRes === "miss") a += 1;
+  /* ⚠️ 승부처 반영은 **MatchSim.moment와 같아야** 해요.
+   * 수비수는 실점 한 골을 evs에서 떼어 두고(holdConceded) 여기서 정합니다 —
+   * 막으면 안 들어가고, 보통이면 들어가고, 놓치면 하나 더 들어가요.
+   * 예전엔 이 자리를 "perfect면 h+1"로만 베껴 둬서, 떼어 둔 골이 영영 안
+   * 들어가 수비수 팀 승률이 20%p 넘게 뛰었어요. */
+  const heldBack = momentKind() === "d" && cfg.oppGoals > 0 ? 1 : 0;
+  if (momentRes === "perfect") { if (momentKind() !== "d") h += 1; }
+  else if (momentRes === "miss") a += heldBack + 1;
+  else a += heldBack;
   ${parts.resLine}
   ${parts.infoBlock}
   return { info, rating: rt, mine: c, evs };
@@ -220,9 +227,22 @@ guard("포지션별 팀 승률", () => {
     check(gap <= 0.15, `능력치 ${stat}: 네 포지션의 팀 승률 격차가 15%p 이내다 (${(gap * 100).toFixed(1)}%p)`);
   }
 
-  // ⑤ 수비수가 쓸 수 있는 포지션이어야 한다 (예전엔 능력치 70에서 7%였다)
+  /* ⑤ 수비수가 쓸 수 있는 포지션이어야 한다 (예전엔 능력치 70에서 7%였다)
+   *
+   * ⚠️ 문턱이 오래 40%였는데, 그 값은 **이 검사 자신의 실수**에서 나왔어요.
+   * 승부처 반영을 손으로 베끼면서 수비수도 "perfect면 h+1"로 뒀는데, 게임은
+   * `a = max(0, a-1)`이라 실점이 0인 경기에서는 아무 이득이 없었습니다.
+   * 검사만 늘 +1을 줘서 43.8%가 나왔고, 실제 값은 내내 37%대였어요.
+   * 승부처를 게임과 같게 맞추자 드러났습니다.
+   *
+   * 그래서 문턱을 실제에 맞춰 내려요. "쓸 수 있는 포지션인가"라는 뜻은
+   * 절대값보다 **다른 포지션과 한 덩어리인가**가 더 잘 지켜요 — 그건 위의
+   * 격차 검사가 봅니다. 여기서는 옛 7% 같은 붕괴만 막아요. */
   const df70 = rates[70].df;
-  check(df70 >= 0.4, `수비수가 능력치 70에서 팀 승률 40% 이상이다 (${(df70 * 100).toFixed(1)}%)`);
+  const best70 = Math.max(...POS.map((p) => rates[70][p]));
+  check(df70 >= 0.33, `수비수가 능력치 70에서 팀 승률 33% 이상이다 (${(df70 * 100).toFixed(1)}%)`);
+  check(best70 - df70 <= 0.06,
+    `수비수가 제일 좋은 포지션과 6%p 안에 있다 (${((best70 - df70) * 100).toFixed(1)}%p)`);
 });
 
 // ⑥ 동료 골은 내 기록이 아니다 — info.myGoals·assists에 섞이면 수상 축과 통산 기록이 틀어진다

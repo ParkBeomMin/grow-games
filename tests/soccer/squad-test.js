@@ -666,6 +666,63 @@ guard("⑯ 부문 1위", () => {
   void sum;
 });
 
+// ---------- ⑰ 🛌 몸이 바닥이면 감독이 가끔 쉬게 하는가 ----------
+console.log("=== ⑰ 보호 로테이션 ===");
+guard("⑰ 보호 로테이션", () => {
+  /* 제보: "스탯이 좋아서 선발 확률이 100%인데, 컨디션이 0이면 감독이 선수 보호
+   * 차원에서 가끔씩은 쉬게 해줄 수도 있는 거 아냐?? 중요하지 않은 경기 같은 거."
+   * 실력 103인데 팀 최고가 70이면 컨디션으로는 절대 안 밀려서, 몸이 아무리
+   * 상해도 매 경기 90분을 뜁니다. */
+  const st = S();
+  /* 앞 절들이 포지션과 기록을 흔들어 놨어요 — 여기서 쓰는 상태를 다시 세웁니다.
+   * 내 포지션은 **명단에 적힌 내 줄**에서 가져와요. S.pos만 바꾸면 명단의 내 줄은
+   * 그대로라 "그 포지션 줄에 내가 없는" 상태가 돼서 확률이 0%가 나옵니다. */
+  st.clubTrust = undefined;
+  if (st.activity) { st.activity.defense = 0; st.activity.apps = 0; st.activity.ratingSum = 0; }
+  setOvr(140);                      // 팀에서 압도적인 실력 — 컨디션으로는 안 밀려요
+  const meRow = Squad.ensureSquad().find((x) => x.me);
+  if (meRow) st.pos = meRow.pos;
+  Squad.ensureSquad();
+  const at = (c) => { st.condition = c; return Squad.myLine(); };
+  const row = [0, 10, 20, 30, 60].map((c) => `컨디션 ${c} → ${Math.round(at(c).odds * 100)}%`);
+  console.log(`   ${row.join(" · ")}`);
+  st.condition = 60;
+  check(Math.round(at(60).odds * 100) === 100, `몸이 멀쩡하면 100%다 (${Math.round(at(60).odds * 100)}%)`);
+  check(at(0).odds < 0.8, `컨디션 0이면 확실히 내려간다 (${Math.round(at(0).odds * 100)}%)`);
+  check(at(0).odds > 0.4, `그렇다고 절반 아래로 떨어지진 않는다 (${Math.round(at(0).odds * 100)}%) — 실력은 실력이니까요`);
+  check(at(0).odds < at(10).odds && at(10).odds < at(20).odds && at(20).odds <= at(30).odds,
+    "몸이 나쁠수록 뺄 확률이 높다");
+  check(Math.abs(at(30).odds - at(60).odds) < 1e-9,
+    `문턱(${Squad.REST_BAR}) 위로는 아예 안 걸린다`);
+
+  /* ⚠️ **확률과 실제가 같은 말을 해야 해요.** 굴릴 때만 빼고 확률에 안 넣으면
+   * "100%라고 적혀 있는데 벤치"가 됩니다 — 이 저장소 단골 병이에요. */
+  st.condition = 0;
+  let sat = 0;
+  const N = 400;
+  for (let i = 0; i < N; i++) {
+    if (st.activity) st.activity.week = i;    // 라운드를 바꿔야 다시 굴려요
+    Squad.rollLineup();
+    if (!Squad.isStarter()) sat++;
+  }
+  const seen = sat / N, said = 1 - at(0).odds;
+  console.log(`   컨디션 0에서 ${N}경기 — 실제로 앉은 비율 ${Math.round(seen * 100)}% · 화면이 말한 비율 ${Math.round(said * 100)}%`);
+  check(Math.abs(seen - said) < 0.08,
+    `화면에 적힌 확률과 실제가 맞는다 (${Math.round(seen * 100)}% vs ${Math.round(said * 100)}%)`);
+
+  /* 쉬게 된 날엔 감독이 몸 얘기를 해야 해요 */
+  const say = Squad.benchReason(Squad.myLine()).replace(/<[^>]+>/g, " ");
+  console.log(`   감독 — "${(say.match(/“([^”]+)”/) || [])[1] || say.trim()}"`);
+  check(/몸|컨디션|쉬/.test(say), "감독이 몸 상태를 이유로 말한다");
+
+  // 스쿼드 레이어에도 적혀야 화면이 한 몸이에요
+  st.condition = 0;
+  const note = Squad.squadHTML().replace(/<[^>]+>/g, " ");
+  check(/감독이 뺄 수 있어요/.test(note), "스쿼드 레이어가 그 사정을 적는다");
+  st.condition = 70;
+  check(!/감독이 뺄 수 있어요/.test(Squad.squadHTML()), "몸이 멀쩡하면 그 줄이 없다");
+});
+
 console.log(fail ? `\n❌ ${fail}건 실패` : "\n✅ 통과");
 w.close();
 process.exit(fail ? 1 : 0);

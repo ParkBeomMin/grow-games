@@ -1999,7 +1999,17 @@ const MatchSim = (() => {
       evs.push({ min: rmin(), side: "atk", h: 1, cls: "good",
         text: who ? `⚽ ${who}의 골! 팀이 추가점을 뽑아냅니다` : `⚽ 동료의 골! 팀이 추가점을 뽑아냅니다` });
     }
-    for (let i = 0; i < oppGoals; i++) evs.push({ min: rmin(), side: "def", a: 1, cls: "bad", text: `😣 ${away}에 실점…` });
+    /* 🛡️ 수비수의 승부처는 **실점을 막는 것**이에요. 그런데 예전에는 이미 들어간
+     * 골을 스코어에서 빼는 방식이었어요 — 중계에는 "😣 실점…"이 세 번 떠 있는데
+     * 결과는 2실점이 됩니다(제보: "중계 텍스트에서는 3실점인데 경기 끝나면
+     * 2실점으로 되어 있네"). 축구에서 들어간 골은 지워지지 않아요.
+     *
+     * 그래서 **한 골을 떼어 뒀다가** 승부처에서 정해요.
+     *   막으면  → 그 골은 아예 안 들어가요 (중계에도 안 떠요)
+     *   놓치면  → 그때 들어가고 중계에도 그때 떠요
+     * 최종 실점 수는 예전과 똑같아요 — 언제 보여주느냐만 바뀝니다. */
+    const holdConceded = momentKind() === "d" && oppGoals > 0 ? 1 : 0;
+    for (let i = 0; i < oppGoals - holdConceded; i++) evs.push({ min: rmin(), side: "def", a: 1, cls: "bad", text: `😣 ${away}에 실점…` });
     if (defense >= 2) evs.push({ min: rmin(), side: "def", text: `🛡️ ${myName}, 결정적 태클로 위기를 끊어요!` });
     evs.push({ min: rmin(), side: "mid", text: pick(["중원 싸움이 뜨거워요", "빠른 템포로 오가는 공방", "관중석이 들썩입니다", "양 팀 압박이 매섭습니다"]) });
     evs.sort((x, y) => x.min - y.min);
@@ -2028,19 +2038,26 @@ const MatchSim = (() => {
       btn.disabled = true;
       btn.textContent = "🔥 승부처!";
       playRandomMini($("stage-moment"), (res, mtype) => {
+        // 떼어 둔 실점을 지금 넣어요 (막았으면 안 넣어요 — 지우는 게 아니라 안 들어가는 거예요)
+        const letIn = () => {
+          if (!holdConceded) return;
+          a += 1; setScore(); flash("def");
+          feed(`😣 ${away}에 실점…`, "bad");
+        };
         if (res === "perfect") {
           /* 🔥 승부처 성공이 **무엇으로 남는지는 포지션이 정해요.**
            * 공격수는 극장골, 미드필더는 결정적 패스, 수비수는 실점 차단이에요. */
           const kind = momentKind();
-          if (kind === "d") { a = Math.max(0, a - 1); setScore(); flash("def"); }
-          else { h += 1; setScore(); flash("atk"); }
+          if (kind !== "d") { h += 1; setScore(); flash("atk"); }
           feed(mtype.great, "good");
           feed(MOMENT_FEED[kind](myName, away), "good");
         } else if (res === "miss") {
+          letIn();
           a += 1; setScore(); flash("def");
           feed(mtype.bad, "bad");
           feed(`😱 치명적인 실수… ${away}에 한 점을 내줍니다`, "bad");
         } else {
+          letIn();
           feed(mtype.ok);
         }
         setMin(90);

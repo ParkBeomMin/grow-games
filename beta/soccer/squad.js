@@ -147,16 +147,40 @@ window.WingerSquad = (() => {
   }
   const lineupScore = (x) => x.str + rand(-FORM_SWING, FORM_SWING) + (x.me ? myBonus().total : 0);
 
+  /* 🛌 **보호 로테이션** — 몸이 바닥이면 감독이 가끔 쉬게 해요.
+   *
+   * 제보: "스탯이 좋아서 선발 확률이 100%인데, 컨디션이 0이면 감독이 선수 보호
+   * 차원에서 가끔씩은 쉬게 해줄 수도 있는 거 아냐?? 중요하지 않은 경기 같은 거."
+   * 맞아요 — 실력 103인데 팀 최고 수비수가 70이면 컨디션으로는 절대 안 밀려서,
+   * 몸이 아무리 상해도 매 경기 90분을 뜁니다.
+   *
+   * ⚠️ 이건 **선발 확률에도 같이 실어요.** 굴릴 때만 빼고 확률에는 안 넣으면
+   * "100%라고 적혀 있는데 벤치"가 됩니다 — 이 저장소가 계속 싸워 온 병이에요.
+   * 리그 경기에만 걸려요(rollLineup을 리그만 부릅니다) — 🏆 컵과 🌏 월드컵은
+   * 큰 경기라 감독도 안 뺍니다. */
+  const REST_BAR = 30;       // 이 아래부터 감독이 쉬게 할 수 있어요
+  const REST_MAX = 0.35;     // 컨디션 0일 때 (0 → 35% · 10 → 19% · 20 → 7% · 30 → 0%)
+  function restP() {
+    const c = S.condition;
+    if (c == null || c >= REST_BAR) return 0;
+    return REST_MAX * Math.pow((REST_BAR - c) / REST_BAR, 1.5);
+  }
+
   /* 이번 경기 선발을 뽑아 활동 기록에 새겨요. 같은 라운드를 다시 그려도
    * 흔들리지 않게 **한 번 정하면 그 라운드 동안 고정**입니다. */
   function rollLineup() {
     const sq = ensureSquad();
+    const rest = Math.random() < restP();     // 🛌 오늘 감독이 나를 뺄까
     const picked = [];
     for (const p of POS_KEYS) {
       const line = sq.filter((x) => x.pos === p)
-        .map((x) => ({ x, v: lineupScore(x) })).sort((a, b) => b.v - a.v);
+        /* 보호 로테이션이 걸린 날은 내 점수를 바닥으로 내려요 — 명단에서 빼는 게
+         * 아니라 경쟁에서 빠지는 것이라, 내 자리는 다음 사람이 자연스럽게 채워요. */
+        .map((x) => ({ x, v: (x.me && rest) ? -Infinity : lineupScore(x) }))
+        .sort((a, b) => b.v - a.v);
       picked.push(...line.slice(0, FORMATION[p]).map((e) => e.x));
     }
+    if (S.activity) S.activity.rested = rest;
     if (S.activity) {
       S.activity.xi = picked.map((x) => x.name);
       S.activity.xiWeek = S.activity.week;
@@ -265,7 +289,11 @@ window.WingerSquad = (() => {
         .sort((a, b) => b.v - a.v);
       if (roll.slice(0, FORMATION[S.pos]).some((e) => e.x.me)) hit++;
     }
-    return { rank, of: line.length, slots: FORMATION[S.pos], line, odds: hit / N, bonus };
+    /* 🛌 보호 로테이션도 확률에 실어요 — 굴릴 때만 빼고 여기 안 넣으면
+     * "100%라고 적혀 있는데 벤치"가 됩니다. */
+    const rest = restP();
+    return { rank, of: line.length, slots: FORMATION[S.pos], line,
+      odds: (hit / N) * (1 - rest), rest, bonus };
   }
 
   /* 왜 앉았는지 / 왜 뽑혔는지 한 줄 — **화면 세 군데가 이 함수 하나를 써요.**
@@ -419,7 +447,9 @@ window.WingerSquad = (() => {
     const parts = `실력 ${Math.round(L.line.find((x) => x.me).str)}`
       + ` · 컨디션 ${sign(b.cond)}`
       + ` · 폼 ${b.avg == null ? "—" : sign(b.form)}`
-      + ` · 그날 흔들림 ±${FORM_SWING}`;
+      + ` · 그날 흔들림 ±${FORM_SWING}`
+      /* 몸이 바닥이면 감독이 뺄 수 있다는 걸 확률 옆에 적어요 */
+      + (L.rest > 0 ? `<br/>🛌 몸이 상해서 감독이 뺄 수 있어요 (−${Math.round(L.rest * 100)}%)` : "");
     return `<div class="sq-note">${
       isStarter()
         ? `✅ <b>이번 경기 선발</b> — ${posName(S.pos)} ${L.slots}자리 중 실력 ${L.rank}번째`
@@ -460,8 +490,8 @@ window.WingerSquad = (() => {
   return {
     openSquad, rollLineup, matchXI, FORM_SWING,
     ensureSquads, ensureSquad, squadOf, startingXI, startingXIOf, leagueFaces,
-    isStarter, myLine, benchReason, myBonus, benchTurn, creditMateGoals, markApps, resetSeason, squadHTML,
-    FORMATION, BENCH, SQUAD_SIZE, BENCH_GAIN, SCORE_W,
+    isStarter, myLine, benchReason, myBonus, restP, benchTurn, creditMateGoals, markApps, resetSeason, squadHTML,
+    FORMATION, BENCH, SQUAD_SIZE, BENCH_GAIN, SCORE_W, REST_BAR, REST_MAX,
     _t: { rollSquad, pickScorer },
   };
 })();
