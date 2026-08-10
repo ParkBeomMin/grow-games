@@ -201,18 +201,12 @@ window.WingerSquad = (() => {
     all.sort((a, b) => b.player.str - a.player.str);
     if (!need) return all.slice(0, n);
     const out = [], left = Object.assign({}, need);
-    /* ⚠️ **우리 클럽에서 한 명은 넣어요.** 클럽 할당량을 없애는 게 이 변경의
-     * 전부인데, 여기만은 남깁니다 — 중계에 뜬 동료 골이 개인 순위에 쌓이는
-     * 배선(applyMateGoals)이 "우리 클럽 선수가 표에 있느냐"에 걸려 있어요.
-     * 없으면 내가 도움을 준 골이 표 어디에도 안 남습니다. */
-    const mineTop = all.find((c) => c.club === S.group);
-    if (mineTop) {
-      out.push(mineTop);
-      const p0 = mineTop.player.pos;
-      if (left[p0]) left[p0] -= 1;
-    }
+    /* ⚠️ **우리 클럽 자리도 따로 안 챙겨요.** 한때 한 자리를 남겼었는데,
+     * 그건 "동료 골이 이 표에 쌓이려면 우리 선수가 표에 있어야 한다"는 배선
+     * 사정 때문이었어요. 그건 이 표가 무엇인지와 상관없는 이유입니다 —
+     * **기록이 좋지 않으면 안 보이는 게 맞아요**(제보). 동료 기록은 👥 명단
+     * 화면에 그대로 남고, 개인 순위는 잘한 사람만 오릅니다. */
     for (const cand of all) {
-      if (out.includes(cand)) continue;
       const p = cand.player.pos;
       if (!left[p]) continue;
       left[p] -= 1;

@@ -227,7 +227,9 @@ guard("⑥ 개인 순위와 같은 사람", () => {
   const mine = race.filter((r) => r.club === S().group);
   console.log(`   개인 순위 ${race.length}명 — ${race.map((r) => `${r.name}(${r.club})`).slice(0, 4).join(" · ")} …`);
   check(race.length > 0, `개인 순위 명단이 만들어졌다 (${race.length}명)`);
-  check(mine.length > 0, `그중 우리 클럽 선수가 있다 (${mine.length}명)`);
+  /* 우리 클럽 선수가 꼭 있어야 하지는 **않아요** — 기록이 좋지 않으면 안 보이는
+   * 게 맞습니다(제보). 동료 기록은 👥 명단 화면에 그대로 남아요. */
+  console.log(`   그중 우리 클럽 ${mine.length}명 (없어도 괜찮아요)`);
   /* ⚠️ **여덟 명 전부**가 실제 명단의 사람이어야 해요. 우리 팀만 맞추면
    * 다른 팀 선수는 어느 명단에도 없는 유령이 됩니다. */
   const ghosts = race.filter((r) => !(all[r.club] || []).some((x) => x.name === r.name));
@@ -254,7 +256,13 @@ guard("⑥ 개인 순위와 같은 사람", () => {
   check(off.length === 0,
     `우리 클럽 몫 말고는 그 포지션 상위권에서 뽑힌다 (벗어난 사람 ${off.length}명`
     + `${off.length ? ` — ${off.map((r) => `${r.name}(${r.pos} ${Math.round(r.pop)})`).join(", ")}` : ""})`);
-  check(mine.length === 1, `우리 클럽 자리는 하나다 (${mine.length}명) — 동료 골이 쌓일 자리예요`);
+  /* 우리 클럽 자리를 강제로 챙기지 않아요 — 실력 순으로 들면 들고, 아니면 없어요 */
+  const myPool = (all[S().group] || []).filter((x) => !x.me).map((x) => x.str);
+  const myBest = myPool.length ? Math.max(...myPool) : 0;
+  const cutAll = Object.values(all).flat().filter((x) => !x.me)
+    .map((x) => x.str).sort((a, b) => b - a)[race.length - 1] || 0;
+  console.log(`   우리 클럽 최고 ${Math.round(myBest)} · 리그 ${race.length}위 선 ${Math.round(cutAll)}`);
+  check(mine.length <= 2, `우리 클럽 자리를 억지로 채우지 않는다 (${mine.length}명)`);
 });
 
 // ---------- ⑦ 클럽이 바뀌면 새로 ----------
