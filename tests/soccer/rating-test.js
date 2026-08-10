@@ -64,7 +64,9 @@ const leagueSrc = [
   grab(GAME, /function leagueOf\(st\) \{[\s\S]*?\n\}/),
 ].filter(Boolean).join("\n");
 
-const ratingFn = new Function("S", "stats", "pos", "condition", "fandom", "clamp", "rand", `
+/* 마지막 인자 penalty는 **리그 벌점을 밖에서 넘기는 자리**예요(🌏 월드컵이 0을 넘겨요).
+ * 여기서는 리그 경기를 재니 안 넘겨요 — 그러면 지금 리그 것을 씁니다. */
+const ratingFn = new Function("S", "stats", "pos", "condition", "fandom", "clamp", "rand", "penalty", `
   ${parts.posInfo} ${parts.clutchScale} ${parts.transLv} ${parts.clutch}
   ${leagueSrc}
   ${consts}

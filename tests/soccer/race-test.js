@@ -20,8 +20,8 @@ const grab = (s, re) => { const m = s.match(re); return m ? m[0] : null; };
 
 const parts = {
   // 재능이 능력치마다 따로 붙어요 — ratingOf가 STAT_KEYS를 훑어요
-  statKeys: grab(GAME, /const STAT_KEYS = \[[^\]]*\];/),
-  goalScale: grab(GAME, /const GOAL_SCALE = [^;]+;/),
+  statKeys: grab(G, /const STAT_KEYS = \[[^\]]*\];/),
+  goalScale: grab(G, /const GOAL_SCALE = [^;]+;/),
   roles: grab(G, /const RACE_ROLES = \[[\s\S]*?\n\];/),
   lam: grab(G, /const raceLam = \([\s\S]*?;\n/),
   leagues: grab(G, /const LEAGUES = \[[\s\S]*?\n\];/),
@@ -40,7 +40,8 @@ let bad = 0;
 const check = (ok, msg) => { console.log(`${ok ? "✅" : "❌"} ${msg}`); if (!ok) bad++; };
 const LEAGUES = new Function(`${parts.leagues} return LEAGUES;`)();
 const ROLES = new Function(`${parts.roles} return RACE_ROLES;`)();
-const raceLam = new Function(`${parts.lam} return raceLam;`)();
+// raceLam이 득점 눈금(GOAL_SCALE)을 곱해요 — 같이 안 넘기면 ReferenceError로 죽습니다
+const raceLam = new Function(`${parts.goalScale} ${parts.lam} return raceLam;`)();
 
 // ── ① 부문상이 표 1위를 본다 (소스 배선)
 check(/raceTop\("g"\)/.test(parts.awardBlk) && /골든부츠/.test(parts.awardBlk),
@@ -57,24 +58,28 @@ check(!!halfReset && !/race/.test(halfReset),
   "반기가 바뀌어도 경쟁자 기록은 안 지운다 (시즌 내내 같은 8명이에요)");
 
 // ── ③ 순위 계산 — 내가 1위면 raceTop이 참
-const rankOf = new Function("S", "key", `${parts.rank}${parts.top} return { rank: raceRank(key), top: raceTop(key) };`);
+/* raceRank가 이제 **우리 팀 동료 기록**도 같이 세워요(window.WingerSquad).
+ * 여기서는 경쟁자 명단만 놓고 순위 규칙을 보는 자리라 명단 모듈은 비워서 넘깁니다 —
+ * 안 넘기면 `window is not defined`로 죽어요. 동료가 표에 끼는지는
+ * tests/soccer/career-column-test.js가 실제 화면으로 봅니다. */
+const rankOf = new Function("S", "key", "window", `${parts.rank}${parts.top} return { rank: raceRank(key), top: raceTop(key) };`);
 const mkS = (myGoals, rivalGoals) => ({
   name: "나", group: "우리팀",
   activity: { goals: myGoals, assists: 0, defense: 0,
     race: rivalGoals.map((g2, i) => ({ name: `상대${i}`, club: "X", role: "r", g: g2, a: 0, d: 0 })) },
 });
-const win = rankOf(mkS(50, [40, 30, 20]), "g");
-const lose = rankOf(mkS(30, [40, 30, 20]), "g");
+const win = rankOf(mkS(50, [40, 30, 20]), "g", {});
+const lose = rankOf(mkS(30, [40, 30, 20]), "g", {});
 check(win.top === true && win.rank[0].me, `내가 최다 득점이면 1위다 (${win.rank[0].name} ${win.rank[0].v})`);
 check(lose.top === false, `아니면 1위가 아니다 (1위 ${lose.rank[0].name} ${lose.rank[0].v})`);
 /* 동점이면 받는다. 실제로도 **공동 득점왕은 둘 다** 받아요 —
  * 한 골 차이로 갈리는 건 몰라도, 같은 기록인데 상을 못 받으면 이상합니다.
  * raceRank의 정렬이 동점에서 내 줄을 앞에 두는 게 이 규칙이에요. */
-check(rankOf(mkS(40, [40, 10]), "g").top === true, "동점이면 공동 1위로 받는다");
+check(rankOf(mkS(40, [40, 10]), "g", {}).top === true, "동점이면 공동 1위로 받는다");
 // 공격포인트는 골+도움
 const p = rankOf({ name: "나", group: "T",
   activity: { goals: 10, assists: 30, defense: 0,
-    race: [{ name: "상대", club: "X", g: 35, a: 0, d: 0 }] } }, "p");
+    race: [{ name: "상대", club: "X", g: 35, a: 0, d: 0 }] } }, "p", {});
 check(p.top === true, `공격포인트왕은 골+도움으로 잰다 (내 40 vs 상대 35)`);
 
 // ── ④ 리그가 높을수록 1위 기록이 많다
@@ -96,7 +101,7 @@ check(tops[tops.length - 1] > tops[0] * 1.2,
 check(tops.every((v, i) => i === 0 || v >= tops[i - 1] - 3), "리그가 오를수록 1위 기록이 안 줄어든다");
 
 // ── ⑤ 옛 세이브 — race가 없으면 부문상을 건너뛴다 (안 죽는다)
-const noRace = rankOf({ name: "나", group: "T", activity: { goals: 99, assists: 0, defense: 0 } }, "g");
+const noRace = rankOf({ name: "나", group: "T", activity: { goals: 99, assists: 0, defense: 0 } }, "g", {});
 check(noRace.top === true && noRace.rank.length === 1,
   "경쟁자 명단이 없어도 순위 계산이 안 죽는다 (나 혼자)");
 check(/Array\.isArray\(act\.race\) && act\.race\.length/.test(parts.awardBlk),
@@ -201,8 +206,11 @@ const RACE_FIX = [
   { name: "평점왕", club: "D", g: 8, a: 8, d: 20, rate: 95, mom: 2 },
   { name: "MOM왕", club: "E", g: 9, a: 7, d: 15, rate: 60, mom: 9 },
 ];
+/* raceHTML이 줄마다 🏷️ 클래스를 적으면서 leagueOf·overall·raceStr·titleOf를 봐요.
+ * 이 검사가 보는 것은 **줄 세우는 순서와 머리글**이라, 그쪽은 최소한으로 넘깁니다 —
+ * 클래스 칸이 제대로 붙는지는 tests/soccer/career-column-test.js가 실제 화면으로 봐요. */
 const mkHTML = new Function(
-  "S", "key", "$",
+  "S", "key", "$", "window", "leagueOf", "overall", "raceStr", "titleOf",
   `${TABS}
    let raceKey = key;
    const raceTab = (k) => RACE_TABS.find(([x]) => x === k) || RACE_TABS[4];
@@ -220,14 +228,14 @@ const firstRow = (html) => {
 };
 const EXPECT = { g: "득점왕", a: "도움왕", d: "수비왕", r: "평점왕", m: "MOM왕" };
 for (const [k, who] of Object.entries(EXPECT)) {
-  const html = mkHTML(FIX_S, k, () => null);
+  const html = mkHTML(FIX_S, k, () => null, {}, () => ({ prestige: 1 }), () => 70, () => 70, () => "🧢 리그 주전");
   check(firstRow(html) === who, `${k} 탭으로 줄을 세우면 1위가 ${who}다 (실제 ${firstRow(html)})`);
 }
 // 공격포인트(p)는 골+도움 — 어느 한 부문 1위가 그대로 오면 안 된다
-const pTop = firstRow(mkHTML(FIX_S, "p", () => null));
+const pTop = firstRow(mkHTML(FIX_S, "p", () => null, {}, () => ({ prestige: 1 }), () => 70, () => 70, () => "🧢 리그 주전"));
 check(pTop === "득점왕", `공격P 탭은 골+도움으로 잰다 (득점왕 32 · 도움왕 27 · 실제 ${pTop})`);
 // 고른 탭이 화면에도 표시된다
-const gHTML = mkHTML(FIX_S, "g", () => null);
+const gHTML = mkHTML(FIX_S, "g", () => null, {}, () => ({ prestige: 1 }), () => 70, () => 70, () => "🧢 리그 주전");
 check(/class="race-tab on" data-k="g"/.test(gHTML), "고른 탭에 on 표시가 붙는다");
 check(/data-k="a"/.test(gHTML) && /data-k="m"/.test(gHTML), "다른 부문 탭도 함께 그려진다");
 /* 탭 하나에 숫자 하나 — 다섯 칸을 다 띄우면 탭을 만든 이유가 없어지고
@@ -241,8 +249,8 @@ check(heads(gHTML) === 3, `머리글도 세 칸이다 (${heads(gHTML)}칸)`);
 // 머리글이 그 부문 단위를 말한다
 const unitOf = (html) => (html.match(/<th>([^<]*)<\/th><\/tr>/) || [])[1];
 check(unitOf(gHTML) === "골", `⚽ 탭의 머리글이 "골"이다 (${unitOf(gHTML)})`);
-check(unitOf(mkHTML(FIX_S, "r", () => null)) === "평균 평점",
-  `⭐ 탭의 머리글이 "평균 평점"이다 (${unitOf(mkHTML(FIX_S, "r", () => null))})`);
+check(unitOf(mkHTML(FIX_S, "r", () => null, {}, () => ({ prestige: 1 }), () => 70, () => 70, () => "🧢 리그 주전")) === "평균 평점",
+  `⭐ 탭의 머리글이 "평균 평점"이다 (${unitOf(mkHTML(FIX_S, "r", () => null, {}, () => ({ prestige: 1 }), () => 70, () => 70, () => "🧢 리그 주전"))})`);
 // 👑은 지금 보고 있는 부문의 1위에만 붙는다
 // 안내 문구에도 👑이 있어서 표 안(tbody)에서만 센다
 const crowns = (html) => ((html.match(/<tbody>[\s\S]*?<\/tbody>/) || [""])[0].match(/👑/g) || []).length;
@@ -265,7 +273,9 @@ check(!!RENDER_RACE && !/renderPrep\(\)/.test(RENDER_RACE),
  * 안 그러면 같은 라운드를 두 번 세게 된다. */
 const MATE_FN = grab(C, /function applyMateGoals\(deltas, names\) \{[\s\S]*?\n  \}/);
 check(!!MATE_FN, "applyMateGoals를 소스에서 찾았다");
-const applyMate = new Function("S", "deltas", "names", `${MATE_FN} return applyMateGoals(deltas, names);`);
+/* applyMateGoals도 명단 모듈(window.WingerSquad)을 봐요 — 여기서는 델타를 직접
+ * 넘겨 규칙만 보는 자리라 비워서 넘깁니다. */
+const applyMate = new Function("S", "deltas", "names", "window", `${MATE_FN} return applyMateGoals(deltas, names);`);
 const mkDelta = (name, club, g0, dg) => ({ r: { name, club, g: g0 + dg }, dg, da: 0, dd: 0 });
 {
   const S2 = { group: "우리팀" };
@@ -274,7 +284,7 @@ const mkDelta = (name, club, g0, dg) => ({ r: { name, club, g: g0 + dg }, dg, da
     mkDelta("동료B", "우리팀", 3, 2),     // 굴려서 2골 — 중계에는 0골
     mkDelta("남의팀선수", "상대팀", 7, 3), // 다른 클럽 — 굴린 값 그대로여야 한다
   ];
-  applyMate(S2, ds, ["동료A", "동료A"]);
+  applyMate(S2, ds, ["동료A", "동료A"], {});
   const byName = Object.fromEntries(ds.map((d) => [d.r.name, d]));
   check(byName["동료A"].r.g === 7 && byName["동료A"].dg === 2,
     `중계에 2골 뜬 동료가 시즌 7골이 된다 (5 + 2 · 실제 ${byName["동료A"].r.g}골 / 이번 라운드 ${byName["동료A"].dg})`);

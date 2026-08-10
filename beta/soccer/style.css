@@ -540,3 +540,38 @@ body.wc-mode .rank-table thead th { background: rgba(242, 193, 78, .12); color: 
 .wc-report { margin: .5rem 0; }
 /* 🌏 결산의 대표팀 감독 한마디 아래 사실 줄 */
 .wc-fact { font-size: .78rem; color: var(--dim); margin-top: .2rem; }
+
+/* ---------- 🏛️ 명예의 전당 — 달 탭과 헌액 카드 ---------- */
+/* 달 탭 — 개수가 늘면 가로로 넘겨서 봐요(부문 탭과 같은 방식). */
+.hof-tabs {
+  display: flex; gap: .3rem; overflow-x: auto; padding-bottom: .35rem; margin-bottom: .6rem;
+  -webkit-overflow-scrolling: touch;
+}
+.hof-tab {
+  flex: 0 0 auto; padding: .38rem .6rem; border-radius: .7rem; cursor: pointer;
+  background: var(--bg2); border: 1px solid var(--line); color: var(--dim);
+  font-family: "Jua", sans-serif; font-size: .8rem; white-space: nowrap;
+}
+.hof-tab span { font-size: .68rem; opacity: .7; }
+.hof-tab.on { background: var(--field); border-color: var(--accent); color: var(--accent); }
+/* 카드가 눌리는 것이라는 표시 — 오른쪽 꺾쇠 */
+.hof-card { cursor: pointer; }
+.hof-more { color: var(--dim); font-size: 1.1rem; flex-shrink: 0; }
+/* 헌액 카드 레이어 */
+.hofd-modal { width: min(400px, 94vw); text-align: left; }
+.hofd-head { text-align: center; margin-bottom: .7rem; }
+.hofd-emoji { font-size: 2.2rem; }
+.hofd-name { font-family: "Jua", sans-serif; font-size: 1.15rem; color: var(--cream); }
+.hofd-me {
+  font-size: .66rem; color: var(--accent); border: 1px solid var(--accent);
+  border-radius: .6rem; padding: .06rem .32rem; vertical-align: middle;
+}
+.hofd-grade { font-size: .82rem; color: var(--accent); }
+.hofd-rank { font-size: .72rem; color: var(--dim); margin-top: .2rem; }
+.hofd-body { font-size: .82rem; }
+.hofd-row {
+  display: flex; justify-content: space-between; gap: .8rem;
+  padding: .34rem 0; border-top: 1px solid var(--line);
+}
+.hofd-row span { color: var(--dim); flex-shrink: 0; }
+.hofd-row b { color: var(--cream); font-weight: 500; text-align: right; }

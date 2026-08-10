@@ -2608,6 +2608,38 @@ window.WingerCareer = (() => {
   const OLD_SCORE_DIV = 2.1;
   const hofScore = (e) => (e && e.sv >= SCORE_V ? e.score : Math.round((e.score || 0) / OLD_SCORE_DIV));
 
+  /* 🗓️ 언제 헌액됐나 — 새 항목은 `at`에 적어요.
+   *
+   * 옛 항목에는 그 칸이 없지만 **id가 `"w" + Date.now()`라 시각이 이미 들어 있어요.**
+   * 그래서 "옛 기록은 전부 한 덩어리"로 밀어 넣지 않고 거기서 꺼내 씁니다 —
+   * 세이브를 고치지 않는다는 규칙은 그대로예요(읽는 쪽에서만 해석해요).
+   * 다른 판에서 온 항목이라 못 읽으면 그때만 🕰️ 그 이전으로 모읍니다. */
+  const HOF_T0 = Date.UTC(2020, 0, 1);   // 이 시리즈가 없던 시각은 시각이 아니에요
+  function hofAt(e) {
+    if (!e) return null;
+    const raw = e.at != null ? Number(e.at) : Number(String(e.id || "").replace(/\D/g, ""));
+    if (!Number.isFinite(raw) || raw < HOF_T0 || raw > Date.now() + 864e5) return null;
+    return raw;
+  }
+  const PAST_KEY = "past";
+  function hofMonth(e) {
+    const t = hofAt(e);
+    if (t == null) return { key: PAST_KEY, label: "🕰️ 그 이전", short: "🕰️ 그 이전" };
+    const d = new Date(t);
+    const m = d.getMonth() + 1;
+    return {
+      key: `${d.getFullYear()}-${String(m).padStart(2, "0")}`,
+      label: `${d.getFullYear()}년 ${m}월`,
+      short: `${String(d.getFullYear()).slice(2)}.${String(m).padStart(2, "0")}`,
+    };
+  }
+  const hofDateText = (e) => {
+    const t = hofAt(e);
+    if (t == null) return "";
+    const d = new Date(t);
+    return `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일`;
+  };
+
   // ---------- 🧬 환생 ----------
   // 은퇴(명예의 전당 등록)와 달리, 기록은 남기지 않고 유산만 다음 세대에 넘겨요.
   /* 🧬 환생 자격 — 아래 중 하나라도 이루면 열려요.
@@ -2726,12 +2758,18 @@ window.WingerCareer = (() => {
     const moves = moveLog(S);   // S를 비우기 전에 뽑아 둬요
     const entry = {
       id: "w" + Date.now(),
+      /* 🗓️ 헌액 시각 — 명예의 전당을 달별로 나누는 기준이에요. id에서도 꺼낼 수
+       * 있지만 id는 "겹치지 않는 이름"이 본업이라, 뜻이 있는 값은 제 칸에 둡니다. */
+      at: Date.now(),
       game: "soccer",
       name: S.name,
       pos: S.pos,
       team: S.group || marketOf().name,
       seasons: c.years ? c.years.length : 0,
       wins: c.wins, daesang: c.daesang, bonsang: c.bonsang, rookie: c.rookie,
+      /* 🏅 발롱도르는 은퇴식에만 있고 명예의 전당 항목에는 없었어요 — 커리어에서
+       * 가장 큰 상인데 카드에서 사라졌습니다. 옛 항목에는 없으니 읽는 쪽에서 건너뛰어요. */
+      ballon: c.ballon || 0,
       goals: (c.goals || 0) + ((S.youth && S.youth.g) || 0),
       assists: (c.assists || 0) + ((S.youth && S.youth.a) || 0),
       apps: (c.apps || 0) + (S.stages || 0),
@@ -2829,14 +2867,64 @@ window.WingerCareer = (() => {
     }
     list.sort((a, b) => hofScore(b) - hofScore(a));
     hofShown = 20;
-    drawHof(list, localIds);
+    hofTab = "all";
+    hofAll = list;
+    hofMine = localIds;
+    drawHof();
+  }
+
+  /* 🗓️ 달 탭 — 명예의 전당이 한 줄로만 쌓이면 "이번 달에 누가 들어왔나"를 볼 수가
+   * 없어요. 달로 나누되 **순위 자체는 건드리지 않아요** — 고른 칸 안에서 점수 순으로
+   * 다시 번호를 매깁니다. 전체 탭은 예전 그대로예요. */
+  function hofTabs() {
+    const seen = new Map();
+    for (const e of hofAll) {
+      const m = hofMonth(e);
+      if (!seen.has(m.key)) seen.set(m.key, { ...m, n: 0 });
+      seen.get(m.key).n += 1;
+    }
+    const months = [...seen.values()]
+      .filter((m) => m.key !== PAST_KEY)
+      .sort((a, b) => (a.key < b.key ? 1 : -1));
+    const past = seen.get(PAST_KEY);
+    return [{ key: "all", short: "전체", label: "전체", n: hofAll.length }]
+      .concat(months, past ? [past] : []);
   }
 
   // 더 보기로 20명씩 늘리고, 내 기록이 목록 밖이면 하단에 고정해서 보여줘요
   let hofShown = 20;
-  function drawHof(list, localIds) {
+  let hofTab = "all";
+  let hofAll = [];
+  let hofMine = new Set();
+  function drawHof() {
     const box = $("hof-list");
-    box.innerHTML = list.length ? "" : `<p class="hint">아직 아무도 없어요. 첫 전설이 되어보세요!</p>`;
+    const localIds = hofMine;
+    const tabs = hofTabs();
+    // 고른 탭이 사라졌으면(목록이 바뀌었으면) 전체로 되돌려요
+    if (!tabs.some((t) => t.key === hofTab)) hofTab = "all";
+    const list = hofTab === "all" ? hofAll : hofAll.filter((e) => hofMonth(e).key === hofTab);
+    box.innerHTML = "";
+    if (tabs.length > 2) {
+      const bar = document.createElement("div");
+      bar.className = "hof-tabs";
+      bar.innerHTML = tabs.map((t) =>
+        `<button type="button" class="hof-tab${t.key === hofTab ? " on" : ""}" data-k="${t.key}">${t.short} <span>${t.n}</span></button>`).join("");
+      bar.addEventListener("click", (ev) => {
+        const b = ev.target.closest(".hof-tab");
+        if (!b) return;
+        hofTab = b.dataset.k;
+        hofShown = 20;
+        drawHof();
+      });
+      box.appendChild(bar);
+    }
+    if (!list.length) {
+      const p = document.createElement("p");
+      p.className = "hint";
+      p.textContent = hofAll.length ? "이 달에는 아무도 없어요." : "아직 아무도 없어요. 첫 전설이 되어보세요!";
+      box.appendChild(p);
+      return;
+    }
     const myIdx = list.findIndex((x) => localIds.has(x.id));
     const view = list.slice(0, hofShown).map((e, i) => ({ e, i }));
     if (myIdx >= hofShown) view.push({ gap: true }, { e: list[myIdx], i: myIdx });
@@ -2856,7 +2944,10 @@ window.WingerCareer = (() => {
               + `${e.wcWin ? ` · 🏆 우승 ${e.wcWin}` : ""}`
               + `${e.wcBall ? ` · 🏅 골든볼 ${e.wcBall}` : ""}`
               + `${e.wcBoot ? ` · 🥇 골든부츠 ${e.wcBoot}` : ""}</div>` : ""}
-        </div>`;
+        </div>
+        <div class="hof-more">›</div>`;
+      // 카드를 누르면 그 선수의 커리어를 펼쳐요 (제보: "명전에서 선수 클릭 시 기록을 레이어로")
+      div.onclick = () => openHofCard(e, i + 1, localIds.has(e.id));
       box.appendChild(div);
     });
     const left = list.length - Math.min(list.length, hofShown);
@@ -2864,9 +2955,61 @@ window.WingerCareer = (() => {
       const more = document.createElement("button");
       more.className = "mini-btn rank-more";
       more.textContent = `▾ 더 보기 (${left}명 남음)`;
-      more.onclick = () => { hofShown += 20; drawHof(list, localIds); };
+      more.onclick = () => { hofShown += 20; drawHof(); };
       box.appendChild(more);
     }
+  }
+
+  /* 🏛️ 헌액 카드 — 카드 한 줄에 다 못 적은 것을 펼쳐 보여줘요.
+   * base.css의 .av-overlay/.av-modal 껍데기를 빌려 씁니다(스쿼드 레이어와 같은 방식).
+   * **옛 항목에는 없는 칸이 많아요.** 없으면 줄을 아예 안 그립니다 — 0으로 채우면
+   * "기록이 없다"와 "0이었다"가 같은 얼굴이 돼요. */
+  function openHofCard(e, rank, mine) {
+    if (document.querySelector(".hof-overlay")) return;
+    const row = (k, v) => (v ? `<div class="hofd-row"><span>${k}</span><b>${v}</b></div>` : "");
+    const awards = [
+      e.trophies ? `🏆 우승 ${e.trophies}` : "",
+      e.ballon ? `🏅 발롱도르 ${e.ballon}` : "",
+      e.daesang ? `🎖️ 리그MVP ${e.daesang}` : "",
+      e.bonsang ? `🥈 베스트11 ${e.bonsang}` : "",
+      e.rookie ? "🌟 신인왕" : "",
+      e.wins ? `🏅 MOM ${e.wins}` : "",
+    ].filter(Boolean).join(" · ");
+    const wc = [
+      e.wcApps ? `🌏 출전 ${e.wcApps}회` : "",
+      e.wcWin ? `🏆 우승 ${e.wcWin}` : "",
+      e.wcBall ? `🏅 골든볼 ${e.wcBall}` : "",
+      e.wcBoot ? `🥇 골든부츠 ${e.wcBoot}` : "",
+    ].filter(Boolean).join(" · ");
+    const wrap = document.createElement("div");
+    wrap.className = "av-overlay hof-overlay";
+    wrap.innerHTML = `<div class="av-modal hofd-modal">
+      <div class="hofd-head">
+        <div class="hofd-emoji">⚽</div>
+        <div class="hofd-name">${e.gen > 1 ? `<span class="hof-gen">${e.gen}세</span> ` : ""}${e.name}${mine ? ` <span class="hofd-me">내 선수</span>` : ""}</div>
+        <div class="hofd-grade">${e.grade || ""}</div>
+        <div class="hofd-rank">${hofTab === "all" ? "전체" : hofTabs().find((t) => t.key === hofTab).label} ${rank}위 · 커리어 점수 ${hofScore(e)}</div>
+      </div>
+      <div class="hofd-body">
+        ${row("🏷️ 최고 클래스", e.bestTitle)}
+        ${row("🏷️ 은퇴 시", e.bestTitle && e.title && e.bestTitle !== e.title ? e.title : "")}
+        ${row("💪 마지막 종합", e.finalOvr)}
+        ${row("⚽ 포지션", (POS_INFO[e.pos] || {}).name)}
+        ${row("🏟️ 마지막 클럽", e.team + (e.teamSeasons && e.teamSeasons < e.seasons ? ` (${e.teamSeasons}시즌)` : ""))}
+        ${row("📅 통산", e.seasons ? `${e.seasons}시즌${e.apps ? ` · ${e.apps}경기` : ""}` : "")}
+        ${row("📊 통산 기록", e.goals != null ? `⚽ ${e.goals}골 · 🅰️ ${e.assists || 0}도움` : "")}
+        ${row("🌍 밟아 온 리그", e.leagues)}
+        ${row("⛰️ 최고 리그", e.leagues && e.leagues.includes("→") ? e.peakLg : "")}
+        ${row("🏆 수상", awards)}
+        ${row("🌏 월드컵", wc)}
+        ${row("🔮 초월", e.trans ? `${e.trans}회` : "")}
+        ${row("🗓️ 헌액", hofDateText(e))}
+      </div>
+      <div class="av-actions"><button class="btn btn-primary" id="btn-hofd-close">닫기</button></div>
+    </div>`;
+    wrap.addEventListener("click", (ev) => { if (ev.target === wrap) wrap.remove(); });
+    document.body.appendChild(wrap);
+    document.getElementById("btn-hofd-close").onclick = () => wrap.remove();
   }
 
   // ---------- 랜덤 매칭 (공용 ../match.js — Supabase 연동) ----------

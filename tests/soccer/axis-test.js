@@ -223,7 +223,7 @@ const seasonFn = new Function("S", "clamp", "rand", "condition", "fandom", `
   const act = { goals: 0, assists: 0, defense: 0 };
   const games = CB_PER_YEAR * WEEKS_PER_CB;
   for (let i = 0; i < games; i++) {
-    const rating = (() => { ${parts.ratingBody} })();
+    const rating = ((penalty) => { ${parts.ratingBody} })();   // 벌점 미지정 = 지금 리그 것
     const c = matchContribution(rating);
     const goals = c.g, assists = c.a, defense = c.def;
     const momentRes = autoRes(stats[posStat]);

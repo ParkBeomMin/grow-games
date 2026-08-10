@@ -29,6 +29,9 @@ const parts = {
   cup: grab(SRC, /const CUP_PRIZE = [^;]+;/),
   cupRound: grab(SRC, /const CUP_ROUND_PRIZE = [^;]+;/),
   prizeOf: grab(SRC, /const prizeOf = \(base, lgId\) => \{[\s\S]*?\n  \};/),
+  /* applyPromotion이 우승을 트로피로 적립해요 — 같이 안 떼면 ReferenceError로 죽습니다.
+   * addTrophy는 LEAGUES와 leagueOf를 보는데 둘은 이미 위에서 떼어 왔어요. */
+  addTrophy: grab(SRC, /function addTrophy\(title, leagueId, weight\) \{[\s\S]*?\n  \}/),
   apply: grab(SRC, /function applyPromotion\(\) \{[\s\S]*?\n  \}/),
   swap: grab(SRC, /function swapLeagues\(fromId, toId, kind\) \{[\s\S]*?\n  \}/),
   roster: grab(SRC, /const leagueRoster = \(id\) => clubsIn\(id, S\);/),
@@ -71,6 +74,7 @@ const run = new Function(
    ${parts.trait}\n${parts.traitOf}\n${parts.traitMul}
    ${parts.roster}
    const proLog = () => {};
+   ${parts.addTrophy}
    ${parts.swap}
    ${parts.apply}
    const move = applyPromotion();

@@ -27,6 +27,8 @@ const parts = {
   gradeP: grab(/const gradeP = GRADE_PASS\[fg\.g\] \|\| 0;/),
   resultP: grab(/const resultP = info\.res === "W"[^;]+;/),
   doneP: grab(/const doneP = Math\.min\(DONE_PASS_CAP[^;]+;/),
+  /* doneP가 득점 눈금으로 나눠요 — 같이 안 떼면 ReferenceError로 죽습니다 */
+  goalScale: grab(/const GOAL_SCALE = [^;]+;/),
   factors: grab(/const factors = \[[\s\S]*?\n    \];/),
   p: grab(/const p = clamp\(0\.51 \+ factors[^;]+;/),
 };
@@ -42,6 +44,7 @@ const passP = new Function(
    ${parts.doneCap}
    ${parts.gradeP}
    ${parts.resultP}
+   ${parts.goalScale}
    ${parts.doneP}
    ${parts.factors}
    ${parts.p}
@@ -94,7 +97,7 @@ const brokenP = parts.p.replace("0.51 + factors", "0.51 + factors.slice(1)");
 if (brokenP === parts.p) { console.log("❌ 변이 치환이 안 됐어요"); process.exit(1); }
 const brokenPass = new Function(
   "m", "fg", "info", "overall", "S", "ev", "momentBonus", "clamp",
-  `${parts.gradePass}\n${parts.doneCap}\n${parts.gradeP}\n${parts.resultP}\n${parts.doneP}\n${parts.factors}\n${brokenP}\n return p;`
+  `${parts.gradePass}\n${parts.doneCap}\n${parts.gradeP}\n${parts.resultP}\n${parts.goalScale}\n${parts.doneP}\n${parts.factors}\n${brokenP}\n return p;`
 );
 const brokenReported = brokenPass(KR, { g: "D" }, { res: "L", myGoals: 0, assists: 0, defense: 0 },
   () => 45, { fandom: 0, condition: 80 }, { round: 0 }, 0, clamp);

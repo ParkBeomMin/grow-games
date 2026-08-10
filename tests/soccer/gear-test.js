@@ -27,7 +27,10 @@ const grab = (re) => { const m = GAME.match(re); return m ? m[0] : null; };
 const parts = {
   tiers: grab(/const GEAR_TIERS = \[[\s\S]*?\n\];/),
   bonus: grab(/function gearBonus\(key\) \{[\s\S]*?\n\}/),
-  reset: grab(/const resetStat = \(key, lo, hi\) =>[^;]+;/),
+  /* ⚠️ `[^;]+;`로 자르면 안 돼요 — resetStat이 여러 줄 블록이 되면서 **본문 안의
+   * 첫 세미콜론**에서 끊겼고, 반쪽짜리 코드가 SyntaxError로 죽었습니다.
+   * 끝나는 모양(`\n};`)으로 잡아요. */
+  reset: grab(/const resetStat = \(key, lo, hi\) => \{[\s\S]*?\n\};/),
   statCap: grab(/const statCap = [^;]+;/),
   transLv: grab(/const transLv = [^;]+;/),
   statBase: grab(/const STAT_CAP = [^;]+;/),

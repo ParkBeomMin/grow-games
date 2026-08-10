@@ -21,6 +21,9 @@ const grab = (src, re) => { const m = src.match(re); return m ? m[0] : null; };
 const parts = {
   tiers: grab(SRC, /const COUNTRY_TIERS = \{[\s\S]*?\n  \};/),
   ladderOf: grab(SRC, /const ladderOf = \(id\) => \{[\s\S]*?\n  \};/),
+  /* applyPromotion이 우승을 트로피로 적립해요 — 같이 안 떼면 ReferenceError로 죽습니다.
+   * addTrophy는 LEAGUES와 leagueOf를 보는데 둘은 이미 위에서 떼어 왔어요. */
+  addTrophy: grab(SRC, /function addTrophy\(title, leagueId, weight\) \{[\s\S]*?\n  \}/),
   apply: grab(SRC, /function applyPromotion\(\) \{[\s\S]*?\n  \}/),
   /* 승강은 이제 리그 명단을 실제로 맞바꿔요 — 그 조각도 함께 떼어 와야 돌아갑니다. */
   swap: grab(SRC, /function swapLeagues\(fromId, toId, kind\) \{[\s\S]*?\n  \}/),
@@ -65,6 +68,7 @@ const PRE = (tiers, apply) => `${parts.leagues}
    ${parts.clubStrOf}
    ${parts.roster}
    const proLog = () => {};
+   ${parts.addTrophy}
    ${parts.swap}
    ${apply}`;
 
@@ -84,6 +88,7 @@ const makeApply = () => new Function(
    ${parts.clubStrOf}
    ${parts.roster}
    const proLog = () => {};
+   ${parts.addTrophy}
    ${parts.swap}
    ${parts.apply}
    const move = applyPromotion();
@@ -121,9 +126,13 @@ const chDown = run(3, 6);
 check(chDown.move && chDown.move.kind === "down" && chDown.league === 2,
   `${NM(3)} 최하위 → ${NM(2)} 강등 (${chDown.move ? chDown.move.to : "안 일어남"})`);
 
-// 승점 차가 모자라면 승격 안 됨 — 국내와 같은 문턱을 쓴다
-const narrow = run(2, 1, 3);
-check(!narrow.move && narrow.league === 2, `승점 차가 모자라면 ${NM(2)} 1위여도 승격 안 된다`);
+/* 승점 차는 이제 승격을 막지 않아요 — **1위면 그 자리에서 올라갑니다.**
+ * 예전에는 2위와 8점 차(PROMO_GAP)를 걸었는데, 리그를 우승하고도 아무 일이
+ * 안 일어나는 시즌이 생겼고 왜 막혔는지도 화면에 안 나왔어요(제보: 세리에B 1위인데 그대로).
+ * 이 검사는 그 옛 규칙을 지키고 있었습니다 — 무너진 게 아니라 규칙이 바뀐 거예요. */
+const narrow = run(2, 1, 1);
+check(narrow.move && narrow.move.kind === "up" && narrow.league === 3,
+  `승점 1점 차 1위여도 ${NM(2)} → ${NM(3)} 승격한다 (${narrow.move ? narrow.move.to : "안 일어남"})`);
 
 // ── ② 잉글랜드 1부 1위는 우승이지 승격이 아니다
 const champ = run(3, 1);

@@ -20,6 +20,7 @@
 const fs = require("fs");
 const BASE = "/workspace/grow-games/beta/soccer";
 const SRC = fs.readFileSync(`${BASE}/career.js`, "utf8");
+const GAME = fs.readFileSync(`${BASE}/game.js`, "utf8");
 const grab = (src, re) => { const m = src.match(re); return m ? m[0] : null; };
 
 const parts = {
@@ -127,7 +128,8 @@ check(mfHat >= hat - 0.3, `미드필더의 해트트릭도 공격수만큼 쳐�
  * 나오므로(raceLam) 두 분포가 겹치는지 실제로 굴려 확인한다. */
 const ROLES = new Function(`${parts.roles} return RACE_ROLES;`)();
 const RACE_POS = new Function(`${parts.racePos} return RACE_POS;`)();
-const raceLam = new Function(`${parts.lam} return raceLam;`)();
+// raceLam이 득점 눈금(GOAL_SCALE)을 곱해요 — 같이 안 넘기면 ReferenceError로 죽습니다
+const raceLam = new Function(`${parts.goalScale} ${parts.lam} return raceLam;`)();
 const conceded = new Function("randInt", `${parts.conceded} return raceConceded;`)(
   (a, b) => Math.floor(a + Math.random() * (b - a + 1)));
 function pois(l) { let n = 0, L = Math.exp(-Math.max(0, l)), p = 1; do { p *= Math.random(); n++; } while (p > L && n < 12); return n - 1; }
@@ -143,11 +145,21 @@ const rivalAvgAt = (pres) => { let s = 0; for (let i = 0; i < N; i++) s += rival
 const lowAvg = rivalAvgAt(0.55), topAvg = rivalAvgAt(2.40);
 console.log(`   경쟁자 평균 평점 — K리그3 ${lowAvg.toFixed(2)} · 프리미어리그 ${topAvg.toFixed(2)} · 내 2골2도움 ${big.toFixed(2)}`);
 check(big > lowAvg && big > topAvg, `2골 2도움이면 어느 리그 경쟁자 평균도 넘는다 (${big.toFixed(2)})`);
-check(quiet < lowAvg - 1.0, `조용한 경기는 경쟁자 평균에 한참 못 미친다 (${quiet.toFixed(2)} vs ${lowAvg.toFixed(2)})`);
+/* ⚠️ 문턱을 **절대 점수**로 박아 두면 안 돼요. 득점 눈금(GOAL_SCALE 0.33)이 들어오면서
+ * 경쟁자 생산량이 3분의 1로 줄었고, 평점 분포가 통째로 좁아졌습니다 —
+ * 예전 문턱(1.0점·0.8점)은 그 세계의 눈금이었어요.
+ * 지키려는 것은 **거리**가 아니라 **방향과 또렷함**이라, 두 눈금 사이의 폭(topAvg-lowAvg)을
+ * 자로 삼아 상대값으로 봅니다. 눈금이 또 바뀌어도 이 계약은 그대로 살아요.
+ * 실측(N=1200 · 5회): 조용 5.65 · K리그3 6.00 · 프리미어리그 6.47~6.48 (흔들림 ±0.01) */
+const spread = topAvg - lowAvg;
+console.log(`   리그 격이 만드는 폭 ${spread.toFixed(2)}점 · 조용한 경기는 ${(lowAvg - quiet).toFixed(2)}점 아래`);
+check(lowAvg - quiet > spread * 0.5,
+  `조용한 경기는 경쟁자 평균에 못 미친다 (${quiet.toFixed(2)} vs ${lowAvg.toFixed(2)} — 리그 폭의 ${((lowAvg - quiet) / spread).toFixed(1)}배)`);
 /* 리그 격이 경쟁자 실력에 실제로 실리는지 — 예전 계수는 최하위와 최상위가
- * 사실상 같은 선수였다("K리그3 경쟁자나 PL 경쟁자나 똑같다"는 제보). */
-check(topAvg - lowAvg > 0.8,
-  `리그가 오르면 경쟁자 눈높이가 확실히 올라간다 (${lowAvg.toFixed(2)} → ${topAvg.toFixed(2)})`);
+ * 사실상 같은 선수였다("K리그3 경쟁자나 PL 경쟁자나 똑같다"는 제보).
+ * 0.3점은 **눈에 보이는 차이**의 하한이에요. 지금 0.47이라 여유가 있습니다. */
+check(spread > 0.3,
+  `리그가 오르면 경쟁자 눈높이가 확실히 올라간다 (${lowAvg.toFixed(2)} → ${topAvg.toFixed(2)} · ${spread.toFixed(2)}점)`);
 
 /* ── 변이 검증 — 골·도움·수비 항을 빼면 ①이 무너져야 한다.
  * 안 잡히면 위의 초록불은 아무것도 안 지키고 있는 것이다. */

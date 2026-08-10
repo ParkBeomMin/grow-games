@@ -91,22 +91,32 @@ const F=new Function("OVR","POS","NAT_C","seedShuffle","K","ACE",`
         /* 🌟 나라마다 에이스 한 명 — 실제 구현과 같은 눈금이에요 */
         const ace=sq.filter((_,i)=>slots[i]==="fw")[0]||sq[0]; if(ace) ace.w*=ACE_W;
         return {str:t.str, nat:t.name, out:false, sq}; });
-    const rollFaces = () => { for(const n of nats){ if(n.out) continue;
-      const G = poissonish(Math.max(0.1, NAT_G0 + (n.str - 74) * NAT_GK) * GOAL_SCALE * 3);
+    /* 한 나라의 **정해진 골 수**를 그 나라 선발에게 배분해요 — 구현의 creditNat과 같은 눈금.
+     * 인라인으로 떼어 온 rollGroupRivals가 이걸 부릅니다. */
+    const creditNat = (name, G) => { const n = nats.find(x=>x.nat===name); if(!n) return;
       const tw = n.sq.reduce((a,pl)=>a+pl.w,0);
       for(let i=0;i<G;i++){ let r=Math.random()*tw;
-        for(const pl of n.sq){ r-=pl.w; if(r<=0){ pl.g++; break; } } } } };
+        for(const pl of n.sq){ r-=pl.w; if(r<=0){ pl.g++; break; } } } };
+    /* 다른 나라도 자기 경기를 치러요. 단 **이미 실제 경기에서 골이 정해진 나라는 건너뜁니다**
+     * — 안 건너뛰면 같은 경기의 골이 두 번 붙어 득점왕 문턱이 실제보다 높아져요.
+     * 구현의 advanceOthers(skip)과 같은 규칙이에요. */
+    const rollFaces = (skip) => { const done = skip || new Set(); for(const n of nats){ if(n.out||done.has(n.nat)) continue;
+      creditNat(n.nat, poissonish(Math.max(0.1, NAT_G0 + (n.str - 74) * NAT_GK) * GOAL_SCALE * 3)); } };
     const topG = () => Math.max(0, ...nats.map(n=>Math.max(0, ...n.sq.map(pl=>pl.g))));
     for(let g=0; g<GROUP_GAMES; g++){
       const rivals = myGroup.filter(x=>!x.me);
       const opp = rivals[g % rivals.length];
-      const r = match(opp.str); apps++; myG += r.myG; rollFaces();
+      const r = match(opp.str); apps++; myG += r.myG;
       const meRow = myGroup.find(x=>x.me);
       meRow.pts += r.res==="W"?3:r.res==="D"?1:0;
       meRow.gd  += r.tg - r.og;
       const info = { res:r.res, teamGoals:r.tg, oppGoals:r.og };
-      const wc = () => ({ myGroup, opp: opp.name });
+      /* wc()는 **같은 객체**를 돌려줘야 해요 — rollGroupRivals가 credited를 여기 적어요 */
+      const wcS = { myGroup, opp: opp.name, credited: [] };
+      const wc = () => wcS;
       ${P.rivals.replace('function rollGroupRivals(info) {','(function(info){').replace(/\n {2}\}$/,'})(info);')}
+      creditNat(opp.name, r.og);                       // 내 상대의 골은 실제 경기에서 나온 값
+      rollFaces(new Set([opp.name].concat(wcS.credited||[])));
     }
     // 조별 종료 — 떨어진 나라의 얼굴은 멈춰요
     {
@@ -120,11 +130,13 @@ const F=new Function("OVR","POS","NAT_C","seedShuffle","K","ACE",`
     if(rank>2) return {result:"group", myG, apps, boot: boot()};
     const pool2 = others.slice().sort((a,b)=>b.str-a.str);
     const semiOpp = pool2[1]||pool2[0];
-    let r = match(semiOpp.str); apps++; myG += r.myG; rollFaces();
+    let r = match(semiOpp.str); apps++; myG += r.myG;
+    creditNat(semiOpp.name, r.og); rollFaces(new Set([semiOpp.name]));
     if(r.res==="D") r.res = Math.random()<0.5?"W":"L";
     if(r.res!=="W") return {result:"semi", myG, apps, boot: boot()};
     const finOpp = pool2[0];
-    let fm = match(finOpp.str); apps++; myG += fm.myG; rollFaces();
+    let fm = match(finOpp.str); apps++; myG += fm.myG;
+    creditNat(finOpp.name, fm.og); rollFaces(new Set([finOpp.name]));
     if(fm.res==="D") fm.res = Math.random()<0.5?"W":"L";
     return {result: fm.res==="W"?"champion":"final", myG, apps, boot: boot()};
   }
