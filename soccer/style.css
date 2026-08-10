@@ -423,3 +423,188 @@ body {
 .sq-odds { color: var(--accent); font-weight: 600; }
 /* 확률이 어디서 나왔는지 펼쳐 주는 줄 — 본문보다 한 단계 작고 흐리게 */
 .sq-parts { font-size: 0.82rem; color: var(--muted); line-height: 1.6; }
+
+/* ═══════════════════════════════════════════════════════════════════
+ * 🌏 월드컵 테마 — 대회 기간에만 화면의 결이 바뀌어요.
+ *
+ * ⚠️ 이 블록의 규칙 하나: **색과 결만 바꾸고 레이아웃은 절대 안 건드려요.**
+ * 이 저장소에서 CSS는 자동 검증의 사각지대라(기계가 화면을 못 봐요), 여기서
+ * 간격이나 폭을 만지면 "성적 칸이 세로로 접히는" 류의 사고를 아무도 못 잡아요.
+ * 팔레트·보더·글자색까지입니다.
+ *
+ * 붙고 떨어지는 건 worldcup.js의 themeSync()가 해요 — 켜고 끄는 게 아니라
+ * S.wc에서 **파생**시킵니다. 대회가 끝나 S.wc가 null이 되면 다음 렌더에서
+ * 반드시 떨어지고, 한 렌더를 놓쳐도 그다음이 고쳐요(자기 복구형).
+ * ═══════════════════════════════════════════════════════════════════ */
+body.wc-mode {
+  /* 그라운드 그린 → 밤 경기장 네이비 + 골드. 변수만 갈아 끼우면
+   * base.css와 이 파일의 규칙이 전부 따라와요 */
+  --bg: #0d1430;
+  --bg2: #16204a;
+  --field: #1d2a5c;
+  --line: #3a4a8c;
+  --accent: #f2c14e;
+  --text: #eef1ff;
+  --dim: #9fa9d0;
+  background:
+    radial-gradient(ellipse 140% 70% at 50% -10%, rgba(242, 193, 78, .10) 0%, transparent 62%),
+    repeating-linear-gradient(90deg, #101838 0px, #101838 40px, #0d1430 40px, #0d1430 80px),
+    var(--bg);
+}
+/* 초록으로 하드코딩된 자리들 — 변수로 안 도는 것만 골라서 덮어요 */
+body.wc-mode .btn-primary {
+  background: linear-gradient(180deg, #ffe08a, var(--accent));
+  color: #2b1d00;
+  box-shadow: 0 4px 0 #b08420;
+}
+body.wc-mode .draft-card,
+body.wc-mode .matchscore,
+body.wc-mode .scoreboard { background: linear-gradient(180deg, #1d2a5c, #131b3f); border-color: #3a4a8c; }
+body.wc-mode .draft-summary,
+body.wc-mode .sb-clock,
+body.wc-mode .pitch { border-color: #3a4a8c; }
+body.wc-mode .sb-clock { background: #131b3f; }
+/* 잔디 줄무늬도 밤 경기장으로 — 초록 그라운드가 그대로면 테마가 반쪽이에요 */
+body.wc-mode .pitch { background: repeating-linear-gradient(90deg, #24336e 0 30px, #1e2b5e 30px 60px); }
+body.wc-mode .tag { background: rgba(242, 193, 78, .14); color: var(--accent); }
+body.wc-mode .bar-fill.scout { background: linear-gradient(90deg, #ffe6a8, var(--accent)); }
+/* 헤더에 골드 밑줄 — "지금은 대회 중"이 화면 맨 위에서 보여야 해요 */
+body.wc-mode .hud { border-color: #3a4a8c; box-shadow: inset 0 -3px 0 var(--accent); }
+body.wc-mode h2 { color: var(--accent); }
+/* 결과 카드에 은은한 광 — 승리 색(연두)은 그대로 둬요. 이겼다는 신호까지
+ * 골드로 덮으면 승패가 한눈에 안 들어와요 */
+body.wc-mode .ms-final { text-shadow: 0 0 14px rgba(242, 193, 78, .35); }
+body.wc-mode .wc-card,
+body.wc-mode .season-standings { border-color: #3a4a8c; }
+body.wc-mode .rank-table thead th { background: rgba(242, 193, 78, .12); color: var(--accent); }
+
+/* 🌏 대회 화면 조각들 */
+.wc-row { margin: 0 0 10px; }
+.wc-badge {
+  background: rgba(242, 193, 78, .12);
+  border: 1px solid rgba(242, 193, 78, .4);
+  border-radius: 12px;
+  padding: 7px 10px;
+  font-size: .82rem;
+  color: #f2c14e;
+  line-height: 1.5;
+}
+/* 아직 문턱에 못 닿았을 때 — 같은 자리지만 조용해야 해요 */
+.wc-badge.dim { background: rgba(147, 182, 162, .08); border-color: var(--line); color: var(--dim); }
+.wc-badge b { color: var(--text); }
+.wc-card { text-align: center; padding: .6rem .4rem; }
+.wc-card .draft-emoji { font-size: 2.4rem; }
+.wc-card.champ .draft-title { color: #f2c14e; text-shadow: 0 0 18px rgba(242, 193, 78, .5); }
+.wc-group { margin-top: .5rem; }
+
+/* 📨 초대장 — 8종 공용 모달 껍데기(.av-modal) 위에 봉투 결만 얹어요 */
+.wc-invite { width: min(400px, 92vw); }
+.wc-inv-flag { font-size: 2.6rem; line-height: 1.1; }
+.wc-invite .av-title { color: #f2c14e; }
+.wc-inv-line { font-size: .95rem; line-height: 1.6; margin: .3rem 0 .5rem; }
+.wc-inv-sub { font-size: .78rem; color: var(--dim); line-height: 1.6; margin-top: .4rem; }
+/* 와일드카드는 선택지가 둘이라 세로로 쌓아요 — 한 줄에 두면 글자가 접혀요
+ * (🔥 1년 특훈에서 세 개를 한 줄에 뒀다가 같은 지적을 받았어요) */
+.wc-invite .av-actions { flex-direction: column; }
+/* 🌏 대회 개인 기록 — 리그 개인 순위 자리에 들어가요 */
+.wc-rec { font-size: .84rem; line-height: 1.7; }
+.wc-rec-row b { color: var(--accent); }
+.wc-rec-next { color: var(--sky); margin-top: .2rem; }
+.wc-rec-note { color: var(--dim); font-size: .74rem; margin-top: .35rem; }
+/* 🥇 대회 개인 순위 · 🏆 수상 */
+.wc-nat { display: block; font-size: .68rem; color: var(--dim); }
+.wc-awards { margin-top: .5rem; }
+.wc-award { font-size: .84rem; line-height: 1.7; color: var(--dim); }
+.wc-award.me { color: var(--accent); font-weight: 600; }
+.wc-award b { color: var(--text); }
+.wc-award.me b { color: var(--accent); }
+/* 🎲 깜짝 발탁 — 소집 카드의 한 줄 */
+.wc-lucky { color: var(--accent); font-size: .88rem; margin: .3rem 0; }
+/* 🏆 토너먼트 대진표 */
+.wc-bracket .wc-vs { color: var(--dim); font-size: .7rem; }
+.wc-bracket td { white-space: nowrap; }
+/* 🏆 이번 대회 우승국 — 내가 못 들었을 때 누가 들었는지 */
+.wc-champ { font-size: .86rem; color: var(--dim); margin: .3rem 0; }
+.wc-champ b { color: var(--accent); }
+/* 📊 기록 화면 탭 */
+.rec-tabs { display: flex; gap: 6px; margin-bottom: 10px; }
+.rec-tab {
+  flex: 1; padding: 8px 6px; border-radius: 10px; cursor: pointer;
+  background: var(--bg2); border: 1px solid var(--line); color: var(--dim);
+  font-family: "Jua", sans-serif; font-size: .92rem;
+}
+.rec-tab.on { background: var(--field); border-color: var(--accent); color: var(--accent); }
+.wc-hist td, .wc-hist th { white-space: nowrap; }
+.wc-rec-champ { font-size: .74rem; color: var(--dim); }
+/* 🌏 결산의 월드컵 — 감독 한마디 블록 */
+.wc-report { margin: .5rem 0; }
+/* 🌏 결산의 대표팀 감독 한마디 아래 사실 줄 */
+.wc-fact { font-size: .78rem; color: var(--dim); margin-top: .2rem; }
+
+/* ---------- 🏛️ 명예의 전당 — 달 탭과 헌액 카드 ---------- */
+/* 달 탭 — 개수가 늘면 가로로 넘겨서 봐요(부문 탭과 같은 방식). */
+.hof-tabs {
+  display: flex; gap: .3rem; overflow-x: auto; padding-bottom: .35rem; margin-bottom: .6rem;
+  -webkit-overflow-scrolling: touch;
+}
+.hof-tab {
+  flex: 0 0 auto; padding: .38rem .6rem; border-radius: .7rem; cursor: pointer;
+  background: var(--bg2); border: 1px solid var(--line); color: var(--dim);
+  font-family: "Jua", sans-serif; font-size: .8rem; white-space: nowrap;
+}
+.hof-tab span { font-size: .68rem; opacity: .7; }
+.hof-tab.on { background: var(--field); border-color: var(--accent); color: var(--accent); }
+/* 카드가 눌리는 것이라는 표시 — 오른쪽 꺾쇠 */
+.hof-card { cursor: pointer; }
+.hof-more { color: var(--dim); font-size: 1.1rem; flex-shrink: 0; }
+/* 헌액 카드 레이어 */
+.hofd-modal { width: min(400px, 94vw); text-align: left; }
+.hofd-head { text-align: center; margin-bottom: .7rem; }
+.hofd-emoji { font-size: 2.2rem; }
+.hofd-name { font-family: "Jua", sans-serif; font-size: 1.15rem; color: var(--cream); }
+.hofd-me {
+  font-size: .66rem; color: var(--accent); border: 1px solid var(--accent);
+  border-radius: .6rem; padding: .06rem .32rem; vertical-align: middle;
+}
+.hofd-grade { font-size: .82rem; color: var(--accent); }
+.hofd-rank { font-size: .72rem; color: var(--dim); margin-top: .2rem; }
+.hofd-body { font-size: .82rem; }
+.hofd-row {
+  display: flex; justify-content: space-between; gap: .8rem;
+  padding: .34rem 0; border-top: 1px solid var(--line);
+}
+.hofd-row span { color: var(--dim); flex-shrink: 0; }
+.hofd-row b { color: var(--cream); font-weight: 500; text-align: right; }
+
+/* ---------- 🎉 피버 타임 ---------- */
+/* 화면 맨 위에 붙는 띠. 화면 전환 때마다 다시 그려져요(show → Fever.tick). */
+.fever-bar {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 60;
+  display: flex; align-items: center; gap: .5rem;
+  padding: .38rem .7rem;
+  background: linear-gradient(90deg, #ff8a3d, #ffd166, #ff8a3d);
+  background-size: 200% 100%;
+  color: #2a1600; font-size: .78rem;
+  animation: fv-slide 6s linear infinite;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, .35);
+}
+@keyframes fv-slide { from { background-position: 0 0; } to { background-position: 200% 0; } }
+.fever-bar .fv-emoji { font-size: 1.05rem; }
+.fever-bar .fv-body { flex: 1; display: flex; flex-direction: column; line-height: 1.25; min-width: 0; }
+.fever-bar .fv-body b { font-family: "Jua", sans-serif; font-size: .86rem; }
+.fever-bar .fv-eff { font-size: .7rem; opacity: .85; }
+.fever-bar .fv-left { font-size: .7rem; opacity: .8; white-space: nowrap; }
+/* 띠가 첫 화면을 가리지 않게 본문을 그만큼 내려요 */
+body.fever-on #app { padding-top: 2.6rem; }
+/* 처음 마주친 순간의 알림 */
+.fever-modal { width: min(340px, 90vw); }
+.fever-modal .fv-big { font-size: 2.6rem; }
+.fever-modal .fv-note { font-size: .84rem; color: var(--dim); margin: .2rem 0 .4rem; }
+.fever-modal .fv-eff-big { font-size: .9rem; color: var(--accent); margin: .2rem 0; }
+
+/* ---------- 📈 동료도 크고 늙어요 ---------- */
+.sq-age { font-size: .68rem; color: var(--dim); margin-left: .3rem; }
+.sq-age .sq-slump { color: #f59e8b; font-weight: 500; }
+.sq-age .sq-surge { color: #6ee7a0; font-weight: 500; }
+/* 결산의 팀 소식 한 줄 */
+.squad-news { color: var(--cream); }

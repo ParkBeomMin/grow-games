@@ -541,6 +541,13 @@ const SEASON_TITLES = [
     eff: { g: 0.12, a: 0.12 }, desc: "골·도움 +12%" },
   { id: "rookie", name: "🌟 신인왕", need: "신인왕 수상",
     eff: { train: 0.15 }, desc: "훈련 상승폭 +15%" },
+  /* 🌏 월드컵 우승 — **신설 칭호 중 가장 셉니다.**
+   * 4년에 한 번뿐인 대회의 우승이라, 리그 한 부문 1위(+15%)나 발롱도르(+8%·평점 +0.25)
+   * 위에 둡니다. BUFF_CAP이 종류별 합계를 잡아 주니 발롱도르와 겹쳐도 안 터져요.
+   * 보상이 **다음 시즌 경기에서 체감되는** 유일한 축이에요 — 상금·명성·점수는
+   * 숫자로만 남지만 이건 경기가 달라집니다. */
+  { id: "wcwin", name: "🌏 월드컵 위너", need: "월드컵 우승",
+    eff: { g: 0.10, a: 0.10, d: 0.10, rate: 0.3 }, desc: "모든 기여 +10% · 평점 +0.3" },
 ];
 const BUFF_CAP = { g: 0.4, a: 0.4, d: 0.4, rate: 0.6, moment: 0.12, train: 0.3 };
 /* 수상 이름 → 칭호. 조건을 따로 계산하지 않고 **화면에 뜬 수상 목록을 그대로**
@@ -552,17 +559,55 @@ const AWARD_BUFF = {
 };
 const seasonTitleOf = (id) => SEASON_TITLES.find((t) => t.id === id) || null;
 
+/* 🌏 월드컵 소집 기간에만 붙는 임시 버프.
+ *
+ * ⚠️ **세이브에 안 남고, 끄는 코드도 없어요.** S.wc(진행 중인 대회)가 있을 때만
+ * 목록에 끼어들었다가 대회가 끝나(S.wc = null) 저절로 사라집니다 — 해제를 잊을
+ * 대상 자체가 없는 구조예요.
+ *
+ * 별도 배수(WC_TRAIN_MUL 같은 것)를 만들지 않고 **버프 체계 안에** 넣은 이유:
+ * 훈련 버프에는 이미 BUFF_CAP.train(+30%) 상한이 있고, 그 상한은 "한 번 앞서간
+ * 커리어가 영원히 앞서가는 것"을 막으려고 둔 거예요. 대회 경로만 그걸 비껴가면
+ * 상한이 반쪽이 되고, 훈련 효율을 조정할 때 봐야 할 손잡이가 둘로 늘어납니다.
+ * 🌟 신인왕(+15%)을 이미 달고 있으면 합이 상한에 걸려 월드컵 몫이 덜 실려요 —
+ * 그게 상한이 있는 이유고, 의도된 동작입니다. */
+const WC_CAMP_BUFF = {
+  id: "wcCamp", name: "🌏 대표팀 훈련장", need: "월드컵 소집 기간",
+  eff: { train: 0.3 }, desc: "훈련 상승폭 +30%",
+};
+
 /* 이번 시즌에 살아 있는 칭호. buffY가 지금 시즌과 같을 때만 들어요 —
  * 지난 시즌 것이 그대로 남으면 "한 번 잘하면 평생 간다"가 됩니다. */
 function activeBuffs(st) {
   const S0 = st || (typeof S !== "undefined" ? S : null);
-  if (!S0 || !Array.isArray(S0.buffs) || S0.buffY !== S0.proYear) return [];
-  return S0.buffs.map(seasonTitleOf).filter(Boolean);
+  if (!S0) return [];
+  const out = (Array.isArray(S0.buffs) && S0.buffY === S0.proYear)
+    ? S0.buffs.map(seasonTitleOf).filter(Boolean) : [];
+  // 🌏 대회 중에만 — 시즌 칭호가 하나도 없어도 이건 붙어야 해서 위 갈래 밖에 둬요
+  if (S0.wc) out.push(WC_CAMP_BUFF);
+  /* 🎉 피버 타임 — 운영자가 연 기간 동안 모두에게 (fever.js)
+   * `typeof window`까지 보는 이유: 이 저장소의 검사는 소스에서 함수를 떼어다
+   * **브라우저 밖에서** 굴려요. 그냥 window를 쓰면 activeBuffs를 떼어 쓰는
+   * 검사 13종이 ReferenceError로 죽습니다(실제로 한 번 그랬어요). */
+  const fv = typeof window !== "undefined" && window.WingerFever && window.WingerFever.buff();
+  if (fv) out.push(fv);
+  return out;
 }
-/* 종류별 합계. g·a·d·train은 배수(1 + 합), rate·moment는 그대로 더해요. */
+/* 종류별 합계. g·a·d·train은 배수(1 + 합), rate·moment는 그대로 더해요.
+ *
+ * 🎉 피버 타임만 **상한 밖에서** 더해요. 상한은 "한 번 앞서간 커리어가 영원히
+ * 앞서가는 것"을 막는 장치인데, 피버는 커리어가 쌓은 게 아니라 운영자가 모두에게
+ * 준 것이고 기간이 지나면 사라져요. 안 그러면 칭호를 많이 단 사람에게는
+ * 이벤트가 아무 일도 안 일어납니다 — 잘하는 사람만 이벤트에서 소외돼요.
+ * 대신 fever.js가 읽을 때 스스로 상한(FEVER_CAP)을 겁니다. */
 function buffSum(kind, st) {
-  const sum = activeBuffs(st).reduce((a, t) => a + (t.eff[kind] || 0), 0);
-  return Math.min(sum, BUFF_CAP[kind] != null ? BUFF_CAP[kind] : 1);
+  const list = activeBuffs(st);
+  let sum = 0, bonus = 0;
+  for (const t of list) {
+    const v = t.eff[kind] || 0;
+    if (t.id === "fever") bonus += v; else sum += v;
+  }
+  return Math.min(sum, BUFF_CAP[kind] != null ? BUFF_CAP[kind] : 1) + bonus;
 }
 const buffMul = (kind, st) => 1 + buffSum(kind, st);
 
@@ -672,6 +717,10 @@ function show(id) {
   $(id).classList.add("active");
   window.scrollTo(0, 0);
   if (!show._silent) history.pushState({ s: id }, "");
+  /* 🎉 피버 타임 — **화면이 바뀔 때마다** 다시 봐요. 정적 파일이라 서버가 먼저
+   * 말을 걸 수 없어서, 이미 켜 둔 화면에서도 다음 화면으로 넘어가는 순간
+   * 배너가 뜨게 하는 자리예요. 네트워크는 안 씁니다(구간만 보고 판정해요). */
+  if (window.WingerFever) WingerFever.tick();
 }
 
 const BACK_SAFE = ["screen-title", "screen-agency", "screen-position", "screen-name", "screen-hof", "screen-battle"];
@@ -1021,12 +1070,70 @@ function renderShop() {
 
 // ---------- 커리어 기록 ----------
 let recordReturn = "screen-main";
+/* 📊 기록 화면의 탭 — 커리어와 🌏 월드컵을 갈라요.
+ *
+ * 제보: "기록에서 월드컵 출전 기록도 볼 수 있으면 좋겠어. 탭으로 추가해서
+ * 보게 하면 될 듯." 맞아요 — 한 카드에 다 밀어 넣으면 스크롤만 길어져요.
+ * 월드컵은 4년에 한 번이라 커리어 기록과 성격도 다릅니다. */
+let recordTab = "career";
 function openRecord(returnTo) {
   recordReturn = returnTo || "screen-main";
+  recordTab = "career";
   renderRecord();
   show("screen-record");
 }
+function renderRecordTabs() {
+  const box = $("record-tabs");
+  if (!box) return;
+  /* 월드컵을 한 번도 안 겪었으면 탭 줄 자체를 감춰요 — 빈 탭은 "여기 뭔가 있나"만
+   * 남기고 아무것도 안 알려줘요. 미발탁 기록("none")도 겪은 것으로 봐요. */
+  const has = Array.isArray(S.wcHist) && S.wcHist.length;
+  box.hidden = !has;
+  if (!has) { recordTab = "career"; return; }
+  const tabs = [["career", "⚽ 커리어"], ["wc", "🌏 월드컵"]];
+  box.innerHTML = tabs.map(([id, name]) =>
+    `<button class="rec-tab${recordTab === id ? " on" : ""}" data-tab="${id}">${name}</button>`).join("");
+  box.querySelectorAll(".rec-tab").forEach((b) => {
+    b.onclick = () => { recordTab = b.dataset.tab; renderRecord(); };
+  });
+}
+/* 🌏 월드컵 기록 — 대회마다 한 줄. 미발탁도 남겨요("TV로 봤어요"가 기록이에요). */
+function wcRecordHTML() {
+  const list = (S.wcHist || []).slice().sort((a, b) => a.y - b.y);
+  const LAB = { champion: "🏆 우승", final: "🥈 준우승", semi: "🎖️ 4강", group: "💧 조별 탈락", none: "— 미발탁" };
+  const c = S.career || {};
+  const played = list.filter((h) => h.result !== "none");
+  const rows = list.map((h) => {
+    const aw = (h.awards || []).map((id) => (id === "boot" ? "🥇" : "🏅")).join("");
+    return `<tr class="${h.result === "champion" ? "me" : ""}"><td>${h.y}</td>`
+      + `<td>${LAB[h.result] || h.result}${aw ? ` <b>${aw}</b>` : ""}</td>`
+      + `<td>${h.result === "none" ? "-" : `${h.apps}경기`}</td>`
+      + `<td>${h.result === "none" ? "-" : `⚽${h.g} 🅰️${h.a}`}</td>`
+      + `<td class="wc-rec-champ">${h.champ || "-"}</td></tr>`;
+  }).join("");
+  const sum = played.length
+    ? `출전 ${played.length}회 · ⚽ ${played.reduce((a, h) => a + h.g, 0)}골`
+      + ` · 🅰️ ${played.reduce((a, h) => a + h.a, 0)}도움`
+      + `${c.wcWin ? ` · 🏆 우승 ${c.wcWin}` : ""}`
+      + `${c.wcBall ? ` · 🏅 골든볼 ${c.wcBall}` : ""}`
+      + `${c.wcBoot ? ` · 🥇 골든부츠 ${c.wcBoot}` : ""}`
+    : "아직 대표팀에 뽑힌 적이 없어요";
+  const nat = (window.WingerWorldCup && WingerWorldCup.myNation)
+    ? WingerWorldCup.myNation().name : "";
+  return `<div class="draft-emoji">🌏</div>
+    <div class="draft-title">${nat} 대표팀</div>
+    <div class="draft-team">${sum}</div>
+    <div class="draft-summary">
+      <table class="rank-table season-standings wc-hist"><thead>
+        <tr><th>시즌</th><th>성적</th><th>출전</th><th>기록</th><th>우승국</th></tr></thead>
+        <tbody>${rows}</tbody></table>
+      <div class="wc-rec-note">월드컵은 <b>4년에 한 번</b>이에요 — 3·7·11·15시즌에 열려요.<br/>
+        이 기록은 리그와 따로 쌓여요.</div>
+    </div>`;
+}
 function renderRecord() {
+  renderRecordTabs();
+  if (recordTab === "wc") { $("record-card").innerHTML = wcRecordHTML(); return; }
   const m = marketOf();
   const trophyLine = S.trophies && S.trophies.length ? `🏆 ${S.trophies.join(", ")}` : "🏆 대회 1위 경력 없음";
   const y = S.youth || { g: 0, a: 0, def: 0 };
@@ -1607,11 +1714,15 @@ const MATE_SCALE = 1.7;    // 동료 골 전체 크기
 const MATE_EDGE = 3.0;     // 전력 차가 동료 골에 실리는 정도
 const MATE_FORM = 0.05;    // 내 경기력이 거드는 정도 — 작게 둡니다
 const MATE_FLOOR = 0.15;   // 아무리 전력이 뒤져도 동료가 아예 못 넣지는 않아요
-function teammateGoals(rating, oppStr) {
+/* myStr — **우리 전력**을 밖에서 넘길 수 있어요. 안 넘기면 소속 클럽이에요(기존 동작).
+ * 🌏 월드컵은 클럽이 아니라 국가로 뛰니 이 인자가 필요합니다. 산식을 worldcup.js에
+ * 베끼지 않는 이유예요 — 베끼면 다음에 GOAL_SCALE을 만질 때 한쪽만 옛 눈금으로 남아요. */
+function teammateGoals(rating, oppStr, myStr) {
   /* 상대를 모르면 **우리 전력과 같다**고 봐요(대등한 경기). 예전에는 리그 평균 70을
    * 기본값으로 뒀는데, 그러면 K리그3(전력 45) 팀은 상대를 모를 때마다 전력 70과
    * 붙는 셈이라 승률이 18%까지 떨어졌어요 — 자기 리그에서 뛰는데도요. */
-  const edge = (clubStrOf(S) - (oppStr == null ? clubStrOf(S) : oppStr)) / 100;
+  const us = myStr == null ? clubStrOf(S) : myStr;
+  const edge = (us - (oppStr == null ? us : oppStr)) / 100;
   const form = clamp((rating - 6.5) * MATE_FORM, -0.3, 0.3);
   /* 바닥을 0이 아니라 0.15로 둬요. 전력이 50이나 뒤지면 1 + edge×2.2가 음수가 돼서
    * 동료 골 기댓값이 **정확히 0**이 됩니다 — 최약체 팀은 나 말고 아무도 못 넣는
@@ -1636,8 +1747,9 @@ const CONC_EDGE = 3.4;     // 전력 차가 실점에 실리는 정도 — 여�
 const CONC_FORM = 0.05;    // 내 평점이 실점을 줄이는 정도
 const CONC_DEF = 400;      // 내 수비 능력치가 실점을 줄이는 정도 (나누는 값이라 클수록 약해요)
 const CONC_CAP = 5;        // 한 경기 실점 상한 — 8:5 같은 스코어가 나오지 않게
-function deriveOppGoals(rating, defStat, oppStr, teamGoals) {
-  const edge = ((oppStr == null ? clubStrOf(S) : oppStr) - clubStrOf(S)) / 100;   // 모르면 대등한 경기
+function deriveOppGoals(rating, defStat, oppStr, teamGoals, myStr) {
+  const us = myStr == null ? clubStrOf(S) : myStr;                                // 🌏 월드컵은 국가 전력을 넘겨요
+  const edge = ((oppStr == null ? us : oppStr) - us) / 100;                        // 모르면 대등한 경기
   const balance = Math.max(0.15, (1 + edge * CONC_EDGE)
     * (1 - (rating - 6.5) * CONC_FORM - ((defStat || 40) - 60) / CONC_DEF));
   const lam = (CONC_BASE * GOAL_SCALE + Math.max(0, teamGoals || 0) * CONC_MIX) * balance;
@@ -1908,7 +2020,17 @@ const MatchSim = (() => {
       evs.push({ min: rmin(), side: "atk", h: 1, cls: "good",
         text: who ? `⚽ ${who}의 골! 팀이 추가점을 뽑아냅니다` : `⚽ 동료의 골! 팀이 추가점을 뽑아냅니다` });
     }
-    for (let i = 0; i < oppGoals; i++) evs.push({ min: rmin(), side: "def", a: 1, cls: "bad", text: `😣 ${away}에 실점…` });
+    /* 🛡️ 수비수의 승부처는 **실점을 막는 것**이에요. 그런데 예전에는 이미 들어간
+     * 골을 스코어에서 빼는 방식이었어요 — 중계에는 "😣 실점…"이 세 번 떠 있는데
+     * 결과는 2실점이 됩니다(제보: "중계 텍스트에서는 3실점인데 경기 끝나면
+     * 2실점으로 되어 있네"). 축구에서 들어간 골은 지워지지 않아요.
+     *
+     * 그래서 **한 골을 떼어 뒀다가** 승부처에서 정해요.
+     *   막으면  → 그 골은 아예 안 들어가요 (중계에도 안 떠요)
+     *   놓치면  → 그때 들어가고 중계에도 그때 떠요
+     * 최종 실점 수는 예전과 똑같아요 — 언제 보여주느냐만 바뀝니다. */
+    const holdConceded = momentKind() === "d" && oppGoals > 0 ? 1 : 0;
+    for (let i = 0; i < oppGoals - holdConceded; i++) evs.push({ min: rmin(), side: "def", a: 1, cls: "bad", text: `😣 ${away}에 실점…` });
     if (defense >= 2) evs.push({ min: rmin(), side: "def", text: `🛡️ ${myName}, 결정적 태클로 위기를 끊어요!` });
     evs.push({ min: rmin(), side: "mid", text: pick(["중원 싸움이 뜨거워요", "빠른 템포로 오가는 공방", "관중석이 들썩입니다", "양 팀 압박이 매섭습니다"]) });
     evs.sort((x, y) => x.min - y.min);
@@ -1937,19 +2059,26 @@ const MatchSim = (() => {
       btn.disabled = true;
       btn.textContent = "🔥 승부처!";
       playRandomMini($("stage-moment"), (res, mtype) => {
+        // 떼어 둔 실점을 지금 넣어요 (막았으면 안 넣어요 — 지우는 게 아니라 안 들어가는 거예요)
+        const letIn = () => {
+          if (!holdConceded) return;
+          a += 1; setScore(); flash("def");
+          feed(`😣 ${away}에 실점…`, "bad");
+        };
         if (res === "perfect") {
           /* 🔥 승부처 성공이 **무엇으로 남는지는 포지션이 정해요.**
            * 공격수는 극장골, 미드필더는 결정적 패스, 수비수는 실점 차단이에요. */
           const kind = momentKind();
-          if (kind === "d") { a = Math.max(0, a - 1); setScore(); flash("def"); }
-          else { h += 1; setScore(); flash("atk"); }
+          if (kind !== "d") { h += 1; setScore(); flash("atk"); }
           feed(mtype.great, "good");
           feed(MOMENT_FEED[kind](myName, away), "good");
         } else if (res === "miss") {
+          letIn();
           a += 1; setScore(); flash("def");
           feed(mtype.bad, "bad");
           feed(`😱 치명적인 실수… ${away}에 한 점을 내줍니다`, "bad");
         } else {
+          letIn();
           feed(mtype.ok);
         }
         setMin(90);

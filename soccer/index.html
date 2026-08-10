@@ -214,6 +214,7 @@
       </div>
       <!-- 🎖️ 시즌 칭호 — 지난 시즌 성적으로 받아 이번 시즌에만 붙는 효과예요 -->
       <div class="buff-row" id="pro-buffs" hidden></div>
+      <div class="wc-row" id="pro-wc" hidden></div>
       <details class="standings-box" id="pro-table" hidden>
         <summary id="pro-table-sum"></summary>
         <div id="pro-table-body"></div>
@@ -269,6 +270,7 @@
     <!-- 기록 -->
     <section class="screen" id="screen-record">
       <h2>📊 커리어 기록</h2>
+      <div class="rec-tabs" id="record-tabs"></div>
       <div class="draft-card" id="record-card"></div>
       <button class="btn btn-ghost" id="btn-record-back">← 돌아가기</button>
     </section>
@@ -293,10 +295,13 @@
   <script src="../fx.js"></script>
 <script src="../ads.js"></script>
   <script src="../help.js"></script>
+  <!-- 🎉 피버 타임 — game.js의 activeBuffs·show가 이 모듈을 봐요 -->
+  <script src="fever.js"></script>
   <script src="game.js"></script>
   <script src="cup.js"></script>
   <script src="camp.js"></script>
   <script src="squad.js"></script>
+  <script src="worldcup.js"></script>
   <script src="career.js"></script>
 <script>if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");</script>
 </body>

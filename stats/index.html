@@ -67,6 +67,18 @@
     .err { color: var(--bad); font-size: .8rem; }
     .refresh { background: transparent; border: 1px solid var(--line); color: var(--sky); border-radius: 8px; padding: 6px 14px; cursor: pointer; font-size: .82rem; }
     a.home { color: var(--sky); font-size: .82rem; text-decoration: none; }
+    /* 🎉 피버 타임 — 유일하게 **쓰는** 화면이에요 (그 밖은 전부 읽기 전용) */
+    .fv-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+    .fv-f { display: flex; flex-direction: column; gap: 4px; font-size: .78rem; color: var(--dim); }
+    .fv-f input { background: #0a0f18; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; color: var(--text); font-size: .86rem; font-family: inherit; }
+    .fv-now { font-size: .84rem; margin-bottom: 12px; padding: 10px 12px; border-radius: 10px; background: #0a0f18; border: 1px solid var(--line); }
+    .fv-now.on { border-color: var(--accent); color: var(--accent); }
+    .fv-btns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; align-items: center; }
+    .fv-btns button { border-radius: 8px; padding: 8px 14px; cursor: pointer; font-size: .82rem; font-family: inherit; }
+    .fv-save { background: var(--accent); color: #3a2a00; border: none; font-weight: 700; }
+    .fv-ghost { background: transparent; border: 1px solid var(--line); color: var(--sky); }
+    .fv-msg { font-size: .8rem; margin-top: 8px; }
+    .fv-hint { font-size: .74rem; color: var(--dim); margin-top: 10px; line-height: 1.6; }
   </style>
 </head>
 <body>
@@ -612,6 +624,7 @@ grant select on public.stats_summary, public.stats_choices, public.stats_daily, 
       if (!STATE) { $("panel").innerHTML = ""; return; }
       const game = activeGame;
       const parts = [
+        feverSection(game),
         insightSection(STATE, game),
         leagueSection(STATE.league, game),
         dailySection(STATE.daily, game),
@@ -620,6 +633,154 @@ grant select on public.stats_summary, public.stats_choices, public.stats_daily, 
         funnelSection(STATE.summary, STATE.hofByGame, game),
       ];
       $("panel").innerHTML = parts.join("").trim() || emptyCard(game);
+      wireFever(game);
+    }
+
+    // ---------- 🎉 피버 타임 (⚽ 더 윙어 전용) ----------
+    /* 이 대시보드에서 **유일하게 쓰는** 자리예요. 나머지는 전부 읽기 전용입니다.
+     *
+     * 쓰기는 `fever` 테이블에 직접 꽂지 않고 `fever_set` RPC 하나로만 들어가요.
+     * 그 RPC가 관리 비밀번호를 봅니다 — 공개 anon 키만으로는 아무도 이벤트를
+     * 열 수 없어요(테이블에 INSERT/UPDATE 정책이 아예 없습니다).
+     * 이 페이지의 게이트 비번과 **다른 비번**이에요. 읽는 문이 열려도 쓰는 문은
+     * 따로 잠겨 있어야 해요. */
+    const FEVER_GAME = "soccer";
+    const FEVER_ID = "soccer-fever";
+    /* [키, 이름, 단위, **화면 숫자 ÷ 이 값 = 게임이 쓰는 값**]
+     *
+     * ⚠️ 넣는 쪽과 빼는 쪽이 같은 자를 써야 해요. 처음엔 빼는 쪽만 `mul * 100`으로
+     * 나눠서, 훈련 30(%)을 저장하면 0.003이 되고 다시 열면 0.3으로 보였습니다(제보).
+     * 이제 이 값 하나만 봐요 — 두 자리에 다른 식이 있으면 반드시 어긋나요. */
+    const FEVER_EFFS = [
+      ["train", "훈련 상승폭", "%", 100],
+      ["moment", "승부처 성공", "%p", 100],
+      ["g", "골", "%", 100],
+      ["a", "도움", "%", 100],
+      ["d", "수비", "%", 100],
+      ["rate", "경기 평점", "점", 1],
+    ];
+    // 화면 ↔ 저장값. 소수 둘째 자리까지만 남겨요(0.30000000000000004 방지)
+    const toField = (v, mul) => Math.round((v || 0) * mul * 100) / 100;
+    const toBoost = (v, mul) => Math.round((Number(v) / mul) * 10000) / 10000;
+    let FEVER_ROW = null;
+
+    /* datetime-local은 **로컬 시각 문자열**이에요. 표준시로 바꿔 보내고,
+     * 받을 때는 다시 로컬로 되돌려요 — 이 변환을 빠뜨리면 9시간이 밀립니다. */
+    const toLocalInput = (iso) => {
+      const d = new Date(iso);
+      if (isNaN(d)) return "";
+      const p = (n) => String(n).padStart(2, "0");
+      return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+    };
+    const fmtWhen = (iso) => {
+      const d = new Date(iso);
+      return isNaN(d) ? "?" : `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+    };
+
+    function feverSection(game) {
+      if (game !== FEVER_GAME) return "";
+      const r = FEVER_ROW;
+      const now = Date.now();
+      let state = `<div class="fv-now">지금 열린 이벤트가 없어요.</div>`;
+      if (r) {
+        const from = Date.parse(r.starts_at), to = Date.parse(r.ends_at);
+        const live = now >= from && now < to;
+        state = `<div class="fv-now${live ? " on" : ""}">`
+          + `${live ? "🔴 진행 중" : now < from ? "🕒 예정" : "⚪ 끝난 이벤트"} — `
+          + `<b>${esc(r.emoji || "🎉")} ${esc(r.title || "")}</b> · ${fmtWhen(r.starts_at)} ~ ${fmtWhen(r.ends_at)}`
+          + `</div>`;
+      }
+      const eff = (r && r.boost) || {};
+      const field = (id, label, val, type) =>
+        `<label class="fv-f">${label}<input id="${id}" type="${type}" value="${val}" /></label>`;
+      return `<section>
+        <h2>🎉 피버 타임</h2>
+        ${state}
+        <div class="fv-grid">
+          ${field("fv-title", "제목", esc((r && r.title) || "주말 피버 타임"), "text")}
+          ${field("fv-emoji", "이모지", esc((r && r.emoji) || "🎉"), "text")}
+          ${field("fv-note", "한 줄 설명", esc((r && r.note) || ""), "text")}
+          ${field("fv-from", "시작", toLocalInput((r && r.starts_at) || new Date().toISOString()), "datetime-local")}
+          ${field("fv-to", "종료", toLocalInput((r && r.ends_at) || new Date(Date.now() + 864e5).toISOString()), "datetime-local")}
+        </div>
+        <div class="fv-grid" style="margin-top:10px">
+          ${FEVER_EFFS.map(([k, label, unit, mul]) =>
+            field(`fv-e-${k}`, `${label} (${unit})`, toField(eff[k], mul), "number")).join("")}
+        </div>
+        <div class="fv-btns">
+          ${field("fv-pw", "관리 비밀번호", "", "password")}
+          <button type="button" class="fv-save" id="fv-save">저장</button>
+          <button type="button" class="fv-ghost" id="fv-24">지금부터 24시간</button>
+          <button type="button" class="fv-ghost" id="fv-off">지금 끄기</button>
+        </div>
+        <p class="fv-msg" id="fv-msg"></p>
+        <p class="fv-hint">효과는 <b>0이면 안 붙어요.</b> 게임 쪽에서 한 번 더 상한을 걸어요
+          (훈련 +100% · 골·도움·수비 +50% · 승부처 +15%p · 평점 +0.6).<br/>
+          플레이어에게는 접속할 때, 그리고 <b>화면이 바뀔 때마다</b> 다시 확인돼요 —
+          이미 켜 둔 사람에게도 다음 화면에서 배너가 뜹니다.</p>
+      </section>`;
+    }
+
+    async function loadFever() {
+      try {
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/fever?id=eq.${FEVER_ID}&select=*`, { headers: H });
+        FEVER_ROW = res.ok ? ((await res.json())[0] || null) : null;
+      } catch { FEVER_ROW = null; }
+    }
+
+    async function feverRpc(fn, body) {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${fn}`, {
+        method: "POST",
+        headers: { ...H, "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (res.ok) return null;
+      let msg = `HTTP ${res.status}`;
+      try { msg = (await res.json()).message || msg; } catch { /* 본문이 없을 수도 있어요 */ }
+      return msg;
+    }
+
+    function wireFever(game) {
+      if (game !== FEVER_GAME || !$("fv-save")) return;
+      const msg = (t, bad) => { $("fv-msg").textContent = t; $("fv-msg").style.color = bad ? "var(--bad)" : "var(--accent)"; };
+      $("fv-24").onclick = () => {
+        const now = new Date();
+        $("fv-from").value = toLocalInput(now.toISOString());
+        $("fv-to").value = toLocalInput(new Date(now.getTime() + 864e5).toISOString());
+      };
+      $("fv-save").onclick = async () => {
+        const pw = $("fv-pw").value;
+        if (!pw) return msg("관리 비밀번호를 넣어주세요", true);
+        const from = $("fv-from").value, to = $("fv-to").value;
+        if (!from || !to) return msg("시작과 종료를 정해주세요", true);
+        const boost = {};
+        for (const [k, , , mul] of FEVER_EFFS) {
+          const v = toBoost($(`fv-e-${k}`).value, mul);
+          if (Number.isFinite(v) && v > 0) boost[k] = v;
+        }
+        msg("저장하는 중…");
+        const err = await feverRpc("fever_set", {
+          p_pw: pw, p_id: FEVER_ID, p_game: FEVER_GAME,
+          p_emoji: $("fv-emoji").value || "🎉", p_title: $("fv-title").value || "피버 타임",
+          p_note: $("fv-note").value || null,
+          p_starts: new Date(from).toISOString(), p_ends: new Date(to).toISOString(),
+          p_boost: boost,
+        });
+        if (err) return msg(`저장 못 했어요 — ${err}`, true);
+        await loadFever();
+        renderPanel();
+        $("fv-msg").textContent = "✅ 저장했어요";
+      };
+      $("fv-off").onclick = async () => {
+        const pw = $("fv-pw").value;
+        if (!pw) return msg("관리 비밀번호를 넣어주세요", true);
+        if (!confirm("지금 이벤트를 지울까요? 플레이어 화면에서 바로 사라져요.")) return;
+        const err = await feverRpc("fever_clear", { p_pw: pw, p_id: FEVER_ID });
+        if (err) return msg(`못 껐어요 — ${err}`, true);
+        await loadFever();
+        renderPanel();
+        $("fv-msg").textContent = "✅ 껐어요";
+      };
     }
 
     async function load() {
@@ -637,6 +798,7 @@ grant select on public.stats_summary, public.stats_choices, public.stats_daily, 
        * 있어요 — 여기서 failed로 잡으면 멀쩡한 화면 전체가 "설정이 필요해요"로 덮여요. */
       let league = [];
       try { league = await getView("stats_league"); } catch { league = []; }
+      await loadFever();          // 🎉 피버 타임 — 집계 뷰와 무관하게 늘 읽어요
       const hofRows = await getHof();
       let hofTotal = null, hofByGame = null;
       if (hofRows) {

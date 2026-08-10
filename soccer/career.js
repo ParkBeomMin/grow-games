@@ -34,7 +34,9 @@ window.WingerCareer = (() => {
    *   지금 (종합 0.50 · 주스탯 0.14 · 체력 0.10 · 약점 페널티)
    *     몰빵 117골 · 도움 24 · 수비 20   |   균형 51골 · 도움 27 · 수비 22
    *   → 전문화는 여전히 골에서 크게 이기지만, 도움·수비는 균형이 가져가요. */
-  function ratingOf(stats, pos, condition, fandom) {
+  /* penalty — **리그 벌점**을 밖에서 넘길 수 있어요. 안 넘기면 지금 리그 것이에요.
+   * 🌏 월드컵은 클럽 리그가 아니라 0을 넘겨요 — 난이도는 국가 전력이 싣습니다. */
+  function ratingOf(stats, pos, condition, fandom, penalty) {
     const WEAK_BAR = 0.75;   // 평균의 이만큼에 못 미치는 칸이 약점이에요
     const WEAK_PEN = 0.45;
     const main = POS_INFO[pos].stat;
@@ -54,7 +56,8 @@ window.WingerCareer = (() => {
       condition / 8 + Math.min((fandom || 0) / 45, FAN_CAP) + rand(-5, 5) + 20;
     /* 🎖️ 시즌 칭호(👑 리그의 지배자·🏆 챔피언·🏅 발롱도르)가 평점에 붙어요.
      * clamp **안쪽**에서 더해요 — 밖에서 더하면 상한 10이 안 지켜집니다. */
-    const rating = clamp(myScore / RATING_DIV - leagueOf(S).penalty + buffSum("rate"), 1, 10);
+    const pen = penalty == null ? leagueOf(S).penalty : penalty;
+    const rating = clamp(myScore / RATING_DIV - pen + buffSum("rate"), 1, 10);
     return rating;
   }
 
@@ -550,14 +553,17 @@ window.WingerCareer = (() => {
    *
    * 가중 카운터가 없던 옛 세이브는 지금까지 쌓인 트로피를 1부 기준(×1)으로 세고
    * 이어붙여요. 0에서 시작하면 새 우승 하나 때문에 지난 우승이 통째로 사라집니다. */
-  function addTrophy(title, leagueId) {
+  /* weight — 커리어 점수에 실을 가중치를 밖에서 정할 수 있어요.
+   * 🌏 월드컵 우승은 **0**을 넘겨요. 점수는 SCORE_W.wc 한 곳으로 몰아서
+   * 손잡이를 하나로 유지합니다 — 양쪽에 실리면 조절할 곳이 둘이 돼요. */
+  function addTrophy(title, leagueId, weight) {
     S.trophies = S.trophies || [];
     if (S.trophies.includes(title)) return false;
     S.trophies.push(title);
     S.career = S.career || {};
     const before = S.career.ringW != null ? S.career.ringW : S.trophies.length - 1;
     const lg = LEAGUES.find((l) => l.id === leagueId) || leagueOf(S);
-    S.career.ringW = before + lg.prestige;
+    S.career.ringW = before + (weight == null ? lg.prestige : weight);
     return true;
   }
 
@@ -652,15 +658,23 @@ window.WingerCareer = (() => {
      * 생산량(pop)도 그 선수의 실력을 그대로 씁니다. 역할(RACE_ROLES)은 포지션에
      * 맞는 것을 골라요 — 센터백에게 스트라이커 생산량을 물리면 안 되니까요.
      * squad.js가 없는 옛 캐시에서는 예전처럼 이름을 지어 씁니다. */
+    /* ⚠️ **자리 배분도 안 해요.** 클럽 할당량에 이어 포지션 할당량도 걷어냅니다
+     * (제보: "포지션별 실력순 8명도 필요없는데??"). 그냥 리그에서 제일 잘하는
+     * 여덟이에요 — 여덟이 다 공격수인 리그도 있을 수 있죠.
+     *
+     * 대신 **역할은 그 선수의 포지션에서 뽑아요.** 예전엔 여덟 역할을 미리 정해
+     * 두고 사람에게 끼워 맞췄는데, 자리 배분을 없애면 공격수가 센터백 역할을
+     * 받아 수비 생산량을 굴리게 됩니다 — 표에 "스트라이커인데 수비 1위"가 떠요. */
     const faces = window.WingerSquad ? WingerSquad.leagueFaces(RACE_ROLES.length) : [];
     if (faces.length === RACE_ROLES.length) {
-      const byPos = {};
-      for (const r of RACE_ROLES) (byPos[RACE_POS[r.key] || "mf"] ||= []).push(r);
-      const left = RACE_ROLES.slice();
+      const roleByPos = { fw: ["st", "st2"], wg: ["wg"], mf: ["am", "mf", "ut"], df: ["cb", "cb2"] };
       return faces.map(({ club, player }) => {
-        const fit = (byPos[player.pos] || []).filter((r) => left.includes(r));
-        const role = fit.length ? pick(fit) : left[0];
-        left.splice(left.indexOf(role), 1);
+        const keys = roleByPos[player.pos] || ["ut"];
+        /* ⚠️ 고를 키를 **먼저 정해요.** find의 술어 안에서 pick을 부르면 원소마다
+         * 다시 굴려져서, 운 나쁘면 아무것도 못 찾고 첫 역할(스트라이커)로 떨어져요 —
+         * 실제로 수비수가 "스트라이커"로 표에 떴습니다(160명 중 25명). */
+        const want = pick(keys);
+        const role = RACE_ROLES.find((r) => r.key === want) || RACE_ROLES[0];
         return {
           name: player.name, role: role.name, key: role.key, pos: player.pos,
           pop: clamp(player.str, 40, 95), club, g: 0, a: 0, d: 0, rate: 0, mom: 0,
@@ -799,7 +813,21 @@ window.WingerCareer = (() => {
     const me = { name: S.name, club: S.group, role: null, me: true,
       g: (act && act.goals) || 0, a: (act && act.assists) || 0, d: (act && act.defense) || 0,
       rate: (act && act.ratingSum) || 0, m: (act && act.wins) || 0 };
-    return race.concat([me]).map((x) => ({ ...x, avg: avg(x), v: val(x) }))
+    /* 🥇 **우리 팀 동료도 기록이 좋으면 올라와요.**
+     *
+     * 경쟁자 여덟은 시즌 초에 실력으로 뽑혀요. 그러면 실력은 평범한데 그 시즌에
+     * 잘한 동료가 표에 낄 자리가 없습니다(제보: "동료 기록이 좋으면 나올 수도
+     * 있는 거지??"). 동료 골은 중계에서 실제로 나온 값이라 **진짜 기록**이에요 —
+     * 명단(👥)에 이미 쌓여 있으니 여기서 같이 세워 줍니다.
+     * 이미 경쟁자로 뽑힌 사람은 두 번 안 넣어요 — 표가 둘로 갈리면 안 되니까요. */
+    const inRace = new Set(race.map((r) => r.name));
+    const mates = (window.WingerSquad ? WingerSquad.squadOf(S.group) : [])
+      .filter((x) => !x.me && !inRace.has(x.name) && ((x.g || 0) || (x.a || 0) || (x.d || 0)))
+      .map((x) => ({
+        name: x.name, club: S.group, role: null, pos: x.pos, pop: clamp(x.str, 40, 95),
+        g: x.g || 0, a: x.a || 0, d: x.d || 0, rate: 0, mom: 0,
+      }));
+    return race.concat(mates).concat([me]).map((x) => ({ ...x, avg: avg(x), v: val(x) }))
       // 동점이면 내 줄을 앞에 둬요 — 실제로도 공동 득점왕은 둘 다 받아요
       .sort((x, y) => y.v - x.v || (x.me ? -1 : 1));
   }
@@ -893,6 +921,9 @@ window.WingerCareer = (() => {
 
   function afterPrep() {
     if (S.camp > 0) { renderPrep(); return; }
+    /* 🌏 월드컵 훈련 턴이 끝났어요 — 경기 시작 버튼만 남겨요.
+     * 상태는 S.wc.ready 하나뿐이라 대회가 끝나면(S.wc = null) 같이 사라집니다. */
+    if (S.wc) { S.wc.ready = true; save(); renderPrep(); show("screen-pro"); return; }
     /* 🏆 컵 준비가 끝나면 **시작 버튼**을 띄워요. 리그 경기도 준비가 끝나면
      * "경기하러 가기"를 누르는데, 컵만 마지막 훈련을 누르는 순간 그대로 8강으로
      * 넘어갔어요 — 훈련하려던 손이 그대로 경기 시작이 됩니다.
@@ -970,6 +1001,18 @@ window.WingerCareer = (() => {
   $("pro-cond-num").textContent = Math.round(S.condition);
     $("pro-cond-bar").style.width = `${S.condition}%`;
 
+    /* 🌏 월드컵 — 테마는 **S.wc에서 파생**시켜요(켜고 끄는 게 아니라). 끄는 쪽을
+     * 한 경로라도 놓치면 리그로 돌아왔는데 화면이 월드컵인 채로 남는데, CSS는
+     * 이 저장소의 자동 검증 사각지대라 기계가 못 잡아요. 파생이면 자기 복구형입니다.
+     * 초대장은 후반기 준비 화면에서 문턱을 넘는 순간 떠요(래칫 — 한 번 넘으면 안 뺏겨요). */
+    if (window.WingerWorldCup && isPro()) {
+      WingerWorldCup.themeSync();
+      /* ⚠️ 초대장을 띄운 뒤에도 **렌더를 계속해요.** 여기서 return 하면 준비 화면이
+       * 반쯤 그려진 채로 남아, 오버레이를 닫았을 때 훈련 버튼이 없는 화면을 봅니다.
+       * 오버레이는 위에 뜨는 모달이지 화면을 대신하는 게 아니에요. */
+      WingerWorldCup.checkInvite();
+    }
+
     /* 🎖️ 이번 시즌 칭호 — 지난 시즌에 받아 온 거예요. 효과가 경기에 붙으니
      * 경기 화면으로 가기 전에 항상 보여야 해요. 없으면 줄 자체를 감춰요. */
     const buffs = activeBuffs(S);
@@ -980,6 +1023,15 @@ window.WingerCareer = (() => {
         ? `<span class="buff-head">🎖️ ${S.proYear}시즌 칭호</span>`
           + buffs.map((t) => `<span class="buff-chip" title="${t.need}">${t.name}<b>${t.desc}</b></span>`).join("")
         : "";
+    }
+
+    /* 🌏 월드컵 배지 — 월드컵 시즌에만 한 줄. 남은 리그가 "월드컵을 향한 일정"으로
+     * 읽히게 하는 것이 이 줄의 일이에요. */
+    const wcBox = $("pro-wc");
+    if (wcBox) {
+      const html = (window.WingerWorldCup && isPro()) ? WingerWorldCup.badgeHTML() : "";
+      wcBox.hidden = !html;
+      wcBox.innerHTML = html;
     }
 
     /* 🏆 리그 순위표 — 시즌 중에만 보여줘요. 접어둬서 훈련 화면이 길어지지 않게 합니다.
@@ -993,7 +1045,13 @@ window.WingerCareer = (() => {
      * 2.28.0에 넣은 "시즌 준비 중에도 순위표를 보여준다"가 내내 죽어 있었습니다.
      * 개인 순위를 붙이면서 같은 자리에 걸려 드러났어요. */
     if (isPro() && !tableReady()) { initTable(); save(); }
-    if (tableReady()) {
+    /* 🌏 대회 중에는 이 자리가 **우리 조**를 봐요. 리그 순위표가 그대로 떠 있으면
+     * 화면이 딴 데를 보고 있는 겁니다 — 지금 치르는 건 리그가 아니에요. */
+    if (S.wc && window.WingerWorldCup) {
+      tbl.hidden = false;
+      $("pro-table-sum").textContent = WingerWorldCup.groupSumText();
+      $("pro-table-body").innerHTML = WingerWorldCup.tableHTML();   // 조별리그면 조 순위, 토너먼트면 대진표
+    } else if (tableReady()) {
       tbl.hidden = false;
       const rows = tableRows();
       const me = rows.find((r) => r.name === S.group);
@@ -1009,7 +1067,13 @@ window.WingerCareer = (() => {
     /* 👥 스쿼드는 레이어로 띄워요(버튼은 HUD에). 여기서는 **선발인지 벤치인지만**
      * 버튼에 적어요 — 그게 매 경기 알아야 하는 한 줄이고, 명단 전체는 눌러서 봐요. */
     const sqBtn = $("btn-squad-pro");
-    if (sqBtn && window.WingerSquad && isPro() && S.group) {
+    /* 🌏 대회 중에는 **클럽 선발 확률이 아무 의미가 없어요** — 지금 뛰는 건
+     * 대표팀이니까요. 같은 자리를 우리 조로 바꿔 씁니다. */
+    if (sqBtn && S.wc && window.WingerWorldCup) {
+      sqBtn.hidden = false;
+      sqBtn.textContent = "🌏 우리 조";
+      sqBtn.onclick = () => WingerWorldCup.openGroup();
+    } else if (sqBtn && window.WingerSquad && isPro() && S.group) {
       sqBtn.hidden = false;
       /* 준비 화면에서는 **확정이 아니라 확률**을 보여줘요. 선발은 경기 시작 때
        * 다시 뽑히니, 여기서 "선발"이라고 못 박으면 화면이 거짓말을 하게 돼요. */
@@ -1024,7 +1088,14 @@ window.WingerCareer = (() => {
      * "한 골 더"에 이유가 생겨요. 부문상이 이 표 1위한테 갑니다. */
     const race = $("pro-race");
     ensureRace();                     // 옛 세이브에도 명단을 채워요
-    if (S.activity && Array.isArray(S.activity.race)) {
+    /* 🌏 대회 중에는 **대회 개인 기록**을 봐요. 리그 득점왕 표를 그대로 두면
+     * 국대 골이 거기 섞인 것처럼 읽혀요(실제로는 안 섞이지만, 화면이 그렇게
+     * 보이면 그게 곧 제보가 됩니다). */
+    if (S.wc && window.WingerWorldCup) {
+      race.hidden = false;
+      $("pro-race-sum").textContent = "🥇 월드컵 개인 순위";
+      $("pro-race-body").innerHTML = WingerWorldCup.raceHTML();
+    } else if (S.activity && Array.isArray(S.activity.race)) {
       race.hidden = false;
       renderRace();
     } else if (isPro()) {
@@ -1064,6 +1135,11 @@ window.WingerCareer = (() => {
       stats.appendChild(row);
     }
 
+    if (S.wc) {
+      $("pro-camp-title").textContent = S.wc.ready
+        ? `🌏 대표팀 훈련 완료 — 경기를 시작하세요!`
+        : `🌏 월드컵 소집 중 — 대표팀 훈련 ${S.camp}회 남음`;
+    } else
     $("pro-camp-title").textContent = S.pendingShow
       ? (S.activity.week === 0
         ? `⚽ ${cbLabel(S.activity.cb)} 리그 준비 완료 — 경기를 시작하세요!`
@@ -1103,6 +1179,15 @@ window.WingerCareer = (() => {
     rest.innerHTML = `<span class="a-emoji">🛌</span>휴식 <span class="a-sub">컨디션 회복</span>`;
     rest.onclick = () => prepAction(null);
     box.appendChild(rest);
+
+    /* 🌏 월드컵 훈련 턴이 끝났으면 훈련을 잠그고 경기 버튼만 남겨요.
+     * 컵의 cupReady와 같은 자리·같은 모양이에요. */
+    if (S.wc && S.wc.ready && window.WingerWorldCup) {
+      box.querySelectorAll(".action-btn").forEach((b) => {
+        if (!b.classList.contains("ad-slot")) b.disabled = true;
+      });
+      box.appendChild(WingerWorldCup.startButton(seasonEnd));
+    }
 
     /* 🏆 컵 준비가 끝났으면 훈련을 잠그고 시작 버튼만 남겨요.
      * 리그의 "경기하러 가기"와 같은 자리·같은 모양이에요. */
@@ -1297,7 +1382,7 @@ window.WingerCareer = (() => {
       nextFn = () => { S.camp = CUP_CAMP; S.cupPrep = true; save(); renderPrep(); show("screen-pro"); };
     } else {
       nextLabel = "🏁 시즌 결산";
-      nextFn = finishYear;
+      nextFn = seasonEnd;
     }
     const btn = $("btn-stage-next");
     if (btn) {
@@ -1464,7 +1549,7 @@ window.WingerCareer = (() => {
       nextFn = () => { S.camp = CUP_CAMP; S.cupPrep = true; save(); renderPrep(); show("screen-pro"); };
     } else {
       nextLabel = "🏁 시즌 결산";
-      nextFn = finishYear;
+      nextFn = seasonEnd;
     }
     return { resultHTML, nextLabel, nextFn };
   }
@@ -1543,7 +1628,7 @@ window.WingerCareer = (() => {
     const opp = cupDraw();
     /* 대진이 비었어요 — 있을 수 없는 상태지만, 예전에는 여기서 **없는 함수**
      * (cupFinish)를 불러 그 자리에서 죽었습니다. 컵을 접고 결산으로 보내요. */
-    if (!opp) { S.cup = null; save(); finishYear(); return; }
+    if (!opp) { S.cup = null; save(); seasonEnd(); return; }
     S.cup.opp = opp;
     save();
     $("stage-title").textContent = `🏆 ${S.cup.name} ${rounds[S.cup.round]}`;
@@ -1629,7 +1714,7 @@ window.WingerCareer = (() => {
       return {
         resultHTML: head + `<div class="tour-line">💧 ${label}에서 탈락${pk}…</div>`
           + `<div class="tour-pts">💰 대회 수당 +${money}만</div>`,
-        nextLabel: "🏁 시즌 결산", nextFn: finishYear,
+        nextLabel: "🏁 시즌 결산", nextFn: seasonEnd,
       };
     }
     S.cup.round += 1;
@@ -1655,7 +1740,7 @@ window.WingerCareer = (() => {
     return {
       resultHTML: (head || "") + `<div class="tour-line">🏆 <b>${name} 우승!!</b>${pk || ""}</div>`
         + `<div class="tour-pts">💰 우승 상금 +${money}만 · ⭐ 명성 +${fan}</div>`,
-      nextLabel: "🏁 시즌 결산", nextFn: finishYear,
+      nextLabel: "🏁 시즌 결산", nextFn: seasonEnd,
     };
   }
 
@@ -1669,7 +1754,21 @@ window.WingerCareer = (() => {
   }
 
   // ---------- 시즌 결산 ----------
+  /* 🌏 시즌의 끝 — **단일 관문**이에요.
+   *
+   * finishYear로 들어가는 입구가 다섯 곳이나 됩니다(리그 종료·벤치 주 종료·컵 탈락·
+   * 컵 우승·컵 대진 방어). 다섯 곳에 각각 월드컵 분기를 심으면 **반드시 하나가 샙니다** —
+   * v2.48.0이 정확히 그 사고였어요(벤치 갈래에만 pendingShow 해제가 빠졌습니다).
+   * 그래서 다섯 입구를 이 함수 하나로 모으고, 월드컵 여부는 여기서만 봅니다. */
+  function seasonEnd() {
+    if (window.WingerWorldCup && WingerWorldCup.due()) { WingerWorldCup.enter(finishYear); return; }
+    finishYear();
+  }
+
   function finishYear() {
+    /* 📈 동료들도 한 살 먹어요 — **결산을 그리기 전에** 늙어야 그 시즌 팀 소식을
+     * 결산에 적을 수 있어요. 한 시즌에 한 번만 도는 건 ageSquads가 스스로 지켜요. */
+    if (window.WingerSquad) WingerSquad.ageSquads();
     const act = S.activity;
     const agePen = S.proYear >= DECLINE_FROM ? (S.proYear - DECLINE_FROM + 1) * 0.8 : 0;
     /* 연말 평가는 이제 축이 해요. 예전에는 hypeSum(순위 기반)이라
@@ -1747,7 +1846,22 @@ window.WingerCareer = (() => {
     /* 🏅 발롱도르 — 리그 최고를 넘어 세계 최고예요.
      * 리그MVP를 받은 시즌 중에서도, 리그격(prestige)을 곱한 값이 문턱을 넘어야 해요.
      * 하부 리그에서 아무리 잘해도 안 되고, 빅클럽에서 압도해야 닿습니다. */
-    if (awards.includes("리그MVP") && hype * leagueOf(S).prestige >= rand(9, 13)) {
+    /* ⚠️ **리그 격을 두 번 세면 안 돼요.** hype에는 이미 격이 들어 있어요
+     * (log(posAxis × prestige) × AXIS_K). 여기서 또 × prestige를 하면 격이
+     * 로그로 한 번, 선형으로 또 한 번 실려서 상위 리그에서는 리그MVP만 받으면
+     * 사실상 자동이 됩니다.
+     *
+     * 제보: "2부리그에서 뛰고 성적이 엄청 좋았던 것도 아닌 것 같은데 발롱도르를
+     * 받았어." 실측해 보니 🇬🇧 챔피언십에서 2골 6도움 69수비(평점 6.8)로
+     * **통과율 100%**였어요. 격을 한 번만 세면 0%가 됩니다.
+     *
+     * 고친 뒤 실측 (리그MVP를 받은 시즌 기준)
+     *   제보 사례(챔피언십)        0%
+     *   45골 15도움 압도 · PL     16% · 세리에A 4% · 그 아래 0%
+     *   110수비 압도 · PL         37% · 챔피언십 14% · K리그1 0%
+     * 주석이 원래 말하던 "하부 리그에서 아무리 잘해도 안 되고, 빅클럽에서
+     * 압도해야 닿는다"가 이제 실제로 그렇게 돼요. */
+    if (awards.includes("리그MVP") && hype >= rand(9, 13)) {
       awards.push("발롱도르");
       S.career.ballon = (S.career.ballon || 0) + 1;
     }
@@ -1805,6 +1919,12 @@ window.WingerCareer = (() => {
     if (avgRating != null && avgRating >= HOT_FORM_BAR) nextBuffs.push("hot");
     if (move && (move.kind === "title" || move.kind === "up")) nextBuffs.push("champ");
     if (move && move.kind === "down") nextBuffs.push("revenge");
+    /* 🌏 월드컵 우승 — **wcHist에 남은 결과를 그대로 읽어요.**
+     * 조건을 여기서 다시 계산하면 결산에 뜬 결과와 칭호가 어긋납니다
+     * (AWARD_BUFF가 수상 목록을 그대로 읽는 것과 같은 이유예요). */
+    if (((S.wcHist || []).filter((h) => h.y === S.proYear)[0] || {}).result === "champion") {
+      nextBuffs.push("wcwin");
+    }
     S.buffs = nextBuffs;
     S.buffY = S.proYear + 1;
     S.career.years.push({ y: S.proYear, hype: Math.round(hype * 10) / 10, wins, sales, dFan, awards, goals: gg, assists: ga, defense: gd, apps, avg: avgRating, club: S.group, league: leaguePlayed, rank: finalRank, teams: finalTeams, promo: move ? move.kind : null, promoTo: move ? move.to : null, prize: move && move.prize ? move.prize : 0 });
@@ -1993,6 +2113,16 @@ window.WingerCareer = (() => {
         : y.promo === "up" ? `🔺 <b>리그 우승!</b> ${(y.y || 0) + 1}시즌부터 <b>${y.promoTo}</b>에서 뜁니다${y.prize ? ` · 💰 우승 상금 +${y.prize}만` : ""}`
         : `🔻 최하위로 강등… ${(y.y || 0) + 1}시즌부터 <b>${y.promoTo}</b>에서 다시 시작해요`}</div>` : ""}
       ${y.club && y.club !== S.group ? `<div class="hint">🔁 <b>${S.group}</b>로 이적했어요 — ${(y.y || 0) + 1}시즌부터 새 팀에서 뜁니다</div>` : ""}
+      ${/* 🌏 월드컵 — **뽑혔든 안 뽑혔든** 한 줄이 있어야 해요.
+          이게 없으면 컵이 끝나고 아무 말 없이 결산으로 넘어와서, 플레이어는
+          "발탁이 안 돼서 그런 건가?"만 하게 됩니다(제보). 미발탁도 결과예요.
+          reportLine이 문턱·깜짝 발탁 가능성·우승국까지 담아 줍니다. */
+        (window.WingerWorldCup && WingerWorldCup.reportLine())
+          ? `<div class="wc-report">${WingerWorldCup.reportLine()}</div>` : ""}
+      ${/* 🗞️ 팀 소식 — 동료가 크고, 부진하고, 은퇴해요. 이게 없으면 명단이
+          조용히 바뀌어서 "언제 사람이 바뀌었지?"가 됩니다. */
+        (window.WingerSquad && WingerSquad.newsLine())
+          ? `<div class="hint squad-news">${WingerSquad.newsLine()}</div>` : ""}
       ${moveNote ? `<div class="hint learn">${moveNote}</div>` : ""}
       ${/* 🎖️ 이 시즌에 받은 칭호 — 다음 시즌 경기에 붙어요. 결산에서 보여줘야
           "이번 시즌을 잘 치르면 다음 시즌이 편해진다"가 눈에 들어와요. */
@@ -2435,6 +2565,16 @@ window.WingerCareer = (() => {
     peak: 260,    // 가장 높이 오른 리그 — K리그1(격 1.00)을 0으로 둔 초과분
     center: 30,   // 주장
     trans: 25,    // 🌠 초월 단계
+    /* 🌏 월드컵 우승 — **게임 최고의 단일 업적**이에요. 발롱도르(220)보다 위에 둡니다.
+     * 4년에 한 번뿐이라 커리어에 3~4번의 기회밖에 없고, 실측으로 종합 120이
+     * 커리어 4번 안에 한 번 드는 확률이 62%예요.
+     * ⚠️ 트로피 가중(addTrophy)에는 **0**을 넘겨요 — 점수가 양쪽에 실리면
+     * 조절할 손잡이가 둘이 됩니다. 여기 하나로 몰아 둡니다. */
+    wc: 320,
+    /* 🏆 대회 개인상 — 팀 성적과 **다른 축**이에요. 우승 없이도 이름을 남길 수
+     * 있어야 해서 따로 셉니다. 골든볼이 리그MVP(90×격)보다 위, 발롱도르(220)보다
+     * 아래예요 — 4년에 한 번뿐이지만 한 대회의 상이니까요. */
+    wcBall: 150, wcBoot: 100,
   };
 
   /* 가장 높이 오른 리그의 격. 시즌 기록에 남은 리그를 전부 훑어요 —
@@ -2462,7 +2602,8 @@ window.WingerCareer = (() => {
       ring * W.ring + (c.wins || 0) * W.mom + (S.fandom || 0) * W.fan +
       (c.years ? c.years.length : 0) * W.year +
       Math.max(0, peakPrestige() - 1) * W.peak +
-      (S.center ? W.center : 0) + transTotal() * W.trans
+      (S.center ? W.center : 0) + transTotal() * W.trans +
+      (c.wcWin || 0) * W.wc + (c.wcBall || 0) * W.wcBall + (c.wcBoot || 0) * W.wcBoot
     );
   }
 
@@ -2473,6 +2614,38 @@ window.WingerCareer = (() => {
   const SCORE_V = 2;          // 지금 눈금의 판 번호 — 새 기록에는 entry.sv로 남겨요
   const OLD_SCORE_DIV = 2.1;
   const hofScore = (e) => (e && e.sv >= SCORE_V ? e.score : Math.round((e.score || 0) / OLD_SCORE_DIV));
+
+  /* 🗓️ 언제 헌액됐나 — 새 항목은 `at`에 적어요.
+   *
+   * 옛 항목에는 그 칸이 없지만 **id가 `"w" + Date.now()`라 시각이 이미 들어 있어요.**
+   * 그래서 "옛 기록은 전부 한 덩어리"로 밀어 넣지 않고 거기서 꺼내 씁니다 —
+   * 세이브를 고치지 않는다는 규칙은 그대로예요(읽는 쪽에서만 해석해요).
+   * 다른 판에서 온 항목이라 못 읽으면 그때만 🕰️ 그 이전으로 모읍니다. */
+  const HOF_T0 = Date.UTC(2020, 0, 1);   // 이 시리즈가 없던 시각은 시각이 아니에요
+  function hofAt(e) {
+    if (!e) return null;
+    const raw = e.at != null ? Number(e.at) : Number(String(e.id || "").replace(/\D/g, ""));
+    if (!Number.isFinite(raw) || raw < HOF_T0 || raw > Date.now() + 864e5) return null;
+    return raw;
+  }
+  const PAST_KEY = "past";
+  function hofMonth(e) {
+    const t = hofAt(e);
+    if (t == null) return { key: PAST_KEY, label: "🕰️ 그 이전", short: "🕰️ 그 이전" };
+    const d = new Date(t);
+    const m = d.getMonth() + 1;
+    return {
+      key: `${d.getFullYear()}-${String(m).padStart(2, "0")}`,
+      label: `${d.getFullYear()}년 ${m}월`,
+      short: `${String(d.getFullYear()).slice(2)}.${String(m).padStart(2, "0")}`,
+    };
+  }
+  const hofDateText = (e) => {
+    const t = hofAt(e);
+    if (t == null) return "";
+    const d = new Date(t);
+    return `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일`;
+  };
 
   // ---------- 🧬 환생 ----------
   // 은퇴(명예의 전당 등록)와 달리, 기록은 남기지 않고 유산만 다음 세대에 넘겨요.
@@ -2570,6 +2743,12 @@ window.WingerCareer = (() => {
       (c.bonsang || 0) ? `🥈베스트11 ${c.bonsang}` : "",
       (c.rookie || 0) ? "🌟신인왕" : "",
       (c.wins || 0) ? `🏅MOM ${c.wins}` : "",
+      /* 🌏 월드컵 — 우승은 물론이고 **출전**도 적어요. 4년에 한 번뿐이라
+       * 나갔다는 것만으로도 커리어의 한 줄입니다. */
+      (c.wcWin || 0) ? `🌏월드컵 우승 ${c.wcWin}` : "",
+      (c.wcBall || 0) ? `🏅골든볼 ${c.wcBall}` : "",
+      (c.wcBoot || 0) ? `🥇골든부츠 ${c.wcBoot}` : "",
+      (c.wcApps || 0) ? `🌏월드컵 ${c.wcApps}회 출전` : "",
     ].filter(Boolean).join(" · ");
     const years = (c.years || []).length;
     const here = seasonsAtClub(S, S.group);
@@ -2586,12 +2765,18 @@ window.WingerCareer = (() => {
     const moves = moveLog(S);   // S를 비우기 전에 뽑아 둬요
     const entry = {
       id: "w" + Date.now(),
+      /* 🗓️ 헌액 시각 — 명예의 전당을 달별로 나누는 기준이에요. id에서도 꺼낼 수
+       * 있지만 id는 "겹치지 않는 이름"이 본업이라, 뜻이 있는 값은 제 칸에 둡니다. */
+      at: Date.now(),
       game: "soccer",
       name: S.name,
       pos: S.pos,
       team: S.group || marketOf().name,
       seasons: c.years ? c.years.length : 0,
       wins: c.wins, daesang: c.daesang, bonsang: c.bonsang, rookie: c.rookie,
+      /* 🏅 발롱도르는 은퇴식에만 있고 명예의 전당 항목에는 없었어요 — 커리어에서
+       * 가장 큰 상인데 카드에서 사라졌습니다. 옛 항목에는 없으니 읽는 쪽에서 건너뛰어요. */
+      ballon: c.ballon || 0,
       goals: (c.goals || 0) + ((S.youth && S.youth.g) || 0),
       assists: (c.assists || 0) + ((S.youth && S.youth.a) || 0),
       apps: (c.apps || 0) + (S.stages || 0),
@@ -2610,7 +2795,12 @@ window.WingerCareer = (() => {
        * "전성기에 세계 최고였다"는 사실이 통째로 사라집니다. */
       title: titleOf(overall()),
       bestTitle: titleAt(c.bestTitle != null ? c.bestTitle : titleIdx(overall())),
-      grade: gradeOfScore(score) + (transTotal() ? ` · ${transcendTitle(transTotal())}` : ""),
+      /* 🌏 월드컵 챔피언은 등급 줄에 서픽스로 붙여요 — 등급 **문턱**은 안 움직이고
+       * 표기만 얹습니다(초월 서픽스 선례). */
+      grade: gradeOfScore(score) + (transTotal() ? ` · ${transcendTitle(transTotal())}` : "")
+        + ((c.wcWin || 0) ? ` · 🌏 월드컵 챔피언` : ""),
+      wcWin: c.wcWin || 0, wcApps: c.wcApps || 0,
+      wcBall: c.wcBall || 0, wcBoot: c.wcBoot || 0,
       nextGrade: nextGrade(score),
     };
     const hof = loadHof();
@@ -2684,14 +2874,64 @@ window.WingerCareer = (() => {
     }
     list.sort((a, b) => hofScore(b) - hofScore(a));
     hofShown = 20;
-    drawHof(list, localIds);
+    hofTab = "all";
+    hofAll = list;
+    hofMine = localIds;
+    drawHof();
+  }
+
+  /* 🗓️ 달 탭 — 명예의 전당이 한 줄로만 쌓이면 "이번 달에 누가 들어왔나"를 볼 수가
+   * 없어요. 달로 나누되 **순위 자체는 건드리지 않아요** — 고른 칸 안에서 점수 순으로
+   * 다시 번호를 매깁니다. 전체 탭은 예전 그대로예요. */
+  function hofTabs() {
+    const seen = new Map();
+    for (const e of hofAll) {
+      const m = hofMonth(e);
+      if (!seen.has(m.key)) seen.set(m.key, { ...m, n: 0 });
+      seen.get(m.key).n += 1;
+    }
+    const months = [...seen.values()]
+      .filter((m) => m.key !== PAST_KEY)
+      .sort((a, b) => (a.key < b.key ? 1 : -1));
+    const past = seen.get(PAST_KEY);
+    return [{ key: "all", short: "전체", label: "전체", n: hofAll.length }]
+      .concat(months, past ? [past] : []);
   }
 
   // 더 보기로 20명씩 늘리고, 내 기록이 목록 밖이면 하단에 고정해서 보여줘요
   let hofShown = 20;
-  function drawHof(list, localIds) {
+  let hofTab = "all";
+  let hofAll = [];
+  let hofMine = new Set();
+  function drawHof() {
     const box = $("hof-list");
-    box.innerHTML = list.length ? "" : `<p class="hint">아직 아무도 없어요. 첫 전설이 되어보세요!</p>`;
+    const localIds = hofMine;
+    const tabs = hofTabs();
+    // 고른 탭이 사라졌으면(목록이 바뀌었으면) 전체로 되돌려요
+    if (!tabs.some((t) => t.key === hofTab)) hofTab = "all";
+    const list = hofTab === "all" ? hofAll : hofAll.filter((e) => hofMonth(e).key === hofTab);
+    box.innerHTML = "";
+    if (tabs.length > 2) {
+      const bar = document.createElement("div");
+      bar.className = "hof-tabs";
+      bar.innerHTML = tabs.map((t) =>
+        `<button type="button" class="hof-tab${t.key === hofTab ? " on" : ""}" data-k="${t.key}">${t.short} <span>${t.n}</span></button>`).join("");
+      bar.addEventListener("click", (ev) => {
+        const b = ev.target.closest(".hof-tab");
+        if (!b) return;
+        hofTab = b.dataset.k;
+        hofShown = 20;
+        drawHof();
+      });
+      box.appendChild(bar);
+    }
+    if (!list.length) {
+      const p = document.createElement("p");
+      p.className = "hint";
+      p.textContent = hofAll.length ? "이 달에는 아무도 없어요." : "아직 아무도 없어요. 첫 전설이 되어보세요!";
+      box.appendChild(p);
+      return;
+    }
     const myIdx = list.findIndex((x) => localIds.has(x.id));
     const view = list.slice(0, hofShown).map((e, i) => ({ e, i }));
     if (myIdx >= hofShown) view.push({ gap: true }, { e: list[myIdx], i: myIdx });
@@ -2706,7 +2946,15 @@ window.WingerCareer = (() => {
           ${e.team} · ${e.seasons}시즌${e.goals != null ? ` · ⚽${e.goals} 🅰️${e.assists || 0}` : ""} · 🏅MOM ${e.wins} · 🏆${e.daesang + e.bonsang} · 점수 ${hofScore(e)}
           ${/* 🌍 밟아 온 리그 — 옛 항목에는 없어요(읽는 쪽에서 건너뜁니다). */
             e.leagues ? `<div class="hof-lg">🌍 ${e.leagues}</div>` : ""}
-        </div>`;
+          ${/* 🌏 월드컵 — 이 필드도 나중에 생겼어요. 없으면 줄 자체를 안 그려요. */
+            e.wcApps ? `<div class="hof-lg">🌏 월드컵 ${e.wcApps}회`
+              + `${e.wcWin ? ` · 🏆 우승 ${e.wcWin}` : ""}`
+              + `${e.wcBall ? ` · 🏅 골든볼 ${e.wcBall}` : ""}`
+              + `${e.wcBoot ? ` · 🥇 골든부츠 ${e.wcBoot}` : ""}</div>` : ""}
+        </div>
+        <div class="hof-more">›</div>`;
+      // 카드를 누르면 그 선수의 커리어를 펼쳐요 (제보: "명전에서 선수 클릭 시 기록을 레이어로")
+      div.onclick = () => openHofCard(e, i + 1, localIds.has(e.id));
       box.appendChild(div);
     });
     const left = list.length - Math.min(list.length, hofShown);
@@ -2714,9 +2962,61 @@ window.WingerCareer = (() => {
       const more = document.createElement("button");
       more.className = "mini-btn rank-more";
       more.textContent = `▾ 더 보기 (${left}명 남음)`;
-      more.onclick = () => { hofShown += 20; drawHof(list, localIds); };
+      more.onclick = () => { hofShown += 20; drawHof(); };
       box.appendChild(more);
     }
+  }
+
+  /* 🏛️ 헌액 카드 — 카드 한 줄에 다 못 적은 것을 펼쳐 보여줘요.
+   * base.css의 .av-overlay/.av-modal 껍데기를 빌려 씁니다(스쿼드 레이어와 같은 방식).
+   * **옛 항목에는 없는 칸이 많아요.** 없으면 줄을 아예 안 그립니다 — 0으로 채우면
+   * "기록이 없다"와 "0이었다"가 같은 얼굴이 돼요. */
+  function openHofCard(e, rank, mine) {
+    if (document.querySelector(".hof-overlay")) return;
+    const row = (k, v) => (v ? `<div class="hofd-row"><span>${k}</span><b>${v}</b></div>` : "");
+    const awards = [
+      e.trophies ? `🏆 우승 ${e.trophies}` : "",
+      e.ballon ? `🏅 발롱도르 ${e.ballon}` : "",
+      e.daesang ? `🎖️ 리그MVP ${e.daesang}` : "",
+      e.bonsang ? `🥈 베스트11 ${e.bonsang}` : "",
+      e.rookie ? "🌟 신인왕" : "",
+      e.wins ? `🏅 MOM ${e.wins}` : "",
+    ].filter(Boolean).join(" · ");
+    const wc = [
+      e.wcApps ? `🌏 출전 ${e.wcApps}회` : "",
+      e.wcWin ? `🏆 우승 ${e.wcWin}` : "",
+      e.wcBall ? `🏅 골든볼 ${e.wcBall}` : "",
+      e.wcBoot ? `🥇 골든부츠 ${e.wcBoot}` : "",
+    ].filter(Boolean).join(" · ");
+    const wrap = document.createElement("div");
+    wrap.className = "av-overlay hof-overlay";
+    wrap.innerHTML = `<div class="av-modal hofd-modal">
+      <div class="hofd-head">
+        <div class="hofd-emoji">⚽</div>
+        <div class="hofd-name">${e.gen > 1 ? `<span class="hof-gen">${e.gen}세</span> ` : ""}${e.name}${mine ? ` <span class="hofd-me">내 선수</span>` : ""}</div>
+        <div class="hofd-grade">${e.grade || ""}</div>
+        <div class="hofd-rank">${hofTab === "all" ? "전체" : hofTabs().find((t) => t.key === hofTab).label} ${rank}위 · 커리어 점수 ${hofScore(e)}</div>
+      </div>
+      <div class="hofd-body">
+        ${row("🏷️ 최고 클래스", e.bestTitle)}
+        ${row("🏷️ 은퇴 시", e.bestTitle && e.title && e.bestTitle !== e.title ? e.title : "")}
+        ${row("💪 마지막 종합", e.finalOvr)}
+        ${row("⚽ 포지션", (POS_INFO[e.pos] || {}).name)}
+        ${row("🏟️ 마지막 클럽", e.team + (e.teamSeasons && e.teamSeasons < e.seasons ? ` (${e.teamSeasons}시즌)` : ""))}
+        ${row("📅 통산", e.seasons ? `${e.seasons}시즌${e.apps ? ` · ${e.apps}경기` : ""}` : "")}
+        ${row("📊 통산 기록", e.goals != null ? `⚽ ${e.goals}골 · 🅰️ ${e.assists || 0}도움` : "")}
+        ${row("🌍 밟아 온 리그", e.leagues)}
+        ${row("⛰️ 최고 리그", e.leagues && e.leagues.includes("→") ? e.peakLg : "")}
+        ${row("🏆 수상", awards)}
+        ${row("🌏 월드컵", wc)}
+        ${row("🔮 초월", e.trans ? `${e.trans}회` : "")}
+        ${row("🗓️ 헌액", hofDateText(e))}
+      </div>
+      <div class="av-actions"><button class="btn btn-primary" id="btn-hofd-close">닫기</button></div>
+    </div>`;
+    wrap.addEventListener("click", (ev) => { if (ev.target === wrap) wrap.remove(); });
+    document.body.appendChild(wrap);
+    document.getElementById("btn-hofd-close").onclick = () => wrap.remove();
   }
 
   // ---------- 랜덤 매칭 (공용 ../match.js — Supabase 연동) ----------
@@ -2923,6 +3223,15 @@ window.WingerCareer = (() => {
   $("btn-hof-back")?.addEventListener("click", () => show("screen-title"));
   $("btn-battle-back")?.addEventListener("click", () => show(battleReturn));
 
+  /* 🌏 월드컵에 필요한 도구만 넘겨요. worldcup.js는 career.js 안쪽을 모르고,
+   * career.js는 대회 진행을 모르는 채로 서로를 부릅니다. */
+  if (window.WingerWorldCup) {
+    WingerWorldCup.init({
+      proLog, queueFx, addTrophy, ratingOf, matchRating,
+      renderPrep, leagueOf,
+    });
+  }
+
   return {
     onEnding,
     refreshPro: renderPrep,
@@ -2932,6 +3241,9 @@ window.WingerCareer = (() => {
       /* 🏆 컵을 치르던 중에 앱을 닫았으면 거기서 이어요. 이 줄이 없으면
        * 남은 라운드가 통째로 사라지고 트로피도 못 받아요 — 컵은 시즌 끝의
        * 세 판이라 중간에 끊기면 그 시즌이 그냥 없어진 것처럼 보입니다. */
+      /* 🌏 월드컵을 치르던 중이었으면 준비 화면으로 돌아와요. 경기는 원자적이라
+       * (중간 상태를 저장하지 않아요) S.camp와 S.wc.ready가 상태를 다 담습니다. */
+      if (S.wc && window.WingerWorldCup && WingerWorldCup.resume(finishYear)) return;
       if (S.cup && window.SoccerCup) { cupMatch(); return; }
       if (S.camp > 0 || S.activity || S.pendingShow) { renderPrep(); show("screen-pro"); }
       else if (S.career && S.career.years.length) yearReport();
