@@ -1018,6 +1018,22 @@ window.WingerCareer = (() => {
     save();
   }
 
+  /* 🦶 주발·약발 — 발 두 개를 나란히 두고 그 발의 숫자를 적어요.
+   * 주발은 늘 10이에요(자기 발이니까요). 약발만 1~10으로 움직입니다. */
+  function footHTML() {
+    const main = mainFoot(), weak = weakFoot();
+    const foot = (side) => {
+      const isMain = side === main;
+      const v = isMain ? 10 : weak;
+      return `<div class="foot ${isMain ? "main" : "weak"}" title="${FOOT_KO[side]}${isMain ? " · 주발" : " · 약발"}">`
+        + `<span class="foot-ico">${side === "L" ? "🦶" : "🦶"}</span><b>${v}</b></div>`;
+    };
+    const mul = footMul();
+    return `<div class="feet">${foot("L")}${foot("R")}</div>`
+      + `<div class="foot-note">${FOOT_KO[main]}잡이 · 약발 ${weak}/10`
+      + `${Math.abs(mul - 1) > 0.001 ? ` · 골·도움 ${mul >= 1 ? "+" : ""}${Math.round((mul - 1) * 100)}%` : ""}</div>`;
+  }
+
   function renderPrep() {
     checkTitle();
     $("pro-name").textContent = `${S.name} (${POS_INFO[S.pos].name})`;
@@ -1164,6 +1180,23 @@ window.WingerCareer = (() => {
 
     const stats = $("pro-stats");
     stats.innerHTML = "";
+    /* 📊 레이더 + 🦶 발 — 숫자 막대만 있으면 "이 선수가 어떤 모양인가"가 안 읽혀요.
+     * 막대는 그대로 둬요 — 🔮 각성·🌠 초월 버튼이 거기 붙어 있고, 정확한 값도
+     * 막대 쪽에서 봅니다. 레이더는 **한눈에 보는 모양**을 맡아요.
+     * radar.js는 8종이 함께 쓰는 파일이라 여기서 새로 만들지 않습니다. */
+    const shape = document.createElement("div");
+    shape.className = "stat-shape";
+    shape.innerHTML = `<canvas class="stat-radar" width="240" height="240"></canvas>`
+      + `<div class="foot-box">${footHTML()}</div>`;
+    stats.appendChild(shape);
+    if (window.Radar) {
+      /* 상한이 초월로 늘어나요 — 눈금을 고정하면 130짜리가 칸을 뚫고 나가요.
+       * 지금 상한 중 가장 큰 값에 맞춰 그립니다. */
+      const max = Math.max(...STAT_DEFS.map((d) => statCap(d.key)));
+      Radar.draw(shape.querySelector(".stat-radar"), STAT_DEFS, S.stats, {
+        max, stroke: "#6ee7a0", fill: "rgba(110, 231, 160, 0.22)",
+      });
+    }
     for (const d of STAT_DEFS) {
       const v = Math.round(S.stats[d.key]);
       const tv = S.talents[d.key], tl = transLv(d.key);
@@ -1535,6 +1568,15 @@ window.WingerCareer = (() => {
      * 바닥 무게(GROW_BASE)를 남겨 두는 이유: 90분을 뛴 이상 아무 일도 없던 칸이
      * 절대 안 오르는 건 과해요. 다만 한 일이 있으면 그쪽이 훨씬 무거워집니다.
      * 체력은 이벤트가 없어서 바닥 무게만 조금 높게 둡니다 — 뛴 것 자체가 근거예요. */
+    /* 🦶 약발은 **훈련이 아니라 경기에서** 붙어요. 골·도움이 난 경기에서만,
+     * 그것도 낮은 확률로 한 칸이에요 — 반대발로 차야 했던 장면을 겪은 값이에요.
+     * 훈련 버튼으로 만들면 훈련 총량이 늘어 성장 곡선이 통째로 움직입니다. */
+    const FOOT_GROW_P = 0.06;
+    if (S.foot && S.foot.weak < 10 && (info.myGoals + info.assists) > 0
+        && Math.random() < FOOT_GROW_P * (info.myGoals + info.assists)) {
+      S.foot.weak += 1;
+      proLog(`🦶 반대발로 해낸 장면이 남았어요 — 약발 ${S.foot.weak}/10`);
+    }
     const GROW_BASE = 0.5;
     const growWeight = {
       shoot: GROW_BASE + info.myGoals * 3,

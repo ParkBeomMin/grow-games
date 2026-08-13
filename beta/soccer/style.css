@@ -610,3 +610,22 @@ body.fever-on #app { padding-top: 2.6rem; }
 .squad-news { color: var(--cream); }
 /* 🌏 대회 개인 순위의 부문 탭 — 리그 개인 순위(.race-tabs) 결을 그대로 써요 */
 .wc-face-tabs { margin-bottom: .4rem; }
+
+/* ---------- 📊 능력치 레이더 · 🦶 주발과 약발 ---------- */
+.stat-shape { display: flex; align-items: center; gap: .4rem; margin-bottom: .5rem; }
+.stat-radar { width: min(190px, 46vw); height: auto; flex-shrink: 0; }
+.foot-box { flex: 1; min-width: 0; text-align: center; }
+.feet { display: flex; justify-content: center; gap: .5rem; }
+.foot {
+  width: 44px; height: 60px; border-radius: 22px / 30px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  border: 2px solid var(--line); background: var(--bg2);
+}
+.foot .foot-ico { font-size: .8rem; opacity: .5; }
+.foot b { font-size: 1.15rem; font-family: "Jua", sans-serif; }
+.foot.main { border-color: #6ee7a0; background: rgba(110, 231, 160, .16); }
+.foot.main b { color: #6ee7a0; }
+.foot.weak b { color: var(--dim); }
+.foot.weak { transform: scaleX(-1); }
+.foot.weak b { transform: scaleX(-1); }
+.foot-note { font-size: .7rem; color: var(--dim); margin-top: .35rem; line-height: 1.4; }

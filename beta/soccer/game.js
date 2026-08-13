@@ -467,6 +467,8 @@ function newState(market, pos, name, roll) {
     market: market.id, pos, name,
     year: 1, month: 1,
     stats, talents,
+    foot: rollFoot(),          // 🦶 주발·약발 — 타고나고 경기에서 붙어요
+
     /* 새 선수는 1부에서 시작해요. 소속 클럽은 프로 데뷔(enterCareer) 때 정해지고,
      * 그때까지는 기본 전력 70으로 유스 경기를 치러요. */
     league: 1,
@@ -611,6 +613,33 @@ function buffSum(kind, st) {
   }
   return Math.min(sum, BUFF_CAP[kind] != null ? BUFF_CAP[kind] : 1) + bonus;
 }
+/* 🦶 주발과 약발 — 능력치와 다른 축이에요.
+ *
+ * ⚠️ **자리를 여기 둔 이유**가 있어요. 이 저장소의 검사는 소스에서 산식을 떼어다
+ * 브라우저 밖에서 굴리는데, matchContribution을 떼어 오는 검사 스무 개가 전부
+ * `HOT_FORM_BAR ~ buffMul` 구간을 함께 떼어 옵니다. 그 구간 안에 두면 검사가
+ * 저절로 따라와요 — 밖에 두면 스무 개가 한꺼번에 ReferenceError로 죽습니다
+ * (실제로 그랬어요).
+ *
+ * 능력치 다섯은 훈련으로 올리는 값이지만, 약발은 **타고나고 경기에서 붙어요.**
+ * 실제 축구에서 약발은 훈련장에서 몇 주 만에 만들어지는 게 아니라,
+ * 그 발로 차야만 하는 상황을 겪으면서 늘어납니다.
+ *
+ * ⚠️ **기준을 5로 뒀어요.** 옛 세이브에는 이 칸이 없어서 읽는 쪽에서 5를 주는데,
+ * 5가 배수 1.00이라 **이어하던 선수의 골이 하나도 안 움직여요.**
+ * 새 축을 넣을 때 기본값이 중립이 아니면 그건 밸런스 변경이지 기능 추가가 아니에요.
+ *
+ * 폭은 ±6%로 좁게 잡았어요. 약발은 있으면 좋은 것이지, 이걸로 커리어가 갈리면
+ * 타고난 값 하나가 실력을 이깁니다. */
+const FOOT_MID = 5;
+const FOOT_K = 0.012;                                  // 한 칸당 1.2%
+const weakFoot = (st) => ((st || S).foot && (st || S).foot.weak) || FOOT_MID;
+const footMul = (st) => 1 + (weakFoot(st) - FOOT_MID) * FOOT_K;   // 1 → 0.952 · 5 → 1.00 · 10 → 1.06
+const mainFoot = (st) => (((st || S).foot && (st || S).foot.main) || "R");
+const FOOT_KO = { R: "오른발", L: "왼발" };
+/* 주발은 오른발이 흔해요 — 실제 프로 선수의 대략 4분의 3이에요. */
+const rollFoot = () => ({ main: Math.random() < 0.75 ? "R" : "L", weak: randInt(2, 7) });
+
 const buffMul = (kind, st) => 1 + buffSum(kind, st);
 
 /* 🏷️ 클래스 — "지금 이 선수가 어느 급인가".
@@ -1693,8 +1722,11 @@ function matchContribution(rating) {
    * 나머지 넷의 별은 훈련 효율 말고는 경기에 아무 영향이 없었습니다. */
   const gTal = isWg ? (clutch("shoot") * 0.6 + clutch("dribble") * 0.4) : clutch("shoot");
   const aTal = isWg ? (clutch("pass") * 0.6 + clutch("dribble") * 0.4) : clutch("pass");
-  const gLam = (G[S.pos] ?? 0.4) * perf * (0.55 + shootF) * gTal * buffMul("g") * GOAL_SCALE;
-  const aLam = (A[S.pos] ?? 0.4) * perf * (0.55 + passF) * aTal * buffMul("a") * GOAL_SCALE;
+  /* 🦶 약발은 **골과 도움에만** 붙어요 — 반대발로 차야 하는 상황에서 갈리는 거니까요.
+   * 수비에는 안 붙입니다(태클에 발이 갈리지는 않아요). 기준 5가 배수 1.00이에요. */
+  const foot = footMul();
+  const gLam = (G[S.pos] ?? 0.4) * perf * (0.55 + shootF) * gTal * buffMul("g") * foot * GOAL_SCALE;
+  const aLam = (A[S.pos] ?? 0.4) * perf * (0.55 + passF) * aTal * buffMul("a") * foot * GOAL_SCALE;
   const dLam = (D[S.pos] ?? 0.6) * perf * (0.55 + defF) * clutch("defense") * buffMul("d") * GOAL_SCALE;
   return { g: poissonish(gLam), a: poissonish(aLam), def: poissonish(dLam) };
 }

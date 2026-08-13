@@ -3,7 +3,11 @@
 
 window.Radar = (() => {
   function draw(canvas, defs, stats, opts = {}) {
-    const ctx = canvas.getContext("2d");
+    /* ⚠️ 2d 컨텍스트를 못 얻는 환경이 있어요(캔버스가 없는 jsdom 등).
+     * 여기서 안 막으면 **부르는 쪽 화면이 통째로 안 그려져요** — 준비 화면이
+     * 레이더 한 줄 때문에 죽었습니다. 못 그리면 조용히 넘어가요. */
+    const ctx = canvas && canvas.getContext && canvas.getContext("2d");
+    if (!ctx) return;
     const W = canvas.width, H = canvas.height;
     const cx = W / 2, cy = H / 2 + 4, R = Math.min(W, H) / 2 - 36;
     const n = defs.length;
