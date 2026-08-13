@@ -639,3 +639,21 @@ body.fever-on #app { padding-top: 2.6rem; }
   font-family: "Jua", sans-serif; font-size: .84rem;
 }
 .foot-opt.on { background: var(--field); border-color: #6ee7a0; color: #6ee7a0; }
+/* ---------- 📍 내 자리 (세부 포지션) ---------- */
+.pos-field { margin-top: .5rem; }
+.pf-grid {
+  display: flex; flex-direction: column; gap: 3px;
+  padding: 6px 4px; border-radius: 10px;
+  background: linear-gradient(180deg, rgba(110,231,160,.07), rgba(110,231,160,.02));
+  border: 1px solid var(--line);
+}
+.pf-row { display: flex; justify-content: center; gap: 4px; }
+.pf-slot {
+  min-width: 30px; padding: .12rem .2rem; border-radius: .35rem;
+  font-size: .58rem; letter-spacing: .02em; text-align: center;
+  border: 1px solid var(--line); color: var(--dim); background: var(--bg2); opacity: .45;
+}
+.pf-slot.on { opacity: 1; }
+.pf-slot.here { background: #6ee7a0; border-color: #6ee7a0; color: #0b1e14; font-weight: 700; }
+.pf-note { font-size: .68rem; color: var(--dim); margin-top: .3rem; line-height: 1.4; }
+.pf-note b { color: var(--cream); }

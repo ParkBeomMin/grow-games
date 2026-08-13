@@ -782,7 +782,8 @@ window.WingerCareer = (() => {
       const pop = clamp(p.str, 40, 95);
       /* 🛡️ 수비는 사람마다 굴려요 — 팀 스코어로는 알 수 없는 값이에요.
        * 우리 팀은 굴리지 않아요(중계에 뜬 내 수비가 따로 쌓입니다). */
-      const dd = mine ? 0 : poissonish(raceLam(def.d, pop));
+      const dSl = (window.WingerSquad ? WingerSquad.slotOf(p) : null) || {};
+      const dd = mine ? 0 : poissonish(raceLam(def.d, pop) * (dSl.d || 1));
       p.d = (p.d || 0) + dd;
       out.push({ p, club, mine, role: def.name, dg: 0, da: 0, dd });
     }
@@ -855,10 +856,13 @@ window.WingerCareer = (() => {
     const iAmAce = ovr >= (best.str || 0);
     const gAce = iAmAce ? null : aceOf(others, "g");
     const aAce = iAmAce ? null : aceOf(others, "a");
-    const wG = (x) => (GOAL_W[x.pos] || 0.4) * (clamp(x.str, 40, 95) / 70) * (x === gAce ? ACE_W : 1);
-    const wA = (x) => (ASSIST_W[x.pos] || 0.4) * (clamp(x.str, 40, 95) / 70) * (x === aAce ? MAKER_W : 1);
-    const myG = (GOAL_W[S.pos] || 0.4) * Math.pow(ovr / 70, MY_P) * (iAmAce ? ACE_W : 1);
-    const myA = (ASSIST_W[S.pos] || 0.4) * Math.pow(ovr / 70, MY_P) * (iAmAce ? MAKER_W : 1);
+    // 📍 자리 결도 함께 봐요 — 나도 다른 선수와 같은 자로 재요
+    const sl = (x) => WingerSquad.slotOf(x) || {};
+    const wG = (x) => (GOAL_W[x.pos] || 0.4) * (clamp(x.str, 40, 95) / 70) * (sl(x).g || 1) * (x === gAce ? ACE_W : 1);
+    const wA = (x) => (ASSIST_W[x.pos] || 0.4) * (clamp(x.str, 40, 95) / 70) * (sl(x).a || 1) * (x === aAce ? MAKER_W : 1);
+    const mySl = sl(mine);
+    const myG = (GOAL_W[S.pos] || 0.4) * Math.pow(ovr / 70, MY_P) * (mySl.g || 1) * (iAmAce ? ACE_W : 1);
+    const myA = (ASSIST_W[S.pos] || 0.4) * Math.pow(ovr / 70, MY_P) * (mySl.a || 1) * (iAmAce ? MAKER_W : 1);
     /* 명단이 없는 옛 세이브나 유스에서는 나눌 상대가 없어요 — 그때는 예전처럼 굴려요 */
     if (!mine || !others.length) return { g: team, mates: 0, a: 0 };
     let g = 0;
@@ -901,14 +905,17 @@ window.WingerCareer = (() => {
       const fws = xi.filter((r) => r.p.pos === "fw");
       const pool = fws.length ? fws : xi;
       const ace = pool.reduce((a, b) => ((a.p.str || 0) >= (b.p.str || 0) ? a : b), pool[0]);
+      /* 📍 자리도 실려요 — 같은 미드필더라도 CAM이 더 넣고 CDM이 더 막아요.
+       * 폭이 좁아서(±20%) 자리 하나가 커리어를 정하지는 않아요. */
+      const sl = (r) => (window.WingerSquad ? WingerSquad.slotOf(r.p) : null) || {};
       const wOf = (r) => (GOAL_W[r.p.pos] || 0.4) * (clamp(r.p.str, 40, 95) / 70)
-        * (r === ace ? ACE_W : 1);
+        * (sl(r).g || 1) * (r === ace ? ACE_W : 1);
       // 🎯 그 클럽의 플레이메이커 — 미드필더·윙어 중 가장 잘하는 사람
       const mids = xi.filter((r) => r.p.pos === "mf" || r.p.pos === "wg");
       const mpool = mids.length ? mids : xi;
       const maker = mpool.reduce((a, b) => ((a.p.str || 0) >= (b.p.str || 0) ? a : b), mpool[0]);
       const aOf = (r) => (ASSIST_W[r.p.pos] || 0.4) * (clamp(r.p.str, 40, 95) / 70)
-        * (r === maker ? MAKER_W : 1);
+        * (sl(r).a || 1) * (r === maker ? MAKER_W : 1);
       const pick1 = (list, weight) => {
         let tot = 0;
         for (const r of list) tot += weight(r);
@@ -1185,6 +1192,39 @@ window.WingerCareer = (() => {
     save();
   }
 
+  /* 📍 내 자리 — 목업처럼 필드 위에 격자를 놓고 내가 설 자리를 밝혀요.
+   * 자리는 포지션 안에서만 나뉘어요(넷은 그대로예요). 그래서 격자도 내 포지션
+   * 줄만 채우고 나머지는 흐리게 둡니다 — "내가 갈 수 있는 자리"가 한눈에 보여요. */
+  function slotFieldHTML() {
+    if (!window.WingerSquad) return "";
+    const me = WingerSquad.squadOf(S.group).find((x) => x.me);
+    const now = WingerSquad.slotOf(me);
+    const mine = WingerSquad.slotsOf(S.pos);
+    const rows = [];
+    for (const p of ["fw", "wg", "mf", "df"]) {
+      for (const sl of WingerSquad.slotsOf(p)) {
+        const on = p === S.pos;
+        const here = on && now && sl.key === now.key;
+        rows.push({ sl, on, here });
+      }
+    }
+    /* 줄(row)로 묶어서 실제 배치처럼 세워요 — 앞선이 위, 수비가 아래예요 */
+    const byRow = {};
+    for (const r of rows) (byRow[r.sl.row] = byRow[r.sl.row] || []).push(r);
+    const body = Object.keys(byRow).sort((a, b) => a - b).map((k) =>
+      `<div class="pf-row">${byRow[k]
+        .sort((a, b) => a.sl.col - b.sl.col)
+        .map((r) => `<span class="pf-slot${r.here ? " here" : r.on ? " on" : ""}" title="${r.sl.name}">${r.sl.key}</span>`)
+        .join("")}</div>`).join("");
+    const fit = now && now.side !== "C"
+      ? (mainFoot() === now.side ? " · 🦶 발이 맞아요" : " · 🦶 반대발 자리예요")
+      : "";
+    return `<div class="pos-field"><div class="pf-grid">${body}</div>`
+      + `<div class="pf-note">📍 <b>${now ? now.name : posName(S.pos)}</b>`
+      + `${mine.length > 1 ? ` · ${posName(S.pos)} ${mine.length}자리` : ""}${fit}</div></div>`;
+  }
+  const posName = (p) => (POS_INFO[p] || {}).name || p;
+
   /* 🦶 주발·약발 — 발 두 개를 나란히 두고 그 발의 숫자를 적어요.
    * 주발은 늘 10이에요(자기 발이니까요). 약발만 1~10으로 움직입니다. */
   function footHTML() {
@@ -1358,7 +1398,7 @@ window.WingerCareer = (() => {
     const shape = document.createElement("div");
     shape.className = "stat-shape";
     shape.innerHTML = `<canvas class="stat-radar" width="240" height="240"></canvas>`
-      + `<div class="foot-box">${footHTML()}</div>`;
+      + `<div class="foot-box">${footHTML()}${isPro() ? slotFieldHTML() : ""}</div>`;
     stats.appendChild(shape);
     if (window.Radar) {
       /* 상한이 초월로 늘어나요 — 눈금을 고정하면 130짜리가 칸을 뚫고 나가요.

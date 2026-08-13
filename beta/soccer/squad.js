@@ -24,6 +24,67 @@ window.WingerSquad = (() => {
   /* 4-4-2가 아니라 이 게임의 포지션 넷(공격수·윙어·미드필더·수비수)에 맞춘 배치예요.
    * 합이 11이에요 — 골키퍼는 이 게임에 없어요. */
   const FORMATION = { fw: 2, wg: 2, mf: 4, df: 3 };
+
+  /* ---------- 📍 세부 자리 ----------
+   *
+   * 포지션 넷(공격수·윙어·미드필더·수비수)은 **그대로 둬요.** 그 위에 자리를 얹습니다.
+   * 넷을 스물일곱으로 쪼개면 포메이션·선발 경쟁·생산량·부문상이 전부 다시 서야 해요.
+   * 자리는 **그 포지션 안에서** 나뉘고, 바깥에서 보면 여전히 넷이에요.
+   *
+   * side — 왼쪽(L)·가운데(C)·오른쪽(R). 🦶 주발이 여기서 의미를 받아요:
+   * 왼쪽 자리는 왼발잡이가, 오른쪽 자리는 오른발잡이가 편합니다.
+   * (실제 축구의 인버티드 윙어처럼 반대발이 유리한 자리도 있지만, 여기서는
+   *  "그 발이 바깥쪽에 있으면 편하다"는 가장 기본만 씁니다)
+   *
+   * g/a/d — 그 자리의 결이에요. 합이 1 언저리라 자리를 옮겨도 총량은 비슷하고,
+   * **무엇을 더 하느냐**가 달라져요. 여기 값이 크면 자리 하나가 커리어를 정해 버려요. */
+  const POS_SLOTS = {
+    fw: [
+      { key: "ST", name: "스트라이커", side: "C", g: 1.15, a: 0.85, d: 0.9, row: 0, col: 1 },
+      { key: "CF", name: "세컨드 스트라이커", side: "C", g: 0.95, a: 1.15, d: 1.0, row: 1, col: 1 },
+    ],
+    wg: [
+      { key: "LW", name: "왼쪽 윙어", side: "L", g: 1.0, a: 1.1, d: 0.95, row: 1, col: 0 },
+      { key: "RW", name: "오른쪽 윙어", side: "R", g: 1.0, a: 1.1, d: 0.95, row: 1, col: 2 },
+    ],
+    mf: [
+      { key: "CAM", name: "공격형 미드필더", side: "C", g: 1.15, a: 1.2, d: 0.7, row: 2, col: 1 },
+      { key: "CM", name: "중앙 미드필더", side: "C", g: 1.0, a: 1.05, d: 1.0, row: 3, col: 1 },
+      { key: "B2B", name: "박스투박스", side: "C", g: 1.05, a: 0.95, d: 1.05, row: 3, col: 2 },
+      { key: "CDM", name: "수비형 미드필더", side: "C", g: 0.7, a: 0.9, d: 1.3, row: 4, col: 1 },
+    ],
+    df: [
+      { key: "LB", name: "왼쪽 풀백", side: "L", g: 0.9, a: 1.2, d: 0.95, row: 5, col: 0 },
+      { key: "CB", name: "센터백", side: "C", g: 1.0, a: 0.8, d: 1.2, row: 5, col: 1 },
+      { key: "RB", name: "오른쪽 풀백", side: "R", g: 0.9, a: 1.2, d: 0.95, row: 5, col: 2 },
+    ],
+  };
+  /* ⚠️ 자리 가중의 **평균을 1로** 맞춰요.
+   * 안 그러면 자리를 얹는 것만으로 그 포지션 전체가 세지거나 약해져요 —
+   * 실측에서 골든부츠 수상률이 43% → 60%로 밀려 올라갔습니다.
+   * 자리는 "무엇을 더 하느냐"를 정하는 것이지 총량을 올리는 게 아니에요. */
+  (() => {
+    for (const p of Object.keys(POS_SLOTS)) {
+      for (const k of ["g", "a", "d"]) {
+        const list = POS_SLOTS[p];
+        const mean = list.reduce((a, x) => a + x[k], 0) / list.length;
+        for (const x of list) x[k] = Math.round((x[k] / mean) * 1000) / 1000;
+      }
+    }
+  })();
+  const slotsOf = (pos) => POS_SLOTS[pos] || POS_SLOTS.mf;
+  const slotByKey = (k) => {
+    for (const p of POS_KEYS) { const s2 = slotsOf(p).find((x) => x.key === k); if (s2) return s2; }
+    return null;
+  };
+  /* 🦶 발 궁합 — 왼쪽 자리에 왼발잡이면 편해요. 가운데 자리는 안 가려요.
+   * 폭은 좁게(±4%) — 타고난 발 하나가 자리를 정해 버리면 안 돼요. */
+  const FOOT_FIT = 0.04;
+  function footFit(x, slot) {
+    if (!slot || slot.side === "C") return 1;
+    const main = x.me ? mainFoot() : (x.foot || "R");
+    return main === slot.side ? 1 + FOOT_FIT : 1 - FOOT_FIT;
+  }
   const BENCH = 5;
   const SQUAD_SIZE = 11 + BENCH;
 
@@ -101,6 +162,7 @@ window.WingerSquad = (() => {
     const x = {
       name: randomPlayerName(Math.random() < 0.55 ? null : MARKETS.find((m) => m.id === "eu")),
       pos, age: a, peak: Math.round((target / MEAN_CURVE) * 10) / 10, str: 0,
+      foot: Math.random() < 0.75 ? "R" : "L",     // 🦶 왼발잡이는 실제로도 4분의 1쯤이에요
       g: 0, a: 0, d: 0, apps: 0,
     };
     x.str = strOfRow(x);
@@ -378,15 +440,46 @@ window.WingerSquad = (() => {
          * 아니라 경쟁에서 빠지는 것이라, 내 자리는 다음 사람이 자연스럽게 채워요. */
         .map((x) => ({ x, v: (x.me && rest) ? -Infinity : lineupScore(x) }))
         .sort((a, b) => b.v - a.v);
-      picked.push(...line.slice(0, FORMATION[p]).map((e) => e.x));
+      picked.push(...assignSlots(p, line.slice(0, FORMATION[p]).map((e) => e.x)));
     }
     if (S.activity) S.activity.rested = rest;
     if (S.activity) {
       S.activity.xi = picked.map((x) => x.name);
       S.activity.xiWeek = S.activity.week;
+      // 📍 그 경기의 자리 — 이름으로 되찾아야 해서 이름 순서와 같이 둬요
+      S.activity.xiSlot = picked.map((x) => x.slot || "");
     }
     return picked;
   }
+  /* 📍 그 포지션에 뽑힌 사람들에게 **자리를 배정**해요.
+   *
+   * 자리 수가 사람 수보다 적으면 돌려 씁니다(미드필더 4명에 자리 4개예요).
+   * 배정은 **실력 순으로 좋은 자리부터** 가되, 🦶 발 궁합을 얹어요 —
+   * 왼발잡이가 왼쪽 자리에 서면 조금 편합니다. 그래서 왼발잡이 풀백은 귀해요.
+   *
+   * ⚠️ 자리는 세이브에 남기지만 **없어도 굴러가야** 해요. 옛 세이브에는 없고,
+   * 읽는 쪽이 포지션 기본 자리를 줍니다(slotOf). */
+  function assignSlots(pos, list) {
+    const slots = slotsOf(pos).slice();
+    const left = list.slice().sort((a, b) => (b.str || 0) - (a.str || 0));
+    const out = [];
+    for (const x of left) {
+      let best = 0, bestV = -Infinity;
+      for (let i = 0; i < slots.length; i++) {
+        const v = footFit(x, slots[i]) * (1 + (slots.length - i) * 0.001);   // 앞자리를 살짝 선호
+        if (v > bestV) { bestV = v; best = i; }
+      }
+      x.slot = slots[best].key;
+      slots.splice(best, 1);
+      if (!slots.length) slots.push(...slotsOf(pos));    // 자리보다 사람이 많으면 돌려 써요
+      out.push(x);
+    }
+    // 원래 순서(포메이션 순)를 지켜서 돌려줘요
+    return list.map((x) => out.find((y) => y === x) || x);
+  }
+  /* 그 선수의 자리 — 없으면 포지션의 첫 자리로 봐요(옛 세이브 대비) */
+  const slotOf = (x) => slotByKey(x && x.slot) || slotsOf((x && x.pos) || "mf")[0];
+
   /* 이번 경기 선발 명단 — 굴린 게 있으면 그걸, 없으면 실력 순 기본값이에요. */
   function matchXI() {
     const act = S.activity;
@@ -728,6 +821,7 @@ window.WingerSquad = (() => {
     ensureSquads, ensureSquad, squadOf, startingXI, startingXIOf, leagueFaces,
     isStarter, myLine, benchReason, myBonus, restP, benchTurn, creditMateGoals, markApps, resetSeason, squadHTML,
     ageSquads, newsLine, ageCurve, leagueXI,
+    POS_SLOTS, slotsOf, slotOf, slotByKey, footFit, assignSlots, FOOT_FIT,
     FORMATION, BENCH, SQUAD_SIZE, BENCH_GAIN, SCORE_W, REST_BAR, REST_MAX,
     AGE_MIN, AGE_MAX, PEAK_AGE, RETIRE_AGE, SLUMP_P, SURGE_P, STR_SPREAD, MEAN_CURVE, BENCH_COND,
     _t: { rollSquad, pickScorer, rollPlayer, strOfRow, moveMe, backfillAges },
