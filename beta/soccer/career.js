@@ -806,6 +806,73 @@ window.WingerCareer = (() => {
   }
 
 
+  /* 🏆 팀이 넣은 골을 **나까지 포함해** 선발 11명에게 나눠요.
+   *
+   * 예전에는 내 골이 팀 스코어와 **무관하게** 나왔어요. 그래서 팀이 3골인데 내가
+   * 5골을 넣을 수 있었고, 무엇보다 다른 클럽 선수들은 팀 득점에 묶여 있는데
+   * 나만 안 묶여서 **부문상이 거저**가 됐습니다(실측: 공격포인트왕 100%).
+   *
+   * 내 무게는 종합에서 나와요 — 종합이 오르면 몫이 커져요. 지수(MY_P)를 1보다
+   * 크게 둔 이유: 실제로 팀의 에이스는 골이 몰립니다. 1이면 종합을 올려도
+   * 몫이 거의 안 커져서 성장이 골로 안 이어져요.
+   *
+   * 🅰️ 도움은 **동료가 넣은 골에서만** 나와요. 내 골에 내가 도움을 줄 수는 없어요.
+   *
+   * 값은 실측으로 잡았어요 — 아래 표는 부문상 수상률 곡선을 예전에 맞춘 결과예요. */
+  /* 🏆 우리 팀이 이 경기에 넣는 골 — **다른 클럽과 같은 자**로 재요.
+   *
+   * 예전에는 내 골(matchContribution) + 동료 골(teammateGoals)이었어요. 그러면
+   * 우리 팀은 한 시즌 33골인데 다른 클럽은 55골이 됩니다 — 같은 리그인데 눈금이
+   * 둘이었어요. 그 상태로 내 몫을 팀에서 나누면 100%를 가져가도 33골이라
+   * 성장이 골로 안 이어져요(실측: 종합 130 공격수가 15골).
+   *
+   * 이제 클럽 전력 대 상대 전력으로 굴리고, **내 종합을 거기 얹어요** —
+   * 에이스가 있으면 팀이 더 넣는 게 실제 축구고, 그래야 성장이 팀 성적으로도 이어져요. */
+  const TEAM_MY_K = 0.012;
+  function myTeamGoals(oppStr, without) {
+    /* without — 내가 안 뛴 주(🪑 벤치)예요. 내 종합을 안 얹어요.
+     * 안 그러면 내가 쉬는 주에도 팀이 나만큼 넣어서, 내가 있으나 없으나 같아집니다. */
+    const lam = GOAL_G0 + (clubStrOf(S) - (oppStr == null ? clubStrOf(S) : oppStr)) * GOAL_GK
+      + (without ? 0 : Math.max(0, clamp(overall(), 40, 220) - 70) * TEAM_MY_K);
+    return poissonish(Math.max(0.2, lam));
+  }
+
+  const MY_P = 1.2;
+  function splitMine(team) {
+    const xi = window.WingerSquad ? WingerSquad.matchXI() : [];
+    const ovr = clamp(overall(), 40, 220);
+    const mine = xi.find((x) => x.me);
+    const others = xi.filter((x) => !x.me);
+    const aceOf = (list, key) => {
+      const pool = list.filter((x) => (key === "g" ? x.pos === "fw" : x.pos === "mf" || x.pos === "wg"));
+      const p2 = pool.length ? pool : list;
+      return p2.length ? p2.reduce((a, b) => ((a.str || 0) >= (b.str || 0) ? a : b), p2[0]) : null;
+    };
+    /* 🌟 **에이스가 나인가.** 내가 팀에서 제일 잘하는 공격 자원이면 골이 나에게
+     * 몰려요 — 그게 에이스라는 말의 뜻이에요. 아직 아니면 그 몫은 선배가 가져가고,
+     * 나는 실력을 올려서 그 자리를 빼앗아야 해요. 성장이 골로 이어지는 자리예요. */
+    const best = others.reduce((a, b) => ((a.str || 0) >= (b.str || 0) ? a : b), others[0]);
+    const iAmAce = ovr >= (best.str || 0);
+    const gAce = iAmAce ? null : aceOf(others, "g");
+    const aAce = iAmAce ? null : aceOf(others, "a");
+    const wG = (x) => (GOAL_W[x.pos] || 0.4) * (clamp(x.str, 40, 95) / 70) * (x === gAce ? ACE_W : 1);
+    const wA = (x) => (ASSIST_W[x.pos] || 0.4) * (clamp(x.str, 40, 95) / 70) * (x === aAce ? MAKER_W : 1);
+    const myG = (GOAL_W[S.pos] || 0.4) * Math.pow(ovr / 70, MY_P) * (iAmAce ? ACE_W : 1);
+    const myA = (ASSIST_W[S.pos] || 0.4) * Math.pow(ovr / 70, MY_P) * (iAmAce ? MAKER_W : 1);
+    /* 명단이 없는 옛 세이브나 유스에서는 나눌 상대가 없어요 — 그때는 예전처럼 굴려요 */
+    if (!mine || !others.length) return { g: team, mates: 0, a: 0 };
+    let g = 0;
+    const totG = myG + others.reduce((a, x) => a + wG(x), 0);
+    for (let i = 0; i < team; i++) if (Math.random() < myG / totG) g += 1;
+    const mates = team - g;
+    /* 동료 골마다 내가 도움을 줬는지 봐요 — 도움이 붙을 확률(ASSIST_P2) 안에서
+     * 내 몫을 겨룹니다. 그래서 도움은 절대 동료 골 수를 넘지 않아요. */
+    const totA = myA + others.reduce((a, x) => a + wA(x), 0);
+    let a = 0;
+    for (let i = 0; i < mates; i++) if (Math.random() < ASSIST_P2 * (myA / totA)) a += 1;
+    return { g, mates, a };
+  }
+
   /* 골을 넣을 사람 — 포지션 가중이에요. squad.js·worldcup.js의 SCORE_W와 같은 눈금.
    * 실력도 조금 실려요(같은 자리면 잘하는 선수가 더 넣어요). */
   const GOAL_W = { fw: 1.0, wg: 0.75, mf: 0.4, df: 0.12 };
@@ -1500,13 +1567,16 @@ window.WingerCareer = (() => {
     /* 팀 결과는 **우리 전력 대 상대 전력**이 정해요. 상대 클럽의 전력을 찾아
      * 동료 골과 실점에 함께 물려줍니다 — 여태 리그 경기는 상대가 누구든 똑같았어요. */
     const oppStr = clubStrByName(act.opp, S);
-    /* 🅰️ **내가 도움을 줬으면 동료가 넣은 거예요.** 동료 골이 내 도움보다 적으면
-     * 그 도움은 누구 골에 붙은 건지 알 수 없어요 — 팀 성적과 개인 기록을 하나로
-     * 묶으면서 여기도 맞춰요. 줄이는 게 아니라 **동료 골을 올려서** 맞춥니다
-     * (줄이면 도움이 거의 0이 돼요 — 실측에서 플레이메이커 수상률이 0%가 됐어요). */
-    const mates = Math.max(teammateGoals(rating, oppStr), c.a);
-    const oppGoals = deriveOppGoals(rating, S.stats.defense, oppStr, c.g + c.a + mates);
     ensureLeagueRecords();   // 명단이 있어야 동료 이름으로 골을 넣어요
+    /* 🏆 **내 몫도 팀 스코어에서 나와요** — 다른 클럽 선수와 같은 자로 잽니다.
+     * 팀이 넣은 골을 선발 11명에게 나누고, 그중 내 몫이 내 골이에요.
+     * 도움도 **동료가 넣은 골에서만** 나와요 (내 골에 내가 도움을 줄 수는 없죠).
+     * 자세한 건 splitMine 주석에 있어요. */
+    const team = c.g + teammateGoals(rating, oppStr);
+    const split = splitMine(team);
+    const mates = split.mates;
+    const oppGoals = deriveOppGoals(rating, S.stats.defense, oppStr, team + split.a);
+    c.g = split.g; c.a = split.a;
     MatchSim.run({
       home: S.group, away: act.opp, myName: S.name,
       goals: c.g, assists: c.a, defense: c.def, oppGoals, rating, mateCount: mates,
@@ -1525,7 +1595,9 @@ window.WingerCareer = (() => {
    * 똑같이 한 라운드를 진행합니다. 안 그러면 벤치인 주만 리그가 멈춰요. */
   function benchShow(act) {
     const oppStr = clubStrByName(act.opp, S);
-    const mates = teammateGoals(6.5, oppStr);
+    /* 🪑 내가 없는 주도 **같은 눈금**으로 굴려요 — 내 종합만 빼고요.
+     * 예전에는 teammateGoals(다른 자)라서, 내가 쉬는 주만 팀 득점이 뚝 떨어졌어요. */
+    const mates = myTeamGoals(oppStr, true);
     const conceded = deriveOppGoals(6.5, S.stats.defense, oppStr, mates);
     const res = mates > conceded ? "W" : mates < conceded ? "L" : "D";
     const roundRes = recordRound(act.opp, res, mates, conceded);
@@ -3486,7 +3558,7 @@ window.WingerCareer = (() => {
       ratingOf, FAN_CAP, RATING_DIV, POS_AXIS, posAxis, AXIS_K, AXIS_OFF,
       RATE, RATE_RESULT, RATE_CONCEDE, ratingParts, matchRating, ratingWhyHTML,
       RACE_POS, leagueRound, ensureLeagueRecords, raceConceded, applyMateGoals, mateNames,
-      recordRound, initTable, tableRows, tableHTML, shareGoals, clubGoals,
+      recordRound, initTable, tableRows, tableHTML, shareGoals, clubGoals, splitMine, myTeamGoals,
       raceRank, raceTop,
       LEAGUES, leagueOf, barOf, CLUBS, clubStrOf, debutClubs, DEBUT_POOL, weakestClub,
       cupEntry, cupName, CUP_SPOTS, myTableRank, applyPromotion,

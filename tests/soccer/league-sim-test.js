@@ -158,6 +158,43 @@ console.log("=== ⑥ 득실 칸이 없는 옛 세이브 ===");
 }
 
 // ---------- ⑦ 변이 검증 ----------
+console.log("=== ⑧ 내 몫도 팀 스코어에서 나오는가 ===");
+{
+  /* 예전에는 내 골이 팀 스코어와 **무관하게** 나왔어요. 그래서 다른 클럽 선수는
+   * 팀 득점에 묶여 있는데 나만 안 묶여서 부문상이 거저가 됐습니다. */
+  const S = fresh();
+  let over = 0, aOver = 0;
+  for (let i = 0; i < 2000; i++) {
+    const team = Math.floor(Math.random() * 6);
+    const sp = T.splitMine(team);
+    if (sp.g + sp.mates !== team) over += 1;      // 내 골 + 동료 골 = 팀 골
+    if (sp.a > sp.mates) aOver += 1;              // 도움은 동료 골 수를 못 넘어요
+  }
+  check(over === 0, `내 골 + 동료 골 = 팀 골 (어긋난 경우 ${over}/2000)`);
+  check(aOver === 0, `내 도움 ≤ 동료 골 (넘은 경우 ${aOver}/2000) — 내 골에 내가 도움을 줄 수는 없어요`);
+  // 종합이 오르면 몫이 커져야 해요 — 안 그러면 성장이 골로 안 이어져요
+  const shareAt = (ovr) => {
+    for (const k of get("STAT_KEYS")) S.stats[k] = ovr;
+    let g = 0;
+    for (let i = 0; i < 3000; i++) g += T.splitMine(3).g;
+    return g / (3000 * 3);
+  };
+  const lo = shareAt(70), hi = shareAt(130);
+  console.log(`   내 몫 — 종합 70 ${(lo * 100).toFixed(0)}% · 종합 130 ${(hi * 100).toFixed(0)}%`);
+  check(hi > lo + 0.1, `종합이 오르면 내 몫이 커진다 (${(lo * 100).toFixed(0)}% → ${(hi * 100).toFixed(0)}%)`);
+  check(hi < 1, `혼자 다 넣지는 않는다 (${(hi * 100).toFixed(0)}%)`);
+  // 🪑 내가 없는 주에는 내 종합이 팀 득점에 안 실려요
+  for (const k of get("STAT_KEYS")) S.stats[k] = 130;
+  const avg = (without) => {
+    let t = 0;
+    for (let i = 0; i < 4000; i++) t += T.myTeamGoals(70, without);
+    return t / 4000;
+  };
+  const withMe = avg(false), noMe = avg(true);
+  console.log(`   팀 득점 — 내가 뛰면 ${withMe.toFixed(2)} · 벤치면 ${noMe.toFixed(2)}`);
+  check(withMe > noMe + 0.2, `내가 뛰면 팀이 더 넣는다 (${withMe.toFixed(2)} > ${noMe.toFixed(2)})`);
+}
+
 console.log("=== ⑦ 변이 검증 ===");
 {
   /* 골을 선수마다 따로 굴리던 옛 방식으로 되돌리면 ①이 무너져야 해요.
