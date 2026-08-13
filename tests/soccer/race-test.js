@@ -195,7 +195,7 @@ check(!!ENSURE && /act\.raceFilled/.test(ENSURE),
  * 맞는 관찰이었다 — 명단이 둘이었다. act.rivals(평점표 8명)와 act.race(개인 순위
  * 8명)가 아예 다른 사람들이라, 득점 1위가 평점표에 없는 게 정상 동작이었다.
  * 지금은 act.race 하나만 쓴다. */
-const FINAL = grab(C, /const roundRes = recordRound\(act\.opp, info\.res\);[\s\S]*?\.sort\([^;]*\);/);
+const FINAL = grab(C, /const roundRes = recordRound\(act\.opp, info\.res[^)]*\);[\s\S]*?\.sort\([^;]*\);/);
 check(!!FINAL && /const scored = leagueRound\(roundRes\);/.test(FINAL)
   && /applyMateGoals\(info\.mateGoals\);/.test(FINAL),
   "경기 후 평점표가 리그 전 선발의 그 라운드 기록을 그대로 쓴다 (동료 골 반영 포함)");
@@ -206,7 +206,7 @@ check(!/rollRivals\(|fillRivals\(|act\.rivals\.|act\.rivals =/.test(C),
   "소스에 옛 라이벌 명단을 쓰는 코드가 없다 — 남아 있으면 명단이 다시 갈라져요");
 /* 평점·MOM이 명단에 쌓이는지 — 개인 순위의 ⭐/🏅 칸 근거다 */
 const RATEFN = grab(C, /function leagueRound\([^)]*\) \{[\s\S]*?\n  \}/);
-check(!!RATEFN && /p\.rate = \(p\.rate \|\| 0\) \+ clamp/.test(RATEFN), "선수에게 평점이 누적된다 (⭐ 평균 평점)");
+check(!!RATEFN && /r\.p\.rate = \(r\.p\.rate \|\| 0\) \+ clamp/.test(RATEFN), "선수에게 평점이 누적된다 (⭐ 평균 평점)");
 /* 우리 팀은 **굴리지 않는다** — 중계에 뜬 골이 따로 들어오므로, 굴리면 같은
  * 라운드를 두 번 세게 된다(🌏 월드컵의 skip 규칙과 같다). */
 check(!!RATEFN && /const mine = club === S\.group;/.test(RATEFN) && /mine \? 0 :/.test(RATEFN),

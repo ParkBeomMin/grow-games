@@ -26,7 +26,10 @@ const grab = (src, re) => { const m = src.match(re); return m ? m[0] : null; };
 
 const parts = {
   initTable: grab(SRC, /function initTable\(\) \{[\s\S]*?\n  \}/),
-  record: grab(SRC, /function recordRound\(myOpp, res\) \{[\s\S]*?\n  \}/),
+  /* recordRound가 이제 **스코어까지** 굴려요 — 골 산식도 함께 떼어 와야 굴러갑니다 */
+  poisson: grab(GAME, /function poissonish\(lam\) \{[\s\S]*?\n\}/),
+  clubGoals: grab(SRC, /const GOAL_G0 = [\s\S]*?const clubGoals = [^;]+;/),
+  record: grab(SRC, /function recordRound\([^)]*\) \{[\s\S]*?\n  \}/),
   clubs: grab(GAME, /const CLUBS = \{[\s\S]*?\n\};/),
   leagues: grab(GAME, /const LEAGUES = \[[\s\S]*?\n\];/),
   clubStrOf: grab(GAME, /function clubStrOf\(st\) \{[\s\S]*?\n\}/),
@@ -94,6 +97,8 @@ const runRounds = new Function(
   `const tableReady = () => true;
    const initTable = () => {};
    S.table = { rows };
+   ${parts.poisson}
+   ${parts.clubGoals}
    ${parts.record}
    for (let i = 0; i < n; i++) {
      const others = rows.filter((r) => r.name !== S.group);
@@ -157,6 +162,8 @@ const gp = (r) => r.w + r.d + r.l;
     `const tableReady = () => true;
      const initTable = () => {};
      S.table = { rows };
+     ${parts.poisson}
+     ${parts.clubGoals}
      ${brokenRec}
      for (let i = 0; i < n; i++) {
        const others = rows.filter((r) => r.name !== S.group);

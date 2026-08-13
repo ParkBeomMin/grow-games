@@ -360,7 +360,8 @@ window.WingerCareer = (() => {
    * ⚠️ S.league은 이미 '리그 ID'라 이름이 겹쳐요. 표는 S.table에 둡니다. */
   function initTable() {
     const list = leagueRoster(leagueOf(S).id);
-    const rows = list.map((c) => ({ name: c.name, str: c.str, w: 0, d: 0, l: 0 }));
+    // gf/ga — 득점·실점. 개인 기록이 이 스코어에서 나와요(득실차도 순위에 씁니다)
+    const rows = list.map((c) => ({ name: c.name, str: c.str, w: 0, d: 0, l: 0, gf: 0, ga: 0 }));
     /* 승격·이적으로 내 클럽이 목록에 없을 수 있어요(applyPromotion은 리그만 바꾸고
      * 클럽 이름은 그대로 둬요). 그때 **덧붙이면 팀이 7개가 됩니다.**
      *
@@ -371,7 +372,7 @@ window.WingerCareer = (() => {
     if (S.group && !rows.some((r) => r.name === S.group)) {
       let out = 0;
       for (let i = 1; i < rows.length; i++) if (rows[i].str < rows[out].str) out = i;
-      rows.splice(out, 1, { name: S.group, str: clubStrOf(S), w: 0, d: 0, l: 0 });
+      rows.splice(out, 1, { name: S.group, str: clubStrOf(S), w: 0, d: 0, l: 0, gf: 0, ga: 0 });
     }
     // 어떤 이유로든 홀수면 제일 약한 팀을 빼요 — 쉬는 팀이 생기는 걸 막습니다
     if (rows.length % 2 === 1) {
@@ -393,16 +394,41 @@ window.WingerCareer = (() => {
    * 평점 순위표가 이걸 봐서 라이벌 점수에 반영합니다 — 예전에는 순위표와
    * 평점표가 서로를 안 봐서, 라이벌 클럽이 지든 이기든 그 선수 평점이 똑같았어요.
    * 팀이 홀수라 짝이 안 맞으면 한 팀은 그 라운드를 쉬어요(키가 안 담겨요). */
-  function recordRound(myOpp, res) {
+  /* 🏆 한 라운드 — **스코어까지** 굴려요.
+   *
+   * 예전에는 승·무·패만 굴렸어요. 그래서 팀 성적과 개인 기록이 서로 모르는
+   * 사이였습니다 — 우리 팀이 3:0으로 이겼는데 우리 팀 선수 골 합이 1일 수 있었어요.
+   * 이 저장소가 계속 앓아 온 "표시와 판정이 서로 다른 것을 본다"의 마지막 자리예요
+   * (🌏 월드컵에서는 이미 고쳤습니다 — "4:2로 이겼는데 상대 골 합이 3").
+   *
+   * 이제 **골을 먼저 굴리고 승패를 거기서 읽어요.** 그 골이 그대로 그 클럽 선수들의
+   * 기록이 됩니다(leagueRound). 내 경기는 굴리지 않아요 — 중계에 뜬 실제 스코어를 써요.
+   *
+   * 돌려주는 것: { [클럽]: { res, gf, ga } } */
+  const GOAL_G0 = 1.45, GOAL_GK = 0.03;      // 전력 70 → 한 경기 1.15골
+  const clubGoals = (str) => poissonish(Math.max(0.15, GOAL_G0 + ((str || 70) - 70) * GOAL_GK));
+  function recordRound(myOpp, res, myGf, myGa) {
     if (!tableReady()) initTable();
     const rows = S.table.rows;
     const find = (n) => rows.find((r) => r.name === n);
     const me = find(S.group), op = find(myOpp);
     const out = {};
+    const put = (row, name, gf, ga) => {
+      if (row) { row.gf = (row.gf || 0) + gf; row.ga = (row.ga || 0) + ga; }
+      out[name] = { res: gf > ga ? "W" : gf < ga ? "L" : "D", gf, ga };
+    };
     if (me && op) {
-      if (res === "W") { me.w += 1; op.l += 1; out[S.group] = "W"; out[myOpp] = "L"; }
-      else if (res === "L") { me.l += 1; op.w += 1; out[S.group] = "L"; out[myOpp] = "W"; }
-      else { me.d += 1; op.d += 1; out[S.group] = "D"; out[myOpp] = "D"; }
+      /* 내 경기는 **중계에 뜬 스코어 그대로**예요. 여기서 다시 굴리면 화면과
+       * 순위표가 다른 말을 합니다. 옛 세이브 대비로 값이 없으면 승패에서 지어내요. */
+      const gf = myGf != null ? myGf : (res === "W" ? 2 : res === "L" ? 0 : 1);
+      const ga = myGa != null ? myGa : (res === "W" ? 0 : res === "L" ? 2 : 1);
+      if (res === "W") { me.w += 1; op.l += 1; }
+      else if (res === "L") { me.l += 1; op.w += 1; }
+      else { me.d += 1; op.d += 1; }
+      me.gf = (me.gf || 0) + gf; me.ga = (me.ga || 0) + ga;
+      op.gf = (op.gf || 0) + ga; op.ga = (op.ga || 0) + gf;
+      out[S.group] = { res, gf, ga };
+      out[myOpp] = { res: res === "W" ? "L" : res === "L" ? "W" : "D", gf: ga, ga: gf };
     }
     /* 남은 팀을 짝지어 굴려요.
      * 팀 수가 홀수면 한 팀이 남는데, 무작위로 두면 특정 팀만 계속 쉬어서
@@ -417,26 +443,33 @@ window.WingerCareer = (() => {
     }
     for (let i = 0; i + 1 < rest.length; i += 2) {
       const a = rest[i], b = rest[i + 1];
-      if (Math.random() < 0.22) {                                   // 무승부 비율
-        a.d += 1; b.d += 1; out[a.name] = "D"; out[b.name] = "D"; continue;
-      }
-      const pA = clamp(0.5 + (a.str - b.str) / 60, 0.15, 0.85);
-      if (Math.random() < pA) { a.w += 1; b.l += 1; out[a.name] = "W"; out[b.name] = "L"; }
-      else { b.w += 1; a.l += 1; out[b.name] = "W"; out[a.name] = "L"; }
+      /* 홈 이점 없이 전력만 봐요. 골을 각자 굴리면 무승부가 저절로 나와요 —
+       * 예전처럼 무승부 비율(0.22)을 손으로 정하지 않습니다. */
+      const ga2 = clubGoals(a.str), gb2 = clubGoals(b.str);
+      if (ga2 > gb2) { a.w += 1; b.l += 1; }
+      else if (ga2 < gb2) { b.w += 1; a.l += 1; }
+      else { a.d += 1; b.d += 1; }
+      put(a, a.name, ga2, gb2);
+      put(b, b.name, gb2, ga2);
     }
     return out;
   }
 
   const RES_KO = { W: "승", D: "무", L: "패" };
 
+  /* 순위는 승점 → **득실차** → 다득점 순이에요(실제 리그와 같아요).
+   * 득실 칸이 없는 옛 세이브는 0으로 읽혀서, 그때는 예전처럼 승-패로 갈려요. */
   const tableRows = () => (S.table ? S.table.rows : [])
-    .map((r) => ({ ...r, pts: r.w * 3 + r.d, gp: r.w + r.d + r.l }))
-    .sort((a, b) => b.pts - a.pts || (b.w - b.l) - (a.w - a.l) || a.name.localeCompare(b.name));
+    .map((r) => ({ ...r, pts: r.w * 3 + r.d, gp: r.w + r.d + r.l,
+      gf: r.gf || 0, ga: r.ga || 0, gd: (r.gf || 0) - (r.ga || 0) }))
+    .sort((a, b) => b.pts - a.pts || b.gd - a.gd || b.gf - a.gf
+      || (b.w - b.l) - (a.w - a.l) || a.name.localeCompare(b.name));
 
   function tableHTML() {
     const rows = tableRows();
-    return `<table class="rank-table"><thead><tr><th>#</th><th>팀</th><th>경기</th><th>승무패</th><th>승점</th></tr></thead>
-      <tbody>${rows.map((r, i) => `<tr class="${r.name === S.group ? "me" : ""}"><td>${i + 1}</td><td>${r.name}</td><td>${r.gp}</td><td>${r.w}-${r.d}-${r.l}</td><td>${r.pts}</td></tr>`).join("")}</tbody></table>`;
+    return `<table class="rank-table"><thead><tr><th>#</th><th>팀</th><th>경기</th><th>승무패</th><th>득실</th><th>승점</th></tr></thead>
+      <tbody>${rows.map((r, i) => `<tr class="${r.name === S.group ? "me" : ""}"><td>${i + 1}</td><td>${r.name}</td><td>${r.gp}</td><td>${r.w}-${r.d}-${r.l}</td>`
+      + `<td class="tb-gd">${r.gd > 0 ? "+" : ""}${r.gd}</td><td>${r.pts}</td></tr>`).join("")}</tbody></table>`;
   }
   const myTableRank = () => {
     const rows = tableRows();
@@ -747,19 +780,86 @@ window.WingerCareer = (() => {
       p.apps = (p.apps || 0) + 1;
       const def = roleOf(p);
       const pop = clamp(p.str, 40, 95);
-      /* 우리 팀은 굴리지 않아요. 그래도 **평점은 매겨야** 해요 —
-       * 안 그러면 우리 팀 동료만 ⭐ 평점 순위에서 통째로 빠집니다. */
-      const dg = mine ? 0 : poissonish(raceLam(def.g, pop));
-      const da = mine ? 0 : poissonish(raceLam(def.a, pop));
+      /* 🛡️ 수비는 사람마다 굴려요 — 팀 스코어로는 알 수 없는 값이에요.
+       * 우리 팀은 굴리지 않아요(중계에 뜬 내 수비가 따로 쌓입니다). */
       const dd = mine ? 0 : poissonish(raceLam(def.d, pop));
-      p.g = (p.g || 0) + dg; p.a = (p.a || 0) + da; p.d = (p.d || 0) + dd;
-      const res = (roundRes && roundRes[club]) || pick(["W", "D", "L"]);
-      const info = { myGoals: dg, assists: da, defense: dd, res, oppGoals: raceConceded(res) };
-      const score = matchRating(info, p.pos || "mf", 0);
-      p.rate = (p.rate || 0) + clamp(score / 10, 1, 10);
-      out.push({ p, club, score, res, role: def.name });
+      p.d = (p.d || 0) + dd;
+      out.push({ p, club, mine, role: def.name, dg: 0, da: 0, dd });
+    }
+    /* 🏆 **골은 굴리지 않아요.** 그 클럽이 그 라운드에 실제로 넣은 만큼만 나눠요.
+     * 개인별로 또 굴리면 팀 스코어와 선수 골 합이 서로 다른 말을 합니다 —
+     * 이 저장소가 계속 앓아 온 자리예요(🌏 월드컵에서는 이미 고쳤어요). */
+    shareGoals(out, roundRes);
+    /* ⭐ 평점은 **골을 나눈 다음에** 매겨요. 먼저 매기면 그 경기에 한 일을 못 봐요.
+     * 실점도 실제 스코어(ga)를 씁니다 — 지어내지 않아요. */
+    for (const r of out) {
+      const info0 = (roundRes && roundRes[r.club]) || null;
+      const res = info0 ? info0.res : pick(["W", "D", "L"]);
+      const info = { myGoals: r.dg, assists: r.da, defense: r.dd, res,
+        oppGoals: info0 ? info0.ga : raceConceded(res) };
+      const score = matchRating(info, r.p.pos || "mf", 0);
+      r.p.rate = (r.p.rate || 0) + clamp(score / 10, 1, 10);
+      r.score = score;
+      r.res = res;
     }
     return out;
+  }
+
+
+  /* 골을 넣을 사람 — 포지션 가중이에요. squad.js·worldcup.js의 SCORE_W와 같은 눈금.
+   * 실력도 조금 실려요(같은 자리면 잘하는 선수가 더 넣어요). */
+  const GOAL_W = { fw: 1.0, wg: 0.75, mf: 0.4, df: 0.12 };
+  const ASSIST_P2 = 0.75;                    // 골 하나에 도움이 붙을 확률 (실제 축구도 대부분 붙어요)
+  /* 🌟 **클럽마다 에이스가 한 명** 있어요 — 실제로 팀 골은 한둘에게 몰립니다.
+   * 이게 없으면 44골이 11명에게 고르게 흩어져서 팀 최다 득점자가 8골이 돼요.
+   * 그러면 내가 종합 100만 돼도 골든부츠가 확정이라 부문상이 시시해집니다
+   * (🌏 월드컵에서 똑같은 걸 겪었어요 — "득점왕이 너무 쉬웠어요"). */
+  const ACE_W = 2.6;
+  /* 🎯 도움도 몰려요 — 팀에는 **경기를 만드는 사람**이 따로 있어요.
+   * 골 가중을 그대로 쓰면 도움이 11명에게 흩어져서 플레이메이커가 4도움이 되고,
+   * 그러면 내가 종합 100만 돼도 🎯 플레이메이커가 확정이 됩니다. */
+  const ASSIST_W = { mf: 1.0, wg: 0.9, fw: 0.5, df: 0.2 };
+  const MAKER_W = 3.0;
+  function shareGoals(rows, roundRes) {
+    if (!roundRes) return;
+    const byClub = {};
+    for (const r of rows) (byClub[r.club] = byClub[r.club] || []).push(r);
+    for (const club of Object.keys(byClub)) {
+      if (club === S.group) continue;
+      const info = roundRes[club];
+      if (!info || !info.gf) continue;
+      const xi = byClub[club];
+      /* 에이스는 그 클럽 선발 공격수 중 가장 잘하는 사람이에요. 공격수가 없으면
+       * 제일 잘하는 사람이 그 자리를 맡아요(포메이션이 바뀌어도 안 깨져요). */
+      const fws = xi.filter((r) => r.p.pos === "fw");
+      const pool = fws.length ? fws : xi;
+      const ace = pool.reduce((a, b) => ((a.p.str || 0) >= (b.p.str || 0) ? a : b), pool[0]);
+      const wOf = (r) => (GOAL_W[r.p.pos] || 0.4) * (clamp(r.p.str, 40, 95) / 70)
+        * (r === ace ? ACE_W : 1);
+      // 🎯 그 클럽의 플레이메이커 — 미드필더·윙어 중 가장 잘하는 사람
+      const mids = xi.filter((r) => r.p.pos === "mf" || r.p.pos === "wg");
+      const mpool = mids.length ? mids : xi;
+      const maker = mpool.reduce((a, b) => ((a.p.str || 0) >= (b.p.str || 0) ? a : b), mpool[0]);
+      const aOf = (r) => (ASSIST_W[r.p.pos] || 0.4) * (clamp(r.p.str, 40, 95) / 70)
+        * (r === maker ? MAKER_W : 1);
+      const pick1 = (list, weight) => {
+        let tot = 0;
+        for (const r of list) tot += weight(r);
+        let t = Math.random() * tot;
+        for (const r of list) { t -= weight(r); if (t <= 0) return r; }
+        return list[0];
+      };
+      for (let i = 0; i < info.gf; i++) {
+        const who = pick1(xi, wOf);
+        who.p.g = (who.p.g || 0) + 1;
+        who.dg = (who.dg || 0) + 1;
+        const others = xi.filter((r) => r !== who);
+        if (others.length && Math.random() < ASSIST_P2) {
+          const as = pick1(others, aOf);
+          as.p.a = (as.p.a || 0) + 1; as.da = (as.da || 0) + 1;
+        }
+      }
+    }
   }
 
   // 우리 팀 선발 이름 — 경기 중 '동료의 골'에 붙일 이름이에요
@@ -1030,8 +1130,12 @@ window.WingerCareer = (() => {
     };
     const mul = footMul();
     return `<div class="feet">${foot("L")}${foot("R")}</div>`
+      /* ⚠️ 퍼센트가 **약발에서 왔다는 걸** 적어요. 그냥 "골·도움 -2%"라고만 두면
+       * 주발(왼/오른) 때문인 것처럼 읽혀요 — 주발은 지금 아무것도 안 합니다
+       * (제보: "주발이 영향주는 건 뭐야??"). 주발은 세부 포지션이 들어올 때
+       * 좌우 자리 궁합으로 쓰기로 했어요. */
       + `<div class="foot-note">${FOOT_KO[main]}잡이 · 약발 ${weak}/10`
-      + `${Math.abs(mul - 1) > 0.001 ? ` · 골·도움 ${mul >= 1 ? "+" : ""}${Math.round((mul - 1) * 100)}%` : ""}</div>`;
+      + `${Math.abs(mul - 1) > 0.001 ? ` → 골·도움 ${mul >= 1 ? "+" : ""}${Math.round((mul - 1) * 100)}%` : ""}</div>`;
   }
 
   function renderPrep() {
@@ -1396,7 +1500,11 @@ window.WingerCareer = (() => {
     /* 팀 결과는 **우리 전력 대 상대 전력**이 정해요. 상대 클럽의 전력을 찾아
      * 동료 골과 실점에 함께 물려줍니다 — 여태 리그 경기는 상대가 누구든 똑같았어요. */
     const oppStr = clubStrByName(act.opp, S);
-    const mates = teammateGoals(rating, oppStr);
+    /* 🅰️ **내가 도움을 줬으면 동료가 넣은 거예요.** 동료 골이 내 도움보다 적으면
+     * 그 도움은 누구 골에 붙은 건지 알 수 없어요 — 팀 성적과 개인 기록을 하나로
+     * 묶으면서 여기도 맞춰요. 줄이는 게 아니라 **동료 골을 올려서** 맞춥니다
+     * (줄이면 도움이 거의 0이 돼요 — 실측에서 플레이메이커 수상률이 0%가 됐어요). */
+    const mates = Math.max(teammateGoals(rating, oppStr), c.a);
     const oppGoals = deriveOppGoals(rating, S.stats.defense, oppStr, c.g + c.a + mates);
     ensureLeagueRecords();   // 명단이 있어야 동료 이름으로 골을 넣어요
     MatchSim.run({
@@ -1420,7 +1528,7 @@ window.WingerCareer = (() => {
     const mates = teammateGoals(6.5, oppStr);
     const conceded = deriveOppGoals(6.5, S.stats.defense, oppStr, mates);
     const res = mates > conceded ? "W" : mates < conceded ? "L" : "D";
-    const roundRes = recordRound(act.opp, res);
+    const roundRes = recordRound(act.opp, res, mates, conceded);
     ensureLeagueRecords();
     leagueRound(roundRes);                      // 리그 전 선발이 그 라운드를 치러요
     const grew = WingerSquad.benchTurn();
@@ -1492,7 +1600,7 @@ window.WingerCareer = (() => {
     /* ⚠️ 순위표를 **먼저** 굴려요. 그래야 그 라운드에 각 클럽이 뭘 했는지가 나오고,
      * 라이벌 점수가 그걸 볼 수 있어요. 예전에는 순위 행을 다 만든 뒤에 굴려서
      * 둘이 같은 라운드를 보면서도 서로 모르는 사이였습니다. */
-    const roundRes = recordRound(act.opp, info.res);
+    const roundRes = recordRound(act.opp, info.res, info.teamGoals, info.oppGoals);
     ensureLeagueRecords();              // 옛 세이브면 여기서 먼저 채워요
     /* 🥇 리그 전 선발이 그 라운드를 치러요. 우리 팀은 굴리지 않고,
      * 중계에 실제로 뜬 동료 골을 바로 이어서 얹습니다(같은 라운드를 두 번 세지 않아요). */
@@ -1750,7 +1858,7 @@ window.WingerCareer = (() => {
     const c = matchContribution(rating);
     /* 컵 상대는 그 팀 전력을 그대로 물려요. 리그와 같은 산식이라 따로 보정하지
      * 않습니다 — 예전에는 "상대가 더 세면 +1 실점"이라는 손보정이 붙어 있었어요. */
-    const mates = teammateGoals(rating, opp.str);
+    const mates = Math.max(teammateGoals(rating, opp.str), c.a);   // 🅰️ 내 도움만큼은 동료가 넣었어요
     const oppGoals = deriveOppGoals(rating, S.stats.defense, opp.str, c.g + c.a + mates);
     MatchSim.run({
       home: S.group, away: opp.name, myName: S.name,
@@ -3378,6 +3486,7 @@ window.WingerCareer = (() => {
       ratingOf, FAN_CAP, RATING_DIV, POS_AXIS, posAxis, AXIS_K, AXIS_OFF,
       RATE, RATE_RESULT, RATE_CONCEDE, ratingParts, matchRating, ratingWhyHTML,
       RACE_POS, leagueRound, ensureLeagueRecords, raceConceded, applyMateGoals, mateNames,
+      recordRound, initTable, tableRows, tableHTML, shareGoals, clubGoals,
       raceRank, raceTop,
       LEAGUES, leagueOf, barOf, CLUBS, clubStrOf, debutClubs, DEBUT_POOL, weakestClub,
       cupEntry, cupName, CUP_SPOTS, myTableRank, applyPromotion,

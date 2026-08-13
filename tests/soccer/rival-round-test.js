@@ -21,7 +21,10 @@ const grab = (re) => { const m = SRC.match(re); return m ? m[0] : null; };
 const GAME = fs.readFileSync("/workspace/grow-games/beta/soccer/game.js", "utf8");
 const grabG = (re) => { const m = GAME.match(re); return m ? m[0] : null; };
 const parts = {
-  record: grab(/function recordRound\(myOpp, res\) \{[\s\S]*?\n  \}/),
+  /* recordRound가 이제 **스코어까지** 굴려요 — 골 산식도 함께 떼어 와야 굴러갑니다 */
+  poisson: grabG(/function poissonish\(lam\) \{[\s\S]*?\n\}/),
+  clubGoals: grab(/const GOAL_G0 = [\s\S]*?const clubGoals = [^;]+;/),
+  record: grab(/function recordRound\([^)]*\) \{[\s\S]*?\n  \}/),
   rows: grab(/const rows = \[\s*\{ name: S\.name[\s\S]*?\]\.sort\([^;]*\);/),
   rateTbl: grab(/const RATE = \{[\s\S]*?\n  \};/),
   rateRes: grab(/const RATE_RESULT = [^;]+;/),
@@ -52,23 +55,38 @@ const runRecord = new Function(
   "S", "myOpp", "res", "clamp", "shuffle", "Math",
   `const tableReady = () => true;
    const initTable = () => {};
+   ${parts.poisson}
+   ${parts.clubGoals}
    ${parts.record}
-   return recordRound(myOpp, res);`
+   return recordRound(myOpp, res, 2, 0);`
 );
-const mkS = () => ({ group: "레알 몬테", table: { rows: TEAMS.map((n) => ({ name: n, str: 55, w: 0, d: 0, l: 0 })) } });
+const mkS = () => ({ group: "레알 몬테",
+  table: { rows: TEAMS.map((n) => ({ name: n, str: 55, w: 0, d: 0, l: 0, gf: 0, ga: 0 })) } });
 
-let sumOK = true, meOK = true, oppOK = true;
+/* ⚠️ 돌려주는 모양이 바뀌었어요 — 이제 승패만이 아니라 **스코어까지** 담겨요
+ * ({ res, gf, ga }). 개인 기록이 이 골에서 나오거든요. */
+let sumOK = true, meOK = true, oppOK = true, scoreOK = true, mirrorOK = true;
 for (let i = 0; i < 500; i++) {
   const S = mkS();
   const out = runRecord(S, "AC 리베라", "W", clamp, shuffle, Math);
   const vals = Object.values(out);
-  if (vals.filter((v) => v === "W").length !== vals.filter((v) => v === "L").length) sumOK = false;
-  if (out["레알 몬테"] !== "W") meOK = false;
-  if (out["AC 리베라"] !== "L") oppOK = false;
+  if (vals.filter((v) => v.res === "W").length !== vals.filter((v) => v.res === "L").length) sumOK = false;
+  if (out["레알 몬테"].res !== "W") meOK = false;
+  if (out["AC 리베라"].res !== "L") oppOK = false;
+  // 내 경기는 **넘긴 스코어 그대로** — 여기서 다시 굴리면 중계와 순위표가 갈려요
+  if (out["레알 몬테"].gf !== 2 || out["레알 몬테"].ga !== 0) scoreOK = false;
+  if (out["AC 리베라"].gf !== 0 || out["AC 리베라"].ga !== 2) mirrorOK = false;
+  // 승패가 **스코어에서** 읽혀야 해요 (따로 굴리면 3:1인데 무승부가 나와요)
+  for (const v of vals) {
+    const want = v.gf > v.ga ? "W" : v.gf < v.ga ? "L" : "D";
+    if (v.res !== want) scoreOK = false;
+  }
 }
 check(meOK, "내 클럽 결과가 그대로 담긴다");
 check(oppOK, "내가 이긴 상대 클럽은 패로 담긴다");
 check(sumOK, "승과 패의 총합이 맞는다 (짝을 지어 굴린다)");
+check(scoreOK, "내 경기 스코어가 넘긴 그대로이고, 모든 팀의 승패가 스코어와 맞는다");
+check(mirrorOK, "상대 클럽에는 뒤집어서 담긴다 (2:0 → 0:2)");
 
 // 6팀이면 3경기 = 6팀 전부 결과가 있다
 const full = runRecord(mkS(), "AC 리베라", "W", clamp, shuffle, Math);
@@ -168,10 +186,17 @@ check(built.find((r) => !r.me).res === "L", "경쟁자 줄에 그 클럽 결과�
 
 /* ── 경쟁자와 내가 **같은 산식**을 쓰는지 — 명단을 합친 이유가 여기 있다.
  * 눈금이 갈리면 득점 1위가 평점표에서 사라지는 예전 증상이 그대로 돌아온다. */
-check(/matchRating\(info, p\.pos \|\| "mf", 0\)/.test(parts.raceRate),
+check(/matchRating\(info, r\.p\.pos \|\| "mf", 0\)/.test(parts.raceRate),
   "경쟁자 평점도 나와 같은 matchRating으로 매긴다");
-check(/roundRes\[club\]/.test(parts.raceRate),
+check(/roundRes\[r\.club\]/.test(parts.raceRate),
   "경쟁자 평점이 그 라운드 소속 클럽 결과를 본다");
+/* 🏆 이제 **실점도 지어내지 않아요** — 그 클럽이 실제로 먹은 골(ga)을 씁니다.
+ * 예전에는 승패만 알고 실점은 raceConceded로 짐작했어요. */
+check(/oppGoals: info0 \? info0\.ga : raceConceded\(res\)/.test(parts.raceRate),
+  "실점은 그 라운드 실제 스코어를 쓴다 (모를 때만 짐작해요)");
+/* ⭐ 평점은 **골을 나눈 다음에** 매겨야 그 경기에 한 일을 봐요 */
+check(parts.raceRate.indexOf("shareGoals(out, roundRes);") < parts.raceRate.indexOf("matchRating("),
+  "골을 나눈 다음에 평점을 매긴다 — 먼저 매기면 그 경기에 한 일을 못 봐요");
 /* 이제 **리그 전 선발**이 이 산식을 지난다 — 예전에는 시즌 초에 뽑은 여덟만
  * 굴려서, 다른 클럽 아홉 번째 선수는 평점표에 아예 못 올라왔다. */
 check(/WingerSquad\.leagueXI\(\)/.test(parts.raceRate),
