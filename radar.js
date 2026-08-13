@@ -48,14 +48,24 @@ window.Radar = (() => {
     ctx.lineWidth = 2;
     ctx.fill();
     ctx.stroke();
-    // 라벨
+    /* 라벨 — **캔버스 밖으로 나가면 그냥 잘려요.**
+     * 가운데 정렬로 꼭짓점에 얹으면 좌우 끝 라벨의 절반이 밖으로 나갑니다
+     * (240 캔버스에서 "🫀 체력 120"이 x=-28부터 시작했어요 · 제보).
+     * 가운데에 두려 하되 **가장자리에서는 안쪽으로 밀어** 넣어요. */
     ctx.fillStyle = opts.label || "#f0ead8";
     ctx.font = "12px 'Gowun Dodum', sans-serif";
-    ctx.textAlign = "center";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    const PAD = 2;
     for (let i = 0; i < n; i++) {
-      const [x, y] = pt(i, R + 20);
+      const [x, y] = pt(i, R + 18);
       const d = defs[i];
-      ctx.fillText(`${d.emoji} ${d.name} ${Math.round(stats[d.key] || 0)}`, x, y + 4);
+      const txt = `${d.emoji} ${d.name} ${Math.round(stats[d.key] || 0)}`;
+      // measureText가 없는 환경도 있어요 — 없으면 대충 재서 그래도 안쪽으로 밀어요
+      const wpx = ((ctx.measureText && ctx.measureText(txt)) || {}).width || txt.length * 9;
+      const tx = Math.min(Math.max(x - wpx / 2, PAD), Math.max(PAD, W - wpx - PAD));
+      const ty = Math.min(Math.max(y, 8), H - 8);
+      ctx.fillText(txt, tx, ty);
     }
   }
   return { draw };

@@ -111,6 +111,52 @@ check(/약발 3\/10/.test(txt), "약발 숫자를 적는다");
 check(stats.querySelectorAll(".stat-row").length === w.__get("STAT_DEFS").length,
   "막대도 그대로 있다 — 🔮 각성 버튼과 정확한 값은 거기서 봐요");
 
+console.log("=== ⑧ 주발은 고르는 것 ===");
+{
+  /* 제보: "주발은 어떻게 설정하는 거지" — 타고나기만 하고 고를 수가 없었어요.
+   * 포지션처럼 **고르는 것**으로 바꿨습니다. 약발 숫자는 여전히 타고나요. */
+  const opts = w.document.querySelectorAll("#screen-name .foot-opt");
+  check(opts.length === 2, `선수 등록 화면에 주발 버튼이 둘 있다 (${opts.length}개)`);
+  check(w.document.querySelector('#screen-name .foot-opt[data-foot="R"].on'),
+    "기본은 오른발이다 (실제 프로의 4분의 3이에요)");
+  // 왼발을 골라 실제로 입단해 봐요 — 버튼을 눌러서
+  w.document.querySelector('#screen-name .foot-opt[data-foot="L"]').click();
+  check(w.document.querySelector('#screen-name .foot-opt[data-foot="L"].on'), "누르면 표시가 옮겨간다");
+  check(!w.document.querySelector('#screen-name .foot-opt[data-foot="R"].on'), "둘이 동시에 켜지지 않는다");
+  w.__set("chosenMarket", w.__get("MARKETS[0]"));
+  w.__set("chosenPos", "fw");
+  w.__set("pendingRoll", w.__get('rollStats("fw")'));
+  w.document.getElementById("input-name").value = "왼발이";
+  w.document.getElementById("btn-start").click();
+  const made = w.__get("S");
+  console.log(`   입단 결과 — ${made.name} · 주발 ${made.foot.main} · 약발 ${made.foot.weak}`);
+  check(made.foot.main === "L", `고른 주발이 세이브에 담긴다 (${made.foot.main})`);
+  check(made.foot.weak >= 1 && made.foot.weak <= 10, `약발은 타고난다 (${made.foot.weak})`);
+}
+
+console.log("=== ⑨ 레이더 라벨이 캔버스 안에 들어가는가 ===");
+{
+  /* 제보: "조금 짤리는 부분들이 있어" — 라벨을 꼭짓점에 가운데 정렬로 얹어서
+   * 좌우 끝 라벨의 절반이 캔버스 밖으로 나갔어요(240 캔버스에서 x=-28부터 시작). */
+  const RADAR = fs.readFileSync("/workspace/grow-games/radar.js", "utf8");
+  const drawn = [];
+  const ctx = {
+    clearRect() {}, beginPath() {}, moveTo() {}, lineTo() {}, stroke() {}, fill() {},
+    measureText: (t) => ({ width: t.length * 11 }),
+    fillText: (t, x) => drawn.push({ t, x }),
+  };
+  const canvas = { width: 240, height: 240, getContext: () => ctx };
+  const win = {};
+  new Function("window", `${RADAR}`)(win);
+  const defs = w.__get("STAT_DEFS");
+  win.Radar.draw(canvas, defs, { shoot: 130, pass: 99, dribble: 130, defense: 142, stamina: 120 }, { max: 142 });
+  check(drawn.length === defs.length, `라벨을 다섯 개 그린다 (${drawn.length}개)`);
+  const out = drawn.filter((d) => d.x < 0 || d.x + d.t.length * 11 > 240);
+  drawn.forEach((d) => console.log(`   ${d.t.padEnd(12)} ${d.x.toFixed(0)}~${(d.x + d.t.length * 11).toFixed(0)}`));
+  check(out.length === 0,
+    `전부 캔버스 안이다 (밖으로 나간 라벨 ${out.length}개${out.length ? ` — ${out.map((o) => o.t).join(", ")}` : ""})`);
+}
+
 console.log("=== ⑦ 변이 검증 ===");
 {
   /* 배수를 떼면(늘 1) 약발이 아무 일도 안 해요. ②가 그걸 잡습니다. */

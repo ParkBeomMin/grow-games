@@ -1379,6 +1379,16 @@ document.querySelectorAll("#position-list .card").forEach((btn) => {
   });
 });
 
+/* 🦶 주발은 **고르는 것**이에요 — 포지션처럼요.
+ * 약발 숫자는 여전히 타고나요(경기에서 붙습니다). 고를 수 있는 건 어느 발잡이냐뿐이에요. */
+let chosenFoot = "R";
+document.querySelectorAll("#screen-name .foot-opt").forEach((b) => {
+  b.addEventListener("click", () => {
+    chosenFoot = b.dataset.foot;
+    document.querySelectorAll("#screen-name .foot-opt").forEach((x) => x.classList.toggle("on", x === b));
+  });
+});
+
 $("btn-random-name").addEventListener("click", () => {
   $("input-name").value = randomPlayerName(chosenMarket);
 });
@@ -1393,6 +1403,7 @@ $("btn-start").addEventListener("click", () => {
   if (window.Stats) Stats.log("new_player", { pos: chosenPos, agency: chosenMarket.name, mk: chosenMarket.id });
   if (window.Match) Match.register("soccer", name);
   S = newState(chosenMarket, chosenPos, name, pendingRoll);
+  S.foot.main = chosenFoot;          // 🦶 고른 주발 (약발 숫자는 타고난 그대로예요)
   addLog(`⚽ ${chosenMarket.name} 입단! ${name}의 축구 인생이 시작됐어요.`);
   save();
   renderMain();

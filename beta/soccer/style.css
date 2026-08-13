@@ -629,3 +629,13 @@ body.fever-on #app { padding-top: 2.6rem; }
 .foot.weak { transform: scaleX(-1); }
 .foot.weak b { transform: scaleX(-1); }
 .foot-note { font-size: .7rem; color: var(--dim); margin-top: .35rem; line-height: 1.4; }
+/* 🦶 주발 고르기 — 선수 등록 화면 */
+.foot-pick { display: flex; align-items: center; justify-content: center; gap: .6rem; margin: .2rem 0 .5rem; }
+.foot-pick-label { font-size: .82rem; color: var(--dim); }
+.foot-pick-btns { display: flex; gap: .35rem; }
+.foot-opt {
+  padding: .34rem .8rem; border-radius: .7rem; cursor: pointer;
+  background: var(--bg2); border: 1px solid var(--line); color: var(--dim);
+  font-family: "Jua", sans-serif; font-size: .84rem;
+}
+.foot-opt.on { background: var(--field); border-color: #6ee7a0; color: #6ee7a0; }
