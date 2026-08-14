@@ -52,7 +52,11 @@ const STAT_DEFS = [
   { key: "pass", name: "패스", emoji: "🎯", sub: "시야·연계" },
   { key: "dribble", name: "드리블", emoji: "🏃", sub: "돌파·개인기" },
   { key: "defense", name: "수비", emoji: "🛡️", sub: "태클·위치선정" },
-  { key: "stamina", name: "체력", emoji: "🫀", sub: "지구력·스피드" },
+  /* ⚡ 스피드는 **체력에서 떼어낸** 축이에요. 예전에는 체력이 "지구력·스피드"를
+   * 겸했는데, 그러면 빠른 선수와 지치지 않는 선수가 같은 값이 됩니다.
+   * 이제 체력은 지치는 속도(컨디션 소모)를, 스피드는 순간의 돌파와 따라붙기를 맡아요. */
+  { key: "stamina", name: "체력", emoji: "🫀", sub: "지구력·회복" },
+  { key: "speed", name: "스피드", emoji: "⚡", sub: "가속·순간 속도" },
 ];
 
 // 포지션 — 야구의 '포지션' 대응. 주력 능력치가 달라져요
@@ -467,6 +471,8 @@ function newState(market, pos, name, roll) {
     market: market.id, pos, name,
     year: 1, month: 1,
     stats, talents,
+    foot: rollFoot(),          // 🦶 주발·약발 — 타고나고 경기에서 붙어요
+
     /* 새 선수는 1부에서 시작해요. 소속 클럽은 프로 데뷔(enterCareer) 때 정해지고,
      * 그때까지는 기본 전력 70으로 유스 경기를 치러요. */
     league: 1,
@@ -488,8 +494,35 @@ function newState(market, pos, name, roll) {
 }
 
 const marketOf = () => MARKETS.find((m) => m.id === S.market);
+/* ⚡ 스피드 칸이 없는 옛 세이브는 **그 선수의 평균**으로 읽어요.
+ *
+ * 평균을 넣으면 종합이 정확히 그대로예요 — (합 + 평균) ÷ 6 = 평균.
+ * 0이나 고정값을 넣으면 이어하던 선수의 종합이 그 자리에서 움직이고,
+ * 종합은 클래스·부문상·수상·이적을 전부 굴리는 값이라 커리어가 통째로 흔들려요.
+ * 새 축을 넣을 때 기본값이 중립이 아니면 그건 기능 추가가 아니라 밸런스 변경입니다. */
+function fillStats(st) {
+  const S0 = st || S;
+  if (!S0 || !S0.stats) return S0;
+  const base = STAT_KEYS.filter((k) => k !== "speed");
+  if (S0.stats.speed == null) {
+    const have = base.filter((k) => S0.stats[k] != null);
+    const mean = have.length ? have.reduce((a, k) => a + S0.stats[k], 0) / have.length : 40;
+    S0.stats.speed = Math.round(mean * 10) / 10;
+  }
+  /* 🦶 주발이 없던 세이브 — 여기서 한 번 타고나요.
+   * 기본값만 주면(오른발·약발 5) 화면에는 뜨지만 **약발이 영영 안 자라요**
+   * (자라는 자리가 `S.foot`이 있을 때만 도니까요). 그건 이어서 하는 사람만
+   * 못 크는 것이라, 세이브에 실제로 심어 줍니다. */
+  if (!S0.foot) S0.foot = { main: Math.random() < 0.75 ? "R" : "L", weak: randInt(2, 7) };
+  if (S0.talents && S0.talents.speed == null) {
+    const have = base.filter((k) => S0.talents[k] != null);
+    S0.talents.speed = have.length ? have.reduce((a, k) => a + S0.talents[k], 0) / have.length : 1;
+  }
+  return S0;
+}
 const overall = () => {
-  const vals = Object.values(S.stats);
+  fillStats(S);
+  const vals = STAT_KEYS.map((k) => S.stats[k]).filter((v) => v != null);
   return vals.reduce((a, b) => a + b, 0) / vals.length;
 };
 
@@ -611,6 +644,33 @@ function buffSum(kind, st) {
   }
   return Math.min(sum, BUFF_CAP[kind] != null ? BUFF_CAP[kind] : 1) + bonus;
 }
+/* 🦶 주발과 약발 — 능력치와 다른 축이에요.
+ *
+ * ⚠️ **자리를 여기 둔 이유**가 있어요. 이 저장소의 검사는 소스에서 산식을 떼어다
+ * 브라우저 밖에서 굴리는데, matchContribution을 떼어 오는 검사 스무 개가 전부
+ * `HOT_FORM_BAR ~ buffMul` 구간을 함께 떼어 옵니다. 그 구간 안에 두면 검사가
+ * 저절로 따라와요 — 밖에 두면 스무 개가 한꺼번에 ReferenceError로 죽습니다
+ * (실제로 그랬어요).
+ *
+ * 능력치 다섯은 훈련으로 올리는 값이지만, 약발은 **타고나고 경기에서 붙어요.**
+ * 실제 축구에서 약발은 훈련장에서 몇 주 만에 만들어지는 게 아니라,
+ * 그 발로 차야만 하는 상황을 겪으면서 늘어납니다.
+ *
+ * ⚠️ **기준을 5로 뒀어요.** 옛 세이브에는 이 칸이 없어서 읽는 쪽에서 5를 주는데,
+ * 5가 배수 1.00이라 **이어하던 선수의 골이 하나도 안 움직여요.**
+ * 새 축을 넣을 때 기본값이 중립이 아니면 그건 밸런스 변경이지 기능 추가가 아니에요.
+ *
+ * 폭은 ±6%로 좁게 잡았어요. 약발은 있으면 좋은 것이지, 이걸로 커리어가 갈리면
+ * 타고난 값 하나가 실력을 이깁니다. */
+const FOOT_MID = 5;
+const FOOT_K = 0.012;                                  // 한 칸당 1.2%
+const weakFoot = (st) => ((st || S).foot && (st || S).foot.weak) || FOOT_MID;
+const footMul = (st) => 1 + (weakFoot(st) - FOOT_MID) * FOOT_K;   // 1 → 0.952 · 5 → 1.00 · 10 → 1.06
+const mainFoot = (st) => (((st || S).foot && (st || S).foot.main) || "R");
+const FOOT_KO = { R: "오른발", L: "왼발" };
+/* 주발은 오른발이 흔해요 — 실제 프로 선수의 대략 4분의 3이에요. */
+const rollFoot = () => ({ main: Math.random() < 0.75 ? "R" : "L", weak: randInt(2, 7) });
+
 const buffMul = (kind, st) => 1 + buffSum(kind, st);
 
 /* 🏷️ 클래스 — "지금 이 선수가 어느 급인가".
@@ -790,7 +850,7 @@ const talentStars = (t) => clamp(Math.round(((t - 0.6) / (TALENT_MAX - 0.6)) * 5
  * (시작값이 얼마든, 앞서 실패로 조금 잃었든 상관없어요). */
 const TALENT_STEP = (TALENT_MAX - 0.6) / 5;
 // 능력치 키 다섯 — 재능 평균처럼 "전부"를 훑을 때 써요
-const STAT_KEYS = ["shoot", "pass", "dribble", "defense", "stamina"];
+const STAT_KEYS = ["shoot", "pass", "dribble", "defense", "stamina", "speed"];
 /* ⭐ 별 그림 — **별만** 그려요.
  *
  * 여기서 세 번 방향을 바꿨어요. 별 다섯 칸으로 재능 0.6~1.8을 나누면 한 칸이
@@ -1253,6 +1313,7 @@ function resumeSlot(id) {
   S = sl[id];
   S.money = S.money || 0;
   S.gear = S.gear || {};
+  fillStats(S);          // ⚡ 스피드 칸이 없는 옛 세이브를 여기서 채워요 (종합은 그대로예요)
   if (S.phase === "soccer-pro" && window.WingerCareer) {
     window.WingerCareer.showActivity();
   } else {
@@ -1350,6 +1411,16 @@ document.querySelectorAll("#position-list .card").forEach((btn) => {
   });
 });
 
+/* 🦶 주발은 **고르는 것**이에요 — 포지션처럼요.
+ * 약발 숫자는 여전히 타고나요(경기에서 붙습니다). 고를 수 있는 건 어느 발잡이냐뿐이에요. */
+let chosenFoot = "R";
+document.querySelectorAll("#screen-name .foot-opt").forEach((b) => {
+  b.addEventListener("click", () => {
+    chosenFoot = b.dataset.foot;
+    document.querySelectorAll("#screen-name .foot-opt").forEach((x) => x.classList.toggle("on", x === b));
+  });
+});
+
 $("btn-random-name").addEventListener("click", () => {
   $("input-name").value = randomPlayerName(chosenMarket);
 });
@@ -1364,6 +1435,7 @@ $("btn-start").addEventListener("click", () => {
   if (window.Stats) Stats.log("new_player", { pos: chosenPos, agency: chosenMarket.name, mk: chosenMarket.id });
   if (window.Match) Match.register("soccer", name);
   S = newState(chosenMarket, chosenPos, name, pendingRoll);
+  S.foot.main = chosenFoot;          // 🦶 고른 주발 (약발 숫자는 타고난 그대로예요)
   addLog(`⚽ ${chosenMarket.name} 입단! ${name}의 축구 인생이 시작됐어요.`);
   save();
   renderMain();
@@ -1677,12 +1749,16 @@ function matchContribution(rating) {
    * 한 칸만 200이고 나머지가 40인 선수는 그 한 장면 말고는 경기에 관여를 못 해요.
    * 이 항이 없으면 "골 넣는 기계"가 도움·수비까지 평범 이상으로 하게 됩니다. */
   const AXIS_MIX = 0.2;
-  const allStat = ((S.stats.shoot || 40) + (S.stats.pass || 40) + (S.stats.dribble || 40)
-    + (S.stats.defense || 40) + (S.stats.stamina || 40)) / 5;
+  const allStat = STAT_KEYS.reduce((a, k) => a + (S.stats[k] || 40), 0) / STAT_KEYS.length;
   const mix = (v) => v * (1 - AXIS_MIX) + allStat * AXIS_MIX;
-  const shootF = mix(gStat) / 100;
+  /* ⚡ 스피드는 **돌파와 따라붙기**에 조금 섞여요 — 마무리(슛)나 시야(패스)를
+   * 대신하지는 않아요. 폭이 크면 스피드 하나만 올리는 게 정답이 됩니다. */
+  const SPD_MIX = 0.2;
+  const spd = S.stats.speed == null ? allStat : S.stats.speed;
+  const withSpd = (v) => v * (1 - SPD_MIX) + spd * SPD_MIX;
+  const shootF = mix(withSpd(gStat)) / 100;
   const passF = mix(aStat) / 100;
-  const defF = mix(S.stats.defense || 40) / 100;
+  const defF = mix(withSpd(S.stats.defense || 40)) / 100;
   const G = { fw: 1.05, wg: 0.75, mf: 0.5, df: 0.14 };
   const A = { mf: 0.95, wg: 0.85, fw: 0.55, df: 0.28 };
   const D = { df: 2.3, mf: 1.2, wg: 0.5, fw: 0.45 };
@@ -1693,8 +1769,11 @@ function matchContribution(rating) {
    * 나머지 넷의 별은 훈련 효율 말고는 경기에 아무 영향이 없었습니다. */
   const gTal = isWg ? (clutch("shoot") * 0.6 + clutch("dribble") * 0.4) : clutch("shoot");
   const aTal = isWg ? (clutch("pass") * 0.6 + clutch("dribble") * 0.4) : clutch("pass");
-  const gLam = (G[S.pos] ?? 0.4) * perf * (0.55 + shootF) * gTal * buffMul("g") * GOAL_SCALE;
-  const aLam = (A[S.pos] ?? 0.4) * perf * (0.55 + passF) * aTal * buffMul("a") * GOAL_SCALE;
+  /* 🦶 약발은 **골과 도움에만** 붙어요 — 반대발로 차야 하는 상황에서 갈리는 거니까요.
+   * 수비에는 안 붙입니다(태클에 발이 갈리지는 않아요). 기준 5가 배수 1.00이에요. */
+  const foot = footMul();
+  const gLam = (G[S.pos] ?? 0.4) * perf * (0.55 + shootF) * gTal * buffMul("g") * foot * GOAL_SCALE;
+  const aLam = (A[S.pos] ?? 0.4) * perf * (0.55 + passF) * aTal * buffMul("a") * foot * GOAL_SCALE;
   const dLam = (D[S.pos] ?? 0.6) * perf * (0.55 + defF) * clutch("defense") * buffMul("d") * GOAL_SCALE;
   return { g: poissonish(gLam), a: poissonish(aLam), def: poissonish(dLam) };
 }

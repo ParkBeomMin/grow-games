@@ -610,3 +610,54 @@ body.fever-on #app { padding-top: 2.6rem; }
 .squad-news { color: var(--cream); }
 /* 🌏 대회 개인 순위의 부문 탭 — 리그 개인 순위(.race-tabs) 결을 그대로 써요 */
 .wc-face-tabs { margin-bottom: .4rem; }
+
+/* ---------- 📊 능력치 레이더 · 🦶 주발과 약발 ---------- */
+.stat-shape { display: flex; align-items: center; gap: .4rem; margin-bottom: .5rem; }
+.stat-radar { width: min(190px, 46vw); height: auto; flex-shrink: 0; }
+.foot-box { flex: 1; min-width: 0; text-align: center; }
+.feet { display: flex; justify-content: center; gap: .5rem; }
+.foot {
+  width: 44px; height: 60px; border-radius: 22px / 30px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  border: 2px solid var(--line); background: var(--bg2);
+}
+.foot .foot-ico { font-size: .8rem; opacity: .5; }
+.foot b { font-size: 1.15rem; font-family: "Jua", sans-serif; }
+.foot.main { border-color: #6ee7a0; background: rgba(110, 231, 160, .16); }
+.foot.main b { color: #6ee7a0; }
+.foot.weak b { color: var(--dim); }
+.foot.weak { transform: scaleX(-1); }
+.foot.weak b { transform: scaleX(-1); }
+.foot-note { font-size: .7rem; color: var(--dim); margin-top: .35rem; line-height: 1.4; }
+/* 🦶 주발 고르기 — 선수 등록 화면 */
+.foot-pick { display: flex; align-items: center; justify-content: center; gap: .6rem; margin: .2rem 0 .5rem; }
+.foot-pick-label { font-size: .82rem; color: var(--dim); }
+.foot-pick-btns { display: flex; gap: .35rem; }
+.foot-opt {
+  padding: .34rem .8rem; border-radius: .7rem; cursor: pointer;
+  background: var(--bg2); border: 1px solid var(--line); color: var(--dim);
+  font-family: "Jua", sans-serif; font-size: .84rem;
+}
+.foot-opt.on { background: var(--field); border-color: #6ee7a0; color: #6ee7a0; }
+/* ---------- 📍 내 자리 (세부 포지션) ---------- */
+.pos-field { margin-top: .5rem; }
+.pf-grid {
+  display: flex; flex-direction: column; gap: 3px;
+  padding: 6px 4px; border-radius: 10px;
+  background: linear-gradient(180deg, rgba(110,231,160,.07), rgba(110,231,160,.02));
+  border: 1px solid var(--line);
+}
+.pf-row { display: flex; justify-content: center; gap: 4px; }
+.pf-slot {
+  min-width: 30px; padding: .12rem .2rem; border-radius: .35rem;
+  font-size: .58rem; letter-spacing: .02em; text-align: center;
+  border: 1px solid var(--line); color: var(--dim); background: var(--bg2); opacity: .45;
+}
+.pf-slot.on { opacity: 1; }
+.pf-slot.here { background: #6ee7a0; border-color: #6ee7a0; color: #0b1e14; font-weight: 700; }
+.pf-note { font-size: .68rem; color: var(--dim); margin-top: .3rem; line-height: 1.4; }
+.pf-note b { color: var(--cream); }
+/* 📍 자리를 고를 수 있어요 — 내 포지션 칸만 눌러집니다 */
+button.pf-slot { cursor: pointer; font-family: inherit; }
+.pf-slot.want { border-color: #6ee7a0; color: #6ee7a0; border-style: dashed; }
+.pf-slot.here.want { border-style: solid; }
