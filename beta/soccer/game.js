@@ -52,7 +52,11 @@ const STAT_DEFS = [
   { key: "pass", name: "패스", emoji: "🎯", sub: "시야·연계" },
   { key: "dribble", name: "드리블", emoji: "🏃", sub: "돌파·개인기" },
   { key: "defense", name: "수비", emoji: "🛡️", sub: "태클·위치선정" },
-  { key: "stamina", name: "체력", emoji: "🫀", sub: "지구력·스피드" },
+  /* ⚡ 스피드는 **체력에서 떼어낸** 축이에요. 예전에는 체력이 "지구력·스피드"를
+   * 겸했는데, 그러면 빠른 선수와 지치지 않는 선수가 같은 값이 됩니다.
+   * 이제 체력은 지치는 속도(컨디션 소모)를, 스피드는 순간의 돌파와 따라붙기를 맡아요. */
+  { key: "stamina", name: "체력", emoji: "🫀", sub: "지구력·회복" },
+  { key: "speed", name: "스피드", emoji: "⚡", sub: "가속·순간 속도" },
 ];
 
 // 포지션 — 야구의 '포지션' 대응. 주력 능력치가 달라져요
@@ -490,8 +494,30 @@ function newState(market, pos, name, roll) {
 }
 
 const marketOf = () => MARKETS.find((m) => m.id === S.market);
+/* ⚡ 스피드 칸이 없는 옛 세이브는 **그 선수의 평균**으로 읽어요.
+ *
+ * 평균을 넣으면 종합이 정확히 그대로예요 — (합 + 평균) ÷ 6 = 평균.
+ * 0이나 고정값을 넣으면 이어하던 선수의 종합이 그 자리에서 움직이고,
+ * 종합은 클래스·부문상·수상·이적을 전부 굴리는 값이라 커리어가 통째로 흔들려요.
+ * 새 축을 넣을 때 기본값이 중립이 아니면 그건 기능 추가가 아니라 밸런스 변경입니다. */
+function fillStats(st) {
+  const S0 = st || S;
+  if (!S0 || !S0.stats) return S0;
+  const base = STAT_KEYS.filter((k) => k !== "speed");
+  if (S0.stats.speed == null) {
+    const have = base.filter((k) => S0.stats[k] != null);
+    const mean = have.length ? have.reduce((a, k) => a + S0.stats[k], 0) / have.length : 40;
+    S0.stats.speed = Math.round(mean * 10) / 10;
+  }
+  if (S0.talents && S0.talents.speed == null) {
+    const have = base.filter((k) => S0.talents[k] != null);
+    S0.talents.speed = have.length ? have.reduce((a, k) => a + S0.talents[k], 0) / have.length : 1;
+  }
+  return S0;
+}
 const overall = () => {
-  const vals = Object.values(S.stats);
+  fillStats(S);
+  const vals = STAT_KEYS.map((k) => S.stats[k]).filter((v) => v != null);
   return vals.reduce((a, b) => a + b, 0) / vals.length;
 };
 
@@ -819,7 +845,7 @@ const talentStars = (t) => clamp(Math.round(((t - 0.6) / (TALENT_MAX - 0.6)) * 5
  * (시작값이 얼마든, 앞서 실패로 조금 잃었든 상관없어요). */
 const TALENT_STEP = (TALENT_MAX - 0.6) / 5;
 // 능력치 키 다섯 — 재능 평균처럼 "전부"를 훑을 때 써요
-const STAT_KEYS = ["shoot", "pass", "dribble", "defense", "stamina"];
+const STAT_KEYS = ["shoot", "pass", "dribble", "defense", "stamina", "speed"];
 /* ⭐ 별 그림 — **별만** 그려요.
  *
  * 여기서 세 번 방향을 바꿨어요. 별 다섯 칸으로 재능 0.6~1.8을 나누면 한 칸이
@@ -1282,6 +1308,7 @@ function resumeSlot(id) {
   S = sl[id];
   S.money = S.money || 0;
   S.gear = S.gear || {};
+  fillStats(S);          // ⚡ 스피드 칸이 없는 옛 세이브를 여기서 채워요 (종합은 그대로예요)
   if (S.phase === "soccer-pro" && window.WingerCareer) {
     window.WingerCareer.showActivity();
   } else {
@@ -1717,12 +1744,16 @@ function matchContribution(rating) {
    * 한 칸만 200이고 나머지가 40인 선수는 그 한 장면 말고는 경기에 관여를 못 해요.
    * 이 항이 없으면 "골 넣는 기계"가 도움·수비까지 평범 이상으로 하게 됩니다. */
   const AXIS_MIX = 0.2;
-  const allStat = ((S.stats.shoot || 40) + (S.stats.pass || 40) + (S.stats.dribble || 40)
-    + (S.stats.defense || 40) + (S.stats.stamina || 40)) / 5;
+  const allStat = STAT_KEYS.reduce((a, k) => a + (S.stats[k] || 40), 0) / STAT_KEYS.length;
   const mix = (v) => v * (1 - AXIS_MIX) + allStat * AXIS_MIX;
-  const shootF = mix(gStat) / 100;
+  /* ⚡ 스피드는 **돌파와 따라붙기**에 조금 섞여요 — 마무리(슛)나 시야(패스)를
+   * 대신하지는 않아요. 폭이 크면 스피드 하나만 올리는 게 정답이 됩니다. */
+  const SPD_MIX = 0.2;
+  const spd = S.stats.speed == null ? allStat : S.stats.speed;
+  const withSpd = (v) => v * (1 - SPD_MIX) + spd * SPD_MIX;
+  const shootF = mix(withSpd(gStat)) / 100;
   const passF = mix(aStat) / 100;
-  const defF = mix(S.stats.defense || 40) / 100;
+  const defF = mix(withSpd(S.stats.defense || 40)) / 100;
   const G = { fw: 1.05, wg: 0.75, mf: 0.5, df: 0.14 };
   const A = { mf: 0.95, wg: 0.85, fw: 0.55, df: 0.28 };
   const D = { df: 2.3, mf: 1.2, wg: 0.5, fw: 0.45 };

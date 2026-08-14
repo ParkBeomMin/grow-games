@@ -40,8 +40,13 @@ window.WingerCareer = (() => {
     const WEAK_BAR = 0.75;   // 평균의 이만큼에 못 미치는 칸이 약점이에요
     const WEAK_PEN = 0.45;
     const main = POS_INFO[pos].stat;
-    const all = (stats.shoot + stats.pass + stats.dribble + stats.defense + stats.stamina) / 5;
-    const low = Math.min(stats.shoot, stats.pass, stats.dribble, stats.defense, stats.stamina);
+    /* ⚠️ 여기 스탯을 **손으로 적으면** 새 축이 들어올 때 조용히 빠져요.
+     * 실제로 ⚡ 스피드를 넣었더니 종합에는 들어가는데 경기력에는 안 닿았습니다 —
+     * 스피드를 140까지 올려도 평점이 6.37에서 꿈쩍도 안 했어요.
+     * STAT_KEYS 하나만 보게 해서 축이 늘면 저절로 따라오게 합니다. */
+    const vals = STAT_KEYS.map((k) => stats[k]).filter((v) => v != null);
+    const all = vals.reduce((a, b) => a + b, 0) / Math.max(1, vals.length);
+    const low = Math.min(...vals);
     const weak = Math.max(0, all * WEAK_BAR - low) * WEAK_PEN;
     /* ⭐ 재능은 **그 능력치가 하는 일에** 붙어요.
      *
@@ -358,6 +363,23 @@ window.WingerCareer = (() => {
   /* 🏆 리그 순위표 — 예전에는 내 팀 성적(teamW/D/L)만 쌓고 다른 팀 기록이 없어서
    * 순위표를 만들 수가 없었어요. 리그의 6팀을 시즌 내내 함께 굴립니다.
    * ⚠️ S.league은 이미 '리그 ID'라 이름이 겹쳐요. 표는 S.table에 둡니다. */
+  /* 🫀 **체력이 지치는 속도를 줄여요.**
+   *
+   * 여태 컨디션 소모가 전부 고정 난수였어요 — 능력치를 하나도 안 봤습니다.
+   * 그래서 능력치 설명은 "지구력"인데 지구력이 지치는 속도와 무관했고,
+   * 체력을 올릴 이유가 평점 계수 하나뿐이라 **주스탯만 밀고 나머지 방치**가
+   * 최적이었어요(백로그 2026-08-05 · "체력이 높아도 컨디션이 덜 줄지 않는다").
+   *
+   * 이제 체력이 소모를 깎아요. 상한은 30%예요 — 그 이상이면 휴식이라는 선택지가
+   * 사라져요. 최소 1은 남겨서 "아무리 체력이 좋아도 공짜는 아니다"를 지킵니다.
+   *   체력  50 → -13%   ·  100 → -27%   ·  130 → -30%(상한)
+   *
+   * ⚠️ 축구에만 넣어요. 7종이 각자 제 파일에 같은 줄을 갖고 있어서, 게임마다
+   * 시즌당 훈련 횟수가 달라 영향도 달라요(⚾ 144경기 · ⚽ 38경기).
+   * 다른 게임은 그 게임의 곡선을 따로 재고 나서 옮겨요. */
+  const WEAR_CAP = 0.30, WEAR_DIV = 370;
+  const wear = (base) => Math.max(1, Math.round(base * (1 - Math.min(WEAR_CAP, (S.stats.stamina || 0) / WEAR_DIV))));
+
   function initTable() {
     const list = leagueRoster(leagueOf(S).id);
     // gf/ga — 득점·실점. 개인 기록이 이 스코어에서 나와요(득실차도 순위에 씁니다)
@@ -1524,7 +1546,7 @@ window.WingerCareer = (() => {
       if (Math.random() < failP) {
         const loss = Math.round(rand(0.5, 1.5) * 10) / 10;
         S.stats[def.key] = clamp(S.stats[def.key] - loss, 0, statCap(def.key));
-        S.condition = clamp(S.condition - randInt(6, 10), 0, 100);
+        S.condition = clamp(S.condition - wear(randInt(6, 10)), 0, 100);
         proLog(`😵 ${def.name} 훈련이 꼬였어요… -${loss.toFixed(1)}`);
       actFx(def.key, "-" + loss.toFixed(1), true);
         S.camp -= 1;
@@ -1541,7 +1563,7 @@ window.WingerCareer = (() => {
       if (S.stats[def.key] >= 100) gain *= 0.5;
       gain = Math.round(gain * 10) / 10;
       S.stats[def.key] = clamp(S.stats[def.key] + gain, 0, statCap(def.key));
-      S.condition = clamp(S.condition - randInt(10, 16), 0, 100);
+      S.condition = clamp(S.condition - wear(randInt(10, 16)), 0, 100);
       const natTag = natMul > 1.01 ? ` ${leagueOf(S).flag}` : "";
       proLog(`${def.emoji} ${def.name} 훈련 +${gain.toFixed(1)}${natTag} (${Math.round(S.stats[def.key])})`);
       actFx(def.key, "+" + gain.toFixed(1));
@@ -1805,6 +1827,9 @@ window.WingerCareer = (() => {
       dribble: GROW_BASE + (info.myGoals + info.assists) * 1.2,
       defense: GROW_BASE + info.defense * 2,
       stamina: 1,
+      /* ⚡ 스피드는 **돌파에서 와요** — 제치고 나가는 장면이 남는 거예요.
+       * 체력처럼 바닥 무게만 두면 90분을 뛴 것만으로 스피드가 늘어서 이상해요. */
+      speed: GROW_BASE + (info.myGoals + info.assists) * 0.8,
     };
     /* 계기를 문구로도 남겨요. 왜 그게 올랐는지 화면에서 읽혀야 해요 —
      * 지금까지는 "실전에서 수비를 깨쳤어요"만 떠서 근거를 알 수가 없었어요. */
@@ -1814,6 +1839,7 @@ window.WingerCareer = (() => {
       dribble: info.myGoals + info.assists > 0 ? "돌파가 통한 게 남아" : "",
       defense: info.defense > 0 ? "몸으로 막아낸 게 남아" : "",
       stamina: "",
+      speed: info.myGoals + info.assists > 0 ? "제치고 나간 장면이 남아" : "",
     };
     /* 활약이 클수록 확률도 올라가요. 승패도 봅니다 — 이긴 경기에서 더 배워요.
      * posAxis를 쓰면 포지션 보정이 자동으로 붙어 수비수가 손해 보지 않아요. */
@@ -1840,7 +1866,7 @@ window.WingerCareer = (() => {
         queueFx([["flash", `⚡ ${d.name} +${gain.toFixed(1)}`]]);
       }
     }
-    S.condition = clamp(S.condition - randInt(3, 6), 0, 100);
+    S.condition = clamp(S.condition - wear(randInt(3, 6)), 0, 100);
     S.pendingShow = false;
 
     const cbDone = act.week >= act.weekTotal;
@@ -1987,7 +2013,7 @@ window.WingerCareer = (() => {
   function cupFinalize(info) {
     const rounds = cupRounds();
     const label = rounds[S.cup.round];
-    S.condition = clamp(S.condition - randInt(3, 6), 0, 100);
+    S.condition = clamp(S.condition - wear(randInt(3, 6)), 0, 100);
     /* 컵 경기도 시즌 기록에 넣어요 — 안 넣으면 결승까지 가서 넣은 골이
      * 연도별 표에서 사라져요. 평점 평균에도 같이 들어갑니다.
      * ⚠️ 평점은 리그 경기와 **같은 자**로 재요. 예전에는 여기만 능력치 평점을
@@ -3120,6 +3146,9 @@ window.WingerCareer = (() => {
       ballon: c.ballon || 0,
       goals: (c.goals || 0) + ((S.youth && S.youth.g) || 0),
       assists: (c.assists || 0) + ((S.youth && S.youth.a) || 0),
+      /* 🛡️ 수비도 남겨요 — 통산 기록에 골·도움만 있어서 수비수의 커리어가
+       * 헌액 카드에서 통째로 안 보였어요(제보). 옛 항목에는 없으니 읽는 쪽에서 건너뜁니다. */
+      defense: (c.defense || 0) + ((S.youth && S.youth.def) || 0),
       apps: (c.apps || 0) + (S.stages || 0),
       finalOvr: Math.round(overall()),
       trans: transTotal(),
@@ -3171,7 +3200,7 @@ window.WingerCareer = (() => {
       <div class="hint lg-path">🌍 ${entry.leagues}${entry.leagues.includes("→") ? ` · 최고 ${entry.peakLg}` : ""}</div>
       ${moves ? `<div class="hint move-log">🔁 이적 이력 — ${moves}</div>` : ""}
       <div class="draft-summary">
-        통산 ${entry.apps}경기(유스 포함) ⚽ ${entry.goals}골 · 🅰️ ${entry.assists}도움<br/>
+        통산 ${entry.apps}경기(유스 포함) ⚽ ${entry.goals}골 · 🅰️ ${entry.assists}도움 · 🛡️ ${entry.defense}수비<br/>
         🏆 우승 ${entry.trophies} · 🏅 발롱도르 ${c.ballon || 0} · 🎖️ 리그MVP ${entry.daesang} · 🥈 베스트11 ${entry.bonsang}${entry.rookie ? " · 🌟 신인왕" : ""}<br/>
         🏅 MOM ${entry.wins}회<br/>
         커리어 점수 <b>${entry.score}</b>${entry.nextGrade ? ` · ${entry.nextGrade.name}까지 ${entry.nextGrade.need}점이었어요` : " · 더 오를 곳이 없는 자리예요"}<br/>
@@ -3284,7 +3313,7 @@ window.WingerCareer = (() => {
         <div class="hof-face-emoji">⚽</div>
         <div class="hof-info">
           <div class="hof-name">${i + 1}. ${e.gen > 1 ? `<span class="hof-gen">${e.gen}세</span> ` : ""}${e.name} <span class="hof-grade">${e.grade}</span></div>
-          ${e.team} · ${e.seasons}시즌${e.goals != null ? ` · ⚽${e.goals} 🅰️${e.assists || 0}` : ""} · 🏅MOM ${e.wins} · 🏆${e.daesang + e.bonsang} · 점수 ${hofScore(e)}
+          ${e.team} · ${e.seasons}시즌${e.goals != null ? ` · ⚽${e.goals} 🅰️${e.assists || 0}${e.defense != null ? ` 🛡️${e.defense}` : ""}` : ""} · 🏅MOM ${e.wins} · 🏆${e.daesang + e.bonsang} · 점수 ${hofScore(e)}
           ${/* 🌍 밟아 온 리그 — 옛 항목에는 없어요(읽는 쪽에서 건너뜁니다). */
             e.leagues ? `<div class="hof-lg">🌍 ${e.leagues}</div>` : ""}
           ${/* 🌏 월드컵 — 이 필드도 나중에 생겼어요. 없으면 줄 자체를 안 그려요. */
@@ -3347,7 +3376,8 @@ window.WingerCareer = (() => {
         ${row("⚽ 포지션", (POS_INFO[e.pos] || {}).name)}
         ${row("🏟️ 마지막 클럽", e.team + (e.teamSeasons && e.teamSeasons < e.seasons ? ` (${e.teamSeasons}시즌)` : ""))}
         ${row("📅 통산", e.seasons ? `${e.seasons}시즌${e.apps ? ` · ${e.apps}경기` : ""}` : "")}
-        ${row("📊 통산 기록", e.goals != null ? `⚽ ${e.goals}골 · 🅰️ ${e.assists || 0}도움` : "")}
+        ${row("📊 통산 기록", e.goals != null
+          ? `⚽ ${e.goals}골 · 🅰️ ${e.assists || 0}도움${e.defense != null ? ` · 🛡️ ${e.defense}수비` : ""}` : "")}
         ${row("🌍 밟아 온 리그", e.leagues)}
         ${row("⛰️ 최고 리그", e.leagues && e.leagues.includes("→") ? e.peakLg : "")}
         ${row("🏆 수상", awards)}
