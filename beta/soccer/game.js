@@ -509,6 +509,11 @@ function fillStats(st) {
     const mean = have.length ? have.reduce((a, k) => a + S0.stats[k], 0) / have.length : 40;
     S0.stats.speed = Math.round(mean * 10) / 10;
   }
+  /* 🦶 주발이 없던 세이브 — 여기서 한 번 타고나요.
+   * 기본값만 주면(오른발·약발 5) 화면에는 뜨지만 **약발이 영영 안 자라요**
+   * (자라는 자리가 `S.foot`이 있을 때만 도니까요). 그건 이어서 하는 사람만
+   * 못 크는 것이라, 세이브에 실제로 심어 줍니다. */
+  if (!S0.foot) S0.foot = { main: Math.random() < 0.75 ? "R" : "L", weak: randInt(2, 7) };
   if (S0.talents && S0.talents.speed == null) {
     const have = base.filter((k) => S0.talents[k] != null);
     S0.talents.speed = have.length ? have.reduce((a, k) => a + S0.talents[k], 0) / have.length : 1;
