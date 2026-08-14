@@ -464,6 +464,20 @@ window.WingerSquad = (() => {
     const left = list.slice().sort((a, b) => (b.str || 0) - (a.str || 0));
     const out = [];
     for (const x of left) {
+      /* 📍 **내가 고른 자리는 여기서 반영돼요 — 다만 순서는 실력이 정합니다.**
+       * 나보다 잘하는 동료가 먼저 돌기 때문에, 그 자리를 이미 가져갔으면
+       * 나는 남은 자리 중에서 받아요. 원하는 자리를 받으려면 그 자리를 놓고
+       * 겨루는 사람보다 잘해야 해요 — 그게 이 게임의 선발 경쟁이에요. */
+      if (x.me && S.wantSlot) {
+        const at = slots.findIndex((sl) => sl.key === S.wantSlot);
+        if (at >= 0) {
+          x.slot = slots[at].key;
+          slots.splice(at, 1);
+          if (!slots.length) slots.push(...slotsOf(pos));
+          out.push(x);
+          continue;
+        }
+      }
       let best = 0, bestV = -Infinity;
       for (let i = 0; i < slots.length; i++) {
         const v = footFit(x, slots[i]) * (1 + (slots.length - i) * 0.001);   // 앞자리를 살짝 선호
@@ -476,6 +490,17 @@ window.WingerSquad = (() => {
     }
     // 원래 순서(포메이션 순)를 지켜서 돌려줘요
     return list.map((x) => out.find((y) => y === x) || x);
+  }
+  /* 📍 내가 바라는 자리를 정해요. 포지션 밖의 자리는 못 골라요 —
+   * 자리는 그 포지션 **안에서만** 나뉘거든요. */
+  function wantSlot(key) {
+    if (!S) return;
+    const ok = slotsOf(S.pos).some((sl) => sl.key === key);
+    S.wantSlot = ok ? key : null;
+    /* 그 라운드의 선발이 이미 뽑혔으면 다시 뽑아요 — 안 그러면 다음 주부터
+     * 반영돼서 "눌렀는데 아무 일도 안 일어나는" 화면이 됩니다. */
+    if (S.activity) S.activity.xiWeek = -1;
+    save();
   }
   /* 그 선수의 자리 — 없으면 포지션의 첫 자리로 봐요(옛 세이브 대비) */
   const slotOf = (x) => slotByKey(x && x.slot) || slotsOf((x && x.pos) || "mf")[0];
@@ -821,7 +846,7 @@ window.WingerSquad = (() => {
     ensureSquads, ensureSquad, squadOf, startingXI, startingXIOf, leagueFaces,
     isStarter, myLine, benchReason, myBonus, restP, benchTurn, creditMateGoals, markApps, resetSeason, squadHTML,
     ageSquads, newsLine, ageCurve, leagueXI,
-    POS_SLOTS, slotsOf, slotOf, slotByKey, footFit, assignSlots, FOOT_FIT,
+    POS_SLOTS, slotsOf, slotOf, slotByKey, footFit, assignSlots, wantSlot, FOOT_FIT,
     FORMATION, BENCH, SQUAD_SIZE, BENCH_GAIN, SCORE_W, REST_BAR, REST_MAX,
     AGE_MIN, AGE_MAX, PEAK_AGE, RETIRE_AGE, SLUMP_P, SURGE_P, STR_SPREAD, MEAN_CURVE, BENCH_COND,
     _t: { rollSquad, pickScorer, rollPlayer, strOfRow, moveMe, backfillAges },

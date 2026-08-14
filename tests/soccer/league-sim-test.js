@@ -172,14 +172,30 @@ console.log("=== ⑧ 내 몫도 팀 스코어에서 나오는가 ===");
   }
   check(over === 0, `내 골 + 동료 골 = 팀 골 (어긋난 경우 ${over}/2000)`);
   check(aOver === 0, `내 도움 ≤ 동료 골 (넘은 경우 ${aOver}/2000) — 내 골에 내가 도움을 줄 수는 없어요`);
-  // 종합이 오르면 몫이 커져야 해요 — 안 그러면 성장이 골로 안 이어져요
+  /* 종합이 오르면 몫이 커져야 해요 — 안 그러면 성장이 골로 안 이어져요.
+   * 🪑 **내가 선발일 때를 재요.** 벤치인 명단이 뽑히면 내 몫은 당연히 0이라
+   * 종합을 올려도 안 움직여요 — 그건 이 검사가 볼 것이 아니에요. */
   const shareAt = (ovr) => {
     for (const k of get("STAT_KEYS")) S.stats[k] = ovr;
+    let n = 0;
+    while (!Squad.isStarter() && n++ < 50) { S.activity.xiWeek = -1; Squad.rollLineup(); }
     let g = 0;
     for (let i = 0; i < 3000; i++) g += T.splitMine(3).g;
     return g / (3000 * 3);
   };
   const lo = shareAt(70), hi = shareAt(130);
+  /* 🪑 명단에 내가 없으면 내 골은 0이어야 해요 — 안 뛴 경기의 해트트릭은 없어요 */
+  {
+    S.activity.xi = Squad.squadOf(S.group).filter((x) => !x.me).slice(0, 11).map((x) => x.name);
+    S.activity.xiSlot = S.activity.xi.map(() => "");
+    S.activity.xiWeek = S.activity.week;
+    check(!Squad.isStarter(), "   (내가 빠진 명단을 세웠어요)");
+    let mineG = 0, mateG = 0;
+    for (let i = 0; i < 500; i++) { const sp = T.splitMine(3); mineG += sp.g; mateG += sp.mates; }
+    check(mineG === 0 && mateG === 1500,
+      `벤치면 내 골은 0이고 팀 골은 동료 몫이다 (내 ${mineG}골 · 동료 ${mateG}골)`);
+    S.activity.xiWeek = -1; Squad.rollLineup();
+  }
   console.log(`   내 몫 — 종합 70 ${(lo * 100).toFixed(0)}% · 종합 130 ${(hi * 100).toFixed(0)}%`);
   check(hi > lo + 0.1, `종합이 오르면 내 몫이 커진다 (${(lo * 100).toFixed(0)}% → ${(hi * 100).toFixed(0)}%)`);
   check(hi < 1, `혼자 다 넣지는 않는다 (${(hi * 100).toFixed(0)}%)`);

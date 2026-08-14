@@ -657,3 +657,7 @@ body.fever-on #app { padding-top: 2.6rem; }
 .pf-slot.here { background: #6ee7a0; border-color: #6ee7a0; color: #0b1e14; font-weight: 700; }
 .pf-note { font-size: .68rem; color: var(--dim); margin-top: .3rem; line-height: 1.4; }
 .pf-note b { color: var(--cream); }
+/* 📍 자리를 고를 수 있어요 — 내 포지션 칸만 눌러집니다 */
+button.pf-slot { cursor: pointer; font-family: inherit; }
+.pf-slot.want { border-color: #6ee7a0; color: #6ee7a0; border-style: dashed; }
+.pf-slot.here.want { border-style: solid; }

@@ -886,7 +886,10 @@ window.WingerCareer = (() => {
     const myG = (GOAL_W[S.pos] || 0.4) * Math.pow(ovr / 70, MY_P) * (mySl.g || 1) * (iAmAce ? ACE_W : 1);
     const myA = (ASSIST_W[S.pos] || 0.4) * Math.pow(ovr / 70, MY_P) * (mySl.a || 1) * (iAmAce ? MAKER_W : 1);
     /* 명단이 없는 옛 세이브나 유스에서는 나눌 상대가 없어요 — 그때는 예전처럼 굴려요 */
-    if (!mine || !others.length) return { g: team, mates: 0, a: 0 };
+    if (!xi.length || !others.length) return { g: team, mates: 0, a: 0 };
+    /* 🪑 명단은 있는데 내가 그 안에 없으면 **나는 안 뛴 거예요.** 예전에는 이 경우도
+     * 위와 한 줄로 묶여서 팀 골을 통째로 내가 가져갔어요 — 안 뛴 경기의 해트트릭이에요. */
+    if (!mine) return { g: 0, mates: team, a: 0 };
     let g = 0;
     const totG = myG + others.reduce((a, x) => a + wG(x), 0);
     for (let i = 0; i < team; i++) if (Math.random() < myG / totG) g += 1;
@@ -1220,14 +1223,18 @@ window.WingerCareer = (() => {
   function slotFieldHTML() {
     if (!window.WingerSquad) return "";
     const me = WingerSquad.squadOf(S.group).find((x) => x.me);
-    const now = WingerSquad.slotOf(me);
+    /* 🪑 **선발이 아니면 자리가 없어요.** slotOf는 못 찾으면 포지션 첫 자리를
+     * 돌려주는데, 그걸 그대로 그리면 벤치인데도 CAM에 서 있는 것처럼 보여요. */
+    const starting = WingerSquad.isStarter && WingerSquad.isStarter();
+    const now = starting ? WingerSquad.slotOf(me) : null;
     const mine = WingerSquad.slotsOf(S.pos);
+    const want = S.wantSlot || null;
     const rows = [];
     for (const p of ["fw", "wg", "mf", "df"]) {
       for (const sl of WingerSquad.slotsOf(p)) {
         const on = p === S.pos;
-        const here = on && now && sl.key === now.key;
-        rows.push({ sl, on, here });
+        const here = on && !!now && sl.key === now.key;
+        rows.push({ sl, on, here, want: on && want === sl.key });
       }
     }
     /* 줄(row)로 묶어서 실제 배치처럼 세워요 — 앞선이 위, 수비가 아래예요 */
@@ -1236,14 +1243,35 @@ window.WingerCareer = (() => {
     const body = Object.keys(byRow).sort((a, b) => a - b).map((k) =>
       `<div class="pf-row">${byRow[k]
         .sort((a, b) => a.sl.col - b.sl.col)
-        .map((r) => `<span class="pf-slot${r.here ? " here" : r.on ? " on" : ""}" title="${r.sl.name}">${r.sl.key}</span>`)
+        .map((r) => (r.on
+          /* 내 포지션 자리는 **누를 수 있어요.** 목업의 격자가 보기만 하는 그림이면
+           * 자리 효과가 그냥 노이즈로 읽혀요 — 고를 수 있어야 선택이 됩니다. */
+          ? `<button type="button" class="pf-slot on${r.here ? " here" : ""}${r.want ? " want" : ""}"`
+            + ` data-slot="${r.sl.key}" title="${r.sl.name}">${r.sl.key}</button>`
+          : `<span class="pf-slot" title="${r.sl.name}">${r.sl.key}</span>`))
         .join("")}</div>`).join("");
-    const fit = now && now.side !== "C"
-      ? (mainFoot() === now.side ? " · 🦶 발이 맞아요" : " · 🦶 반대발 자리예요")
-      : "";
+    /* 원하는 자리를 못 받았으면 **누가 가져갔는지** 적어요. 이유가 안 보이면
+     * "눌렀는데 안 되네"가 되고, 그건 고를 수 없는 것과 같아요. */
+    let note;
+    if (!now) {
+      const wantName = want ? (WingerSquad.slotByKey(want) || {}).name : null;
+      note = `🪑 이번 경기는 벤치예요`
+        + `${wantName ? ` — 노리는 자리는 <b>${wantName}</b>` : " — 자리를 눌러서 고를 수 있어요"}`;
+    } else if (want && want !== now.key) {
+      const taker = (WingerSquad.matchXI() || [])
+        .find((x) => !x.me && x.pos === S.pos && x.slot === want);
+      const wantName = (WingerSquad.slotByKey(want) || {}).name || want;
+      note = `📍 <b>${now.name}</b> — ${wantName} 자리는 `
+        + `${taker ? `<b>${taker.name}</b>(실력 ${Math.round(taker.str)})가` : "다른 선수가"} 맡았어요`;
+    } else {
+      const fit = now && now.side !== "C"
+        ? (mainFoot() === now.side ? " · 🦶 발이 맞아요" : " · 🦶 반대발 자리예요")
+        : "";
+      note = `📍 <b>${now ? now.name : posName(S.pos)}</b>`
+        + `${want ? "" : ` · ${posName(S.pos)} ${mine.length}자리 — 눌러서 고를 수 있어요`}${fit}`;
+    }
     return `<div class="pos-field"><div class="pf-grid">${body}</div>`
-      + `<div class="pf-note">📍 <b>${now ? now.name : posName(S.pos)}</b>`
-      + `${mine.length > 1 ? ` · ${posName(S.pos)} ${mine.length}자리` : ""}${fit}</div></div>`;
+      + `<div class="pf-note">${note}</div></div>`;
   }
   const posName = (p) => (POS_INFO[p] || {}).name || p;
 
@@ -1422,6 +1450,14 @@ window.WingerCareer = (() => {
     shape.innerHTML = `<canvas class="stat-radar" width="240" height="240"></canvas>`
       + `<div class="foot-box">${footHTML()}${isPro() ? slotFieldHTML() : ""}</div>`;
     stats.appendChild(shape);
+    for (const b of shape.querySelectorAll(".pf-slot.on")) {
+      b.onclick = () => {
+        /* 이미 고른 자리를 다시 누르면 놓아요 — 감독에게 맡기는 상태로 돌아가요 */
+        WingerSquad.wantSlot(S.wantSlot === b.dataset.slot ? null : b.dataset.slot);
+        WingerSquad.rollLineup();
+        renderPrep();
+      };
+    }
     if (window.Radar) {
       /* 상한이 초월로 늘어나요 — 눈금을 고정하면 130짜리가 칸을 뚫고 나가요.
        * 지금 상한 중 가장 큰 값에 맞춰 그립니다. */
