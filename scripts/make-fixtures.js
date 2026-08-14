@@ -312,13 +312,13 @@ const nextSeasonBtn = (P) => Array.from(P.w.document.querySelectorAll("#career-a
  * 엔딩 분기는 score = S.fandom + overall() * 2 를 보는데, 봇이 클릭만으로 얻는 score는
  * 330 문턱에 못 닿아요. 그래서 프로 도전 화면에 닿은 직후에 살아 있는 S.fandom만 심고,
  * 엔딩 제목을 화면에서 다시 읽어 실제로 📹가 떴는지 확인합니다. */
-function soccerDebut(P, mode, plan, marketIdx) {
+function soccerDebut(P, mode, plan, marketIdx, pos) {
   /* marketIdx — 유스 국적(MARKETS의 자리). 안 넘기면 예전과 같아요.
    * 국적이 🌟 프로 계약 데뷔 리그를 정하므로, 나라별 시나리오는 여기를 바꿔서 만들어요.
    *   0 🇰🇷 K리그 · 1 🇯🇵 J리그 · 2 🇧🇷 브라질 · 3 🇬🇧 잉글랜드 · 4 🇮🇹 이탈리아
    * (난이도 순으로 놓여 있어요 — 뒤로 갈수록 데뷔 리그가 험해요) */
   const agency = marketIdx != null ? marketIdx : (mode === "semi" ? 0 : 1);
-  newPlayer(P, agency, "fw", mode === "semi" ? "밑바닥" : "윙어");
+  newPlayer(P, agency, pos || "fw", mode === "semi" ? "밑바닥" : "윙어");
   youthUntilSurvival(P, plan);
   if (mode === "semi") {
     P.state().fandom = 400;
@@ -2048,12 +2048,81 @@ function* seeds(n) {
   }
 }
 
+/* 📍 준비 화면 한 자리에서 이번 묶음 네 가지를 다 봐요.
+ *
+ *   📊 능력치 레이더 · 🦶 주발/약발 · 📍 세부 자리(눌러서 고르기) · ⚡ 스피드 · 🫀 체력
+ *
+ * **미드필더**로 데뷔시켜요 — 자리가 넷(CAM·CM·B2B·CDM)이라 고르는 맛이 제일 잘 보여요.
+ * 시즌 중반까지 굴려서 순위표·개인 순위도 같이 차 있는 상태로 멈춥니다. */
+function makeSoccerSlot() {
+  log("📍 ⑫ 준비 화면 — 자리·레이더·주발·스피드");
+  const MATCHES = 8;
+  for (const seed of seeds(20)) {
+    let P;
+    try {
+      P = makePage("soccer", seed);
+      soccerDebut(P, "pro", "pos", 0, "mf");
+      let played = 0;
+      for (let g = 0; g < 4000; g++) {
+        const id = P.active();
+        if (id === "screen-stage") { P.$("btn-stage-next").click(); continue; }
+        if (id !== "screen-pro") break;
+        const go = P.w.document.querySelector("#pro-actions .go-game");
+        if (go) {
+          if (played >= MATCHES) break;      // 준비 화면에서 멈춰요
+          go.click(); played++; continue;
+        }
+        if (!doAct(P, "#pro-actions .action-btn", "pos")) break;
+      }
+      const st = P.state();
+      const ready = P.active() === "screen-pro" && !!P.w.document.querySelector("#pro-actions .go-game");
+      const sq = (st.squads && st.squads[st.group]) || [];
+      const mids = sq.filter((x) => x.pos === "mf");
+      const me = sq.find((x) => x.me);
+      // 겨룰 동료가 있어야 "자리를 못 받는 경우"까지 볼 수 있어요
+      const rival = mids.some((x) => !x.me && (x.str || 0) > ((me && me.str) || 0));
+      if (ready && st.pos === "mf" && mids.length >= 4 && me && rival) {
+        const foot = st.foot || {};
+        add({
+          id: "soccer-slot",
+          game: "soccer", url: "soccer/", emoji: "📍",
+          title: "준비 화면 — 자리·레이더·주발·스피드",
+          state: `${st.group} · ${st.proYear}시즌 · 미드필더 · ${played}경기`
+            + ` · 주발 ${foot.main === "L" ? "왼발" : "오른발"}(약발 ${foot.weak})`
+            + ` · 스피드 ${Math.round((st.stats && st.stats.speed) || 0)} · 우리 팀 미드필더 ${mids.length}명`,
+          check: "① <b>📊 능력치</b>가 육각형 그래프로 그려지고 <b>글자가 안 잘리는지</b>, "
+            + "② <b>⚡ 스피드</b>가 여섯 번째 축으로 있고 훈련으로 오르는지, "
+            + "③ <b>🦶 주발</b> 옆의 약발 수치와 <b>골·도움 ±N%</b>가 맞물려 보이는지, "
+            + "④ <b>📍 자리</b> 격자에서 내 포지션 칸을 <b>눌러 고를 수 있는지</b> "
+            + "(못 받으면 누가 가져갔는지 이름이 뜨고, 같은 칸을 다시 누르면 놓아져요), "
+            + "⑤ <b>🫀 체력</b>을 올리면 경기 뒤 컨디션이 덜 깎이는지 봐주세요",
+          steps: [
+            "게임이 열리면 <b>이어하기</b> → 선수 카드",
+            "준비 화면을 내려 <b>📊 능력치</b> 육각형과 <b>🦶 주발</b> 줄을 봐 주세요",
+            "<b>📍 자리</b> 격자에서 <b>CAM·CM·B2B·CDM</b> 중 하나를 눌러 보세요 — 지금 서 있는 칸은 진하게, 고른 칸은 점선으로 표시돼요",
+            "<b>⚽ 경기하러 가기</b>를 눌러 다음 라운드를 치르고, 준비 화면으로 돌아와 자리가 바뀌었는지 확인해 주세요",
+            "동료보다 실력이 모자라면 그 자리를 못 받아요 — 그때 <b>누가 맡았는지</b> 격자 아래에 적혀요",
+          ],
+          keys: snapshot(P),
+        });
+        P.close();
+        return;
+      }
+      P.close();
+    } catch (e) {
+      log(`  … 시드 ${seed} 건너뜀 (${e.message})`);
+      if (P) P.close();
+    }
+  }
+  log("  ⚠️ soccer-slot — 조건에 맞는 시드를 못 찾았어요");
+}
+
 // ---------- 파일 쓰기 ----------
 /* 이번에 뽑지 않은 시나리오는 기존 파일에서 살려요.
  * 그래야 `node scripts/make-fixtures.js soccer-transfer`처럼 하나만 다시 뽑아도
  * 나머지가 안 사라져요. 같은 id는 이번에 뽑은 게 이깁니다. */
 const ORDER = ["soccer-transfer", "soccer-promote", "soccer-youth-ext", "soccer-semipro", "soccer-report",
-  "soccer-aging", "soccer-hof-month",
+  "soccer-aging", "soccer-hof-month", "soccer-slot",
   "idol-concept", "idol-reveal", "idol-report", "idol-tour", "idol-standings",
   "rookie-posting", "rookie-posting-locked", "rookie-abroad-report", "rookie-cont-series", "rookie-retire"];
 
@@ -2132,6 +2201,7 @@ if (want("soccer-nation-jp", "soccer")) makeSoccerNation(1, {
 });
 if (want("soccer-aging", "soccer")) makeSoccerAging();
 if (want("soccer-hof-month", "soccer")) makeSoccerHofMonths();
+if (want("soccer-slot", "soccer")) makeSoccerSlot();
 if (want("soccer-promo", "soccer")) makeSoccerPromoRelegation("up");
 if (want("soccer-releg", "soccer")) makeSoccerPromoRelegation("down");
 if (want("idol-concept", "idol")) {
