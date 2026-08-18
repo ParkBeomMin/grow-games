@@ -414,6 +414,9 @@ body {
 .bench-card { text-align: center; padding: .6rem .4rem; }
 .bench-card .draft-emoji { font-size: 2.4rem; }
 .bench-card .tour-line { color: var(--dim); font-size: .82rem; margin: .3rem 0 .5rem; }
+/* 🪑 대표팀 벤치 카드 — 순위표를 품어서 조금 넓게 잡아요 */
+.wc-bench .rank-table { margin: .55rem 0 .2rem; }
+.wc-bench .tour-line b { color: var(--text); }
 /* 🗣️ 감독 한마디 — 벤치인 이유는 숫자가 아니라 말로 전해요 */
 .coach-say { color: var(--text); font-size: .9rem; line-height: 1.55; margin: .4rem .2rem .55rem; }
 /* 👥 스쿼드 레이어 — base.css의 .av-modal 껍데기를 빌려 씁니다 */
