@@ -2121,12 +2121,72 @@ function makeSoccerSlot() {
   log("  ⚠️ soccer-slot — 조건에 맞는 시드를 못 찾았어요");
 }
 
+/* 🖊️ 헌액 한마디 + 🛡️ 명예의 전당이 태그를 실행하지 않는가.
+ *
+ * 이 둘은 **남이 올린 값**이 있어야 볼 수 있어요. 커리어를 굴려 만드는 게 아니라
+ * 명예의 전당에 항목을 직접 심습니다 — 실제로 다른 사람이 올린 것과 같은 자리예요.
+ *
+ * ⚠️ 이름과 한마디에 `<img src=x onerror=…>`를 넣은 항목을 일부러 하나 넣어 뒀어요.
+ * 화면에 **글자 그대로** 보이면 막힌 겁니다. 그림 깨진 아이콘이 뜨거나 화면이
+ * 이상해지면 새는 거예요. */
+function makeSoccerHof() {
+  log("🖊️ ⑬ 명예의 전당 — 한마디와 태그 방어");
+  const EVIL = '<img src=x onerror="alert(1)">';
+  const base = (over) => Object.assign({
+    game: "soccer", pos: "fw", team: "소백 그린", seasons: 12, wins: 40,
+    daesang: 2, bonsang: 3, rookie: 1, ballon: 1, goals: 260, assists: 120, defense: 90,
+    apps: 420, finalOvr: 118, gen: 1, sv: 3, trophies: 6,
+    leagues: "🇰🇷 K리그1 → 🇬🇧 프리미어리그", peakLg: "🇬🇧 프리미어리그", country: "en",
+    title: "⭐ 슈퍼스타", bestTitle: "👑 세계 최고", grade: "🥇 레전드",
+    teamSeasons: 5, trans: 0, wcApps: 2, wcWin: 1,
+  }, over);
+  let P;
+  try {
+    P = makePage("soccer", 7);
+    const hof = [
+      base({ id: "w1001", at: Date.UTC(2026, 7, 12, 10), name: "정우람", score: 3200,
+        word: "후회 없이 뛰었습니다. 다음 세대에게." }),
+      base({ id: "w1002", at: Date.UTC(2026, 7, 14, 11), name: "레오 산체스", score: 2600,
+        word: "무릎이 먼저 은퇴했네요 😂" }),
+      // 🛡️ 방어 확인용 — 이름과 한마디 둘 다 태그예요
+      base({ id: "w1003", at: Date.UTC(2026, 7, 15, 9), name: EVIL, score: 2100, word: EVIL }),
+      base({ id: "w1004", at: Date.UTC(2026, 7, 16, 9), name: "무언", score: 1800 }),   // 한마디 없음
+    ];
+    P.w.localStorage.setItem("grow-hof-v1", JSON.stringify(hof));
+    P.w.localStorage.setItem("grow-hof-synced", "1");
+    add({
+      id: "soccer-hof-word",
+      game: "soccer", url: "soccer/", emoji: "🖊️",
+      title: "명예의 전당 — 한마디와 태그 방어",
+      state: `헌액 4명 · 한마디 3건(그중 1건은 태그를 넣은 것) · 한마디 없는 항목 1건`,
+      check: "① 카드에 <b>🖊️ “…”</b> 줄이 뜨는지, "
+        + "② <b>한마디를 안 남긴 항목</b>(무언)에는 그 줄이 아예 없는지(빈 따옴표가 뜨면 안 돼요), "
+        + "③ 카드를 눌러 연 <b>헌액 카드</b>에도 같은 줄이 뜨는지, "
+        + "④ ⚠️ <b>세 번째 항목</b>은 이름과 한마디에 일부러 <code>&lt;img … onerror&gt;</code>를 "
+        + "넣어 뒀어요 — <b>글자 그대로 보이면 막힌 겁니다.</b> 그림 깨진 아이콘이 뜨거나 "
+        + "경고창이 뜨면 새는 거예요",
+      steps: [
+        "게임이 열리면 <b>🏛️ 명예의 전당</b>으로 들어가 주세요 (제목 화면 아래쪽)",
+        "목록에서 <b>🖊️ 한마디</b> 줄을 확인",
+        "각 카드를 눌러 <b>헌액 카드</b>를 열고 한마디 칸을 확인",
+        "세 번째 항목이 <b>글자로만</b> 보이는지 확인 — 여기가 이번 보안 수정이에요",
+      ],
+      keys: snapshot(P),
+    });
+    P.close();
+    return;
+  } catch (e) {
+    log(`  ⚠️ soccer-hof-word — ${e.message}`);
+    if (P) P.close();
+  }
+}
+
 // ---------- 파일 쓰기 ----------
 /* 이번에 뽑지 않은 시나리오는 기존 파일에서 살려요.
  * 그래야 `node scripts/make-fixtures.js soccer-transfer`처럼 하나만 다시 뽑아도
  * 나머지가 안 사라져요. 같은 id는 이번에 뽑은 게 이깁니다. */
 const ORDER = ["soccer-transfer", "soccer-promote", "soccer-youth-ext", "soccer-semipro", "soccer-report",
-  "soccer-aging", "soccer-hof-month", "soccer-slot",
+  "soccer-aging", "soccer-hof-month", "soccer-slot", "soccer-hof-word",
   "idol-concept", "idol-reveal", "idol-report", "idol-tour", "idol-standings",
   "rookie-posting", "rookie-posting-locked", "rookie-abroad-report", "rookie-cont-series", "rookie-retire"];
 
@@ -2206,6 +2266,7 @@ if (want("soccer-nation-jp", "soccer")) makeSoccerNation(1, {
 if (want("soccer-aging", "soccer")) makeSoccerAging();
 if (want("soccer-hof-month", "soccer")) makeSoccerHofMonths();
 if (want("soccer-slot", "soccer")) makeSoccerSlot();
+if (want("soccer-hof-word", "soccer")) makeSoccerHof();
 if (want("soccer-promo", "soccer")) makeSoccerPromoRelegation("up");
 if (want("soccer-releg", "soccer")) makeSoccerPromoRelegation("down");
 if (want("idol-concept", "idol")) {
