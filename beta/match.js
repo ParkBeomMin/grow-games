@@ -127,6 +127,38 @@ window.Match = (() => {
 
   // ---------- 명예의 전당 (전 세계 공유) ----------
   // 은퇴 시 커리어 엔트리를 hof 테이블에 등록 (실패해도 로컬 저장은 유지)
+  /* 🛡️ **명예의 전당은 남이 올린 값을 그대로 화면에 그려요** (게임들이 innerHTML로 씁니다).
+   *
+   * 이름 칸에 태그를 넣어 올리면 그게 **다른 사람 브라우저에서 실행됩니다.**
+   * 지어낸 걱정이 아니에요 — `<img src=x onerror=…>`를 이름으로 올린 항목이
+   * 명예의 전당 목록의 DOM에 그대로 들어가는 걸 확인했어요. 입력칸의
+   * maxlength는 화면의 예의일 뿐, 개발자 도구를 열면 아무 값이나 올라갑니다.
+   *
+   * 8종이 **같은 표 하나**를 읽으니 여기서 씻습니다. 보내기 전에도, 받아온 뒤에도요 —
+   * 받는 쪽이 진짜 방어선이에요(이미 올라가 있는 값이 있으니까요).
+   * 태그를 이스케이프하지 않고 **지웁니다.** 이 칸들에 <>&"'`가 뜻을 갖는 경우가
+   * 없어서, 지우는 쪽이 그리는 자리마다 이스케이프를 기억하는 것보다 안전해요. */
+  const BAD = /[<>&"'`\\]/g;
+  const MAX_STR = 120, MAX_KEYS = 80, MAX_ARR = 60, MAX_DEPTH = 4;
+  function scrub(v, depth) {
+    const d = depth || 0;
+    if (typeof v === "string") return v.replace(BAD, "").slice(0, MAX_STR);
+    if (typeof v === "number") return Number.isFinite(v) ? v : 0;
+    if (typeof v === "boolean" || v === null || v === undefined) return v;
+    if (d >= MAX_DEPTH) return null;
+    if (Array.isArray(v)) return v.slice(0, MAX_ARR).map((x) => scrub(x, d + 1));
+    if (typeof v === "object") {
+      const out = {};
+      let n = 0;
+      for (const k of Object.keys(v)) {
+        if (++n > MAX_KEYS) break;
+        out[String(k).replace(BAD, "").slice(0, 40)] = scrub(v[k], d + 1);
+      }
+      return out;
+    }
+    return null;
+  }
+
   async function submitHof(game, entry) {
     if (!enabled()) return false;
     try {
@@ -134,11 +166,11 @@ window.Match = (() => {
         method: "POST",
         headers: { ...headers(), Prefer: "resolution=merge-duplicates,return=minimal" },
         body: JSON.stringify([{
-          id: `${game}-${String(entry.id)}`,
+          id: `${game}-${String(entry.id)}`.replace(BAD, "").slice(0, 64),
           game,
-          player: String(entry.name || "").slice(0, 24),
+          player: String(entry.name || "").replace(BAD, "").slice(0, 24),
           score: Math.round(entry.score) || 0,
-          data: entry,
+          data: scrub(entry),
         }]),
       });
       return res.ok;
@@ -173,13 +205,14 @@ window.Match = (() => {
       );
       if (!res.ok) return null;
       const arr = await res.json();
-      return arr.map((r) => r.data).filter(Boolean);
+      // ⚠️ **받는 쪽이 진짜 방어선이에요** — 씻기 전에 올라간 값이 이미 있으니까요
+      return arr.map((r) => scrub(r.data)).filter(Boolean);
     } catch {
       return null;
     }
   }
 
   // cloud.js가 같은 접속 정보를 쓰도록 내보내요 (키를 두 곳에 두지 않으려고요)
-  return { enabled, playerId, submit, roster, register, count, submitHof, fetchHof, backfillHof,
+  return { enabled, playerId, submit, roster, register, count, submitHof, fetchHof, backfillHof, scrub,
            cfg: { url: SUPABASE_URL, key: SUPABASE_ANON_KEY } };
 })();

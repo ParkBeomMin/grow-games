@@ -625,6 +625,7 @@ grant select on public.stats_summary, public.stats_choices, public.stats_daily, 
       const game = activeGame;
       const parts = [
         feverSection(game),
+        wordSection(game),
         insightSection(STATE, game),
         leagueSection(STATE.league, game),
         dailySection(STATE.daily, game),
@@ -634,6 +635,7 @@ grant select on public.stats_summary, public.stats_choices, public.stats_daily, 
       ];
       $("panel").innerHTML = parts.join("").trim() || emptyCard(game);
       wireFever(game);
+      wireWords();
     }
 
     // ---------- 🎉 피버 타임 (⚽ 더 윙어 전용) ----------
@@ -719,6 +721,58 @@ grant select on public.stats_summary, public.stats_choices, public.stats_daily, 
           플레이어에게는 접속할 때, 그리고 <b>화면이 바뀔 때마다</b> 다시 확인돼요 —
           이미 켜 둔 사람에게도 다음 화면에서 배너가 뜹니다.</p>
       </section>`;
+    }
+
+    // ---------- 🖊️ 명예의 전당 한마디 (공개되는 글이라 가릴 수 있어야 해요) ----------
+    /* 헌액할 때 플레이어가 남기는 한 줄이에요. **다른 사람에게 그대로 보입니다.**
+     * 게임 쪽에서 길이를 자르고 태그 글자를 지우지만, 그건 모양의 문제고 **내용**은
+     * 못 거릅니다. 광고가 붙은 서비스라 지울 손잡이가 반드시 있어야 해요.
+     * 지우는 건 fever와 같은 방식 — 비밀번호를 확인하는 RPC(hof_word_clear)로만 됩니다.
+     * (anon 키로는 hof 표를 고칠 수 없어요. UPDATE 정책 자체가 없습니다.) */
+    function wordSection(game) {
+      const rows = (STATE.hofRows || [])
+        .filter((r) => r.game === game && r.data && r.data.word)
+        .map((r) => ({ id: `${game}-${r.data.id}`, name: r.data.name || "?", word: r.data.word, at: r.data.at || 0 }))
+        .sort((a, b) => (b.at || 0) - (a.at || 0))
+        .slice(0, 40);
+      if (!rows.length) return "";
+      return `<section>
+        <h2>🖊️ 헌액 한마디 <span class="sub">${rows.length}건</span></h2>
+        <p class="fv-hint">플레이어가 은퇴할 때 남긴 글이에요. <b>명예의 전당에서 모두에게 보입니다.</b>
+          문제가 되는 글은 여기서 가릴 수 있어요 — 기록 자체는 남고 한마디만 지워집니다.</p>
+        <div class="fv-btns">${
+          `<label class="fv-f">관리 비밀번호<input id="wd-pw" type="password" value="" /></label>`}
+        </div>
+        <p class="fv-msg" id="wd-msg"></p>
+        <table class="tbl"><thead><tr><th>선수</th><th>한마디</th><th>남긴 날</th><th></th></tr></thead>
+        <tbody>${rows.map((r) => `<tr>
+          <td>${esc(r.name)}</td>
+          <td>${esc(r.word)}</td>
+          <td>${r.at ? fmtWhen(new Date(r.at).toISOString()) : "-"}</td>
+          <td><button type="button" class="fv-ghost wd-hide" data-id="${esc(r.id)}">가리기</button></td>
+        </tr>`).join("")}</tbody></table>
+      </section>`;
+    }
+
+    function wireWords() {
+      const btns = document.querySelectorAll(".wd-hide");
+      if (!btns.length) return;
+      const msg = (t, bad) => {
+        const el = $("wd-msg");
+        if (el) { el.textContent = t; el.style.color = bad ? "var(--bad)" : "var(--accent)"; }
+      };
+      btns.forEach((b) => {
+        b.onclick = async () => {
+          const pw = ($("wd-pw") || {}).value || "";
+          if (!pw) return msg("관리 비밀번호를 넣어주세요", true);
+          if (!confirm("이 한마디를 가릴까요? 플레이어 화면에서 사라져요.")) return;
+          msg("가리는 중…");
+          const err = await feverRpc("hof_word_clear", { p_pw: pw, p_id: b.dataset.id });
+          if (err) return msg(`못 가렸어요 — ${err}`, true);
+          b.closest("tr").remove();
+          msg("✅ 가렸어요");
+        };
+      });
     }
 
     async function loadFever() {
