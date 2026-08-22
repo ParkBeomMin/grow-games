@@ -49,7 +49,8 @@ console.log("=== ② 오가는 길에서 씻는가 (8종이 같은 길을 써요
     check(long.w.length <= 120, `긴 문자열을 자른다 (${long.w.length}자)`);
   }
   check(/data: scrub\(entry\)/.test(MATCH), "보낼 때 씻는다");
-  check(/scrub\(r\.data\)/.test(MATCH), "**받을 때도** 씻는다 — 이미 올라가 있는 값이 진짜 위험이에요");
+  const fetchBody = (MATCH.match(/async function fetchHof\(game\) \{[\s\S]*?\n {2}\}/) || [""])[0];
+  check(/scrub\(/.test(fetchBody), "**받을 때도** 씻는다 — 이미 올라가 있는 값이 진짜 위험이에요");
 }
 
 // ---------- 페이지 ----------

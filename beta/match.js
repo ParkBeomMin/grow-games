@@ -195,21 +195,47 @@ window.Match = (() => {
     if (allOk) localStorage.setItem("grow-hof-synced", "1"); // 전부 성공했을 때만 완료 처리
   }
 
-  // 해당 게임의 전 세계 명예의 전당 (점수 내림차순, 최대 100)
+  /* 해당 게임의 전 세계 명예의 전당.
+   *
+   * ⚠️ **점수순 100명만 가져오면 달별 분류가 죽어요.**
+   * 제보: "명예의 전당이 지금 상용에 월별 분류가 사라졌나???"
+   * 사라진 게 아니라 **한 달치만 실려 있었어요.** 실측(축구 202명):
+   * 7월 15명의 최고 점수가 2995인데 상위 100명의 컷이 3014였습니다 —
+   * 19점 차로 7월이 통째로 빠졌고, 달이 하나뿐이라 탭이 안 떴어요.
+   * 그리고 그 15명은 **어느 탭으로도 볼 수 없었습니다.**
+   *
+   * "최근 순으로 한 번 더" 가져와도 안 풀려요 — 7월은 점수도 낮고 최근도 아니라
+   * 두 갈래 어디에도 안 걸립니다. 지난달은 **영원히 그렇습니다.**
+   * 점수는 오래 쌓일수록 커지니, 이 컷은 시간이 갈수록 지난 달을 밀어내요.
+   *
+   * 그래서 **달마다 상위를 뽑아 오는 뷰**(hof_month_top · 달별 50명)를 씁니다.
+   * 달 탭이 제 일을 하려면 각 달이 목록에 실려 있어야 해요.
+   * 역대 상위 100명도 같이 가져와 합쳐요 — 뷰의 달별 컷에 밀린 옛 전설이
+   * 전체 탭에서 사라지면 안 되니까요.
+   * 뷰가 없는 환경(SQL을 아직 안 돌린 곳)에서는 점수순 하나로 굴러갑니다. */
+  const HOF_LIMIT = 100, HOF_MONTH_LIMIT = 600;
   async function fetchHof(game) {
     if (!enabled()) return null;
-    try {
-      const res = await fetch(
-        `${SUPABASE_URL}/rest/v1/hof?game=eq.${game}&select=data&order=score.desc&limit=100`,
-        { headers: headers() }
-      );
-      if (!res.ok) return null;
-      const arr = await res.json();
-      // ⚠️ **받는 쪽이 진짜 방어선이에요** — 씻기 전에 올라간 값이 이미 있으니까요
-      return arr.map((r) => scrub(r.data)).filter(Boolean);
-    } catch {
-      return null;
+    const q = async (table, order, limit) => {
+      try {
+        const res = await fetch(
+          `${SUPABASE_URL}/rest/v1/${table}?game=eq.${game}&select=id,data&order=${order}&limit=${limit}`,
+          { headers: headers() }
+        );
+        return res.ok ? await res.json() : null;
+      } catch { return null; }
+    };
+    const [top, months] = await Promise.all([
+      q("hof", "score.desc", HOF_LIMIT),
+      q("hof_month_top", "score.desc", HOF_MONTH_LIMIT),
+    ]);
+    if (!top && !months) return null;
+    const byId = new Map();
+    for (const r of (top || []).concat(months || [])) {
+      if (r && r.data && !byId.has(r.id)) byId.set(r.id, r.data);
     }
+    // ⚠️ **받는 쪽이 진짜 방어선이에요** — 씻기 전에 올라간 값이 이미 있으니까요
+    return [...byId.values()].map((d) => scrub(d)).filter(Boolean);
   }
 
   // cloud.js가 같은 접속 정보를 쓰도록 내보내요 (키를 두 곳에 두지 않으려고요)

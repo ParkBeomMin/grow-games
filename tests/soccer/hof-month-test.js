@@ -166,6 +166,63 @@ const cardNames = () => cardEls().map((c) => c.querySelector(".hof-name").textCo
   check(/e\.at != null \? Number\(e\.at\) : Number\(String\(e\.id \|\| ""\)\.replace/.test(CAREER),
     "at이 없으면 id에서 시각을 꺼낸다 — 옛 기록을 통째로 버리지 않아요");
 
+  // ---------- ⑨ 지난 달이 목록에 실려 오는가 (제보) ----------
+  console.log("=== ⑨ 지난 달을 가져오는가 ===");
+  {
+    /* 제보: "명예의 전당이 지금 상용에 월별 분류가 사라졌나???"
+     *
+     * 사라진 게 아니라 **한 달치만 실려 있었어요.** 원격에서 점수 상위 100명만
+     * 가져왔는데, 실측(축구 202명) 7월 최고 점수가 2995이고 상위 100명의 컷이
+     * 3014였습니다 — 19점 차로 7월이 통째로 빠졌고, 달이 하나뿐이라 탭이 안 떴어요.
+     * 그 15명은 **어느 탭으로도 볼 수 없었습니다.**
+     *
+     * "최근 순으로 한 번 더"로는 안 풀려요 — 지난 달은 점수도 낮고 최근도 아니라
+     * 두 갈래 어디에도 안 걸립니다. 그래서 **달마다 상위를 뽑는 뷰**를 씁니다. */
+    const MATCH = fs.readFileSync("/workspace/grow-games/beta/match.js", "utf8");
+    const body = (MATCH.match(/const HOF_LIMIT = [\s\S]*?async function fetchHof\(game\) \{[\s\S]*?\n {2}\}/) || [""])[0];
+    check(!!body, "fetchHof를 소스에서 찾았다");
+    check(/hof_month_top/.test(body), "달마다 상위를 뽑는 뷰에서도 가져온다");
+    check(/hof["'`]?, ?["'`]score\.desc/.test(body) || /q\("hof", "score\.desc"/.test(body),
+      "역대 점수 상위도 함께 가져온다 — 뷰의 달별 컷에 밀린 옛 전설이 사라지면 안 돼요");
+
+    /* 소스에서 뽑아 **실제로 굴려요.** "뷰 이름이 적혀 있다"만 보면 배선이 죽어도 통과해요. */
+    const calls = [];
+    const run = new Function("fetch", "SUPABASE_URL", "headers", "enabled", "scrub", "Promise",
+      `${body} return fetchHof;`);
+    const rows = {
+      hof: [{ id: "a", data: { id: "w1", name: "8월왕", score: 9000 } }],
+      hof_month_top: [
+        { id: "a", data: { id: "w1", name: "8월왕", score: 9000 } },          // 겹쳐요
+        { id: "b", data: { id: "w2", name: "7월사람", score: 100 } },
+      ],
+    };
+    const fakeFetch = (url) => {
+      const table = String(url).split("/rest/v1/")[1].split("?")[0];
+      calls.push(table);
+      return Promise.resolve({ ok: true, json: () => Promise.resolve(rows[table] || []) });
+    };
+    const fetchHof = run(fakeFetch, "https://x.test", () => ({}), () => true, (d) => d, Promise);
+    const out = await fetchHof("soccer");
+    console.log(`   두드린 곳 ${calls.join(" · ")} → ${out.length}명 (${out.map((x) => x.name).join(", ")})`);
+    check(calls.includes("hof") && calls.includes("hof_month_top"), "두 곳을 다 두드린다");
+    check(out.length === 2, `겹치는 사람은 한 번만 담는다 (${out.length}명)`);
+    check(out.some((x) => x.name === "7월사람"), "지난 달 사람이 실려 온다 — 여기가 이번 제보예요");
+
+    // 뷰가 아직 없는 환경(SQL 안 돌린 곳)에서도 살아야 해요
+    const half = run((url) => {
+      const table = String(url).split("/rest/v1/")[1].split("?")[0];
+      return Promise.resolve(table === "hof_month_top"
+        ? { ok: false, json: () => Promise.resolve(null) }
+        : { ok: true, json: () => Promise.resolve(rows.hof) });
+    }, "https://x.test", () => ({}), () => true, (d) => d, Promise);
+    const out2 = await half("soccer");
+    check(out2 && out2.length === 1, `뷰가 없어도 점수순 하나로 굴러간다 (${out2 ? out2.length : "null"}명)`);
+
+    const dead = run(() => Promise.resolve({ ok: false, json: () => Promise.resolve(null) }),
+      "https://x.test", () => ({}), () => true, (d) => d, Promise);
+    check((await dead("soccer")) === null, "둘 다 실패하면 null — 로컬 기록으로 넘어가요");
+  }
+
   console.log(fail ? `\n❌ ${fail}건 실패` : "\n✅ 통과");
   w.close();
   process.exit(fail ? 1 : 0);
