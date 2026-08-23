@@ -278,8 +278,17 @@ guard("⑥ 개인 순위와 같은 사람", () => {
   const cutAll = Object.values(all).flat().filter((x) => !x.me)
     .map((x) => x.str).sort((a, b) => b - a)[race.length - 1] || 0;
   console.log(`   우리 클럽 최고 ${Math.round(myBest)} · 리그 ${race.length}위 선 ${Math.round(cutAll)}`);
-  check(mine.length === Squad.startingXIOf(S().group).length - 1,
-    `우리 클럽도 선발 전원이 들어온다 (${mine.length}명 · 나 제외) — 자리를 챙기는 게 아니라 리그 전체가 다 들어와서예요`);
+  /* ⚠️ 우리 클럽 줄은 **그 경기에 실제로 뛴 11명**(matchXI)에서 나와요 —
+   * 다른 클럽만 실력 순 선발(startingXIOf)입니다.
+   * 그래서 🪑 **내가 벤치인 주에는 11명이 다 동료**예요(내 자리를 동료가 채우니까).
+   * `startingXIOf(...) - 1`로 재면 그런 주에만 빨간불이 떴습니다 — 실제로
+   * 열 번에 한 번쯤 흔들렸어요. 화면이 쓰는 그 명단을 그대로 봐요. */
+  const myXI = Squad.matchXI();
+  const expectMine = myXI.length - (myXI.some((x) => x.me) ? 1 : 0);
+  check(mine.length === expectMine,
+    `우리 클럽도 선발 전원이 들어온다 (${mine.length}명 · 기대 ${expectMine}명`
+    + `${myXI.some((x) => x.me) ? " · 나 제외" : " · 🪑 이번 주는 내가 벤치라 전원이 동료"})`
+    + " — 자리를 챙기는 게 아니라 리그 전체가 다 들어와서예요");
 });
 
 // ---------- ⑦ 클럽이 바뀌면 새로 ----------

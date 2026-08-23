@@ -729,7 +729,13 @@ window.WingerWorldCup = (() => {
       for (const x of sq[nat]) all.push({ p: x, nat, out: (w.natOut || []).includes(nat) });
     }
     const key = FACE_KEY[k] || FACE_KEY.p;
-    all.sort((a, b) => key(b.p) - key(a.p) || (b.p.g || 0) - (a.p.g || 0) || b.p.str - a.p.str);
+    const ties = FACE_TIE[k] || FACE_TIE.p;
+    all.sort((a, b) => {
+      const d0 = key(b.p) - key(a.p);
+      if (d0) return d0;
+      for (const t of ties) { const d = t(b.p) - t(a.p); if (d) return d; }
+      return (b.p.str || 0) - (a.p.str || 0);
+    });
     return all;
   }
   /* 부문 — 리그 개인 순위와 같은 결이에요. **포지션이 아니라 숫자로** 줄을 세워요.
@@ -747,6 +753,32 @@ window.WingerWorldCup = (() => {
   };
   const FACE_VAL = { p: (x) => `${x.g || 0}⚽ ${x.a || 0}🅰️`, g: (x) => x.g || 0, a: (x) => x.a || 0,
     d: (x) => x.d || 0, r: (x) => faceAvg(x).toFixed(2) };
+
+  /* ⚖️ **동률일 때 누가 위인가** — 순위표와 수상이 이걸 **같이** 씁니다.
+   *
+   * 제보(스크린샷): 득점 순위표 1위가 나(3골)인데 🥇 골든부츠는 3골인 다른 선수가
+   * 가져갔어요. **표는 `골 → 실력` 순으로 세우고, 수상은 `골 → 도움` 순으로 정하고
+   * 있었습니다.** 자가 둘이면 화면과 판정이 다른 말을 해요 — 이 저장소의 단골 병입니다.
+   *
+   * 규칙은 실제 대회를 따라요: 골든부츠는 동률이면 **도움**이 많은 쪽,
+   * 골든월은 **적은 경기로 더 막은** 쪽이 아니라 많이 뛴 쪽(출전),
+   * 골든볼은 평점이 같으면 생산량(골·도움)으로 가릅니다.
+   * 마지막 자는 실력 — 여기까지 같으면 우열이 없으니 흔들리지 않을 값을 씁니다. */
+  const FACE_TIE = {
+    g: [(x) => x.a || 0, (x) => x.apps || 0],
+    a: [(x) => x.g || 0, (x) => x.apps || 0],
+    d: [(x) => x.apps || 0, (x) => x.g || 0],
+    r: [(x) => (x.g || 0) * 2 + (x.a || 0), (x) => x.apps || 0],
+    p: [(x) => x.g || 0, (x) => x.apps || 0],
+  };
+  // 동률일 때 무엇으로 갈랐는지 화면에 적어요 — 안 적으면 "왜 쟤가 위지"가 됩니다
+  const TIE_NOTE = {
+    g: "골이 같으면 🅰️ 도움이 많은 선수가 위예요",
+    a: "도움이 같으면 ⚽ 골이 많은 선수가 위예요",
+    d: "수비가 같으면 출전 경기가 많은 선수가 위예요",
+    r: "평점이 같으면 골·도움이 많은 선수가 위예요",
+    p: "같으면 ⚽ 골이 많은 선수가 위예요",
+  };
   let faceTab = "r";
   // 화면에 그릴 줄 — 상위 N명, 내가 밖이면 내 줄을 따로 알려줘요
   function faceRows(k) {
@@ -780,9 +812,14 @@ window.WingerWorldCup = (() => {
      * 한 표에 칸을 다 늘어놓으면 좁은 화면에서 숫자가 뭉갭니다(리그에서 겪었어요). */
     const tabs = `<div class="race-tabs wc-face-tabs">${FACE_TABS.map(([k, label]) =>
       `<button type="button" class="race-tab${k === faceTab ? " on" : ""}" data-fk="${k}">${label}</button>`).join("")}</div>`;
+    /* ⚖️ 동률이 실제로 있을 때만 규칙을 적어요 — 늘 적으면 잔소리가 됩니다.
+     * 1위와 같은 값을 가진 사람이 또 있으면, 왜 순서가 그런지 보여야 해요. */
+    const key = FACE_KEY[faceTab] || FACE_KEY.p;
+    const tied = top.length > 1 && key(top[0].p) === key(top[1].p);
+    const note = tied ? `<p class="wc-tie-note">⚖️ ${TIE_NOTE[faceTab] || TIE_NOTE.p}</p>` : "";
     return tabs + `<table class="rank-table season-standings"><thead>
         <tr><th>#</th><th>선수 · 국가</th><th>${unit}</th></tr></thead>
-      <tbody>${top.map(line).join("")}${pin}</tbody></table>` + recordHTML();
+      <tbody>${top.map(line).join("")}${pin}</tbody></table>` + note + recordHTML();
   }
   /* 탭을 누르면 그 자리에서 다시 그려요. 화면을 그린 쪽이 이걸 한 번 불러 줍니다. */
   function wireFaceTabs(box, redraw) {
@@ -852,18 +889,20 @@ window.WingerWorldCup = (() => {
     const w = wc();
     const rows = faces();
     if (!w || !rows.length) return [];
-    const boot = rows.slice().sort((a, b) => (b.p.g || 0) - (a.p.g || 0) || (b.p.a || 0) - (a.p.a || 0))[0];
+    /* ⚠️ **순위표의 1위를 그대로 데려와요.** 여기서 다시 줄을 세우면 자가 둘이 되고,
+     * 화면의 1위와 수상자가 갈립니다 — 실제로 그렇게 갈렸어요(제보). */
+    const boot = faces("g")[0];
     /* 🏅 골든볼은 **평점 1위**가 가져가요.
      * 실제 월드컵의 골든볼은 기자단 투표라 숫자로 정해지지 않지만, 이 게임에는
      * ⭐ 평점이라는 자가 이미 있고 **모두가 같은 방식으로** 받아요.
      * 예전에는 기여 + "실력에서 뽑은 가짜 평점"이었어요 — 그건 지어낸 값이었습니다. */
-    const ball = rows.slice().sort((a, b) => faceAvg(b.p) - faceAvg(a.p) || faceScore(b) - faceScore(a))[0];
+    const ball = faces("r")[0];
     const out = [];
     if (boot) out.push({ id: "boot", name: "🥇 골든부츠", who: boot.p.name, nat: boot.nat, me: !!boot.p.me, val: `${boot.p.g || 0}골` });
     if (ball) out.push({ id: "ball", name: "🏅 골든볼", who: ball.p.name, nat: ball.nat, me: !!ball.p.me, val: `평점 ${faceAvg(ball.p).toFixed(2)}` });
     /* 🛡️ 수비수에게도 들 것이 하나는 있어야 해요. 이게 없으면 대회 내내 1위를 해도
      * 아무 일도 안 일어납니다 — 리그에는 🛡️ 리그 최고 수비수가 이미 있어요. */
-    const wall = rows.slice().sort((a, b) => (b.p.d || 0) - (a.p.d || 0) || (b.p.apps || 0) - (a.p.apps || 0))[0];
+    const wall = faces("d")[0];
     if (wall && (wall.p.d || 0) > 0) out.push({ id: "wall", name: "🛡️ 골든월", who: wall.p.name, nat: wall.nat, me: !!wall.p.me, val: `수비 ${wall.p.d || 0}회` });
     return out;
   }
@@ -1507,9 +1546,14 @@ window.WingerWorldCup = (() => {
     "우리가 해냈어. 자네가 있어서 가능했네.",
     "이 트로피는 오래 갈 걸세. 자네 이름과 함께.",
   ];
+  /* ⚠️ **여기에 없는 상을 받으면 "undefined"가 화면에 찍혀요.**
+   * 제보(스크린샷): "이 트로피는 오래 갈 걸세. 자네 이름과 함께. undefined"
+   * 🛡️ 골든월을 나중에 만들면서 이 표에만 안 넣었습니다. 아래 `?? ""`가 두 번째
+   * 방어선이에요 — 다음에 상을 하나 더 만들어도 화면에 undefined가 안 뜹니다. */
   const SAY_AWARD = {
     boot: "이 대회 최고의 골잡이였어.",
     ball: "이 대회 최고의 선수였네. 누가 봐도.",
+    wall: "자네 뒤가 있어서 앞이 편했네.",
   };
 
   function reportLine() {
@@ -1542,7 +1586,7 @@ window.WingerWorldCup = (() => {
         : h.result === "final" ? pick(SAY_FINAL)
         : h.result === "semi" ? pick(SAY_SEMI)
         : pick(good ? SAY_GROUP_OK : SAY_GROUP);
-      if (aw.length) say += ` ${SAY_AWARD[aw[0]]}`;
+      if (aw.length && SAY_AWARD[aw[0]]) say += ` ${SAY_AWARD[aw[0]]}`;
       fact = `${LABEL[h.result]} · ${h.apps}경기 ⚽${h.g} 🅰️${h.a}`
         + (h.benched ? ` · 🪑 ${h.benched}경기 결장` : "")
         + (aw.length ? ` · ${aw.map((id) => AW_NAME[id] || id).join(" · ")}` : "")
