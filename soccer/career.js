@@ -212,8 +212,30 @@ window.WingerCareer = (() => {
     { id: "wg8", name: "무명 유망주 벤치", bp: 180 },
   ];
 
+  /* 🛡️ 명예의 전당 카드는 **남이 올린 값**을 innerHTML로 그려요. match.js가 받는
+   * 길에서 한 번 씻지만, 그리는 자리에서도 막습니다 — 로컬에 남은 옛 항목과
+   * 씻기 전에 저장된 값이 있으니까요. 방어선은 둘이라야 하나가 새도 버팁니다. */
+  const esc = (v) => String(v == null ? "" : v)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+
   const loadHof = () => JSON.parse(localStorage.getItem(HOF_KEY) || "[]");
   const saveHof = (list) => localStorage.setItem(HOF_KEY, JSON.stringify(list));
+
+  /* 아직 안 올린 헌액을 원격으로 보내요.
+   * `sent`가 **정확히 false**인 것만 봅니다 — 이 칸이 없는 옛 항목은 만들 때
+   * 이미 올라갔어요. undefined를 "안 올림"으로 보면 올릴 수 없는 항목(같은 id는
+   * 덮어쓸 수 없어요)을 열 때마다 다시 두드리게 됩니다. */
+  async function flushHof() {
+    if (!window.Match) return;
+    const list = loadHof();
+    let changed = false;
+    for (const e of list) {
+      if (e.game !== "soccer" || e.sent !== false) continue;
+      if (await window.Match.submitHof("soccer", e)) { e.sent = true; changed = true; }
+    }
+    if (changed) saveHof(list);
+  }
   const loadBattle = () => JSON.parse(localStorage.getItem(BATTLE_KEY) || "{}");
   // 대전 기록도 백업 대상(keysOf)이에요. touch()로 표시해두지 않으면 다음 pull에
   // 조용히 덮여 사라져요.
@@ -3162,6 +3184,24 @@ window.WingerCareer = (() => {
       + (moves ? `    🔁 이적 ${(S.moves || []).length}회 — ${moves}\n` : "");
   }
 
+  /* 🖊️ **은퇴 한마디** — 헌액할 때 선수가 남기는 한 줄이에요.
+   *
+   * 커리어 숫자는 다 남는데 **그 커리어가 어땠는지는 아무도 안 적었어요.**
+   * 명예의 전당이 성적표만 있고 목소리가 없는 표였습니다.
+   *
+   * ⚠️ 이건 **다른 사람에게 보이는 글**이에요. 그래서 세 가지를 지킵니다.
+   *   · 길이를 자르고(WORD_MAX), 줄바꿈·제어문자를 지워요 — 카드 한 줄에 들어가야 해요
+   *   · 태그로 쓰이는 글자를 지워요 — match.js가 또 씻고, 그리는 쪽에서 또 이스케이프해요
+   *   · **안 써도 돼요.** 비워 두면 그 줄이 아예 안 그려집니다 (빈 따옴표는 더 쓸쓸해요)
+   * 가리는 손잡이는 관리 화면에 있어요 — 공개되는 글이라 지울 방법이 있어야 합니다. */
+  const WORD_MAX = 60;
+  const cleanWord = (v) => String(v == null ? "" : v)
+    .replace(/[\u0000-\u001f\u007f]/g, " ")        // 줄바꿈·제어문자
+    .replace(/[<>&"'`\\]/g, "")                     // 태그로 쓰이는 글자
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, WORD_MAX);
+
   function enshrine() {
     const c = S.career || { years: [], wins: 0, daesang: 0, bonsang: 0, rookie: 0 };
     const score = careerScore();
@@ -3209,10 +3249,15 @@ window.WingerCareer = (() => {
       wcBall: c.wcBall || 0, wcBoot: c.wcBoot || 0, wcWall: c.wcWall || 0,
       nextGrade: nextGrade(score),
     };
+    /* ⚠️ **바로 안 올려요.** hof 표에는 UPDATE 정책이 없어서(읽기·넣기만 열려 있어요)
+     * 같은 id로 다시 올려도 **덮어쓸 수가 없습니다.** 아무나 남의 헌액을 고칠 수 있게
+     * 되는 게 싫어서 일부러 그렇게 둔 거예요. 그래서 🖊️ 한마디를 받고 **한 번에**
+     * 올립니다. `sent: false`는 "아직 안 올린 항목"이라는 표시예요 —
+     * 이 칸이 없는 옛 항목은 그때 이미 올라간 것이라 건드리지 않아요. */
+    entry.sent = false;
     const hof = loadHof();
     hof.push(entry);
     saveHof(hof);
-    if (window.Match) window.Match.submitHof("soccer", entry);
     if (window.Stats) Stats.log("retire", {
       years: entry.seasons, wins: entry.wins, score: entry.score,
       // "어디까지 갔나" 분포를 보려면 마지막 리그와 트로피 수가 있어야 해요
@@ -3245,16 +3290,47 @@ window.WingerCareer = (() => {
     moveNote = null;   // 한 번만 보여줘요 — 다음에 결산을 열면 안 뜹니다
     const act = $("career-actions");
     act.innerHTML = "";
+    /* 🖊️ 한마디는 **카드를 보고 나서** 씁니다 — 자기 커리어를 읽은 뒤라야 할 말이 생겨요.
+     * 그래서 헌액은 이미 끝나 있고, 남기면 같은 id로 다시 올려 덮어씁니다(upsert). */
+    const wordBox = document.createElement("div");
+    wordBox.className = "hof-word-box";
+    wordBox.innerHTML = `
+      <div class="hof-word-title">🖊️ 마지막으로 한마디 남기고 갈까요?</div>
+      <div class="hof-word-sub">명예의 전당 카드에 함께 남아요 · 안 써도 괜찮아요</div>
+      <input id="hof-word" type="text" maxlength="${WORD_MAX}" placeholder="예) 후회 없이 뛰었습니다" />
+      <button class="mini-btn" id="btn-hof-word">남기기</button>
+      <div class="hof-word-done" id="hof-word-done"></div>`;
+    act.appendChild(wordBox);
+    const wordInput = $("hof-word");
+    const wordDone = $("hof-word-done");
+    $("btn-hof-word").onclick = () => {
+      const word = cleanWord(wordInput.value);
+      if (!word) { wordDone.textContent = "한 글자라도 적어 주세요."; return; }
+      entry.word = word;
+      /* 로컬 기록에도 같이 넣어요 — 명예의 전당은 로컬과 원격을 겹쳐 보여줘서,
+       * 한쪽에만 넣으면 내 화면과 남의 화면이 다른 말을 합니다. */
+      const list = loadHof();
+      const at = list.findIndex((x) => x.id === entry.id);
+      if (at >= 0) list[at] = entry; else list.push(entry);
+      saveHof(list);
+      flushHof();                       // 한마디까지 담아서 **한 번에** 올라가요
+      wordInput.value = word;
+      wordInput.disabled = true;
+      $("btn-hof-word").disabled = true;
+      wordDone.textContent = `“${word}” — 카드에 남겼어요`;
+    };
     const hofBtn = document.createElement("button");
     hofBtn.className = "btn btn-primary";
     hofBtn.textContent = "🏛️ 명예의 전당 보기";
-    hofBtn.onclick = showHof;
+    hofBtn.onclick = showHof;              // showHof가 안 올린 항목을 올려요
     act.appendChild(hofBtn);
     S = null;
     const again = document.createElement("button");
     again.className = "btn btn-ghost";
     again.textContent = "🔁 새 선수 키우기";
-    again.onclick = () => location.reload();
+    /* 한마디를 안 쓰고 바로 나가는 사람이 훨씬 많아요 — 여기서도 올려 보내요.
+     * 못 올려도 `sent: false`로 남아서 다음에 명예의 전당을 열 때 다시 갑니다. */
+    again.onclick = () => { flushHof().finally(() => location.reload()); };
     act.appendChild(again);
     show("screen-career");
   }
@@ -3264,6 +3340,7 @@ window.WingerCareer = (() => {
     box.innerHTML = `<p class="hint">불러오는 중…</p>`;
     show("screen-hof");
     if (window.Match) await window.Match.backfillHof();
+    await flushHof();                      // 은퇴식에서 못 올린 게 있으면 여기서 올라가요
     const local = loadHof().filter((e) => e.game === "soccer");
     const localIds = new Set(local.map((e) => e.id));
     let list = local, global = false;
@@ -3348,10 +3425,12 @@ window.WingerCareer = (() => {
       div.innerHTML = `
         <div class="hof-face-emoji">⚽</div>
         <div class="hof-info">
-          <div class="hof-name">${i + 1}. ${e.gen > 1 ? `<span class="hof-gen">${e.gen}세</span> ` : ""}${e.name} <span class="hof-grade">${e.grade}</span></div>
-          ${e.team} · ${e.seasons}시즌${e.goals != null ? ` · ⚽${e.goals} 🅰️${e.assists || 0}${e.defense != null ? ` 🛡️${e.defense}` : ""}` : ""} · 🏅MOM ${e.wins} · 🏆${e.daesang + e.bonsang} · 점수 ${hofScore(e)}
+          <div class="hof-name">${i + 1}. ${e.gen > 1 ? `<span class="hof-gen">${e.gen}세</span> ` : ""}${esc(e.name)} <span class="hof-grade">${esc(e.grade)}</span></div>
+          ${esc(e.team)} · ${e.seasons}시즌${e.goals != null ? ` · ⚽${e.goals} 🅰️${e.assists || 0}${e.defense != null ? ` 🛡️${e.defense}` : ""}` : ""} · 🏅MOM ${e.wins} · 🏆${e.daesang + e.bonsang} · 점수 ${hofScore(e)}
           ${/* 🌍 밟아 온 리그 — 옛 항목에는 없어요(읽는 쪽에서 건너뜁니다). */
-            e.leagues ? `<div class="hof-lg">🌍 ${e.leagues}</div>` : ""}
+            e.leagues ? `<div class="hof-lg">🌍 ${esc(e.leagues)}</div>` : ""}
+          ${/* 🖊️ 한마디 — 카드를 안 열어도 보여야 이 칸이 살아 있어요 */
+            e.word ? `<div class="hof-word">🖊️ “${esc(e.word)}”</div>` : ""}
           ${/* 🌏 월드컵 — 이 필드도 나중에 생겼어요. 없으면 줄 자체를 안 그려요. */
             e.wcApps ? `<div class="hof-lg">🌏 월드컵 ${e.wcApps}회`
               + `${e.wcWin ? ` · 🏆 우승 ${e.wcWin}` : ""}`
@@ -3380,7 +3459,8 @@ window.WingerCareer = (() => {
    * "기록이 없다"와 "0이었다"가 같은 얼굴이 돼요. */
   function openHofCard(e, rank, mine) {
     if (document.querySelector(".hof-overlay")) return;
-    const row = (k, v) => (v ? `<div class="hofd-row"><span>${k}</span><b>${v}</b></div>` : "");
+    // 값은 전부 씻어서 넣어요 — 라벨(k)은 코드가 쓰는 말이라 그대로 둡니다
+    const row = (k, v) => (v ? `<div class="hofd-row"><span>${k}</span><b>${esc(v)}</b></div>` : "");
     const awards = [
       e.trophies ? `🏆 우승 ${e.trophies}` : "",
       e.ballon ? `🏅 발롱도르 ${e.ballon}` : "",
@@ -3401,8 +3481,8 @@ window.WingerCareer = (() => {
     wrap.innerHTML = `<div class="av-modal hofd-modal">
       <div class="hofd-head">
         <div class="hofd-emoji">⚽</div>
-        <div class="hofd-name">${e.gen > 1 ? `<span class="hof-gen">${e.gen}세</span> ` : ""}${e.name}${mine ? ` <span class="hofd-me">내 선수</span>` : ""}</div>
-        <div class="hofd-grade">${e.grade || ""}</div>
+        <div class="hofd-name">${e.gen > 1 ? `<span class="hof-gen">${e.gen}세</span> ` : ""}${esc(e.name)}${mine ? ` <span class="hofd-me">내 선수</span>` : ""}</div>
+        <div class="hofd-grade">${esc(e.grade)}</div>
         <div class="hofd-rank">${hofTab === "all" ? "전체" : hofTabs().find((t) => t.key === hofTab).label} ${rank}위 · 커리어 점수 ${hofScore(e)}</div>
       </div>
       <div class="hofd-body">
@@ -3420,6 +3500,8 @@ window.WingerCareer = (() => {
         ${row("🌏 월드컵", wc)}
         ${row("🔮 초월", e.trans ? `${e.trans}회` : "")}
         ${row("🗓️ 헌액", hofDateText(e))}
+        ${/* 🖊️ 한마디 — 없는 항목이 훨씬 많아요(나중에 생긴 칸이라). 없으면 줄을 안 그려요. */
+          e.word ? `<div class="hofd-word">🖊️ “${esc(e.word)}”</div>` : ""}
       </div>
       <div class="av-actions"><button class="btn btn-primary" id="btn-hofd-close">닫기</button></div>
     </div>`;
@@ -3670,7 +3752,7 @@ window.WingerCareer = (() => {
       cupEntry, cupName, CUP_SPOTS, myTableRank, applyPromotion,
       TRANSFER_MIN_YEAR, PROMOTE_HYPE, OFFERS_PER_LEAGUE, transferFee, transferOffers, canTransfer,
       DOWNGRADE_FEE, LOYALTY_FEE, leftBefore, moveLog, careerScore, shortClub, clubCell,
-      clubOfYear, fillClubs,
+      clubOfYear, fillClubs, enshrine, cleanWord, WORD_MAX, esc, flushHof,
       state: () => S,
     },
   };

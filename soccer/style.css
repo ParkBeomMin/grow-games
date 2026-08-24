@@ -414,6 +414,25 @@ body {
 .bench-card { text-align: center; padding: .6rem .4rem; }
 .bench-card .draft-emoji { font-size: 2.4rem; }
 .bench-card .tour-line { color: var(--dim); font-size: .82rem; margin: .3rem 0 .5rem; }
+/* ⚖️ 동률 규칙 한 줄 — 표 바로 아래, 본문보다 작고 흐리게 */
+.wc-tie-note { font-size: .78rem; color: var(--muted); margin: .35rem .2rem .1rem; text-align: center; }
+/* 🖊️ 은퇴 한마디 — 남기는 칸(은퇴식)과 남은 줄(명예의 전당) */
+.hof-word-box { background: var(--card2, rgba(255,255,255,.04)); border-radius: 12px;
+  padding: .7rem .7rem .6rem; margin: .2rem 0 .6rem; text-align: center; }
+.hof-word-title { font-size: .95rem; font-weight: 600; }
+.hof-word-sub { font-size: .76rem; color: var(--muted); margin: .15rem 0 .5rem; }
+.hof-word-box input { width: 100%; box-sizing: border-box; padding: .5rem .6rem; margin-bottom: .4rem;
+  border-radius: 8px; border: 1px solid rgba(255,255,255,.18); background: rgba(0,0,0,.25);
+  color: var(--text); font-size: .92rem; text-align: center; }
+.hof-word-box input:disabled { opacity: .7; }
+.hof-word-done { font-size: .8rem; color: var(--accent); margin-top: .35rem; min-height: 1em; }
+.hof-word { font-size: .82rem; color: var(--accent); margin-top: .15rem;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hofd-word { margin: .5rem .1rem .1rem; padding: .5rem .6rem; border-radius: 10px;
+  background: rgba(255,255,255,.05); color: var(--text); font-size: .9rem; line-height: 1.5; text-align: center; }
+/* 🪑 대표팀 벤치 카드 — 순위표를 품어서 조금 넓게 잡아요 */
+.wc-bench .rank-table { margin: .55rem 0 .2rem; }
+.wc-bench .tour-line b { color: var(--text); }
 /* 🗣️ 감독 한마디 — 벤치인 이유는 숫자가 아니라 말로 전해요 */
 .coach-say { color: var(--text); font-size: .9rem; line-height: 1.55; margin: .4rem .2rem .55rem; }
 /* 👥 스쿼드 레이어 — base.css의 .av-modal 껍데기를 빌려 씁니다 */

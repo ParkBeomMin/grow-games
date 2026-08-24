@@ -60,6 +60,56 @@ window.WingerWorldCup = (() => {
     return row ? row[0] : 78;
   }
 
+  /* 🎖️ **대표팀 안에서의 선발 경쟁** (설계 D3 — 3단계)
+   *
+   * 1·2단계는 "발탁 = 전 경기 선발"로 냈어요. 그래야 대회가 그것만으로 완결되고,
+   * 4년에 한 번뿐인 첫 대회가 "벤치에서 세 경기 보고 왔다"가 되지 않으니까요.
+   * 이제 대회가 자리를 잡았으니 **클래스가 대표팀 안에서도 말을 합니다.**
+   *
+   *   🏅 국가대표 주전(92↑) — 전 경기 선발 확정. **클래스 이름이 곧 약속이에요.**
+   *   🎖️ 국가대표 후보(78~91) — 경기마다 굴려요. 이름이 "후보"인 이유가 생깁니다.
+   *
+   * ⚠️ 문턱을 여기 숫자로 적지 않아요 — 클래스 표에서 읽습니다(callBar과 같은 이유).
+   * 92를 적어 두면 클래스 밸런스를 바꿨을 때 화면의 🏅과 실제 선발이 어긋나요.
+   *
+   * 토너먼트에서 확률이 올라가요 — **"큰 경기에 기회가 온다"**. 그리고 그게 없으면
+   * 결승까지 와서 못 뛰는 대회가 흔해집니다.
+   *
+   * 문턱 아래(🌱 와일드카드·🎲 깜짝 발탁으로 온 선수)는 바닥 확률을 받아요.
+   * 0으로 두면 다섯 경기를 통째로 앉아 있게 되는데, 그건 초대가 아니라 벌이에요. */
+  const STARTER_TITLE = "국가대표 주전";
+  function starterBar() {
+    const row = (typeof PLAYER_TITLES !== "undefined" ? PLAYER_TITLES : [])
+      .find((t) => String(t[1]).includes(STARTER_TITLE));
+    return row ? row[0] : 92;
+  }
+  const XI_LO = 0.3;         // 🎖️ 후보 구간 바닥(=국가대표 후보 문턱)의 선발 확률
+  const XI_KNOCK = 0.15;     // 토너먼트 가산 — 큰 경기에 기회가 와요
+  const XI_FLOOR = 0.15;     // 문턱 아래로 온 선수의 바닥
+  function xiP(stage) {
+    const hi = starterBar(), lo = classBar();
+    const ovr = overall();
+    if (ovr >= hi) return 1;
+    const t = (ovr - lo) / Math.max(1, hi - lo);
+    const base = clamp(XI_LO + (1 - XI_LO) * t, XI_FLOOR, 1);
+    return clamp(base + (stage === "group" ? 0 : XI_KNOCK), 0, 1);
+  }
+  const xiPct = (stage) => Math.round(xiP(stage) * 100);
+
+  /* 🪑 **계속 앉혀 두지는 않아요.**
+   *
+   * 곡선만 두면 문턱 언저리(30%)에서 다섯 경기를 통째로 못 뛰는 대회가 실제로 나와요.
+   * 4년에 한 번뿐인 대회에서 그건 초대가 아니라 벌이에요. 감독도 한 번은 써 봅니다.
+   * 그래서 **두 경기 연속 결장이면 다음은 선발**이에요. 최악이 "셋에 하나"로 묶여요.
+   * 상한이 아니라 바닥이라 잘하는 선수에게서 뭘 빼앗지 않아요. */
+  const BENCH_RUN_MAX = 2;
+  function xiNow() {
+    const w = wc();
+    if (!w) return 1;
+    if ((w.benchRun || 0) >= BENCH_RUN_MAX) return 1;
+    return xiP(w.stage);
+  }
+
   /* 🎚️ 문턱은 **소집 때마다 조금씩 달라요.**
    *
    * 제보: "소집 문턱은 지금 무조건 고정인가?? 선수들 기량 보고 소집 때마다 조금씩
@@ -176,8 +226,12 @@ window.WingerWorldCup = (() => {
 
   const NAT_MEAN = NATIONS.reduce((a, n) => a + n.str, 0) / NATIONS.length;
   const natStr = (n) => NAT_MEAN + (n.str - NAT_MEAN) * NAT_SPREAD;
-  // 우리 팀 전력 — 좁힌 국가 전력에 내 종합(에이스 보정)을 얹어요
-  const teamStr = () => natStr(myNation()) + clamp((overall() - 90) / ACE_DIV, ACE_LO, ACE_HI);
+  /* 우리 팀 전력 — 좁힌 국가 전력에 내 종합(에이스 보정)을 얹어요.
+   * `without`이면 에이스 보정을 안 얹어요 — 🪑 내가 벤치인 경기예요.
+   * 리그의 myTeamGoals(oppStr, true)와 같은 생각이에요: 내가 안 뛰는 경기만
+   * 갑자기 다른 자로 재면, 벤치인 경기만 팀이 이상해집니다. */
+  const teamStr = (without) => natStr(myNation())
+    + (without ? 0 : clamp((overall() - 90) / ACE_DIV, ACE_LO, ACE_HI));
 
   /* 🌍 국가 전력을 **평균 쪽으로 좁혀서** 써요.
    *
@@ -397,7 +451,7 @@ window.WingerWorldCup = (() => {
   const matesOf = () => {
     const w = wc();
     return (w && Array.isArray(w.mates) && w.mates.length) ? w.mates
-      : xiOf(mySquad()).filter((x) => !x.me).map((x) => x.name);
+      : natXI(true).filter((x) => !x.me).map((x) => x.name);
   };
 
   /* 🥇 대회 개인 순위 — **참가국마다 진짜 명단이 있어요.**
@@ -438,6 +492,29 @@ window.WingerWorldCup = (() => {
     }
     return out;
   }
+  /* 🇰🇷 **우리 나라가 그 경기에 세운 열한 명.**
+   *
+   * `xiOf`는 실력 순으로만 뽑아요. 그런데 대표팀 선발은 실력만이 아니라 **굴림**으로도
+   * 정해집니다(🎖️ 후보 구간). 그래서 둘을 그냥 두면 어긋나요 —
+   *   · 🏅 주전이라 뛰기로 정해졌는데 실력 순에서 밀려 xiOf에 없으면,
+   *     열한 명에 **나까지 열둘**이 출전 수를 받아요.
+   *   · 벤치인데 xiOf에 있으면, 안 뛴 경기의 출전 수가 동료에게 붙어요.
+   * 이 파일이 계속 싸워 온 병("명단이 둘로 갈려 표시와 판정이 다른 것을 본다")의
+   * 바로 그 모양이라, **뛰는지 여부를 받아서 명단을 하나로** 만듭니다.
+   *
+   * 뛰면 나는 반드시 들어가요 — 내 포지션에서 가장 약한 한 명이 자리를 비켜요.
+   * 벤치면 나를 빼고 열한 명을 다시 뽑아요 — 그래서 **누가 내 자리에 섰는지**도
+   * 여기서 자연히 나옵니다. */
+  function natXI(playing) {
+    const mine = mySquad();
+    const me = mine.find((x) => x.me);
+    const others = xiOf(mine.filter((x) => !x.me));
+    if (!playing || !me) return others;
+    const same = others.filter((x) => x.pos === me.pos).sort((a, b) => (a.str || 0) - (b.str || 0));
+    const out = same[0] || others[others.length - 1];
+    return others.filter((x) => x !== out).concat([me]);
+  }
+
   /* 골을 넣을 사람 — 선발 중에서 포지션 가중으로. squad.js의 pickScorer와 같은 눈금이에요 */
   const SCORE_W = { fw: 1.0, wg: 0.75, mf: 0.4, df: 0.12 };
   /* 🛡️ 수비를 해낼 사람 — 위를 뒤집은 가중이에요.
@@ -499,7 +576,7 @@ window.WingerWorldCup = (() => {
         w.squads[t.name] = natSquadOf(t.str, t.name === meName);
       }
       const mine = w.squads[meName] || [];
-      w.mates = xiOf(mine).filter((x) => !x.me).map((x) => x.name);
+      w.mates = natXI(true).filter((x) => !x.me).map((x) => x.name);
       /* 이미 치른 내 경기는 **내 줄에 그대로 옮겨요.** 안 옮기면 대회 한복판에
        * 업데이트를 받은 사람의 골이 순위표에서 사라집니다. */
       const meRow0 = mine.find((x) => x.me);
@@ -593,8 +670,10 @@ window.WingerWorldCup = (() => {
   const ASSIST_P = 0.55;     // 골 하나에 도움이 붙을 확률
   function creditMates(names, myGoals, res) {
     const mine = mySquad();
-    const xi = xiOf(mine);
-    for (const x of xi) x.apps = (x.apps || 0) + 1;
+    const xi = natXI(true);                      // 내가 뛴 경기 — 나를 포함한 열한 명
+    /* 내 출전 수는 **w.apps가 진짜**예요(finalize가 내 줄에 비춰 넣어요).
+     * 여기서 또 세면 두 번 셉니다. */
+    for (const x of xi) { if (!x.me) x.apps = (x.apps || 0) + 1; }
     const mates = xi.filter((x) => !x.me);
     for (const n of names || []) {
       const who = mine.find((x) => x.name === n) || pickFrom(mates);
@@ -650,7 +729,13 @@ window.WingerWorldCup = (() => {
       for (const x of sq[nat]) all.push({ p: x, nat, out: (w.natOut || []).includes(nat) });
     }
     const key = FACE_KEY[k] || FACE_KEY.p;
-    all.sort((a, b) => key(b.p) - key(a.p) || (b.p.g || 0) - (a.p.g || 0) || b.p.str - a.p.str);
+    const ties = FACE_TIE[k] || FACE_TIE.p;
+    all.sort((a, b) => {
+      const d0 = key(b.p) - key(a.p);
+      if (d0) return d0;
+      for (const t of ties) { const d = t(b.p) - t(a.p); if (d) return d; }
+      return (b.p.str || 0) - (a.p.str || 0);
+    });
     return all;
   }
   /* 부문 — 리그 개인 순위와 같은 결이에요. **포지션이 아니라 숫자로** 줄을 세워요.
@@ -668,6 +753,32 @@ window.WingerWorldCup = (() => {
   };
   const FACE_VAL = { p: (x) => `${x.g || 0}⚽ ${x.a || 0}🅰️`, g: (x) => x.g || 0, a: (x) => x.a || 0,
     d: (x) => x.d || 0, r: (x) => faceAvg(x).toFixed(2) };
+
+  /* ⚖️ **동률일 때 누가 위인가** — 순위표와 수상이 이걸 **같이** 씁니다.
+   *
+   * 제보(스크린샷): 득점 순위표 1위가 나(3골)인데 🥇 골든부츠는 3골인 다른 선수가
+   * 가져갔어요. **표는 `골 → 실력` 순으로 세우고, 수상은 `골 → 도움` 순으로 정하고
+   * 있었습니다.** 자가 둘이면 화면과 판정이 다른 말을 해요 — 이 저장소의 단골 병입니다.
+   *
+   * 규칙은 실제 대회를 따라요: 골든부츠는 동률이면 **도움**이 많은 쪽,
+   * 골든월은 **적은 경기로 더 막은** 쪽이 아니라 많이 뛴 쪽(출전),
+   * 골든볼은 평점이 같으면 생산량(골·도움)으로 가릅니다.
+   * 마지막 자는 실력 — 여기까지 같으면 우열이 없으니 흔들리지 않을 값을 씁니다. */
+  const FACE_TIE = {
+    g: [(x) => x.a || 0, (x) => x.apps || 0],
+    a: [(x) => x.g || 0, (x) => x.apps || 0],
+    d: [(x) => x.apps || 0, (x) => x.g || 0],
+    r: [(x) => (x.g || 0) * 2 + (x.a || 0), (x) => x.apps || 0],
+    p: [(x) => x.g || 0, (x) => x.apps || 0],
+  };
+  // 동률일 때 무엇으로 갈랐는지 화면에 적어요 — 안 적으면 "왜 쟤가 위지"가 됩니다
+  const TIE_NOTE = {
+    g: "골이 같으면 🅰️ 도움이 많은 선수가 위예요",
+    a: "도움이 같으면 ⚽ 골이 많은 선수가 위예요",
+    d: "수비가 같으면 출전 경기가 많은 선수가 위예요",
+    r: "평점이 같으면 골·도움이 많은 선수가 위예요",
+    p: "같으면 ⚽ 골이 많은 선수가 위예요",
+  };
   let faceTab = "r";
   // 화면에 그릴 줄 — 상위 N명, 내가 밖이면 내 줄을 따로 알려줘요
   function faceRows(k) {
@@ -701,9 +812,14 @@ window.WingerWorldCup = (() => {
      * 한 표에 칸을 다 늘어놓으면 좁은 화면에서 숫자가 뭉갭니다(리그에서 겪었어요). */
     const tabs = `<div class="race-tabs wc-face-tabs">${FACE_TABS.map(([k, label]) =>
       `<button type="button" class="race-tab${k === faceTab ? " on" : ""}" data-fk="${k}">${label}</button>`).join("")}</div>`;
+    /* ⚖️ 동률이 실제로 있을 때만 규칙을 적어요 — 늘 적으면 잔소리가 됩니다.
+     * 1위와 같은 값을 가진 사람이 또 있으면, 왜 순서가 그런지 보여야 해요. */
+    const key = FACE_KEY[faceTab] || FACE_KEY.p;
+    const tied = top.length > 1 && key(top[0].p) === key(top[1].p);
+    const note = tied ? `<p class="wc-tie-note">⚖️ ${TIE_NOTE[faceTab] || TIE_NOTE.p}</p>` : "";
     return tabs + `<table class="rank-table season-standings"><thead>
         <tr><th>#</th><th>선수 · 국가</th><th>${unit}</th></tr></thead>
-      <tbody>${top.map(line).join("")}${pin}</tbody></table>` + recordHTML();
+      <tbody>${top.map(line).join("")}${pin}</tbody></table>` + note + recordHTML();
   }
   /* 탭을 누르면 그 자리에서 다시 그려요. 화면을 그린 쪽이 이걸 한 번 불러 줍니다. */
   function wireFaceTabs(box, redraw) {
@@ -773,18 +889,20 @@ window.WingerWorldCup = (() => {
     const w = wc();
     const rows = faces();
     if (!w || !rows.length) return [];
-    const boot = rows.slice().sort((a, b) => (b.p.g || 0) - (a.p.g || 0) || (b.p.a || 0) - (a.p.a || 0))[0];
+    /* ⚠️ **순위표의 1위를 그대로 데려와요.** 여기서 다시 줄을 세우면 자가 둘이 되고,
+     * 화면의 1위와 수상자가 갈립니다 — 실제로 그렇게 갈렸어요(제보). */
+    const boot = faces("g")[0];
     /* 🏅 골든볼은 **평점 1위**가 가져가요.
      * 실제 월드컵의 골든볼은 기자단 투표라 숫자로 정해지지 않지만, 이 게임에는
      * ⭐ 평점이라는 자가 이미 있고 **모두가 같은 방식으로** 받아요.
      * 예전에는 기여 + "실력에서 뽑은 가짜 평점"이었어요 — 그건 지어낸 값이었습니다. */
-    const ball = rows.slice().sort((a, b) => faceAvg(b.p) - faceAvg(a.p) || faceScore(b) - faceScore(a))[0];
+    const ball = faces("r")[0];
     const out = [];
     if (boot) out.push({ id: "boot", name: "🥇 골든부츠", who: boot.p.name, nat: boot.nat, me: !!boot.p.me, val: `${boot.p.g || 0}골` });
     if (ball) out.push({ id: "ball", name: "🏅 골든볼", who: ball.p.name, nat: ball.nat, me: !!ball.p.me, val: `평점 ${faceAvg(ball.p).toFixed(2)}` });
     /* 🛡️ 수비수에게도 들 것이 하나는 있어야 해요. 이게 없으면 대회 내내 1위를 해도
      * 아무 일도 안 일어납니다 — 리그에는 🛡️ 리그 최고 수비수가 이미 있어요. */
-    const wall = rows.slice().sort((a, b) => (b.p.d || 0) - (a.p.d || 0) || (b.p.apps || 0) - (a.p.apps || 0))[0];
+    const wall = faces("d")[0];
     if (wall && (wall.p.d || 0) > 0) out.push({ id: "wall", name: "🛡️ 골든월", who: wall.p.name, nat: wall.nat, me: !!wall.p.me, val: `수비 ${wall.p.d || 0}회` });
     return out;
   }
@@ -909,7 +1027,8 @@ window.WingerWorldCup = (() => {
       : w.stage !== "group" ? nextOpponent().name : null;
     return `<div class="wc-rec">
       <div class="wc-rec-row"><b>${w.apps}</b>경기 · <b>⚽ ${w.g}</b>골 · <b>🅰️ ${w.a}</b>도움`
-      + ` · <b>🛡️ ${w.d}</b>수비 · 평균 평점 <b>${avg}</b></div>
+      + ` · <b>🛡️ ${w.d}</b>수비 · 평균 평점 <b>${avg}</b>`
+      + `${w.benched ? ` · 🪑 ${w.benched}경기 결장` : ""}</div>
       ${next ? `<div class="wc-rec-next">다음 상대 — ${next}</div>` : ""}
       <div class="wc-rec-note">이 기록은 <b>리그와 따로</b> 쌓여요 — 리그 득점왕 경쟁에는 안 섞입니다.</div>
     </div>`;
@@ -947,9 +1066,16 @@ window.WingerWorldCup = (() => {
     const w = wc();
     const btn = document.createElement("button");
     btn.className = "action-btn rest go-game wc-go";
+    /* 🎖️ **확률을 미리 적어요.** 감춘 굴림은 버그로 읽히고, 적어 둔 굴림은
+     * 이야기가 됩니다 (🎲 깜짝 발탁·🛌 보호 로테이션이 같은 이유로 적어요). */
+    const p = xiNow();
+    const sub = w.stage === "group" ? "조별리그 — 승점 3점" : "단판 — 무승부면 승부차기";
+    const tag = p < 1 ? ` · 선발 확률 ${Math.round(p * 100)}%`
+      : (w.benchRun || 0) >= BENCH_RUN_MAX ? ` · 🪑 ${w.benchRun}경기 연속 결장 — 이번엔 선발이에요`
+      : " · 🏅 선발 확정";
     btn.innerHTML = `<span class="a-emoji">🌏</span>${stageLabel()}`
-      + `<span class="a-sub">${w.stage === "group" ? "조별리그 — 승점 3점" : "단판 — 무승부면 승부차기"}</span>`;
-    btn.onclick = () => playMatch(onDone);
+      + `<span class="a-sub">${sub}${tag}</span>`;
+    btn.onclick = () => (Math.random() < p ? playMatch(onDone) : benchMatch(onDone));
     return btn;
   }
 
@@ -979,6 +1105,7 @@ window.WingerWorldCup = (() => {
     const opp = nextOpponent();
     w.opp = opp.name;
     w.ready = false;
+    w.benchRun = 0;              // 🪑 연속 결장은 여기서 끊겨요
     save();
 
     $("stage-title").textContent = `🌏 ${S.proYear}시즌 월드컵 — ${nat.name}`;
@@ -999,6 +1126,117 @@ window.WingerWorldCup = (() => {
       mates: matesOf(),
       finalize: (info) => finalize(info, onDone),
     });
+  }
+
+  /* 🪑 **벤치인 경기** — 대표팀 경기는 나 없이도 열려요.
+   *
+   * 지키는 것 셋:
+   *   ① 내 기록(w.g·a·d·apps)에 **아무것도 안 쌓여요.** 안 뛴 경기니까요.
+   *   ② 그래도 대회는 굴러가요 — 조 순위표·동료 기록·다른 나라가 전부 한 라운드
+   *      나아갑니다. 여기가 멈추면 **내가 벤치인 주만 대회가 멈춰요.**
+   *   ③ 다음 단계는 `wcAfterMatch()` 하나가 정해요 (이 파일의 계약 ①).
+   *
+   * **성장 보상은 없어요.** 클럽 벤치에는 훈련장 성장이 붙지만, 그건 38라운드
+   * 리그의 장치예요. 5경기짜리 대회에서 또 주면 벤치가 이득이 됩니다. */
+  function benchMatch(onDone) {
+    const w = wc();
+    const nat = myNation();
+    const opp = nextOpponent();
+    w.opp = opp.name;
+    w.ready = false;
+
+    /* 산식은 뛴 경기와 **같은 것**을 써요 — 내 종합(에이스 보정)과 평점만 빼고요.
+     * 평점 자리에 6.5(중간값)를 넣는 건 리그의 벤치 주와 같은 방식이에요. */
+    const us = teamStr(true);
+    const teamGoals = teammateGoals(6.5, opp.str, us);
+    const oppGoals = deriveOppGoals(6.5, S.stats.defense, opp.str, teamGoals, us);
+    let res = teamGoals > oppGoals ? "W" : teamGoals < oppGoals ? "L" : "D";
+    /* 토너먼트에 무승부는 없어요. 그런데 **승부차기는 내가 못 차요** — 벤치니까요.
+     * 그래서 전력으로 굴립니다. 지어낸 게 아니라 "내가 없는 팀의 승부차기"예요. */
+    let pkText = "";
+    if (w.stage !== "group" && res === "D") {
+      const win = Math.random() < us / (us + opp.str);
+      res = win ? "W" : "L";
+      pkText = `승부차기 끝에 ${win ? "이겼어요" : "졌어요"} — 벤치에서 지켜봤어요`;
+    }
+
+    const stepped = benchCredit(teamGoals, res);   // 내 자리에 들어간 사람이 돌아와요
+    w.credited = [];
+    creditNat(w.opp, oppGoals);
+    if (w.stage === "group") rollGroupRivals({ res, teamGoals, oppGoals });
+    advanceOthers(new Set([w.opp].concat(w.credited || [])));
+    w.benched = (w.benched || 0) + 1;
+    w.benchRun = (w.benchRun || 0) + 1;
+    if (w.stage === "group") {
+      const me = w.myGroup.find((x) => x.me);
+      me.pts += res === "W" ? 3 : res === "D" ? 1 : 0;
+      me.gd += teamGoals - oppGoals;
+    }
+    CTX.proLog(`🪑 월드컵 ${stageLabel()} vs ${w.opp} 결장 — ${teamGoals}:${oppGoals} (나 없이)`);
+    save();
+
+    $("stage-title").textContent = `🌏 ${S.proYear}시즌 월드컵 — ${nat.name}`;
+    $("stage-round").textContent = `${stageLabel()} · vs ${opp.name}`;
+    themeSync();
+    /* ⚠️ **경기를 치렀다는 표시를 여기서도 내려요.** 뛴 주에는 MatchSim 갈래가
+     * 같은 일을 하는데, 벤치 갈래만 빠뜨리면 다음 준비 화면이 "훈련 N회"라 적어
+     * 놓고 버튼을 전부 잠급니다 — v2.48.0에서 실제로 났던 사고예요. */
+    S.pendingShow = false;
+
+    /* ⚠️ `#stage-result`는 **MatchSim이 만드는** 요소라 여기엔 아직 없어요.
+     * 없는 걸 만지면 함수가 그 자리에서 죽고, 화면은 버튼을 눌러도 아무 반응이
+     * 없는 것처럼 보입니다(리그 벤치에서 났던 사고). 카드 안에 다 그려요. */
+    const step = wcAfterMatch(res, onDone);
+    $("stage-card").innerHTML = `
+      <div class="bench-card wc-bench">
+        <div class="draft-emoji">🪑</div>
+        <div class="draft-title">이번 경기는 벤치예요</div>
+        <div class="tour-line">${benchReason(stepped)}</div>
+        <div class="ms-final ${res === "W" ? "win" : res === "L" ? "lose" : ""}">
+          ${nat.name} ${teamGoals} : ${oppGoals} ${opp.name} · ${RES_LABEL[res]} (나 없이)</div>
+        ${pkText ? `<div class="tour-line">${pkText}</div>` : ""}
+        ${tableHTML2()}
+        ${step.html}
+      </div>`;
+    const rbox = $("stage-result");
+    if (rbox) rbox.innerHTML = "";
+    wire(step.label, step.fn);
+    show("screen-stage");
+  }
+
+  /* 🪑 우리 나라의 그 경기 — **나를 빼고** 굴려요.
+   *
+   * ⚠️ 명단에서 나를 뺀 **뒤에** 선발 11을 뽑아요. 뽑고 나서 거르면 열 명이 뛴
+   * 경기가 됩니다. 이렇게 하면 "내 자리에 누가 들어갔는지"도 자연히 나와요 —
+   * 벤치 카드에 그 이름을 적습니다. 이유가 안 보이는 결장은 버그로 읽혀요. */
+  function benchCredit(goals, res) {
+    const withMe = new Set(natXI(true).map((x) => x.name));
+    const xi = natXI(false);
+    for (const x of xi) x.apps = (x.apps || 0) + 1;
+    for (let i = 0; i < goals; i++) {
+      const who = pickFrom(xi);
+      if (who) { who.g = (who.g || 0) + 1; who._dg = (who._dg || 0) + 1; }
+      const asst = pickFrom(xi.filter((x) => x !== who));
+      if (asst && Math.random() < ASSIST_P) { asst.a = (asst.a || 0) + 1; asst._da = (asst._da || 0) + 1; }
+    }
+    creditDef(xi, natStrOf(myNation().name));
+    creditRate(xi, res);
+    return xi.find((x) => !withMe.has(x.name)) || null;
+  }
+
+  /* 왜 앉았는지 한 줄 — 클래스가 이유예요. 감독이 그 말을 합니다. */
+  function benchReason(stepped) {
+    const ovr = Math.round(overall());
+    const hi = starterBar();
+    /* 받침에 따라 "이/가"가 갈려요 — 이름을 붙이는 문장이라 여기서만 봐요 */
+    const ga = (name) => {
+      const c = (name || "").charCodeAt((name || "").length - 1);
+      return (c >= 0xac00 && c <= 0xd7a3 && (c - 0xac00) % 28 !== 0) ? "이" : "가";
+    };
+    const who = stepped
+      ? `<b>${stepped.name}</b>(실력 ${Math.round(stepped.str)})${ga(stepped.name)} 내 자리에 섰어요` : "";
+    return `🗣️ "오늘은 벤치에서 시작하자." — 종합 <b>${ovr}</b> · 🏅 주전 확정은 <b>${hi}</b>부터예요`
+      + (who ? `<br/>${who}` : "");
   }
 
   /* MatchSim의 계약대로 { resultHTML, nextLabel, nextFn }을 돌려줘요.
@@ -1186,7 +1424,7 @@ window.WingerWorldCup = (() => {
     }
     S.fandom = (S.fandom || 0) + awFame;
     S.wcHist = hist().concat([{
-      y: S.proYear, result, g: w.g, a: w.a, apps: w.apps,
+      y: S.proYear, result, g: w.g, a: w.a, apps: w.apps, benched: w.benched || 0,
       awards: mine.map((a) => a.id),
       champ: fin ? fin.champ : (result === "champion" ? myNation().name : null),
     }]);
@@ -1308,9 +1546,14 @@ window.WingerWorldCup = (() => {
     "우리가 해냈어. 자네가 있어서 가능했네.",
     "이 트로피는 오래 갈 걸세. 자네 이름과 함께.",
   ];
+  /* ⚠️ **여기에 없는 상을 받으면 "undefined"가 화면에 찍혀요.**
+   * 제보(스크린샷): "이 트로피는 오래 갈 걸세. 자네 이름과 함께. undefined"
+   * 🛡️ 골든월을 나중에 만들면서 이 표에만 안 넣었습니다. 아래 `?? ""`가 두 번째
+   * 방어선이에요 — 다음에 상을 하나 더 만들어도 화면에 undefined가 안 뜹니다. */
   const SAY_AWARD = {
     boot: "이 대회 최고의 골잡이였어.",
     ball: "이 대회 최고의 선수였네. 누가 봐도.",
+    wall: "자네 뒤가 있어서 앞이 편했네.",
   };
 
   function reportLine() {
@@ -1343,8 +1586,9 @@ window.WingerWorldCup = (() => {
         : h.result === "final" ? pick(SAY_FINAL)
         : h.result === "semi" ? pick(SAY_SEMI)
         : pick(good ? SAY_GROUP_OK : SAY_GROUP);
-      if (aw.length) say += ` ${SAY_AWARD[aw[0]]}`;
+      if (aw.length && SAY_AWARD[aw[0]]) say += ` ${SAY_AWARD[aw[0]]}`;
       fact = `${LABEL[h.result]} · ${h.apps}경기 ⚽${h.g} 🅰️${h.a}`
+        + (h.benched ? ` · 🪑 ${h.benched}경기 결장` : "")
         + (aw.length ? ` · ${aw.map((id) => AW_NAME[id] || id).join(" · ")}` : "")
         + (h.champ && h.result !== "champion" ? ` · 우승 ${h.champ}` : "");
     }
@@ -1357,11 +1601,12 @@ window.WingerWorldCup = (() => {
     groupTableHTML, bracketHTML, tableHTML: tableHTML2, groupSumText, recordHTML,
     raceHTML, wireFaceTabs, openGroup, matesOf, faces, faceRows,
     active: () => !!wc(),
-    isWcYear, callBar, wildBar, luckP, myNation,
+    isWcYear, callBar, wildBar, luckP, myNation, xiP, xiPct,
     _t: {
       NATIONS, wildBar, classBar, BAR_NAT_K, BAR_WOBBLE, WILD_GAP, barSeed,
+      starterBar, xiP, xiNow, BENCH_RUN_MAX, XI_LO, XI_KNOCK, XI_FLOOR, benchMatch, benchCredit, benchReason,
       TRUST_GO, TRUST_STAY, PRIZE, FAME, AWARD_FAME,
-      natSquadOf, xiOf, ensureSquads, advanceOthers, creditNat, creditMates, cutNations,
+      natSquadOf, xiOf, natXI, ensureSquads, advanceOthers, creditNat, creditMates, cutNations,
       faces, faceRows, matesOf, wireFaceTabs,
       decideAwards, faceScore, FACE_N, NAT_G0, NAT_GK, ACE_W, SCORE_W, DEF_W, DEF_G0, DEF_GK,
       creditDef, creditRate, faceAvg, FACE_TABS, FACE_KEY, mySquad, markAce,
