@@ -13,7 +13,7 @@ const path = require("path");
 const { JSDOM } = require(__dirname + "/jsdom.js");
 
 const B = "/workspace/grow-games/beta";
-const GAMES = ["rookie", "idol", "stock", "dev", "chef", "stream", "soccer", "unicorn"];
+const GAMES = ["rookie", "idol", "stock", "dev", "chef", "stream", "soccer", "winger2", "unicorn"];
 
 let fail = 0;
 const check = (ok, msg) => { console.log(`${ok ? "✅" : "❌"} ${msg}`); if (!ok) fail++; };

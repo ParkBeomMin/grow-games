@@ -23,11 +23,12 @@
     rookie: "rookie-save-v1", idol: "trainee-save-v1", stock: "investor-save-v1",
     dev: "devgrow-save-v1", chef: "chef-save-v1", stream: "streamer-save-v1",
     soccer: "winger-save-v1", unicorn: "unicorn-save-v1",
+    winger2: "winger2-save-v1",
   };
   var BATTLE = {
     rookie: "grow-battle-v1", idol: "grow-battle-idol-v1", stock: "grow-battle-stock-v1",
     dev: "grow-battle-dev-v1", chef: "grow-battle-chef-v1", stream: "grow-battle-stream-v1",
-    soccer: "grow-battle-soccer-v1",
+    soccer: "grow-battle-soccer-v1", winger2: "grow-battle-winger2-v1",
   };
   var SHARED_KEY = "grow-hof-v1";   // 8종이 함께 쓰는 명예의 전당
   var SHARED_GAME = "_shared";
@@ -795,6 +796,7 @@
     chef: function (s) { return s.phase === "chef-pro" ? "오너셰프 " + (s.proYear || 0) + "년차" : (s.year || 1) + "년차 요리사"; },
     stream: function (s) { return s.phase === "stream-pro" ? "전업 스트리머 " + (s.proYear || 0) + "년차" : (s.year || 1) + "년차 스트리머"; },
     soccer: function (s) { return s.phase === "soccer-pro" ? "프로 " + (s.proYear || 0) + "시즌" : "유스 " + (s.year || 1) + "년차"; },
+    winger2: function (s) { return s.phase === "winger2-pro" ? "프로 " + (s.proYear || 0) + "시즌" : "유스 " + (s.year || 1) + "년차"; },
     unicorn: function (s) {
       // beta/unicorn/game.js의 STAGES와 같은 표예요 (기준선·이름 모두 그쪽이 원본이에요)
       var STAGES = [
@@ -810,6 +812,7 @@
   var LABEL = {
     rookie: "⚾ 야구", idol: "🎤 아이돌", stock: "📈 주식", dev: "💻 개발자",
     chef: "🍳 요리사", stream: "📺 스트리머", soccer: "⚽ 축구", unicorn: "🦄 유니콘",
+    winger2: "⚽ 축구 II",
   };
 
   /* 한 줄 요약 — "설명"만 담당해요. "있냐 없냐"는 hasData()가 따로 봅니다.

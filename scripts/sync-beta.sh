@@ -15,7 +15,7 @@ cd "$ROOT"
 FORCE=0
 [ "${1:-}" = "--force" ] && FORCE=1
 
-CONTENT="rookie idol stock dev chef stream soccer unicorn stats index.html env.js match.js stats.js ads.js fx.js help.js base.css timing.js radar.js manifest.webmanifest sw.js icon-192.png icon-512.png"
+CONTENT="rookie idol stock dev chef stream soccer winger2 unicorn stats index.html env.js match.js stats.js ads.js fx.js help.js base.css timing.js radar.js manifest.webmanifest sw.js icon-192.png icon-512.png"
 
 # beta/에만 있는 변경을 먼저 찾아요 — 덮어쓰면 사라지는 것들이에요
 LOST=""

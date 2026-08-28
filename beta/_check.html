@@ -70,7 +70,9 @@
     .mg-range { flex: 1 1 120px; min-width: 110px; accent-color: var(--accent); }
     .mg-out { color: var(--sky); font-size: .78rem; }
     .mg-list { display: flex; flex-direction: column; gap: 8px; margin: 12px 0 0; }
-    .mg-item {
+    /* 🎬 .w2-item은 경기 화면 시나리오 버튼이에요. 모양은 같지만 클래스를 나눴어요 —
+       check-page-test가 .mg-item 개수로 '미니게임 7종'을 세거든요. 같이 쓰면 12종이 됩니다. */
+    .mg-item, .w2-item {
       display: flex;
       flex-direction: column;
       align-items: flex-start;
@@ -85,9 +87,9 @@
       color: var(--text);
       cursor: pointer;
     }
-    .mg-item.on { border-color: var(--accent); background: var(--field); }
-    .mg-item b { color: var(--accent); font-size: .98rem; }
-    .mg-item span { color: var(--dim); font-size: .76rem; line-height: 1.5; }
+    .mg-item.on, .w2-item.on { border-color: var(--accent); background: var(--field); }
+    .mg-item b, .w2-item b { color: var(--accent); font-size: .98rem; }
+    .mg-item span, .w2-item span { color: var(--dim); font-size: .76rem; line-height: 1.5; }
     .mg-item .mg-stat { color: var(--sky); }
     .mg-now { color: var(--dim); font-size: .78rem; margin: 12px 0 6px; }
     .mg-frame { display: block; width: 100%; min-height: 240px; border: 0; border-radius: 12px; background: var(--bg); }
@@ -157,6 +159,30 @@
         </div>
       </section>
 
+      <!-- 🎬 ⚽ 더 윙어 II 경기 화면 — CSS는 기계가 못 봐요.
+           jsdom에 렌더 엔진이 없어 계산된 스타일을 못 읽습니다. 칸이 겹치는지,
+           sticky가 붙는지, 골 연출이 어떻게 보이는지는 **눌러서 폰으로 봐야** 알아요.
+           그래서 여기에 도달 시나리오를 뒀습니다. -->
+      <section class="mg-box" id="w2">
+        <h3 class="ck-group">🎬 ⚽ 더 윙어 II — 경기 화면 연출</h3>
+        <p class="mg-safe">
+          순간 카드 경기 화면(<code>winger2/match-scene.js</code>)을 <b>그 자리에서 돌려 봐요.</b>
+          게임을 처음부터 할 필요 없이 접전·대승·결승골·하프타임을 골라서 봅니다.<br />
+          ✅ <b>세이브를 한 글자도 안 건드려요</b> — 화면만 그리는 조각이라 게임 로직을 아예 안 부릅니다.<br />
+          📱 <b>이 칸은 폰으로 봐야 의미가 있어요.</b> 스코어보드가 위에 붙어 있는지, 카드가 아래에서
+          밀려 올라오는지, 골 순간에 화면이 흔들리는지는 실기기에서만 보입니다.
+        </p>
+        <div class="mg-list" id="w2-list"></div>
+        <div id="w2-stage" hidden>
+          <p class="mg-now" id="w2-now"></p>
+          <div id="w2-hold"></div>
+          <div class="mg-acts">
+            <button type="button" class="btn btn-primary" id="w2-again">🔁 다시 보기</button>
+            <button type="button" class="btn btn-ghost" id="w2-close">✖️ 닫기</button>
+          </div>
+        </div>
+      </section>
+
       <a class="btn btn-ghost" href="index.html" style="display:block;text-align:center;text-decoration:none">🎮 베타 게임 목록으로</a>
     </section>
   </main>
@@ -175,6 +201,7 @@
     const F = (window.CHECK_FIXTURES || { items: [] });
     const GAME_NAME = {
       soccer: "⚽ 더 윙어 (축구)",
+      winger2: "⚽ 더 윙어 II (축구)",
       idol: "🎤 더 트레이니 (아이돌)",
       rookie: "⚾ 더 드래프트 (야구)",
     };
@@ -182,6 +209,7 @@
     const GAME_TAB = {
       rookie: "⚾ 야구",
       soccer: "⚽ 축구",
+      winger2: "⚽ 축구 II",
       idol: "🎤 아이돌",
       stock: "📈 주식",
       dev: "💻 개발",
@@ -190,7 +218,7 @@
       unicorn: "🦄 유니콘",
     };
     // 화면에 그리는 순서예요(탭 순서이기도 해요). 여기 없는 게임은 카드가 아예 안 그려져요.
-    const GAME_ORDER = ["rookie", "soccer", "idol"];
+    const GAME_ORDER = ["rookie", "soccer", "winger2", "idol"];
     let ckTab = null;   // 지금 보고 있는 시나리오 탭(게임 키)이에요.
     const $ = (id) => document.getElementById(id);
 
@@ -573,6 +601,212 @@
       seenKey: MG_READY_KEY,
     };
 
+    /* ============================================================
+     * 🎬 ⚽ 더 윙어 II 경기 화면 — 연출 도달 시나리오
+     *
+     * CSS는 이 저장소의 검증 사각지대예요. jsdom은 렌더 엔진이 없어서
+     * "칸이 겹치는지"·"sticky가 붙는지"를 못 봅니다. 그래서 눌러서 볼 수 있게 뒀어요.
+     *
+     * 🔒 세이브·게임 로직을 아예 안 부릅니다. match-scene.js는 그리기만 하는 조각이라
+     *    카드 배열만 손으로 만들어 넣으면 됩니다 — 여기 카드는 **연출 확인용 표본**이지
+     *    게임이 실제로 뽑는 값이 아니에요(엔진은 grow-engineer가 만듭니다).
+     *
+     * 🖼 <iframe> 안에서 돌려요 — winger2/style.css가 :root 색을 갈아치우기 때문에
+     *    이 페이지에 그냥 붙이면 확인 페이지가 통째로 남색으로 물듭니다.
+     * ============================================================ */
+    const W2_SCENES = [
+      { id: "tight", emoji: "🔥", name: "접전 (1점 차)", desc: "카드 간격이 길어져요 · 내 골 연출 + 진동" },
+      { id: "rout", emoji: "💨", name: "대승 (3점 차)", desc: "이미 기운 경기 — 카드가 빠르게 넘어가요" },
+      { id: "decisive", emoji: "🏆", name: "후반 결승골", desc: "추가시간 · 색종이까지 터지는 최대 연출" },
+      { id: "concede", emoji: "😣", name: "실점 · 수비 순간", desc: "회색 플래시 + 좌우 흔들림 · 🧱 수비 카드" },
+      { id: "quiet", emoji: "😶", name: "내 순간 0회", desc: "능력치 70이면 실제로 일어나요 — 그때 뭐라고 적히는지" },
+    ];
+    const W2_DECK = {
+      tight: {
+        cfg: { home: "청록 유나이티드", away: "잿빛 시티", myName: "김윙어" },
+        cards: [
+          { min: 0, kind: "kick", score: [0, 0], text: "잿빛 시티와의 경기가 시작됩니다" },
+          { min: 12, kind: "filler", score: [0, 0], text: "🟨 상대 압박이 거세요" },
+          { min: 27, kind: "goal", mine: false, by: "박스트", result: "goal", score: [1, 0] },
+          { min: 41, kind: "defend", mine: false, result: "concede", score: [1, 1] },
+          { min: 45, kind: "half", score: [1, 1], poss: 48, shots: 6, rating: 6.8 },
+          { min: 58, kind: "goal", mine: true, moment: "oneone", stakeKey: "lead", by: "김윙어", goalBy: "김윙어", result: "goal", goAhead: true, score: [2, 1] },
+          { min: 79, kind: "filler", score: [2, 1], text: "상대가 총공세를 폅니다" },
+          { min: 93, kind: "end", score: [2, 1], text: "삐— 경기 종료 휘슬" },
+        ],
+        tally: { mineCards: 1, mineSuccess: 1 },
+      },
+      rout: {
+        cfg: { home: "청록 유나이티드", away: "낮은 골짜기", myName: "김윙어" },
+        cards: [
+          { min: 0, kind: "kick", score: [0, 0], text: "낮은 골짜기와의 경기가 시작됩니다" },
+          { min: 9, kind: "goal", mine: false, by: "박스트", result: "goal", score: [1, 0] },
+          { min: 22, kind: "goal", mine: false, by: "이미드", result: "goal", score: [2, 0] },
+          { min: 34, kind: "goal", mine: false, by: "박스트", result: "goal", score: [3, 0] },
+          { min: 45, kind: "half", score: [3, 0], poss: 63, shots: 11, rating: 7.1 },
+          { min: 61, kind: "filler", score: [3, 0], text: "이미 승부가 기울었어요" },
+          { min: 74, kind: "assist", mine: true, moment: "killpass", stakeKey: "clincher", by: "김윙어", assistBy: "김윙어", goalBy: "박스트", result: "assist", score: [4, 0] },
+          { min: 90, kind: "end", score: [4, 0], text: "삐— 경기 종료 휘슬" },
+        ],
+        tally: { mineCards: 1, mineSuccess: 1 },
+      },
+      decisive: {
+        cfg: { home: "청록 유나이티드", away: "잿빛 시티", myName: "김윙어" },
+        cards: [
+          { min: 0, kind: "kick", score: [0, 0], text: "잿빛 시티와의 경기가 시작됩니다" },
+          { min: 38, kind: "defend", mine: false, result: "concede", score: [0, 1] },
+          { min: 45, kind: "half", score: [0, 1], poss: 44, shots: 3, rating: 6.2 },
+          { min: 67, kind: "goal", mine: false, by: "박스트", result: "goal", score: [1, 1] },
+          { min: 93, kind: "goal", mine: true, moment: "cutin", stakeKey: "lead", by: "김윙어", goalBy: "김윙어", result: "goal", goAhead: true, score: [2, 1] },
+          /* 🏆 `markDecisive`는 엔진의 markDecisive()를 흉내 낸 것이에요 —
+           * 그 분의 골 카드에 `decisive = true`를 **휘슬 직전에** 되채웁니다.
+           * 카드가 열리는 순간에는 아직 아무도 결승골인 줄 모르거든요
+           * (1-0 뒤에 2-2가 되면 그 골은 결승골이 아니에요). */
+          { min: 95, kind: "end", score: [2, 1], text: "삐— 경기 종료 휘슬", markDecisive: 93 },
+        ],
+        tally: { mineCards: 1, mineSuccess: 1 },
+      },
+      concede: {
+        cfg: { home: "청록 유나이티드", away: "잿빛 시티", myName: "김윙어" },
+        cards: [
+          { min: 0, kind: "kick", score: [0, 0], text: "잿빛 시티와의 경기가 시작됩니다" },
+          { min: 14, kind: "filler", score: [0, 0], text: "중원 싸움이 뜨거워요" },
+          { min: 31, kind: "defend", mine: true, moment: "block", stakeKey: "holdDraw", by: "김윙어", result: "concede", score: [0, 1] },
+          { min: 45, kind: "half", score: [0, 1], poss: 51, shots: 4, rating: 6.0 },
+          { min: 72, kind: "defend", mine: true, moment: "block", stakeKey: "holdGap", by: "김윙어", result: "save", score: [0, 1] },
+          { min: 91, kind: "end", score: [0, 1], text: "삐— 경기 종료 휘슬" },
+        ],
+        tally: { mineCards: 2, mineSuccess: 1 },
+      },
+      quiet: {
+        cfg: { home: "청록 유나이티드", away: "잿빛 시티", myName: "김윙어" },
+        cards: [
+          { min: 0, kind: "kick", score: [0, 0], text: "잿빛 시티와의 경기가 시작됩니다" },
+          { min: 11, kind: "filler", score: [0, 0], text: "빠른 템포로 오가는 공방" },
+          { min: 29, kind: "goal", mine: false, by: "박스트", result: "shot", score: [0, 0] },
+          { min: 45, kind: "half", score: [0, 0], poss: 47, shots: 5, rating: 6.5 },
+          { min: 66, kind: "defend", mine: false, result: "save", score: [0, 0] },
+          { min: 88, kind: "filler", score: [0, 0], text: "관중석이 들썩입니다" },
+          { min: 92, kind: "end", score: [0, 0], text: "삐— 경기 종료 휘슬" },
+        ],
+        tally: { mineCards: 0, mineSuccess: 0 },
+      },
+    };
+    let w2Frame = null, w2Fit = 0, w2Id = null, w2Run = 0;
+
+    function w2Teardown() {
+      w2Run += 1;                                   // 돌고 있던 시나리오는 다음 칸에서 스스로 멈춰요
+      if (w2Fit) { clearInterval(w2Fit); w2Fit = 0; }
+      if (w2Frame) { w2Frame.remove(); w2Frame = null; }
+    }
+    function w2Play(id) {
+      const m = W2_SCENES.find((x) => x.id === id);
+      const deck = W2_DECK[id];
+      if (!m || !deck) return;
+      w2Id = id;
+      $("w2-stage").hidden = false;
+      w2Teardown();
+      const mine = w2Run;
+      $("w2-now").textContent = `${m.emoji} ${m.name} — ${m.desc}`;
+      renderW2();
+      const ifr = document.createElement("iframe");
+      ifr.className = "mg-frame";
+      ifr.title = `${m.name} 경기 화면 칸`;
+      $("w2-hold").appendChild(ifr);
+      w2Frame = ifr;
+      const boot = () => {
+        if (w2Frame !== ifr) return;
+        const W = ifr.contentWindow, D = ifr.contentDocument;
+        const link = (href) => {
+          const l = D.createElement("link");
+          l.rel = "stylesheet"; l.href = new URL(href, location.href).href;
+          D.head.appendChild(l);
+        };
+        link("base.css");
+        link("winger2/style.css");                  // 경기 화면의 진짜 색·모양이 여기 있어요
+        const st = D.createElement("style");
+        st.textContent = "body{margin:0;padding:10px;background:var(--bg);overflow-x:hidden}";
+        D.head.appendChild(st);
+        const box = D.createElement("div");
+        D.body.appendChild(box);
+        /* fx.js와 match-scene.js를 **칸 안에서** 돌려요 — window·타이머·색종이가
+         * 전부 이 칸 것이 되고 확인 페이지와 한 톨도 안 섞여요. */
+        const load = (src) => new Promise((ok, no) => {
+          const t = D.createElement("script");
+          t.src = new URL(src, location.href).href;
+          t.onload = ok; t.onerror = () => no(new Error(src));
+          D.head.appendChild(t);
+        });
+        Promise.all([load("fx.js"), load("winger2/match-scene.js")]).then(async () => {
+          if (w2Frame !== ifr || mine !== w2Run) return;
+          const Sc = W.W2Scene;
+          // 🔁 다시 보기 — 지난 판의 markDecisive 흔적을 지웁니다 (안 지우면 두 번째부터
+          // 카드가 열리는 순간에 이미 결승골이 되어 연출 시점이 달라져요)
+          for (const c of deck.cards) delete c.decisive;
+          Sc.mount(box, deck.cfg);
+          /* 🔁 부르는 순서를 career.js의 runV2Match와 **똑같이** 맞춥니다 —
+           * momentSlot() → push(카드) → 판정 → push(같은 카드). 여기서만 다른 순서로
+           * 부르면 이 칸은 초록인데 게임은 깨지는, 이 저장소가 여덟 번 겪은 그 검사가 돼요. */
+          for (const card of deck.cards) {
+            if (w2Frame !== ifr || mine !== w2Run) return;
+            // 엔진의 markDecisive()와 같은 자리 — 휘슬 직전에 그 골을 결승골로 되채워요
+            if (card.markDecisive != null) {
+              const g = deck.cards.find((c) => c.min === card.markDecisive);
+              if (g) g.decisive = true;
+            }
+            if (card.mine) {
+              /* 미니게임 4종(winger-moment.js)은 grow-engineer 몫이라 아직 없어요.
+               * 여기서는 자리만 채웁니다 — 확인 대상은 **카드 첫 줄이 무엇이 걸렸는지
+               * 밝히는가**와 판정 뒤 골 연출이에요. */
+              const slot = Sc.momentSlot();
+              await Sc.push(card);
+              if (slot) slot.innerHTML = '<p class="hint" style="text-align:center;margin:0">🎮 여기에 미니게임이 들어와요 (winger-moment.js)</p>';
+              await new Promise((r) => setTimeout(r, 900));
+              if (w2Frame !== ifr || mine !== w2Run) return;
+              await Sc.push(card);
+            } else {
+              await Sc.push(card);
+            }
+          }
+          if (w2Frame !== ifr || mine !== w2Run) return;
+          Sc.summary(deck.tally);
+        }).catch((e) => {
+          $("w2-now").textContent = `❌ 연출 파일을 못 읽었어요 (${e.message}) — 로컬 파일로 열면 못 가져와요. 서버로 열어 주세요.`;
+        });
+        w2Fit = setInterval(() => mgFitTo(ifr, D), 150);
+        mgFitTo(ifr, D);
+        try { $("w2-stage").scrollIntoView({ block: "nearest", behavior: "smooth" }); } catch { /* 안 되는 브라우저도 있어요 */ }
+      };
+      if (ifr.contentDocument && ifr.contentDocument.body) boot();
+      else ifr.onload = boot;
+    }
+    function renderW2() {
+      const list = $("w2-list");
+      list.innerHTML = "";
+      for (const m of W2_SCENES) {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = `w2-item${w2Id === m.id ? " on" : ""}`;
+        b.dataset.scene = m.id;
+        b.innerHTML = `<b>${esc(m.emoji)} ${esc(m.name)}</b><span>${esc(m.desc)}</span>`;
+        b.onclick = () => w2Play(m.id);
+        list.appendChild(b);
+      }
+    }
+    // 검사가 이 칸만 따로 흔들 수 있게 손잡이를 내어 둬요
+    api.w2 = {
+      scenes: W2_SCENES,
+      deck: (id) => W2_DECK[id],
+      play: (id) => w2Play(id),
+      frame: () => w2Frame,
+      close: () => { w2Teardown(); w2Id = null; $("w2-stage").hidden = true; renderW2(); },
+    };
+    function w2Init() {
+      $("w2-again").onclick = () => { if (w2Id) w2Play(w2Id); };
+      $("w2-close").onclick = () => api.w2.close();
+      renderW2();
+    }
+
     function mgInit() {
       const st = $("mg-stat");
       st.value = String(MG.stat);
@@ -675,6 +909,7 @@
      * 그 전에 화면을 읽어서 "버튼이 하나도 없다"로 보여요. 바로 그립니다. */
     render();
     mgInit();
+    w2Init();
     $("ck-restore").onclick = restore;
 
     /* 🔗 주소 뒤에 #시나리오id를 붙이면 그 시나리오로 바로 들어가요.

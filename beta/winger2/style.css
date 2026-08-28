@@ -1,0 +1,854 @@
+/* ⚽ 더 윙어 II — 야간 조명 네이비 테마 (grow/base.css 위에 덮어씀)
+ *
+ * 왜 초록이 아닌가 — 허브에 초록 게임이 이미 셋(더 윙어·더 드래프트·더 인베스터)이라
+ * 같은 초록이면 아이콘과 카드가 구분이 안 갑니다. 밤 경기장 조명 아래 남색으로 갈랐어요.
+ * 축구라는 신호는 잔디(--turf)가 경기 화면에서 냅니다 — UI 전체를 초록으로 칠하지 않아도
+ * 필드 한 조각이면 읽혀요.
+ *
+ * ⚠️ 절대색을 쓰지 마세요. 이 파일 안에서도 화면마다 색이 갈립니다.
+ *    새 색이 필요하면 여기 변수를 하나 더 만들어서 쓰세요. */
+:root {
+  --bg: #0f1830;          /* 밤하늘 */
+  --bg2: #17224a;
+  --field: #1e2b58;       /* 카드 표면 */
+  --line: #4a63c4;      /* 경계선. bg 대비 3.2:1 — 얇은 선이 안 사라지는 최소선이에요 */
+  --sand: #d8b077;
+  --cream: #eaf0ff;
+  --accent: #ff9f45;      /* 조명 앰버 — 이 게임의 얼굴색 */
+  --accent2: #ff4d6d;     /* 경고·부정. 앰버와 헷갈리지 않게 붉은 핑크로 벌렸어요 */
+  --sky: #6fc9ff;         /* 차가운 조명빛 — 좋아지는 쪽·링크 */
+  --text: #e9eeff;
+  --dim: #96a5d2;
+
+  /* 경기 화면 전용 — base.css에는 없는 값이에요 */
+  --good: #6ee7a0;        /* 우리 쪽 좋은 일 (base.css .pbp .good과 같은 값) */
+  --good2: #b6ecca;
+  --bad: #ff8a80;
+  --turf: #17452f;        /* 조명 아래 잔디 줄무늬 */
+  --turf2: #133b28;
+  --ink: #241300;         /* 앰버 위에 얹는 글자색 */
+}
+
+body {
+  background:
+    radial-gradient(ellipse 120% 60% at 50% -10%, rgba(255, 159, 69, .12) 0%, transparent 60%),
+    repeating-linear-gradient(90deg, var(--bg2) 0px, var(--bg2) 40px, var(--bg) 40px, var(--bg) 80px),
+    var(--bg);
+}
+
+.title-box h1 { color: var(--accent); }
+
+.btn-primary {
+  background: linear-gradient(180deg, #ffc47f, var(--accent));
+  color: var(--ink);
+  box-shadow: 0 4px 0 #c96f18;
+}
+
+.bar-fill.scout { background: linear-gradient(90deg, #ffd9a8, var(--accent)); }
+.bar-fill.stat { background: linear-gradient(90deg, #9fd0ff, var(--sky)); }
+
+.tag { background: rgba(255, 159, 69, 0.14); color: var(--accent); }
+
+.card-grid.three { grid-template-columns: 1fr 1fr 1fr; }
+
+.series-link {
+  display: block;
+  margin-top: 18px;
+  color: var(--dim);
+  font-size: 0.85rem;
+  text-decoration: none;
+}
+.series-link:hover { color: var(--sky); }
+
+.draft-card {
+  background: linear-gradient(180deg, var(--field), var(--bg2));
+  border-color: var(--line);
+}
+.draft-summary { border-color: var(--line); }
+
+.season-standings .me td { color: var(--accent); font-weight: 700; }
+
+/* 연도별 기록표 — 원래 7칸(시즌·소속·출전·⚽·🅰️·🛡️·수상)이었는데 폭 28~34px에
+ * 이모지 헤더(🅰️도움·🛡️수비)를 얹었더니 실기기에서 헤더가 세로로 쪼개졌어요(도/움, 수/비).
+ * ⚾ 더 드래프트(beta/rookie/career.js:1023)처럼 4칸(시즌·소속·성적·수상)으로 줄였어요 —
+ * 골·도움·수비를 '성적' 한 칸으로 합치고, 항상 12인 출전은 표에서 뺐어요.
+ * table-layout:fixed는 칼럼 수가 바뀌면 폭이 통째로 밀리니 이 게임 전용 클래스
+ * (.season-soccer)로 따로 잡아요. 나머지 폭은 '수상' 칸이 가져가요 — 수상 배지는
+ * 길이가 들쭉날쭉해서 유일하게 유동 폭이어야 해요(이 판단은 7칸 때와 동일하게 유지). */
+.season-soccer { table-layout: fixed; }
+.season-soccer th:nth-child(1), .season-soccer td:nth-child(1) { width: 38px; }
+/* 폭은 0.74rem(≈11.8px) 기준으로 계산했어요. 한글은 글자당 약 1em,
+ * 숫자는 약 0.5em이에요. 기본 셀 패딩이 좌우 4px씩(base.css) 붙습니다.
+ *   소속 4자(예: 머드독스) ≈ 47px + 패딩 8 + 여백 8 → 64px 필요 → 72px
+ *   성적 '45골 23도움 11수비' ≈ 102px + 패딩 8 → 110px 필요 → 112px
+ * 예전 44/100px은 둘 다 모자라서 소속이 성적에 달라붙었어요. */
+.season-soccer th:nth-child(2), .season-soccer td:nth-child(2) { width: 72px; }
+.season-soccer th:nth-child(3), .season-soccer td:nth-child(3) { width: 112px; }
+.season-soccer th, .season-soccer td { word-break: keep-all; }
+/* 소속 칸 — 44px일 때 '머드독스'(4자)가 칸보다 넓어서 옆 성적 칸에 붙었어요.
+ * 폭을 늘리는 것만으로는 이름이 더 길어지면 또 새니, overflow로 구조적으로 막아요.
+ * padding-right가 이름과 성적 사이 여백을 보장해요. */
+.season-soccer .yr-club {
+  /* 수상 칸이 여러 줄로 늘어나면 행이 높아지는데, 소속만 top이라 혼자 위에
+     붙어 보였어요. 다른 칸과 같은 눈높이로 맞춥니다. */
+  vertical-align: middle;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding-right: 6px;
+}
+/* 이적한 시즌은 눈에 띄게 — 표를 훑으며 언제 소속이 바뀌었는지 바로 보이게 */
+.season-soccer .yr-club.moved { color: var(--accent); }
+.season-soccer .yr-lg { display: block; font-size: 0.62rem; opacity: .65; }
+/* 그 시즌 팀 최종 순위 — 어느 해에 팀이 무너졌는지 표만 훑어도 보이게 */
+.season-soccer .yr-rank { display: block; font-size: 0.62rem; opacity: .55; }
+.season-soccer .yr-stat { white-space: nowrap; }
+
+/* FM식 경기 스코어보드 */
+.matchscore {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin: 6px 0 4px;
+  padding: 12px 10px;
+  background: linear-gradient(180deg, var(--field), var(--bg2));
+  border: 1px solid var(--line);
+  border-radius: 14px;
+}
+.matchscore .ms-team {
+  flex: 1;
+  text-align: center;
+  font-family: "Jua", sans-serif;
+  font-size: 0.95rem;
+  color: var(--text);
+  line-height: 1.2;
+}
+.matchscore .ms-team.home { color: var(--accent); }
+.matchscore .ms-num {
+  font-family: "Jua", sans-serif;
+  font-size: 1.7rem;
+  min-width: 84px;
+  text-align: center;
+  color: var(--text);
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 10px;
+  padding: 2px 8px;
+}
+.matchscore .ms-num.win { color: var(--good2); }
+.matchscore .ms-num.lose { color: var(--bad); }
+.ms-line {
+  text-align: center;
+  color: var(--dim);
+  font-size: 0.9rem;
+  margin-bottom: 8px;
+}
+.ms-line b { color: var(--accent); }
+
+/* 경기 시뮬레이션 뷰 — 스코어보드 + 미니 필드 */
+.msim { margin-bottom: 6px; }
+.scoreboard {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 10px 8px;
+  background: linear-gradient(180deg, var(--field), var(--bg2));
+  border: 1px solid var(--line); border-bottom: 0;
+  border-radius: 12px 12px 0 0;
+}
+.scoreboard .sb-team {
+  flex: 1; text-align: center; line-height: 1.15;
+  font-family: "Jua", sans-serif; font-size: 0.9rem; color: var(--text);
+}
+.scoreboard .sb-team.home { color: var(--accent); }
+.scoreboard .sb-score {
+  font-family: "Jua", sans-serif; font-size: 1.7rem;
+  background: rgba(0, 0, 0, 0.3); border-radius: 8px; padding: 2px 12px;
+  min-width: 78px; text-align: center; color: var(--text);
+}
+.scoreboard .sb-score i { opacity: 0.55; margin: 0 4px; font-style: normal; }
+.sb-clock {
+  text-align: center; font-size: 0.76rem; color: var(--dim);
+  background: var(--bg2); border: 1px solid var(--line); border-top: 0; padding: 3px;
+}
+.pitch {
+  position: relative; height: 92px; overflow: hidden;
+  border: 1px solid var(--line); border-top: 0; border-radius: 0 0 12px 12px;
+  background: repeating-linear-gradient(90deg, var(--turf) 0 30px, var(--turf2) 30px 60px);
+}
+.pitch .pitch-mid { position: absolute; left: 50%; top: 0; bottom: 0; width: 2px; background: rgba(255, 255, 255, 0.22); }
+.pitch .net { position: absolute; top: 50%; transform: translateY(-50%); font-size: 1.15rem; opacity: 0.85; }
+.pitch .net.left { left: 3px; }
+.pitch .net.right { right: 3px; }
+.pitch .ball {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  font-size: 1.2rem; transition: left 0.5s ease, top 0.5s ease;
+  filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.5));
+}
+/* box-shadow 애니메이션은 프레임마다 페인트를 다시 돌려요 — opacity만 움직이는
+ * 덧레이어로 바꿨습니다. 저사양 폰에서 골 순간에 끊기던 자리예요. */
+.pitch::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  opacity: 0; box-shadow: inset 0 0 0 3px var(--good2);
+}
+.pitch.goal-a::after { box-shadow: inset 0 0 0 3px var(--bad); }
+.pitch.goal-h::after, .pitch.goal-a::after { animation: sbGoalFx 0.55s ease; }
+@keyframes sbGoalFx { 0%, 100% { opacity: 0; } 45% { opacity: 1; } }
+.msim .pbp { margin-top: 8px; }
+.ms-final {
+  text-align: center; font-family: "Jua", sans-serif; font-size: 1.05rem;
+  margin: 8px 0 4px; color: var(--text);
+}
+.ms-final.win { color: var(--good2); }
+.ms-final.lose { color: var(--bad); }
+
+/* 🎒 이적 적응으로 배운 것 — 한 번만 뜨는 줄이라 눈에 띄어야 해요 */
+.hint.learn { color: var(--accent); }
+
+/* 💼 이적 제안 — 리그별로 묶고, 카드마다 도박의 크기(평점 페널티·수상 가치)를 적어요 */
+.tf-group {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 10px;
+  margin-bottom: 12px;
+  background: linear-gradient(180deg, var(--field), var(--bg2));
+}
+.tf-group.up { border-color: var(--accent); }
+.tf-group.down { border-color: var(--dim); }
+.tf-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 2px 4px 8px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 8px;
+}
+.tf-head .tf-lg { font-family: "Jua", sans-serif; font-size: 1.05rem; color: var(--accent); }
+/* 리그가 5개로 늘어서 묶음마다 위/아래를 한 마디로 적어요 */
+.tf-head .tf-lg small { font-family: inherit; font-size: 0.72rem; color: var(--dim); }
+.tf-group.same .tf-head .tf-lg { color: var(--text); }
+.tf-group.down .tf-head .tf-lg { color: var(--dim); }
+.tf-risk { font-size: 0.76rem; color: var(--sky); }
+.tf-group.up .tf-head .tf-risk { color: var(--accent2); }
+.tf-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  margin-bottom: 6px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--bg2);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.92rem;
+  cursor: pointer;
+}
+.tf-card:last-child { margin-bottom: 0; }
+.tf-card:hover, .tf-card:focus-visible { border-color: var(--accent); transform: translateY(-1px); }
+.tf-card:active { transform: scale(0.98); }
+.tf-card .tf-top,
+.tf-card .tf-sub { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.tf-card .tf-name { font-family: "Jua", sans-serif; color: var(--text); }
+.tf-card .tf-str { font-size: 0.8rem; color: var(--dim); }
+.tf-card .tf-fee { font-size: 0.82rem; color: var(--accent); }
+/* 카드만 보고 눌러도 어느 리그인지 알 수 있어야 해요 */
+.tf-card .tf-lg { font-size: 0.8rem; color: var(--sky); }
+.tf-card.down .tf-lg, .tf-card.down .tf-risk { color: var(--dim); }
+/* 🏟️ 그 클럽이 리그 안에서 어디쯤인지 — 전력 숫자만으로는 감이 안 와요 */
+.tf-card .tf-rank { font-size: 0.78rem; color: var(--dim); }
+
+@media (max-width: 380px) {
+  .card-grid.three { grid-template-columns: 1fr; }
+  .tf-card .tf-sub { flex-direction: column; gap: 2px; }
+}
+
+/* 📊 기록 화면 표 — 결산 표와 같은 이유로 3칸이에요.
+ * 칸을 나누면 폰 폭에서 헤더가 세로로 쪼개져요. 수상 칸만 유동 폭입니다. */
+.season-record { table-layout: fixed; }
+.season-record th, .season-record td { word-break: keep-all; }
+/* 폭 근거는 위 .season-soccer 주석과 같아요. 성적 칸은 112px 필요합니다.
+ * 시즌 칸은 44 → 60px — 아래에 소속·리그를 작은 글씨로 붙였어요.
+ * ("3시즌 103골"이 어느 리그 기록인지 알 수가 없다는 제보) */
+.season-record th:nth-child(1), .season-record td:nth-child(1) { width: 60px; }
+.season-record th:nth-child(2), .season-record td:nth-child(2) { width: 112px; }
+.season-record .yr-stat { white-space: nowrap; }
+.season-record .rec-season { vertical-align: middle; line-height: 1.35; }
+/* 소속은 칸보다 길 수 있어서 넘치면 잘라요 (전체 이름은 title에 있어요) */
+.season-record .rec-club {
+  display: block; font-size: 0.66rem; color: var(--accent); opacity: .85;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.season-record .rec-lg { display: block; font-size: 0.62rem; opacity: .6; white-space: nowrap; }
+
+/* 🏆 리그 순위표 — 접이식. 루키의 같은 요소와 모양을 맞춰요 */
+.standings-box { margin: 0 0 10px; border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; }
+.standings-box > summary { cursor: pointer; font-size: .85rem; color: var(--cream); list-style: none; }
+.standings-box > summary::-webkit-details-marker { display: none; }
+.standings-box > summary::before { content: "▸ "; color: var(--dim); }
+.standings-box[open] > summary::before { content: "▾ "; }
+
+/* 평균 평점 칸 — 좁게 고정해 '성적'이 세로로 접히지 않게 해요 */
+.yr-avg { white-space: nowrap; width: 38px; color: var(--cream); }
+.ch-club { color: var(--dim); font-size: .92em; }
+.ch-role { display: block; font-size: .78em; opacity: .6; }
+/* 그 라운드 클럽 성적 — 소속 옆에 한 글자. 줄을 새로 만들지 않아요(inline) */
+.ch-res { margin-left: .28em; font-size: .78em; }
+.ch-res.r-w { color: var(--accent); }
+.ch-res.r-l { color: var(--accent2); }
+.ch-res.r-d { color: var(--dim); }
+
+/* 🏆 승부차기 — 컵 단판에서 비겼을 때만 나와요 */
+.pk-head { font-size: .95rem; color: var(--cream); margin-bottom: .4rem; }
+.pk-score { font-size: 1.9rem; font-weight: 800; letter-spacing: .06em; margin: .2rem 0 .5rem; }
+.pk-score b { color: var(--dim); }
+.pk-score b.win { color: var(--accent); }
+.pk-board { max-height: 8.4rem; overflow-y: auto; text-align: left; margin: 0 auto .5rem; max-width: 22rem; }
+.pk-line { font-size: .82rem; padding: .12rem 0; color: var(--dim); }
+.pk-line.ok { color: var(--cream); }
+.pk-line.no { color: var(--accent2); }
+.pk-hint { font-size: .9rem; color: var(--text); margin: .35rem 0 .5rem; min-height: 1.2rem; }
+.pk-btns { display: flex; gap: .4rem; justify-content: center; flex-wrap: wrap; }
+.pk-side { flex: 1 1 5.5rem; max-width: 8rem; }
+
+/* 유스 라운드 판정 근거 — 확률과 가장 크게 작용한 조각 */
+.pass-why { color: var(--sky); font-size: .84rem; margin-top: 2px; }
+.pass-why b { color: var(--cream); }
+
+/* ⭐ 경기 평점 내역 — 접어 두고, 궁금할 때만 펼쳐요 */
+.rate-why { margin: .4rem auto; max-width: 24rem; text-align: left; }
+.rate-why > summary { cursor: pointer; font-size: .86rem; color: var(--accent); list-style: none; text-align: center; }
+.rate-why > summary::-webkit-details-marker { display: none; }
+.rate-why > summary::after { content: " ▾"; color: var(--dim); }
+.rate-why[open] > summary::after { content: " ▴"; }
+.rw-body { display: flex; flex-wrap: wrap; gap: .25rem .5rem; margin-top: .35rem; }
+.rw-item { font-size: .8rem; color: var(--dim); white-space: nowrap; }
+.rw-item b { color: var(--cream); font-weight: 600; }
+
+/* 🥇 개인 순위 — 득점·도움·수비·평점·MOM을 한 표에 */
+.race-title { font-size: .82rem; color: var(--accent); margin-bottom: 4px; }
+.race-table { font-size: .82rem; }
+.race-table th, .race-table td { padding: .24rem .28rem; }
+.race-table td:first-child, .race-table th:first-child { width: 1.5rem; }
+/* 숫자 칸 — 한 부문만 보여주니 폭을 줄이고 이름·소속에 자리를 넘겨요 */
+.race-table .rc-v, .race-table th:last-child { width: 4.2rem; text-align: right; white-space: nowrap; }
+.race-table .ch-club { display: block; font-size: .68rem; color: var(--dim); }
+/* 🏷️ 칭호 — 이 표에서 "다른 팀 선수가 어느 급인가"를 읽는 유일한 자리예요.
+ * 소속·역할과 같은 회색으로 두면 묻혀서, 색을 살짝 올려 눈에 걸리게 합니다. */
+.race-table .ch-title { color: var(--cream); font-weight: 600; }
+
+/* 🎖️ 시즌 칭호 — 지난 시즌에 받아 이번 시즌 경기에 붙는 효과예요.
+ * 경기하러 가기 전에 늘 보여야 해서 접지 않고 칩으로 깔아 둡니다. */
+.buff-row {
+  display: flex; flex-wrap: wrap; align-items: center; gap: .3rem;
+  /* 아래 여백이 .1rem이라 바로 밑의 🏆 리그 순위표 상자와 거의 붙어 보였어요.
+   * 순위표(.standings-box)는 자기 위 여백이 0이라 여기서 띄워 줘야 합니다. */
+  margin: .5rem 0 .7rem;
+}
+.buff-head { font-size: .72rem; color: var(--dim); margin-right: .1rem; }
+.buff-chip {
+  display: inline-flex; align-items: baseline; gap: .3rem;
+  padding: .16rem .45rem; border-radius: .7rem;
+  background: rgba(255, 209, 102, .12); border: 1px solid rgba(255, 209, 102, .35);
+  font-size: .72rem; color: var(--cream); line-height: 1.35;
+}
+.buff-chip b { font-weight: 600; color: var(--accent); font-size: .68rem; }
+/* 🌍 밟아 온 리그 — 명예의 전당 카드와 은퇴식에 한 줄 */
+.hof-lg { font-size: .72rem; color: var(--dim); margin-top: .12rem; }
+.lg-path { letter-spacing: .01em; }
+/* 결산의 '다음 시즌 칭호' 한 줄 */
+.buff-next .bn-eff { color: var(--accent); }
+.buff-next.dim { opacity: .72; }
+.race-note { font-size: .72rem; color: var(--dim); margin-top: .3rem; }
+/* 부문 탭 — 정렬만 바꿔요. 좁은 화면에서는 가로로 넘겨서 봐요 */
+.race-tabs {
+  display: flex; gap: .25rem; overflow-x: auto; padding-bottom: .3rem;
+  margin-bottom: .35rem; -webkit-overflow-scrolling: touch;
+}
+.race-tab {
+  flex: 0 0 auto; font-family: inherit; font-size: .74rem; white-space: nowrap;
+  padding: .28rem .55rem; border-radius: 999px; cursor: pointer;
+  background: var(--bg2); border: 1px solid var(--line); color: var(--dim);
+}
+.race-tab.on { background: var(--field); border-color: var(--accent); color: var(--accent); font-weight: 700; }
+/* 그 부문 숫자 — 표에서 제일 먼저 읽혀야 하는 값이에요 */
+.race-table th:last-child { color: var(--accent); }
+.race-table td.rc-v { color: var(--text); font-weight: 700; }
+
+/* 🔥 1년 특훈 — 프로 도전에 실패한 뒤 한 해를 더 쓰는 화면 */
+.camp-stat {
+  display: flex; align-items: center; gap: .4rem;
+  justify-content: flex-start; padding: .6rem .7rem; font-size: .9rem;
+}
+.camp-stat .cs-emoji { font-size: 1.1rem; }
+.camp-stat .cs-now { margin-left: auto; color: var(--dim); font-size: .8rem; }
+
+/* 두 갈래는 나란히 두 칸 — 셋을 한 줄에 두면 글자가 접혀서 안 읽혀요.
+   '다른 능력치 고르기'는 아래 한 줄을 통째로 써요(얇고 길게). */
+.action-grid.camp-two { grid-template-columns: 1fr 1fr; }
+.camp-way {
+  display: flex; flex-direction: column; justify-content: center; gap: .25rem;
+  text-align: center; padding: .8rem .5rem; min-height: 5.4rem;
+}
+.camp-way .cw-top { font-size: .92rem; font-weight: 700; line-height: 1.25; }
+.camp-way .cw-sub { font-size: .68rem; color: var(--dim); line-height: 1.35; }
+.action-grid.camp-two .camp-back {
+  grid-column: 1 / -1; padding: .45rem; font-size: .78rem; opacity: .85;
+}
+
+/* 연타 레이어 — 화면 한가운데. 아래에 붙여 두면 폰에서 접혀 안 보였어요 */
+.tap-modal { width: min(340px, 90vw); }
+.tap-hint { font-size: .78rem; color: var(--dim); margin-bottom: 10px; line-height: 1.5; }
+.ct-bar {
+  height: 10px; border-radius: 5px; overflow: hidden;
+  background: rgba(255, 255, 255, .1); margin-bottom: 12px;
+}
+.ct-fill { height: 100%; width: 100%; background: var(--accent); transition: width .05s linear; }
+.ct-btn {
+  width: 100%; padding: 2.2rem .8rem; border-radius: 18px; cursor: pointer;
+  font-family: inherit; color: var(--cream); font-weight: 700;
+  background: var(--field); border: 3px solid var(--line);
+  display: flex; flex-direction: column; align-items: center; gap: .3rem;
+  /* 연타라 터치가 겹쳐요 — 길게 눌러 나오는 선택·확대를 막아요 */
+  user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
+  touch-action: manipulation;
+}
+.ct-btn .ct-emoji { font-size: 2.6rem; }
+.ct-btn .ct-count { font-size: 2rem; color: var(--accent); }
+.ct-btn.hit { animation: ct-pop .09s ease-out; border-color: var(--accent); }
+@keyframes ct-pop { from { transform: scale(1); } 50% { transform: scale(.95); } to { transform: scale(1); } }
+
+/* 👥 스쿼드 — 선발 11 + 벤치 */
+.squad-table { width: 100%; font-size: .74rem; }
+.squad-table td, .squad-table th { padding: .16rem .2rem; }
+.squad-table .sq-pos { color: var(--dim); }
+.squad-table .sq-str { text-align: right; color: var(--cream); width: 2.6em; }
+.squad-table .sq-rec { text-align: right; color: var(--dim); white-space: nowrap; }
+.squad-table tr.me td { color: var(--accent); font-weight: 600; }
+.squad-table tr.sq-sep td {
+  padding-top: .4rem; color: var(--dim); font-size: .72rem; border-bottom: 1px solid var(--line);
+}
+.sq-note { font-size: .76rem; margin-bottom: .35rem; color: var(--text); }
+
+/* 🪑 벤치인 주의 결과 화면 */
+.bench-card { text-align: center; padding: .6rem .4rem; }
+.bench-card .draft-emoji { font-size: 2.4rem; }
+.bench-card .tour-line { color: var(--dim); font-size: .82rem; margin: .3rem 0 .5rem; }
+/* ⚖️ 동률 규칙 한 줄 — 표 바로 아래, 본문보다 작고 흐리게 */
+.wc-tie-note { font-size: .78rem; color: var(--muted); margin: .35rem .2rem .1rem; text-align: center; }
+/* 🖊️ 은퇴 한마디 — 남기는 칸(은퇴식)과 남은 줄(명예의 전당) */
+.hof-word-box { background: var(--card2, rgba(255,255,255,.04)); border-radius: 12px;
+  padding: .7rem .7rem .6rem; margin: .2rem 0 .6rem; text-align: center; }
+.hof-word-title { font-size: .95rem; font-weight: 600; }
+.hof-word-sub { font-size: .76rem; color: var(--muted); margin: .15rem 0 .5rem; }
+.hof-word-box input { width: 100%; box-sizing: border-box; padding: .5rem .6rem; margin-bottom: .4rem;
+  border-radius: 8px; border: 1px solid rgba(255,255,255,.18); background: rgba(0,0,0,.25);
+  color: var(--text); font-size: .92rem; text-align: center; }
+.hof-word-box input:disabled { opacity: .7; }
+.hof-word-done { font-size: .8rem; color: var(--accent); margin-top: .35rem; min-height: 1em; }
+.hof-word { font-size: .82rem; color: var(--accent); margin-top: .15rem;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hofd-word { margin: .5rem .1rem .1rem; padding: .5rem .6rem; border-radius: 10px;
+  background: rgba(255,255,255,.05); color: var(--text); font-size: .9rem; line-height: 1.5; text-align: center; }
+/* 🪑 대표팀 벤치 카드 — 순위표를 품어서 조금 넓게 잡아요 */
+.wc-bench .rank-table { margin: .55rem 0 .2rem; }
+.wc-bench .tour-line b { color: var(--text); }
+/* 🗣️ 감독 한마디 — 벤치인 이유는 숫자가 아니라 말로 전해요 */
+.coach-say { color: var(--text); font-size: .9rem; line-height: 1.55; margin: .4rem .2rem .55rem; }
+/* 👥 스쿼드 레이어 — base.css의 .av-modal 껍데기를 빌려 씁니다 */
+.squad-modal { width: min(420px, 94vw); text-align: left; }
+.squad-modal .av-title { text-align: center; }
+.squad-modal .av-actions { margin-top: 10px; }
+.sq-odds { color: var(--accent); font-weight: 600; }
+/* 확률이 어디서 나왔는지 펼쳐 주는 줄 — 본문보다 한 단계 작고 흐리게 */
+.sq-parts { font-size: 0.82rem; color: var(--muted); line-height: 1.6; }
+
+/* ═══════════════════════════════════════════════════════════════════
+ * 🌏 월드컵 테마 — 대회 기간에만 화면의 결이 바뀌어요.
+ *
+ * ⚠️ 이 블록의 규칙 하나: **색과 결만 바꾸고 레이아웃은 절대 안 건드려요.**
+ * 이 저장소에서 CSS는 자동 검증의 사각지대라(기계가 화면을 못 봐요), 여기서
+ * 간격이나 폭을 만지면 "성적 칸이 세로로 접히는" 류의 사고를 아무도 못 잡아요.
+ * 팔레트·보더·글자색까지입니다.
+ *
+ * 붙고 떨어지는 건 worldcup.js의 themeSync()가 해요 — 켜고 끄는 게 아니라
+ * S.wc에서 **파생**시킵니다. 대회가 끝나 S.wc가 null이 되면 다음 렌더에서
+ * 반드시 떨어지고, 한 렌더를 놓쳐도 그다음이 고쳐요(자기 복구형).
+ * ═══════════════════════════════════════════════════════════════════ */
+body.wc-mode {
+  /* ⚠️ 예전에는 대회 모드가 "밤 경기장 네이비 + 골드"였어요. v2의 평상시 테마가
+   * 바로 그 네이비라, 그대로 두면 **대회 중인지 아닌지가 화면에서 안 보입니다.**
+   * 그래서 대회는 한 칸 더 올려 크림슨 + 골드로 갈랐어요 — 결승전 카펫 색이에요. */
+  --bg: #2a0a18;
+  --bg2: #3d0f22;
+  --field: #4a1229;
+  --line: #a8365e;
+  --accent: #f2c14e;
+  --sky: #ffb9cd;
+  --text: #ffeef3;
+  --dim: #d6a4b3;
+  background:
+    radial-gradient(ellipse 140% 70% at 50% -10%, rgba(242, 193, 78, .12) 0%, transparent 62%),
+    repeating-linear-gradient(90deg, var(--bg2) 0px, var(--bg2) 40px, var(--bg) 40px, var(--bg) 80px),
+    var(--bg);
+}
+/* 변수로 안 도는 자리만 골라서 덮어요 */
+body.wc-mode .btn-primary {
+  background: linear-gradient(180deg, #ffe08a, var(--accent));
+  color: #2b1d00;
+  box-shadow: 0 4px 0 #b08420;
+}
+body.wc-mode .tag { background: rgba(242, 193, 78, .14); color: var(--accent); }
+body.wc-mode .bar-fill.scout { background: linear-gradient(90deg, #ffe6a8, var(--accent)); }
+/* 헤더에 골드 밑줄 — "지금은 대회 중"이 화면 맨 위에서 보여야 해요 */
+body.wc-mode .hud { box-shadow: inset 0 -3px 0 var(--accent); }
+body.wc-mode h2 { color: var(--accent); }
+/* 결과 카드에 은은한 광 — 승리 색(연두)은 그대로 둬요. 이겼다는 신호까지
+ * 골드로 덮으면 승패가 한눈에 안 들어와요 */
+body.wc-mode .ms-final { text-shadow: 0 0 14px rgba(242, 193, 78, .35); }
+/* 대회 잔디도 조명 아래 밤 잔디로 — 변수 하나만 갈면 경기 화면이 전부 따라와요 */
+body.wc-mode { --turf: #3f1430; --turf2: #340f28; }
+
+/* 🌏 대회 화면 조각들 */
+.wc-row { margin: 0 0 10px; }
+.wc-badge {
+  background: rgba(242, 193, 78, .12);
+  border: 1px solid rgba(242, 193, 78, .4);
+  border-radius: 12px;
+  padding: 7px 10px;
+  font-size: .82rem;
+  color: #f2c14e;
+  line-height: 1.5;
+}
+/* 아직 문턱에 못 닿았을 때 — 같은 자리지만 조용해야 해요 */
+.wc-badge.dim { background: rgba(147, 182, 162, .08); border-color: var(--line); color: var(--dim); }
+.wc-badge b { color: var(--text); }
+.wc-card { text-align: center; padding: .6rem .4rem; }
+.wc-card .draft-emoji { font-size: 2.4rem; }
+.wc-card.champ .draft-title { color: #f2c14e; text-shadow: 0 0 18px rgba(242, 193, 78, .5); }
+.wc-group { margin-top: .5rem; }
+
+/* 📨 초대장 — 8종 공용 모달 껍데기(.av-modal) 위에 봉투 결만 얹어요 */
+.wc-invite { width: min(400px, 92vw); }
+.wc-inv-flag { font-size: 2.6rem; line-height: 1.1; }
+.wc-invite .av-title { color: #f2c14e; }
+.wc-inv-line { font-size: .95rem; line-height: 1.6; margin: .3rem 0 .5rem; }
+.wc-inv-sub { font-size: .78rem; color: var(--dim); line-height: 1.6; margin-top: .4rem; }
+/* 와일드카드는 선택지가 둘이라 세로로 쌓아요 — 한 줄에 두면 글자가 접혀요
+ * (🔥 1년 특훈에서 세 개를 한 줄에 뒀다가 같은 지적을 받았어요) */
+.wc-invite .av-actions { flex-direction: column; }
+/* 🌏 대회 개인 기록 — 리그 개인 순위 자리에 들어가요 */
+.wc-rec { font-size: .84rem; line-height: 1.7; }
+.wc-rec-row b { color: var(--accent); }
+.wc-rec-next { color: var(--sky); margin-top: .2rem; }
+.wc-rec-note { color: var(--dim); font-size: .74rem; margin-top: .35rem; }
+/* 🥇 대회 개인 순위 · 🏆 수상 */
+.wc-nat { display: block; font-size: .68rem; color: var(--dim); }
+.wc-awards { margin-top: .5rem; }
+.wc-award { font-size: .84rem; line-height: 1.7; color: var(--dim); }
+.wc-award.me { color: var(--accent); font-weight: 600; }
+.wc-award b { color: var(--text); }
+.wc-award.me b { color: var(--accent); }
+/* 🎲 깜짝 발탁 — 소집 카드의 한 줄 */
+.wc-lucky { color: var(--accent); font-size: .88rem; margin: .3rem 0; }
+/* 🏆 토너먼트 대진표 */
+.wc-bracket .wc-vs { color: var(--dim); font-size: .7rem; }
+.wc-bracket td { white-space: nowrap; }
+/* 🏆 이번 대회 우승국 — 내가 못 들었을 때 누가 들었는지 */
+.wc-champ { font-size: .86rem; color: var(--dim); margin: .3rem 0; }
+.wc-champ b { color: var(--accent); }
+/* 📊 기록 화면 탭 */
+.rec-tabs { display: flex; gap: 6px; margin-bottom: 10px; }
+.rec-tab {
+  flex: 1; padding: 8px 6px; border-radius: 10px; cursor: pointer;
+  background: var(--bg2); border: 1px solid var(--line); color: var(--dim);
+  font-family: "Jua", sans-serif; font-size: .92rem;
+}
+.rec-tab.on { background: var(--field); border-color: var(--accent); color: var(--accent); }
+.wc-hist td, .wc-hist th { white-space: nowrap; }
+.wc-rec-champ { font-size: .74rem; color: var(--dim); }
+/* 🌏 결산의 월드컵 — 감독 한마디 블록 */
+.wc-report { margin: .5rem 0; }
+/* 🌏 결산의 대표팀 감독 한마디 아래 사실 줄 */
+.wc-fact { font-size: .78rem; color: var(--dim); margin-top: .2rem; }
+
+/* ---------- 🏛️ 명예의 전당 — 달 탭과 헌액 카드 ---------- */
+/* 달 탭 — 개수가 늘면 가로로 넘겨서 봐요(부문 탭과 같은 방식). */
+.hof-tabs {
+  display: flex; gap: .3rem; overflow-x: auto; padding-bottom: .35rem; margin-bottom: .6rem;
+  -webkit-overflow-scrolling: touch;
+}
+.hof-tab {
+  flex: 0 0 auto; padding: .38rem .6rem; border-radius: .7rem; cursor: pointer;
+  background: var(--bg2); border: 1px solid var(--line); color: var(--dim);
+  font-family: "Jua", sans-serif; font-size: .8rem; white-space: nowrap;
+}
+.hof-tab span { font-size: .68rem; opacity: .7; }
+.hof-tab.on { background: var(--field); border-color: var(--accent); color: var(--accent); }
+/* 카드가 눌리는 것이라는 표시 — 오른쪽 꺾쇠 */
+.hof-card { cursor: pointer; }
+.hof-more { color: var(--dim); font-size: 1.1rem; flex-shrink: 0; }
+/* 헌액 카드 레이어 */
+.hofd-modal { width: min(400px, 94vw); text-align: left; }
+.hofd-head { text-align: center; margin-bottom: .7rem; }
+.hofd-emoji { font-size: 2.2rem; }
+.hofd-name { font-family: "Jua", sans-serif; font-size: 1.15rem; color: var(--cream); }
+.hofd-me {
+  font-size: .66rem; color: var(--accent); border: 1px solid var(--accent);
+  border-radius: .6rem; padding: .06rem .32rem; vertical-align: middle;
+}
+.hofd-grade { font-size: .82rem; color: var(--accent); }
+.hofd-rank { font-size: .72rem; color: var(--dim); margin-top: .2rem; }
+.hofd-body { font-size: .82rem; }
+.hofd-row {
+  display: flex; justify-content: space-between; gap: .8rem;
+  padding: .34rem 0; border-top: 1px solid var(--line);
+}
+.hofd-row span { color: var(--dim); flex-shrink: 0; }
+.hofd-row b { color: var(--cream); font-weight: 500; text-align: right; }
+
+/* ---------- 🎉 피버 타임 ---------- */
+/* 화면 맨 위에 붙는 띠. 화면 전환 때마다 다시 그려져요(show → Fever.tick). */
+.fever-bar {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 60;
+  display: flex; align-items: center; gap: .5rem;
+  padding: .38rem .7rem;
+  background: linear-gradient(90deg, #ff8a3d, #ffd166, #ff8a3d);
+  background-size: 200% 100%;
+  color: #2a1600; font-size: .78rem;
+  animation: fv-slide 6s linear infinite;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, .35);
+}
+@keyframes fv-slide { from { background-position: 0 0; } to { background-position: 200% 0; } }
+.fever-bar .fv-emoji { font-size: 1.05rem; }
+.fever-bar .fv-body { flex: 1; display: flex; flex-direction: column; line-height: 1.25; min-width: 0; }
+.fever-bar .fv-body b { font-family: "Jua", sans-serif; font-size: .86rem; }
+.fever-bar .fv-eff { font-size: .7rem; opacity: .85; }
+.fever-bar .fv-left { font-size: .7rem; opacity: .8; white-space: nowrap; }
+/* 띠가 첫 화면을 가리지 않게 본문을 그만큼 내려요 */
+body.fever-on #app { padding-top: 2.6rem; }
+/* 처음 마주친 순간의 알림 */
+.fever-modal { width: min(340px, 90vw); }
+.fever-modal .fv-big { font-size: 2.6rem; }
+.fever-modal .fv-note { font-size: .84rem; color: var(--dim); margin: .2rem 0 .4rem; }
+.fever-modal .fv-eff-big { font-size: .9rem; color: var(--accent); margin: .2rem 0; }
+
+/* ---------- 📈 동료도 크고 늙어요 ---------- */
+.sq-age { font-size: .68rem; color: var(--dim); margin-left: .3rem; }
+.sq-age .sq-slump { color: var(--bad); font-weight: 500; }
+.sq-age .sq-surge { color: var(--good); font-weight: 500; }
+/* 결산의 팀 소식 한 줄 */
+.squad-news { color: var(--cream); }
+/* 🌏 대회 개인 순위의 부문 탭 — 리그 개인 순위(.race-tabs) 결을 그대로 써요 */
+.wc-face-tabs { margin-bottom: .4rem; }
+
+/* ---------- 📊 능력치 레이더 · 🦶 주발과 약발 ---------- */
+.stat-shape { display: flex; align-items: center; gap: .4rem; margin-bottom: .5rem; }
+.stat-radar { width: min(190px, 46vw); height: auto; flex-shrink: 0; }
+.foot-box { flex: 1; min-width: 0; text-align: center; }
+.feet { display: flex; justify-content: center; gap: .5rem; }
+.foot {
+  width: 44px; height: 60px; border-radius: 22px / 30px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  border: 2px solid var(--line); background: var(--bg2);
+}
+.foot .foot-ico { font-size: .8rem; opacity: .5; }
+.foot b { font-size: 1.15rem; font-family: "Jua", sans-serif; }
+.foot.main { border-color: var(--good); background: rgba(110, 231, 160, .16); }
+.foot.main b { color: var(--good); }
+.foot.weak b { color: var(--dim); }
+.foot.weak { transform: scaleX(-1); }
+.foot.weak b { transform: scaleX(-1); }
+.foot-note { font-size: .7rem; color: var(--dim); margin-top: .35rem; line-height: 1.4; }
+/* 🦶 주발 고르기 — 선수 등록 화면 */
+.foot-pick { display: flex; align-items: center; justify-content: center; gap: .6rem; margin: .2rem 0 .5rem; }
+.foot-pick-label { font-size: .82rem; color: var(--dim); }
+.foot-pick-btns { display: flex; gap: .35rem; }
+.foot-opt {
+  padding: .34rem .8rem; border-radius: .7rem; cursor: pointer;
+  background: var(--bg2); border: 1px solid var(--line); color: var(--dim);
+  font-family: "Jua", sans-serif; font-size: .84rem;
+}
+.foot-opt.on { background: var(--field); border-color: var(--good); color: var(--good); }
+/* ---------- 📍 내 자리 (세부 포지션) ---------- */
+.pos-field { margin-top: .5rem; }
+.pf-grid {
+  display: flex; flex-direction: column; gap: 3px;
+  padding: 6px 4px; border-radius: 10px;
+  background: linear-gradient(180deg, rgba(110,231,160,.07), rgba(110,231,160,.02));
+  border: 1px solid var(--line);
+}
+.pf-row { display: flex; justify-content: center; gap: 4px; }
+.pf-slot {
+  min-width: 30px; padding: .12rem .2rem; border-radius: .35rem;
+  font-size: .58rem; letter-spacing: .02em; text-align: center;
+  border: 1px solid var(--line); color: var(--dim); background: var(--bg2); opacity: .45;
+}
+.pf-slot.on { opacity: 1; }
+.pf-slot.here { background: var(--good); border-color: var(--good); color: var(--bg); font-weight: 700; }
+.pf-note { font-size: .68rem; color: var(--dim); margin-top: .3rem; line-height: 1.4; }
+.pf-note b { color: var(--cream); }
+/* 📍 자리를 고를 수 있어요 — 내 포지션 칸만 눌러집니다 */
+button.pf-slot { cursor: pointer; font-family: inherit; }
+.pf-slot.want { border-color: var(--good); color: var(--good); border-style: dashed; }
+.pf-slot.here.want { border-style: solid; }
+
+/* ═══════════════════════════════════════════════════════════════════
+ * 🎬 순간 카드 경기 화면 (match-scene.js — window.W2Scene)
+ *
+ * 세로 화면 문법: 위 1/3은 맥락(스코어보드·시계·흐름), 아래는 액션(중계 피드).
+ * 새 카드는 아래에서 위로 밀려 들어옵니다.
+ *
+ * 규칙 셋 — 고칠 때 지켜 주세요.
+ *  ① 애니메이션은 transform·opacity만. left/top/box-shadow를 움직이면
+ *    저사양 폰에서 레이아웃·페인트를 매 프레임 다시 돌려요.
+ *  ② 절대색 금지. 위 :root 변수만 씁니다.
+ *  ③ prefers-reduced-motion은 축약 대상이 아니에요 — 맨 아래 블록을 지우지 마세요.
+ *    **끄더라도 정보는 남습니다**: 골 배너·스코어·문구는 전부 DOM에 그대로 있고
+ *    움직임만 사라져요.
+ * ═══════════════════════════════════════════════════════════════════ */
+
+.w2-scene { position: relative; }
+
+/* ---------- 상단 고정 스코어보드 ---------- */
+.w2-top {
+  position: sticky; top: 0; z-index: 5;
+  background: linear-gradient(180deg, var(--field), var(--bg2));
+  border: 1px solid var(--line); border-radius: 12px;
+  padding: 8px 8px 6px;
+  box-shadow: 0 6px 14px rgba(0, 0, 0, .35);
+}
+.w2-row { display: flex; align-items: center; justify-content: center; gap: 8px; }
+.w2-team {
+  flex: 1; min-width: 0; text-align: center; line-height: 1.15;
+  font-family: "Jua", sans-serif; font-size: .9rem; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis;
+}
+.w2-team.home { color: var(--accent); }
+.w2-score {
+  font-family: "Jua", sans-serif; font-size: 1.7rem; color: var(--text);
+  background: rgba(0, 0, 0, .32); border-radius: 8px; padding: 2px 12px;
+  min-width: 82px; text-align: center; white-space: nowrap;
+}
+.w2-score i { opacity: .5; margin: 0 4px; font-style: normal; }
+/* 숫자가 바뀐 순간만 튕겨요 — scale은 레이아웃을 안 건드립니다 */
+.w2-score.bump { animation: w2Bump .42s cubic-bezier(.2, 1.4, .4, 1); }
+@keyframes w2Bump { 0% { transform: scale(1); } 40% { transform: scale(1.22); } 100% { transform: scale(1); } }
+
+.w2-meta {
+  display: flex; align-items: center; justify-content: space-between; gap: 6px;
+  margin-top: 5px; font-size: .74rem; color: var(--dim);
+}
+.w2-clock { font-variant-numeric: tabular-nums; }
+/* 🔥 내 순간 횟수 — 경기 전에 약속하지 않고, 실제로 온 만큼만 셉니다 */
+.w2-mine-count { color: var(--accent); }
+.w2-mine-count[hidden] { display: none; }
+
+/* 흐름 막대 — 옛 미니 필드(공이 무작위로 튀던 자리)를 대신해요.
+ * 카드의 주인(우리 공격/상대 공격/중립)만 보여주는 정직한 한 줄입니다. */
+.w2-flow {
+  position: relative; height: 6px; margin-top: 6px; border-radius: 3px; overflow: hidden;
+  background: repeating-linear-gradient(90deg, var(--turf) 0 14px, var(--turf2) 14px 28px);
+}
+.w2-flow-mark {
+  position: absolute; left: 0; top: 0; bottom: 0; width: 34%;
+  border-radius: 3px; background: var(--accent); opacity: .8;
+  transform: translateX(97%);
+  transition: transform .45s cubic-bezier(.3, .8, .4, 1), background-color .3s;
+}
+.w2-flow-mark.def { background: var(--bad); }
+
+/* ---------- 아래 피드 ---------- */
+.w2-feed { padding: 10px 0 4px; display: flex; flex-direction: column; gap: 6px; }
+.w2-card {
+  display: grid; grid-template-columns: 42px 1fr; gap: 8px; align-items: baseline;
+  background: rgba(0, 0, 0, .22); border-left: 3px solid var(--line);
+  border-radius: 8px; padding: 7px 10px;
+  font-size: .84rem; line-height: 1.6; color: var(--text);
+  animation: w2In .32s cubic-bezier(.2, .9, .3, 1);
+}
+@keyframes w2In { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+.w2-card .w2-min { color: var(--dim); font-size: .74rem; font-variant-numeric: tabular-nums; }
+.w2-card.good { border-left-color: var(--good); color: var(--good2); }
+.w2-card.bad { border-left-color: var(--bad); color: var(--bad); }
+.w2-card.filler { color: var(--dim); }
+/* 🔥 내 순간 — 여기만 타이핑이 붙어요. 전부 타이핑하면 밀도 차이가 사라집니다 */
+.w2-card.mine { border-left-color: var(--accent); background: rgba(255, 159, 69, .1); }
+.w2-card.mine .w2-body { color: var(--cream); }
+.w2-card.mine .w2-stake { color: var(--accent); font-family: "Jua", sans-serif; }
+/* 타이핑 중 커서 — 글자 폭을 안 밀도록 폭 0에 그림자로 그려요 */
+.w2-typing .w2-body::after {
+  content: "▍"; color: var(--accent); animation: w2Caret .7s steps(1) infinite;
+}
+@keyframes w2Caret { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
+
+/* 🥅 하프타임 — 카드가 아니라 구분선이에요 */
+.w2-half {
+  display: flex; align-items: center; gap: 8px; margin: 4px 0;
+  font-size: .78rem; color: var(--dim);
+  animation: w2In .32s ease;
+}
+.w2-half::before, .w2-half::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+.w2-half b { color: var(--cream); font-weight: 400; }
+
+/* ⚽ 골 배너 — **내 골에만** 붙습니다(설계 §5-4).
+ * 동료 골·실점에는 안 붙여요 — 바로 위 카드 문구와 같은 말이 두 번 나옵니다.
+ * reduced-motion에서도 이 줄은 DOM에 남아요. 움직임만 사라집니다. */
+.w2-goal {
+  text-align: center; font-family: "Jua", sans-serif; font-size: 1.5rem;
+  padding: 8px; border-radius: 10px; color: var(--ink);
+  background: linear-gradient(180deg, #ffc47f, var(--accent));
+  animation: w2Pop .5s cubic-bezier(.2, 1.5, .4, 1);
+}
+@keyframes w2Pop { from { opacity: 0; transform: scale(.6); } to { opacity: 1; transform: scale(1); } }
+
+/* 순간 카드의 미니게임 자리 */
+.w2-moment { margin: 6px 0 2px; }
+
+/* 사후 집계 — "이 경기의 내 순간 N회" */
+.w2-tally {
+  text-align: center; font-size: .84rem; color: var(--dim);
+  border: 1px dashed var(--line); border-radius: 10px; padding: 8px; margin-top: 8px;
+}
+.w2-tally b { color: var(--accent); }
+
+/* ---------- 골 연출 (설계 §5-4) ---------- */
+/* 풀스크린 플래시. position:fixed라 부모에 transform이 있으면 어긋나요 —
+ * 그래서 셰이크는 body가 아니라 .w2-scene에 겁니다(아래). */
+.w2-flash {
+  position: fixed; inset: 0; z-index: 88; pointer-events: none;
+  background: var(--accent); opacity: 0;
+  animation: w2Flash .42s ease-out;
+}
+.w2-flash.mate { background: var(--good); animation-duration: .3s; }
+.w2-flash.bad { background: var(--dim); animation-duration: .3s; }
+@keyframes w2Flash { 0% { opacity: 0; } 22% { opacity: .42; } 100% { opacity: 0; } }
+
+.w2-scene.shake { animation: w2Shake .3s ease-in-out; }
+.w2-scene.shake-x { animation: w2ShakeX .24s ease-in-out; }
+@keyframes w2Shake {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  20% { transform: translate3d(-5px, 2px, 0); }
+  45% { transform: translate3d(4px, -2px, 0); }
+  70% { transform: translate3d(-3px, 1px, 0); }
+}
+@keyframes w2ShakeX {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  33% { transform: translate3d(-4px, 0, 0); }
+  66% { transform: translate3d(4px, 0, 0); }
+}
+
+/* ---------- ♿ 어지럼증·광과민성 — 축약 대상이 아닙니다 ----------
+ * 흔들림·플래시·타이핑을 전부 끕니다. **정보는 그대로 남아요** —
+ * 골 배너·스코어·중계 문구는 DOM에 있고 움직임만 사라집니다. */
+@media (prefers-reduced-motion: reduce) {
+  .w2-card, .w2-half, .w2-goal, .w2-score.bump,
+  .w2-scene.shake, .w2-scene.shake-x, .pitch.goal-h::after, .pitch.goal-a::after {
+    animation: none !important;
+  }
+  .w2-flow-mark { transition: none !important; }
+  .w2-flash { display: none !important; }
+  .w2-typing .w2-body::after { display: none; }
+}

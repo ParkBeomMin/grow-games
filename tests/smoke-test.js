@@ -3,7 +3,10 @@
 const fs = require("fs"), path = require("path");
 const { JSDOM } = require("/workspace/grow-games/tests/cloud/jsdom.js");
 const ROOT = "/workspace/grow-games";
-const GAMES = ["rookie", "soccer", "idol", "stock", "dev", "chef", "stream", "unicorn"];
+const GAMES = ["rookie", "soccer", "winger2", "idol", "stock", "dev", "chef", "stream", "unicorn"];
+/* 아직 베타에만 있는 게임이에요 — 상용으로 승격하면 여기서 빼세요.
+ * 상용에는 폴더가 없어서, 이 표시가 없으면 `smoke-test.js root`가 읽다가 그대로 죽어요. */
+const BETA_ONLY = ["winger2"];
 const base = process.argv[2] === "root" ? "" : (process.argv[2] || "beta");
 const PRELUDE = `
   window.fetch = () => Promise.reject(new Error("net off"));
@@ -14,6 +17,7 @@ const PRELUDE = `
 `;
 let bad = 0;
 for (const g of GAMES) {
+  if (!base && BETA_ONLY.includes(g)) { console.log(`⏭️  상용/${g} — 아직 베타 전용이에요`); continue; }
   const dir = path.join(ROOT, base, g);
   let html = fs.readFileSync(path.join(dir, "index.html"), "utf8")
     .replace(/<script[^>]*src="https?:[^"]*"[^>]*><\/script>/g, "")

@@ -205,7 +205,7 @@ check(/return \{ play, hold, sequence, reaction, duel, target, drop, odd \};/.te
   "timing.js는 여전히 8종 그대로다 (건드리지 않았다)");
 check(!/TourStage/.test(TSRC), "timing.js에 투어 전용 메커닉이 새어 들어가지 않았다");
 // 아이돌만 내려받아요 — 다른 게임의 index.html에는 없어야 해요
-const GAMES = ["rookie", "soccer", "stock", "dev", "chef", "stream", "unicorn"];
+const GAMES = ["rookie", "soccer", "winger2", "stock", "dev", "chef", "stream", "unicorn"];
 const loaded = GAMES.filter((g) => /tour-stage\.js/.test(fs.readFileSync(`${ROOT}/beta/${g}/index.html`, "utf8")));
 check(loaded.length === 0, `아이돌 말고는 아무도 내려받지 않는다${loaded.length ? ` — ${loaded.join(", ")}` : ""}`);
 check(/tour-stage\.js/.test(fs.readFileSync(`${ROOT}/beta/idol/index.html`, "utf8")),
