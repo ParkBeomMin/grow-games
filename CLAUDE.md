@@ -165,3 +165,10 @@ S.career.mvpW = (S.career.mvpW != null ? S.career.mvpW : S.career.mvp) + prestig
 | 2026-08-28 | 등록 체크리스트에 게임 키 표·`tour-mech-test` 추가 | skills/grow-new-game | ⚽ 더 윙어 II 신설 중 발견 — `SAVE_KEY`만 바꾸면 `Match.register`·HOF·fever가 상용 데이터를 오염시킴 |
 | 2026-08-28 | Phase 3에 경계면 계약 선확정 절차 추가 | skills/grow-game-build | 서브 에이전트끼리는 서로의 `agentId`를 몰라 `SendMessage`가 안 닿음 — 오케스트레이터가 계약과 파일 담당을 미리 나눠야 함 |
 | 2026-08-28 | "폐기는 이름이 아니라 형태" 원칙 추가 | agents/grow-engineer | `ACE_W` 폐기 근거를 읽고도 같은 형태의 계단을 다른 이름으로 되살려, 능력치 70 수상률이 0.0%가 됨 |
+| 2026-08-28 | "고친 뒤 되돌려 빨간불 확인" 원칙 추가 | agents/grow-engineer | G-3 버그를 되돌려도 검사 4종이 전부 초록불 — 그 영역에 검사가 없었음 |
+| 2026-08-28 | 구현자·검증자 동시 실행 금지 | skills/grow-game-build | engineer가 고치는 파일로 inspector가 검사를 돌려 20/20 실패 — 움직이는 표적을 잼 |
+| 2026-08-28 | "빨간불인데 그냥 두는 검사" 절 추가 | agents/grow-inspector | 버그와 알려진 설계 한계를 한 검사에 묶으면, 고친 뒤에도 빨간불이라 신호를 잃음 |
+| 2026-08-28 | 문턱·기준선 여유 절 추가 | agents/grow-inspector | `fatigue` 문턱 여유가 0.4%까지 좁아져 계수 한 번만 더 움직이면 우연으로 빨간불 |
+| 2026-08-28 | "한 벌 계수를 요약에서 줄이지 마라" 추가 | agents/grow-balancer | `NPC_SPOT` 세 값을 "하나를 내리는 것과 같다"로 요약해 분할이 폐기되고 곡선이 무너짐 |
+| 2026-08-28 | 종료 코드 3갈래·0번 변이 등록·픽스처 건강 검사 | skills/grow-test-writing | 변이 정규식이 구현 변경에 두 번 죽었는데 "실패 1건"으로만 보임 |
+| 2026-08-29 | "시드 하나로 재지 마라" 추가 | skills/grow-test-writing | 한 세션에 두 번 — 시드에 따라 밴드를 넘나들거나, 고정 시드에서만 통과 |
