@@ -154,6 +154,8 @@
       <h2 id="stage-title"></h2>
       <div class="tour-round" id="stage-round"></div>
       <label class="auto-toggle"><input type="checkbox" id="auto-mini" /> 🤖 경기 자동 진행</label>
+      <!-- ♿ 판정 창 전역 확대 — 성적 페널티가 없어요. winger-moment.js가 이 칸을 봅니다 -->
+      <label class="auto-toggle"><input type="checkbox" id="wide-judge" /> ♿ 순간 카드 판정 넓게 (+30%)</label>
       <div class="tour-card" id="stage-card"></div>
       <button class="btn btn-primary" id="btn-stage-next">다음</button>
     </section>
@@ -310,6 +312,10 @@
   <script src="camp.js"></script>
   <script src="squad.js"></script>
   <script src="engine.js"></script>
+  <!-- 🔥 순간 카드 미니게임 4종 — 로드되면서 WingerEngine.setMini로 스스로 꽂아요.
+       ⚽ 축구 전용이라 timing.js가 아니라 전용 파일이에요(8개 게임이 다 내려받는 자리라서요).
+       engine.js 뒤여야 합니다. -->
+  <script src="../winger-moment.js"></script>
   <!-- 🎬 순간 카드 경기 화면 — career.js의 runV2Match가 window.W2Scene을 봐요.
        engine.js 뒤, career.js 앞이어야 합니다. -->
   <script src="match-scene.js"></script>

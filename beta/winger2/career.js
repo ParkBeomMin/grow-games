@@ -1753,14 +1753,22 @@ window.WingerCareer = (() => {
       try { card = m.next(); } catch (e) { console.error(e); card = null; }
       if (!card) return done();
       /* 🔥 내 순간 카드 — 판정이 아직 안 들어온 카드예요.
-       * winger-moment.js가 붙기 전에는 자동 판정으로 돕니다(설계 §11 1차 범위). */
+       *
+       * 🤖 경기 자동 진행이 켜져 있으면 미니게임을 **아예 안 열고** 지금의 확률
+       * 굴림(autoJudge)을 그대로 씁니다. ⏩ 빨리감기와는 다른 자리예요 —
+       * ⏩는 연출만 짧게 하고 개입은 유지합니다(설계 §5-5). */
       if (m.pending) {
         const mini = WingerEngine.getMini();
         const slot = (scene && scene.momentSlot && scene.momentSlot()) || $("stage-moment");
-        if (mini && slot) {
+        if (mini && slot && !autoMiniOn()) {
           if (scene && scene.push) scene.push(card);
-          mini(slot, { kind: m.pendingKind, moment: card.moment, condition: S.condition },
-            (judge) => { m.resolve(judge); draw(card); });
+          mini(slot, {
+            kind: m.pendingKind, moment: card.moment, condition: S.condition,
+            foot: mainFoot(),                        // 🦶 주발 쪽 코스가 판정 창 +25%예요
+            /* 조작 성공도 s → 판정. 산식(§2-6)은 엔진 안에 있어요 —
+             * 미니게임은 조작만 재고, 확률로 옮기는 일은 엔진이 합니다. */
+            judge: (s) => m.judgeFor(s),
+          }, (judge) => { m.resolve(judge); draw(card); });
           return;
         }
         m.resolve(m.autoJudge());

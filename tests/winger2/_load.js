@@ -195,4 +195,55 @@ function play(E, pos, ability, opt) {
   return acc;
 }
 
-module.exports = { load, mutsOK, xiOf, xiAll, statsOf, play, spreadFor, SRC, ENGINE };
+/* ═══════════════════════════════════════════════════════════════════════
+ * 🔥 `beta/winger-moment.js` — 미니게임 4종을 **브라우저 없이** 부르기
+ *
+ * 판정 산식(`s` → perfect/ok/miss)은 엔진에 있고, 이 파일이 내는 건 **조작 성공도 `s`**
+ * 하나뿐이에요. `_t`에 `sCut/sOne/sKp/sBlk/winMul/rollBlock`이 나와 있어서
+ * **그 파일의 함수를 그대로** 부를 수 있습니다 — 산식을 베껴 적지 않아요.
+ *
+ * `window`·`document`·`localStorage`를 자리만 채워 줍니다:
+ *   · `document`는 `getElementById → null`만 있으면 돼요 (♿ 체크박스 배선이 조용히 넘어갑니다)
+ *   · `localStorage`는 ♿ 판정 창 확대(`grow-wide-judge`)를 켜고 끄는 창구예요
+ *   · `window.WingerEngine`을 넣어야 🫀 컨디션(`condMul`)이 진짜로 걸립니다 —
+ *     안 넣으면 `condOf`가 1로 떨어져 **컨디션 검사가 아무것도 안 지켜요**
+ * ═══════════════════════════════════════════════════════════════════════ */
+const MOMENT = "/workspace/grow-games/beta/winger-moment.js";
+const MSRC = fs.readFileSync(MOMENT, "utf8");
+
+function loadMoment(muts, opt) {
+  const o = opt || {};
+  let src = MSRC;
+  for (const [re, rep] of muts || []) {
+    const before = src;
+    src = src.replace(re, rep);
+    if (src === before) throw new Error(`winger-moment.js에 변이가 안 걸렸어요 — ${re}`);
+  }
+  const store = { "grow-wide-judge": o.wide ? "1" : "0" };
+  const localStorage = {
+    getItem: (k) => (k in store ? store[k] : null),
+    setItem: (k, v) => { store[k] = String(v); },
+  };
+  const win = { WingerEngine: o.engine || load() };
+  const doc = { getElementById: () => null, readyState: "complete", addEventListener() {} };
+  /* 🔒 직접 eval을 안 씁니다 — const가 eval 스코프에 갇혀 값이 늘 undefined가 돼요. */
+  const M = new Function("window", "document", "localStorage",
+    `${src}\nreturn window.W2Moment;`)(win, doc, localStorage);
+  M.__store = store;
+  M.__win = win;
+  return M;
+}
+/* 변이 정규식이 winger-moment.js에 걸리는지 미리 확인 — 죽지 않고 목록을 돌려줍니다. */
+function momentMutsOK(table) {
+  const bad = [];
+  for (const [name, muts] of Object.entries(table || {})) {
+    for (const [re] of muts) {
+      if (!MSRC.match(re)) bad.push(`${name}: ${re}`);
+      else if (MSRC.replace(re, "\u0000") === MSRC) bad.push(`${name}(치환 무효): ${re}`);
+    }
+  }
+  return bad;
+}
+
+module.exports = { load, mutsOK, xiOf, xiAll, statsOf, play, spreadFor, SRC, ENGINE,
+  loadMoment, momentMutsOK, MSRC, MOMENT };

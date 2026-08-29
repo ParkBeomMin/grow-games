@@ -625,15 +625,24 @@ window.WingerEngine = (() => {
       return finishCard(card);
     }
 
-    /* 미니게임이 아직 안 붙었거나 _t.skill이 켜져 있을 때의 자동 판정.
-     * 화면이 setMini로 진짜 미니게임을 끼워 넣으면 이 갈래는 안 지나갑니다. */
-    function autoJudge(kind) {
+    /* 🎯 조작 성공도 s(0~1) → 이 카드의 판정 (§2-6).
+     *
+     *   P(사건 | 카드) = clamp(autoP(me) + 2*half(a)*(s − 0.5), 0, 1)
+     *
+     * **미니게임이 내는 것은 s 하나뿐이고, 확률로 옮기는 일은 여기서 합니다.**
+     * autoP는 그 경기의 전력(atkW·defW)과 내 능력치에서 나오는 값이라 미니게임이
+     * 알 수가 없어요. 미니게임이 제 손으로 판정을 만들면 **카드 갈래가 자동 갈래와
+     * 어긋납니다** — §2-6 개정이 고친 바로 그 자리예요. */
+    function judgeAt(kind, s) {
       const ab = abilityOf(me);
-      const s = _skill == null ? 0.5 : clamp(_skill, 0, 1);
       // 🧱 수비의 autoP는 **막을 확률**이에요 (중립이 걸리는 자리가 실점이라서요)
       const autoP = kind === "defend" ? 1 - pConcede(defW, ab) : pFinish(atkW, ab);
-      return outcome(kind, cardP(autoP, ab, s));
+      return outcome(kind, cardP(autoP, ab, clamp(s, 0, 1)));
     }
+
+    /* 미니게임이 아직 안 붙었거나 _t.skill이 켜져 있을 때의 자동 판정.
+     * 화면이 setMini로 진짜 미니게임을 끼워 넣으면 이 갈래는 안 지나갑니다. */
+    const autoJudge = (kind) => judgeAt(kind, _skill == null ? 0.5 : _skill);
 
     function build() {
       k += 1;
@@ -757,6 +766,9 @@ window.WingerEngine = (() => {
       /* 미니게임이 아직 안 붙은 카드를 자동으로 판정할 때 쓰는 값이에요.
        * 드라이버가 m.resolve(m.autoJudge())로 부릅니다. */
       autoJudge: () => (pending ? autoJudge(pending.kind) : "miss"),
+      /* 🎮 미니게임이 낸 조작 성공도 s(0~1)를 지금 열린 카드의 판정으로 옮겨요.
+       * 화면은 `m.resolve(m.judgeFor(s))`로 부릅니다. */
+      judgeFor: (s) => (pending ? judgeAt(pending.kind, s) : "miss"),
       get pendingKind() { return pending ? pending.kind : null; },
       get n() { return n; },
       get score() { return [us, them]; },

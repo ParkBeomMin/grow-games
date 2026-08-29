@@ -52,6 +52,33 @@ const check = (ok, msg) => { console.log(`${ok ? "✅" : "❌"} ${msg}`); if (!o
   check(gaps.length === 0,
     `index.html이 받는 파일이 ASSETS에 다 있다${gaps.length ? ` — 빠진 것: ${gaps.join(", ")} (오프라인에서만 깨져요)` : ""}`);
 
+  /* 🔴 **반대 방향** — ASSETS에는 있는데 index.html이 안 받는 파일 (2026-08-29 신설)
+   *
+   * 여태 한 방향(index.html → ASSETS)만 봤습니다. 그래서
+   * **`<script src="../winger-moment.js">`를 지워도 전 검사가 초록불**이었어요 —
+   * 캐시에는 남아 있고, 온라인·오프라인 다 멀쩡하고, **미니게임만 조용히 사라집니다**
+   * (`getMini()`가 null → `career.js`가 자동 판정으로 떨어져요).
+   * 플레이어는 오류를 하나도 못 보고 *"왜 안 뜨지?"*만 겪습니다.
+   *
+   * 🌐 네트워크 의존 모듈은 원래 ASSETS에 안 들어가니 이 방향에는 안 걸려요. */
+  const inHtml = new Set(srcs.map(norm));
+  const orphan = assets.map(norm)
+    .filter((a) => /\.js$/.test(a) && !inHtml.has(a))
+    .map((a) => path.relative(DIR, a));
+  check(orphan.length === 0,
+    `ASSETS의 스크립트를 index.html이 다 받는다`
+    + (orphan.length
+      ? `\n     🔴 캐시에는 있는데 **페이지가 안 받는 것**: ${orphan.join(", ")}`
+        + `\n     오류 없이 그 기능만 조용히 사라집니다 — 미니게임이면 자동 판정으로 떨어져요`
+      : ` (${assets.filter((a) => /\.js$/.test(a)).length}개)`));
+
+  /* 🔥 미니게임은 **엔진 뒤**에 실려야 합니다 — `setMini`를 스스로 부르거든요 */
+  const iEngine = HTML.indexOf('src="engine.js"');
+  const iMoment = HTML.indexOf('src="../winger-moment.js"');
+  check(iMoment > 0 && iEngine > 0 && iMoment > iEngine,
+    `🔥 winger-moment.js가 engine.js **뒤**에 실린다 (스스로 setMini를 불러요)`
+    + `${iMoment < 0 ? " — 태그가 아예 없어요" : ""}`);
+
   // ③ 캐시 이름 — 접두사가 겹치면 activate가 **다른 게임 캐시를 지웁니다**
   const cm = SW.match(/const CACHE = "([^"]+)"/);
   check(!!cm && /^winger2-/.test(cm[1]), `CACHE 이름이 winger2- 접두사다 (${cm ? cm[1] : "못 찾음"})`);
@@ -146,6 +173,55 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
     /* ⏩ 빨리감기는 설계 §5-5 항목이에요. 화면은 fast()를 내보내는데 부르는 쪽이 있나요 */
     check(/\bfast\s*\(/.test(CAREER) || /W2Scene\.fast/.test(CAREER),
       "⏩ 빨리감기 — 화면의 fast()를 부르는 곳이 있다 (설계 §5-5)");
+
+    /* ══════════ F. 🔒 미니게임 ↔ 엔진 배선 (2026-08-29 신설) ══════════
+     *
+     * 🔴 **`judge`를 안 넘겨도 전 검사가 초록불이었습니다.**
+     *    안 넘기면 `winger-moment.js`의 폴백(`loneJudge`)으로 떨어지고,
+     *    그 폴백은 `s`만 봐요 — `autoP`(그 경기의 전력 + 내 능력치)를 모릅니다.
+     *    그러면 **카드 갈래가 자동 갈래와 어긋납니다** — §2-6 개정이 고친 바로 그 자리예요
+     *    (🅰️ 전개 도움 4~6배 · 🧱 수비 실점 능력치 150에서 −9.8%).
+     *    화면은 멀쩡히 돌고 숫자만 조용히 틀어집니다.
+     *
+     * 값이 아니라 **배선**을 봅니다 — 다섯 칸이 다 실려 나가는가. */
+    const call = CAREER.match(/mini\(slot, \{[\s\S]*?\}, \([^)]*\) => \{[^}]*\}\);/);
+    check(!!call, `🔥 career.js가 미니게임을 부르는 자리를 찾았다${call ? "" : " — 정규식을 고치세요"}`);
+    if (call) {
+      const need = [
+        ["judge", /judge:\s*\(s\)\s*=>\s*m\.judgeFor\(s\)/, "🔒 s를 **엔진에** 되돌려 물어요 (§2-6). 없으면 폴백으로 떨어집니다"],
+        ["kind", /kind:\s*m\.pendingKind/, "그 카드가 ⚽ 결정인지 🅰️ 전개인지 🧱 수비인지"],
+        ["moment", /moment:\s*card\.moment/, "네 판 중 어느 판인지"],
+        ["condition", /condition:\s*S\.condition/, "🫀 판정 창에 걸려요"],
+        ["foot", /foot:\s*mainFoot\(\)/, "🦶 주발 쪽 코스가 +25%"],
+      ];
+      const gone = need.filter(([, re]) => !re.test(call[0]));
+      check(gone.length === 0,
+        `F-1. 🔒 미니게임에 다섯 칸을 다 넘긴다 — ${need.map(([k]) => k).join(" · ")}`
+        + (gone.length ? `\n     🔴 빠진 것: ${gone.map(([k, , why]) => `${k} (${why})`).join(" · ")}` : ""));
+      check(/\(judge\)\s*=>\s*\{\s*m\.resolve\(judge\)/.test(call[0]),
+        `F-2. 🔒 미니게임이 낸 판정을 **엔진에 되돌려** 준다 (m.resolve)`);
+    }
+    /* 엔진 쪽에 그 창구가 실제로 있나 — 한쪽만 있으면 배선이 끊긴 거예요 */
+    const E0 = load();
+    const mm = E0.createMatch({ xi: xiOf("fw", 110, 70), oppName: "상대", teamStr: 70, oppStr: 70, condition: 80 });
+    check(typeof mm.judgeFor === "function",
+      `F-3. 엔진이 judgeFor(s)를 내보낸다 — career.js가 부르는 그 이름`);
+    /* s = 0.5가 중립이라는 §2-6의 약속이 이 창구에서도 성립하는가 */
+    /* ⚠️ 한 경기에 **내 카드가 하나도 없을 수 있어요** — 장면이 전부 중립이거나
+     *    동료가 다 가져가면요. 한 판만 보고 판정하면 열 번에 두어 번 헛빨간불이 뜹니다
+     *    (실제로 그랬어요). 나올 때까지 굴립니다. */
+    let pend = null, tries = 0;
+    for (; tries < 40 && !pend; tries++) {
+      const m2 = E0.createMatch({ xi: xiOf("fw", 110, 70), oppName: "상대",
+        teamStr: 70, oppStr: 70, condition: 80 });
+      while (m2.next()) if (m2.pending) { pend = m2; break; }
+    }
+    check(!!pend, `F-4. 내 카드를 열었다 (${tries}경기째)`);
+    if (pend) {
+      const js = [0, 0.25, 0.5, 0.75, 1].map((v) => pend.judgeFor(v));
+      check(js.every((j) => ["perfect", "ok", "miss"].indexOf(j) >= 0),
+        `F-5. judgeFor(s)가 perfect/ok/miss만 낸다 — s 0→1에서 [${js.join(", ")}]`);
+    }
   }
 
   /* ── C. stakeKey 8종이 화면에서 서로 다른 문구가 된다 ──
@@ -213,16 +289,37 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
    *    세 번에 한 번씩 빨간불이 떴어요 — 벤치인 주에 걸린 거였습니다.
    *    **그때그때 갈리는 검사는 아무도 안 믿게 됩니다.**
    *    여덟 라운드를 다 벤치로 보내면 그건 그것대로 빨간불이에요(조용히 건너뛰지 않습니다). */
+  /* 🔥 **미니게임이 붙은 뒤로는 경기가 손을 기다립니다** (2026-08-29).
+   *   예전에는 `getMini()`가 null이라 자동 판정으로 흘렀는데, 이제 내 카드마다
+   *   ▶️ 시작 → 판을 누르기까지 화면이 멈춰요. 검사가 그 손 노릇을 합니다.
+   *   **자동 진행 토글로 우회하지 않습니다** — 그러면 미니게임이 아예 안 열려도
+   *   초록불이라, 지금 메우려는 구멍(①)을 그대로 남겨 두게 돼요.
+   *   네 판의 누르는 자리: `.w2m-side`(🏃) · `.w2m-goal`(🥅) · `.w2m-run-btn`(🎯) · `.w2m-dir`(🧱) */
+  const MOMENT_SEL = ".w2m-go, .w2m-side, .w2m-run-btn, .w2m-dir, .w2m-goal";
+  let momentSeen = 0;
+  const pumpMoment = () => {
+    const el = w.document.querySelector(MOMENT_SEL);
+    if (!el || el.disabled) return false;
+    if (el.classList.contains("w2m-go")) momentSeen += 1;
+    press(el);
+    return true;
+  };
+
   const MAX_ROUNDS = 8;
   let week0 = 0, benched = 0, opened = false, rounds = 0;
-  for (; rounds < MAX_ROUNDS && !opened; rounds++) {
+  /* 🔥 **미니게임을 한 번도 못 봤으면 라운드를 더 굴립니다.**
+   *   한 경기에 내 카드가 하나도 없을 수 있어요(장면이 전부 중립이거나 동료가 다 가져감).
+   *   그걸 "미니게임이 안 열렸다"로 읽으면 열 번에 서너 번 헛빨간불이 뜹니다 — 실제로 그랬어요. */
+  for (; rounds < MAX_ROUNDS && !(opened && momentSeen > 0); rounds++) {
     if (!goBtn()) break;
     week0 = S().activity.week;
     press(goBtn());
     for (let i = 0; i < 200 && active() !== "screen-stage"; i++) await wait(10);
-    for (let i = 0; i < 400 && S().activity.week === week0; i++) await wait(10);
-    if (w.document.querySelectorAll(".w2-card").length >= 6) { opened = true; break; }
-    benched += 1;
+    for (let i = 0; i < 1200 && S().activity.week === week0; i++) { pumpMoment(); await wait(10); }
+    if (w.document.querySelectorAll(".w2-card").length >= 6) {
+      opened = true;
+      if (momentSeen > 0) break;              // 카드도 그려졌고 미니게임도 봤어요
+    } else { benched += 1; }
     const nx = $("btn-stage-next");
     if (nx) press(nx);
     for (let i = 0; i < 300 && active() !== "screen-pro"; i++) await wait(10);
@@ -239,6 +336,12 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
       for (let i = 0; i < 100 && !goBtn(); i++) await wait(10);
     }
   }
+  /* 🔥 미니게임이 **실제로 열렸는가** — 이게 구멍 ①의 증상이 드러나는 자리예요.
+   *   스크립트 태그가 빠지면 `getMini()`가 null이라 자동 판정으로 흐르고,
+   *   경기는 멀쩡히 끝나면서 **미니게임만 조용히 사라집니다.** */
+  check(momentSeen > 0,
+    `🔥 순간 카드에서 미니게임이 실제로 열렸다 (▶️ 시작 화면 ${momentSeen}번)`
+    + `${momentSeen ? "" : " — getMini()가 null이면 오류 없이 자동 판정으로 흘러요 (index.html의 script 태그를 보세요)"}`);
   check(opened,
     `⚽ 경기하러 가기 → 순간 카드 경기에 도달했다 (🪑 벤치인 주 ${benched}회 건너뜀 · ${rounds + 1}라운드째`
     + `${opened ? "" : ` · 마지막 화면 ${active()} · 버튼 ${goBtn() ? "있음" : "없음"}`})`);
