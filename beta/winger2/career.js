@@ -343,6 +343,11 @@ window.WingerCareer = (() => {
   }
 
   function startPrep() {
+    /* 🎂 시즌이 하나 넘어가면 한 살. 유스의 해넘이(game.js)와 **같은 자**를 써요 —
+     * 두 곳에서 따로 세면 반드시 어긋납니다.
+     * ⚠️ **`S.proYear`를 올리기 전에** 부릅니다. 뒤에 두면 나이 칸이 없는 옛 세이브가
+     *    되짚기(`proYear`에서 계산) + 한 살로 **두 살**을 먹어요 (21 → 23). */
+    WingerProspect.birthday(S);
     S.proYear += 1;
     S.camp = 3;
     S.condition = 80;
@@ -386,16 +391,18 @@ window.WingerCareer = (() => {
    * 굴리는데 게임은 38경기로 돌아 기대값이 통째로 어긋납니다. */
   const WEEKS_PER_CB = 19;
 
-  /* 🎂 선수 생애 주기 — 실제 축구 선수의 굴곡을 그대로 따라가요.
-   * 열여덟에 데뷔해 서른셋에 그만두면 15시즌입니다. 예전에는 10시즌이라
-   * "이제 좀 알겠다" 싶을 때 끝났어요.
+  /* 🎂 선수 생애 주기 — **시즌 번호가 아니라 나이가 축입니다** (§6-4 · prospect.js).
    *
-   * 늘린 건 시즌 수만이 아니에요. 성장·전성기·노쇠 구간을 같은 비율로 늘렸습니다.
-   * 시즌만 5개 붙이면 노쇠 구간이 8년차부터 8시즌이 되어, 커리어의 절반이
-   * 내리막인 이상한 곡선이 돼요. */
-  const CAREER_MAX = 15;    // 마지막 시즌 — 이 시즌 결산에서는 은퇴만 남아요
-  const GROW_UNTIL = 4;     // 여기까지는 시즌이 끝날 때 재능만큼 저절로 자라요
-  const DECLINE_FROM = 11;  // 여기부터 노쇠 — 능력치가 깎이고 연말 평가에도 벌점이 붙어요
+   * 폐기한 것 셋. 전부 `proYear`(몇 번째 시즌인가)로 사람의 몸을 판정했어요:
+   *   · `CAREER_MAX = 15`   15시즌 고정 은퇴 → **나이 상한 + 은퇴 제안**
+   *   · `GROW_UNTIL = 4`    1~4시즌만 성장(그 뒤 정체) → **나이곡선. 정체 구간 없음**
+   *   · `DECLINE_FROM = 11` 11시즌부터 일률 노쇠 → **곡선이 내려가는 만큼, 능력치에 비례**
+   *
+   * ⚠️ 이름만 바꿔 되살리지 마세요. 폐기 이유는 상수 이름이 아니라 **형태**예요 —
+   *    "몇 번째 시즌인가"로 성장·노쇠·은퇴를 재던 것 자체가 폐기 대상입니다.
+   *    재능도 포지션도 성장타입도 안 보던 자리라, 40이든 130이든 똑같이 깎였어요.
+   *
+   * 나이·성장타입·은퇴 판정은 전부 prospect.js가 한곳에서 봅니다. */
   const CB_LABELS = ["전반기", "후반기"];
   const cbLabel = (n) => CB_LABELS[n - 1] || `${n}차`;
 
@@ -417,7 +424,8 @@ window.WingerCareer = (() => {
    * 시즌당 훈련 횟수가 달라 영향도 달라요(⚾ 144경기 · ⚽ 38경기).
    * 다른 게임은 그 게임의 곡선을 따로 재고 나서 옮겨요. */
   const WEAR_CAP = 0.30, WEAR_DIV = 370;
-  const wear = (base) => Math.max(1, Math.round(base * (1 - Math.min(WEAR_CAP, (S.stats.stamina || 0) / WEAR_DIV))));
+  // 🎂 지치는 것도 **지금 몸**이 정해요 — 서른다섯의 체력은 스물다섯의 체력이 아닙니다
+  const wear = (base) => Math.max(1, Math.round(base * (1 - Math.min(WEAR_CAP, WingerProspect.nowStats(S).stamina / WEAR_DIV))));
 
   function initTable() {
     const list = leagueRoster(leagueOf(S).id);
@@ -483,7 +491,9 @@ window.WingerCareer = (() => {
       pos: x.pos || "mf",
       slot: (window.WingerSquad ? WingerSquad.slotOf(x) : null) || {},
       me: !!x.me,
-      stats: x.me ? S.stats : null,
+      /* 🎂 **지금 실력**을 넘겨요 — `S.stats`는 정점 기준값이라 그대로 주면
+       * 열아홉과 서른셋이 같은 선수가 됩니다 (동료는 `str`에 이미 자기 곡선이 들어 있어요). */
+      stats: x.me ? WingerProspect.nowStats(S) : null,
       str: x.str,
       /* 🦶 약발 배수는 나에게만 있어요(동료는 약발 칸이 없습니다).
        * 엔진이 골·도움 카드에만 겁니다 — 태클에 발이 갈리지는 않아요. */
@@ -1329,7 +1339,9 @@ window.WingerCareer = (() => {
     // 리그 이름을 함께 보여줘요 — 승격·강등하면 여기가 바뀌는 게 제일 먼저 눈에 띄어야 해요
     $("pro-team").textContent =
       `${leagueOf(S).flag} ${S.group}${S.center ? " · 주장" : ""} · ${leagueOf(S).name}`
-      + `${traitOf(S).tag ? ` · ${traitOf(S).tag}` : ""} · ${S.proYear}/${CAREER_MAX}시즌`
+      /* 🎂 "몇 번째 시즌 / 몇 시즌까지"가 아니라 **나이**를 적어요.
+       * 은퇴가 나이로 정해지니 남은 시간을 재는 자도 나이여야 합니다. */
+      + `${traitOf(S).tag ? ` · ${traitOf(S).tag}` : ""} · ${S.proYear}시즌 · 만 ${WingerProspect.ageOf(S)}세`
       /* 🏷️ 칭호 — 경쟁자들에게 붙는 것과 **같은 자**로 잽니다. 내 종합만 덩그러니
        * 있으면 그 숫자가 이 리그에서 어느 급인지 알 길이 없어요. */
       /* 최고 클래스를 같이 적어요. 각성으로 능력치를 되돌리면 클래스가 내려가는데,
@@ -1605,7 +1617,9 @@ window.WingerCareer = (() => {
     // 상한에 닿았으면 훈련은 턴만 소모돼요 — 각성으로 돌려줍니다
     if (def && atCap(def.key)) { if (awakenTalent(def.key, proLog)) renderPrep(); return; }
     if (def) {
-      const yearMod = S.proYear <= 4 ? 1.1 : S.proYear <= 9 ? 1.0 : S.proYear <= 12 ? 0.7 : 0.45;
+      /* 🏋️ 훈련 상승폭 — 성장타입 × **정점 나이 기준** 효율 (prospect.js `trainMul`).
+       * 옛것은 `proYear <= 4 ? 1.1 : ...`이라 조숙도 만성도 같은 자리에서 꺾였어요. */
+      const yearMod = WingerProspect.trainMul(S);
       const failP = S.condition < 40 ? 0.15 : 0.07;
       if (Math.random() < failP) {
         const loss = Math.round(rand(0.5, 1.5) * 10) / 10;
@@ -2200,12 +2214,12 @@ window.WingerCareer = (() => {
     $("stage-round").textContent = `${S.group} vs ${opp.name} (${opp.lg}) · 단판`;
     show("screen-stage");
 
-    const rating = ratingOf(S.stats, S.pos, S.condition, S.fandom);
+    const rating = ratingOf(WingerProspect.nowStats(S), S.pos, S.condition, S.fandom);
     const c = matchContribution(rating);
     /* 컵 상대는 그 팀 전력을 그대로 물려요. 리그와 같은 산식이라 따로 보정하지
      * 않습니다 — 예전에는 "상대가 더 세면 +1 실점"이라는 손보정이 붙어 있었어요. */
     const mates = Math.max(teammateGoals(rating, opp.str), c.a);   // 🅰️ 내 도움만큼은 동료가 넣었어요
-    const oppGoals = deriveOppGoals(rating, S.stats.defense, opp.str, c.g + c.a + mates);
+    const oppGoals = deriveOppGoals(rating, WingerProspect.nowStats(S).defense, opp.str, c.g + c.a + mates);
     MatchSim.run({
       home: S.group, away: opp.name, myName: S.name,
       goals: c.g, assists: c.a, defense: c.def, oppGoals, rating, mateCount: mates,
@@ -2264,7 +2278,7 @@ window.WingerCareer = (() => {
           if (btn) btn.hidden = true;
           SoccerCup.shootout(document.getElementById("pk-box"), {
             myName: S.group, oppName: S.cup.opp.name,
-            shoot: S.stats.shoot, oppStr: S.cup.opp.str,
+            shoot: WingerProspect.nowStats(S).shoot, oppStr: S.cup.opp.str,
             /* 동료 키커 — 개인 순위 명단에서 우리 팀 선수를 데려와요.
              * 예전에는 다섯 번을 전부 내가 찼어요("1번 (나) · 2번 (나) …"). */
             mates: mateNames(), myStr: clubStrOf(S),
@@ -2347,7 +2361,15 @@ window.WingerCareer = (() => {
      * 결산에 적을 수 있어요. 한 시즌에 한 번만 도는 건 ageSquads가 스스로 지켜요. */
     if (window.WingerSquad) WingerSquad.ageSquads();
     const act = S.activity;
-    const agePen = S.proYear >= DECLINE_FROM ? (S.proYear - DECLINE_FROM + 1) * 0.8 : 0;
+    /* 🗑️ **나이 벌점을 폐기했습니다.** 옛 `(proYear - 11 + 1) * 0.8`도, 그걸 나이 눈금으로
+     * 옮긴 `AGE_PEN`도 없어요.
+     *
+     * 이제 `overall()`이 곡선만큼 내려가고 그게 생산량(골·도움·수비)을 통해 축에 이미
+     * 들어옵니다. 벌점을 또 걸면 **나이를 두 번 세는** 겁니다 — 훈련 배수 ×1.18/×0.86을
+     * 지운 것과 **같은 근거**예요 (§7-1 ①).
+     * ⚠️ engineer 판단입니다. designer 확인이 필요한 자리로 56번 보고서에 적었어요.
+     * ⚠️ `agePen = 0`을 남겨 두지 않았습니다 — 늘 0인 항은 "배너만 뜨고 아무 일도
+     *    안 하는 칭호"와 같은 자리라, 다음 사람이 살아 있는 손잡이로 오해해요. */
     /* 연말 평가는 이제 축이 해요. 예전에는 hypeSum(순위 기반)이라
      * 1위를 하는 순간 천장에 붙어서 능력치를 더 올려도 결과가 같았어요.
      * 축은 골·도움·수비 성공 개수라 상한이 없어요. 후반에 기하급수로 커지니
@@ -2361,7 +2383,7 @@ window.WingerCareer = (() => {
      * 아래 hype 줄과 수상 판정 블록은 여러 회귀 테스트가 소스에서 통째로 떼어 굴려요.
      * 그래서 리그를 지역 변수로 묶지 않고 매번 leagueOf(S)로 읽어요 —
      * 묶으면 떼어낸 조각이 밖에서 안 돌아서 테스트가 통째로 죽습니다. */
-    const hype = clamp(Math.log(Math.max(1, posAxis(act, S.pos) * leagueOf(S).prestige)) * AXIS_K - AXIS_OFF - agePen, -1.5, 12);
+    const hype = clamp(Math.log(Math.max(1, posAxis(act, S.pos) * leagueOf(S).prestige)) * AXIS_K - AXIS_OFF, -1.5, 12);
     const wins = act.wins;
     const sales = act.sales;
     const dFan = Math.round(hype * 10 + wins * 3 - (hype < 0 ? 15 : 0));
@@ -2523,9 +2545,24 @@ window.WingerCareer = (() => {
       lg: leaguePlayed, ctry: leagueOf({ league: leaguePlayed }).country,
       rank: finalRank, hype: Math.round(hype * 10) / 10,
     });
-    for (const d of STAT_DEFS) {
-      if (S.proYear <= GROW_UNTIL) S.stats[d.key] = clamp(S.stats[d.key] + rand(0, 1) * S.talents[d.key], 0, statCap(d.key));
-      else if (S.proYear >= DECLINE_FROM) S.stats[d.key] = clamp(S.stats[d.key] - rand(0.6, 1.8), 0, statCap(d.key));
+    /* 🗑️ **시즌 결산 자동 성장/노쇠 단계가 없어졌습니다.**
+     *
+     * 폐기한 형태: `proYear <= 4 ? +rand(0,1)*talent : proYear >= 11 ? -rand(0.6, 1.8)`
+     *   ⓐ 5~10시즌이 통째로 **정체 구간**이었고
+     *   ⓑ 노쇠가 **일률**이라 능력치 40과 130이 똑같이 깎였어요.
+     *
+     * 지금은 `S.stats`가 **정점 기준값**이고 지금 실력은 `nowStats`가 곡선을 곱해 냅니다.
+     * `startPrep`이 나이를 한 살 올리면 그 순간 실력이 따라 움직여요 — 여기서 할 일이
+     * 없습니다. **정체 구간이 구조적으로 생길 수가 없어요.**
+     *
+     * ⚠️ 여기에 다시 `S.stats`를 더하거나 깎지 마세요. 정점 기준값에 곡선을 누적하면
+     *    그 값이 더는 기준값이 아니게 되고, 유망주 카드가 약속한
+     *    *"시간이 지나면 같아져요"*가 깨집니다. */
+    /* 🕯️ 출전이 적은 시즌 · 🔥 잘한 시즌을 세요.
+     * 앞은 은퇴 제안의 조건이고, 뒤는 3시즌 연속 평점 7.0↑이면 **정점 나이 +1**이에요
+     * (§7-1 — 성장타입은 고정 라벨이 아닙니다). */
+    if (WingerProspect.seasonTally(S, apps, avgRating)) {
+      proLog(`🌟 전성기가 늦춰졌어요 — 정점 나이가 ${WingerProspect.peakAgeOf(S)}세가 됩니다`);
     }
     const income = sales * 3 + wins * 40;
     S.money = (S.money || 0) + income;
@@ -2675,7 +2712,12 @@ window.WingerCareer = (() => {
     const rows = slice.map((x, i) =>
       `<tr><td>${x.y}시즌</td>${clubCell(x, slice[i - 1])}${statCell(x)}<td>${x.awards.length ? "🏆" + x.awards.join(",") : "-"}</td></tr>`
     ).join("");
-    const forcedRetire = S.proYear >= CAREER_MAX;
+    /* 🎓 은퇴 — 시즌 수가 아니라 **나이**로 봅니다 (§6-4).
+     *   · forcedRetire  — 나이 상한. 더 뛸 시즌이 없어요
+     *   · suggestRetire — 곡선이 문턱 밑이고 출전이 적은 시즌이 연달았을 때. **제안**이에요 */
+    const forcedRetire = WingerProspect.mustRetire(S);
+    const suggestRetire = WingerProspect.suggestRetire(S);
+    const myAge = WingerProspect.ageOf(S);
     const cr = S.career;
     $("career-title").textContent = `📊 ${y.y}시즌 결산`;
     $("career-card").innerHTML = `
@@ -2722,8 +2764,9 @@ window.WingerCareer = (() => {
       <div class="draft-summary">
         프로 통산 ${cr.years.length}시즌 · 출전 ${cr.apps || 0} · ⚽ ${cr.goals || 0}골 · 🅰️ ${cr.assists || 0}도움 · 🛡️ ${cr.defense || 0} · 🏅 MOM ${cr.wins}회<br/>
         🏆 MVP ${cr.daesang} · 베스트11 ${cr.bonsang}${cr.rookie ? " · 신인왕" : ""} · ⭐ 명성 ${Math.round(S.fandom)}<br/>
-        ${forcedRetire ? "슬슬 은퇴를 고민할 나이가 됐어요. 아름다운 마무리를…"
-          : S.proYear >= DECLINE_FROM ? `🕯️ 전성기가 지났어요 — 몸이 예전 같지 않습니다 (${CAREER_MAX}시즌까지)`
+        ${forcedRetire ? `만 ${myAge}세 — 더 뛸 시즌이 없어요. 아름다운 마무리를…`
+          : suggestRetire ? `🕯️ 만 ${myAge}세 · 출전이 줄었어요 — 은퇴를 생각해 볼 때입니다 (더 뛰어도 돼요)`
+          : myAge > WingerProspect.peakAgeOf(S) ? `🕯️ 전성기가 지났어요 — 만 ${myAge}세, 몸이 예전 같지 않습니다`
           : "다음 시즌도 계속 뛸 수 있어요!"}
       </div>`;
     moveNote = null;   // 한 번만 보여줘요 — 다음에 결산을 열면 안 뜹니다

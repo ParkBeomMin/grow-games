@@ -436,40 +436,23 @@ const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 const STAT_CAP = 130;
 const fmtMoney = (v) => (v >= 10000 ? `${(v / 10000).toFixed(1)}억` : `${Math.round(v)}만`);
 
-function rollStats(pos) {
-  const stats = {};
-  const talents = {};
-  for (const d of STAT_DEFS) {
-    stats[d.key] = randInt(24, 38);
-    talents[d.key] = Math.min(rand(0.8, 1.45) + legacyTalentBonus(loadLegacy().pts), TALENT_MAX);
-  }
-  stats[POS_INFO[pos].stat] = clamp(stats[POS_INFO[pos].stat] + 8, 0, STAT_CAP);
-  talents[POS_INFO[pos].stat] = Math.max(talents[POS_INFO[pos].stat], 1.05);
-  return { stats, talents };
-}
-
-let pendingRoll = null;
-function renderRoll() {
-  if (!pendingRoll) return;
-  window.Radar.draw($("roll-radar"), STAT_DEFS, pendingRoll.stats, {
-    stroke: "#5fa8ff",
-    fill: "rgba(95, 168, 255, 0.28)",
-  });
-  $("roll-stars").innerHTML = STAT_DEFS
-    // 이 줄은 텍스트로만 쓰여서 태그가 못 들어가요 — 별만 그려요
-    .map((d) => `${d.emoji} ${d.name} ${"⭐".repeat(talentStars(pendingRoll.talents[d.key]))}`)
-    .join(" · ") + `<br/>⭐ = 잠재력 — 별이 많은 능력치일수록 훈련 효율이 높아요`;
-}
-$("btn-reroll")?.addEventListener("click", () => {
-  pendingRoll = rollStats(chosenPos);
-  renderRoll();
-});
-
+/* 🌱 첫 능력치는 **유망주 카드**가 정해요 (prospect.js · §6-2).
+ *
+ * 예전에는 여기서 `rollStats(pos)`로 굴리고 화면의 "🎲 능력치 다시 뽑기"를
+ * **무제한**으로 눌렀어요(현행 ⚽ 더 윙어 그대로). 그러면 타고난 것이 아무 의미가
+ * 없어집니다 — 마음에 들 때까지 누르면 되니까요. 유스5 × 포지션4 × 주발2 = 40조합이
+ * 전부 같은 출발선이 된 것도 같은 뿌리예요.
+ *
+ * 이제 세 장 중 하나를 고르고 **리롤은 2회**입니다. 세 장의 스탯 총합은 같고,
+ * 다른 건 분포 · 성장타입(흐릿함) · 특능 · 결함 · 나이예요. */
 function newState(market, pos, name, roll) {
-  const { stats, talents } = roll || rollStats(pos);
+  const { stats, talents } = roll;
   return {
     market: market.id, pos, name,
     year: 1, month: 1,
+    /* 🎂 나이는 유망주 카드가 정해요(17~19). applyCard가 바로 뒤에 덮어씁니다 —
+     * 여기 값은 카드 없이 만들어지는 경로(검사·픽스처)의 기본값이에요. */
+    age: WingerProspect.START_AGE,
     stats, talents,
     foot: rollFoot(),          // 🦶 주발·약발 — 타고나고 경기에서 붙어요
 
@@ -514,15 +497,32 @@ function fillStats(st) {
    * (자라는 자리가 `S.foot`이 있을 때만 도니까요). 그건 이어서 하는 사람만
    * 못 크는 것이라, 세이브에 실제로 심어 줍니다. */
   if (!S0.foot) S0.foot = { main: Math.random() < 0.75 ? "R" : "L", weak: randInt(2, 7) };
+  /* 🎂 나이 칸이 없던 세이브 — 여기서 **한 번 심어요.**
+   *
+   * `ageOf`가 `year`·`proYear`에서 되짚어 주긴 하지만, 그건 **읽을 때마다 다시 계산**돼요.
+   * 그러면 `birthday()`가 도는 순간이 시즌 카운터를 올린 뒤인지 앞인지에 따라
+   * **한 해에 두 살**을 먹습니다(21 → 23). 실제로 그 버그를 냈고 검사가 잡았어요.
+   * 한 번 심어 두면 그 뒤로는 `S.age`만 보니 부르는 순서와 무관해집니다.
+   * 🦶 주발을 심는 바로 위 줄과 같은 이유예요. */
+  if (S0.age == null) S0.age = WingerProspect.ageOf(S0);
   if (S0.talents && S0.talents.speed == null) {
     const have = base.filter((k) => S0.talents[k] != null);
     S0.talents.speed = have.length ? have.reduce((a, k) => a + S0.talents[k], 0) / have.length : 1;
   }
   return S0;
 }
+/* 🎯 **지금 실력**의 단일 관문 — `S.stats`(정점 기준값)에 나이곡선을 곱한 값이에요.
+ *
+ * 동료(NPC)는 이미 이렇게 삽니다 — `squad.js`의 `strOfRow`가 `peak × ageCurve(age)`로
+ * *지금 실력*을 내요. 여태 **나만 그 자를 안 썼습니다.** 그래서 열여덟도 서른여섯도
+ * 능력치표가 곧 실력이었고, 선발 경쟁에서 나만 다른 눈금으로 재고 있었어요.
+ *
+ * ⚠️ 훈련·각성·장비·상한(`statCap`)은 **`S.stats` 원본**을 봅니다. 올리는 건 정점 기준값,
+ *    지금 내는 건 그 값 × 곡선 — 둘을 섞으면 훈련 화면이 자기 숫자를 못 믿게 돼요. */
 const overall = () => {
   fillStats(S);
-  const vals = STAT_KEYS.map((k) => S.stats[k]).filter((v) => v != null);
+  const now = WingerProspect.nowStats(S);
+  const vals = STAT_KEYS.map((k) => now[k]).filter((v) => v != null);
   return vals.reduce((a, b) => a + b, 0) / vals.length;
 };
 
@@ -788,7 +788,7 @@ function show(id) {
   if (window.WingerFever) WingerFever.tick();
 }
 
-const BACK_SAFE = ["screen-title", "screen-agency", "screen-position", "screen-name", "screen-hof", "screen-battle"];
+const BACK_SAFE = ["screen-title", "screen-agency", "screen-position", "screen-prospect", "screen-name", "screen-hof", "screen-battle"];
 window.addEventListener("popstate", (e) => {
   const target = e.state && e.state.s;
   const cur = document.querySelector(".screen.active");
@@ -804,7 +804,7 @@ window.addEventListener("popstate", (e) => {
 
 $("btn-back-first")?.addEventListener("click", () => show("screen-title"));
 $("btn-back-position")?.addEventListener("click", () => show("screen-agency"));
-$("btn-back-name")?.addEventListener("click", () => show("screen-position"));
+$("btn-back-name")?.addEventListener("click", () => show("screen-prospect"));
 const goHome = () => { if (S) save(); location.reload(); };
 $("btn-home-main")?.addEventListener("click", goHome);
 $("btn-home-pro")?.addEventListener("click", goHome);
@@ -1403,14 +1403,33 @@ function renderMarkets() {
   }
 }
 
+/* 🌱 포지션을 고르면 **유망주 3택**으로 갑니다 (§6-1의 흐름 1→2→4).
+ * 이름·주발은 카드를 고른 뒤에 정해요 — 누구를 데려올지가 먼저입니다. */
+let chosenCard = null;
+let chosenTalents = null;
+let usedRerolls = 0;
+
+function openProspect() {
+  WingerProspect.open(chosenMarket, chosenPos, (card, talents, rerolls) => {
+    chosenCard = card;
+    chosenTalents = talents;
+    usedRerolls = rerolls;
+    const t = WingerProspect.TRAITS.find((x) => x.id === card.trait);
+    const f = WingerProspect.FLAWS.find((x) => x.id === card.flaw);
+    $("name-hint").textContent = `${chosenMarket.name} ${POS_INFO[chosenPos].name} 유망주의 이름은?`;
+    /* 무엇을 골랐는지 이름 화면에도 한 줄 남겨요 — 안 그러면 카드를 고른 순간
+     * 그 정보가 화면에서 사라져서 "내가 뭘 골랐더라?"가 됩니다. */
+    $("name-recap").textContent =
+      `🎂 ${card.age}세` + (t ? ` · ${t.emoji} ${t.name}` : "") + (f ? ` · ${f.emoji} ${f.name}` : "");
+    $("input-name").value = randomPlayerName(chosenMarket);
+    show("screen-name");
+  }, () => show("screen-position"));
+}
+
 document.querySelectorAll("#position-list .card").forEach((btn) => {
   btn.addEventListener("click", () => {
     chosenPos = btn.dataset.pos;
-    $("name-hint").textContent = `${chosenMarket.name} ${POS_INFO[chosenPos].name} 유망주의 이름은?`;
-    $("input-name").value = randomPlayerName(chosenMarket);
-    pendingRoll = rollStats(chosenPos);
-    show("screen-name");
-    renderRoll();
+    openProspect();
   });
 });
 
@@ -1429,6 +1448,8 @@ $("btn-random-name").addEventListener("click", () => {
 });
 
 $("btn-start").addEventListener("click", () => {
+  // 카드를 안 고르고 이 화면에 닿는 길은 없어야 하지만, 없으면 그 자리에서 되돌려요
+  if (!chosenCard || !chosenTalents) { openProspect(); return; }
   const name = $("input-name").value.trim() || randomPlayerName(chosenMarket);
   curSlot = null;
   /* ⚠️ 이름 말고 **id**를 함께 남겨요. 예전에는 표시 이름만 남겨서, 선택지 이름을
@@ -1437,7 +1458,9 @@ $("btn-start").addEventListener("click", () => {
    * id는 세이브가 가리키는 값이라 안 바뀌어요. 이름은 사람이 읽으라고 같이 둡니다. */
   if (window.Stats) Stats.log("new_player", { pos: chosenPos, agency: chosenMarket.name, mk: chosenMarket.id });
   if (window.Match) Match.register("winger2", name);
-  S = newState(chosenMarket, chosenPos, name, pendingRoll);
+  S = newState(chosenMarket, chosenPos, name, { stats: chosenCard.stats, talents: chosenTalents });
+  // 🌱 나이·성장타입·특능·결함·리롤 사용 수를 심어요 (효과는 특능 엔진에서 §11-7)
+  WingerProspect.applyCard(S, chosenCard, usedRerolls);
   S.foot.main = chosenFoot;          // 🦶 고른 주발 (약발 숫자는 타고난 그대로예요)
   addLog(`⚽ ${chosenMarket.name} 입단! ${name}의 축구 인생이 시작됐어요.`);
   save();
@@ -1595,6 +1618,9 @@ function doTraining(def) {
   const condMod = S.condition >= 70 ? 1.15 : S.condition >= 40 ? 1.0 : 0.6;
   const buffMod = S.buff ? 1.5 : 1.0;
   S.buff = false;
+  /* 🗑️ 성장타입 훈련 배수(×1.18 / ×0.86)는 **폐기됐어요** (§7-1 ①) —
+   * 정점 나이가 이미 훈련 효율의 창을 옮기니 같은 축을 두 번 세는 계수였습니다.
+   * 유스는 프로의 나이 계단(`trainMul`)도 안 걸어요 — 원래 없던 자리라 그대로 둡니다. */
   let gain = rand(2.2, 4.2) * S.talents[def.key] * m.growth * condMod * buffMod;
   if (S.stats[def.key] >= 100) gain *= 0.5;
   gain = Math.round(gain * 10) / 10;
@@ -1672,6 +1698,10 @@ function advanceMonth() {
   S.month += 1;
   if (S.month === 13) {
     S.month = 1;
+    /* 🎂 나이는 프로에서만 흐르는 게 아니에요 — 유스에서 보낸 해도 나이를 먹습니다.
+     * ⚠️ **`S.year`를 올리기 전에** 부릅니다. 뒤에 두면 나이 칸이 없는 옛 세이브가
+     *    되짚기(`year`에서 계산) + 한 살로 **두 살**을 먹어요. */
+    WingerProspect.birthday(S);
     S.year += 1;
   }
   save();
@@ -1681,10 +1711,12 @@ function advanceMonth() {
 // ---------- 경기 공통 ----------
 function stageScore(type) {
   const mainKey = type.main || POS_INFO[S.pos].stat;
+  // 🎂 유스 경기도 **지금 실력**으로 뜁니다 — 열일곱과 열아홉이 같을 수는 없어요
+  const st = WingerProspect.nowStats(S);
   const score =
-    S.stats[mainKey] * 0.55 +
-    S.stats[type.aux] * 0.2 +
-    S.stats.stamina * 0.1 +
+    st[mainKey] * 0.55 +
+    st[type.aux] * 0.2 +
+    st.stamina * 0.1 +
     S.condition / 8 +
     rand(-9, 9);
   return { mainKey, score };
@@ -1742,26 +1774,28 @@ const GOAL_SCALE = 0.33;
 
 function matchContribution(rating) {
   const perf = clamp((rating - 5) / 4 + 0.6, 0.15, 1.6);
+  // 🎂 **지금 실력**으로 뛰어요 (`S.stats`는 정점 기준값이에요 — prospect.js `nowStats`)
+  const st = WingerProspect.nowStats(S);
   /* 윙어는 돌파로 기회를 만들어요. 골·도움 판정에 드리블이 함께 작용합니다.
    * 예전에는 드리블이 어디에도 안 들어가서, 윙어만 자기 주 스탯에 투자할수록
    * 성적이 나빠졌어요 (도달 가능 범위에서 재보니 85% → 32%). */
   const isWg = S.pos === "wg";
-  const gStat = isWg ? (S.stats.shoot || 40) * 0.6 + (S.stats.dribble || 40) * 0.4 : (S.stats.shoot || 40);
-  const aStat = isWg ? (S.stats.pass || 40) * 0.6 + (S.stats.dribble || 40) * 0.4 : (S.stats.pass || 40);
+  const gStat = isWg ? st.shoot * 0.6 + st.dribble * 0.4 : st.shoot;
+  const aStat = isWg ? st.pass * 0.6 + st.dribble * 0.4 : st.pass;
   /* 축마다 자기 스탯이 주인공이지만, 종합도 조금 섞어요(AXIS_MIX).
    * 한 칸만 200이고 나머지가 40인 선수는 그 한 장면 말고는 경기에 관여를 못 해요.
    * 이 항이 없으면 "골 넣는 기계"가 도움·수비까지 평범 이상으로 하게 됩니다. */
   const AXIS_MIX = 0.2;
-  const allStat = STAT_KEYS.reduce((a, k) => a + (S.stats[k] || 40), 0) / STAT_KEYS.length;
+  const allStat = STAT_KEYS.reduce((a, k) => a + st[k], 0) / STAT_KEYS.length;
   const mix = (v) => v * (1 - AXIS_MIX) + allStat * AXIS_MIX;
   /* ⚡ 스피드는 **돌파와 따라붙기**에 조금 섞여요 — 마무리(슛)나 시야(패스)를
    * 대신하지는 않아요. 폭이 크면 스피드 하나만 올리는 게 정답이 됩니다. */
   const SPD_MIX = 0.2;
-  const spd = S.stats.speed == null ? allStat : S.stats.speed;
+  const spd = st.speed;   // nowStats가 없는 칸을 나머지 평균으로 채워 줘요 (§9-2 규칙 6)
   const withSpd = (v) => v * (1 - SPD_MIX) + spd * SPD_MIX;
   const shootF = mix(withSpd(gStat)) / 100;
   const passF = mix(aStat) / 100;
-  const defF = mix(withSpd(S.stats.defense || 40)) / 100;
+  const defF = mix(withSpd(st.defense)) / 100;
   const G = { fw: 1.05, wg: 0.75, mf: 0.5, df: 0.14 };
   const A = { mf: 0.95, wg: 0.85, fw: 0.55, df: 0.28 };
   const D = { df: 2.3, mf: 1.2, wg: 0.5, fw: 0.45 };
@@ -2230,7 +2264,7 @@ function renderStageSim(type, grade, onFinal) {
    * 유스 평가전은 **우리가 주최 측이고 상대는 초청팀**이라, 조금 유리한 판으로
    * 잡아요. 예전 산식(내 평점만 보던 시절)의 승률에 맞춘 값이에요. */
   const mates = teammateGoals(rating, YOUTH_OPP_STR);
-  const oppGoals = deriveOppGoals(rating, S.stats.defense, YOUTH_OPP_STR, c.g + c.a + mates);
+  const oppGoals = deriveOppGoals(rating, WingerProspect.nowStats(S).defense, YOUTH_OPP_STR, c.g + c.a + mates);
   MatchSim.run({
     home: "우리 유스",
     away: pick(oppClubs(S)),

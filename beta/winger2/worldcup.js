@@ -1115,11 +1115,11 @@ window.WingerWorldCup = (() => {
 
     /* ⚠️ 산식은 전부 기존 것을 그대로 써요. 다른 점은 **클럽 대신 국가 전력**을
      * 넘긴다는 것뿐입니다(ratingOf는 리그 벌점을 0으로 — 난이도는 국가 전력이 실어요). */
-    const rating = CTX.ratingOf(S.stats, S.pos, S.condition, S.fandom, 0);
+    const rating = CTX.ratingOf(WingerProspect.nowStats(S), S.pos, S.condition, S.fandom, 0);
     const c = matchContribution(rating);
     const us = teamStr();
     const mates = teammateGoals(rating, opp.str, us);
-    const oppGoals = deriveOppGoals(rating, S.stats.defense, opp.str, c.g + c.a + mates, us);
+    const oppGoals = deriveOppGoals(rating, WingerProspect.nowStats(S).defense, opp.str, c.g + c.a + mates, us);
     MatchSim.run({
       home: nat.name, away: opp.name, myName: S.name,
       goals: c.g, assists: c.a, defense: c.def, oppGoals, rating, mateCount: mates,
@@ -1149,7 +1149,7 @@ window.WingerWorldCup = (() => {
      * 평점 자리에 6.5(중간값)를 넣는 건 리그의 벤치 주와 같은 방식이에요. */
     const us = teamStr(true);
     const teamGoals = teammateGoals(6.5, opp.str, us);
-    const oppGoals = deriveOppGoals(6.5, S.stats.defense, opp.str, teamGoals, us);
+    const oppGoals = deriveOppGoals(6.5, WingerProspect.nowStats(S).defense, opp.str, teamGoals, us);
     let res = teamGoals > oppGoals ? "W" : teamGoals < oppGoals ? "L" : "D";
     /* 토너먼트에 무승부는 없어요. 그런데 **승부차기는 내가 못 차요** — 벤치니까요.
      * 그래서 전력으로 굴립니다. 지어낸 게 아니라 "내가 없는 팀의 승부차기"예요. */
@@ -1284,7 +1284,7 @@ window.WingerWorldCup = (() => {
           if (btn) btn.hidden = true;
           SoccerCup.shootout(document.getElementById("pk-box"), {
             myName: myNation().name, oppName: w.opp,
-            shoot: S.stats.shoot, oppStr: nextOpponent().str,
+            shoot: WingerProspect.nowStats(S).shoot, oppStr: nextOpponent().str,
             mates: matesOf(), myStr: teamStr(),
             onDone: (win) => {
               /* ⚠️ 승부차기 판을 **치워요.** 안 치우면 마지막 버튼이 그대로 남고,

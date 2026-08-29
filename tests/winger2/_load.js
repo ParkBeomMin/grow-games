@@ -14,6 +14,7 @@
  */
 "use strict";
 const fs = require("fs");
+const path = require("path");
 const ENGINE = "/workspace/grow-games/beta/winger2/engine.js";
 const SRC = fs.readFileSync(ENGINE, "utf8");
 
@@ -245,5 +246,69 @@ function momentMutsOK(table) {
   return bad;
 }
 
+/* ═══════════════════════════════════════════════════════════════════════
+ * 🖥️ 페이지를 JSDOM에 띄웁니다 — **진짜 게임 코드를 그대로** 부르려고요
+ *
+ * `prospect.js`는 game.js의 전역(S · rand · STAT_DEFS · POS_INFO …)과 `WingerSquad`에
+ * 기대어 있어서, 산식만 떼어 오면 **그 전역들을 제가 다시 지어내게** 됩니다 —
+ * 그게 이 저장소가 여러 번 데인 *"경로가 다른 시뮬레이터"*예요. 페이지째 띄웁니다.
+ *
+ *   opts.muts     { "prospect.js": [[정규식, 바꿀문자열], …], "career.js": […] }
+ *                 파일별로 넣어요. **안 걸리면 던집니다.**
+ *   opts.keys     localStorage에 심을 것 (없으면 새 게임으로 시작)
+ *   opts.wide 등  그 밖은 안 씁니다
+ *
+ * 🔒 `window.__get(name)`으로 game.js의 최상위 const(전역에 안 붙는 것)를 꺼낼 수 있어요.
+ * ═══════════════════════════════════════════════════════════════════════ */
+const PAGE_DIR = "/workspace/grow-games/beta/winger2";
+function bootPage(opts) {
+  const o = opts || {};
+  const { JSDOM } = require("/workspace/grow-games/tests/cloud/jsdom.js");
+  const muts = o.muts || {};
+  const applied = {};
+  const PRE = `window.fetch=()=>Promise.reject(new Error("off"));
+window.requestAnimationFrame=(cb)=>setTimeout(()=>cb(0),0);window.scrollTo=()=>{};
+window.alert=()=>{};window.confirm=()=>false;
+window.__errs=[];window.addEventListener("error",function(e){window.__errs.push(String(e.message||e.error));});
+` + Object.entries(o.keys || {}).map(([k, v]) => `localStorage.setItem(${JSON.stringify(k)},${JSON.stringify(v)});`).join("");
+  const html = fs.readFileSync(path.join(PAGE_DIR, "index.html"), "utf8")
+    .replace(/<script src="([^"]+)"><\/script>/g, (m0, src) => {
+      const f = path.resolve(PAGE_DIR, src.split("?")[0]);
+      if (!fs.existsSync(f)) return "";
+      let code = fs.readFileSync(f, "utf8");
+      const base = path.basename(f);
+      for (const [re, rep] of muts[base] || []) {
+        const before = code;
+        code = code.replace(re, rep);
+        if (code === before) throw new Error(`${base}에 변이가 안 걸렸어요 — ${re}`);
+        applied[base] = (applied[base] || 0) + 1;
+      }
+      return `<script>\n${code}\n</script>`;
+    })
+    .replace("</head>", `<script>${PRE}</script></head>`)
+    .replace("</body>", `<script>window.__get=(n)=>eval(n);</script></body>`);
+  const dom = new JSDOM(html, { runScripts: "dangerously", pretendToBeVisual: true, url: "https://x.test/winger2/" });
+  const w = dom.window;
+  w.Ads = { display() {}, init() {} };
+  w.Stats = { log() {} };
+  w.__applied = applied;
+  return w;
+}
+/* 변이 정규식이 그 파일에 걸리는지 미리 확인 — 죽지 않고 목록을 돌려줍니다. */
+function pageMutsOK(table) {
+  const bad = [];
+  for (const [name, byFile] of Object.entries(table || {})) {
+    for (const [file, muts] of Object.entries(byFile)) {
+      const src = fs.readFileSync(path.join(PAGE_DIR, file), "utf8");
+      for (const [re] of muts) {
+        if (!src.match(re)) bad.push(`${name} → ${file}: ${re}`);
+        else if (src.replace(re, "\u0000") === src) bad.push(`${name} → ${file}(치환 무효): ${re}`);
+      }
+    }
+  }
+  return bad;
+}
+
 module.exports = { load, mutsOK, xiOf, xiAll, statsOf, play, spreadFor, SRC, ENGINE,
+  bootPage, pageMutsOK, PAGE_DIR,
   loadMoment, momentMutsOK, MSRC, MOMENT };

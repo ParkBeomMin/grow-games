@@ -60,7 +60,9 @@ const reg = (ok, msg) => { console.log(`${ok ? "✅" : "❌"} ${msg}`); if (!ok)
 /* 🚧 아직 못 닿은 목표. **여기 적힌 것만** 종료 코드에서 빠집니다. */
 const UNMET = {
   "concede-sym": "실점 비대칭 — **지금 시드 넷 평균 −14.6%로 밴드(±15%) 가장자리에 걸쳐 있습니다.**"
-    + " 시드 하나로 재면 통과했다 실패했다 해요(balancer 실측 −14.83~−16.42%) — 단일 시드는 잡음입니다."
+    + " 시드 하나로 재면 통과했다 실패했다 해요 — 단일 시드는 잡음입니다."
+    + " 그리고 **조작 실력에 따라서도 갈립니다**(balancer: skill 0.35에서 −18.2% · 0.65에서 −14.0%)."
+    + " 그건 me가 있는 명단에서의 값이고, 여기 −14.6%는 **me 없는 순수 산식**이라 skill과 무관해요(44번 참고)."
     + " 계수를 그쪽에 맞춘 게 아니라 NPC_SPOT.assist(6.50)의 부수 효과예요 —"
     + " pConcede(CON×defW 0.5555) vs pFinish(FIN×atkW 0.4420), 차 25.7%는 그대로입니다."
     + " autoMatch에 경쟁자 수비수의 개인 능력치가 안 실려요 (§2-8b (7) · 2차의 「칸마다 관점 굴리기」)",
@@ -106,9 +108,19 @@ const SEEDS = [11, 202, 5150, 31337];
 const avg = (a) => a.reduce((x, y) => x + y, 0) / a.length;
 const spread = (a) => `[${a.map((v) => v.toFixed(2)).join(" ")}]`;
 
-/* 내 클럽 — 카드 갈래(`createMatch`). 내 공격 칸은 pFinish 하나, 상대 공격 칸은 pConcede 하나. */
+/* 🎚️ **측정 조건을 상수로 못박습니다** (2026-08-29 · balancer 지적).
+ *
+ * 🔴 31b는 `_t.skill`을 **어디에도 안 적어 두고** 재고 있었어요. 나중에 누가 기본값을
+ *    바꾸면 *"검사가 왜 빨간불인지 아무도 모르는"* 상태가 됩니다.
+ *    그리고 실제로 balancer가 skill을 흔드니 **같은 코드가 통과도 실패도** 했어요 —
+ *    아래 44번이 그 자리를 따로 봅니다. */
+const SKILL = 0.5;         // 🤖 자동 진행과 같은 값 · balancer가 곡선을 잰 값
+/* 내 클럽 — 카드 갈래(`createMatch`). 내 공격 칸은 pFinish 하나, 상대 공격 칸은 pConcede 하나.
+ * ⚠️ **이 명단에는 `me`가 없습니다**(`xiAll`) — 열한 명 전부 자동이에요.
+ *    그래서 31·31b는 **조작 실력과 무관한 「순수 산식 대칭」**을 잽니다.
+ *    실제 플레이(내가 카드를 여는 경우)는 skill을 타요 — 44번이 그쪽입니다. */
 function myClub(E, SEED) {
-  E._t.seed(SEED); E._t.skill = 0.5;
+  E._t.seed(SEED); E._t.skill = SKILL;
   let gf = 0, ga = 0, cs = 0;
   for (let i = 0; i < N; i++) {
     const r = E._t.playMatch({ xi: xiNoMe(70, i), oppName: "상대", teamStr: 70, oppStr: 70, condition: 80 });
@@ -203,7 +215,9 @@ let base = null;
   console.log(`   시드 ${SEEDS.length}개 — 득점 ${spread(per.map((x) => x.g))} · 실점 ${spread(per.map((x) => x.c))} · 무실점 ${spread(per.map((x) => x.s))}\n`);
 
   reg(Math.abs(dG) <= SYM_BAND,
-    `31. 🏟️ 여섯 클럽이 같은 산식으로 **득점**한다 — 시드 ${SEEDS.length}개 평균 ${dG >= 0 ? "+" : ""}${dG.toFixed(2)}% (±${SYM_BAND}%)`);
+    `31. 🏟️ 여섯 클럽이 같은 산식으로 **득점**한다 — 시드 ${SEEDS.length}개 평균 ${dG >= 0 ? "+" : ""}${dG.toFixed(2)}% (±${SYM_BAND}%)`
+    + `\n     측정 조건: _t.skill = ${SKILL} · 명단에 me 없음(순수 산식) · 전력 70:70 · N=${N} · 시드 ${SEEDS.join("/")}`
+    + `\n     시드별 ${spread(per.map((x) => x.g))}`);
 
   /* 31b — 🚧 알려진 미달. 두 갈래로 봅니다:
    *   ① ±15% 밴드에 들어왔나  → 들어왔으면 "승격하세요" 빨간불
@@ -214,13 +228,15 @@ let base = null;
     + `${Math.abs(dC) <= SYM_BAND
       ? ` ← 밴드에는 닿았지만 여유가 ${(SYM_BAND - Math.abs(dC)).toFixed(2)}%p뿐이라 승격 안 합니다 (위 주석)` : ""}`);
   reg(Math.abs(dC) <= CONCEDE_CAP,
-    `31b-상한. 실점 비대칭이 더 나빠지지 않았다 — 시드 평균 |${dC.toFixed(2)}%| ≤ ${CONCEDE_CAP}% (상한이지 목표가 아니에요)`);
+    `31b-상한. 실점 비대칭이 더 나빠지지 않았다 — 시드 평균 |${dC.toFixed(2)}%| ≤ ${CONCEDE_CAP}% (상한이지 목표가 아니에요)`
+    + `\n     시드별 ${spread(per.map((x) => x.c))} · _t.skill = ${SKILL} · me 없음`);
 
   goal("cs-sym", Math.abs(dS) <= SYM_BAND - PROMOTE_MARGIN,
     `31b. 🚧 **무실점**도 아직 같은 산식이 아니다 — 차 ${dS >= 0 ? "+" : ""}${dS.toFixed(1)}%`
     + ` (밴드 ±${SYM_BAND}% · 승격 ±${SYM_BAND - PROMOTE_MARGIN}%)`);
   reg(Math.abs(dS) <= CS_CAP,
-    `31b-상한. 무실점 비대칭이 더 나빠지지 않았다 — 시드 평균 |${dS.toFixed(2)}%| ≤ ${CS_CAP}% (상한이지 목표가 아니에요)`);
+    `31b-상한. 무실점 비대칭이 더 나빠지지 않았다 — 시드 평균 |${dS.toFixed(2)}%| ≤ ${CS_CAP}% (상한이지 목표가 아니에요)`
+    + `\n     시드별 ${spread(per.map((x) => x.s))} · _t.skill = ${SKILL} · me 없음`);
 
   /* 방향까지 못박습니다 — 크기만 보면 **반대로 뒤집혀도** 통과해요.
    * 지금은 내 클럽이 **더 먹히고** 무실점이 **적습니다**(나에게 불리한 쪽).
@@ -387,7 +403,38 @@ window.__errs=[];window.addEventListener("error",function(e){window.__errs.push(
   const CAP = w.__get("BUFF_CAP");
   const rowsOf = () => Object.values(CT.clubRows()).flat();
   const meRow = () => rowsOf().find((r) => r.me);
+  /* 🪑 **벤치는 정상입니다 — 결함이 아니에요.**
+   *
+   * `clubRows()`는 `WingerSquad.leagueXI()`를 그대로 읽습니다. 내가 그 라운드 선발에서
+   * 빠지면 `me` 줄이 통째로 없어요. 2026-08-29에 픽스처의 21세 신인이 나이곡선을 타면서
+   * 종합 49.4 → 41.3이 되어 **벤치로 밀렸고**, 그 순간 아래 32-4~8·34가
+   * `undefined.buff`로 **파일을 죽였습니다.**
+   *
+   * 🔴 그때 제가 "내 줄이 있다"를 회귀로 걸었는데 **그건 틀린 계약이었어요** —
+   *    벤치는 게임이 원래 하는 일이고, 밸런스가 움직이면 언제든 다시 그렇게 됩니다.
+   *    검사가 밸런스 변경을 못 견디면 그 검사가 잘못된 겁니다.
+   *
+   * 🔧 그래서 **계약을 바꿉니다**:
+   *    · 지키는 것 — *"선발이면 me 줄이 있고, 벤치면 없다"* (leagueXI ↔ clubRows 정합)
+   *    · 그리고 아래 buff 검사는 **선발 상태를 만들어 놓고** 돕니다.
+   *      벤치라서 건너뛰면 "안 돈 것"이 초록으로 섞이니까요.
+   *      스탯을 올리는 건 **검사 쪽 준비**이지 소스를 고치는 게 아닙니다. */
+  const benched = !meRow();
+  reg(w.WingerSquad.isStarter() === !benched,
+    `32-0. 🔗 clubRows()가 leagueXI와 맞는다 — 선발이면 me 줄이 있고 벤치면 없다`
+    + ` (전체 ${rowsOf().length}줄 · me ${rowsOf().filter((r) => r.me).length}줄 · isStarter ${w.WingerSquad.isStarter()})`);
+  if (benched) {
+    /* 🪑 벤치였으면 선발이 되도록 세워 둡니다 — 이 절은 내 줄이 있어야 도는 검사예요. */
+    for (const k of Object.keys(S.stats)) S.stats[k] = 95;
+    if (S.activity) S.activity.xiWeek = -1;
+  }
+  const HAVE_ME = !!meRow();
+  reg(HAVE_ME,
+    `32-0b. 🪑 벤치였으면 **선발로 세워** 아래 검사를 돌린다 (${benched ? "벤치였음 → 선발로" : "원래 선발"} · me ${rowsOf().filter((r) => r.me).length}줄)`
+    + (HAVE_ME ? "" : `\n     🔴 스탯을 올려도 선발에 못 듭니다 — leagueXI를 보세요`));
+  if (!HAVE_ME) { w.close(); }
 
+  if (HAVE_ME) {
   S.buffs = []; S.buffY = S.proYear;
   const flat = meRow().buff;
   reg(!!flat && flat.g === 1 && flat.a === 1 && flat.d === 1,
@@ -486,6 +533,101 @@ window.__errs=[];window.addEventListener("error",function(e){window.__errs.push(
 
   reg(w.__errs.length === 0, `페이지에 자바스크립트 오류가 없다${w.__errs.length ? ` — ${w.__errs[0]}` : ""}`);
   w.close();
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════
+ * 44. 🎮 **31b는 코드가 아니라 「코드 + 플레이어」를 잽니다** (2026-08-29 · balancer 지적)
+ *
+ * 🔴 balancer가 `_t.skill`을 흔드니 **같은 코드가 통과도 실패도** 했습니다.
+ *    31b가 재는 실점 비대칭에 **조작 실력이 실려 있었어요** — 내 🧱 수비 카드의
+ *    성공이 곧 우리 클럽의 실점을 줄이니까요.
+ *
+ * 그래서 둘로 갈랐습니다. **같은 축을 재는 것 같지만 묻는 게 다릅니다.**
+ *
+ *   31b  명단에 **me 없음** → 조작이 개입할 자리가 없어요.  **순수 산식 대칭**을 잽니다
+ *        (실측: skill을 0.35~0.65로 흔들어도 −14.56%에서 **소수점 하나 안 움직입니다**)
+ *   44   명단에 **me 있음**(df110) → 내 카드가 실점에 직접 걸려요. **실제 플레이**를 잽니다
+ *
+ * 🚨 **44는 절대값을 안 박습니다.** balancer가 준 밴드 창 `E[s] ∈ [0.44, 0.58]`
+ *    (조작 실력 전체 폭 ≈ 능력치 17점) 안에서 **관계 셋**만 봐요 —
+ *      ① 잘할수록 덜 먹힌다 (단조)   ② 그 폭이 실제로 있다 (검사가 skill을 탄다)
+ *      ③ 창 전체에서 상한 안
+ *    창을 벗어난 실력(0.35·0.65)은 balancer 몫입니다 — 여기서 문턱을 박으면
+ *    **코드가 아니라 가상 플레이어를 재게** 돼요(52번 §3에서 데인 그 자리).
+ * ══════════════════════════════════════════════════════════════ */
+const SKILL_BAND = [0.44, 0.58];   // balancer 실측 — 실플레이 E[s]가 도는 폭
+const SKILL_MID = 0.50;            // 🤖 자동 진행이 내는 값 (실력 하한선)
+const PLAY_CAP = 8;                // % — 창 안에서의 실점 비대칭 상한 (실측 최대 3.4%)
+const PLAY_SPAN_MIN = 3;           // %p — 창 양 끝의 벌어짐. 이만큼은 있어야 "skill을 탄다"
+const N44 = 8000;
+{
+  const E0 = load();
+  /* 상대 쪽(autoMatch)은 skill과 무관해요 — 시드당 한 번만 재서 돌려씁니다 */
+  const other = SEEDS.map((sd) => otherClubs(E0, sd));
+  const meClub = (sd, sk) => {
+    E0._t.seed(sd); E0._t.skill = sk;
+    let ga = 0, cs = 0;
+    for (let i = 0; i < N44; i++) {
+      const r = E0._t.playMatch({ xi: xiOf("df", 110, 70, i), oppName: "상대",
+        teamStr: 70, oppStr: 70, condition: 80 });
+      ga += r.oppGoals; if (!r.oppGoals) cs += 1;
+    }
+    return { ga: ga / N44, cs: cs / N44 };
+  };
+  const at = (sk) => {
+    const per = SEEDS.map((sd, i) => rel(meClub(sd, sk).ga, other[i].gf));
+    return { avg: avg(per), per };
+  };
+  const lo = at(SKILL_BAND[0]), mid = at(SKILL_MID), hi = at(SKILL_BAND[1]);
+  console.log(`   🎮 내가 df110일 때 실점 비대칭 — skill ${SKILL_BAND[0]} ${lo.avg.toFixed(2)}%`
+    + ` · ${SKILL_MID} ${mid.avg.toFixed(2)}% · ${SKILL_BAND[1]} ${hi.avg.toFixed(2)}%`);
+  console.log(`      시드별 ${SKILL_BAND[0]} ${spread(lo.per)} · ${SKILL_MID} ${spread(mid.per)} · ${SKILL_BAND[1]} ${spread(hi.per)}\n`);
+
+  reg(lo.avg < mid.avg && mid.avg < hi.avg,
+    `44-1. 🎮 **잘할수록 덜 먹힌다** — skill ${SKILL_BAND[0]} → ${SKILL_MID} → ${SKILL_BAND[1]}에서`
+    + ` ${lo.avg.toFixed(2)}% < ${mid.avg.toFixed(2)}% < ${hi.avg.toFixed(2)}% (단조)`);
+
+  const span = hi.avg - lo.avg;
+  reg(span >= PLAY_SPAN_MIN,
+    `44-2. 🎮 그 폭이 실제로 있다 — 창 양 끝이 **${span.toFixed(2)}%p** 벌어진다 (≥${PLAY_SPAN_MIN}%p)`
+    + `\n     👉 이 폭이 0이면 **검사가 조작을 아예 안 보고 있다**는 뜻이에요`);
+
+  const worst = Math.max(...[lo, mid, hi].map((x) => Math.max(...x.per.map(Math.abs))));
+  reg(worst <= PLAY_CAP,
+    `44-3. 🎮 밴드 창 [${SKILL_BAND.join(", ")}] 전체 · 시드 ${SEEDS.length}개에서 |비대칭| ≤ ${PLAY_CAP}%`
+    + ` (최악 ${worst.toFixed(2)}%) — 상한이지 목표가 아니에요`);
+
+  /* 🔗 31b의 측정 조건이 코드에 남아 있는가 — 나중에 기본값이 바뀌면 여기서 웁니다 */
+  reg(SKILL === SKILL_MID && E0._t.skill === SKILL_BAND[1],
+    `44-4. 🔗 측정 조건이 코드에 명시돼 있다 — 31b는 _t.skill = ${SKILL} (🤖 자동 진행과 같은 값)`
+    + ` · 44는 ${SKILL_BAND.join("/")}를 직접 설정`);
+
+  /* 🧪 변이 — `_t.skill`을 무시하고 늘 0.5로 굴리면 폭이 사라져 44-2가 빨간불이어야 합니다.
+   * 이게 안 잡히면 44는 "조작을 본다"고 말만 하는 검사예요. */
+  const MSK = [[/const autoJudge = \(kind\) => judgeAt\(kind, _skill == null \? 0\.5 : _skill\);/,
+    "const autoJudge = (kind) => judgeAt(kind, 0.5);"]];
+  const bad = mutsOK({ "44-skill": MSK });
+  if (bad.length) {
+    reg(false, `44-변이가 **안 돌았습니다** — 정규식이 소스와 안 맞아요: ${bad.join(", ")}`);
+  } else {
+    const M = load(MSK);
+    const mAt = (sk) => {
+      const per = SEEDS.map((sd, i) => {
+        M._t.seed(sd); M._t.skill = sk;
+        let ga = 0;
+        for (let j = 0; j < N44; j++) {
+          ga += M._t.playMatch({ xi: xiOf("df", 110, 70, j), oppName: "상대",
+            teamStr: 70, oppStr: 70, condition: 80 }).oppGoals;
+        }
+        return rel(ga / N44, other[i].gf);
+      });
+      return avg(per);
+    };
+    const mSpan = mAt(SKILL_BAND[1]) - mAt(SKILL_BAND[0]);
+    reg(!(mSpan >= PLAY_SPAN_MIN),
+      `44-변이. _t.skill을 무시하고 늘 0.5로 굴리면 → 빨간불 (폭 ${span.toFixed(2)}%p → **${mSpan.toFixed(2)}%p**)`);
+  }
 }
 
 /* ══════════════════════════════════════════════════════════════

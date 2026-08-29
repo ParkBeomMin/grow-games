@@ -1,6 +1,6 @@
 /* winger2 서비스워커 — 네트워크 우선, 실패 시 캐시 (오프라인 플레이) */
 const CACHE = "winger2-v1";   // ⚽ 더 윙어 II 신설
-const ASSETS = ["./", "./index.html", "./style.css", "./game.js", "./cup.js", "./career.js", "./squad.js", "./engine.js", "./match-scene.js", "./fever.js", "./camp.js", "./worldcup.js", "./manifest.webmanifest", "../winger-moment.js", "../base.css", "../env.js", "../fx.js", "../radar.js", "../timing.js", "../match.js", "../help.js"];
+const ASSETS = ["./", "./index.html", "./style.css", "./game.js", "./cup.js", "./career.js", "./squad.js", "./prospect.js", "./engine.js", "./match-scene.js", "./fever.js", "./camp.js", "./worldcup.js", "./manifest.webmanifest", "../winger-moment.js", "../base.css", "../env.js", "../fx.js", "../radar.js", "../timing.js", "../match.js", "../help.js"];
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));
 });

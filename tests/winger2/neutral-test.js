@@ -259,6 +259,97 @@ function sweep(Eng, positions, matches) {
 }
 
 /* ══════════════════════════════════════════════════════════════
+ * ⑤ 🆕 clamp가 닿는 칸 — **22번 ①-K를 정정합니다** (2026-08-29)
+ *
+ * 22번은 *"clamp는 실플레이 구간 밖"*이라고 적었는데, 그건 **`s`가 늘 0.5일 때만** 참이었어요.
+ * `cardP = clamp(autoP + 2·half(a)·(s − 0.5), 0, 1)`에서 s = 0.5면 둘째 항이 0이라
+ * 절대 안 닿습니다 — **미니게임이 붙어 `s ∈ [0,1]`을 내면서 처음 닿습니다.**
+ *
+ * 🚨 여기가 왜 중요한가 — 위 ①~④는 **전부 s = 0.5**에서 봅니다. 즉 지금까지
+ *    중립 검사 넷 중 **어느 것도 clamp를 볼 수 없었어요.** s를 극단으로 놓는 검사가 없었습니다.
+ *
+ * 잘리면 **잘 해도 더 못 올라갑니다** — 조작으로 벌 수 있는 폭이 그 칸에서만 줄어요.
+ * engine.js §2-6 주석이 그 처방을 적어 뒀습니다:
+ *   *"clamp에 걸리는 칸이 생기면 **중심을 옮기지 말고 half(a)를 줄이세요** — 중립이 중심에 걸려 있습니다."*
+ *
+ * 🔬 재는 법: 리그 여섯 클럽 전력(78·74·72·70·68·66)과 최약체(52)를 **서로 다 맞붙여**
+ *   `s = 0`과 `s = 1`에서 clamp **전**의 값이 [0,1]을 벗어나는 칸을 셉니다.
+ *   산식은 소스에서 뜯은 것(위 T)과 `half(a)`를 씁니다 — 값을 베껴 적지 않았어요.
+ * ══════════════════════════════════════════════════════════════ */
+const CLAMP_SAFE_UPTO = 110;   // 이 능력치까지는 **전 상대에서 안 닿아야** 합니다 (회귀)
+/* 🚧 알려진 상태 — 지금 닿는 칸 수. **목표가 아니라 상한**이에요. 늘면 빨간불,
+ * 0이 되면 "승격하세요" 빨간불 (31b와 같은 양방향). */
+const CLAMP_KNOWN = { 130: 8, 150: 20 };
+{
+  const HALF = (() => {
+    const m = SRC.match(/ {2}function half\(a\) \{[\s\S]*?\n {2}\}\n/);
+    if (!m) throw new Error("engine.js에서 half(a)를 못 뜯었어요 — 정규식을 고치세요");
+    const lerp = SRC.match(/ {2}const lerp = [^\n]+\n/)[0];
+    return new Function(`${lerp}${m[0]}  return half;`)();
+  })();
+  /* 리그 여섯 클럽 + 최약체 (13번 §12-3 · 21번 §①-A-5와 같은 눈금) */
+  const STR = [78, 74, 72, 70, 68, 66, 52];
+  function clampCells(ab) {
+    const hit = [];
+    for (const me of STR) for (const op of STR) {
+      const atkW = me / (me + op), defW = op / (me + op);
+      for (const kind of ["atk", "def"]) {
+        const autoP = kind === "atk" ? T.pFinish(atkW, ab) : 1 - T.pConcede(defW, ab);
+        for (const sv of [0, 1]) {
+          const raw = autoP + 2 * HALF(ab) * (sv - 0.5);
+          if (raw > 1 + 1e-12 || raw < -1e-12) hit.push(`${kind} ${me}:${op} s=${sv} → ${raw.toFixed(3)}`);
+        }
+      }
+    }
+    return hit;
+  }
+  /* ── 회귀 — 능력치 110까지는 전 상대에서 안 닿습니다 ── */
+  const lowBad = [];
+  for (const ab of [40, 70, 90, 110]) {
+    const h = clampCells(ab);
+    if (h.length) lowBad.push(`능력치 ${ab}: ${h.length}칸 (${h[0]})`);
+  }
+  check(lowBad.length === 0,
+    `⑤-1. 능력치 ${CLAMP_SAFE_UPTO}까지는 **리그 전 상대 · s 극단(0·1)에서도** clamp에 안 닿는다`
+    + (lowBad.length ? `\n     🔴 ${lowBad.join(" · ")}\n     👉 처방은 **중심을 옮기는 게 아니라 half(a)를 줄이는 것**입니다 (engine.js §2-6 주석)` : ""));
+
+  /* ── 🚧 알려진 상태 — 130부터는 최대 전력차에서 상단이 잘립니다 ── */
+  for (const ab of [130, 150]) {
+    const h = clampCells(ab);
+    const cap = CLAMP_KNOWN[ab];
+    if (h.length === 0) {
+      check(false, `⑤-2. 능력치 ${ab}에서 clamp가 **한 칸도 안 닿습니다** — 🎉 해소됐어요!`
+        + ` CLAMP_KNOWN에서 ${ab}을 지우고 ⑤-1의 안전 구간을 넓히세요`);
+    } else {
+      check(h.length <= cap,
+        `⑤-2. 🚧 능력치 ${ab}에서 clamp가 닿는 칸 ${h.length}개 ≤ ${cap} (상한이지 목표가 아니에요)`
+        + `\n     예: ${h[0]} — **잘 해도 더 못 올라가는 칸**입니다 (balancer 실측 시즌 영향 <0.2%p)`);
+    }
+  }
+
+  /* 🧪 변이 — `half(a)`를 키우면 안전 구간(110)에서도 닿아야 합니다.
+   * 안 잡히면 ⑤-1이 아무것도 안 지키는 거예요. */
+  const MH = SRC.replace(/ {2}function half\(a\) \{[\s\S]*?\n {2}\}\n/, (m0) =>
+    m0.replace(/return lerp\(v, 40, 0\.17, 80, 0\.19\);/, "return lerp(v, 40, 0.34, 80, 0.38);")
+      .replace(/return lerp\(v, 80, 0\.19, 120, 0\.20\);/, "return lerp(v, 80, 0.38, 120, 0.40);")
+      .replace(/return 0\.20;/, "return 0.40;"));
+  if (MH === SRC) {
+    check(false, "⑤-변이가 **안 돌았습니다** — half(a)의 정규식이 소스와 안 맞아요");
+  } else {
+    const lerp = SRC.match(/ {2}const lerp = [^\n]+\n/)[0];
+    const H2 = new Function(`${lerp}${MH.match(/ {2}function half\(a\) \{[\s\S]*?\n {2}\}\n/)[0]}  return half;`)();
+    let n = 0;
+    for (const me of STR) for (const op of STR) {
+      const autoP = T.pFinish(me / (me + op), CLAMP_SAFE_UPTO);
+      if (autoP + H2(CLAMP_SAFE_UPTO) > 1 + 1e-12) n += 1;
+    }
+    check(n > 0,
+      `⑤-변이. half(a)를 두 배로 키우면 능력치 ${CLAMP_SAFE_UPTO}에서도 clamp가 닿는다 (${n}칸)`
+      + ` — ⑤-1이 실제로 그걸 봅니다`);
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════
  * ③-변이 — 배선이 끊기면 합산이 빨간불인가
  *   정의 검사(①)는 cardP만 봅니다. **배선**은 autoJudge가 그 cardP에
  *   *내 능력치의* autoP를 넘겨 주느냐예요 — 거기서 끊으면 ①은 초록인 채로

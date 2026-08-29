@@ -97,13 +97,23 @@
           <button type="button" class="foot-opt on" data-foot="R">오른발</button>
         </div>
       </div>
-      <div class="roll-box">
-        <canvas id="roll-radar" width="280" height="230"></canvas>
-        <div class="roll-stars" id="roll-stars"></div>
-        <button class="btn btn-ghost" id="btn-reroll">🎲 능력치 다시 뽑기</button>
-      </div>
+      <!-- 🌱 능력치는 유망주 카드(screen-prospect)에서 정해졌어요.
+           예전 여기 있던 "🎲 능력치 다시 뽑기"는 **무제한 리롤**이라
+           타고난 것을 무력화했습니다 — 카드 3택 + 리롤 2회로 대체했어요 (§6-2). -->
+      <div class="pick-recap" id="name-recap"></div>
       <button class="btn btn-primary" id="btn-start">입단하기</button>
       <button class="btn btn-ghost" id="btn-back-name">← 뒤로</button>
+    </section>
+
+    <!-- 🌱 유망주 3택 (§6-2) — 다섯 칸이 한 묶음이라 쪼개서 고를 수 없어요.
+         실루엣·카드 연출은 director 몫이에요 (§11-11). 클래스만 남겨 둡니다. -->
+    <section class="screen" id="screen-prospect">
+      <h2>🌱 유망주 카드</h2>
+      <p class="hint" id="prospect-hint"></p>
+      <div class="prospect-grid" id="prospect-list"></div>
+      <p class="hint prospect-talent" id="prospect-talent"></p>
+      <button class="btn btn-ghost" id="btn-prospect-reroll"></button>
+      <button class="btn btn-ghost" id="btn-back-prospect">← 뒤로</button>
     </section>
 
     <!-- 메인 (육성) -->
@@ -311,6 +321,7 @@
   <script src="cup.js"></script>
   <script src="camp.js"></script>
   <script src="squad.js"></script>
+  <script src="prospect.js"></script>
   <script src="engine.js"></script>
   <!-- 🔥 순간 카드 미니게임 4종 — 로드되면서 WingerEngine.setMini로 스스로 꽂아요.
        ⚽ 축구 전용이라 timing.js가 아니라 전용 파일이에요(8개 게임이 다 내려받는 자리라서요).

@@ -1241,3 +1241,32 @@ button.pf-slot { cursor: pointer; font-family: inherit; }
   .w2m-gate, .w2m-half.w2m-weak { background: var(--m-weak-2); }
   .w2m-gate.w2m-strong, .w2m-half.w2m-strong { background: var(--m-strong-2); }
 }
+
+/* ---------- 🌱 유망주 3택 (§6-2) ----------
+ *
+ * ⚠️ **뼈대만입니다.** 카드 실루엣·연출은 director 몫이에요 (설계 §11의 11번).
+ * 클래스는 여기 다 나와 있으니 그대로 잡아서 얹으면 됩니다:
+ *   .prospect-card > .pc-age · .pc-silhouette · .pc-radar-box > .pc-radar
+ *                    .pc-hint · .pc-trait · .pc-flaw (> .pc-eff)
+ * `.pc-silhouette`는 **비워 둔 자리**예요 — CSS 실루엣 3장이 들어올 칸입니다. */
+.prospect-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+.prospect-card { gap: 6px; padding: 10px 8px; text-align: center; }
+.pc-age { font-size: .82rem; color: var(--sky); }
+.pc-silhouette { display: block; min-height: 0; }
+.pc-radar-box { display: block; }
+.pc-radar { max-width: 100%; height: auto; }
+.pc-hint { font-size: .72rem; color: var(--dim); line-height: 1.5; }
+.pc-trait, .pc-flaw { font-size: .76rem; line-height: 1.4; }
+.pc-trait { color: var(--accent); }
+.pc-flaw { color: var(--accent2); }
+.pc-eff { display: block; font-size: .68rem; color: var(--dim); }
+.prospect-talent { line-height: 1.8; }
+/* ✏️ 이름 화면에 "무엇을 골랐나" 한 줄 */
+.pick-recap { font-size: .8rem; color: var(--sky); margin: 6px 0 10px; }
+
+@media (max-width: 520px) {
+  /* 세 장을 세로로 쌓으면 스크롤이 길어져서 셋을 견줄 수가 없어요 — 가로를 지킵니다 */
+  .prospect-grid { gap: 6px; }
+  .prospect-card { padding: 8px 4px; }
+  .pc-trait, .pc-flaw { font-size: .68rem; }
+}
