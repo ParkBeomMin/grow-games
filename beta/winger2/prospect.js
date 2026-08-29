@@ -131,10 +131,34 @@ window.WingerProspect = (() => {
    *    같은 축을 두 번 세게 됩니다. */
 
   /* 🎂 나이 축 (§6-4) */
-  const CARD_AGE_LO = 17, CARD_AGE_HI = 19;
+  /* 🎂 카드 나이는 **셋 다 17세**예요 — 17~19로 굴리던 것을 폐기했습니다 (§6-2 재판정).
+   *
+   * ⓑ안(정점 기준값 × 곡선)이 **능력치는 풀었지만 시간을 못 풀었어요.** 같은 총합이라도
+   * 17세 카드는 19시즌, 19세 카드는 17시즌을 뜁니다 — 실측 총 상 **12.5% 차**.
+   * **시간은 다른 무엇으로도 못 삽니다.** 스탯으로도, 특능으로도 보정이 안 돼요.
+   *
+   * ⚠️ **카드가 밋밋해지지 않습니다.** 나이 다양성은 **성장타입이 이미 만들어요** —
+   *    같은 18세라도 곡선이 조숙 0.84 · 보통 0.70 · 만성 0.56이라 레이더 크기가
+   *    확 다릅니다. 반대급부가 나이 칸에서 성장타입 칸으로 옮겨간 것뿐이고,
+   *    **하나의 칸이 하나의 이야기를 해서 더 깨끗해집니다.**
+   *
+   * ⚠️ ⓑ(정점 기준값 + 곡선 곱)는 **그대로 유지**합니다. 나이가 같아도 곡선이 다르니까요.
+   *
+   * 🔴 **왜 18이 아니라 17인가 — 유스가 3년이라 `카드 나이 + 3 = 데뷔 나이`입니다.**
+   *    18로 두면 데뷔가 만 21세가 되는데, 그건 실제 프로 데뷔(18~20세)보다 늦고
+   *    balancer의 커리어 측정이 전부 **만 20세 기준**이라 값을 통째로 다시 재야 해요.
+   *    17이면 데뷔 **만 20세**, 커리어는 20~38세 = **18시즌**입니다
+   *    (은퇴 제안을 받아들이면 조숙 14 · 보통 16 · 만성 17시즌).
+   *    ⚠️ 이 값을 옮기면 **데뷔 나이가 통째로 따라 움직입니다** — 곡선 위 어디에서
+   *    커리어가 시작하느냐가 바뀌니, 면적·훈련 총량·출전을 전부 다시 재세요. */
+  const CARD_AGE = 17;
   const START_AGE = 18;           // 나이 칸이 없는 옛 세이브의 출발 나이
   const RETIRE_AGE = 38;          // 이 나이의 시즌이 마지막 — 다음은 없어요
-  const RETIRE_CURVE = 0.75;      // 곡선이 여기 밑이고
+  /* 🕯️ 곡선이 여기 밑이고 — **0.75에서 0.78로.** 정점 가드와 **한 벌**입니다 (§6-4 재판정).
+   * 0.75로는 🌳 만성이 은퇴 제안을 **영영 못 받았어요**(37세 곡선 0.760 > 0.75).
+   * ⚠️ 이건 "세기 손잡이"가 아니라 *"정점의 몇 할 아래로 내려갔나"*예요 —
+   *    `GROWTH_TYPES` 앵커를 옮기면 **여기도 따라 옮겨야** 합니다(종속값). */
+  const RETIRE_CURVE = 0.78;
   const LOW_APPS = 15;            // 출전이 이만큼도 안 되는 시즌이
   const LOW_RUN = 2;              // 이만큼 연달아 나오면 은퇴 제안
   const PEAK_SHIFT_MAX = 2;       // 정점 나이 이동 상한 (커리어당)
@@ -344,10 +368,21 @@ window.WingerProspect = (() => {
   /* 더는 뛸 수 없는 나이. 옛 `proYear >= 15`(시즌 수 고정)를 대체해요. */
   const mustRetire = (st) => ageOf(st) >= RETIRE_AGE;
 
-  /* 은퇴 **제안** — 곡선이 문턱 밑이고, 출전이 적은 시즌이 연달았을 때 (§6-4).
-   * 강제가 아니에요. 더 뛸지는 사람이 정합니다. */
+  /* 은퇴 **제안** — 강제가 아니에요. 더 뛸지는 사람이 정합니다 (§6-4).
+   *
+   * 🔴 **정점을 넘겼는지를 반드시 함께 봅니다.** 나이곡선은 **뒤집힌 U자**라
+   * 문턱 하나로 판정하면 **오르막에도 걸려요** — 🌳 만성 만 19~22세(곡선 0.56~0.74)가
+   * `🕯️ 은퇴를 생각해 볼 때입니다`를 받았습니다. 정작 만 33~37세에는 안 받고요.
+   * 실측으로 잡힌 자리예요(27번 ⓐ).
+   *
+   * ⚠️ **문턱(0.78)과 이 가드는 한 벌입니다. 하나만 넣으면 각각 다르게 고장나요:**
+   *   · 가드만  → 🌳 만성이 은퇴 제안을 **영영 못 받음** (37세 0.760 > 0.75)
+   *   · 문턱만  → 오르막 제안이 **만 23세까지 넓어짐** */
   const suggestRetire = (st) =>
-    !mustRetire(st) && ageMul(st) < RETIRE_CURVE && (st && st.lowApps || 0) >= LOW_RUN;
+    !mustRetire(st)
+    && ageOf(st) > peakAgeOf(st)                       // 🔴 내리막에서만 — 방향 가드
+    && ageMul(st) < RETIRE_CURVE
+    && ((st && st.lowApps) || 0) >= LOW_RUN;
 
   /* ══════════════════════════════════════════════════════════════════
    * 🌱 유망주 카드 3장
@@ -418,7 +453,7 @@ window.WingerProspect = (() => {
     const flawPool = FLAWS.slice();
     const cards = [];
     for (let i = 0; i < CARDS; i++) {
-      const age = randInt(CARD_AGE_LO, CARD_AGE_HI);
+      const age = CARD_AGE;
       const hint = HINTS[i % HINTS.length];
       /* 성장타입은 **여기서 굴러 카드에 숨어 있어요.** 화면에는 코멘트만 나갑니다. */
       const type = pickW(GROWTH_TYPES, hint.w);
@@ -451,14 +486,6 @@ window.WingerProspect = (() => {
     for (const d of STAT_DEFS) out[d.key] = card.stats[d.key] * c;
     return out;
   }
-
-  /* 🎂 레이더 옆에 반드시 함께 나가는 줄 (§6-2 ⚠️ · 원칙 ③).
-   * 이게 없으면 *"왜 이 카드만 약하지?"*가 노이즈가 됩니다 — 약한 이유를 밝혀야 해요.
-   * ⚠️ **성장타입은 말하지 않습니다.** 나이만 말해요 (흐릿함은 스카우트 코멘트가 맡습니다). */
-  const ageNote = (age) =>
-    age <= 17 ? "아직 몸이 덜 여물었어요"
-    : age >= 19 ? "또래보다 몸이 일찍 잡혔어요"
-    : "또래와 비슷한 속도예요";
 
   /* 고른 카드를 세이브에 심어요. 특능·결함은 **자리만** 잡습니다 (효과는 §11-7). */
   function applyCard(st, card, rerolls) {
@@ -504,7 +531,12 @@ window.WingerProspect = (() => {
 
   function render(onPick) {
     const hint = document.getElementById("prospect-hint");
-    if (hint) hint.textContent = `${draw.market.name} 스카우트가 유망주 세 명을 데려왔어요. 셋의 잠재 총합은 같아요 — 지금 약해 보이는 쪽은 아직 몸이 덜 여문 겁니다.`;
+    /* 🎂 셋 다 열여덟이라, 레이더 크기 차이는 **오직 얼마나 여물었나**에서 옵니다.
+     * 그 이유를 화면이 말해 주지 않으면 *"왜 이 카드만 약하지?"*가 노이즈가 돼요(원칙 ③).
+     * ⚠️ 성장타입 자체는 말하지 않습니다 — 흐릿함은 스카우트 코멘트가 맡아요. */
+    if (hint) hint.textContent =
+      `${draw.market.name} 스카우트가 열일곱 살 셋을 데려왔어요. 잠재 총합은 셋이 같아요 — `
+      + `레이더는 **지금 실력**이라, 늦게 피는 선수일수록 지금은 작아 보입니다.`;
 
     const box = document.getElementById("prospect-list");
     box.innerHTML = "";
@@ -515,7 +547,7 @@ window.WingerProspect = (() => {
       btn.className = "card prospect-card";
       btn.dataset.idx = String(i);
       btn.innerHTML = `
-        <span class="pc-age">🎂 ${c.age}세 — ${ageNote(c.age)}</span>
+        <span class="pc-age">🎂 ${c.age}세</span>
         <span class="pc-silhouette" aria-hidden="true"></span>
         <span class="pc-radar-box"><canvas class="pc-radar" width="200" height="168"></canvas></span>
         <span class="pc-hint">🗣️ ${c.hint.text}</span>
@@ -559,11 +591,11 @@ window.WingerProspect = (() => {
   return {
     GROWTH_TYPES, HINTS, FLAWS, TRAITS, TRAIT_SLOTS,
     ageOf, typeOf, peakAgeOf, ageMul, curveAt, flawOf, traitsOf,
-    nowStats, trainMul, cardShown, ageNote,
+    nowStats, trainMul, cardShown,
     birthday, seasonTally, mustRetire, suggestRetire,
     rollCards, applyCard, open,
     POOL, CARDS, REROLL_MAX,
-    RETIRE_AGE, RETIRE_CURVE, LOW_APPS, LOW_RUN, CARD_AGE_LO, CARD_AGE_HI,
+    RETIRE_AGE, RETIRE_CURVE, LOW_APPS, LOW_RUN, CARD_AGE,
     START_AGE, PEAK_SHIFT_MAX, HOT_RUN, HOT_BAR,
     _t: { spread, pickW, pieceAt, rollTalents, trainStep, TRAIN_NEUTRAL, YOUTH_FOCUS, STAT_LO, STAT_HI, state: () => draw },
   };

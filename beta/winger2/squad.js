@@ -358,12 +358,14 @@ window.WingerSquad = (() => {
   }
   const ensureSquad = () => squadOf(S.group);        // 우리 팀
 
-  /* 선발 11명 — 포지션 자리마다 실력 순이에요. */
+  /* 선발 11명 — 포지션 자리마다 **선발 무게** 순이에요.
+   * ⚠️ `str` 순이 아니라 `pickWeight` 순입니다 — 🌱 YOUTH_BONUS를 다른 팀에도 똑같이
+   *    걸어야 해요. 우리 팀만 어린 선수를 밀어주면 그건 특혜입니다. */
   function startingXIOf(club) {
     const sq = squadOf(club);
     const out = [];
     for (const p of POS_KEYS) {
-      const line = sq.filter((x) => x.pos === p).sort((a, b) => b.str - a.str);
+      const line = sq.filter((x) => x.pos === p).sort((a, b) => pickWeight(b) - pickWeight(a));
       out.push(...line.slice(0, FORMATION[p]));
     }
     return out;
@@ -409,7 +411,45 @@ window.WingerSquad = (() => {
     const trust = trustOf();
     return { cond, form, avg, trust, total: cond + form + trust };
   }
-  const lineupScore = (x) => x.str + rand(-FORM_SWING, FORM_SWING) + (x.me ? myBonus().total : 0);
+  /* ══════════════════════════════════════════════════════════════════
+   * 🌱 **어린 선수에게는 자리를 조금 더 줍니다** — `YOUTH_BONUS` (§7-1 ④)
+   *
+   * ── 왜 ──
+   * 설계는 🌳 만성을 *"초반 시즌을 **버텨야** 한다"*로 적었는데, 게임은 그걸
+   * **"경기를 안 준다"**로 처리하고 있었어요 — 실측 만성 신인 출전 **9.8/38**,
+   * 출전 15경기 미만이 **75.9%**. 그리고 더 나쁜 건 **복리**입니다:
+   * 못 뛰면 실전 성장이 없고, 성장이 없으면 다음 시즌도 못 뜁니다.
+   * `lowApps`가 쌓여 🕯️ 은퇴 권유까지 이어졌어요. **버티는 게 아니라 벌이었습니다.**
+   *
+   * ── 🔒 세게 만드는 게 아니라 **기회를 주는 것**입니다 ──
+   * **선발 경쟁 무게에만** 겁니다. 생산량(골·도움·수비)은 나이곡선이 정하니,
+   * 못하는 어린 선수가 뛰면 **성적은 그대로 나쁩니다.** 다만 **경험은 쌓여요** —
+   * 그게 "버틴다"의 뜻이에요. 실력을 올리는 게 아니라 감독이 기회를 준다는 뜻입니다.
+   *
+   * ── 🚨 **NPC에게도 똑같이 겁니다** ──
+   * 나만 받으면 그건 특혜예요 — *"나와 경쟁자가 다른 자"*가 이 저장소의 단골 병입니다.
+   * 이건 타입이 아니라 **나이의 일반 규칙**이라, 만성만 받는 것도 아니에요.
+   *
+   * ── 화면에 이미 있던 개념입니다 ──
+   * 스쿼드 표가 `🌱 21세 이하`를 **표시하면서 배정에는 안 쓰고 있었어요.**
+   * 보이는 것과 하는 일을 맞추는 자리입니다.
+   *
+   * ⚠️ 제안값이에요 (balancer 실측 5-i). ⚠️ **자리 배정(assignSlots)에는 안 겁니다** —
+   *    거기는 뽑힌 뒤 좋은 자리를 실력 순으로 나누는 자리라 성격이 달라요. */
+  const YOUTH_BONUS = { 18: 0.18, 19: 0.14, 20: 0.09, 21: 0.05 };
+  /* 내 줄에는 나이 칸이 없어요(meRow 주석 참고) — 세이브에 또 두지 않고 여기서 물어봅니다.
+   * 열여덟보다 어린 줄은 열여덟과 같게 봐요 — 데뷔가 만 20세라 지금은 안 생기지만,
+   * 표에 없는 나이가 들어와도 보너스가 0으로 뚝 떨어지지 않게 하는 자리입니다. */
+  const rowAge = (x) => (x.me ? (window.WingerProspect ? WingerProspect.ageOf(S) : null) : x.age);
+  function youthMul(x) {
+    const a = rowAge(x);
+    if (a == null) return 1;
+    return 1 + (YOUTH_BONUS[Math.max(18, Math.round(a))] || 0);
+  }
+  /* 감독이 선발을 고를 때 보는 무게. **여기 한 곳에서만** 정해요 —
+   * 우리 팀(rollLineup)과 다른 팀(startingXIOf)이 다른 자를 쓰면 안 됩니다. */
+  const pickWeight = (x) => x.str * youthMul(x);
+  const lineupScore = (x) => pickWeight(x) + rand(-FORM_SWING, FORM_SWING) + (x.me ? myBonus().total : 0);
 
   /* 🛌 **보호 로테이션** — 몸이 바닥이면 감독이 가끔 쉬게 해요.
    *
@@ -783,7 +823,14 @@ window.WingerSquad = (() => {
      * 화면에서는 그냥 숫자가 달라진 것으로만 보입니다. 옛 세이브(나이 없음)는
      * 칸 자체를 안 그려요. */
     const tag = (x) => {
-      if (x.me || x.age == null) return "";
+      /* 🌱 내 줄에도 나이를 적어요. `YOUTH_BONUS`가 이제 **나에게도 실제로 걸리니**,
+       * 표시만 없으면 "왜 내가 뽑혔지/밀렸지"의 이유가 화면에서 사라집니다. */
+      if (x.me) {
+        const a = window.WingerProspect ? WingerProspect.ageOf(S) : null;
+        if (a == null) return "";
+        return `<span class="sq-age">${a}세${a <= 21 ? " 🌱" : a >= 33 ? " 🕯️" : ""}</span>`;
+      }
+      if (x.age == null) return "";
       const f = formOf(x);
       const mark = f < 0 ? ` <b class="sq-slump">📉 부진</b>` : f > 0 ? ` <b class="sq-surge">🔥 상승세</b>` : "";
       const young = x.age <= 21 ? " 🌱" : x.age >= 33 ? " 🕯️" : "";
@@ -850,7 +897,7 @@ window.WingerSquad = (() => {
     isStarter, myLine, benchReason, myBonus, restP, benchTurn, creditMateGoals, markApps, resetSeason, squadHTML,
     ageSquads, newsLine, ageCurve, leagueXI,
     POS_SLOTS, slotsOf, slotOf, slotByKey, footFit, assignSlots, wantSlot, FOOT_FIT,
-    FORMATION, BENCH, SQUAD_SIZE, BENCH_GAIN, SCORE_W, REST_BAR, REST_MAX,
+    FORMATION, BENCH, SQUAD_SIZE, BENCH_GAIN, SCORE_W, REST_BAR, REST_MAX, YOUTH_BONUS, youthMul, pickWeight,
     AGE_MIN, AGE_MAX, PEAK_AGE, RETIRE_AGE, SLUMP_P, SURGE_P, STR_SPREAD, MEAN_CURVE, BENCH_COND,
     _t: { rollSquad, pickScorer, rollPlayer, strOfRow, moveMe, backfillAges },
   };

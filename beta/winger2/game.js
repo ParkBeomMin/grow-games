@@ -450,8 +450,9 @@ function newState(market, pos, name, roll) {
   return {
     market: market.id, pos, name,
     year: 1, month: 1,
-    /* 🎂 나이는 유망주 카드가 정해요(17~19). applyCard가 바로 뒤에 덮어씁니다 —
-     * 여기 값은 카드 없이 만들어지는 경로(검사·픽스처)의 기본값이에요. */
+    /* 🎂 나이는 유망주 카드가 정해요(셋 다 17세 — 유스 3년을 지나 만 20세에 데뷔합니다).
+     * applyCard가 바로 뒤에 덮어써요 — 여기 값은 카드 없이 만들어지는
+     * 경로(검사·픽스처)의 기본값이라 옛 세이브 기본값(START_AGE)과 같이 둡니다. */
     age: WingerProspect.START_AGE,
     stats, talents,
     foot: rollFoot(),          // 🦶 주발·약발 — 타고나고 경기에서 붙어요
