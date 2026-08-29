@@ -172,3 +172,5 @@ S.career.mvpW = (S.career.mvpW != null ? S.career.mvpW : S.career.mvp) + prestig
 | 2026-08-28 | "한 벌 계수를 요약에서 줄이지 마라" 추가 | agents/grow-balancer | `NPC_SPOT` 세 값을 "하나를 내리는 것과 같다"로 요약해 분할이 폐기되고 곡선이 무너짐 |
 | 2026-08-28 | 종료 코드 3갈래·0번 변이 등록·픽스처 건강 검사 | skills/grow-test-writing | 변이 정규식이 구현 변경에 두 번 죽었는데 "실패 1건"으로만 보임 |
 | 2026-08-29 | "시드 하나로 재지 마라" 추가 | skills/grow-test-writing | 한 세션에 두 번 — 시드에 따라 밴드를 넘나들거나, 고정 시드에서만 통과 |
+| 2026-08-29 | "사람의 조작을 검사로 굳히지 마라" 추가 | skills/grow-test-writing | 겨냥 전략만 바꾼 조작자 모델에서 E[s]가 0.52 → 0.66. 밴드를 통째로 넘나듦 |
+| 2026-08-29 | CSS 헤드리스 렌더 검증 절 추가 | agents/grow-director | `/workspace/.tools`의 playwright로 16판을 렌더해, 주발 표시 색이 판정과 반대인 버그를 잡음 |
