@@ -20,13 +20,41 @@
  */
 "use strict";
 const fs = require("fs");
-const { load, xiOf, statsOf, play } = require("./_load.js");
+const { load, mutsOK, xiOf, statsOf, play, SRC: SRC_E } = require("./_load.js");
 
 let fail = 0;
 const check = (ok, msg) => { console.log(`${ok ? "✅" : "❌"} ${msg}`); if (!ok) fail += 1; };
 const near = (a, b, eps) => Math.abs(a - b) <= eps;
 
 const E = load();
+
+/* 🧪 이 파일이 쓰는 변이 전부 — 0번 검사가 여기 있는 정규식을 소스와 대조합니다. */
+const MUT_TABLE = {
+  "③b나머지평균을||0으로": [[
+    /return \(k\) => \(stats && typeof stats\[k\] === "number" && isFinite\(stats\[k\]\) \? stats\[k\] : avg\);/,
+    'return (k) => ((stats && stats[k]) || 0);']],
+};
+/* ══════════════════════════════════════════════════════════════
+ * 🔎 0. **변이 정규식이 지금 소스에 걸리나** — 다른 무엇보다 먼저 봅니다
+ *
+ * 변이 정규식은 소스 **문자열**에 의존해요. 누가 그 줄의 모양을 바꾸면 정규식이
+ * 안 걸리고 `load()`가 던져서 **파일이 그 자리에서 죽습니다** — 그런데 모아 돌릴 때는
+ * `❌ 실패 1건`으로만 보여서 *안 돈 것*과 *빨간불*이 구분이 안 돼요.
+ * 이 저장소에서 **세 번** 난 사고입니다 (`ME_P : 1` · `NPC_SPOT : 1` · 축구 검사 10개).
+ *
+ * 여기서 먼저 대조하면 **죽는 대신 ❌ 한 줄**로 뜹니다.
+ * (`_load.js`가 크래시를 **종료 코드 2**로 갈라 주는 것과 한 벌이에요.)
+ * ══════════════════════════════════════════════════════════════ */
+{
+  const bad = mutsOK(MUT_TABLE);
+  const n = Object.values(MUT_TABLE).reduce((a, m) => a + m.length, 0);
+  check(bad.length === 0,
+    `0. 변이 정규식 ${n}개가 지금 beta/winger2/engine.js에 전부 걸린다`
+    + (bad.length
+      ? `\n     🔴 **안 걸린 것 ${bad.length}개 — 그 변이 검사는 지금 "안 도는" 상태입니다** (초록불이 아니에요)`
+        + bad.map((b) => `\n       · ${b}`).join("")
+      : ""));
+}
 
 /* ---------- ① 시드 재현성 ---------- */
 {
@@ -208,14 +236,60 @@ const E = load();
  *    설계 §3-1 표에서 옮겨 적은 값이에요. 계수를 바꾸려면 이 줄도 같이 고치게 됩니다. */
 {
   const WANT = { SCENE_ATK: 0.72, BIG_BASE: 0.45, FAT: 0.55, URG: 0.18, FIN: 0.884,
-    CON: 1.111, ME_P: 1.80, SPOT: 4.00, NPC_SPOT: 7.00, N_MIN: 6, N_MAX: 8,
-    COND_K: 0.30, COND_REF: 80, ASSIST_P2: 0.75, GOAL_GAP: 3,
+    CON: 1.111, ME_P: 1.80, SPOT: 4.00, N_MIN: 6, N_MAX: 8,
+    COND_K: 0.30, COND_REF: 80, GOAL_GAP: 3,
     /* 22번 확정 (2026-08-28). CLUTCH는 1.35 → 1.25로 내렸어요 — 1.35는 시즌 골 +3.6%로
      * (라') 중립이 이어받은 ±3% 밴드를 넘습니다. FLOOR_SHARE는 0~0.20 전 구간이
      * 네 조건을 통과해서 안전망으로 0.12에 남겼습니다. */
-    CLUTCH: 1.25, FLOOR_SHARE: 0.12 };
+    CLUTCH: 1.25, FLOOR_SHARE: 0.12,
+    /* 🅳 **후보 D 한 벌** (게이트 ①-G · 38번 engineer). designer가 정한 값을 옮긴 것이에요.
+     *   NPC_SPOT  7.00 → 2.90  — 종류별 분할(_G/_A/_D)은 **폐기된 설계**입니다. 단일 값이에요
+     *   ASSIST_P2 0.75 → 0.48
+     *
+     * ⚠️ **balancer G-9 재측정 대기 중입니다.** 23번 후보 D 표가 재현되는지 아직 안 끝났어요 —
+     *    여기서 또 움직일 수 있습니다. 움직이면 이 줄도 같이 고치는 게 맞아요
+     *    (소스에서 읽어 오면 상수를 바꿔도 검사가 따라가서 아무것도 안 잡힙니다). */
+    ASSIST_P2: 0.48 };
   const off = Object.entries(WANT).filter(([k, v]) => E.K[k] !== v).map(([k, v]) => `${k} ${E.K[k]}≠${v}`);
   check(off.length === 0, `확정 계수가 설계 §3-1 표와 같다${off.length ? ` — ${off.join(", ")}` : ""}`);
+
+  /* ══════════════════════════════════════════════════════════════════════
+   * 🟠 **아래 두 pin(`NPC_SPOT` · `POS_AXIS.n`)이 이 계수들의 유일한 방어선입니다.**
+   *
+   * engineer가 41번에서 되돌려 확인했고, **저도 직접 되돌려 재확인했습니다** —
+   * 두 계수를 옛 값으로 돌려도 `award` · `league` · `mutation` · `neutral` · `wiring`이
+   * **전부 초록불**입니다. 즉 **행동 검사가 하나도 안 웁니다.**
+   *
+   * 왜 그런가 — 이 계수들이 맞추는 건 **부문상 수상률**(🥇 18.3% · 🎯 17.6% · 🛡️ 18.1%,
+   * 격차 0.7%p)인데, 수상률은 `내 기록 ÷ 리그 1위 기록` → hype → 수상 판정으로 갈려서
+   * **커리어 몬테카를로**라야 보입니다. 빠른 단위 검사로는 구조적으로 못 잡아요
+   * (`45_inspector_gate-close.md` §6 · `46_inspector_gate1g-close.md` §3).
+   *
+   * 🚨 **그래서 이 pin은 "값이 이거다"만 지키고 "이 값이어야 하는 이유"는 안 지킵니다.**
+   *    여기를 고치면 아무 검사도 안 울면서 밸런스가 조용히 무너집니다.
+   *    값을 옮기려면 **balancer 실측(G-2·G-7)을 먼저 받으세요.** 검사가 통과한다고
+   *    괜찮은 게 아니에요 — 이 자리에는 검사가 없습니다.
+   * ══════════════════════════════════════════════════════════════════════ */
+
+  /* 🌟 `NPC_SPOT`은 **숫자가 아니라 카드 종류별 객체**입니다 (40번 · ①-G 최종).
+   *   `{ goal: 2.80, assist: 5.80, defend: 4.50 }`
+   * ⚠️ 위 WANT 표에 넣으면 `E.K.NPC_SPOT !== 2.90`이 `[object Object]≠2.9`로 찍혀서
+   *    **무엇이 어떻게 틀렸는지 안 보입니다.** 모양이 바뀐 계수는 세 값을 따로 pin 해요.
+   * ⚠️ 여기가 객체가 되면서 `mutation-test.js` E의 변이 정규식이 **두 게이트째 안 걸렸습니다.**
+   *    상수의 *모양*을 바꾸는 건 값을 바꾸는 것보다 파급이 큽니다 —
+   *    그래서 그 파일 0번이 정규식을 먼저 대조해요. */
+  const NS = E.K.NPC_SPOT;
+  const NS_WANT = { goal: 3.05, assist: 6.50, defend: 4.90 };
+  const nsOff = !NS || typeof NS !== "object"
+    ? [`객체가 아니에요 (${NS})`]
+    : Object.entries(NS_WANT).filter(([k, v]) => NS[k] !== v).map(([k, v]) => `${k} ${NS[k]}≠${v}`);
+  check(nsOff.length === 0,
+    `NPC_SPOT이 카드 종류별 객체다 — goal ${NS_WANT.goal} · assist ${NS_WANT.assist} · defend ${NS_WANT.defend}`
+    + (nsOff.length ? ` — ${nsOff.join(", ")}` : ` (실제 goal ${NS && NS.goal} · assist ${NS && NS.assist} · defend ${NS && NS.defend})`));
+  /* 🅰️ `_A`가 가장 큰 것은 **의도**예요 — 도움 에이스 풀(mf·wg·fw)이 넓어서 희석되거든요.
+   * 순서가 뒤집히면 그건 계수 조정이 아니라 다른 고장입니다. */
+  check(NS.assist > NS.defend && NS.defend > NS.goal,
+    `NPC_SPOT의 크기 순서가 assist > defend > goal이다 (풀이 넓을수록 큽니다)`);
   // 포지션 가중 — 이게 없으면 센터백이 스트라이커만큼 골을 넣습니다
   check(E.K.GOAL_W.fw > E.K.GOAL_W.wg && E.K.GOAL_W.wg > E.K.GOAL_W.mf && E.K.GOAL_W.mf > E.K.GOAL_W.df,
     "GOAL_W가 fw > wg > mf > df 순서다");
@@ -229,6 +303,16 @@ const E = load();
     "blend의 S1이 포지션마다 맞다 (mf=패스 · df=수비 · fw=슛 · wg=드리블)");
   check(E.K.BLEND_W[0] === 0.60 && E.K.BLEND_W[1] === 0.25 && E.K.BLEND_W[2] === 0.15,
     "blend 가중이 0.60 / 0.25 / 0.15");
+  /* 🌟 ACE_POOL — designer 판정 (8). 값을 여기 직접 적습니다.
+   * ⚠️ **`aceOf`는 `GOAL_W`를 안 봅니다.** 능력치 최대 한 명을 그냥 고를 뿐이에요 —
+   *    designer가 적은 근거(*"GOAL_W[wg] < GOAL_W[fw]라 fw가 에이스가 되기 쉽다"*)는
+   *    코드에서 성립하지 않습니다(38번 §3). **결론(fw가 위)은 지켜지지만 이유가 달라요** —
+   *    에이스가 아닌 나머지 fw가 GOAL_W 1.0을 계속 갖기 때문입니다.
+   *    그 결론은 `award-test.js` B-2가 앙상블로 지킵니다. */
+  const AP = SRC_E.match(/const ACE_POOL = \{[^}]*\};/);
+  const poolOK = !!AP && /goal:\s*\["fw",\s*"wg"\]/.test(AP[0])
+    && /assist:\s*\["mf",\s*"wg",\s*"fw"\]/.test(AP[0]) && /defend:\s*\["df"\]/.test(AP[0]);
+  check(poolOK, `ACE_POOL이 goal ["fw","wg"] · assist ["mf","wg","fw"] · defend ["df"]다 — ${AP ? AP[0].replace(/\s+/g, " ") : "못 찾음"}`);
 }
 
 /* ---------- ⑨-b 🅰️ 패스가 도움에 닿는다 (라이브 결함 ①이 v2에서 풀렸나) ----------
@@ -284,13 +368,16 @@ const E = load();
    * ⚠️ 값을 검사에 **직접 적습니다.** 소스에서 읽어 오면 상수를 바꿔도 검사가 따라가서
    *    아무것도 안 잡혀요. 계수를 옮기려면 이 줄도 같이 고치게 되는 게 맞습니다. */
   const off = CAREER.match(/const AXIS_OFF\s*=\s*([\d.]+)/);
-  check(!!off && Number(off[1]) === 2.00,
-    `AXIS_OFF = 2.00 (실제 ${off ? off[1] : "못 찾음"}) — 22번 §확정 계수. V1 구조에서 재적합`);
+  check(!!off && Number(off[1]) === 2.35,
+    `AXIS_OFF = 2.35 (실제 ${off ? off[1] : "못 찾음"}) — ①-G 최종 (39·40번)`);
   const pos = CAREER.match(/const POS_AXIS = \{[\s\S]*?\n {2}\};/);
-  /* ⚠️ df.n 0.816은 **철벽상 축을 「차단 횟수」로 잡은 값**이에요.
-   *    부문상 게이트(①-G · designer §12-4b G-1~G-7)에서 축을 「무실점 경기 수」로 바꾸면
-   *    이 값을 **그 게이트에서 다시 잡아야 합니다.** 지금은 0.816이 맞습니다. */
-  const want = { fw: 1.128, wg: 0.957, mf: 0.815, df: 0.816 };
+  /* 🅳 후보 D 한 벌 (38번). 🌟 `ACE_POOL.goal`에 wg가 들어가고 `NPC_SPOT`이 2.90으로
+   *    내려간 위에서 재적합한 값이에요.
+   * ⚠️ `df.n`은 **철벽상 축이 「무실점」으로 옮겨간 뒤에도 「차단」 기준**입니다 —
+   *    designer 판정으로 `posAxis`는 차단을 계속 보거든요(37번 ① · `award-test.js` F).
+   *    그 판정이 뒤집히면 df 하나가 아니라 **네 포지션 n이 전부** 다시 잡힙니다.
+   * ⚠️ **balancer G-9 재측정 대기 중** — 여기서 또 움직일 수 있어요. */
+  const want = { fw: 1.072, wg: 0.967, mf: 0.873, df: 0.794 };
   const gotN = {};
   if (pos) for (const [, k, v] of pos[0].matchAll(/(\w+):\s*\{[^}]*n:\s*([\d.]+)/g)) gotN[k] = Number(v);
   const bad = Object.entries(want).filter(([k, v]) => gotN[k] !== v).map(([k, v]) => `${k} ${gotN[k]}≠${v}`);
@@ -307,8 +394,8 @@ const E = load();
    *    행동 검사(22번 inspector 항목 24)는 career.js의 리그·평점·MOM 판정을 통째로
    *    굴려야 해서 아직 안 만들었어요 — 42번 보고서에 미굳힘으로 남겼습니다. */
   const mom = CAREER.match(/const MOM_MIN\s*=\s*([\d.]+)/);
-  check(!!mom && Number(mom[1]) === 8.30,
-    `MOM_MIN = 8.30 (실제 ${mom ? mom[1] : "못 찾음"}) — 22번 §확정 계수 (능력치 110에서 MOM 6.2%)`);
+  check(!!mom && Number(mom[1]) === 8.40,
+    `MOM_MIN = 8.40 (실제 ${mom ? mom[1] : "못 찾음"}) — ①-G 최종 (39·40번)`);
 }
 
 console.log(fail ? `\n❌ ${fail}건 실패` : "\n✅ 통과");

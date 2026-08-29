@@ -12,6 +12,7 @@
  *   createMatch(cfg)   내 경기 한 판 (스텝 머신 — 화면이 한 장씩 받아 갑니다)
  *   autoMatch(cfg)     NPC 클럽 대 NPC 클럽 한 판 (같은 8칸 루프, 화면 없음)
  *   shareByWeight()    스코어가 이미 정해진 클럽의 골을 STEP 3 무게로 나눠요
+ *                      (도움은 pBig로 전개/결정을 사후 재구성 — autoMatch와 같은 자)
  *
  * ── 이 파일이 **안 하는** 일 ──
  * DOM을 만들지 않습니다. 전역(S · WingerSquad)을 읽지 않아요 — 전부 cfg로 받습니다.
@@ -75,7 +76,26 @@ window.WingerEngine = (() => {
   const CON = 1.111;         // STEP 4 — 자동 실점. CON × defW는 1로 clamp
   const ME_P = 1.80;         // STEP 3 — 내 무게에만
   const SPOT = 4.00;         // STEP 3 — **나는 늘** 이걸 받아요 (에이스 여부와 무관 · aceOf 주석)
-  const NPC_SPOT = 7.00;     // STEP 3 — 각 클럽 에이스(내 클럽 포함). **나는 후보에서 빠집니다**
+  /* STEP 3 — 각 클럽 에이스(내 클럽 포함)에게. **나는 후보에서 빠집니다**(aceOf 주석).
+   *
+   * 🔴 **카드 종류마다 값이 다릅니다.** 에이스는 `aceOf(xi, kind)`로 종류마다 따로
+   * 뽑히니(골 에이스 · 도움 에이스 · 수비 에이스), 배수도 종류마다예요.
+   *
+   * ⚠️ **이 분할을 지우지 마세요.** 13번 §2-8b (2)가 한 번 "폐기"로 적혔다가 되살아난
+   * 자리예요 — 폐기 근거였던 *"단일 2.90으로 내리는 것과 같다"*가 **요약 착오**였습니다
+   * (23번 balancer 정정: 후보 D는 G만 2.90이고 A·D는 7.00이었어요).
+   * 실제로 단일 2.90으로 두면 게이트 곡선이 **13.7/44.9/82.2/97.6/99.6**으로 무너집니다.
+   *
+   * 셋이 하는 일이 서로 달라요 —
+   *   G  리그 **득점** 1위를 정합니다 → 🥇 골든부츠 문턱
+   *   A  리그 **도움** 1위를 정합니다 → 🎯 플레이메이커 문턱
+   *   D  리그 **차단** 1위를 정합니다 → 🛡️ 철벽상의 **타이브레이커**
+   *      (무실점은 클럽 기록이라 여기 안 닿는다고 봤는데, 후보 D-1이 무실점 격차를
+   *       좁히면서 **차단 타이브레이커가 실제 판정자**가 됐어요 — 10 → 1에서 8% → 29%)
+   *
+   * 🚨 `SPOT`은 **안 쪼갭니다.** 내 쪽을 종류별로 다르게 주면 *"내가 어느 종류의
+   * 에이스냐"*로 포지션 유불리가 생겨요. 경쟁자 쪽만 쪼개면 리그 분포만 움직입니다. */
+  const NPC_SPOT = { goal: 3.05, assist: 6.50, defend: 4.90 };
   /* 🔻 내 몫의 **바닥** (13번 §2-4 · 2026-08-28 판정 · inspector F3).
    *
    * SPOT은 승자독식 계단이라 세 증상이 한 원인에서 나왔어요 —
@@ -92,7 +112,11 @@ window.WingerEngine = (() => {
   const N_MIN = 6, N_MAX = 8;
   const COND_K = 0.30;       // 컨디션 기울기
   const COND_REF = 80;       // c* — 새 커리어·시즌 리셋이 둘 다 80이에요 (§2-7, 잠정값)
-  const ASSIST_P2 = 0.75;    // 동료 골에 도움이 붙을 확률 (career.js:930에서 값만 승계)
+  /* 🅰️ ⚽ 결정 장면의 골에 도움이 붙을 확률.
+   * ⚠️ **이 값이 곧 리그 도움÷골이 아닙니다.** 🅰️ 전개 장면의 골에는 도움이 늘 붙어요 —
+   * 리그 값은 `P(전개) × 1 + P(결정) × ASSIST_P2`입니다. 그래서 감도가 절반쯤이에요.
+   * 0.75 → 0.48은 23번 후보 D 실측(도움÷골 0.749~0.759 · 밴드 0.70~0.80 중앙). */
+  const ASSIST_P2 = 0.48;
   const GOAL_GAP = 3;        // |스코어차| 이 값 이상이면 6장에서 끊어요
 
   /* 📍 포지션 가중 — 이게 없으면 센터백이 스트라이커만큼 골을 넣습니다.
@@ -224,11 +248,11 @@ window.WingerEngine = (() => {
   /* 🌟 스포트라이트 — **나는 늘 `SPOT`, 경쟁자 클럽의 에이스는 늘 `NPC_SPOT`입니다.**
    *
    * 🚨 **둘은 배타적이지 않아요.** 에이스 후보에서 **나를 뺍니다** — 그래야 21번 §①-A-5가
-   * `SPOT 4.00` · `NPC_SPOT 7.00`을 잡을 때 쓴 구조와 같아집니다:
+   * `SPOT 4.00` · `NPC_SPOT`(당시 단일 7.00)을 잡을 때 쓴 구조와 같아집니다:
    * *"`NPC_SPOT`은 내 클럽 에이스에게도 걸려서 **나와 같은 8칸을 놓고 겨룹니다**."*
    *
    * ⚠️ 나를 후보에 넣으면 **클럽마다 에이스 한 명인 승자독식**이 되고, 내가 팀 최강을
-   * 넘는 순간 나는 `SPOT × ME_P = 7.2`를 얻으면서 경쟁자의 `NPC_SPOT 7.0`이 통째로
+   * 넘는 순간 나는 `SPOT × ME_P = 7.2`를 얻으면서 경쟁자의 `NPC_SPOT`이 통째로
    * 사라집니다. 그게 designer가 §2-10에서 **폐기했다고 적은 바로 그 계단**이에요 —
    * 상수 이름만 `ACE_W` → `SPOT`으로 바뀐 채 남아 있었습니다.
    * 실측: 축이 fw 75→80에서 **×2.7** · mf 80→85에서 **×3.0**으로 튀고,
@@ -237,10 +261,34 @@ window.WingerEngine = (() => {
    *
    * 나를 뺀 구조에서 곡선 최대 오차가 29.1%p → **2.3%p**(역대 최소)로 내려왔습니다.
    *
-   * ⚠️ SPOT 4.00 < NPC_SPOT 7.00이 이상해 보이지만 맞아요 — 둘은 독립 노브가 아닙니다.
-   * NPC_SPOT은 내 클럽 에이스에게도 걸려서 나와 같은 8칸을 놓고 겨루니, 올리면 내 골이
-   * 함께 깎여요. 4.00/7.00에서 내 130골 18.7 · 경쟁자 1위 19.2로 섭니다. */
-  const ACE_POOL = { goal: ["fw"], assist: ["mf", "wg"], defend: ["df"] };
+   * ⚠️ `SPOT 4.00`이 `NPC_SPOT.assist`(6.50)보다 작은 게 이상해 보이지만 맞아요 —
+   * 둘은 독립 노브가 아닙니다. `NPC_SPOT`은 **내 클럽 에이스에게도** 걸려서 나와 같은
+   * 8칸을 놓고 겨루니, 올리면 내 생산량이 함께 깎여요. 그래서 *"경쟁자 1위를 올리는 것"*과
+   * *"내 것을 깎는 것"*이 한 손잡이입니다 — 부문상은 그 **비**로 갈리고요. */
+  /* 🌟 두 풀이 **일부러 겹쳐 있습니다** — `goal`에 `wg`, `assist`에 `fw`
+   * (13번 §2-8b (8) · 게이트 G-7).
+   *
+   * 예전에는 `goal: ["fw"]` · `assist: ["mf","wg"]`로 **안 겹쳐서**, 리그에
+   * *"골과 도움을 둘 다 하는 사람"*이 **구조적으로 없었어요** — 리그 1위 골 22.5 ·
+   * 1위 도움 22.8인데 1위 공격P가 **29.7뿐**이라 📈 공격포인트왕이 51%로 혼자 떴습니다.
+   * 두 축을 잘하는 사람이 없으니 공격P 1위 문턱이 저절로 낮았던 거예요.
+   *
+   * ⚠️ **풀을 통째로 합치면 안 됩니다** — 실측에서 `GOAL_W`가 낮은 mf까지 골 에이스가
+   * 되어 골 축이 무너져요(골든부츠 52%). 한 자리씩만 넣습니다.
+   *
+   * 🔴 **"에이스가 되기 어렵다"가 근거가 아닙니다.** `aceOf`는 능력치 최대 한 명을
+   * 그냥 고르고 `GOAL_W`·`ASSIST_W`를 **보지 않아요.** fw 2 · wg 2 · mf 4니 에이스
+   * 자리는 대체로 반반입니다. 축을 지키는 건 **에이스가 아닌 나머지의 무게 합**이에요 —
+   *
+   *   🅰️ 도움 축(에이스 배수 `NPC_SPOT.assist` · `ASSIST_W` mf 1.0 · wg 0.9 · fw 0.5)
+   *     에이스가 mf면 — mf 넷 `1.0×6.50 + 1.0×3` = **9.50**  vs  fw 둘 **1.00**
+   *     에이스가 fw면 — mf 넷 **4.00**  vs  fw 둘 `0.5×6.50 + 0.5` = **3.75**
+   *   어느 쪽이 에이스든 mf가 앞섭니다. `ASSIST_W`가 두 배인 데다 **머릿수가 넷 대 둘**이라
+   *   골 풀(fw 2 : wg 2)보다 여유가 큽니다.
+   *
+   * ⚠️ 이 풀을 건드리면 **`NPC_SPOT_A`·`ASSIST_P2`·`AXIS_OFF`가 따라 움직여요.**
+   *   위 무게 합에 에이스 배수가 그대로 들어가 있는 게 보이시죠 — 한 벌입니다. */
+  const ACE_POOL = { goal: ["fw", "wg"], assist: ["mf", "wg", "fw"], defend: ["df"] };
   function aceOf(xi, kind) {
     const want = ACE_POOL[kind] || [];
     const pool = xi.filter((x) => want.indexOf(x.pos) >= 0 && !x.me);
@@ -263,16 +311,25 @@ window.WingerEngine = (() => {
       /* 🦶 약발 배수는 **골·도움에만** 붙어요 — 반대발로 차야 하는 상황에서 갈리니까요.
        * 태클에 발이 갈리지는 않습니다(현행 matchContribution과 같은 규칙). */
       * (kind === "defend" || row.foot == null ? 1 : row.foot)
+      /* 🎖️ 시즌 칭호·🎉 피버 버프 (13번 §2-7b). 개념집이 *"효과가 붙는 자리는 전부
+       * 경기 안"*이라고 적어 둔 그 자리예요 — 여기 없으면 칭호 여덟 개의 g·a·d가
+       * **리그 38라운드에서 통째로 죽습니다**(닿는 건 🏆 컵뿐이었어요).
+       *
+       * 🚨 **나에게만 붙습니다.** 부르는 쪽(engRow)이 내 줄에만 buff를 실어 줘요 —
+       * 칭호는 내 커리어가 쌓은 것이고 NPC에게는 그 개념이 없습니다.
+       * ⚠️ 엔진은 전역(S·buffMul)을 안 읽어요(§10-3b). **이미 곱해진 수**로 받습니다. */
+      * ((row.buff && row.buff[sk]) || 1)
       /* 🥵 fatigue — **그 경기에 그 사람이 넣은 골만** 셉니다.
        * 도움까지 세면 전개 카드가 결정 카드를 −4% 잡아먹어요.
        * STEP 2가 아니라 여기 있는 이유: pBig는 장면의 속성이고 이건 사람의 속성이라,
        * 경쟁자 11명을 함께 굴릴 때 STEP 2에서는 정의가 안 됩니다(주인공을 아직 모르니까요). */
       * (1 / (1 + FAT * goals))
-      /* 🌟 경쟁자 에이스는 늘 NPC_SPOT · 나는 늘 SPOT (배타적이지 않아요 — aceOf 주석 참고).
+      /* 🌟 경쟁자 에이스는 늘 NPC_SPOT[카드 종류] · 나는 늘 SPOT
+       * (배타적이지 않아요 — aceOf 주석 참고. ace 자체가 kind마다 다른 사람입니다).
        * ⚠️ ME_P는 **평평한 배수**로 둡니다(`(blend/70) × 1.8`). 21번 모델은 지수였지만
        * 지수로 두면 능력치 130에서 95.0%로 목표(85%)를 10%p 넘어요 —
        * 설계 §2-4가 적은 형태(평평한 배수)가 실측에서도 더 좋습니다. */
-      * (row === ace ? NPC_SPOT : 1)
+      * (row === ace ? (NPC_SPOT[kind] || NPC_SPOT.goal) : 1)
       * (row.me ? ME_P * SPOT : 1);
   }
   /* floor — **내 무게에만** 바닥을 깝니다(FLOOR_SHARE). 경쟁자 루프에서는 절대 켜지 마세요. */
@@ -730,7 +787,9 @@ window.WingerEngine = (() => {
     const defA = new Map(), defB = new Map();
     let ga = 0, gb = 0;
 
-    const oneWay = (xi, other, hits, hitsO, aw, dw, k, behind, goals, defOther, clutchOn) => {
+    /* ⚠️ 수비 쪽 무게(defW)는 **일부러 안 받습니다.** 한 장면에 굴림은 하나라
+     * 여기서 쓸 데가 없어요 — 인자로 남겨 두면 `pf * pc`가 되돌아오는 길이 열립니다. */
+    const oneWay = (xi, other, hits, hitsO, aw, k, behind, goals, defOther, clutchOn) => {
       const big = isBig(aw, k, n, behind, null, clutchOn);
       const kind = big ? "goal" : "assist";
       const { who } = pickActor(xi, kind, hits);
@@ -738,17 +797,48 @@ window.WingerEngine = (() => {
       // 수비 장면은 상대 쪽에서 한 명이 맡아요 — 차단 기록이 그쪽에 쌓입니다
       const guard = other.length ? pickActor(other, "defend", hitsO).who : null;
       const pf = pFinish(aw, abilityOf(who));
-      const pc = guard ? pConcede(dw, abilityOf(guard)) : 1;
-      /* 마무리와 수비를 **한 번의 굴림**으로 봅니다 — 두 번 굴리면 같은 장면을 두 번
-       * 세는 셈이라 골이 반으로 줄어요. 수비수의 sc가 그 굴림의 문턱을 옮깁니다. */
-      if (chance(pf * pc)) {
-        hits.set(who, (hits.get(who) || 0) + 1);
-        let assister = null;
-        if (chance(ASSIST_P2)) {
-          const mates = xi.filter((x) => x !== who);
-          if (mates.length) assister = pickActor(mates, "assist", hits).who;
+      /* 🔴 **한 장면에 굴림은 하나입니다** (§2-5 STEP 4 · §2-10의 네 번째 냄새).
+       *
+       * 예전에는 `chance(pf * pc)`였어요 — 바로 위 주석이 *"두 번 굴리면 골이 반으로
+       * 줄어요"*라고 막으려던 그 일을 **코드가 하고 있었습니다.** `createMatch`는
+       * 칸마다 우리 팀에서 한 명만 봐요: 우리 공격 칸이면 `pFinish` 하나, 상대 공격
+       * 칸이면 `pConcede` 하나. 곱이 되는 형태는 설계 어디에도 없습니다.
+       *
+       * 증거 — 리그 6팀 무실점이 `18.6 / 18.1 / 18.4 / [10.8] / 17.7 / 17.4`
+       * (대괄호가 내 클럽)이었고, 무실점률이 createMatch 22.6% vs autoMatch 52.5%였어요.
+       * **내 클럽만 다른 산식으로 실점**하고 있었습니다.
+       *
+       * ⚠️ 이 형태가 남기는 비대칭 — **경쟁자 수비수의 개인 능력치는 여기 안 실립니다.**
+       * 경쟁자 클럽의 무실점은 클럽 전력만 가르고, 내 클럽은 거기에 내 수비 카드가
+       * 더해져요. designer가 **명시하고 2차로 넘긴** 자리예요(칸마다 관점을 굴리는 형태).
+       * `guard`는 그대로 뽑습니다 — 막아낸 장면의 🧱 차단 기록이 거기서 나와요. */
+      if (chance(pf)) {
+        /* 🅰️ 장면의 성격은 **카드 갈래(createMatch.autoAttack)와 똑같이** 읽어요 (§2-5).
+         *
+         *   🅰️ 전개 장면 = 찬스를 **만드는** 장면 → 주인공은 **도움**, 마무리는 `g` 무게로 따로
+         *   ⚽ 결정 장면 = 넣는 장면            → 주인공이 넣고 도움자를 ASSIST_P2로 지명
+         *
+         * 🔴 예전에는 전개 장면에서도 주인공을 **득점자**로 넣었어요. 나와 경쟁자가
+         * 다른 규칙을 쓰면 리그 도움이 통째로 비어서, 내가 가만히 있어도 🎯 플레이메이커가
+         * 들어옵니다 — §2-9·§2-10이 없애려던 바로 그 병이에요.
+         *
+         * ⚠️ createMatch는 마무리 후보에서 **나**를 빼지만(카드를 안 열고 골을 얻어서),
+         * 이 루프에는 내가 없으니 그 조건이 필요 없어요. */
+        let scorer = who, assister = null;
+        if (kind === "goal") {
+          if (chance(ASSIST_P2)) {
+            const mates = xi.filter((x) => x !== who);
+            if (mates.length) assister = pickActor(mates, "assist", hits).who;
+          }
+        } else {
+          const rest = xi.filter((x) => x !== who);
+          scorer = rest.length ? pickActor(rest, "goal", hits).who : who;
+          assister = scorer === who ? null : who;
         }
-        goals.push({ scorer: who, assister });
+        /* 🥵 fatigue는 **넣은 사람**에게 쌓여요 — createMatch의 bump(scorer)와 같은 자리예요.
+         * 지명이 다 끝난 뒤에 올립니다(먼저 올리면 같은 장면의 지명이 자기 피로를 봐요). */
+        hits.set(scorer, (hits.get(scorer) || 0) + 1);
+        goals.push({ scorer, assister });
         return 1;
       }
       if (guard) defOther.set(guard, (defOther.get(guard) || 0) + 1);
@@ -759,8 +849,8 @@ window.WingerEngine = (() => {
       const scene = sceneOf(atkW, defW);
       if (scene === "neu") continue;
       const clutchOn = isClutch(k, n, ga - gb);
-      if (scene === "atk") ga += oneWay(A, B, hitsA, hitsB, atkW, defW, k, gb - ga, goalsA, defB, clutchOn);
-      else gb += oneWay(B, A, hitsB, hitsA, defW, atkW, k, ga - gb, goalsB, defA, clutchOn);
+      if (scene === "atk") ga += oneWay(A, B, hitsA, hitsB, atkW, k, gb - ga, goalsA, defB, clutchOn);
+      else gb += oneWay(B, A, hitsB, hitsA, defW, k, ga - gb, goalsB, defA, clutchOn);
       if (Math.abs(ga - gb) >= GOAL_GAP) n = Math.min(n, Math.max(N_MIN, k));
     }
     return { gf: ga, ga: gb, goalsA, goalsB, defA, defB };
@@ -770,25 +860,56 @@ window.WingerEngine = (() => {
    * 내 경기의 상대 클럽이 그 경우예요 — 스코어는 중계에 뜬 값이라 다시 굴리면
    * 화면과 순위표가 다른 말을 합니다(이 저장소가 계속 앓아 온 자리).
    *
-   * kind "goal"이면 도움도 함께 붙여요. "defend"면 차단 한 명만 뽑습니다. */
-  function shareByWeight(xi, count, kind) {
+   * kind "goal"이면 도움도 함께 붙여요. "defend"면 차단 한 명만 뽑습니다.
+   * atkW는 그 클럽의 공격 쪽 무게예요(없으면 0.5 — 대등한 두 팀).
+   *
+   * 🅰️ **도움은 `autoMatch`·`createMatch`와 같은 규칙으로 붙습니다.**
+   *
+   * 골 하나하나가 🅰️ 전개에서 났는지 ⚽ 결정에서 났는지는 여기서 알 수 없어요 —
+   * 스코어만 넘어오니까요. 그런데 **분포는 엔진이 이미 압니다**: STEP 2의
+   * pBig(= `BIG_BASE × edge`)가 그 값이에요. 골마다 그 확률로 굴려 사후에 나눕니다.
+   * *"골 중 몇 %를 전개 출신으로 볼 것인가"를 새로 정하지 않아요* — 새 상수가 없습니다.
+   *
+   * 🔴 예전에는 여기서 **모든 골에 ASSIST_P2만** 걸었어요. 그러면 이 길로 가는 클럽만
+   * 도움이 덜 나옵니다. 그리고 이 길로 가는 클럽은 **언제나 내 경기의 상대**라
+   * 무작위 오차가 아니라 **계통 오차**예요 — 평균으로 안 씻깁니다.
+   * 리그 6팀이 세 갈래(카드 · autoMatch · 여기)로 나뉘어도 **자는 하나**라야 해요.
+   *
+   * ⚠️ urgency(뒤지면 찬스가 는다)와 추가시간 가중은 **그 시점 스코어를 봐야** 아는
+   * 값이라 여기서는 못 씁니다. 그만큼 결정 쪽이 아주 조금 낮게 잡혀요. */
+  function shareByWeight(xi, count, kind, atkW) {
     const out = [];
     if (!xi || !xi.length || !(count > 0)) return out;
     for (const x of xi) x._ab = null;
-    const k = kind === "defend" ? "defend" : "goal";
+    const defend = kind === "defend";
     const hits = new Map();
+    const pBig = clamp(BIG_BASE * ((atkW == null ? 0.5 : atkW) / 0.5), 0, 1);
     for (let i = 0; i < count; i++) {
-      const { who } = pickActor(xi, k, hits);
+      if (defend) {
+        // 🧱 차단은 한 명만 뽑아요. 🥵 fatigue는 **골만** 세니 여기서는 안 올립니다
+        const { who } = pickActor(xi, "defend", hits);
+        if (!who) break;
+        out.push({ scorer: who, assister: null });
+        continue;
+      }
+      const big = chance(pBig);
+      const { who } = pickActor(xi, big ? "goal" : "assist", hits);
       if (!who) break;
-      let assister = null;
-      if (k === "goal") {
-        hits.set(who, (hits.get(who) || 0) + 1);
+      let scorer = who, assister = null;
+      if (big) {
         if (chance(ASSIST_P2)) {
           const mates = xi.filter((x) => x !== who);
           if (mates.length) assister = pickActor(mates, "assist", hits).who;
         }
+      } else {
+        // 🅰️ 전개 출신 — 주인공은 만드는 사람이고 마무리는 `g` 무게로 다른 사람이에요
+        const rest = xi.filter((x) => x !== who);
+        scorer = rest.length ? pickActor(rest, "goal", hits).who : who;
+        assister = scorer === who ? null : who;
       }
-      out.push({ scorer: who, assister });
+      // 🥵 fatigue는 넣은 사람에게 — createMatch의 bump(scorer) · autoMatch와 같은 자리예요
+      hits.set(scorer, (hits.get(scorer) || 0) + 1);
+      out.push({ scorer, assister });
     }
     return out;
   }

@@ -83,8 +83,9 @@ const check = (ok, msg) => { console.log(`${ok ? "✅" : "❌"} ${msg}`); if (!o
   const MKF = fs.readFileSync("/workspace/grow-games/scripts/make-fixtures.js", "utf8");
   check(games.has("winger2"),
     `_fixtures.js에 winger2 시나리오가 있다 (지금 있는 게임: ${Array.from(games).join(", ") || "없음"})`
-    + `\n     GAME_ORDER에는 winger2가 있는데 시나리오가 0건이면 **탭이 한 장도 안 그려집니다** (오류 없이 조용히요).`
-    + `\n     scripts/make-fixtures.js에 winger2 생산자 ${/game:\s*"winger2"/.test(MKF) ? "있음" : "**없음**"} — 거기부터 채워야 해요.`);
+    + (games.has("winger2") ? "" :
+      `\n     GAME_ORDER에는 winger2가 있는데 시나리오가 0건이면 **탭이 한 장도 안 그려집니다** (오류 없이 조용히요).`
+      + `\n     scripts/make-fixtures.js에 winger2 생산자 ${/game:\s*"winger2"/.test(MKF) ? "있음" : "**없음**"} — 거기부터 채워야 해요.`));
 }
 
 /* ══════════ B·C·D — 페이지를 실제로 띄웁니다 ══════════ */
@@ -93,15 +94,21 @@ const FX = (() => {
   const m = s.match(/window\.CHECK_FIXTURES\s*=\s*(\{[\s\S]*\});\s*$/);
   return m ? new Function(`return ${m[1]};`)() : null;
 })();
-const item = FX && FX.items.find((x) => x.id === "soccer-veteran");
-if (!item) { console.log("❌ 확인용 세이브를 못 찾았어요 (beta/_fixtures.js)"); process.exit(1); }
-/* ⚠️ winger2 픽스처가 아직 없어서 soccer 세이브를 winger2 키·phase로 옮겨 씁니다.
- *    winger2는 soccer 복제라 스키마가 같아요. 픽스처가 생기면 그걸로 바꾸세요
- *    (`scripts/make-fixtures.js`에 winger2를 넣는 일이 아직 남아 있습니다). */
-const keys = {};
-for (const [k, v] of Object.entries(item.keys)) {
-  keys[k.replace(/^winger-save-v1/, "winger2-save-v1")] = v.replace(/"phase":"soccer-pro"/g, '"phase":"winger2-pro"');
-}
+const item = FX && FX.items.find((x) => x.id === "winger2-match");
+if (!item) { console.log("❌ winger2 확인용 세이브를 못 찾았어요 (beta/_fixtures.js)"); process.exit(1); }
+/* 🔑 **디스크에 있는 그대로 씁니다.** 예전에는 winger2 픽스처가 없어서 soccer 세이브를
+ *    키·phase만 바꿔 빌려 썼는데, 그건 "픽스처가 실제와 다른 모양"이라는 이 저장소의
+ *    단골 함정 바로 옆자리예요. 지금은 진짜 winger2 시나리오가 있습니다.
+ *    ⚠️ 모양이 맞는지 여기서 한 번 확인하고 넘어갑니다 — 안 맞으면 손으로 고치지 말고
+ *       `node scripts/make-fixtures.js`를 다시 돌리세요. */
+const keys = item.keys;
+const shapeBad = Object.entries(keys)
+  .filter(([k, v]) => !/^winger2-save-v1/.test(k) || /"phase":"(?!winger2-)/.test(v))
+  .map(([k]) => k);
+check(shapeBad.length === 0,
+  `winger2 픽스처가 디스크 모양 그대로다 — 키가 winger2-save-v1로 시작하고 phase가 winger2-*`
+  + (shapeBad.length ? ` — 어긋난 키: ${shapeBad.join(", ")}` : ` (${Object.keys(keys).join(", ")})`));
+
 const PRE = `window.fetch=()=>Promise.reject(new Error("off"));
 window.requestAnimationFrame=(cb)=>setTimeout(()=>cb(0),0);window.scrollTo=()=>{};
 window.alert=()=>{};window.confirm=()=>false;
@@ -189,7 +196,6 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   const goBtn = () => w.document.querySelector("#pro-actions .go-game");
   check(!!goBtn(), "⚽ 경기하러 가기 버튼이 있다");
 
-  const week0 = S().activity.week;
   /* 🖱️ 실기기 이벤트 순서 그대로 — pointerdown → pointerup → click.
    *    pointerdown 하나만 보내던 검사가 24개 케이스를 전부 놓친 전례가 있어요. */
   const press = (el) => {
@@ -198,10 +204,45 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
       el.dispatchEvent(new Ev(type, { bubbles: true, cancelable: true }));
     }
   };
-  press(goBtn());
-  for (let i = 0; i < 200 && active() !== "screen-stage"; i++) await wait(10);
+
+  /* 🪑 **선발은 라운드마다 다시 뽑혀요** (`WingerSquad.isStarter()`).
+   *    벤치인 주는 `benchShow` 갈래로 빠져서 순간 카드가 **한 장도 안 그려집니다** —
+   *    그건 결함이 아니라 설계예요. 그 주는 넘기고 다음 라운드에 다시 눌러요.
+   *
+   * 🔴 이 되풀이가 **없으면 검사가 뒤집힙니다.** 픽스처를 winger2로 바꾸고 나서
+   *    세 번에 한 번씩 빨간불이 떴어요 — 벤치인 주에 걸린 거였습니다.
+   *    **그때그때 갈리는 검사는 아무도 안 믿게 됩니다.**
+   *    여덟 라운드를 다 벤치로 보내면 그건 그것대로 빨간불이에요(조용히 건너뛰지 않습니다). */
+  const MAX_ROUNDS = 8;
+  let week0 = 0, benched = 0, opened = false, rounds = 0;
+  for (; rounds < MAX_ROUNDS && !opened; rounds++) {
+    if (!goBtn()) break;
+    week0 = S().activity.week;
+    press(goBtn());
+    for (let i = 0; i < 200 && active() !== "screen-stage"; i++) await wait(10);
+    for (let i = 0; i < 400 && S().activity.week === week0; i++) await wait(10);
+    if (w.document.querySelectorAll(".w2-card").length >= 6) { opened = true; break; }
+    benched += 1;
+    const nx = $("btn-stage-next");
+    if (nx) press(nx);
+    for (let i = 0; i < 300 && active() !== "screen-pro"; i++) await wait(10);
+    /* 🏋️ **한 주는 훈련 턴을 다 써야 ⚽ 경기 버튼이 열려요.**
+     *    `career.js:1564`의 `if (S.pendingShow)`가 그 버튼을 그립니다 —
+     *    준비 턴이 남아 있으면 화면에 훈련 버튼만 있어요.
+     *    🛌 휴식을 씁니다: 훈련 버튼은 상한에 닿으면 「재능 각성」으로 바뀌어 턴을
+     *    다르게 쓰는데, 휴식은 언제나 턴 하나를 그대로 소모해요.
+     *    (실측: 두 번 누르면 열립니다. 넉넉히 12번까지 봐요.) */
+    for (let t = 0; t < 12 && !goBtn(); t++) {
+      const rest = w.document.querySelector('#pro-actions .action-btn[data-key="__rest"]');
+      if (!rest) break;
+      press(rest);
+      for (let i = 0; i < 100 && !goBtn(); i++) await wait(10);
+    }
+  }
+  check(opened,
+    `⚽ 경기하러 가기 → 순간 카드 경기에 도달했다 (🪑 벤치인 주 ${benched}회 건너뜀 · ${rounds + 1}라운드째`
+    + `${opened ? "" : ` · 마지막 화면 ${active()} · 버튼 ${goBtn() ? "있음" : "없음"}`})`);
   check(active() === "screen-stage", `경기 화면이 열렸다 (${active()})`);
-  for (let i = 0; i < 400 && S().activity.week === week0; i++) await wait(10);
   check(S().activity.week === week0 + 1, "경기가 끝까지 돌고 라운드가 넘어갔다");
 
   const feed = w.document.querySelectorAll(".w2-card");

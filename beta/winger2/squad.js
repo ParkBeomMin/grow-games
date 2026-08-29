@@ -754,7 +754,8 @@ window.WingerSquad = (() => {
   function resetSeason() {
     if (!S.squads) return;
     for (const club of Object.keys(S.squads)) {
-      for (const x of S.squads[club]) { x.g = 0; x.a = 0; x.d = 0; x.apps = 0; x.rate = 0; x.mom = 0; }
+      // cs — 🛡️ 무실점 경기 수(철벽상의 주축). 이 줄에 안 넣으면 시즌이 넘어가도 안 비워져요.
+      for (const x of S.squads[club]) { x.g = 0; x.a = 0; x.d = 0; x.cs = 0; x.apps = 0; x.rate = 0; x.mom = 0; }
     }
     backfillAges();
   }

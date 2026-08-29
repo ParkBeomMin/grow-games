@@ -70,12 +70,15 @@ window.WingerCareer = (() => {
    * 수비수의 골 가중치가 높은 건 세트피스 득점이 실제로 희소하고 가치가 크기 때문이에요.
    * n은 정규화 계수예요. 수비수는 시즌 수비 성공이 68회인데 공격수는 골이 31개라,
    * 그대로 더하면 포지션이 곧 유불리가 됩니다. 시뮬레이션으로 잡은 값이에요. */
+  /* ⚽ ①-G 확정 (24번 최종). `ASSIST_P2` 0.48 · `NPC_SPOT` 3.05/6.50/4.90 위에서
+   * 네 n을 다시 잡았어요 — **`AXIS_OFF` 2.35와 한 벌이라 따로 넣으면 곡선이 무너집니다.**
+   * 🛡️ df의 d는 여전히 **차단**이에요 — 무실점은 부문상(리그 분위수) 축이고
+   * hype는 절대값의 로그라 서로 다른 축입니다(§1-3 · designer 판정). */
   const POS_AXIS = {
-    fw: { g: 1.0, a: 0.5, d: 0.15, n: 1.128 },
-    wg: { g: 0.8, a: 0.8, d: 0.15, n: 0.957 },
-    mf: { g: 0.5, a: 1.0, d: 0.30, n: 0.815 },
-    /* 🛡️ df의 n이 내려간 건 차단이 27.9로 내려와 축이 작아졌기 때문이에요 (22번 재산정) */
-    df: { g: 2.0, a: 1.0, d: 0.55, n: 0.816 },
+    fw: { g: 1.0, a: 0.5, d: 0.15, n: 1.072 },
+    wg: { g: 0.8, a: 0.8, d: 0.15, n: 0.967 },
+    mf: { g: 0.5, a: 1.0, d: 0.30, n: 0.873 },
+    df: { g: 2.0, a: 1.0, d: 0.55, n: 0.794 },
   };
   const AXIS_K = 3.00;
   /* 경기 수를 12 → 38로 올리면서 시즌 축이 3.23배가 됐어요. log가 AXIS_K(3.00)로
@@ -96,9 +99,13 @@ window.WingerCareer = (() => {
    * 4.8로 다시 잡았어요 — 2.6 / 17.6 / 61.2 / 86.1 / 95.6%.
    * **생산량을 바꿀 때 이 값을 같이 안 옮기면 수상이 통째로 사라지거나 쏟아져요.** */
   /* ⚽ v2 — 점진 확정 엔진이 생산량을 통째로 바꿔서 **다시 잡은 값**이에요.
-   * 4.8 → 1.90. 21번 §①-A-4가 SPOT 4.00 · NPC_SPOT 7.00 짝에서 곡선을 다시 적합한 결과예요.
+   * 4.8 → 1.90(21번, 당시 `NPC_SPOT` 단일 7.00) → 2.00(22번) → **2.35**(23번 ①-G).
    * ⚠️ 생산량을 바꿀 때 이 값을 같이 안 옮기면 수상이 통째로 사라지거나 쏟아져요. */
-  const AXIS_OFF = 2.00;
+  /* ⚽ ①-G 확정 — 2.00 → 2.35. 위 POS_AXIS.n 넷과 **한 벌이라 따로 넣으면 안 돼요.**
+   * 🎖️ 칭호 버프가 카드 엔진에 연결되면서(§2-7b) 곡선의 **허리가 밀렸습니다** —
+   * 리그MVP가 능력치 90~110에서 +4.8~+7.9%p (70에서 +1.1 · 130~150은 이미 90%대라 +0.6~3.6).
+   * 2.35가 그걸 받는 값이에요. 버프 배선을 끊으면 이 값도 같이 되돌려야 합니다. */
+  const AXIS_OFF = 2.35;
 
   /* ---------- ⭐ 경기 평점 — 실제 축구 평점처럼 ----------
    *
@@ -481,6 +488,19 @@ window.WingerCareer = (() => {
       /* 🦶 약발 배수는 나에게만 있어요(동료는 약발 칸이 없습니다).
        * 엔진이 골·도움 카드에만 겁니다 — 태클에 발이 갈리지는 않아요. */
       foot: x.me ? footMul() : 1,
+      /* 🎖️ 시즌 칭호·🎉 피버 버프 (13번 §2-7b).
+       *
+       * 🔴 여태 **리그 경기에 하나도 안 닿았어요.** `buffMul`을 부르는 곳이
+       * `matchContribution` 하나뿐인데 v2 리그는 카드 엔진을 씁니다 — 🥇 골든부츠 위너 ·
+       * 🏅 발롱도르 위너 · 🌏 월드컵 위너까지 칭호 여덟 개의 g·a·d가 38라운드에서
+       * 통째로 죽어 있었습니다(닿는 건 🏆 컵뿐이었어요). 🎉 피버도 같이 죽었고요.
+       *
+       * 🚨 **나에게만 실어요** — 칭호는 내 커리어가 쌓은 것이고 NPC에게는 그 개념이 없어요.
+       * ⚠️ **이미 곱한 수**를 넘깁니다. 엔진은 전역(S·buffMul)을 안 읽어요(§10-3b) —
+       *    화면 없이 node에서 곡선을 재려면 그래야 합니다.
+       * ⚠️ `moment`(승부처 성공 +%p)는 여기가 아니라 **미니게임 판정 창**에 붙어요(§4-5).
+       *    `rate`·`train`도 각자 제자리가 따로 있습니다. 여기는 g·a·d 셋뿐이에요. */
+      buff: x.me ? { g: buffMul("g"), a: buffMul("a"), d: buffMul("d") } : null,
       row: x,
     };
   }
@@ -569,10 +589,15 @@ window.WingerCareer = (() => {
       for (const [er, n] of r.defB) addCredit(er.row, 0, 0, n);
     }
     /* 🏟️ 내 경기의 상대 클럽 — **스코어는 중계에 뜬 값**이라 다시 굴리지 않고
-     * STEP 3 무게로 나누기만 해요. 굴리면 화면과 순위표가 다른 말을 합니다. */
+     * STEP 3 무게로 나누기만 해요. 굴리면 화면과 순위표가 다른 말을 합니다.
+     *
+     * 🅰️ 전력비(atkW)를 함께 넘겨요 — 엔진이 그 값으로 pBig을 세워 전개/결정 출신을
+     * 나눕니다. 안 넘기면 늘 대등한 두 팀(0.5)으로 보는데, 이 자리는 **언제나
+     * 내 상대**라 그 치우침이 평균으로 안 씻겨요 (13번 §2-8b (3) · 게이트 ①-G G-4). */
     if (op && XI[myOpp] && !(mine && mine.oppDone)) {
       const g = out[myOpp] ? out[myOpp].gf : 0;
-      putGoals(WingerEngine.shareByWeight(XI[myOpp], g, "goal"));
+      const sO = op.str || 70, sM = (me && me.str) || 70;
+      putGoals(WingerEngine.shareByWeight(XI[myOpp], g, "goal", sO / (sO + sM)));
       const stops = (mine && mine.oppStops) || 0;
       for (const { scorer } of WingerEngine.shareByWeight(XI[myOpp], stops, "defend")) addCredit(scorer.row, 0, 0, 1);
     }
@@ -921,6 +946,11 @@ window.WingerCareer = (() => {
       const res = info0 ? info0.res : pick(["W", "D", "L"]);
       const info = { myGoals: r.dg, assists: r.da, defense: r.dd, res,
         oppGoals: info0 ? info0.ga : raceConceded(res) };
+      /* 🛡️ 무실점 경기 — 🛡️ 철벽상의 **주축**이에요 (13번 §2-8b (4)).
+       * 평점이 무실점 보너스를 읽는 그 값(info.oppGoals)을 그대로 봐요 —
+       * 따로 세면 결산에 뜬 스코어와 순위표가 다른 말을 합니다.
+       * 옛 세이브에 이 칸이 없어도 읽는 쪽이 || 0으로 받습니다(마이그레이션 안 해요). */
+      if (!info.oppGoals) r.p.cs = (r.p.cs || 0) + 1;
       const score = matchRating(info, r.p.pos || "mf", 0);
       r.p.rate = (r.p.rate || 0) + clamp(score / 10, 1, 10);
       r.score = score;
@@ -947,7 +977,8 @@ window.WingerCareer = (() => {
    * STEP 3이라는 **하나의 무게 식**을 지나서 이 형태가 재발할 수 없습니다.
    *
    * 에이스 계단(`iAmAce ? ACE_W : 1`)도 폐기했어요 — 축이 70→90에서 2.8배 튀는
-   * 주범이었고, SPOT 4.00 / NPC_SPOT 7.00 상수 하나로 바뀌었습니다. */
+   * 주범이었고, engine.js의 `SPOT` / `NPC_SPOT`(카드 종류별 셋)으로 바뀌었습니다.
+   * ⚠️ **여기 값을 적어 두지 마세요** — 두 곳에 두면 반드시 어긋납니다. engine.js가 정본이에요. */
 
   // 우리 팀 선발 이름 — 경기 중 '동료의 골'에 붙일 이름이에요
   const mateNames = () => (window.WingerSquad
@@ -976,7 +1007,17 @@ window.WingerCareer = (() => {
 
 
   /* 나를 끼워 정렬한 순위.
-   * key — "g" 득점 · "a" 도움 · "d" 수비 · "p" 공격포인트 · "r" 평균평점 · "m" MOM */
+   * key — "g" 득점 · "a" 도움 · "d" 무실점 경기 · "p" 공격포인트 · "r" 평균평점 · "m" MOM
+   *
+   * 🛡️ key "d"는 **무실점 경기 수**예요 (13번 §2-8b (4) · 게이트 ①-G의 G-5).
+   * 차단 횟수였던 것을 바꿨습니다 — 기회가 **상대 공격 장면**에서 나와서
+   * *"가장 잘 막는 수비수"*가 아니라 *"가장 자주 두들겨 맞는 팀의 수비수"*가 1위였어요.
+   * 실측: 능력치를 110 → 150으로 올려도 리그 1위 차단은 50.1 → 50.6으로 거의 고정이라,
+   * 🛡️ 철벽상 수상률이 **0%**였습니다(원칙 ⑤ — 축을 잘못 고르면 능력치가 안 실려요).
+   * 차단은 **동점일 때 타이브레이커**로 남습니다.
+   *
+   * ⚠️ key 문자는 "d" 그대로 둡니다 — 옛 세이브가 가리키는 값은 아니지만(탭은 저장
+   * 안 해요), RACE_TABS·raceValue·raceTop("d")가 같은 문자를 봐야 해요. */
   function raceRank(key) {
     const act = S.activity;
     const apps = (act && act.apps) || 0;
@@ -989,9 +1030,15 @@ window.WingerCareer = (() => {
       : key === "r" ? x.avg
       // MOM은 내 줄이 act.wins, 다른 선수는 mom에 쌓여요 — 같은 이름으로 읽어요
       : key === "m" ? (x.m != null ? x.m : x.mom || 0)
+      // 🛡️ 수비 부문의 주축은 무실점 경기 수예요 (위 주석)
+      : key === "d" ? (x.cs || 0)
       : x[key] || 0;
+    /* 🛡️ 무실점이 같으면 **차단이 많은 쪽**이 앞이에요. 다른 부문에는 타이브레이커가
+     * 없어요 — 무실점은 상한이 38이라 동점이 훨씬 자주 나옵니다. */
+    const tie = (x) => (key === "d" ? (x.d || 0) : 0);
     const me = { name: S.name, club: S.group, role: null, me: true,
       g: (act && act.goals) || 0, a: (act && act.assists) || 0, d: (act && act.defense) || 0,
+      cs: (act && act.cs) || 0,
       rate: (act && act.ratingSum) || 0, m: (act && act.wins) || 0, apps,
       pop: clamp(overall(), 40, 95) };
     /* 🥇 **리그의 모든 선수**가 이 표에 들어와요.
@@ -1017,7 +1064,8 @@ window.WingerCareer = (() => {
         const rl = RACE_ROLES.find((r) => r.key === x.role);
         const R = rl || roleOf(x);
         others.push({ name: x.name, club, role: R.name, key: R.key, pos: x.pos, pop: clamp(x.str, 40, 95),
-          g: x.g || 0, a: x.a || 0, d: x.d || 0, rate: x.rate || 0, mom: x.mom || 0, apps: x.apps || 0 });
+          g: x.g || 0, a: x.a || 0, d: x.d || 0, cs: x.cs || 0,
+          rate: x.rate || 0, mom: x.mom || 0, apps: x.apps || 0 });
       }
     }
     const rows = others.concat([me]).map((x) => ({ ...x, avg: avgOf(x, x.apps), v: 0 }))
@@ -1034,7 +1082,7 @@ window.WingerCareer = (() => {
       return rows.sort((x, y) => (y.pop || 0) - (x.pop || 0));
     }
     // 동점이면 내 줄을 앞에 둬요 — 실제로도 공동 득점왕은 둘 다 받아요
-    return rows.sort((x, y) => y.v - x.v || (x.me ? -1 : 1));
+    return rows.sort((x, y) => y.v - x.v || tie(y) - tie(x) || (x.me ? -1 : 1));
   }
 
   // 내가 그 부문 1위인가 — 부문상 판정이 이걸 봐요
@@ -1050,7 +1098,7 @@ window.WingerCareer = (() => {
    *
    * 1위에 붙는 👑은 그 부문 수상자예요 — 부문상 판정이 이 표의 1위를 봅니다. */
   const RACE_TABS = [
-    ["g", "⚽ 득점", "골"], ["a", "🅰️ 도움", "도움"], ["d", "🛡️ 수비", "수비"],
+    ["g", "⚽ 득점", "골"], ["a", "🅰️ 도움", "도움"], ["d", "🛡️ 무실점", "무실점"],
     ["p", "🎯 공격P", "공격P"], ["r", "⭐ 평점", "평균 평점"], ["m", "🏅 MOM", "MOM"],
   ];
   /* 고른 탭은 세이브에 안 넣어요 — 화면 상태일 뿐이고, 세이브에 새 칸을 늘리면
@@ -1059,9 +1107,13 @@ window.WingerCareer = (() => {
   const raceTab = (k) => RACE_TABS.find(([x]) => x === k) || RACE_TABS[4];
   const raceLabel = (k) => raceTab(k)[1];
   const raceUnit = (k) => raceTab(k)[2];
+  /* ⚠️ 표에 뜨는 값과 부문상 판정(raceRank의 val)이 **같은 것을 봐야** 해요.
+   * 정렬은 무실점으로 하고 표에는 차단을 띄우면, 이 게임이 계속 앓아 온
+   * "표시와 판정이 서로 다른 것을 본다"가 그대로 재발합니다. */
   const raceValue = (r, k) => k === "r" ? (r.avg || 0).toFixed(2)
     : k === "m" ? (r.m != null ? r.m : r.mom || 0)
     : k === "p" ? (r.g || 0) + (r.a || 0)
+    : k === "d" ? (r.cs || 0)
     : r[k] || 0;
 
   function raceHTML() {
@@ -1848,8 +1900,9 @@ window.WingerCareer = (() => {
    * 🔥 물오른 폼·전당 점수·승격이 같이 움직여요. 문턱 하나가 더 국소적이에요.
    * ⚠️ 7.6은 제안값입니다. balancer 실측 ①에서 K1 기준 6% 근처가 되는 값으로 확정하세요. */
   /* ⚠️ 7.6은 사실상 안 물렸어요 — 능력치 110에서 MOM이 8.9%였습니다(목표 6%).
-   * 8.30에서 6.2%로 섭니다 (22번 실측). */
-  const MOM_MIN = 8.30;
+   * 22번에서 8.30으로 잡았고, ①-G 계수 한 벌(23번 재측정)에서 **8.40**으로 다시 잡았어요 —
+   * 🎖️ 칭호 버프가 카드 엔진에 붙으면서 평점이 올라 문턱이 헐거워졌습니다. 목표 밴드 5~8%. */
+  const MOM_MIN = 8.40;
   function proMatchFinalize(act, info) {
     /* ⚽ v2 — 승부처 보정(momAdj)은 **0입니다.**
      * v1은 90분 끝에 승부처가 딱 한 번 있었고 그 성패를 평점에 ±0.8로 얹었어요.
@@ -1917,6 +1970,9 @@ window.WingerCareer = (() => {
     act.goals = (act.goals || 0) + info.myGoals;
     act.assists = (act.assists || 0) + info.assists;
     act.defense = (act.defense || 0) + info.defense;
+    /* 🛡️ 무실점 경기 — 🛡️ 철벽상의 주축이에요 (13번 §2-8b (4)).
+     * 🪑 벤치인 주에는 안 세요 — *"내가 **선발로 뛴** 경기 중 팀 무실점"*이 축이에요. */
+    if (!info.oppGoals) act.cs = (act.cs || 0) + 1;
     if (info.res === "W") act.teamW = (act.teamW || 0) + 1;
     else if (info.res === "D") act.teamD = (act.teamD || 0) + 1;
     else act.teamL = (act.teamL || 0) + 1;
@@ -2169,6 +2225,18 @@ window.WingerCareer = (() => {
       act.goals = (act.goals || 0) + info.myGoals;
       act.assists = (act.assists || 0) + info.assists;
       act.defense = (act.defense || 0) + info.defense;
+      /* 🛡️ **컵 무실점은 세지 않아요** (13번 §2-8b (9) · 게이트 G-8 실측).
+       *
+       * 컵은 아직 v1 산식(`deriveOppGoals`)이라 무실점 비율이 리그보다 **+60.5~+198.5%**
+       * 높습니다. 골·도움·차단은 이미 그 비대칭 위에서 곡선이 잡혔지만 🛡️ 무실점은
+       * **지금 새로 세우는 축**이라 부채를 처음부터 안 집니다.
+       * *"네 축이 같은 자"*보다 *"컵과 리그가 같은 자"*가 더 근본이에요 — 앞은 축 사이의
+       * 일관성이고 뒤는 **같은 축 안**의 일관성입니다.
+       *
+       * 🔓 **컵을 카드 엔진으로 옮기면 되살립니다**(§11 순서 1의 미완 항목).
+       * ⚠️ 그때까지 화면에 분모(출전 수)를 함께 띄우면 안 돼요 — `apps`는 컵을 세는데
+       *    `cs`는 안 세니 *"12경기 중 무실점 4"*가 거짓말이 됩니다.
+       *    `raceRank`는 값만 정렬해서 분모가 필요 없어요. */
       act.apps = (act.apps || 0) + 1;
       act.ratingSum = (act.ratingSum || 0) + rateShown;
     }
@@ -2342,6 +2410,8 @@ window.WingerCareer = (() => {
       ensureLeagueRecords();
       if (raceTop("g")) awards.push("골든부츠");
       if (raceTop("a")) awards.push("플레이메이커");
+      /* 🛡️ 철벽상은 **무실점 경기 수** 1위예요 (13번 §2-8b (4) · 게이트 ①-G의 G-5).
+       * 차단 횟수 1위였을 때는 약팀 수비수가 유리해서 수상률이 0%였습니다 — raceRank 주석 참고. */
       if (raceTop("d")) awards.push("철벽상");
       if (raceTop("p")) awards.push("공격포인트왕");
     }

@@ -17,7 +17,57 @@ const fs = require("fs");
 const ENGINE = "/workspace/grow-games/beta/winger2/engine.js";
 const SRC = fs.readFileSync(ENGINE, "utf8");
 
-/* muts = [[정규식, 바꿀 문자열], …]. 하나라도 안 걸리면 던집니다. */
+/* ═══════════════════════════════════════════════════════════════════════
+ * 💥 **크래시는 초록불도 빨간불도 아닙니다** — 종료 코드로 갈라 줍니다
+ *
+ * 이 저장소에서 같은 사고가 **세 번** 났어요:
+ *   ① 축구 검사 열 개가 여러 커밋 동안 스택만 뱉고 죽어 있었음
+ *   ② 검사 D의 `ME_P : 1` 정규식 (42·43번)
+ *   ③ 검사 E의 `NPC_SPOT : 1` 정규식 — **두 게이트째 안 돌았습니다** (45번)
+ *
+ * ②③은 둘 다 "변이 정규식이 소스 문자열에 의존한다"는 같은 뿌리예요.
+ * 소스가 바뀌면 정규식이 안 걸리고, `load()`가 던지고, 파일이 그 자리에서 죽습니다.
+ * 그런데 **모아 돌릴 때는 `❌ 실패 1건`으로만 보여서** *안 돈 것*과 *빨간불*이 구분이 안 돼요.
+ *
+ * 🔧 그래서 종료 코드를 나눕니다 — `_load.js`를 부르는 모든 검사에 자동으로 걸려요:
+ *     0 = 통과 · 1 = 빨간불(검사가 돌았고 계약이 깨짐) · **2 = 💥 죽음(안 돌았음)**
+ *
+ * 모아 돌릴 때는 이렇게 갈라 보세요:
+ *   red=0; dead=0
+ *   for t in tests/winger2/*-test.js; do
+ *     node "$t" >/dev/null 2>&1; c=$?
+ *     [ $c -eq 1 ] && { echo "❌ $(basename $t)"; red=$((red+1)); }
+ *     [ $c -ge 2 ] && { echo "💥 $(basename $t) — 안 돌았어요"; dead=$((dead+1)); }
+ *   done; echo "빨간불 ${red}건 · 죽음 ${dead}건"
+ *
+ * 그리고 **정규식이 안 걸리는 것 자체를 검사로** 만드세요 — `mutsOK()`를 쓰면
+ * 죽지 않고 ❌ 한 줄로 뜹니다(§ 아래). 죽는 것보다 그게 낫습니다. */
+function die(e) {
+  console.log(`\n💥 검사가 죽었어요 — 이건 초록불도 빨간불도 아닙니다 (안 돈 겁니다)`);
+  console.log(`   ${e && e.stack ? e.stack : e}`);
+  process.exit(2);
+}
+process.on("uncaughtException", die);
+process.on("unhandledRejection", die);
+
+/* 🔎 변이 정규식이 **지금 소스에 걸리는지** 미리 확인합니다. 던지지 않아요.
+ * 돌려주는 것: 안 걸린 정규식의 목록(빈 배열이면 전부 걸림).
+ * 검사 파일이 이걸 ❌ 한 줄로 찍으면, 소스가 바뀌었을 때 **죽는 대신 빨간불**이 됩니다. */
+function mutsOK(table) {
+  const bad = [];
+  for (const [name, muts] of Object.entries(table)) {
+    for (const [re] of muts) {
+      const hit = SRC.match(re);
+      if (!hit) bad.push(`${name}: ${re}`);
+      else if (SRC.replace(re, "\u0000") === SRC) bad.push(`${name}(치환 무효): ${re}`);
+    }
+  }
+  return bad;
+}
+
+/* muts = [[정규식, 바꿀 문자열], …]. 하나라도 안 걸리면 던집니다.
+ * (던지는 건 그대로 둡니다 — 조용히 무변이로 통과하는 것보다 죽는 게 나아요.
+ *  다만 위 `mutsOK()`로 **먼저 확인**하면 죽지 않고 빨간불로 뜹니다.) */
 function load(muts) {
   let src = SRC;
   for (const [re, rep] of muts || []) {
@@ -44,14 +94,76 @@ const FORMATION = { fw: 2, wg: 2, mf: 4, df: 3 };
 const SPREAD = [-11, 7, -3, 13, -8, 2, 10, -14, 5, -6, 9];
 const statsOf = (a) => ({ shoot: a, pass: a, dribble: a, defense: a, stamina: a, speed: a });
 
-function xiOf(pos, ability, mateBase) {
+/* 🔴 **고정 SPREAD는 재현성을 주는 대신 아티팩트를 하나 만듭니다.**
+ *
+ * 배열이 `fw fw wg wg mf mf mf mf df df df` 순서로 그대로 붙어서, mateBase 70이면
+ *   fw 59 · 77   wg 67 · **83**   mf 62 · 72 · 80 · 56   df 75 · 64 · 79
+ * 가 **언제나** 나와요. `ACE_POOL.goal`이 `["fw","wg"]`가 된 뒤로는
+ * `aceOf`가 능력치 최대 한 명을 고르니 **골 에이스가 100% 윙어**가 됩니다.
+ * 실제 게임(`STR_SPREAD ±14` 무작위)에서는 **50.1%**예요 — 픽스처가 그 최악만 봅니다.
+ * (`ACE_POOL.goal`이 `["fw"]`였을 때는 에이스 위치가 spread와 무관해서 없던 함정이에요.)
+ *
+ * 볼트의 **"픽스처가 디스크와 다른 모양이면 없는 병이 보인다"** 그 자리입니다 —
+ * 실제로 `award-test.js` B-2가 이것 때문에 빨간불이었고, 코드는 멀쩡했어요.
+ *
+ * 🔧 그래서 **spin**을 받습니다.
+ *   · `spin`을 안 주면 **예전 그대로**예요 (고정 SPREAD). 기존 검사의 기준선이 안 흔들립니다
+ *   · `spin`이 숫자면 그 시드로 SPREAD를 **섞습니다**. 여러 spin을 돌리면
+ *     명단 폭의 앙상블이 되어 실제 게임의 분포에 가까워져요
+ *
+ * ⚠️ **에이스가 누구인지가 결과를 가르는 검사**(포지션 분포·부문상)는 반드시 앙상블로
+ *    보세요. 한 벌만 보면 그 한 벌의 우연을 재게 됩니다. */
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+function spreadFor(spin) {
+  if (spin == null) return SPREAD;
+  const r = mulberry32(spin >>> 0);
+  const out = SPREAD.slice();
+  for (let i = out.length - 1; i > 0; i--) {           // Fisher-Yates
+    const j = Math.floor(r() * (i + 1));
+    const t = out[i]; out[i] = out[j]; out[j] = t;
+  }
+  return out;
+}
+
+/* 🧍 **나 없는 선발 11명** — 열한 명 전부가 명단 폭을 그대로 받습니다.
+ *
+ * 🔴 검사들이 `xiOf(...)`로 만든 뒤 내 줄을 `me:false · str = base`로 바꿔 쓰고 있었는데,
+ *    그러면 그 자리 하나만 **폭 없이 평평한 base**가 됩니다. 공격수 자리를 그렇게 쓰면
+ *    fw는 {70, 폭 하나}인데 wg는 {폭, 폭}이라 **골 에이스가 wg로 기웁니다**
+ *    (실측: fw 37.2% / wg 62.8% — 실제 게임은 50 대 50이에요).
+ *    고정 SPREAD의 "골 에이스 100% 윙어"만큼은 아니지만 **같은 종류의 함정**이라 없앱니다.
+ * ⚠️ `spin`을 주면 앙상블이 됩니다. 에이스가 누구인지가 결과를 가르는 검사에서는 꼭 쓰세요. */
+function xiAll(mateBase, spin) {
   const base = mateBase == null ? 70 : mateBase;
+  const sp = spreadFor(spin);
   const rows = [];
   let i = 0;
   for (const p of ["fw", "wg", "mf", "df"]) {
     for (let j = 0; j < FORMATION[p]; j++) {
       rows.push({ name: `P${i}`, pos: p, slot: { g: 1, a: 1, d: 1 }, me: false,
-        str: Math.max(25, Math.min(99, base + SPREAD[i % SPREAD.length])) });
+        str: Math.max(25, Math.min(99, base + sp[i % sp.length])) });
+      i += 1;
+    }
+  }
+  return rows;
+}
+
+function xiOf(pos, ability, mateBase, spin) {
+  const base = mateBase == null ? 70 : mateBase;
+  const sp = spreadFor(spin);
+  const rows = [];
+  let i = 0;
+  for (const p of ["fw", "wg", "mf", "df"]) {
+    for (let j = 0; j < FORMATION[p]; j++) {
+      rows.push({ name: `P${i}`, pos: p, slot: { g: 1, a: 1, d: 1 }, me: false,
+        str: Math.max(25, Math.min(99, base + sp[i % sp.length])) });
       i += 1;
     }
   }
@@ -83,4 +195,4 @@ function play(E, pos, ability, opt) {
   return acc;
 }
 
-module.exports = { load, xiOf, statsOf, play, SRC, ENGINE };
+module.exports = { load, mutsOK, xiOf, xiAll, statsOf, play, spreadFor, SRC, ENGINE };

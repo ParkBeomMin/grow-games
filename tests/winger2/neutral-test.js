@@ -52,7 +52,7 @@
  */
 "use strict";
 const fs = require("fs");
-const { load, xiOf } = require("./_load.js");
+const { load, mutsOK, xiOf } = require("./_load.js");
 
 let fail = 0;
 const check = (ok, msg) => { console.log(`${ok ? "✅" : "❌"} ${msg}`); if (!ok) fail += 1; };
@@ -85,6 +85,35 @@ ${P.clamp}${P.lerp}${P.mid}${P.scRef}${P.sc}
 ${P.pFinish}${P.pConcede}
   return { pFinish, pConcede, wOf: (us0, them0) => ({ atk: ${P.atkW}, def: ${P.defW} }) };
 `)();
+
+/* 🧪 이 파일이 쓰는 변이 전부 — 0번 검사가 여기 있는 정규식을 소스와 대조합니다. */
+const MUT_TABLE = {
+  "①cardP중심을succ로": [[/const cardP = \(autoP, ability, s\) => clamp\(autoP \+ 2 \* half\(ability\) \* \(s - 0\.5\), 0, 1\);/,
+    "const cardP = (autoP, ability, s) => clamp(succ(ability, s), 0, 1);"]],
+  "③autoP가능력치를안탐": [[/const autoP = kind === "defend" \? 1 - pConcede\(defW, ab\) : pFinish\(atkW, ab\);/,
+    'const autoP = kind === "defend" ? 1 - pConcede(defW, 70) : pFinish(atkW, 70);']],
+};
+/* ══════════════════════════════════════════════════════════════
+ * 🔎 0. **변이 정규식이 지금 소스에 걸리나** — 다른 무엇보다 먼저 봅니다
+ *
+ * 변이 정규식은 소스 **문자열**에 의존해요. 누가 그 줄의 모양을 바꾸면 정규식이
+ * 안 걸리고 `load()`가 던져서 **파일이 그 자리에서 죽습니다** — 그런데 모아 돌릴 때는
+ * `❌ 실패 1건`으로만 보여서 *안 돈 것*과 *빨간불*이 구분이 안 돼요.
+ * 이 저장소에서 **세 번** 난 사고입니다 (`ME_P : 1` · `NPC_SPOT : 1` · 축구 검사 10개).
+ *
+ * 여기서 먼저 대조하면 **죽는 대신 ❌ 한 줄**로 뜹니다.
+ * (`_load.js`가 크래시를 **종료 코드 2**로 갈라 주는 것과 한 벌이에요.)
+ * ══════════════════════════════════════════════════════════════ */
+{
+  const bad = mutsOK(MUT_TABLE);
+  const n = Object.values(MUT_TABLE).reduce((a, m) => a + m.length, 0);
+  check(bad.length === 0,
+    `0. 변이 정규식 ${n}개가 지금 beta/winger2/engine.js에 전부 걸린다`
+    + (bad.length
+      ? `\n     🔴 **안 걸린 것 ${bad.length}개 — 그 변이 검사는 지금 "안 도는" 상태입니다** (초록불이 아니에요)`
+        + bad.map((b) => `\n       · ${b}`).join("")
+      : ""));
+}
 
 const E = load();
 /* 픽스처는 teamStr = oppStr = 70이라 atkW = defW = 0.5입니다 — 소스에서 뜯은 식으로 확인해요. */
