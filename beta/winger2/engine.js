@@ -457,6 +457,16 @@ window.WingerEngine = (() => {
     return r < p + (1 - p) / 2 ? "ok" : "miss";
   }
 
+  /* 🎯 조작 성공도 s(0~1) → 판정 — **중심(autoP)은 부르는 쪽이 줍니다.**
+   *
+   *     P(사건 | 카드) = clamp( autoP + 2*half(a)*(s − 0.5), 0, 1 )
+   *
+   * 산식이 사는 자리는 **여기 한 곳뿐**이에요. 프로 경기는 createMatch가 그 경기의
+   * 전력·능력치에서 autoP를 뽑아 부르고(judgeAt), ⚔️ 유스 평가전은 유스의 중심 확률로
+   * 부릅니다(game.js). 사본을 두면 두 갈래가 조용히 어긋나요 —
+   * §2-6이 고친 게 정확히 그 사고(🅰️ 전개 도움 4~6배 · 🧱 수비 실점 −9.8%)입니다. */
+  const judgeAtP = (kind, autoP, ability, s) => outcome(kind, cardP(autoP, ability, clamp(s, 0, 1)));
+
   /* ---------- 🎮 미니게임 창구 ----------
    * fn(container, opts, cb) → cb("perfect" | "ok" | "miss"). timing.js와 같은 모양이에요.
    * 아직 winger-moment.js가 없으면 null이고, 그때는 자동 판정으로 돕니다. */
@@ -637,7 +647,7 @@ window.WingerEngine = (() => {
       const ab = abilityOf(me);
       // 🧱 수비의 autoP는 **막을 확률**이에요 (중립이 걸리는 자리가 실점이라서요)
       const autoP = kind === "defend" ? 1 - pConcede(defW, ab) : pFinish(atkW, ab);
-      return outcome(kind, cardP(autoP, ab, clamp(s, 0, 1)));
+      return judgeAtP(kind, autoP, ab, s);
     }
 
     /* 미니게임이 아직 안 붙었거나 _t.skill이 켜져 있을 때의 자동 판정.
@@ -935,6 +945,10 @@ window.WingerEngine = (() => {
   return {
     createMatch, autoMatch, shareByWeight, setMini, getMini,
     succ, cardP, sc, mid, half, condMul, blendOf, K,
+    /* 🔓 경기 밖(⚔️ 유스 평가전)에서도 **같은 산식·같은 표**를 쓰라고 냅니다.
+     *   judgeAtP  s → 판정 (§2-6). 중심만 부르는 쪽이 줘요
+     *   MINI      카드 종류 × 포지션 → 미니게임 (§4-3). 사본을 만들면 표가 갈라져요 */
+    judgeAtP, MINI,
 
     /* ---------- 🧪 시드 주입 창구 (§10) ----------
      * 점진 확정은 매 경기 결과가 달라요. 고정 시드가 없으면 회귀 검사가 표본 수로

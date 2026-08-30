@@ -395,11 +395,15 @@ const RACE_ROLES = [
 const raceLam = (base, pop) => base * ((pop || 70) / 70) * 1.67 * GOAL_SCALE;
 
 // 평가 경기 종목: 주 스탯 / 보조 스탯 가중치
+/* `kind` — ⚔️ 그 경기의 순간 카드가 무엇으로 열리는가 (g 결정 · a 전개 · d 수비).
+ * 화면에 이미 "2번째 경기 · 수비 조직"이라고 적혀 있고 점수도 defense로 재요.
+ * 거기서 오는 카드가 🧱 차단이어야 화면과 손이 같은 말을 합니다.
+ * null이면 **내 포지션이 정해요**(momentKind) — "포지션 자유"가 그 뜻이에요. */
 const STAGE_TYPES = [
-  { name: "공격 전개", main: "shoot", aux: "dribble" },
-  { name: "중원 장악", main: "pass", aux: "stamina" },
-  { name: "수비 조직", main: "defense", aux: "stamina" },
-  { name: "포지션 자유", main: null, aux: "stamina" }, // main = 내 포지션 스탯
+  { name: "공격 전개", main: "shoot", aux: "dribble", kind: "g" },
+  { name: "중원 장악", main: "pass", aux: "stamina", kind: "a" },
+  { name: "수비 조직", main: "defense", aux: "stamina", kind: "d" },
+  { name: "포지션 자유", main: null, aux: "stamina", kind: null }, // main = 내 포지션 스탯
 ];
 
 const EVALS = { 6: "상반기 유스 리그", 12: "연말 평가전" };
@@ -2083,9 +2087,13 @@ function playRandomMini(container, cb) {
   }
 }
 
-/* 🔥 승부처 성공이 무엇으로 남는가 — 포지션이 정해요.
+/* 🔥 승부처 성공이 무엇으로 남는가 — **기본은 포지션이 정해요.**
  *   g 극장골 · a 결정적 패스(도움) · d 실점 차단
- * 실제 축구에서도 수비수의 결정적 장면은 골이 아니라 차단이에요. */
+ * 실제 축구에서도 수비수의 결정적 장면은 골이 아니라 차단이에요.
+ *
+ * ⚠️ 2026-08-30부터 **유일한 답이 아닙니다.** ⚔️ 유스 평가전은 그 경기의 성격
+ * (`STAGE_TYPES.kind` — "수비 조직"이면 d)이 정해서 `MatchSim.run`에 넘겨요.
+ * 그래서 **읽을 땐 `momentKind()`가 아니라 그 경기의 `mKind`를 보세요.** */
 const MOMENT_KIND = { fw: "g", wg: "g", mf: "a", df: "d" };
 const momentKind = () => MOMENT_KIND[S && S.pos] || "g";
 const MOMENT_FEED = {
@@ -2094,6 +2102,86 @@ const MOMENT_FEED = {
   d: (me, opp) => `🛡️ 결정적인 차단!! ${me}이(가) ${opp}의 마지막 공격을 지워냅니다!`,
 };
 
+/* ---------- ⚔️ 유스 평가전의 순간 카드 (v2) ----------
+ *
+ * 유스 3년은 36턴 훈련 + 평가전 15경기인데 **내가 개입하는 순간이 0회**였어요.
+ * 평가전의 승부처가 v1의 `timing.js` 8종이라, 입단 전에 고르게 해놓은 🦶 주발과
+ * ♿ 판정 확대가 유스 내내 **효과가 0인 죽은 스위치**였습니다 — 고르게 해놓고
+ * 효과가 없는 칸(원칙 ③)이 이미 화면에 있었던 거예요. 둘 다 `winger-moment.js`만
+ * 읽는데 그건 프로 경기(`runV2Match`)에서만 불렸습니다.
+ *
+ * 첫 평가전이 **1년차 6월 — 36턴 중 6턴째, 약 2~3분**이에요. 그 자리를 v2의
+ * 순간 카드 4종(💨 컷인 · ⚡ 1:1 · ✨ 킬패스 · 🧱 차단)으로 바꿉니다.
+ *
+ * 🔒 **판정 산식은 프로와 한 글자도 다르지 않습니다.**
+ *
+ *     P(사건 | 카드) = clamp( autoP + 2*half(a)*(s − 0.5), 0, 1 )
+ *
+ * 조작 성공도 `s`를 내는 것도(W2Moment), 그걸 확률로 옮기는 것도
+ * (`WingerEngine.judgeAtP`) 전부 기존 코드 그대로예요. 유스가 새로 주는 것은
+ * **중심 `autoP` 하나뿐**입니다.
+ *
+ * ── 🔴 왜 유스의 autoP는 상수인가 (프로는 전력·능력치에서 뽑는데) ──
+ * 프로 카드는 그 카드 하나가 결과의 전부라 능력치가 중심에 실려야 해요. 그런데
+ * 유스 평가전은 **경기 평점(등급)을 `stageScore`가 이미 능력치로 정하고**, 순간
+ * 카드는 거기서 ±1칸만 움직입니다. 중심에 또 능력치를 얹으면 한 경기에 능력치가
+ * 두 번 실려요 — 엔진 §2-6이 "카드의 중심"을 폐기한 것과 **같은 형태의 이중 계상**입니다.
+ * 게다가 `sc(a)`는 프로 기준(능력치 70)으로 재는 값이라, 상대가 **또래 유망주**인
+ * 판에 17세의 40을 그대로 넣으면 "프로 무대에 던져진 아이"가 됩니다.
+ *
+ * 그래서 중심을 **등급 기댓값이 0이 되는 자리**에 둡니다 (엔진의 outcome 표 기준) —
+ *   ⚽🅰️ 1/3  → perfect ⅓ · ok ⅓ · miss ⅓   (miss = (1−p)/2 라 p=⅓에서 같아져요)
+ *   🧱 0.5    → perfect ½ · miss ½            (읽기 게임이라 ok가 없어요)
+ * 중립 조작(s = 0.5)에서 **등급 ±1칸의 기댓값이 정확히 0**이라, 껍데기를 갈아 끼워도
+ * 평가전 등급 분포·명성·프로 도전 통과율이 그대로예요.
+ *
+ * 능력치는 사라지지 않고 **`half(a)`(0.17 → 0.20)에 남습니다** — 잘 키운 선수일수록
+ * 손으로 흔들 수 있는 폭이 넓어요. 그게 §2-6이 능력치에 남겨 둔 자리입니다.
+ *
+ * ⚠️ **`miniZone(stat)`은 유스에서 폐기됩니다.** 능력치가 판정 창을 넓히는 건
+ * `autoP`가 능력치를 안 타던 옛 구조의 값이에요 — 표가 아니라 **그 표를 잰 모델이**
+ * 다릅니다(설계 §4-5). 판정 창에 걸리는 건 🦶 주발(±25%)·🫀 컨디션·♿ 확대뿐이에요. */
+const YOUTH_CARD_KIND = { g: "goal", a: "assist", d: "defend" };
+/* 🎚️ 유스 카드의 중심 확률. **balancer의 손잡이는 이 둘뿐입니다** —
+ * 산식도 미니게임도 안 건드리고 여기만 움직이면 평가전 곡선이 통째로 따라와요. */
+const YOUTH_CARD_P = { goal: 1 / 3, assist: 1 / 3, defend: 0.5 };
+/* 결과 대사 — MatchSim이 { ok, great, bad }를 그대로 중계에 씁니다.
+ * 🧱 차단은 판정에 `ok`가 없지만(읽기 게임) 대사는 채워 둬요 — 비워 두면
+ * 나중에 표가 바뀌었을 때 중계가 `undefined`를 뱉습니다. */
+const YOUTH_CARD_TXT = {
+  cutin: { ok: "✨ 안쪽으로 파고들어 슛까지 갔어요", great: "💫 완벽한 컷인! 각을 열고 그대로 꽂았다!!", bad: "😱 컷인이 읽혀 각이 막혔어요" },
+  oneone: { ok: "⚡ 키퍼와 맞섰지만 각이 조금 좁았어요", great: "⚡ 1:1을 완벽하게 넘겼다! 골망이 흔들려요!!", bad: "😵 1:1에서 서두르다 키퍼에 막혔어요" },
+  killpass: { ok: "🎯 패스는 갔지만 한 박자 늦었어요", great: "✨ 수비 라인을 통째로 가르는 킬패스!!", bad: "🙈 패스 길이 막혀 끊겼어요" },
+  block: { ok: "🛡️ 몸을 걸쳐 슛을 흘려냈어요", great: "🛡️ 방향을 완벽하게 읽어 지워냈다!!", bad: "😵 반대로 읽혀 그대로 내줬어요" },
+};
+
+/* 평가전 한 경기의 순간 카드를 엽니다. `cb(판정, 대사)` — MatchSim의 계약 그대로예요.
+ *   kindKey — g/a/d. 그 경기의 성격(STAGE_TYPES.kind)이나 내 포지션이 정해요.
+ * ⚠️ 엔진이나 미니게임이 아직 안 실렸으면 **v1 승부처로 조용히 떨어집니다** —
+ *    스크립트 하나가 안 왔다고 평가전이 통째로 멈추면 안 돼요. */
+function playYouthMoment(container, cb, kindKey) {
+  const E = window.WingerEngine, M = window.W2Moment;
+  if (!E || !E.judgeAtP || !M || !M.play) { playRandomMini(container, cb); return; }
+  const kind = YOUTH_CARD_KIND[kindKey] || "goal";
+  const pool = ((E.MINI || {})[kind] || {})[S.pos] || ["oneone"];
+  const moment = pick(pool);
+  const T = YOUTH_CARD_TXT[moment] || YOUTH_CARD_TXT.oneone;
+  /* 능력치는 프로와 **같은 자로** 잽니다 — 포지션별 혼합(BLEND)이라, 미드필더가
+   * 패스를 올리면 그만큼 흔들 수 있는 폭이 넓어져요. */
+  const ability = E.blendOf({ pos: S.pos, stats: WingerProspect.nowStats(S) });
+  const judge = (s) => E.judgeAtP(kind, YOUTH_CARD_P[kind], ability, s);
+  if (autoMiniOn()) { cb(judge(0.5), T); return; }
+  if (container) {
+    container.innerHTML = "";           // 앞 카드의 잔해 위에 쌓이지 않게
+    container.classList.add("w2m-youth");   // 🎨 유스 맥락 — 연출은 director가 이어받아요
+  }
+  M.play(container, {
+    kind, moment, condition: S.condition,
+    foot: mainFoot(),                   // 🦶 주발 쪽 코스가 판정 창 +25%예요 (여기서 살아나요)
+    judge,
+  }, (res) => cb(res, T));
+}
+
 // ---------- 경기 시뮬레이션 뷰 (스코어보드 + 미니 필드 + 중계) ----------
 // 유스/프로 경기 공통. #stage-card 안에 렌더하고 #btn-stage-next를 재사용해요.
 const MatchSim = (() => {
@@ -2101,6 +2189,18 @@ const MatchSim = (() => {
   function run(cfg) {
     const { home, away, myName, goals, assists, defense, oppGoals } = cfg;
     clearInterval(timer);
+    /* 🔥 이 경기의 승부처가 **무엇으로 열리고 무엇으로 남는가.**
+     *
+     * 기본은 예전 그대로예요 — 포지션이 정하고(momentKind), v1 승부처 8종이 열립니다.
+     * ⚔️ 유스 평가전만 둘 다 넘겨서 v2 순간 카드로 갈아 끼워요(playEvalStage).
+     * 🏆 컵·🌍 월드컵은 아무것도 안 넘기니 **한 줄도 안 달라집니다.**
+     *
+     * ⚠️ mKind는 여기서 **한 번만** 정해요. 경기 도중에 다시 부르면 떼어 둔 실점
+     * (holdConceded)을 정할 때와 결과를 붙일 때가 서로 다른 답을 볼 수 있어요. */
+    const mKind = cfg.momentKind || momentKind();
+    const playMoment = cfg.playMoment
+      ? (el, done) => cfg.playMoment(el, done, mKind)
+      : playRandomMini;
     $("stage-card").innerHTML = `
       <div class="msim">
         <div class="scoreboard">
@@ -2172,7 +2272,7 @@ const MatchSim = (() => {
      *   막으면  → 그 골은 아예 안 들어가요 (중계에도 안 떠요)
      *   놓치면  → 그때 들어가고 중계에도 그때 떠요
      * 최종 실점 수는 예전과 똑같아요 — 언제 보여주느냐만 바뀝니다. */
-    const holdConceded = momentKind() === "d" && oppGoals > 0 ? 1 : 0;
+    const holdConceded = mKind === "d" && oppGoals > 0 ? 1 : 0;
     for (let i = 0; i < oppGoals - holdConceded; i++) evs.push({ min: rmin(), side: "def", a: 1, cls: "bad", text: `😣 ${away}에 실점…` });
     if (defense >= 2) evs.push({ min: rmin(), side: "def", text: `🛡️ ${myName}, 결정적 태클로 위기를 끊어요!` });
     evs.push({ min: rmin(), side: "mid", text: pick(["중원 싸움이 뜨거워요", "빠른 템포로 오가는 공방", "관중석이 들썩입니다", "양 팀 압박이 매섭습니다"]) });
@@ -2201,7 +2301,7 @@ const MatchSim = (() => {
       feed("🔥 결정적인 순간이 찾아와요…!", "good");
       btn.disabled = true;
       btn.textContent = "🔥 승부처!";
-      playRandomMini($("stage-moment"), (res, mtype) => {
+      playMoment($("stage-moment"), (res, mtype) => {
         // 떼어 둔 실점을 지금 넣어요 (막았으면 안 넣어요 — 지우는 게 아니라 안 들어가는 거예요)
         const letIn = () => {
           if (!holdConceded) return;
@@ -2209,9 +2309,10 @@ const MatchSim = (() => {
           feed(`😣 ${away}에 실점…`, "bad");
         };
         if (res === "perfect") {
-          /* 🔥 승부처 성공이 **무엇으로 남는지는 포지션이 정해요.**
-           * 공격수는 극장골, 미드필더는 결정적 패스, 수비수는 실점 차단이에요. */
-          const kind = momentKind();
+          /* 🔥 승부처 성공이 **무엇으로 남는지는 이 경기의 mKind가 정해요** —
+           * 기본은 포지션(극장골·결정적 패스·실점 차단)이고, ⚔️ 유스 평가전만
+           * 그 경기의 성격이 정합니다. 경기 시작할 때 한 번 정해 둔 값이에요. */
+          const kind = mKind;
           if (kind !== "d") { h += 1; setScore(); flash("atk"); }
           feed(mtype.great, "good");
           feed(MOMENT_FEED[kind](myName, away), "good");
@@ -2235,7 +2336,7 @@ const MatchSim = (() => {
       finished = true;
       clearInterval(timer);
       const res = h > a ? "W" : h < a ? "L" : "D";
-      /* ⚠️ 승부처 성공이 붙는 자리가 포지션마다 달라요.
+      /* ⚠️ 승부처 성공이 붙는 자리(골/도움/차단)가 경기마다 달라요 — `mKind`가 정합니다.
        *
        * 예전에는 포지션과 무관하게 **내 골 +1**이었어요. 그런데 ⚽ 득점 눈금
        * (GOAL_SCALE 0.33)이 들어가면서 산식이 뽑는 골이 확 줄어, 이 한 골이
@@ -2246,9 +2347,9 @@ const MatchSim = (() => {
        * "극장골!!"이라 적어, 화면 안에서 스스로 모순이었어요. */
       const info = {
         home, away,
-        myGoals: goals + (momentRes === "perfect" && momentKind() === "g" ? 1 : 0),
-        assists: assists + (momentRes === "perfect" && momentKind() === "a" ? 1 : 0),
-        defense: defense + (momentRes === "perfect" && momentKind() === "d" ? 1 : 0),
+        myGoals: goals + (momentRes === "perfect" && mKind === "g" ? 1 : 0),
+        assists: assists + (momentRes === "perfect" && mKind === "a" ? 1 : 0),
+        defense: defense + (momentRes === "perfect" && mKind === "d" ? 1 : 0),
         teamGoals: h, oppGoals: a, res, momentRes,
         mateGoals,     // 이 경기에서 골을 넣은 우리 팀 선수 이름 (개인 순위에 올라가요)
       };
@@ -2276,7 +2377,17 @@ const MatchSim = (() => {
 
 // 유스 경기(평가전/트라이아웃) — MatchSim로 시뮬레이션
 const YOUTH_OPP_STR = 52;   // 유스 평가전 상대 전력 (기본 70보다 낮게 — 우리가 주최 측이에요)
-function renderStageSim(type, grade, onFinal) {
+/* stageKind — ⚔️ 순간 카드를 무엇으로 열까요 (g/a/d).
+ *
+ * 🏆 평가전은 **그 경기의 성격**이 정해요(`STAGE_TYPES.kind`) — 화면에 "수비 조직"이라
+ * 적혀 있고 점수도 defense로 재는데 손에 오는 게 슛이면 화면이 스스로 어긋납니다.
+ * 덕분에 포지션과 무관하게 **4종이 전부** 유스에 나와요.
+ *
+ * 🔥 프로 도전(트라이아웃~계약)은 **안 넘겨서 내 포지션이 정합니다.** 거기는
+ * "내 자리로 평가받는 자리"이기도 하고, 무엇보다 라운드 판정의 활약 항(doneP)이
+ * 골 0.04 · 도움 0.03 · 수비 0.015로 **무게가 다릅니다** — 여기서 카드 종류를 흔들면
+ * 통과율이 조용히 움직여요(원칙: 다른 축의 손잡이로 고치지 않기). */
+function renderStageSim(type, grade, onFinal, stageKind) {
   const gradeRating = { S: 8.4, A: 7.2, B: 6.1, C: 4.9, D: 3.7 }[grade.g] || 6;
   const rating = clamp(gradeRating + rand(-0.5, 0.5), 1, 10);
   const c = matchContribution(rating);
@@ -2294,6 +2405,9 @@ function renderStageSim(type, grade, onFinal) {
     away: pick(oppClubs(S)),
     myName: S.name,
     goals: c.g, assists: c.a, defense: c.def, oppGoals, rating, mateCount: mates,
+    /* ⚔️ 유스의 승부처는 v2 순간 카드예요 — 여기서 🦶 주발과 ♿ 판정 확대가 살아납니다. */
+    momentKind: stageKind || momentKind(),
+    playMoment: playYouthMoment,
     finalize: (info) => {
       let gi = GRADE_ORDER.indexOf(grade.g);
       if (info.momentRes === "perfect") gi = Math.min(4, gi + 1);
@@ -2324,6 +2438,7 @@ function playEvalStage() {
   S.condition = clamp(S.condition - 5, 0, 100);
   ev.idx += 1;
   $("stage-round").textContent = `${ev.idx}번째 경기 · ${type.name}`;
+  /* ⚔️ 카드 종류는 **그 경기의 성격**이 정해요 — "포지션 자유"(kind: null)면 내 포지션이요. */
   renderStageSim(type, grade, (fg, info) => {
     const pts = Math.round(fg.pts * m.spot);
     const pay = { S: 60, A: 40, B: 25, C: 10, D: 0 }[fg.g] || 0;
@@ -2332,6 +2447,9 @@ function playEvalStage() {
     S.stages += 1;
     S.youth = S.youth || { g: 0, a: 0, def: 0 };
     S.youth.g += info.myGoals; S.youth.a += info.assists; S.youth.def += info.defense;
+    /* ⚔️ 유스에서 받은 순간 카드 수 — 옛 세이브엔 없는 칸이라 **읽는 쪽에서 기본값**을 줘요.
+     * 마이그레이션은 안 합니다. 서사·통계용이고 어떤 산식에도 안 들어갑니다. */
+    S.youthCards = (S.youthCards || 0) + 1;
     ev.totalPts += pts;
     ev.scores.push(score + (fg.pts - grade.pts) * 0.6);
     save();
@@ -2344,7 +2462,7 @@ function playEvalStage() {
     return ev.idx < 3
       ? { resultHTML, nextLabel: "다음 경기", nextFn: playEvalStage }
       : { resultHTML, nextLabel: "종합 순위 발표", nextFn: finishEval };
-  });
+  }, type.kind);
 }
 
 function finishEval() {
@@ -2460,6 +2578,7 @@ function playSurvivalRound() {
     }
     S.youth = S.youth || { g: 0, a: 0, def: 0 };
     S.youth.g += info.myGoals; S.youth.a += info.assists; S.youth.def += info.defense;
+    S.youthCards = (S.youthCards || 0) + 1;   // ⚔️ 프로 도전의 순간 카드도 같이 세요
     save();
     const scoreClass = info.res === "W" ? "win" : info.res === "L" ? "lose" : "";
     /* 🗣️ 왜 통과했는지·왜 떨어졌는지를 **감독의 말**로 적어요.

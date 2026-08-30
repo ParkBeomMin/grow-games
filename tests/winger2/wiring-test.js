@@ -37,40 +37,197 @@ const check = (ok, msg) => { console.log(`${ok ? "✅" : "❌"} ${msg}`); if (!o
   const missing = assets.filter((a) => a !== "./" && !fs.existsSync(norm(a)));
   check(missing.length === 0, `ASSETS의 모든 항목이 디스크에 있다${missing.length ? ` — 없는 것: ${missing.join(", ")}` : ""}`);
 
-  // ② 페이지가 실제로 받는 파일이 ASSETS에 있나
-  const srcs = Array.from(HTML.matchAll(/<script src="([^"]+)"><\/script>/g)).map((m) => m[1])
-    .concat(Array.from(HTML.matchAll(/<link rel="stylesheet" href="([^"]+)"/g)).map((m) => m[1]))
-    .filter((s) => !/^https?:/.test(s));
+  /* ══════════════════════════════════════════════════════════════════════
+   * ② 🔌 **배선 세 갈래를 서로 다른 자로 잽니다** (2026-08-30 개정)
+   *
+   * 🔴 **이 절은 검사가 틀려서 빨간불이었습니다** — 배선이 아니라 **검사의 모형**이
+   *    문제였어요. 옛 정규식은 `<script src="…"></script>` 하나만 봤는데, 지금
+   *    index.html에는 **세 갈래**가 있습니다:
+   *
+   *      ⓐ 고전 스크립트   <script src="game.js"></script>
+   *      ⓑ 모듈 스크립트   <script type="module" src="char3d.js"></script>
+   *                        (type="module"이라 **jsdom이 실행을 안 해서** 나머지 12종이 안 죽어요)
+   *      ⓒ 동적 import     char3d.js 안의 import("./vendor/three.module.min.js")
+   *                        (691KB — 🧬 조립대에 **처음 들어올 때**만 내려옵니다)
+   *
+   *    셋 다 **브라우저가 실제로 받는 파일**이라 ASSETS에 있어야 하고,
+   *    셋 다 **없어지면 오프라인에서만/그 기능만** 조용히 깨집니다.
+   *
+   * ⚠️ **정규식을 넓히기만 하면 안 됩니다.** "아무 문자열이나 잡아서 통과"시키면
+   *    진짜 미등록(예: `focus.js`를 <script>로 실으면서 ASSETS에 안 넣기)을 놓쳐요.
+   *    그래서 ⓐⓑⓒ를 **따로 모으고**, 세 방향을 **각각** 봅니다:
+   *
+   *      A-② 앞으로  페이지가 받는 것 → ASSETS에 다 있나   (오프라인에서만 깨짐)
+   *      A-③ 뒤로    ASSETS의 스크립트 → 페이지가 다 받나  (그 기능만 조용히 사라짐)
+   *      A-④ 디스크  폴더의 .js → 어느 쪽에도 없는 고아가 있나
+   *
+   *    ⚠️ **셋을 한 검사로 묶지 않습니다.** 성질이 다르고, 특히 A-④에는
+   *       **알려진 고아**(focus.js)가 있어서 묶으면 고친 뒤에도 빨간불이 남아요.
+   * ══════════════════════════════════════════════════════════════════════ */
+  const note = (msg) => console.log(`🚧 ${msg}`);
+  const rel = (fromRel, spec) => {
+    const dir = path.posix.dirname(fromRel.replace(/^\.\//, ""));
+    return path.posix.normalize(path.posix.join(dir === "." ? "" : dir, spec.split("?")[0]));
+  };
+  const readIn = (r) => {
+    const f = path.resolve(DIR, r);
+    return fs.existsSync(f) ? fs.readFileSync(f, "utf8") : null;
+  };
+  /* 🔎 세 갈래를 **따로** 모읍니다. 섞으면 어느 배선이 끊겼는지 못 읽어요. */
+  function wireScan(HTML0) {
+    const classic = [], modules = [], regs = [];
+    for (const m of HTML0.matchAll(/<script\b([^>]*?)>/gi)) {
+      const at = m[1];
+      const src = (at.match(/\bsrc\s*=\s*"([^"]+)"/) || [])[1];
+      if (!src || /^(https?:)?\/\//.test(src)) continue;      // 🌐 바깥 도메인은 캐시 대상이 아니에요
+      (/\btype\s*=\s*"module"/i.test(at) ? modules : classic).push(src.split("?")[0]);
+    }
+    // 🔧 인라인 <script>의 서비스워커 등록 — 스크립트 태그가 아니지만 **실제로 받는 파일**이에요
+    for (const m of HTML0.matchAll(/serviceWorker\.register\(\s*["']([^"']+)["']/g)) regs.push(m[1]);
+    // ⓒ 모듈이 끌어오는 것 — 동적 import()와 정적 from을 **모듈 파일에서만** 찾습니다
+    const imports = [], seen = new Set();
+    const queue = modules.slice();
+    while (queue.length) {
+      const f = queue.shift();
+      if (seen.has(f)) continue;
+      seen.add(f);
+      const code = readIn(f);
+      if (code == null) continue;
+      for (const re of [/\bimport\(\s*["'](\.[^"']+)["']\s*\)/g, /\bfrom\s+["'](\.[^"']+)["']/g]) {
+        for (const m of code.matchAll(re)) {
+          const t = rel(f, m[1]);
+          if (readIn(t) == null) continue;                    // 없는 파일은 A-①이 따로 봐요
+          imports.push(t);
+          queue.push(t);
+        }
+      }
+    }
+    const css = Array.from(HTML0.matchAll(/<link rel="stylesheet" href="([^"]+)"/g)).map((m) => m[1])
+      .filter((x) => !/^(https?:)?\/\//.test(x));
+    return { classic, modules, imports, regs, css };
+  }
+  const WIRE = wireScan(HTML);
+  check(WIRE.classic.length > 0 && WIRE.modules.length > 0 && WIRE.imports.length > 0,
+    `A-②-0. 🔌 세 갈래를 다 읽었다 — 고전 ${WIRE.classic.length} · 모듈 ${WIRE.modules.length} · 동적 import ${WIRE.imports.length}`
+    + `\n     모듈: ${WIRE.modules.join(", ") || "(없음)"} · import: ${WIRE.imports.join(", ") || "(없음)"}`
+    + (WIRE.modules.length && WIRE.imports.length ? "" :
+      `\n     🔴 셋 중 하나가 0이면 **그 갈래를 아예 안 재고 있는 것**입니다 (정규식이 죽었어요)`));
+
   /* 🌐 네트워크 의존 모듈은 일부러 안 넣어 왔어요 — 오프라인에서 할 일이 없는 파일이에요.
    * ⚠️ env.js는 **여기 들어가면 안 됩니다.** 베타/상용을 판별해 localStorage를
    *    'beta::'로 감싸는 모듈이라, 오프라인에서 빠지면 세이브 접두사가 통째로 틀어져요.
    *    🦄 unicorn/sw.js는 이미 ../env.js를 캐시합니다 — 그게 맞는 상태예요. */
   const NET_ONLY = ["../cloud.js", "../stats.js", "../ads.js"].map(norm);
   const cached = new Set(assets.map(norm));
-  const gaps = srcs.map(norm).filter((s) => !cached.has(s) && NET_ONLY.indexOf(s) < 0)
-    .map((s) => path.relative(DIR, s));
-  check(gaps.length === 0,
-    `index.html이 받는 파일이 ASSETS에 다 있다${gaps.length ? ` — 빠진 것: ${gaps.join(", ")} (오프라인에서만 깨져요)` : ""}`);
 
-  /* 🔴 **반대 방향** — ASSETS에는 있는데 index.html이 안 받는 파일 (2026-08-29 신설)
+  /* 🔎 A-②(앞으로) · A-③(뒤로) · A-④(디스크)를 **한 함수로** 재서, 아래 변이 검증이
+   *    똑같은 자를 다시 쓸 수 있게 합니다 — 기준선과 변이가 다른 문장을 지키면
+   *    둘 다 초록불인 상태가 생겨요. */
+  function wireGaps(HTML0, assets0) {
+    const w = wireScan(HTML0);
+    const cache = new Set(assets0.map(norm));
+    const fetched = w.classic.concat(w.modules).concat(w.imports).concat(w.css);
+    const fwd = fetched.map(norm)
+      .filter((f) => !cache.has(f) && NET_ONLY.indexOf(f) < 0)
+      .map((f) => path.relative(DIR, f));
+    const got = new Set(fetched.map(norm));
+    const back = assets0.map(norm)
+      .filter((a) => /\.js$/.test(a) && !got.has(a))
+      .map((a) => path.relative(DIR, a));
+    return { w, fwd: Array.from(new Set(fwd)), back: Array.from(new Set(back)) };
+  }
+  const GAP = wireGaps(HTML, assets);
+
+  check(GAP.fwd.length === 0,
+    `A-②. 🔌 **페이지가 받는 것이 ASSETS에 다 있다** (고전 + 모듈 + 동적 import + CSS)`
+    + (GAP.fwd.length
+      ? `\n     🔴 빠진 것: ${GAP.fwd.join(", ")} — **온라인에선 멀쩡하고 오프라인에서만** 깨져요`
+        + `\n     addAll은 원자적이 아니라 그냥 안 담깁니다 — 아무도 눈치를 못 채요`
+      : ` (${WIRE.classic.length + WIRE.modules.length + WIRE.imports.length + WIRE.css.length}개)`));
+
+  /* 🔴 **반대 방향** — ASSETS에는 있는데 페이지가 안 받는 파일 (2026-08-29 신설)
    *
    * 여태 한 방향(index.html → ASSETS)만 봤습니다. 그래서
    * **`<script src="../winger-moment.js">`를 지워도 전 검사가 초록불**이었어요 —
    * 캐시에는 남아 있고, 온라인·오프라인 다 멀쩡하고, **미니게임만 조용히 사라집니다**
    * (`getMini()`가 null → `career.js`가 자동 판정으로 떨어져요).
-   * 플레이어는 오류를 하나도 못 보고 *"왜 안 뜨지?"*만 겪습니다.
-   *
-   * 🌐 네트워크 의존 모듈은 원래 ASSETS에 안 들어가니 이 방향에는 안 걸려요. */
-  const inHtml = new Set(srcs.map(norm));
-  const orphan = assets.map(norm)
-    .filter((a) => /\.js$/.test(a) && !inHtml.has(a))
-    .map((a) => path.relative(DIR, a));
-  check(orphan.length === 0,
-    `ASSETS의 스크립트를 index.html이 다 받는다`
-    + (orphan.length
-      ? `\n     🔴 캐시에는 있는데 **페이지가 안 받는 것**: ${orphan.join(", ")}`
+   * 플레이어는 오류를 하나도 못 보고 *"왜 안 뜨지?"*만 겪습니다. */
+  check(GAP.back.length === 0,
+    `A-③. 🔌 **ASSETS의 스크립트를 페이지가 다 받는다**`
+    + (GAP.back.length
+      ? `\n     🔴 캐시에는 있는데 **페이지가 안 받는 것**: ${GAP.back.join(", ")}`
         + `\n     오류 없이 그 기능만 조용히 사라집니다 — 미니게임이면 자동 판정으로 떨어져요`
       : ` (${assets.filter((a) => /\.js$/.test(a)).length}개)`));
+
+  /* ══════════════════════════════════════════════════════════════════════
+   * A-④ 📁 **디스크에 있는데 어디에도 등록 안 된 .js**
+   *
+   * 🚧 **알려진 미달을 여기 적어 둡니다.** 지금 크기를 상한으로 박고, **더 나빠지면
+   *    빨간불**이에요 — 회귀는 잡히고 현상은 기록됩니다.
+   * ⚠️ 이걸 위의 A-②/A-③에 묶으면 **고친 뒤에도 빨간불**이라 사람이
+   *    "저건 원래 빨간불이야"로 배웁니다. 그래서 따로 세웠어요.
+   * ✅ **해소되면 이 검사가 승격을 요구합니다** — 등록되는 순간 ❌로 바뀌어
+   *    KNOWN_ORPHANS에서 빼라고 말해요. 양방향이라 고치는 사람이 반드시 이 줄을 봅니다.
+   * ══════════════════════════════════════════════════════════════════════ */
+  const KNOWN_ORPHANS = ["focus.js"];   // 🚧 아직 어디에도 안 실린 파일 (다른 세션 작업 중)
+  {
+    const walk = (d, pre) => fs.readdirSync(path.join(DIR, d), { withFileTypes: true })
+      .flatMap((e) => (e.isDirectory() ? walk(path.join(d, e.name), pre)
+        : (/\.js$/.test(e.name) ? [path.posix.join(d === "." ? "" : d, e.name)] : [])));
+    const onDisk = walk(".", "");
+    const wired = new Set(WIRE.classic.concat(WIRE.modules).concat(WIRE.imports).concat(WIRE.regs)
+      .map(norm).concat(assets.map(norm)));
+    const orphans = onDisk.filter((f) => !wired.has(norm("./" + f)));
+    const unexpected = orphans.filter((f) => KNOWN_ORPHANS.indexOf(f) < 0);
+    const promoted = KNOWN_ORPHANS.filter((f) => fs.existsSync(path.join(DIR, f)) && orphans.indexOf(f) < 0);
+    check(unexpected.length === 0,
+      `A-④. 📁 폴더의 .js ${onDisk.length}개 중 **새 고아가 없다** (알려진 것: ${KNOWN_ORPHANS.join(", ") || "없음"})`
+      + (unexpected.length
+        ? `\n     🔴 등록 안 된 파일: ${unexpected.join(", ")}`
+          + `\n     index.html에도 sw.js ASSETS에도 없으면 **아무 데서도 안 실립니다** — 오류도 안 나요`
+        : ""));
+    const stillOrphan = orphans.filter((f) => KNOWN_ORPHANS.indexOf(f) >= 0);
+    if (stillOrphan.length) {
+      note(`A-④. ${stillOrphan.join(", ")} 는 아직 index.html·sw.js 어디에도 없습니다 — **알려진 미달**이에요`);
+      note(`      등록하면 이 줄이 ❌로 바뀌어 "KNOWN_ORPHANS에서 빼세요"라고 말합니다 (승격 알림)`);
+    }
+    check(promoted.length === 0,
+      `A-④b. 📁 KNOWN_ORPHANS가 현실과 맞는다`
+      + (promoted.length
+        ? `\n     ✅ **${promoted.join(", ")} 가 이제 등록됐어요 — wiring-test.js의 KNOWN_ORPHANS에서 빼세요.**`
+          + `\n     (알려진 미달이 해소되면 검사를 합칩니다 — 그러라고 이 줄이 빨간불이에요)`
+        : ` (${KNOWN_ORPHANS.length}개)`));
+  }
+
+  /* ══════════════════════════════════════════════════════════════════════
+   * 🧪 **A-② ③ ④가 진짜로 무언가를 지키는지** — 여기서 바로 되돌려 봅니다.
+   *    (소스 파일은 안 건드려요. **읽어 온 문자열**만 바꿔서 같은 함수에 다시 넣습니다)
+   * ══════════════════════════════════════════════════════════════════════ */
+  {
+    const muts = [
+      ["M4", "index.html에서 <script type=\"module\" src=\"char3d.js\"> 제거 (3D 배선이 진짜 끊김)",
+        () => wireGaps(HTML.replace(/<script type="module" src="char3d\.js"><\/script>/, ""), assets),
+        (g) => g.back.indexOf("char3d.js") >= 0 && g.back.some((x) => /three\.module\.min\.js$/.test(x)),
+        (g) => `A-③ 빠진 것: ${g.back.join(", ") || "(없음)"}`],
+      ["M5", "index.html에 focus.js를 <script>로 싣고 ASSETS에는 안 넣기 (진짜 미등록)",
+        () => wireGaps(HTML.replace("<script src=\"game.js\"></script>",
+          "<script src=\"focus.js\"></script>\n  <script src=\"game.js\"></script>"), assets),
+        (g) => g.fwd.indexOf("focus.js") >= 0,
+        (g) => `A-② 빠진 것: ${g.fwd.join(", ") || "(없음)"}`],
+      ["M6", "sw.js ASSETS에서 ./vendor/three.module.min.js 빼기 (오프라인에서만 3D가 죽음)",
+        () => wireGaps(HTML, assets.filter((a) => !/three\.module\.min\.js$/.test(a))),
+        (g) => g.fwd.some((x) => /three\.module\.min\.js$/.test(x)),
+        (g) => `A-② 빠진 것: ${g.fwd.join(", ") || "(없음)"}`],
+    ];
+    for (const [tag, why, run, want, show] of muts) {
+      let g = null, err = null;
+      try { g = run(); } catch (e) { err = e; }
+      check(!!g && want(g),
+        `🧪 ${tag}. 변이 — ${why} → 빨간불이 뜬다`
+        + (g ? `\n     ${show(g)}` : `\n     💥 변이가 안 걸렸어요: ${err && err.message}`)
+        + (g && want(g) ? "" : `\n     🔴 되돌렸는데 안 갈립니다 — **이 검사는 아무것도 안 지키고 있어요**`));
+    }
+  }
 
   /* 🔥 미니게임은 **엔진 뒤**에 실려야 합니다 — `setMini`를 스스로 부르거든요 */
   const iEngine = HTML.indexOf('src="engine.js"');

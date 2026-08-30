@@ -1,6 +1,9 @@
 /* winger2 서비스워커 — 네트워크 우선, 실패 시 캐시 (오프라인 플레이) */
 const CACHE = "winger2-v1";   // ⚽ 더 윙어 II 신설
-const ASSETS = ["./", "./index.html", "./style.css", "./game.js", "./grade.js", "./cup.js", "./career.js", "./squad.js", "./prospect.js", "./engine.js", "./match-scene.js", "./fever.js", "./camp.js", "./worldcup.js", "./manifest.webmanifest", "../winger-moment.js", "../base.css", "../env.js", "../fx.js", "../radar.js", "../timing.js", "../match.js", "../help.js"];
+/* ⚠️ `./vendor/three.module.min.js`는 **691KB**입니다 — 설치할 때 한 번 받아 둬요.
+ * 안 넣으면 **온라인에선 멀쩡하고 오프라인에서만 3D가 안 뜹니다**(그리고 CSS 실루엣으로
+ * 조용히 떨어져서 아무도 눈치를 못 채요). 이 목록은 자동 생성이 없습니다. */
+const ASSETS = ["./", "./index.html", "./style.css", "./game.js", "./grade.js", "./cup.js", "./career.js", "./squad.js", "./prospect.js", "./char3d.js", "./vendor/three.module.min.js", "./engine.js", "./match-scene.js", "./fever.js", "./camp.js", "./worldcup.js", "./manifest.webmanifest", "../winger-moment.js", "../base.css", "../env.js", "../fx.js", "../radar.js", "../timing.js", "../match.js", "../help.js"];
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));
 });

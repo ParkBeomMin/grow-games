@@ -15,7 +15,11 @@ cd "$ROOT"
 FORCE=0
 [ "${1:-}" = "--force" ] && FORCE=1
 
-CONTENT="rookie idol stock dev chef stream soccer winger2 unicorn stats index.html env.js match.js stats.js ads.js fx.js help.js base.css timing.js radar.js manifest.webmanifest sw.js icon-192.png icon-512.png"
+# ⚠️ 새 공유 파일을 beta/에 만들면 **여기에도 넣어야** 해요.
+# 안 넣으면 상용에 그 파일이 없어서 지금 당장은 조용하지만, 그 게임이 승격된 뒤
+# 누가 이걸 돌리면 **베타 것만 남고 상용과 갈라진 채 아무도 모릅니다.**
+# (winger-moment.js가 실제로 그 상태였어요 — 검사가 찾아 줬습니다.)
+CONTENT="rookie idol stock dev chef stream soccer winger2 unicorn stats index.html env.js match.js stats.js ads.js fx.js help.js base.css timing.js radar.js winger-moment.js manifest.webmanifest sw.js icon-192.png icon-512.png"
 
 # beta/에만 있는 변경을 먼저 찾아요 — 덮어쓰면 사라지는 것들이에요
 LOST=""

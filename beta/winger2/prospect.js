@@ -613,17 +613,62 @@ window.WingerProspect = (() => {
    * 세로로 끌다 손을 떼면 🎲가 먹히는 자리라 문턱은 그대로 남깁니다. */
   const DRAG_MIN = 12;
 
-  /* 🧒 CSS 실루엣 — 이미지도 캔버스도 없이 `<i>` 여덟 개로 그려요.
-   * 3D(char3d.js)가 들어오면 이 자리를 그대로 덮습니다 — 그때도 **폴백으로 남습니다**.
+  /* 🧍 **무대** — 3D 캐릭터(char3d.js)가 서는 자리예요.
+   *
+   * 🔑 무대 안에는 **CSS 실루엣이 늘 깔려 있습니다.** 3D는 그 위를 덮을 뿐이에요.
+   *    WebGL이 없거나(jsdom·구형 기기) three.js 내려받기가 실패하거나 컨텍스트를 잃으면
+   *    **아무것도 안 해도 실루엣이 그대로 보입니다.** 폴백을 따로 만드는 게 아니라
+   *    **폴백 위에 3D를 얹는** 구조예요 — 그래야 실패해도 화면이 멀쩡합니다.
+   *
+   * 🦶 **주발 — 공이 그 발 옆에 놓입니다.**
+   *    ⚠️ 캐릭터가 **우리를 마주 보고** 서 있어서 **캐릭터의 왼발은 화면 오른쪽**이에요.
+   *       거울이 한 번 뒤집힙니다. 예전에 🦶 표시 색이 판정과 반대이던 버그가 이 형태였어요.
+   *    🔒 그래서 `🦶 왼발` 칩을 **공 바로 옆에** 붙입니다. 라벨이 물건 옆에 있으면
+   *       거울 문제가 아예 안 생겨요 — 화면 좌우를 외울 필요가 없습니다.
+   *
    * ⚠️ 머리 모양은 `shapeKey`에서 나와요. 🎲로 배분을 다시 뽑으면 같이 바뀝니다. */
-  function figureHTML(b) {
+  function stageHTML(b, who) {
     const h = (String(b.shapeKey || "").charCodeAt(0) || 65) % 3;
-    return `<span class="pc-silhouette hair-${h}" aria-hidden="true">`
+    const L = who.foot === "L";
+    return `<span class="w2c-stage foot-${L ? "L" : "R"}" id="pc-stage">`
+      + `<span class="pc-silhouette hair-${h}" aria-hidden="true">`
       + `<i class="s-leg l"></i><i class="s-leg r"></i>`
       + `<i class="s-arm l"></i><i class="s-arm r"></i>`
       + `<i class="s-body"></i><i class="s-head"></i><i class="s-hair"></i><i class="s-ball"></i>`
+      + `</span>`
+      + `<span class="w2c-foot" aria-hidden="true">${footLabel(who.foot)}</span>`
       + `</span>`;
   }
+
+  /* 🧍 무대에 선수를 세워요 — **3D가 없어도 아무 일도 안 일어납니다.**
+   *
+   * `char3d.js`는 ES module이라 `window.W2Char`가 **항상 늦게** 생깁니다
+   * (jsdom은 module을 아예 실행하지 않아서 검사에서는 영원히 없어요).
+   * 그래서 ① 여기서 매번 있는지 보고 ② 늦게 도착하면 `w2char-ready`로 다시 칠합니다. */
+  function paintChar() {
+    if (!draw) return;
+    const stage = document.getElementById("pc-stage");
+    if (!stage) return;
+    try {
+      if (window.W2Char) window.W2Char.show(stage, {
+        stats: draw.build.stats,
+        foot: draw.who.foot,
+        shapeKey: draw.build.shapeKey,
+        /* 📏 키는 아직 없어요 — 5번 작업에서 `draw.who.height`가 들어오면 그대로 실립니다 */
+        height: draw.who.height,
+      });
+    } catch (e) { /* 연출이 게임을 멈추면 안 됩니다 */ }
+  }
+
+  /* 🧹 조립대를 **완전히 떠날 때** 컨텍스트까지 놓습니다.
+   * 안 놓으면 다음 화면에서 프레임을 먹어요 — 🔥 순간 카드는 프레임 위에서 판정합니다. */
+  function dropChar() {
+    try { if (window.W2Char) window.W2Char.dispose(); } catch (e) {}
+  }
+
+  try {
+    window.addEventListener("w2char-ready", paintChar);
+  } catch (e) { /* window가 없는 환경(노드 직접 로드)에서는 그냥 넘어갑니다 */ }
 
   /* ⭐ 잠재력이 가장 높은 칸에만 별 하나 — *"이 칸은 더 클 수 있어요"*가
    * 그 줄에서 읽혀야 해요.
@@ -686,7 +731,11 @@ window.WingerProspect = (() => {
      * 이해합니다 — 그건 거짓말이에요. 36턴 훈련이 ≈100점을 더하고 프로 커리어가 더 얹어요.
      * 타이틀이 이미 *"동네 유망주에서 프로 계약까지"*라고 적어 뒀습니다.
      * **출발점이 `F`인 게 이 게임입니다.** */
-    return `<span class="pc-grades pb-slot" data-slot="2">`
+    /* 🎬 `data-slot`은 **화면에 보이는 순서**예요 — 🧍 무대 바로 아래가 등급 여섯 줄입니다.
+     * 🔑 왜 레이더보다 위인가: 🎲가 바꾸는 건 **📊 배분**이고, 그걸 가장 곧게 읽는 게
+     *    이 여섯 줄이에요. 🎲 버튼과 캐릭터 사이에 **바뀌는 것**이 있어야 굴린 보람이 보입니다.
+     *    (390px 렌더 실측 — 무대 240 + 여섯 줄 195가 접히는 선 안에 같이 들어옵니다) */
+    return `<span class="pc-grades pb-slot" data-slot="1">`
       + `<span class="pcg-cap"><b>🌱 출발점</b> — 열일곱의 타고난 몸이에요. 훈련이 여기서부터 키웁니다`
       + `<br/>⭐ 가장 크게 자랄 칸 · 바는 여섯 칸을 <b>같은 자</b>로 재요</span>`
       + rows + `</span>`;
@@ -710,17 +759,17 @@ window.WingerProspect = (() => {
     const tr = traitById(b.trait), fl = flawById(b.flaw);
     return `
       <span class="pb-head">
-        ${figureHTML(b)}
+        ${stageHTML(b, who)}
         <span class="pc-id">
           <span class="pc-name">🧒 ${esc(who.name || "이름 없는 유망주")}</span>
           <span class="pb-meta">🎂 ${b.age}세 · ${footLabel(who.foot)}</span>
         </span>
       </span>
-      <span class="pc-now pb-slot" data-slot="1">
+      ${gradeStripHTML(b, talents)}
+      <span class="pc-now pb-slot" data-slot="2">
         <span class="pc-cap"><b>📈 지금 실력</b> — 늦게 크는 선수일수록 작아 보여요</span>
         <span class="pc-radar-box"><canvas class="pc-radar" width="300" height="260"></canvas></span>
       </span>
-      ${gradeStripHTML(b, talents)}
       <span class="pb-gift pb-slot" data-slot="3">
         <span class="pcg-cap"><b>🎁 타고난 것</b> <span class="pb-lock" title="굴려서 못 바꿔요" aria-label="잠김">🔒</span>
           — 🎲는 <b>📊 배분만</b> 다시 뽑아요. 여기는 안 바뀝니다</span>
@@ -807,6 +856,9 @@ window.WingerProspect = (() => {
           max: 44, stroke: "#5fa8ff", fill: "rgba(95, 168, 255, 0.28)",
         });
       }
+      /* 🧍 무대는 **다시 그린 다음** 세웁니다 — innerHTML이 옛 캔버스를 통째로 버리니까요.
+       * `W2Char.show`는 이미 서 있으면 컨텍스트를 새로 만들지 않고 **모양만 갈아입혀요**. */
+      paintChar();
     }
 
     /* 🎲 몇 번 뽑았나 — **남은 횟수가 아니라 쓴 횟수**예요(무제한이라 남은 수가 없습니다).
@@ -874,6 +926,9 @@ window.WingerProspect = (() => {
        * 미니게임 준비 화면에서 실제로 났던 버그예요. */
       start.onclick = () => {
         if (dragged) return;
+        /* 🧹 조립대를 떠나요 — 3D를 여기서 놓습니다. 안 놓으면 다음 화면에서
+         * 프레임을 먹고, 🔥 순간 카드는 **프레임 위에서 판정**합니다. */
+        dropChar();
         if (draw.onPick) draw.onPick(draw.build, draw.talents, draw.used);
       };
     }
@@ -913,7 +968,7 @@ window.WingerProspect = (() => {
     bindDragGuard();
     render();
     const back = document.getElementById("btn-back-prospect");
-    if (back) back.onclick = onBack;
+    if (back) back.onclick = (e) => { dropChar(); if (onBack) onBack(e); };
     show("screen-prospect");
   }
 

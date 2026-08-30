@@ -1271,11 +1271,30 @@ button.pf-slot { cursor: pointer; font-family: inherit; }
   text-align: left;
   border-color: var(--line);
 }
-/* 🎬 슬롯 — 들어올 때 순서대로 굴러 채워지는 자리예요 (`data-slot` 순서).
- * ⚠️ 지금은 **자리 표시만** 합니다. 연출은 director 몫이에요. */
-.pb-slot { display: block; }
+/* 🎬 슬롯 — 들어올 때 `data-slot` 순서대로 채워집니다 (1 🌱 등급 → 2 📈 레이더 → 3 🎁 타고난 것).
+ *
+ * ⚠️ **번호는 화면에 보이는 순서**예요. DOM 순서와 같습니다 — CSS `order`로 눈속임하면
+ *    낭독 순서가 어긋나요. 순서를 바꿀 일이 생기면 `prospect.js`의 `benchHTML`에서 바꾸세요.
+ * ⏱️ 짧게 잡았습니다(최대 0.39초). 🎲를 누를 때마다 다시 도는 연출이라
+ *    길면 **굴리는 리듬을 잡아먹어요** — 굴림은 몇 번이든 눌러도 되는 행동입니다. */
+.pb-slot { display: block; animation: pbSlotIn .22s ease both; }
+.pb-slot[data-slot="1"] { animation-delay: .03s; }
+.pb-slot[data-slot="2"] { animation-delay: .10s; }
+.pb-slot[data-slot="3"] { animation-delay: .17s; }
+@keyframes pbSlotIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 
-.pb-head { display: flex; align-items: center; gap: 10px; }
+/* 🧍 머리글 = **무대**입니다. 이름·🎂·🦶는 무대 위에 얹혀요 (선수 소개 컷의 문법).
+ * ⚠️ `position: sticky`가 여기 걸립니다 — 아래 「무대」 절의 설명을 보세요. */
+.pb-head {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  display: block;
+  margin: -12px -12px 4px;          /* 카드 안쪽 여백을 밀어내고 폭을 꽉 채웁니다 */
+  border-radius: 12px 12px 0 0;
+  overflow: hidden;
+  background: var(--field);          /* 스크롤한 내용이 무대 뒤로 비치면 안 돼요 */
+}
 /* 🔒 잠긴 사실 줄 — 🎂 나이 · 🦶 주발. 📏 키가 5번 작업에서 여기 합류합니다 */
 .pb-meta { display: block; font-size: .78rem; color: var(--dim); }
 
@@ -1303,8 +1322,17 @@ button.pf-slot { cursor: pointer; font-family: inherit; }
 .pb-bud-note { flex: 1 1 100%; font-size: .7rem; opacity: .85; word-break: keep-all; }
 
 /* 🧒 머리글 — 이름 · 🔒 잠긴 사실 · 실루엣 */
-.pc-id { flex: 1 1 auto; min-width: 0; display: block; }
-.pc-name { display: block; font-family: "Jua", sans-serif; font-size: 1.15rem; color: var(--pc-tone); line-height: 1.3; }
+/* 🧒 이름표 — **무대 위에 얹습니다.** 3D 뒤로 글자가 묻히지 않게 아래쪽에 그늘(scrim)을 깔아요. */
+.pc-id {
+  position: absolute;
+  left: 12px; right: 40%; top: 9px;
+  z-index: 2;
+  min-width: 0;
+  display: block;
+  pointer-events: none;             /* 무대를 끌어 돌리는 손을 막지 않아요 */
+  text-shadow: 0 1px 3px rgba(4, 8, 20, .85);
+}
+.pc-name { display: block; font-family: "Jua", sans-serif; font-size: 1.15rem; color: var(--text); line-height: 1.3; }
 .pc-age { display: block; font-size: .76rem; color: var(--dim); }
 
 /* 📈/📊 두 개의 자 — **같은 선수를 다른 잣대로 두 번** 봅니다.
@@ -1367,15 +1395,131 @@ button.pf-slot { cursor: pointer; font-family: inherit; }
 .pc-trait { color: var(--accent); }
 .pc-flaw { color: var(--accent2); }
 .pc-eff { display: block; font-size: .72rem; color: var(--dim); }
-/* 🧒 CSS 실루엣 — `<i>` 여덟 개. 이미지도 캔버스도 없어요.
- * (3D char3d.js가 들어오면 이 자리를 덮되, **폴백으로 남습니다**) */
-.pc-silhouette {
+/* ══════════════════════════════════════════════════════════════════
+ * 🧍 무대 — 3D 캐릭터(char3d.js)가 서는 자리
+ *
+ * 🔑 **접히는 선 위에 무엇이 오는가**가 이 화면의 설계입니다 (390px 실측 기준):
+ *      🧬 제목 32 + 안내 50 + 🧍 무대 240 + 🌱 등급 여섯 줄 195 ≈ **517px**
+ *    390×667(작은 폰)에도 이 넷이 함께 들어옵니다. 📈 레이더와 🎁 타고난 것은 그 아래예요.
+ *
+ * 🔑 **왜 무대가 `sticky`이고 🎲가 화면 아래에 붙는가** —
+ *    조립대는 세로로 1,300px이 넘고 🎲 버튼은 원래 y≈925(접히는 선 **아래**)에 있었어요.
+ *    *"🎲를 굴리면 체형이 바뀝니다"*인데 **굴리는 순간 캐릭터가 화면 밖**이면
+ *    아무 일도 안 일어난 것과 같습니다. 그래서 세로 스포츠 UI의 검증된 형태를 씁니다 —
+ *    **위는 맥락을 고정(무대), 아래는 행동을 고정(🎲)**, 가운데만 스크롤.
+ *
+ * ⚠️ 이 무대는 **조립대 전용**이에요. 🔥 순간 카드가 도는 화면에는 안 깔립니다 —
+ *    미니게임은 프레임 위에서 판정해서, 3D가 같이 돌면 곡선이 기기 성능에 의존해요.
+ * ══════════════════════════════════════════════════════════════════ */
+.w2c-stage {
   position: relative;
-  flex: 0 0 auto;
+  display: block;
+  width: 100%;
+  height: clamp(176px, 30vh, 240px);
+  overflow: hidden;
+  /* 🌙 조명 아래 잔디 — 절대색이 아니라 테마 변수입니다.
+   * 🎨 월드컵 테마가 `--turf`를 갈아도 무대가 같이 따라와요. */
+  background:
+    radial-gradient(120% 78% at 50% 118%, rgba(255, 159, 69, .20) 0%, rgba(255, 159, 69, 0) 62%),
+    radial-gradient(86% 70% at 50% 8%, var(--bg2) 0%, var(--bg) 100%);
+}
+/* 무대 바닥 — 선수가 공중에 뜬 것처럼 안 보이게 하는 타원 하나.
+ * ⚠️ 캐릭터를 오른쪽으로 비켜 세웠으니(char3d.js `root.position.x`) 여기도 같이 옮깁니다 */
+.w2c-stage::before {
+  content: "";
+  position: absolute;
+  left: 60%; bottom: 17%;
+  width: 32%; height: 6%;
+  transform: translateX(-50%);
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(4, 8, 20, .6), rgba(4, 8, 20, 0));
+}
+/* 🌑 이름표 뒤 그늘 — **3D 위에 글자를 얹으니 반드시 필요합니다.**
+ * 캐릭터가 돌면 뒤 밝기가 바뀌어요. 그늘이 없으면 어떤 각도에서는 이름이 안 읽힙니다.
+ *
+ * ⚠️ **위쪽에 깝니다.** 처음엔 아래쪽에 깔았는데 그 그늘이 ⚽ 공과 👟 축구화를
+ *    통째로 삼켰어요 — 🦶 주발이 보이라고 만든 자리를 연출이 덮은 겁니다. */
+.pb-head::after {
+  content: "";
+  position: absolute;
+  left: 0; right: 0; top: 0;
+  height: 42%;
+  z-index: 1;
+  pointer-events: none;
+  background: linear-gradient(to bottom, rgba(6, 11, 26, .88) 0%, rgba(6, 11, 26, .42) 52%, transparent 100%);
+}
+.w2c-canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  display: block;
+  /* 🖐️ 좌우로 끌면 선수가 돌아가요. **세로 스크롤은 그대로 남깁니다** —
+   * 조립대는 세로로 길어서 여기서 스크롤을 뺏으면 화면이 갇힙니다. */
+  touch-action: pan-y;
+  cursor: grab;
+}
+.w2c-canvas:active { cursor: grabbing; }
+
+/* 🦶 주발 칩 — **공 바로 옆**에 붙습니다.
+ *
+ * 🔴 캐릭터는 우리를 마주 보고 서 있어서 **캐릭터의 왼발이 화면 오른쪽**이에요.
+ *    거울이 한 번 뒤집힙니다. 예전에 🦶 주발 표시의 **색이 판정과 반대쪽**이던 버그가
+ *    정확히 이 형태였어요 — *"안 보이는 것"*이 아니라 **거짓말을 하고 있던 것**입니다.
+ *    라벨을 공 옆에 두면 좌우를 외울 필요가 없어져요. 그게 이 규칙의 이유입니다. */
+.w2c-foot {
+  position: absolute;
+  bottom: 7%;
+  z-index: 2;
+  z-index: 2;
+  font-size: .72rem;
+  color: var(--text);
+  background: rgba(4, 8, 20, .62);
+  border: 1px solid var(--line);
+  border-radius: 99px;
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+/* 🎯 **3D가 서면 칩이 공을 따라갑니다.** char3d.js가 공의 화면 위치를 재서
+ * `--ball-x`(가운데 %) · `--ball-w`(지름 %)로 넘겨줘요.
+ *
+ * 🔴 처음엔 이 값을 **손으로 박았습니다.** 그랬더니 왼발잡이에서 칩이 공을 **덮었어요** —
+ *    캐릭터를 오른쪽으로 비켜 세운 탓에 공의 화면 위치가 좌우 대칭이 아니었거든요.
+ *    무대 높이·카메라 거리·다리 굵기가 전부 이 위치를 움직입니다. **CSS는 그걸 모릅니다.**
+ *    그래서 재는 쪽이 알려 주고, 붙이는 쪽이 그 옆에 답니다.
+ *
+ * ⚠️ 칩은 **공 바로 아래**에 앉습니다. 옆에 두면 한쪽 주발에서 👟 축구화를 덮었어요
+ *    (왼발잡이 렌더에서 확인). 아래는 두 주발 모두 자리가 나고 좌우도 안 헷갈립니다.
+ * ⚠️ `--ball-bot`은 **무대 아래에서 잰 %**예요 (NDC y를 그대로 쓴 값이라 위가 아니라 아래 기준). */
+.w2c-stage.is-3d .w2c-foot {
+  left: var(--ball-x);
+  right: auto;
+  bottom: calc(var(--ball-bot) - 13%);
+  transform: translateX(-50%);
+}
+/* 폴백(WebGL 없음)에서 쓰는 기본 자리 — 실루엣의 공 위치에 맞춘 값입니다 */
+.foot-L .w2c-foot { left: 62%; }     /* 캐릭터의 왼발 = 화면 오른쪽 */
+.foot-R .w2c-foot { right: 62%; }
+
+/* 🧒 CSS 실루엣 — `<i>` 여덟 개. 이미지도 캔버스도 없어요.
+ *
+ * 🔑 **폴백을 따로 만들지 않고 그 위에 3D를 얹습니다.** WebGL이 없거나(jsdom·구형 기기)
+ *    three.js 내려받기가 실패하거나 컨텍스트를 잃으면 **아무것도 안 해도 이게 보입니다.**
+ *    `.is-3d`가 붙으면 조용히 사라져요. */
+.pc-silhouette {
+  position: absolute;
+  left: 50%; top: 50%;
+  transform: translate(-50%, -50%) scale(2.5);
+  transform-origin: center;
   display: block;
   width: 54px;
   height: 62px;
 }
+.w2c-stage.is-3d .pc-silhouette { display: none; }
+/* 🦶 실루엣의 공도 주발을 따릅니다 — 여기도 **화면 오른쪽 = 캐릭터의 왼발**이에요.
+ * (기본 `left: 36px`이 화면 오른쪽이라 왼발잡이가 그대로 맞습니다) */
+.foot-R .s-ball { left: 5px; }
 .pc-silhouette i { position: absolute; display: block; }
 .s-head { left: 17px; top: 2px; width: 20px; height: 20px; border-radius: 50%; background: #e8bd93; }
 .s-hair { left: 15px; top: 0; width: 24px; height: 11px; border-radius: 12px 12px 3px 3px; background: #3a2b23; }
@@ -1394,7 +1538,22 @@ button.pf-slot { cursor: pointer; font-family: inherit; }
   border: 1px solid #2a3550;
 }
 
-.pc-tools { display: flex; gap: 8px; }
+/* 🎲 · 📊 — **화면 아래에 붙는 행동 줄**입니다 (위 「무대」 절의 짝).
+ *
+ * 🔑 무대가 위에 고정되고 이 줄이 아래에 고정되니, 가운데를 아무리 스크롤해도
+ *    **「캐릭터」와 「굴리는 손」이 언제나 한 화면에** 있습니다. 🎲를 누른 순간
+ *    체형이 바뀌는 게 보여요 — 그게 이 화면의 전부입니다.
+ * ⚠️ `sticky`라 문서 흐름에서 자리를 그대로 차지해요. 맨 아래까지 스크롤하면
+ *    제자리로 돌아가고 [이 선수로 시작]이 그 아래에 온전히 나옵니다. */
+.pc-tools {
+  position: sticky;
+  bottom: 0;
+  z-index: 4;
+  display: flex;
+  gap: 8px;
+  padding: 6px 0 8px;
+  background: linear-gradient(to top, var(--bg) 62%, transparent);
+}
 .pc-tools .btn { margin: 0; flex: 1 1 0; font-size: .86rem; padding: 12px 4px; }
 
 /* 📊 견주기 시트 — 아래에서 올라와요 */
@@ -1441,14 +1600,26 @@ button.pf-slot { cursor: pointer; font-family: inherit; }
 .prospect-talent { line-height: 1.8; font-size: .72rem; margin-top: 10px; }
 
 @media (max-width: 359px) {
-  /* 320px — 실루엣을 접고 글자만 남겨요 */
-  .pc-silhouette { display: none; }
+  /* 320px — 무대를 낮추고 실루엣을 줄여요. **접지는 않습니다** —
+   * 여기서 무대를 없애면 *"내 선수가 나타난다"*는 이 화면의 유일한 이유가 사라져요.
+   * (예전 규칙은 실루엣이 54×62짜리 곁다리였을 때 만든 것입니다) */
+  .w2c-stage { height: clamp(150px, 26vh, 190px); }
+  /* 320px은 무대가 좁아요 — 칩 글자만 줄입니다 (자리는 `--ball-x`가 알아서 따라갑니다) */
+  .w2c-foot { font-size: .68rem; padding: 2px 6px; }
+  .pc-silhouette { transform: translate(-50%, -50%) scale(2); }
+  .pc-name { font-size: 1rem; }
   .pcg-name { flex: 0 0 64px; font-size: .68rem; }
   .pcg-row { gap: 4px; }
 }
 
+/* ♿ **축약 대상이 아닙니다.** 흔들림·회전은 어지럼증과 광과민성 발작을 부릅니다.
+ * 🔑 그리고 **정보는 하나도 안 잃습니다** — 3D는 정지 포즈 한 장으로, 슬롯은 그 자리에서
+ *    바로 보입니다(`animation: none`이면 `both`의 시작 상태 opacity:0에 갇히니 **끝 상태를
+ *    직접 적어 줍니다**). 조립대에서 읽어야 할 것은 전부 그대로 남아요.
+ * (3D 쪽 정지는 char3d.js의 `reduceMotion()`이 맡습니다 — 회전·숨쉬기를 끄고 한 장만 그려요) */
 @media (prefers-reduced-motion: reduce) {
   .pcs-panel { animation: none; }
+  .pb-slot { animation: none; opacity: 1; transform: none; }
 }
 
 /* ---------- 📊 능력치 등급 F~S · XP 바 · 승급 카드 (70번 갈래 F2) ----------

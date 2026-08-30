@@ -388,6 +388,14 @@
   <script src="match-scene.js"></script>
   <script src="worldcup.js"></script>
   <script src="career.js"></script>
+<!-- 🧍 3D 캐릭터 뷰어 — ⚠️ **ES module입니다.**
+     ① `type="module"`이라 항상 defer예요. `window.W2Char`는 **늦게 생깁니다** —
+        prospect.js는 없는 순간을 견디고, 도착하면 `w2char-ready`로 다시 칠합니다.
+     ② three.js 691KB(gzip ~167KB)는 여기서 안 받아요. 🧬 조립대에 **처음 들어올 때**
+        char3d.js가 동적 import 합니다 — 타이틀과 🏠 유스 36턴은 그 값을 안 칩니다.
+     ③ ⚠️ `tests/winger2/_load.js`의 치환 정규식은 `<script src=`만 잡아서 이 줄이 **안 걸립니다.**
+        jsdom은 module 스크립트를 실행하지 않으니 검사에서는 이 파일이 없는 것과 같아요 — 의도입니다. -->
+  <script type="module" src="char3d.js"></script>
 <script>if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");</script>
 </body>
 </html>
