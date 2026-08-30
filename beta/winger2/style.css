@@ -656,8 +656,15 @@ body.wc-mode {
 .fever-bar .fv-body b { font-family: "Jua", sans-serif; font-size: .86rem; }
 .fever-bar .fv-eff { font-size: .7rem; opacity: .85; }
 .fever-bar .fv-left { font-size: .7rem; opacity: .8; white-space: nowrap; }
-/* 띠가 첫 화면을 가리지 않게 본문을 그만큼 내려요 */
-body.fever-on #app { padding-top: 2.6rem; }
+/* 띠가 첫 화면을 가리지 않게 본문을 그만큼 내려요.
+   높이는 fever.js가 **실제로 재서** --fever-h에 넣어요. 상수로 두면 반드시
+   어긋나요 — 효과가 많으면 문구가 두 줄로 접혀 띠가 두꺼워지거든요.
+   20px는 #app의 원래 위 여백(base.css)이에요. 이걸 빼먹으면 본문이 띠에 붙어요. */
+body.fever-on #app { padding-top: calc(20px + var(--fever-h, 3.6rem)); }
+/* ☁️ 동기화 알약·토스트는 같은 구석(우측 상단)을 써요. 알약은 z-index가 띠보다
+   낮아서 피버 중엔 아예 안 보였어요 — 위치로 비켜요(가리는 쪽이 아니라 남는 쪽으로). */
+body.fever-on .cloud-sync,
+body.fever-on .cloud-toast { top: calc(10px + var(--fever-h, 3.6rem)); }
 /* 처음 마주친 순간의 알림 */
 .fever-modal { width: min(340px, 90vw); }
 .fever-modal .fv-big { font-size: 2.6rem; }

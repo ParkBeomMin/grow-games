@@ -110,21 +110,43 @@ window.WingerFever = (() => {
   // ---------- 화면 ----------
 
   const BAR_ID = "fever-bar";
+
+  /* 띠 높이를 본문에 알려요(--fever-h).
+   *
+   * 띠는 position:fixed 라 자리를 차지하지 않고, 본문을 그만큼 내려서 피해요.
+   * 그런데 그 높이는 **고정이 아니에요** — 운영자가 넣은 효과가 많으면 문구가
+   * 두 줄로 접혀서 띠가 두꺼워지고, 좁은 폰일수록 더 접혀요. 상수로 적어 두면
+   * 반드시 어긋납니다: 2.6rem으로 두었더니 효과 한 개짜리 띠에서도 1.8px,
+   * 두 줄로 접히면 15.8px가 HUD 위에서 잘렸어요(제보).
+   * 그래서 재서 넣어요. 읽는 쪽은 style.css의 body.fever-on 규칙이에요. */
+  const setH = () => {
+    const bar = document.getElementById(BAR_ID);
+    if (bar) document.documentElement.style.setProperty("--fever-h", `${bar.offsetHeight}px`);
+  };
+
   function drawBar() {
     const e = live();
     let bar = document.getElementById(BAR_ID);
-    if (!e) { if (bar) bar.remove(); document.body.classList.remove("fever-on"); return; }
+    if (!e) {
+      if (bar) bar.remove();
+      document.body.classList.remove("fever-on");
+      document.documentElement.style.removeProperty("--fever-h");
+      return;
+    }
     if (!bar) {
       bar = document.createElement("div");
       bar.id = BAR_ID;
       bar.className = "fever-bar";
       document.body.appendChild(bar);
+      // 화면을 돌리면 접히는 줄 수가 달라져요 — 그때도 따라가야 해요
+      if (window.ResizeObserver) new ResizeObserver(setH).observe(bar);
     }
     document.body.classList.add("fever-on");
     bar.innerHTML = `<span class="fv-emoji">${e.emoji}</span>`
       + `<span class="fv-body"><b>${e.title}</b>`
       + `${Object.keys(e.eff).length ? `<span class="fv-eff">${effText(e)}</span>` : ""}</span>`
       + `<span class="fv-left">${leftText(e.to)}</span>`;
+    setH();   // ResizeObserver가 없는 브라우저에서도 첫 그림부터 맞아요
   }
 
   /* 처음 마주친 순간에만 한 번 크게 알려요. 같은 이벤트를 두 번 안 알리려고
