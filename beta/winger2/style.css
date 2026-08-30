@@ -1270,3 +1270,109 @@ button.pf-slot { cursor: pointer; font-family: inherit; }
   .prospect-card { padding: 8px 4px; }
   .pc-trait, .pc-flaw { font-size: .68rem; }
 }
+
+/* ---------- 📊 능력치 등급 F~S · XP 바 · 승급 카드 (70번 갈래 F2) ----------
+ *
+ * ⚠️ **뼈대만입니다. 연출은 director 몫이에요.** 클래스는 여기 다 나와 있어요:
+ *   .stat-row.graded > .stat-grade(.g-F ~ .g-S) · .bar.xp-bar > .bar-fill.xp · .stat-xp
+ *   .grade-up-layer > .grade-up-card > .gu-stat · .gu-from · .gu-arrow · .gu-to · .gu-say
+ *   .pc-grades > .pcg-cap · .pcg-row > .pcg-name · .stat-grade · .bar.xp-bar
+ *
+ * ⚠️ `.stat-row` · `.bar` · `.stat-val`의 본체는 **base.css(8종 공유)**에 있어요.
+ * 여기서는 winger2 전용 클래스만 얹습니다 — 공유 파일은 안 건드려요. */
+.stat-grade {
+  flex: 0 0 auto;
+  min-width: 26px;
+  text-align: center;
+  font-size: .9rem;
+  font-weight: 800;
+  letter-spacing: -.5px;
+}
+.g-F { color: #8d9aa0; }
+.g-E { color: #9fb5a4; }
+.g-D { color: #7fd1e8; }
+.g-C { color: #6ee7a0; }
+.g-B { color: #ffd166; }
+.g-A { color: #ff9f45; }
+.g-S { color: #ff6b9d; text-shadow: 0 0 8px rgba(255, 107, 157, .55); }
+
+/* XP 바 — **다음 승급까지 얼마**를 그려요. 100칸짜리 절대 막대가 아닙니다. */
+.bar-fill.xp { background: linear-gradient(90deg, #6ee7a0, #ffd166); }
+.stat-xp { flex: 0 0 auto; min-width: 40px; text-align: right; font-size: .66rem; color: var(--dim); }
+/* 🔢 숫자는 **작게 병기**해요 — 주인공은 등급입니다 */
+.stat-row.graded .stat-val { font-size: .72rem; color: var(--dim); width: 26px; }
+.stat-row.graded .stat-val.max { color: #ffd166; }
+.stat-row.graded .stat-pot { min-width: 58px; font-size: .64rem; }
+
+/* 🎉 승급 카드 — 화면 위에 잠깐 떴다 사라져요.
+ * 매끄러운 증가는 만족스럽지 않고 **문턱을 넘는 순간**이 필요해요 (설계 §B-3). */
+.grade-up-layer {
+  position: fixed;
+  left: 50%;
+  top: 18%;
+  transform: translateX(-50%);
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+  pointer-events: none;
+}
+/* ⚠️ 한 턴에 두 칸이 올라도 **카드는 한 장, 줄이 둘**이에요.
+ * 2.6초짜리를 쌓으면 손이 5.2초 멈춥니다. */
+.grade-up-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 16px;
+  border: 2px solid var(--line);
+  border-radius: 14px;
+  background: rgba(12, 30, 18, .96);
+  box-shadow: 0 8px 26px rgba(0, 0, 0, .5);
+  animation: gradeUpPop 2.6s ease forwards;
+}
+/* 🎯 주 스탯이 오른 카드는 무게가 달라요 — *"내 무기가 컸다"*니까요.
+ * 🎬 여기는 **자리만** 잡아 뒀습니다. 크기·소리·파티클은 director 몫이에요. */
+.grade-up-card.has-main { border-color: var(--accent); }
+.gu-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: .82rem;
+  white-space: nowrap;
+  opacity: .82;
+}
+.gu-row.gu-main { font-size: 1.02rem; opacity: 1; }
+.gu-stat { font-weight: 700; }
+.gu-from { color: var(--dim); font-weight: 800; }
+.gu-arrow { color: var(--dim); }
+.gu-to { color: var(--accent); font-weight: 800; font-size: 1.1em; }
+.gu-say { color: var(--accent); font-weight: 700; }
+@keyframes gradeUpPop {
+  0%   { opacity: 0; transform: translateY(10px) scale(.9); }
+  12%  { opacity: 1; transform: translateY(0) scale(1.06); }
+  20%  { transform: translateY(0) scale(1); }
+  82%  { opacity: 1; transform: translateY(0) scale(1); }
+  100% { opacity: 0; transform: translateY(-8px) scale(.98); }
+}
+/* ♿ 움직임을 줄이는 설정이면 뜨고 지기만 해요 */
+@media (prefers-reduced-motion: reduce) {
+  .grade-up-card { animation: none; opacity: 1; }
+}
+
+/* 🌱 유망주 카드의 등급 여섯 줄 — **숫자를 안 보여줍니다** */
+.pc-grades { display: block; margin: 2px 0; }
+.pcg-cap { display: block; font-size: .62rem; color: var(--dim); margin-bottom: 3px; }
+.pcg-row { display: flex; align-items: center; gap: 4px; margin: 2px 0; }
+.pcg-name { flex: 1 1 auto; min-width: 0; font-size: .66rem; color: var(--dim); text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pcg-row .stat-grade { min-width: 20px; font-size: .78rem; }
+.pcg-row .bar { flex: 0 0 26px; display: block; height: 5px; border-radius: 3px; overflow: hidden; background: rgba(255, 255, 255, .12); }
+.pcg-row .bar-fill { display: block; height: 100%; }
+
+@media (max-width: 520px) {
+  /* 좁은 화면에선 XP 숫자를 접어요 — 등급과 바가 먼저입니다 */
+  .stat-xp { display: none; }
+  .stat-row.graded .stat-pot { min-width: 44px; font-size: .6rem; }
+  .pcg-name { font-size: .6rem; }
+  .pcg-row .bar { flex: 0 0 18px; }
+}

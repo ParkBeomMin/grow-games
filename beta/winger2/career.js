@@ -1511,10 +1511,14 @@ window.WingerCareer = (() => {
       const tv = S.talents[d.key], tl = transLv(d.key);
       const stars = talentStarStr(tv) + (isTalentMax(tv) ? (tl ? ` <span class="tr">✨${tl}</span>` : " MAX") : "");
       const row = document.createElement("div");
-      row.className = "stat-row";
+      row.className = "stat-row" + (window.W2Grade ? " graded" : "");
+      /* 📊 유스와 **같은 자**를 씁니다 — 프로에서 등급이 갑자기 바뀌면
+       * 승급 카드가 거짓말이 돼요 (grade.js §어떤 값을 등급으로 옮기는가). */
+      const gradeHTML = window.W2Grade ? W2Grade.partHTML(S.stats[d.key])
+        : `<div class="bar"><div class="bar-fill stat${v > 100 ? " over" : ""}" style="width:${Math.min(v, 100)}%"></div></div>`;
       row.innerHTML = `
         <span class="stat-name">${d.emoji} ${d.name}</span>
-        <div class="bar"><div class="bar-fill stat${v > 100 ? " over" : ""}" style="width:${Math.min(v, 100)}%"></div></div>
+        ${gradeHTML}
         <span class="stat-val${v >= statCap(d.key) ? " max" : ""}" title="상한 ${statCap(d.key)}">${v}</span>
         <span class="stat-pot" title="잠재력 — 별이 많을수록 훈련 효율이 높아요">${stars}</span>`;
       if (v >= 100) {
@@ -1526,6 +1530,8 @@ window.WingerCareer = (() => {
       }
       stats.appendChild(row);
     }
+    // 🎉 승급 감지 — 프로 훈련·벤치 주·각성이 전부 이 화면을 다시 그려요
+    if (window.W2Grade) W2Grade.tick(S, STAT_DEFS, POS_INFO[S.pos].stat);
 
     if (S.wc) {
       $("pro-camp-title").textContent = S.wc.ready

@@ -1493,10 +1493,16 @@ function renderMain() {
     const tv = S.talents[d.key], tl = transLv(d.key);
     const stars = talentStarStr(tv) + (isTalentMax(tv) ? (tl ? ` <span class="tr">✨${tl}</span>` : " MAX") : "");
     const row = document.createElement("div");
-    row.className = "stat-row";
+    row.className = "stat-row" + (window.W2Grade ? " graded" : "");
+    /* 📊 등급이 주인공, 숫자는 작게 병기해요 (설계 갈래 F2).
+     * 바는 `v/100`이 아니라 **지금 등급 구간 안에서의 위치**를 그려요 —
+     * 47.3이 50.1이 되는 건 100칸짜리 바에선 안 보입니다.
+     * ⚠️ grade.js가 안 떠도 화면은 밀리지 않아요 — 예전 막대로 돌아갑니다. */
+    const gradeHTML = window.W2Grade ? W2Grade.partHTML(S.stats[d.key])
+      : `<div class="bar"><div class="bar-fill stat${v > 100 ? " over" : ""}" style="width:${Math.min(v, 100)}%"></div></div>`;
     row.innerHTML = `
       <span class="stat-name">${d.emoji} ${d.name}</span>
-      <div class="bar"><div class="bar-fill stat${v > 100 ? " over" : ""}" style="width:${Math.min(v, 100)}%"></div></div>
+      ${gradeHTML}
       <span class="stat-val${v >= statCap(d.key) ? " max" : ""}" title="상한 ${statCap(d.key)}">${v}</span>
       <span class="stat-pot" title="잠재력 — 별이 많을수록 훈련 효율이 높아요">${stars}</span>`;
     if (v >= 100) {
@@ -1508,6 +1514,11 @@ function renderMain() {
     }
     statsBox.appendChild(row);
   }
+  /* 🎉 승급 감지 — **화면을 그리는 자리에 답니다.**
+   * 능력치가 오르는 통로가 훈련·휴식·랜덤 이벤트·평가전·각성으로 다섯인데,
+   * 다섯 곳에 손을 대면 하나를 빠뜨려요. 화면은 어느 통로로 올랐든 다시 그려집니다.
+   * (옛 세이브는 `S.gradeSnap`이 없어서 첫 그리기에 조용히 채우기만 해요) */
+  if (window.W2Grade) W2Grade.tick(S, STAT_DEFS, POS_INFO[S.pos].stat);
 
   const actBox = $("action-list");
   actBox.innerHTML = "";

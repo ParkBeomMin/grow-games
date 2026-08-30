@@ -516,6 +516,31 @@ window.WingerProspect = (() => {
   const traitById = (id) => TRAITS.find((t) => t.id === id) || null;
   const flawById = (id) => FLAWS.find((f) => f.id === id) || null;
 
+  /* 📊 등급 여섯 줄 — **숫자를 안 보여줍니다.** 열여덟 살에게 `슛 41`은 아무 말도
+   * 안 해요. `C−`는 말을 합니다.
+   *
+   * ⚠️ 등급을 매기는 값은 **정점 기준값(`card.stats`)**이에요 — 옆 레이더가 그리는
+   * *지금 실력*이 아닙니다. 두 값이 다른 걸 일부러 그대로 둡니다:
+   *   레이더 = 지금 얼마나 여물었나 (나이·성장타입이 만드는 반대급부)
+   *   등급   = 다 컸을 때 어떤 모양인가 (세 장의 총합이 같은 그 값)
+   * 그래서 등급으로는 **모양**을, 레이더로는 **지금**을 견줍니다. 캡션이 그 말을 합니다.
+   *
+   * 등급을 지금 실력으로 매기면 세 장이 전부 `F−`로 깔려요 —
+   * 열여덟의 곡선이 0.56~0.84라 18~54가 10~45로 눌립니다. 그러면 카드를 못 고릅니다. */
+  function gradeStripHTML(card) {
+    if (!window.W2Grade) return "";
+    const rows = STAT_DEFS.map((d) => {
+      const g = W2Grade.of(card.stats[d.key]);
+      if (!g) return "";
+      return `<span class="pcg-row">`
+        + `<span class="pcg-name">${d.emoji} ${d.name}</span>`
+        + `<span class="stat-grade g-${g.base}">${g.label}</span>`
+        + `<span class="bar xp-bar"><span class="bar-fill xp" style="width:${g.pct.toFixed(1)}%"></span></span>`
+        + `</span>`;
+    }).join("");
+    return `<span class="pc-grades"><span class="pcg-cap">📊 다 자랐을 때</span>${rows}</span>`;
+  }
+
   /* 화면에 나가는 문자열은 전부 이 파일 안의 상수예요(남이 올린 값이 아닙니다).
    * 그래도 카드 골격을 innerHTML로 짜니, 사람이 넣는 값이 여기 들어오면
    * **반드시 이스케이프해서** 붙이세요 — 나중에 이름을 얹을 때 걸리는 자리입니다. */
@@ -534,9 +559,10 @@ window.WingerProspect = (() => {
     /* 🎂 셋 다 열여덟이라, 레이더 크기 차이는 **오직 얼마나 여물었나**에서 옵니다.
      * 그 이유를 화면이 말해 주지 않으면 *"왜 이 카드만 약하지?"*가 노이즈가 돼요(원칙 ③).
      * ⚠️ 성장타입 자체는 말하지 않습니다 — 흐릿함은 스카우트 코멘트가 맡아요. */
+    /* ⚠️ textContent라 마크다운이 안 먹어요 — 강조가 필요하면 요소를 나눕니다.
+     * (`**지금 실력**`이 글자 그대로 화면에 찍히던 자리) */
     if (hint) hint.textContent =
-      `${draw.market.name} 스카우트가 열일곱 살 셋을 데려왔어요. 잠재 총합은 셋이 같아요 — `
-      + `레이더는 **지금 실력**이라, 늦게 피는 선수일수록 지금은 작아 보입니다.`;
+      `잠재력 총합은 셋이 같아요. 레이더는 지금 실력이라, 늦게 크는 선수일수록 작아 보입니다.`;
 
     const box = document.getElementById("prospect-list");
     box.innerHTML = "";
@@ -550,6 +576,7 @@ window.WingerProspect = (() => {
         <span class="pc-age">🎂 ${c.age}세</span>
         <span class="pc-silhouette" aria-hidden="true"></span>
         <span class="pc-radar-box"><canvas class="pc-radar" width="200" height="168"></canvas></span>
+        ${gradeStripHTML(c)}
         <span class="pc-hint">🗣️ ${c.hint.text}</span>
         <span class="pc-trait">${tr ? `${tr.emoji} ${tr.name}<span class="pc-eff">${tr.desc}</span>` : ""}</span>
         <span class="pc-flaw">${fl ? `${fl.emoji} ${fl.name}<span class="pc-eff">${fl.desc}</span>` : ""}</span>`;
