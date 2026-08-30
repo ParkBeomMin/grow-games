@@ -561,33 +561,58 @@ window.WingerProspect = (() => {
     return top >= 3 ? st.filter((x) => x.n === top).map((x) => x.k) : [];
   }
 
-  /* 📊 등급 여섯 줄.
+  /* 📏 **잠재력 바** — 카드와 📊 견주기 시트가 함께 쓰는 **절대 자**(값 ÷ STAT_HI).
+   *
+   * ⚠️ 유스 홈·💼 준비 화면의 **XP 바**(`.bar-fill.xp` = 다음 승급까지)와 **다른 자**예요.
+   *    이름을 다르게 부릅니다 — 둘 다 "XP 바"면 다음 사람이 통일하려 듭니다.
+   *
+   * 🔑 **자는 그 화면이 던지는 질문이 정해요.**
+   *    🌱 카드·📊 시트가 묻는 건 *"셋 중 어느 게 나은가"*라 **절대 크기**여야 하고,
+   *    🏠 유스 홈·💼 준비가 묻는 건 *"다음 승급까지 얼마나"*라 **구간 진행률**이어야 합니다.
+   *
+   * 🔴 구간 진행률로 그렸을 때 실제로 렌더에서 잰 값입니다(2026-08-30 · 390px):
+   *      `⚽ 슛 42(E)` → **18.4px** · `🎯 패스 40(E)` → **0px**
+   *      `🏃 드리블 30(F)` → **124.5px** · `⚡ 스피드 24(F)` → **99.6px**
+   *    여섯 칸에서 **가장 좋은 칸이 가장 짧고 가장 나쁜 칸이 길었어요.**
+   *    "작아서 안 보인다"가 아니라 **바가 순서를 거꾸로 말하고 있던 것**입니다. */
+  const potPct = (v) => Math.max(0, Math.min(100, (Number(v) / STAT_HI) * 100));
+
+  /* 📊 능력치 여섯 줄.
    *
    * ⚠️ 등급을 매기는 값은 **정점 기준값(`card.stats`)**이에요 — 위 레이더가 그리는
    * *지금 실력*이 아닙니다. 두 값이 다른 걸 일부러 그대로 둡니다:
    *   레이더 = 지금 얼마나 여물었나 (나이·성장타입이 만드는 반대급부)
-   *   등급   = 다 컸을 때 어떤 모양인가 (세 장의 총합이 같은 그 값)
+   *   등급   = 타고난 몸이 어떤 모양인가 (세 장의 총합이 같은 그 값)
    * 등급을 지금 실력으로 매기면 세 장이 전부 `F`로 깔려요 —
    * 열일곱의 곡선이 0.56~0.84라 18~54가 10~45로 눌립니다. 그러면 카드를 못 고릅니다.
    *
-   * 🔑 **글자보다 바가 일합니다.** 열일곱의 타고난 값은 18~54라 여섯 칸이 거의
-   * `F`(~39) 아니면 `E`(40~57)예요. 셋을 가르는 건 그 구간 **안에서 어디냐**이고,
-   * 그게 XP 바입니다. 3열 시절엔 이 바가 **26px**이라 셋이 다 똑같아 보였어요. */
+   * 🔑 **글자보다 바가, 바보다 ⭐가 일합니다.** 열일곱의 타고난 값은 18~54라
+   * 여섯 칸이 거의 `F`(~39) 아니면 `E`(40~57)예요. 전부 F일 때 알아야 할 건
+   * *"지금 얼마나"*가 아니라 ***"어디까지 클 수 있나"***라, ⭐가 등급 글자보다 큽니다. */
   function gradeStripHTML(card, talents) {
     if (!window.W2Grade) return "";
     const stars = starKeys(talents);
     const rows = STAT_DEFS.map((d) => {
       const g = W2Grade.of(card.stats[d.key]);
       if (!g) return "";
-      return `<span class="pcg-row">`
-        + `<span class="pcg-name">${d.emoji} ${d.name}${stars.indexOf(d.key) >= 0 ? `<span class="pcg-star">⭐</span>` : ""}</span>`
+      /* ⭐ 자리는 **줄마다 늘 있습니다** — 별이 있을 때만 칸을 만들면 이름이 줄마다 밀려요 */
+      const top = stars.indexOf(d.key) >= 0;
+      return `<span class="pcg-row${top ? " is-top" : ""}">`
+        + `<span class="pcg-name">${d.emoji} ${d.name}</span>`
+        + `<span class="pcg-star"${top ? ` title="가장 크게 자랄 칸이에요" aria-label="가장 크게 자랄 칸"` : ` aria-hidden="true"`}>${top ? "⭐" : ""}</span>`
         + `<span class="stat-grade g-${g.base}">${g.label}</span>`
-        + `<span class="bar xp-bar"><span class="bar-fill xp" style="width:${g.pct.toFixed(1)}%"></span></span>`
+        + `<span class="pcg-bar"><span class="pcg-fill" style="width:${potPct(card.stats[d.key]).toFixed(1)}%"></span></span>`
         + `<span class="pcg-val">${g.shown}</span>`
         + `</span>`;
     }).join("");
+    /* 🔑 **`F`가 거짓말에서 서사로 바뀌는 한 줄이에요.**
+     * 예전 캡션은 `📊 다 자랐을 때`였는데, 플레이어는 앞을 읽고 *"다 자라도 F야?"*로
+     * 이해합니다 — 그건 거짓말이에요. 36턴 훈련이 ≈100점을 더하고 프로 커리어가 더 얹어요.
+     * 타이틀이 이미 *"동네 유망주에서 프로 계약까지"*라고 적어 뒀습니다.
+     * **출발점이 `F`인 게 이 게임입니다.** */
     return `<span class="pc-grades">`
-      + `<span class="pcg-cap"><b>📊 다 자랐을 때</b> — 훈련 전 타고난 모양이에요 (바 = 다음 등급까지)</span>`
+      + `<span class="pcg-cap"><b>🌱 출발점</b> — 열일곱의 타고난 몸이에요. 훈련이 여기서부터 키웁니다`
+      + `<br/>⭐ 가장 크게 자랄 칸 · 바는 여섯 칸을 <b>같은 자</b>로 재요</span>`
       + rows + `</span>`;
   }
 
@@ -647,11 +672,12 @@ window.WingerProspect = (() => {
     const head = `<tr><th class="pcs-lab">칸</th>`
       + cards.map((c, i) => `<th class="pcs-col tone-${TONE[i % 3]}">${MARK[i % 3]}<span>${esc(c.name || `${i + 1}번`)}</span></th>`).join("")
       + `</tr>`;
-    /* 📏 시트의 바는 **절대 크기**예요 — 카드 안의 XP 바(다음 등급까지)와 다릅니다.
-     * 여기서 구간 안 진행률을 그리면 `E 44%`가 `F 80%`보다 짧게 그려져서
-     * **더 좋은 칸이 더 짧아 보여요.** 견주는 자리에서 그건 거짓말입니다. */
-    const all = [].concat.apply([], cards.map((c) => STAT_DEFS.map((d) => c.stats[d.key])));
-    const top = Math.max(40, Math.max.apply(null, all));
+    /* 📏 시트도 카드와 **같은 잠재력 바**를 씁니다 (`값 ÷ STAT_HI`).
+     *
+     * 🔴 예전엔 분모가 `max(40, 이번 판 18칸의 최대)`라 **자가 판마다 늘었다 줄었어요.**
+     *    세 장이 다 약하면 바가 통째로 길어져서 **못한 뽑기가 좋아 보입니다.**
+     *    🎲 리롤이 2회 있으니 *"이번 뽑기는 통째로 별로다"*가 읽혀야 하고,
+     *    그러려면 **리롤 전후로 자가 안 바뀌어야** 해요. 그래서 고정 분모입니다. */
     const rows = STAT_DEFS.map((d) => {
       const vals = cards.map((c) => c.stats[d.key]);
       const best = Math.max.apply(null, vals);
@@ -660,7 +686,7 @@ window.WingerProspect = (() => {
           const g = W2Grade.of(c.stats[d.key]);
           return `<td class="${c.stats[d.key] === best ? "pcs-best" : ""}">`
             + `<span class="stat-grade g-${g.base}">${g.label}</span>`
-            + `<span class="pcs-bar"><span class="pcs-fill" style="width:${((c.stats[d.key] / top) * 100).toFixed(1)}%"></span></span>`
+            + `<span class="pcs-bar"><span class="pcs-fill" style="width:${potPct(c.stats[d.key]).toFixed(1)}%"></span></span>`
             + `</td>`;
         }).join("") + `</tr>`;
     }).join("");
@@ -668,8 +694,8 @@ window.WingerProspect = (() => {
       + cards.map((c) => `<td class="pcs-txt">${fn(c)}</td>`).join("") + `</tr>`;
     const tr = line("⭐ 특능", (c) => { const t = traitById(c.trait); return t ? `${t.emoji} ${esc(t.name)}` : "—"; });
     const fl = line("🩹 결함", (c) => { const f = flawById(c.flaw); return f ? `${f.emoji} ${esc(f.name)}` : "—"; });
-    return `<p class="pcs-cap"><b>📊 다 자랐을 때</b>의 모양이에요 — 카드의 레이더(지금 실력)와 <b>다른 자</b>입니다.<br/>`
-      + `열일곱이라 여섯 칸이 대부분 F~E예요 — 글자가 같으면 <b>바가 긴 쪽</b>이 앞섭니다.</p>`
+    return `<p class="pcs-cap"><b>🌱 출발점</b>의 모양이에요 — 카드의 레이더(지금 실력)와 <b>다른 자</b>입니다.<br/>`
+      + `바는 세 장을 <b>같은 자</b>(${STAT_HI} 만점)로 재요 — <b>바가 긴 쪽</b>이 앞섭니다. 🎲 다시 뽑아도 자는 안 바뀝니다.</p>`
       + `<table class="pcs-tbl">${head}${rows}${tr}${fl}</table>`;
   }
 
