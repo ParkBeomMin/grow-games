@@ -1422,7 +1422,9 @@ function openProspect() {
      * 그 정보가 화면에서 사라져서 "내가 뭘 골랐더라?"가 됩니다. */
     $("name-recap").textContent =
       `🎂 ${card.age}세` + (t ? ` · ${t.emoji} ${t.name}` : "") + (f ? ` · ${f.emoji} ${f.name}` : "");
-    $("input-name").value = randomPlayerName(chosenMarket);
+    /* 🧒 카드에 적혀 있던 이름을 그대로 들고 옵니다 — 방금 고른 선수와 다른 이름이
+     * 뜨면 "내가 고른 그 아이"가 아니게 돼요. 물론 여기서 고쳐 쓸 수 있어요. */
+    $("input-name").value = card.name || randomPlayerName(chosenMarket);
     show("screen-name");
   }, () => show("screen-position"));
 }

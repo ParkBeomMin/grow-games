@@ -443,6 +443,17 @@ window.WingerProspect = (() => {
     return t;
   }
 
+  /* 🧒 이름 — game.js의 `randomPlayerName`을 그대로 씁니다(유스 지역에 맞는 이름이 나와요).
+   * 없는 환경이면 조용히 빈 문자열이라, 이름 줄만 안 보이고 카드는 그대로 돕니다. */
+  function cardName(marketId, taken) {
+    if (typeof randomPlayerName !== "function") return "";
+    for (let i = 0; i < 12; i++) {
+      const n = randomPlayerName({ id: marketId });
+      if (!taken.some((c) => c.name === n)) return n;
+    }
+    return randomPlayerName({ id: marketId });
+  }
+
   /* 세 장을 한 번에 뽑아요. 특능·결함·편중 스탯은 **서로 겹치지 않게** 나눠 줍니다 —
    * 같은 결함이 둘이면 고를 게 없어요. */
   function rollCards(marketId, pos) {
@@ -462,6 +473,10 @@ window.WingerProspect = (() => {
       const flaw = flawPool.length ? flawPool.splice(Math.floor(Math.random() * flawPool.length), 1)[0] : null;
       cards.push({
         age, hint, shapeKey,
+        /* 🧒 **이름.** 카드에 이름이 없으면 `🎂 17세` 셋을 견주게 돼요 —
+         * 누구를 데려오는지가 화면에 없었습니다. 여기서 붙인 이름이 이름 화면의
+         * 기본값으로 그대로 넘어가요 (game.js `openProspect`). 세 장은 안 겹칩니다. */
+        name: cardName(marketId, cards),
         growthType: type.id,
         trait: trait ? trait.id : null,
         flaw: flaw ? flaw.id : null,
@@ -516,36 +531,75 @@ window.WingerProspect = (() => {
   const traitById = (id) => TRAITS.find((t) => t.id === id) || null;
   const flawById = (id) => FLAWS.find((f) => f.id === id) || null;
 
-  /* 📊 등급 여섯 줄 — **숫자를 안 보여줍니다.** 열여덟 살에게 `슛 41`은 아무 말도
-   * 안 해요. `C−`는 말을 합니다.
+  /* 🖐️ 스와이프 — 카드가 곧 버튼이라, **끌었으면 누른 게 아니어야** 해요.
+   * 손가락이 12px 넘게 움직이면 그 손가락의 click은 무시합니다. */
+  const DRAG_MIN = 12;
+
+  /* 🎨 카드마다 색이 하나 — 지금 몇 번째 카드인지가 색으로도 읽혀요.
+   * 📊 견주기 시트의 열 머리가 **같은 색**을 씁니다 (🅰️는 어디서나 🅰️). */
+  const TONE = ["a", "b", "c"];
+  const MARK = ["🅰️", "🅱️", "🅲"];
+
+  /* 🧒 CSS 실루엣 — 이미지도 캔버스도 없이 `<i>` 여덟 개로 그려요.
+   * 3D(char3d.js)가 들어오면 이 자리를 그대로 덮습니다 — 그때도 **폴백으로 남습니다**. */
+  function figureHTML(card, i) {
+    const h = (String(card.shapeKey || "").charCodeAt(0) || 65) % 3;
+    return `<span class="pc-silhouette tone-${TONE[i % 3]} hair-${h}" aria-hidden="true">`
+      + `<i class="s-leg l"></i><i class="s-leg r"></i>`
+      + `<i class="s-arm l"></i><i class="s-arm r"></i>`
+      + `<i class="s-body"></i><i class="s-head"></i><i class="s-hair"></i><i class="s-ball"></i>`
+      + `</span>`;
+  }
+
+  /* ⭐ 잠재력이 가장 높은 칸에만 별 하나 — *"이 칸은 더 클 수 있어요"*가
+   * 그 줄에서 읽혀야 해요. 자세한 다섯 칸짜리 표는 📊 견주기 시트에 있습니다.
+   * (잠재력은 세 장이 함께 쓰는 값이라 카드마다 다르지 않아요) */
+  function starKeys(talents) {
+    if (!talents || typeof talentStars !== "function") return [];
+    const st = STAT_DEFS.map((d) => ({ k: d.key, n: talentStars(talents[d.key]) }));
+    const top = Math.max.apply(null, st.map((x) => x.n));
+    return top >= 3 ? st.filter((x) => x.n === top).map((x) => x.k) : [];
+  }
+
+  /* 📊 등급 여섯 줄.
    *
-   * ⚠️ 등급을 매기는 값은 **정점 기준값(`card.stats`)**이에요 — 옆 레이더가 그리는
+   * ⚠️ 등급을 매기는 값은 **정점 기준값(`card.stats`)**이에요 — 위 레이더가 그리는
    * *지금 실력*이 아닙니다. 두 값이 다른 걸 일부러 그대로 둡니다:
    *   레이더 = 지금 얼마나 여물었나 (나이·성장타입이 만드는 반대급부)
    *   등급   = 다 컸을 때 어떤 모양인가 (세 장의 총합이 같은 그 값)
-   * 그래서 등급으로는 **모양**을, 레이더로는 **지금**을 견줍니다. 캡션이 그 말을 합니다.
+   * 등급을 지금 실력으로 매기면 세 장이 전부 `F`로 깔려요 —
+   * 열일곱의 곡선이 0.56~0.84라 18~54가 10~45로 눌립니다. 그러면 카드를 못 고릅니다.
    *
-   * 등급을 지금 실력으로 매기면 세 장이 전부 `F−`로 깔려요 —
-   * 열여덟의 곡선이 0.56~0.84라 18~54가 10~45로 눌립니다. 그러면 카드를 못 고릅니다. */
-  function gradeStripHTML(card) {
+   * 🔑 **글자보다 바가 일합니다.** 열일곱의 타고난 값은 18~54라 여섯 칸이 거의
+   * `F`(~39) 아니면 `E`(40~57)예요. 셋을 가르는 건 그 구간 **안에서 어디냐**이고,
+   * 그게 XP 바입니다. 3열 시절엔 이 바가 **26px**이라 셋이 다 똑같아 보였어요. */
+  function gradeStripHTML(card, talents) {
     if (!window.W2Grade) return "";
+    const stars = starKeys(talents);
     const rows = STAT_DEFS.map((d) => {
       const g = W2Grade.of(card.stats[d.key]);
       if (!g) return "";
       return `<span class="pcg-row">`
-        + `<span class="pcg-name">${d.emoji} ${d.name}</span>`
+        + `<span class="pcg-name">${d.emoji} ${d.name}${stars.indexOf(d.key) >= 0 ? `<span class="pcg-star">⭐</span>` : ""}</span>`
         + `<span class="stat-grade g-${g.base}">${g.label}</span>`
         + `<span class="bar xp-bar"><span class="bar-fill xp" style="width:${g.pct.toFixed(1)}%"></span></span>`
+        + `<span class="pcg-val">${g.shown}</span>`
         + `</span>`;
     }).join("");
-    return `<span class="pc-grades"><span class="pcg-cap">📊 다 자랐을 때</span>${rows}</span>`;
+    return `<span class="pc-grades">`
+      + `<span class="pcg-cap"><b>📊 다 자랐을 때</b> — 훈련 전 타고난 모양이에요 (바 = 다음 등급까지)</span>`
+      + rows + `</span>`;
   }
 
   /* 화면에 나가는 문자열은 전부 이 파일 안의 상수예요(남이 올린 값이 아닙니다).
    * 그래도 카드 골격을 innerHTML로 짜니, 사람이 넣는 값이 여기 들어오면
-   * **반드시 이스케이프해서** 붙이세요 — 나중에 이름을 얹을 때 걸리는 자리입니다. */
+   * **반드시 이스케이프해서** 붙이세요 — 🧒 이름이 그 자리라 esc()로 감쌌습니다. */
+  const esc = (s) => String(s == null ? "" : s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+
   function open(market, pos, onPick, onBack) {
-    draw = { market, pos, left: REROLL_MAX };
+    draw = { market, pos, left: REROLL_MAX, idx: 0 };
     const r = rollCards(market.id, pos);
     draw.cards = r.cards; draw.talents = r.talents;
     render(onPick);
@@ -554,15 +608,77 @@ window.WingerProspect = (() => {
     show("screen-prospect");
   }
 
+  /* 지금 보고 있는 카드만 바꿔 그려요 — 카드 세 장을 다시 만들지 않습니다
+   * (레이더를 다시 그리면 캔버스가 세 번 지워졌다 그려져요). */
+  function setIdx(n) {
+    if (!draw || !draw.cards) return;
+    const max = draw.cards.length - 1;
+    draw.idx = Math.max(0, Math.min(max, n));
+    const list = document.getElementById("prospect-list");
+    if (list) list.style.transform = `translateX(${-draw.idx * 100}%)`;
+    const cards = document.querySelectorAll("#prospect-list .prospect-card");
+    cards.forEach((el, i) => {
+      const on = i === draw.idx;
+      el.classList.toggle("on", on);
+      /* 안 보이는 카드는 탭 순서·스크린리더에서 빠져요 — 있는데 안 보이면
+       * 손가락과 낭독이 엉뚱한 카드에 닿습니다. */
+      el.tabIndex = on ? 0 : -1;
+      el.setAttribute("aria-hidden", on ? "false" : "true");
+    });
+    const dots = document.querySelectorAll("#prospect-dots .pc-dot");
+    dots.forEach((el, i) => el.classList.toggle("on", i === draw.idx));
+    const prev = document.getElementById("btn-pc-prev");
+    const next = document.getElementById("btn-pc-next");
+    if (prev) prev.disabled = draw.idx <= 0;
+    if (next) next.disabled = draw.idx >= max;
+    const pick = document.getElementById("btn-prospect-pick");
+    const c = draw.cards[draw.idx];
+    if (pick) pick.textContent = c && c.name ? `${c.name} 선수로 갈게요` : "이 선수로 갈게요";
+    const nav = document.getElementById("prospect-dots");
+    if (nav) nav.setAttribute("aria-label", `유망주 ${draw.idx + 1} / ${draw.cards.length}`);
+  }
+
+  /* 📊 견주기 시트 — **원래의 3열 의도가 사는 자리**예요.
+   * 숫자 없이 글자만이라 390px에서 세 칸이 안 깨집니다 (한 칸이 한 글자니까요).
+   * ⚠️ 여기 등급도 **정점 기준값**이에요. 캡션이 그 말을 합니다. */
+  function compareHTML(cards, talents) {
+    if (!window.W2Grade) return "";
+    const stars = starKeys(talents);
+    const head = `<tr><th class="pcs-lab">칸</th>`
+      + cards.map((c, i) => `<th class="pcs-col tone-${TONE[i % 3]}">${MARK[i % 3]}<span>${esc(c.name || `${i + 1}번`)}</span></th>`).join("")
+      + `</tr>`;
+    /* 📏 시트의 바는 **절대 크기**예요 — 카드 안의 XP 바(다음 등급까지)와 다릅니다.
+     * 여기서 구간 안 진행률을 그리면 `E 44%`가 `F 80%`보다 짧게 그려져서
+     * **더 좋은 칸이 더 짧아 보여요.** 견주는 자리에서 그건 거짓말입니다. */
+    const all = [].concat.apply([], cards.map((c) => STAT_DEFS.map((d) => c.stats[d.key])));
+    const top = Math.max(40, Math.max.apply(null, all));
+    const rows = STAT_DEFS.map((d) => {
+      const vals = cards.map((c) => c.stats[d.key]);
+      const best = Math.max.apply(null, vals);
+      return `<tr><th class="pcs-lab">${d.emoji} ${d.name}${stars.indexOf(d.key) >= 0 ? `<span class="pcg-star">⭐</span>` : ""}</th>`
+        + cards.map((c) => {
+          const g = W2Grade.of(c.stats[d.key]);
+          return `<td class="${c.stats[d.key] === best ? "pcs-best" : ""}">`
+            + `<span class="stat-grade g-${g.base}">${g.label}</span>`
+            + `<span class="pcs-bar"><span class="pcs-fill" style="width:${((c.stats[d.key] / top) * 100).toFixed(1)}%"></span></span>`
+            + `</td>`;
+        }).join("") + `</tr>`;
+    }).join("");
+    const line = (lab, fn) => `<tr><th class="pcs-lab">${lab}</th>`
+      + cards.map((c) => `<td class="pcs-txt">${fn(c)}</td>`).join("") + `</tr>`;
+    const tr = line("⭐ 특능", (c) => { const t = traitById(c.trait); return t ? `${t.emoji} ${esc(t.name)}` : "—"; });
+    const fl = line("🩹 결함", (c) => { const f = flawById(c.flaw); return f ? `${f.emoji} ${esc(f.name)}` : "—"; });
+    return `<p class="pcs-cap"><b>📊 다 자랐을 때</b>의 모양이에요 — 카드의 레이더(지금 실력)와 <b>다른 자</b>입니다.<br/>`
+      + `열일곱이라 여섯 칸이 대부분 F~E예요 — 글자가 같으면 <b>바가 긴 쪽</b>이 앞섭니다.</p>`
+      + `<table class="pcs-tbl">${head}${rows}${tr}${fl}</table>`;
+  }
+
   function render(onPick) {
     const hint = document.getElementById("prospect-hint");
-    /* 🎂 셋 다 열여덟이라, 레이더 크기 차이는 **오직 얼마나 여물었나**에서 옵니다.
-     * 그 이유를 화면이 말해 주지 않으면 *"왜 이 카드만 약하지?"*가 노이즈가 돼요(원칙 ③).
-     * ⚠️ 성장타입 자체는 말하지 않습니다 — 흐릿함은 스카우트 코멘트가 맡아요. */
-    /* ⚠️ textContent라 마크다운이 안 먹어요 — 강조가 필요하면 요소를 나눕니다.
-     * (`**지금 실력**`이 글자 그대로 화면에 찍히던 자리) */
+    /* 🎂 셋 다 열일곱이라, 레이더 크기 차이는 **오직 얼마나 여물었나**에서 옵니다.
+     * 그 이유를 화면이 말해 주지 않으면 *"왜 이 카드만 약하지?"*가 노이즈가 돼요(원칙 ③). */
     if (hint) hint.textContent =
-      `잠재력 총합은 셋이 같아요. 레이더는 지금 실력이라, 늦게 크는 선수일수록 작아 보입니다.`;
+      `한 장씩 넘겨 보세요. 세 명의 잠재력 총합은 같아요.`;
 
     const box = document.getElementById("prospect-list");
     box.innerHTML = "";
@@ -570,30 +686,67 @@ window.WingerProspect = (() => {
       const tr = traitById(c.trait), fl = flawById(c.flaw);
       const btn = document.createElement("button");
       btn.type = "button";
-      btn.className = "card prospect-card";
+      btn.className = `card prospect-card tone-${TONE[i % 3]}`;
       btn.dataset.idx = String(i);
+      /* 📈 레이더 캔버스가 300×260인 건 **공용 radar.js를 안 고치고** 크게 그리려고예요.
+       * `R = min(W,H)/2 - 36`이라 캔버스가 작으면 반지름이 통째로 라벨에 먹힙니다
+       * (200×168 → 반지름 48px). 300×260이면 94px이 남아요. 8종 공용 파일이라
+       * 저 상수는 못 건드리니, **이쪽 캔버스를 키워서 풉니다.** */
       btn.innerHTML = `
-        <span class="pc-age">🎂 ${c.age}세</span>
-        <span class="pc-silhouette" aria-hidden="true"></span>
-        <span class="pc-radar-box"><canvas class="pc-radar" width="200" height="168"></canvas></span>
-        ${gradeStripHTML(c)}
+        <span class="pc-head">
+          <span class="pc-mark">${MARK[i % 3]}</span>
+          <span class="pc-id">
+            <span class="pc-name">🧒 ${esc(c.name || `${i + 1}번 유망주`)}</span>
+            <span class="pc-age">🎂 ${c.age}세 · ${esc((tr && tr.name) || "유망주")}</span>
+          </span>
+          ${figureHTML(c, i)}
+        </span>
+        <span class="pc-tap">👆 이 카드를 누르면 이 선수로 갑니다 · 좌우로 쓸어서 넘겨요</span>
+        <span class="pc-now">
+          <span class="pc-cap"><b>📈 지금 실력</b> — 늦게 크는 선수일수록 작아 보여요</span>
+          <span class="pc-radar-box"><canvas class="pc-radar" width="300" height="260"></canvas></span>
+        </span>
+        ${gradeStripHTML(c, draw.talents)}
         <span class="pc-hint">🗣️ ${c.hint.text}</span>
         <span class="pc-trait">${tr ? `${tr.emoji} ${tr.name}<span class="pc-eff">${tr.desc}</span>` : ""}</span>
         <span class="pc-flaw">${fl ? `${fl.emoji} ${fl.name}<span class="pc-eff">${fl.desc}</span>` : ""}</span>`;
       /* ⚠️ pointerdown이 아니라 click이에요. pointerdown에서 화면을 갈아치우면
        * 손을 뗄 때 그 자리의 새 요소로 click이 가서 **두 번 먹힙니다.**
        * 미니게임 준비 화면에서 실제로 났던 버그예요. */
-      btn.addEventListener("click", () => { if (onPick) onPick(draw.cards[i], draw.talents, REROLL_MAX - draw.left); });
+      btn.addEventListener("click", () => {
+        if (dragged) return;                       // 🖐️ 끌어서 넘긴 거예요 — 고른 게 아닙니다
+        if (i !== draw.idx) { setIdx(i); return; } // 옆 카드를 눌렀으면 그 카드로 넘어가기만
+        if (onPick) onPick(draw.cards[i], draw.talents, REROLL_MAX - draw.left);
+      });
       box.appendChild(btn);
       if (window.Radar) {
-        // 📊 **곡선을 곱한 값**을 그려요 — 지금 실력이 그대로 보여야 나이가 반대급부가 됩니다
+        /* 📊 **곡선을 곱한 값**을 그려요 — 지금 실력이 그대로 보여야 나이가 반대급부가 됩니다.
+         * max 44 = `STAT_HI(54) × 열일곱의 가장 이른 곡선(0.80)` — **테두리 = 지금 나이에
+         * 가능한 최대**예요. 기본값 60을 쓰면
+         * 가장 좋은 카드도 73%까지만 차서 **셋 다 늘 미완성으로 보입니다.** */
         window.Radar.draw(btn.querySelector(".pc-radar"), STAT_DEFS, cardShown(c), {
-          stroke: "#5fa8ff", fill: "rgba(95, 168, 255, 0.28)",
+          max: 44, stroke: "#5fa8ff", fill: "rgba(95, 168, 255, 0.28)",
         });
       }
     });
 
-    /* ⭐ 잠재력은 세 장이 공유해요 — 카드 밖에 한 번만 적어서 그걸 눈으로 보이게 합니다. */
+    const dots = document.getElementById("prospect-dots");
+    if (dots) {
+      dots.innerHTML = draw.cards.map((c, i) => `<span class="pc-dot tone-${TONE[i % 3]}"></span>`).join("");
+      dots.onclick = null;
+    }
+    const prev = document.getElementById("btn-pc-prev");
+    const next = document.getElementById("btn-pc-next");
+    if (prev) prev.onclick = () => setIdx(draw.idx - 1);
+    if (next) next.onclick = () => setIdx(draw.idx + 1);
+    const pick = document.getElementById("btn-prospect-pick");
+    if (pick) pick.onclick = () => { if (onPick) onPick(draw.cards[draw.idx], draw.talents, REROLL_MAX - draw.left); };
+
+    bindSwipe();
+    setIdx(draw.idx || 0);
+
+    /* ⭐ 잠재력은 세 장이 공유해요 — 📊 견주기 시트 안에 한 번만 적습니다.
+     * (카드 밖에 그냥 떠 있으면 뭘 말하는 줄인지 알 수가 없었어요) */
     const tal = document.getElementById("prospect-talent");
     if (tal) {
       tal.innerHTML = STAT_DEFS
@@ -601,18 +754,67 @@ window.WingerProspect = (() => {
         .join(" · ") + `<br/>⭐ = 잠재력 — 세 명이 함께 쓰는 값이에요 (다시 뽑으면 같이 바뀝니다)`;
     }
 
+    const cmpBox = document.getElementById("prospect-compare");
+    if (cmpBox) cmpBox.innerHTML = compareHTML(draw.cards, draw.talents);
+    const sheet = document.getElementById("prospect-sheet");
+    const cmpBtn = document.getElementById("btn-prospect-compare");
+    const closeBtn = document.getElementById("btn-sheet-close");
+    if (sheet && cmpBtn) {
+      cmpBtn.onclick = () => { sheet.hidden = false; sheet.classList.add("on"); };
+      const close = () => { sheet.classList.remove("on"); sheet.hidden = true; };
+      if (closeBtn) closeBtn.onclick = close;
+      sheet.onclick = (e) => { if (e.target === sheet) close(); };
+      close();
+    }
+
     const rb = document.getElementById("btn-prospect-reroll");
     if (rb) {
-      rb.textContent = draw.left > 0 ? `🎲 세 명 다시 뽑기 (${draw.left}회 남음)` : "🎲 다시 뽑기를 다 썼어요";
+      rb.textContent = draw.left > 0 ? `🎲 다시 뽑기 ${draw.left}회` : "🎲 다시 뽑기를 다 썼어요";
       rb.disabled = draw.left <= 0;
       rb.onclick = () => {
         if (draw.left <= 0) return;
         draw.left -= 1;
         const rr = rollCards(draw.market.id, draw.pos);
         draw.cards = rr.cards; draw.talents = rr.talents;
+        draw.idx = 0;
         render(onPick);
       };
     }
+  }
+
+  /* 🖐️ 스와이프 — 화면 하나에 한 번만 겁니다(다시 그려도 다시 안 걸어요).
+   * ⚠️ 좌표가 없는 합성 이벤트(검사 하네스)에서도 안 죽어야 해요 — 그때는 `dragged`가
+   * 늘 false라 **탭으로만** 동작합니다. */
+  let dragged = false;
+  let swipeBound = false;
+  function bindSwipe() {
+    const vp = document.getElementById("prospect-viewport");
+    if (!vp || swipeBound) return;
+    swipeBound = true;
+    let x0 = null;
+    vp.addEventListener("pointerdown", (e) => {
+      x0 = typeof e.clientX === "number" ? e.clientX : null;
+      dragged = false;
+    });
+    vp.addEventListener("pointermove", (e) => {
+      if (x0 == null) return;
+      if (Math.abs(e.clientX - x0) > DRAG_MIN) dragged = true;
+    });
+    const end = (e) => {
+      if (x0 == null) return;
+      const dx = (typeof e.clientX === "number" ? e.clientX : x0) - x0;
+      x0 = null;
+      if (Math.abs(dx) > 40) setIdx(draw.idx + (dx < 0 ? 1 : -1));
+      /* click은 pointerup **다음**에 와요 — 그 한 번만 막고 바로 풉니다 */
+      if (dragged) setTimeout(() => { dragged = false; }, 0);
+    };
+    vp.addEventListener("pointerup", end);
+    vp.addEventListener("pointercancel", () => { x0 = null; dragged = false; });
+    /* ⌨️ 화살표로도 넘겨요 */
+    vp.addEventListener("keydown", (e) => {
+      if (e.key === "ArrowLeft") { setIdx(draw.idx - 1); e.preventDefault(); }
+      if (e.key === "ArrowRight") { setIdx(draw.idx + 1); e.preventDefault(); }
+    });
   }
 
   return {

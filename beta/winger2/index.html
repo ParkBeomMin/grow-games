@@ -106,14 +106,40 @@
     </section>
 
     <!-- 🌱 유망주 3택 (§6-2) — 다섯 칸이 한 묶음이라 쪼개서 고를 수 없어요.
-         실루엣·카드 연출은 director 몫이에요 (§11-11). 클래스만 남겨 둡니다. -->
+         🎬 **한 장씩 넘겨 봅니다** (설계 갈래 B3 · 2026-08-30 director).
+         390px에서 3열은 카드 한 장이 115px이라 글자가 마구 끊겼어요 —
+         셋을 견주는 원래 의도는 아래 📊 견주기 시트가 대신 맡습니다.
+         카드 자체가 버튼이에요(누르면 그 선수로 갑니다). 스와이프로 넘겨요. -->
     <section class="screen" id="screen-prospect">
       <h2>🌱 유망주 카드</h2>
       <p class="hint" id="prospect-hint"></p>
-      <div class="prospect-grid" id="prospect-list"></div>
-      <p class="hint prospect-talent" id="prospect-talent"></p>
-      <button class="btn btn-ghost" id="btn-prospect-reroll"></button>
+      <div class="pc-nav">
+        <button type="button" class="pc-arrow" id="btn-pc-prev" aria-label="이전 유망주">‹</button>
+        <div class="pc-dots" id="prospect-dots" aria-hidden="true"></div>
+        <button type="button" class="pc-arrow" id="btn-pc-next" aria-label="다음 유망주">›</button>
+      </div>
+      <div class="pc-viewport" id="prospect-viewport">
+        <div class="prospect-grid" id="prospect-list"></div>
+      </div>
+      <button class="btn btn-primary" id="btn-prospect-pick"></button>
+      <div class="pc-tools">
+        <button class="btn btn-ghost" id="btn-prospect-compare">📊 셋 견주기</button>
+        <button class="btn btn-ghost" id="btn-prospect-reroll"></button>
+      </div>
       <button class="btn btn-ghost" id="btn-back-prospect">← 뒤로</button>
+
+      <!-- 📊 견주기 시트 — **원래의 3열 의도가 사는 자리**예요.
+           등급 글자만 쓰니 390px에서도 세 칸이 안 깨집니다 (한 칸이 한 글자니까요). -->
+      <div class="pc-sheet" id="prospect-sheet" hidden>
+        <div class="pcs-panel" role="dialog" aria-modal="true" aria-label="셋 견주기">
+          <div class="pcs-head">
+            <span>📊 셋 견주기</span>
+            <button type="button" class="pcs-x" id="btn-sheet-close" aria-label="닫기">✖️</button>
+          </div>
+          <div class="pcs-body" id="prospect-compare"></div>
+          <p class="hint prospect-talent" id="prospect-talent"></p>
+        </div>
+      </div>
     </section>
 
     <!-- 메인 (육성) -->
