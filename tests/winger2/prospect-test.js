@@ -8,10 +8,10 @@
  *    그중 가장 뼈아픈 것: **결산 성장·노쇠를 통째로 지워도 초록불**이었습니다.
  *    `award`·`league`가 `finishYear`를 **돌리기는 하는데 능력치를 안 봅니다.**
  *
- * 여기서 메우는 일곱 (engineer §4의 A~G 순서 그대로)
- *   A 세 장의 스탯 총합이 **정확히 같은가**       (원칙 ④ — 한 장이 그냥 좋으면 선택이 아니에요)
+ * 여기서 메우는 것 (engineer §4의 A~G 순서 그대로 — A·C는 2026-08-30에 이사했어요)
+ *   A 🚚 **`tests/winger2/bench-test.js`로 옮겼습니다** — 3택이 폐기되고 🧬 조립대가 됐어요
  *   B 노쇠가 **능력치에 비례**하는가              (옛 일률 −rand(0.6,1.8)로 되돌리면 빨간불)
- *   C 리롤 상한 2회                              (게임 입구를 통해 실제 버튼을 눌러서)
+ *   C 🚚 **`tests/winger2/bench-test.js`로 옮겼습니다** — 아래 「이사 간 자리」 참고
  *   D 나이가 흐르는가                             (유스 해넘이 · startPrep **양쪽**)
  *   E 성장타입 3종의 곡선이 **서로 다른가**
  *   F 옛 세이브가 **회춘하지 않는가**
@@ -31,6 +31,22 @@
  *    기대어 있어서 **페이지째 띄워 진짜 함수를 부릅니다.** 산식을 떼어 오면 그 전역들을
  *    제가 다시 지어내게 되고, 그게 *"경로가 다른 시뮬레이터"*예요.
  *
+ * ─────────────────────────────────────────────────────────────────────────
+ * 🚚 **이사 간 자리 — A절·C절** (2026-08-30 · 74번 판정 ③-C·⑤ · engineer 76번)
+ * ─────────────────────────────────────────────────────────────────────────
+ * 🌱 유망주 **3택**이 폐기되고 🧬 **조립대(선수 한 명 + ♾️ 무제한 다시 뽑기)**가 됐습니다.
+ * `rollCards`가 사라져서 A절·C절이 **문법이 아니라 세계째로** 죽었어요:
+ *
+ *   · A-1 *"세 장의 총합이 **서로 같다**"*  → 선수가 하나라 견줄 상대가 없습니다.
+ *     새 계약은 *"몇 번을 굴려도 **정확히 194**"*예요 — 비교가 아니라 **고정값**입니다
+ *   · C절 *"두 번 쓰면 잠긴다 · 상한이 이 기능의 절반"*  → designer 판정이
+ *     **정확히 그 문장을 뒤집었습니다.** 브레이크가 **횟수가 아니라 총합**이에요.
+ *     `2`를 `Infinity`로 바꾸는 건 답이 아닙니다 — 지켜야 할 것 자체가 바뀌었어요
+ *
+ * 🔴 **그래서 값을 고치지 않고 파일을 옮겼습니다.** 둘 다
+ *    **`tests/winger2/bench-test.js`**에 새 계약으로 다시 세웠어요 (B절·C절·D절).
+ *    여기 남기면 *"옛 계약을 지키는 문법적으로 멀쩡한 검사"*가 됩니다.
+ *
  * ⏱️ 약 6초.
  */
 "use strict";
@@ -48,9 +64,8 @@ const near = (a, b, eps) => Math.abs(a - b) <= eps;
 /* 🧪 이 파일이 쓰는 변이 전부 — 0번이 먼저 소스와 대조합니다.
  * (안 걸리면 `bootPage`가 던져 파일이 죽어요. 이 저장소에서 세 번 난 사고입니다.) */
 const MUT = {
-  /* A 세 장의 총합을 제각각으로 — 원칙 ④ 정면 위반 */
-  POOL_VARY: { "prospect.js": [[/stats: spread\(POOL, posKey, focus, shapeKey\),/,
-    "stats: spread(POOL + i * 18, posKey, focus, shapeKey),"]] },
+  /* 🚚 `POOL_VARY`(총합 깨기)는 **bench-test.js의 `POOL_LOOSE`**로 옮겼습니다 —
+   * 옛 정규식은 3장 루프의 `i`를 쓰고 있어서 루프가 사라지자 ReferenceError가 됐어요. */
   /* B·G 나이곡선을 능력치에서 떼어 냄 — 성장도 노쇠도 사라집니다.
    * (2026-08-29 재구조화: `S.stats`가 **정점 기준값**이 되고 `nowStats`가 곡선을 곱해요.
    *  옛 `growthDelta`/`AGE_GAIN`이 사라진 자리라 변이도 그 형태를 따라갑니다.) */
@@ -59,8 +74,8 @@ const MUT = {
   /* D 🔴 birthday를 proYear 뒤로 되돌림 — 2026-08-29에 났던 그 결함 */
   OLD_ORDER: { "career.js": [[/ {4}WingerProspect\.birthday\(S\);\n {4}S\.proYear \+= 1;/,
     "    S.proYear += 1;\n    WingerProspect.birthday(S);"]] },
-  /* C 리롤 무제한으로 되돌림 */
-  REROLL_INF: { "prospect.js": [[/const REROLL_MAX = 2;/, "const REROLL_MAX = 999;"]] },
+  /* 🚚 `REROLL_INF`(리롤 상한)은 **bench-test.js의 `REROLL_CAP`**으로 옮기면서
+   * **방향이 뒤집혔습니다** — 이제 무제한이 설계라 「상한을 도로 채우는 것」이 변이예요. */
   /* D-1 유스 해넘이에서 나이를 안 먹음 · D-2 startPrep에서 안 먹음 */
   NO_BDAY_YOUTH: { "game.js": [[/ {4}WingerProspect\.birthday\(S\);/, "    /* 나이 안 먹음 */"]] },
   NO_BDAY_PRO: { "career.js": [[/ {4}WingerProspect\.birthday\(S\);/, "    /* 나이 안 먹음 */"]] },
@@ -76,8 +91,9 @@ const MUT = {
   NO_GUARD: { "prospect.js": [[/ {4}&& ageOf\(st\) > peakAgeOf\(st\)[^\n]*\n/, ""]] },
   /* 40b 🔴 **문턱만 되돌림** — 만성이 영영 제안을 못 받습니다 */
   OLD_CURVE: { "prospect.js": [[/const RETIRE_CURVE = 0\.78;/, "const RETIRE_CURVE = 0.75;"]] },
-  /* 42 🔴 **카드 나이를 다시 흩뜨림** */
-  CARD_AGE_SPREAD: { "prospect.js": [[/ {6}const age = CARD_AGE;/, "      const age = 17 + i;"]] },
+  /* 42 🔴 **만들어지는 나이를 다시 흩뜨림**
+   * (3장 루프가 사라져 `const age = CARD_AGE;`가 `rollBuild`의 `age: CARD_AGE,`가 됐어요) */
+  CARD_AGE_SPREAD: { "prospect.js": [[/ {6}age: CARD_AGE,/, "      age: CARD_AGE + randInt(0, 2),"]] },
   /* 42b 🔴 **NPC에게만 안 걺** — 다른 팀을 str 순으로 되돌려 「나만 특혜」로 만듭니다.
    * designer가 🚨 *"NPC에게도 똑같이 걸어라"*라고 못박은 자리인데, 어기면 아무 신호가 없었어요. */
   ME_ONLY: { "squad.js": [[/ {6}const line = sq\.filter\(\(x\) => x\.pos === p\)\.sort\(\(a, b\) => pickWeight\(b\) - pickWeight\(a\)\);/,
@@ -121,59 +137,17 @@ const mkSave = (over) => Object.assign({
 }, over || {});
 
 /* ══════════════════════════════════════════════════════════════
- * A. 🃏 **세 장의 스탯 총합이 정확히 같다** (원칙 ④)
+ * A. 🚚 **이사 갔습니다 → `tests/winger2/bench-test.js`**
  *
- * 한 장이 그냥 좋으면 **선택이 아니라 정답**이 됩니다. 카드 3택의 존재 이유가 사라져요.
- * 🚨 `POOL`(194)을 소스에서 읽지 않습니다 — *"세 장이 서로 같은가"*만 보면
- *    상수를 바꿔도 관계가 지켜지는지 그대로 잡혀요 (§10-3의 그 규칙).
+ * 옛 A절: *"세 장의 스탯 총합이 **서로 같다**"* (`rollCards` 3장 비교)
+ * 새 계약: *"몇 번을 굴려도 **정확히 194**"* (`rollShape` · 🧬 조립대 한 명)
+ *
+ * 🔴 **비교에서 고정값으로 바뀐 자리예요.** 선수가 하나라 "서로 같다"는 성립하지 않고,
+ *    ♾️ 무제한 리롤에서는 **총합이 유일한 브레이크**라 값 자체를 박아야 합니다.
+ *    `bench-test.js` B-1(10만 회) · C-1(게임 입구 300굴림)이 그 자리입니다.
  * ══════════════════════════════════════════════════════════════ */
 const MARKETS = Object.keys(P._t.YOUTH_FOCUS);
 const POSES = Object.keys(W.__get("POS_INFO"));
-function sumsOf(Pr, rolls) {
-  const bad = [];
-  let n = 0, minS = Infinity, maxS = -Infinity;
-  for (let i = 0; i < rolls; i++) {
-    const m = MARKETS[i % MARKETS.length], pos = POSES[i % POSES.length];
-    const r = Pr.rollCards(m, pos);
-    const tot = r.cards.map((c) => Object.values(c.stats).reduce((a, b) => a + b, 0));
-    minS = Math.min(minS, ...tot); maxS = Math.max(maxS, ...tot);
-    n += 1;
-    if (new Set(tot).size !== 1) bad.push(`${m}/${pos}: [${tot.join(", ")}]`);
-  }
-  return { bad, n, minS, maxS };
-}
-{
-  const r = sumsOf(P, 1200);
-  check(r.bad.length === 0,
-    `A-1. 🃏 세 장의 스탯 총합이 **정확히 같다** — ${r.n}판 × ${MARKETS.length}유스 × ${POSES.length}포지션`
-    + ` (총합 ${r.minS}~${r.maxS})`
-    + (r.bad.length ? `\n     🔴 다른 판 ${r.bad.length}개: ${r.bad.slice(0, 2).join(" · ")}` : ""));
-
-  /* ⭐ 잠재력도 세 장이 공유해야 합니다 — 장마다 굴리면 재능만으로 한 장이 좋아져요 */
-  let tBad = 0;
-  for (let i = 0; i < 300; i++) {
-    const rr = P.rollCards(MARKETS[i % MARKETS.length], POSES[i % POSES.length]);
-    if (rr.talents && Array.isArray(rr.talents) && rr.talents.length > 1
-      && new Set(rr.talents.map((t) => JSON.stringify(t))).size !== 1) tBad += 1;
-  }
-  check(tBad === 0, `A-2. ⭐ 잠재력은 세 장이 **공유**한다 (장마다 굴리면 재능만으로 한 장이 좋아져요)`);
-
-  /* 그리고 세 장이 **서로 달라야** 합니다 — 총합만 같고 똑같으면 그것도 선택이 아니에요 */
-  let sameShape = 0;
-  for (let i = 0; i < 300; i++) {
-    const rr = P.rollCards(MARKETS[i % MARKETS.length], POSES[i % POSES.length]);
-    const sig = rr.cards.map((c) => JSON.stringify(c.stats));
-    if (new Set(sig).size !== rr.cards.length) sameShape += 1;
-  }
-  check(sameShape === 0, `A-3. 🃏 총합은 같아도 **분포는 서로 다르다** (같으면 고를 이유가 없어요)`);
-
-  /* 🧪 변이 — 총합을 제각각으로 */
-  const MW = bootPage({ muts: MUT.POOL_VARY["prospect.js"] ? MUT.POOL_VARY : null });
-  const mr = sumsOf(MW.WingerProspect, 40);
-  check(mr.bad.length > 0,
-    `A-변이. 세 장의 총합을 제각각으로 만들면 → 빨간불 (${mr.bad.length}/${mr.n}판이 다름 · 예 ${mr.bad[0]})`);
-  MW.close();
-}
 
 /* ══════════════════════════════════════════════════════════════
  * B. 📉 **지금 실력 = 정점 기준값 × 나이곡선** (2026-08-29 재구조화)
@@ -296,54 +270,24 @@ function backfill(Pr) {
 }
 
 /* ══════════════════════════════════════════════════════════════
- * C. 🎲 **리롤 상한 2회** — 게임 입구를 통해 실제 버튼을 눌러서
+ * C. 🚚 **이사 갔습니다 → `tests/winger2/bench-test.js`**
  *
- * 무제한 리롤은 **"타고난 것"을 지웁니다** — 마음에 들 때까지 돌리면 카드 3택이
- * 선택이 아니라 대기 시간이 돼요. 그래서 상한이 이 기능의 절반입니다.
- * 🖱️ 실기기 순서(pointerdown → pointerup → click)로 누릅니다.
+ * 🌍 **여기는 값이 아니라 세계가 뒤집힌 자리입니다.**
+ *
+ *   옛 C절이 지키던 문장: *"두 번 쓰면 잠긴다"* · *"상한이 이 기능의 절반입니다"*
+ *   지금의 판정(74번 ③-C):  **♾️ 무제한.** 브레이크는 **횟수가 아니라 총합 고정**
+ *
+ * 🔴 그래서 `2`를 `Infinity`로 바꾸는 건 답이 아니에요 — 그러면
+ *    **문법적으로 멀쩡하고 변이도 걸리는데 지키는 문장이 틀린** 검사가 됩니다.
+ *    (⚽ 더 윙어 II에서 이미 한 번 그렇게 뒤집혔어요: 기준선 ❌ · 변이 ✅)
+ *
+ * 새 계약은 `bench-test.js`에 있습니다:
+ *   C-1 🎲 300굴림이 **전부 총합 194**        ← 진짜 브레이크
+ *   C-2 **화면이 찍는 합**도 매 굴림 194
+ *   C-3 굴릴 때마다 **모양은 실제로 달라진다** (🎲가 죽어도 총합은 194예요)
+ *   C-4 ${ROLLS}번 눌러도 **안 잠긴다** (무제한 **정책**의 문장 — 예산이 돌아오면 여기부터)
+ *   D-1~4 🔒 ⭐ 잠재력 · 🧬 성장타입 · 🎁 타고난 것 · 🎂 나이는 **안 굴러간다**
  * ══════════════════════════════════════════════════════════════ */
-function toProspect(win) {
-  const $ = (id) => win.document.getElementById(id);
-  const press = (el) => {
-    for (const type of ["pointerdown", "pointerup", "click"]) {
-      const Ev = win.PointerEvent || win.MouseEvent;
-      el.dispatchEvent(new Ev(type, { bubbles: true, cancelable: true }));
-    }
-  };
-  press($("btn-new"));
-  press(win.document.querySelector("#agency-list button, .agency-card, [data-market]"));
-  press(win.document.querySelector("[data-pos]"));
-  return { $, press, active: () => (win.document.querySelector(".screen.active") || {}).id };
-}
-{
-  const { $, press, active } = toProspect(W);
-  check(active() === "screen-prospect" && W.document.querySelectorAll(".prospect-card").length === 3,
-    `C-1. 🎲 새 게임 → 에이전시 → 포지션 → **유망주 3택**에 도달한다 (${active()} · 카드 ${W.document.querySelectorAll(".prospect-card").length}장)`);
-
-  const rb = $("btn-prospect-reroll");
-  const sig = () => Array.from(W.document.querySelectorAll(".prospect-card")).map((b) => b.textContent).join("|");
-  const before = sig();
-  check(!!rb && !rb.disabled && /2/.test(rb.textContent),
-    `C-2. 🎲 리롤 버튼이 **2회 남음**으로 시작한다 ("${rb ? rb.textContent : "없음"}")`);
-  press(rb);
-  const after1 = sig();
-  check(after1 !== before, `C-3. 🎲 리롤을 누르면 세 명이 **실제로 새로 뽑힌다**`);
-  check(!rb.disabled && /1/.test(rb.textContent), `C-4. 🎲 한 번 쓰면 1회 남음 ("${rb.textContent}")`);
-  press(rb);
-  check(rb.disabled, `C-5. 🎲 **두 번 쓰면 잠긴다** ("${rb.textContent}" · disabled ${rb.disabled})`);
-  const after2 = sig();
-  press(rb);
-  check(sig() === after2, `C-6. 🎲 잠긴 뒤에 눌러도 **안 바뀐다** (무제한으로 새는 길이 없어요)`);
-
-  /* 🧪 변이 — 무제한으로 되돌리면 두 번 써도 안 잠깁니다 */
-  const MW = bootPage({ muts: MUT.REROLL_INF });
-  const m = toProspect(MW);
-  const mrb = m.$("btn-prospect-reroll");
-  m.press(mrb); m.press(mrb);
-  check(!mrb.disabled,
-    `C-변이. 리롤을 무제한(999)으로 되돌리면 → 빨간불 (두 번 쓰고도 disabled ${mrb.disabled} · "${mrb.textContent}")`);
-  MW.close();
-}
 
 /* ══════════════════════════════════════════════════════════════
  * D · G. 🎂 나이가 흐르는가 · 📊 결산 성장·노쇠가 **능력치를 움직이는가**
@@ -746,20 +690,22 @@ function retireScan(Pr) {
 function cardAges(Pr, rolls) {
   const ages = new Set(), sums = new Set();
   for (let i = 0; i < rolls; i++) {
-    const r = Pr.rollCards(MARKETS[i % MARKETS.length], POSES[i % POSES.length]);
-    for (const c of r.cards) {
-      ages.add(c.age);
-      sums.add(Object.values(c.stats).reduce((a, b) => a + b, 0));
-    }
+    const c = Pr.rollBuild(MARKETS[i % MARKETS.length], POSES[i % POSES.length]);
+    ages.add(c.age);
+    sums.add(Object.values(c.stats).reduce((a, b) => a + b, 0));
   }
   return { ages: [...ages].sort((a, b) => a - b), sums: [...sums].sort((a, b) => a - b) };
 }
 {
   const r = cardAges(P, 1000);
   check(r.ages.length === 1 && r.ages[0] === P.CARD_AGE,
-    `42. 🎂 1000판 × 3장이 **전부 만 ${P.CARD_AGE}세** (나온 나이: ${r.ages.join(", ")})`);
+    `42. 🎂 1000명이 **전부 만 ${P.CARD_AGE}세** (나온 나이: ${r.ages.join(", ")})`);
+  /* 🔗 나이를 고정하면서 총합이 흐트러지면 한 문제를 다른 문제로 바꾼 것뿐이에요.
+   * ⚠️ 값(194)을 지키는 건 `bench-test.js` B-1입니다 — 여기서는 **"하나뿐"**만 봐요
+   *    (같은 값을 두 파일에 박으면 옮길 때 한쪽만 고쳐집니다). */
   check(r.sums.length === 1,
-    `42-2. 🃏 나이를 고정해도 **잠재 총합은 여전히 하나** (${r.sums.join(", ")}) — 원칙 ④가 안 깨졌어요`);
+    `42-2. 🃏 나이를 고정해도 **총합은 여전히 하나** (${r.sums.join(", ")}) — 원칙 ④가 안 깨졌어요`
+    + `\n     👉 그 값이 194인지는 bench-test.js B-1이 봅니다`);
 
   /* 🔴 **카드 나이는 데뷔 나이를 정합니다** — 유스가 3년이라 `카드 + 3 = 데뷔`예요.
    * designer가 2026-08-29에 18 → 17로 정정했습니다: 18이면 데뷔가 만 21세가 되는데
@@ -787,9 +733,9 @@ function cardAges(Pr, rolls) {
     check(false, `42-변이가 **안 돌았습니다** — 정규식이 소스와 안 맞아요: ${b.join(", ")}`);
   } else {
     const MW = bootPage({ muts: MUT.CARD_AGE_SPREAD });
-    const m = cardAges(MW.WingerProspect, 60);
+    const m = cardAges(MW.WingerProspect, 200);
     check(m.ages.length > 1,
-      `42-변이. 카드 나이를 다시 흩뜨리면 → 빨간불 (나온 나이: ${m.ages.join(", ")})`);
+      `42-변이. 만들어지는 나이를 다시 흩뜨리면 → 빨간불 (나온 나이: ${m.ages.join(", ")})`);
     MW.close();
   }
 }
@@ -1175,7 +1121,13 @@ const FLIP_CAP = 0.15;     // 역전 창의 깊이 상한 (지금 0.080 · 상�
  * 대신 **지금 값을 적어 두고, 움직이면 "곡선을 다시 재세요"**라고 알려요.
  * ══════════════════════════════════════════════════════════════ */
 {
-  const WANT = { POOL: 194, REROLL_MAX: 2,
+  /* 🌍 `REROLL_MAX`는 **2 → Infinity**로 바뀌었습니다 (2026-08-30 · 74번 판정 ③-C).
+   *    ⚠️ 값만 갈아 끼운 게 아니에요 — **무엇이 브레이크인가**가 바뀐 자리입니다.
+   *    옛 세계: 횟수가 브레이크 (예산 2회 + ↩️ 되돌리기)
+   *    지금:     **`POOL` 고정이 브레이크** · 횟수는 무제한
+   *    🔴 그래서 `POOL`이 이 표에서 움직이면 **무제한이 즉시 사고**가 됩니다 —
+   *       `REROLL_MAX`가 움직이는 것보다 훨씬 큰 일이에요 (bench-test.js B·C절 참고). */
+  const WANT = { POOL: 194, REROLL_MAX: Infinity,
     RETIRE_AGE: 38, RETIRE_CURVE: 0.78, LOW_APPS: 15, LOW_RUN: 2,
     PEAK_SHIFT_MAX: 2, HOT_RUN: 3, HOT_BAR: 7.0, START_AGE: 18 };
   const off = Object.entries(WANT).filter(([k, v]) => P[k] !== v).map(([k, v]) => `${k} ${P[k]}≠${v}`);
@@ -1185,7 +1137,8 @@ const FLIP_CAP = 0.15;     // 역전 창의 깊이 상한 (지금 0.080 · 상�
       ? `\n     🔴 움직인 것: ${off.join(" · ")}`
         + `\n     👉 balancer에게 **실측 ③(곡선 다섯 점 · c* · 커리어 길이)** 재측정을 요청하세요.`
         + `\n        AGE_PEN은 hype에 직접 들어가 AXIS_OFF 2.35 위의 곡선을 흔듭니다`
-      : ` (POOL ${P.POOL} · 은퇴 ${P.RETIRE_AGE}세/${P.RETIRE_CURVE} · 정점 이동 ${P.PEAK_SHIFT_MAX} — 전부 **제안**이에요)`));
+      : ` (POOL ${P.POOL} · 🎲 ${P.REROLL_MAX === Infinity ? "♾️ 무제한" : P.REROLL_MAX}`
+        + ` · 은퇴 ${P.RETIRE_AGE}세/${P.RETIRE_CURVE} · 정점 이동 ${P.PEAK_SHIFT_MAX} — 전부 **제안**이에요)`));
 
   /* 🟠 알려진 미달 — designer가 보는 중인 셋. 값이 아니라 **상태**를 적어 둡니다. */
   /* 🔄 **반대급부가 나이 칸에서 성장타입 칸으로 옮겨갔습니다** (2026-08-29 · 59번 §1-③).

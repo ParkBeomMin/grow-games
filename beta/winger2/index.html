@@ -44,6 +44,51 @@
       </div>
     </section>
 
+    <!-- ✏️ 이름 · 🦶 주발 — **흐름의 맨 앞**입니다 (2026-08-30 · 74번 판정 「위험」)
+         🔑 *"내가 만든 선수"*가 목적인데 🎲를 몇 번 눌러 나온 것뿐이면 3택만도 못해요.
+            **이름이 먼저 붙어야 그다음에 굴리는 몸이 「내 선수의 몸」**이 됩니다.
+         타이틀 → 여기 → 🏟️ 유스 → 🎯 포지션 → 🧬 조립대 순서예요. -->
+    <section class="screen" id="screen-name">
+      <h2>✏️ 선수 등록</h2>
+      <p class="hint" id="name-hint">먼저 이름과 주발부터 정해요.<br/>유스와 포지션은 다음 화면에서 고릅니다.</p>
+      <div class="name-box">
+        <input id="input-name" type="text" maxlength="8" placeholder="이름 입력" />
+        <button class="btn btn-ghost" id="btn-random-name">🎲 랜덤</button>
+      </div>
+      <!-- 🦶 주발 — 포지션처럼 **고르는 것**이에요. 약발은 타고나고 경기에서 붙어요 -->
+      <div class="foot-pick">
+        <span class="foot-pick-label">🦶 주발</span>
+        <div class="foot-pick-btns">
+          <button type="button" class="foot-opt" data-foot="L">왼발</button>
+          <button type="button" class="foot-opt on" data-foot="R">오른발</button>
+        </div>
+      </div>
+      <!-- 🔓 **"🎲 능력치 다시 뽑기"가 ♾️ 무제한으로 돌아왔습니다** — 자리는 여기가 아니라
+           🧬 조립대(screen-prospect)예요. (2026-08-30 · 74번 판정 ③-C)
+
+           여기 있던 옛 주석은 *"무제한 리롤이라 타고난 것을 무력화했다"*였습니다.
+           **그 문장에서 지워야 할 낱말은 「무제한」이 아니었어요** —
+           폐지 사유의 핵심은 **「굴리면 다 바뀌고 세진다」**였습니다.
+
+             | | 그때 | 지금 |
+             | 굴림 횟수        | 무제한        | ♾️ **무제한 — 같습니다** |
+             | 굴리는 것의 총합  | 🔴 **기댓값**(옛 rollStats의 `6×31+8` · 굴릴 때마다 흔들림) | ✅ **정확히 `POOL 194` 고정** |
+             | 타고난 것        | 🔴 **전부 같이 굴러감** | ✅ 🧬 성장타입 · ⭐ 잠재력 · ⭐ 특능 · 🩹 결함 **안 바뀜** |
+
+           🔑 **무제한이 안전한 이유 — 굴려도 안 좋아지는 것만 굴리게 했습니다.**
+              총합이 고정이라 바뀌는 건 **모양**뿐이고, 실측 D에서 0 ↔ 무제한이 **+0.35%**예요
+              (고른 모양의 유효 능력치는 +17.7%인데도요). 실측 B-0 — 30만 회에서 총합 ≠ 194가 **0.0000%**.
+
+           ⚠️ *"굴리면 직전 게 사라지니 무제한이어도 최고값에 못 간다"*로 안심하지 마세요 —
+              **유한 예산에서만** 맞습니다. 굴리는 비용이 0이면 `V = E[max(X, V)]`가
+              **`sup(X)`로 수렴**해요. 손실이 아니라 지연입니다.
+
+           🚨 **그러니 이 주석을 지우지 말고, 총합 고정을 푸는 변경이 오면 그때 다시 쓰세요.**
+              지우면 다음 사람이 `POOL`을 밴드로 푸는 근거를 잃습니다. -->
+      <button class="btn btn-primary" id="btn-name-next">다음</button>
+      <button class="btn btn-ghost" id="btn-back-name">← 타이틀로</button>
+    </section>
+
     <!-- 유스 배경 선택 -->
     <section class="screen" id="screen-agency">
       <h2>🏟️ 유스 선택</h2>
@@ -81,63 +126,44 @@
       <button class="btn btn-ghost" id="btn-back-position">← 뒤로</button>
     </section>
 
-    <!-- 이름 입력 -->
-    <section class="screen" id="screen-name">
-      <h2>✏️ 선수 등록</h2>
-      <p class="hint" id="name-hint"></p>
-      <div class="name-box">
-        <input id="input-name" type="text" maxlength="8" placeholder="이름 입력" />
-        <button class="btn btn-ghost" id="btn-random-name">🎲 랜덤</button>
-      </div>
-      <!-- 🦶 주발 — 포지션처럼 **고르는 것**이에요. 약발은 타고나고 경기에서 붙어요 -->
-      <div class="foot-pick">
-        <span class="foot-pick-label">🦶 주발</span>
-        <div class="foot-pick-btns">
-          <button type="button" class="foot-opt" data-foot="L">왼발</button>
-          <button type="button" class="foot-opt on" data-foot="R">오른발</button>
-        </div>
-      </div>
-      <!-- 🌱 능력치는 유망주 카드(screen-prospect)에서 정해졌어요.
-           예전 여기 있던 "🎲 능력치 다시 뽑기"는 **무제한 리롤**이라
-           타고난 것을 무력화했습니다 — 카드 3택 + 리롤 2회로 대체했어요 (§6-2). -->
-      <div class="pick-recap" id="name-recap"></div>
-      <button class="btn btn-primary" id="btn-start">입단하기</button>
-      <button class="btn btn-ghost" id="btn-back-name">← 뒤로</button>
-    </section>
-
-    <!-- 🌱 유망주 3택 (§6-2) — 다섯 칸이 한 묶음이라 쪼개서 고를 수 없어요.
-         🎬 **한 장씩 넘겨 봅니다** (설계 갈래 B3 · 2026-08-30 director).
-         390px에서 3열은 카드 한 장이 115px이라 글자가 마구 끊겼어요 —
-         셋을 견주는 원래 의도는 아래 📊 견주기 시트가 대신 맡습니다.
-         카드 자체가 버튼이에요(누르면 그 선수로 갑니다). 스와이프로 넘겨요. -->
+    <!-- 🧬 선수 만들기 (조립대) — **3택 카드를 폐기하고 한 명을 펼칩니다** (74번 판정 ⑤)
+         🖐️ 스와이프 · ●○○ · 한 장씩 넘기기는 **버렸습니다** — 선수가 하나라 넘길 게 없어요.
+         🎬 슬롯(`.pb-slot`)이 들어올 때 순서대로 굴러 채워지는 연출은 director 몫입니다. -->
     <section class="screen" id="screen-prospect">
-      <h2>🌱 유망주 카드</h2>
+      <h2>🧬 선수 만들기</h2>
       <p class="hint" id="prospect-hint"></p>
-      <div class="pc-nav">
-        <button type="button" class="pc-arrow" id="btn-pc-prev" aria-label="이전 유망주">‹</button>
-        <div class="pc-dots" id="prospect-dots" aria-hidden="true"></div>
-        <button type="button" class="pc-arrow" id="btn-pc-next" aria-label="다음 유망주">›</button>
-      </div>
-      <div class="pc-viewport" id="prospect-viewport">
-        <div class="prospect-grid" id="prospect-list"></div>
-      </div>
-      <button class="btn btn-primary" id="btn-prospect-pick"></button>
+
+      <!-- 조립대 본문 — 🧒 이름/🦶 주발 → 📈 지금 실력 → 🌱 출발점(📊 배분) → 🎁 타고난 것
+           ⚠️ 📏 키는 **이번 범위가 아닙니다.** 5번 작업에서 `.pb-meta`(🔒 잠긴 사실 줄)에
+              🎂 나이 옆으로 합류하고, 화면 순서는 📏 키 → 🎯 포지션 → 🧬 조립대가 됩니다. -->
+      <!-- ♿ `aria-live` — 🎲를 누르면 본문이 통째로 다시 그려져요. 알림이 없으면
+           낭독 사용자에게는 **아무 일도 안 일어난 화면**이 됩니다. -->
+      <div class="card pbench" id="prospect-body" aria-live="polite"></div>
+
+      <div class="pb-budget" id="prospect-budget"></div>
       <div class="pc-tools">
-        <button class="btn btn-ghost" id="btn-prospect-compare">📊 셋 견주기</button>
         <button class="btn btn-ghost" id="btn-prospect-reroll"></button>
+        <button class="btn btn-ghost" id="btn-prospect-compare">📊 표준과 견주기</button>
       </div>
+      <button class="btn btn-primary" id="btn-prospect-start"></button>
       <button class="btn btn-ghost" id="btn-back-prospect">← 뒤로</button>
 
-      <!-- 📊 견주기 시트 — **원래의 3열 의도가 사는 자리**예요.
-           등급 글자만 쓰니 390px에서도 세 칸이 안 깨집니다 (한 칸이 한 글자니까요). -->
+      <!-- 📊 견주기 시트 — **3열(세 장) → 2열「지금 ↔ 표준」**입니다.
+           ⚠️ 「직전 ↔ 지금」이 **아니에요.** 되돌리기가 없으니 직전을 보여주는 건
+              손잡이 없는 정보(원칙 ③의 역방향)입니다. 무제한 굴림에서 실제 질문은
+              *"이거 멈춰도 되나"*이고, 그 답은 **표준**과 견줘야 나옵니다. -->
       <div class="pc-sheet" id="prospect-sheet" hidden>
-        <div class="pcs-panel" role="dialog" aria-modal="true" aria-label="셋 견주기">
+        <div class="pcs-panel" role="dialog" aria-modal="true" aria-label="표준과 견주기">
           <div class="pcs-head">
-            <span>📊 셋 견주기</span>
+            <span>📊 지금 ↔ 표준</span>
             <button type="button" class="pcs-x" id="btn-sheet-close" aria-label="닫기">✖️</button>
           </div>
           <div class="pcs-body" id="prospect-compare"></div>
           <p class="hint prospect-talent" id="prospect-talent"></p>
+          <div class="pc-tools">
+            <button class="btn btn-ghost" id="btn-sheet-reroll">🎲 다시 뽑기</button>
+            <button class="btn btn-primary" id="btn-sheet-keep">이대로 갈게요</button>
+          </div>
         </div>
       </div>
     </section>

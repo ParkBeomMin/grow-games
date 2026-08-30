@@ -174,11 +174,49 @@ window.WingerProspect = (() => {
   const HOT_RUN = 3;              // 평균 평점 7.0↑ 시즌이 이만큼 연속이면 정점 +1
   const HOT_BAR = 7.0;
 
-  /* 🌱 유망주 카드 (§6-2) */
-  const CARDS = 3;
-  const REROLL_MAX = 2;           // 무제한 리롤을 대체합니다 — "타고난 것"이 살아나요
-  const POOL = 194;               // 세 장의 스탯 총합. 옛 rollStats의 기대 총합(6×31+8)과 같아요
-  const STAT_LO = 18, STAT_HI = 54;   // 한 칸이 극단으로 쏠려 못 쓰는 카드가 되지 않게
+  /* 🧬 조립대 — **3택 카드에서 「내가 만드는 선수」로** (2026-08-30 · 74번 판정 ②·⑤)
+   *
+   * 🔓 여기 있던 `const CARDS = 3;`이 사라졌습니다. 카드 3택을 폐기하고 **한 명을
+   *    조립대에 펼칩니다.** 3택과 다시 뽑기를 **둘 다** 두면 *"3장 중 고르고 각각 리롤"*이
+   *    되어 최적화가 폭발해요 — 그래서 둘 중 하나만 남깁니다.
+   *
+   * 🔑 **이 설계 전체를 지탱하는 한 줄:**
+   *    **다시 굴려도 총합이 안 바뀌면, 몇 번을 굴려도 곡선이 안 밀립니다.** 바뀌는 건 모양뿐이에요.
+   *    반대로 총합이 흔들리면 **리롤 1회도** 곡선을 밉니다(기댓값이 `E[max of N+1]`이 되니까요).
+   *    → 그래서 `POOL`은 **손잡이가 아니라 잠금장치**입니다. 밴드로 풀지 마세요.
+   *      (💥 「낮은 확률로 대박」 제안이 이 자리를 건드립니다 — designer 판정 + 실측이 붙기 전에는
+   *       총합을 흔들지 않습니다. `spread`는 총합을 **인자로 받으니** 그때 여기만 바꾸면 돼요) */
+  const POOL = 194;               // 한 굴림의 스탯 총합. **정확히** 194 — 우수리까지 되돌려요(spread)
+  const STAT_LO = 18, STAT_HI = 54;   // 한 칸이 극단으로 쏠려 못 쓰는 모양이 되지 않게
+
+  /* ══════════════════════════════════════════════════════════════════
+   * 🎛️ **다시 뽑기 — ♾️ 무제한입니다** (2026-08-30 · 74번 판정 ③-C · ④-B)
+   *
+   * 🔴 **예산도 ↩️ 되돌리기도 없습니다.** 둘 다 넣었다가 뺐어요. 이유가 서로 다릅니다:
+   *
+   *   · 예산 → **횟수는 손잡이가 아니었습니다.** 위험의 정체가 총합이지 횟수가 아니에요
+   *   · ↩️ 되돌리기 → **무제한이면 필요가 없습니다.** *"직전이 더 좋았다"*는
+   *     **다시 굴리면 또 나올 수 있는 것**이라 실제로 잃은 게 아니거든요.
+   *     되돌릴 수 없는 걸 나란히 보여주는 건 **손잡이 없는 정보**(원칙 ③의 역방향)라
+   *     📊 시트도 「직전 ↔ 지금」에서 **「지금 ↔ 표준」**으로 옮겼습니다.
+   *
+   * 🔑 **무제한이 왜 안전한가 — 근거를 두 줄로 남깁니다** (다음 사람이 다시 잠그지 않게)
+   *
+   *   ⚠️ *"굴리면 직전 게 사라지니 무제한이어도 최고값에 못 간다"*는 **유한 예산에서만** 맞아요.
+   *      무회상 최적 정지의 문턱은 `V = E[max(X, V)]`이고, **굴리는 비용이 0이면**
+   *      `P(X > V) > 0`인 한 **`V → sup(X)`로 수렴합니다.** 손실이 아니라 **지연**이에요.
+   *
+   *   ✅ **진짜 브레이크는 「굴려도 안 좋아지는 것을 굴리게 하는 것」입니다.**
+   *      실측 D: 📊 배분만 굴릴 때 0 → 무제한이 **+0.35%**. 고른 모양의 유효 능력치는
+   *      **+17.7%**인데도요. 총합이 고정이라 세지는 게 아니라 **모양만** 바뀌니까요.
+   *
+   * 🚨 **그래서 규칙은 이것 하나입니다 — 굴릴 수 있는 것은 「총합이 고정된 축」뿐입니다.**
+   *    총합을 정의할 수 없는 축(🧬 성장타입 · 📏 키)은 **굴리지 말고 잠그세요.**
+   *    ⚠️ 예산을 도로 채워 넣는 건 답이 아니에요 — 총합이 흔들리면 **예산 1회도** 곡선을 밉니다.
+   *
+   * ⭐ 잠재력 총합 고정(3-B)은 **아직입니다** — balancer 실측 D″가 먼저예요.
+   *    곡선을 흔드는 변경은 **한 번에 하나씩 끊어 잽니다**(§11). 지금은 잠근 채로 둡니다. */
+  const REROLL_MAX = Infinity;    // 🎲 예산. **♾️ 무제한** — 브레이크는 횟수가 아니라 `POOL` 고정이에요
 
   /* 🏫 유스가 바꾸는 것은 **풀의 분포**예요 (§6-1).
    * 브라질 풀에서는 드리블 편중 카드가, 이탈리아 풀에서는 수비 편중 카드가 자주 나와요.
@@ -440,9 +478,13 @@ window.WingerProspect = (() => {
     return out;
   }
 
-  /* ⭐ 잠재력(재능)은 **카드 칸이 아니에요** (§6-2의 다섯 칸에 없습니다).
-   * 세 장이 공유해요 — 카드마다 따로 굴리면 한 장이 재능만으로 그냥 좋아져서
-   * "총합은 같다"를 지켜도 기대 강도가 어긋납니다. */
+  /* ⭐ 잠재력(재능) — **조립대에 들어올 때 한 번만** 굴리고 🔒 잠깁니다.
+   *
+   * 🔴 예전에는 이 함수가 `rollCards` **안**에 있었어요. 그래서 🎲를 누를 때마다
+   *    잠재력이 같이 굴렀고, 🎲 예산이 그대로 **잠재력의 `max of N`**이 됐습니다 —
+   *    *"타고난 것"이 굴려서 피할 수 있는 값*이 되어 버린 자리예요(74번 판정 ①-2).
+   *    ⚠️ **다시 `rollBuild` 안으로 옮기지 마세요.** 그게 새던 자리입니다.
+   *    (5번 작업에서 📏 키 화면이 들어오면 호출 위치가 그쪽으로 옮겨갑니다 — 잠금은 그대로예요) */
   function rollTalents(pos) {
     const bonus = legacyTalentBonus(loadLegacy().pts);
     const t = {};
@@ -452,58 +494,66 @@ window.WingerProspect = (() => {
     return t;
   }
 
-  /* 🧒 이름 — game.js의 `randomPlayerName`을 그대로 씁니다(유스 지역에 맞는 이름이 나와요).
-   * 없는 환경이면 조용히 빈 문자열이라, 이름 줄만 안 보이고 카드는 그대로 돕니다. */
-  function cardName(marketId, taken) {
-    if (typeof randomPlayerName !== "function") return "";
-    for (let i = 0; i < 12; i++) {
-      const n = randomPlayerName({ id: marketId });
-      if (!taken.some((c) => c.name === n)) return n;
-    }
-    return randomPlayerName({ id: marketId });
-  }
-
-  /* 세 장을 한 번에 뽑아요. 특능·결함·편중 스탯은 **서로 겹치지 않게** 나눠 줍니다 —
-   * 같은 결함이 둘이면 고를 게 없어요. */
-  function rollCards(marketId, pos) {
+  /* 📊 배분 한 벌 — **🎲가 굴리는 유일한 것**입니다.
+   *
+   * 총합은 언제나 정확히 `POOL`이라, 몇 번을 굴려도 바뀌는 건 **모양**뿐이에요.
+   * 그래서 예산을 마음 편히 줄 수 있습니다(실측 D — 예산 0 ↔ 무제한이 **+0.35%**).
+   *
+   * ⚠️ 🎁(🗣️ 코멘트 · 🧬 성장타입 · ⭐ 특능 · 🩹 결함)는 여기 없습니다. 일부러예요 —
+   *    🧬를 함께 굴리면 첫 3시즌이 **+19.8%**, 🌳 만성이 36% → 10%로 사라집니다(실측 D-ⓑ). */
+  function rollShape(marketId, pos) {
     const focus = YOUTH_FOCUS[marketId] || [];
     const posKey = POS_INFO[pos].stat;
-    const shapePool = STAT_DEFS.map((d) => d.key).slice();
-    const traitPool = TRAITS.slice();
-    const flawPool = FLAWS.slice();
-    const cards = [];
-    for (let i = 0; i < CARDS; i++) {
-      const age = CARD_AGE;
-      const hint = HINTS[i % HINTS.length];
-      /* 성장타입은 **여기서 굴러 카드에 숨어 있어요.** 화면에는 코멘트만 나갑니다. */
-      const type = pickW(GROWTH_TYPES, hint.w);
-      const shapeKey = shapePool.length ? shapePool.splice(Math.floor(Math.random() * shapePool.length), 1)[0] : posKey;
-      const trait = traitPool.length ? traitPool.splice(Math.floor(Math.random() * traitPool.length), 1)[0] : null;
-      const flaw = flawPool.length ? flawPool.splice(Math.floor(Math.random() * flawPool.length), 1)[0] : null;
-      cards.push({
-        age, hint, shapeKey,
-        /* 🧒 **이름.** 카드에 이름이 없으면 `🎂 17세` 셋을 견주게 돼요 —
-         * 누구를 데려오는지가 화면에 없었습니다. 여기서 붙인 이름이 이름 화면의
-         * 기본값으로 그대로 넘어가요 (game.js `openProspect`). 세 장은 안 겹칩니다. */
-        name: cardName(marketId, cards),
-        growthType: type.id,
-        trait: trait ? trait.id : null,
-        flaw: flaw ? flaw.id : null,
-        // 📊 **정점 기준값**이에요 — 세 장의 총합이 같습니다. 화면 레이더는 여기에 곡선을 곱해요
-        stats: spread(POOL, posKey, focus, shapeKey),
-      });
-    }
-    /* 세 장의 코멘트가 늘 같은 순서로 나오면 "첫째 칸이 조숙"이 정답이 돼요. */
-    for (let i = cards.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      const t = cards[i].hint; cards[i].hint = cards[j].hint; cards[j].hint = t;
-      const g = cards[i].growthType; cards[i].growthType = cards[j].growthType; cards[j].growthType = g;
-    }
-    return { cards, talents: rollTalents(pos) };
+    /* 그 굴림만의 편중 — 굴릴 때마다 모양이 달라 보이게 하는 칸이에요 */
+    const shapeKey = pick(STAT_DEFS.map((d) => d.key));
+    const out = {
+      shapeKey,
+      stats: spread(POOL, posKey, focus, shapeKey),
+    };
+    return out;
   }
 
-  /* 카드 레이더에 그릴 값 — **정점 기준값 × 곡선(나이, 숨은 성장타입)**.
-   * 세 장의 총합은 같지만 **보이는 크기는 다릅니다.** 그게 나이 칸의 반대급부예요. */
+  /* 📊 **표준** — 총합 `POOL`을 여섯 칸에 **고르게** 나눈 모양이에요.
+   * 굴림이 아니라 **자**입니다. 무제한 굴림에서 플레이어가 실제로 묻는 건
+   * *"이거 멈춰도 되나"*이고, 그 답은 **평범한 모양과 견줘야** 나옵니다.
+   * 그리고 이게 💥 대박의 인지 장치예요 — 얼마나 드문 걸 뽑았는지 시트가 말해 줍니다.
+   * ⚠️ 총합이 `POOL`과 **정확히 같아야** 합니다 — 자가 다르면 견주는 뜻이 사라져요. */
+  function evenStats() {
+    const keys = STAT_DEFS.map((d) => d.key);
+    const base = Math.floor(POOL / keys.length);
+    const extra = POOL - base * keys.length;      // 반올림 우수리는 앞 칸부터 한 점씩
+    const out = {};
+    keys.forEach((k, i) => { out[k] = base + (i < extra ? 1 : 0); });
+    return out;
+  }
+
+  /* 🧬 선수 한 명 — 조립대에 들어올 때 **한 번**만 부릅니다.
+   * 여기서 정해진 것 중 🎲가 다시 건드리는 건 `stats`·`shapeKey`뿐이에요.
+   *
+   * 🧒 이름은 여기서 안 짓습니다 — **이름 화면이 맨 앞**이라 사람이 이미 정했어요.
+   *    (세 장 중복 방지 `cardName`도 같이 사라졌습니다. 한 명이라 겹칠 게 없어요) */
+  function rollBuild(marketId, pos) {
+    /* 🗣️ 코멘트를 먼저 뽑고 그 가중치로 성장타입을 굴려요 — 화면엔 코멘트만 나갑니다.
+     * `HINTS`의 `w`에 있는 **0**은 결함이 아니라 기능입니다(74번 판정 ③-B):
+     * 🎲로 못 바꾸니 *"이 코멘트면 만성이 아니다"*가 **회피 수단이 아니라 정보**예요. */
+    const hint = pick(HINTS);
+    const type = pickW(GROWTH_TYPES, hint.w);
+    const sh = rollShape(marketId, pos);
+    return {
+      age: CARD_AGE,
+      hint,
+      shapeKey: sh.shapeKey,
+      // 📊 **정점 기준값**이에요 — 화면 레이더는 여기에 나이곡선을 곱합니다
+      stats: sh.stats,
+      growthType: type.id,
+      trait: TRAITS.length ? pick(TRAITS).id : null,
+      flaw: FLAWS.length ? pick(FLAWS).id : null,
+    };
+  }
+
+  /* 📈 레이더에 그릴 값 — **정점 기준값 × 곡선(나이, 숨은 성장타입)**.
+   * 총합은 언제나 `POOL`인데 **보이는 크기는 성장타입마다 다릅니다.**
+   * 늦게 피는 타입일수록 지금이 작아요 — 그게 🧬 성장타입의 반대급부입니다. */
   function cardShown(card) {
     const c = curveAt(card.growthType, card.age, 0);
     const out = {};
@@ -511,7 +561,9 @@ window.WingerProspect = (() => {
     return out;
   }
 
-  /* 고른 카드를 세이브에 심어요. 특능·결함은 **자리만** 잡습니다 (효과는 §11-7). */
+  /* 만든 선수를 세이브에 심어요. 특능·결함은 **자리만** 잡습니다 (효과는 §11-7).
+   * ⚠️ 인자 이름이 `card`인 건 **세이브 스키마와 호출부를 안 건드리려고**예요 —
+   *    3택은 사라졌지만 여기 들어오는 모양(age·growthType·trait·flaw·stats)은 그대로입니다. */
   function applyCard(st, card, rerolls) {
     const S0 = st || S;
     if (!S0 || !card) return S0;
@@ -531,29 +583,42 @@ window.WingerProspect = (() => {
   }
 
   /* ══════════════════════════════════════════════════════════════════
-   * 화면 — **최소한만.** 연출과 실루엣은 director 몫이에요 (§11-11).
-   * 클래스 이름을 남겨 두니 style.css에서 그대로 잡으면 됩니다.
+   * 🧬 조립대 화면 — **최소한만.** 연출과 실루엣은 director 몫이에요 (§11-11).
+   *
+   * 클래스 이름을 남겨 두니 style.css에서 그대로 잡으면 됩니다:
+   *   .pbench > .pb-head > .pc-silhouette · .pc-id > .pc-name · .pb-meta
+   *           > .pb-slot.pc-now   > .pc-cap · .pc-radar-box > .pc-radar
+   *           > .pb-slot.pc-grades > .pcg-cap · .pcg-row(.is-top) > .pcg-name · .pcg-star
+   *                                 · .stat-grade · .pcg-bar > .pcg-fill · .pcg-val
+   *           > .pb-slot.pb-gift  > .pb-lock · .pc-hint · .pc-trait · .pc-flaw
+   *   .pb-budget > .pb-pip(.on)
+   * 🎬 `.pb-slot`은 **들어올 때 0.6초씩 순서대로 굴러 채워지는** 자리예요
+   *    (`data-slot` 순서). `prefers-reduced-motion`이면 한 번에 — director 항목입니다.
    * ══════════════════════════════════════════════════════════════════ */
 
-  let draw = null;          // { market, pos, cards, talents, left }
+  /* { market, pos, who, talents, build, prev, used, onPick }
+   * · `talents` · `build`의 🎁 칸은 **한 번 굴리고 안 바뀝니다**
+   * · `used`는 🎲를 쓴 횟수예요 — 남은 횟수는 `leftOf()`가 계산합니다
+   *   (예산이 `Infinity`일 수 있어서 **쓴 횟수**를 셉니다. 남은 수를 세면 세이브에 ∞가 들어가요)
+   * · ↩️ 되돌리기가 없어서 **직전 배분을 안 들고 있습니다** — 굴리면 그대로예요.
+   *   무제한이라 후회할 이유가 없어요(다시 굴리면 또 나옵니다) */
+  let draw = null;
+  const leftOf = () => REROLL_MAX - (draw ? draw.used : 0);
 
   const traitById = (id) => TRAITS.find((t) => t.id === id) || null;
   const flawById = (id) => FLAWS.find((f) => f.id === id) || null;
 
-  /* 🖐️ 스와이프 — 카드가 곧 버튼이라, **끌었으면 누른 게 아니어야** 해요.
-   * 손가락이 12px 넘게 움직이면 그 손가락의 click은 무시합니다. */
+  /* 🖐️ 12px 문턱 — 조립대가 세로로 길어 **스크롤이 있습니다.**
+   * 손가락이 움직였으면 그건 누른 게 아니에요. 좌우 스와이프는 사라졌지만
+   * 세로로 끌다 손을 떼면 🎲가 먹히는 자리라 문턱은 그대로 남깁니다. */
   const DRAG_MIN = 12;
 
-  /* 🎨 카드마다 색이 하나 — 지금 몇 번째 카드인지가 색으로도 읽혀요.
-   * 📊 견주기 시트의 열 머리가 **같은 색**을 씁니다 (🅰️는 어디서나 🅰️). */
-  const TONE = ["a", "b", "c"];
-  const MARK = ["🅰️", "🅱️", "🅲"];
-
   /* 🧒 CSS 실루엣 — 이미지도 캔버스도 없이 `<i>` 여덟 개로 그려요.
-   * 3D(char3d.js)가 들어오면 이 자리를 그대로 덮습니다 — 그때도 **폴백으로 남습니다**. */
-  function figureHTML(card, i) {
-    const h = (String(card.shapeKey || "").charCodeAt(0) || 65) % 3;
-    return `<span class="pc-silhouette tone-${TONE[i % 3]} hair-${h}" aria-hidden="true">`
+   * 3D(char3d.js)가 들어오면 이 자리를 그대로 덮습니다 — 그때도 **폴백으로 남습니다**.
+   * ⚠️ 머리 모양은 `shapeKey`에서 나와요. 🎲로 배분을 다시 뽑으면 같이 바뀝니다. */
+  function figureHTML(b) {
+    const h = (String(b.shapeKey || "").charCodeAt(0) || 65) % 3;
+    return `<span class="pc-silhouette hair-${h}" aria-hidden="true">`
       + `<i class="s-leg l"></i><i class="s-leg r"></i>`
       + `<i class="s-arm l"></i><i class="s-arm r"></i>`
       + `<i class="s-body"></i><i class="s-head"></i><i class="s-hair"></i><i class="s-ball"></i>`
@@ -561,8 +626,10 @@ window.WingerProspect = (() => {
   }
 
   /* ⭐ 잠재력이 가장 높은 칸에만 별 하나 — *"이 칸은 더 클 수 있어요"*가
-   * 그 줄에서 읽혀야 해요. 자세한 다섯 칸짜리 표는 📊 견주기 시트에 있습니다.
-   * (잠재력은 세 장이 함께 쓰는 값이라 카드마다 다르지 않아요) */
+   * 그 줄에서 읽혀야 해요.
+   *
+   * 🔑 선수가 **하나뿐이라 이 별이 화면의 유일한 고정점**입니다. 🔒 잠긴 축이고,
+   *    📊 배분은 🎲로 바뀌니까요 — *"어디까지 클 수 있나"*는 여기서만 읽힙니다. */
   function starKeys(talents) {
     if (!talents || typeof talentStars !== "function") return [];
     const st = STAT_DEFS.map((d) => ({ k: d.key, n: talentStars(talents[d.key]) }));
@@ -570,13 +637,13 @@ window.WingerProspect = (() => {
     return top >= 3 ? st.filter((x) => x.n === top).map((x) => x.k) : [];
   }
 
-  /* 📏 **잠재력 바** — 카드와 📊 견주기 시트가 함께 쓰는 **절대 자**(값 ÷ STAT_HI).
+  /* 📏 **잠재력 바** — 조립대와 📊 견주기 시트가 함께 쓰는 **절대 자**(값 ÷ STAT_HI).
    *
    * ⚠️ 유스 홈·💼 준비 화면의 **XP 바**(`.bar-fill.xp` = 다음 승급까지)와 **다른 자**예요.
    *    이름을 다르게 부릅니다 — 둘 다 "XP 바"면 다음 사람이 통일하려 듭니다.
    *
    * 🔑 **자는 그 화면이 던지는 질문이 정해요.**
-   *    🌱 카드·📊 시트가 묻는 건 *"셋 중 어느 게 나은가"*라 **절대 크기**여야 하고,
+   *    🧬 조립대·📊 시트가 묻는 건 *"직전과 지금 중 어느 모양이 나은가"*라 **절대 크기**여야 하고,
    *    🏠 유스 홈·💼 준비가 묻는 건 *"다음 승급까지 얼마나"*라 **구간 진행률**이어야 합니다.
    *
    * 🔴 구간 진행률로 그렸을 때 실제로 렌더에서 잰 값입니다(2026-08-30 · 390px):
@@ -591,9 +658,9 @@ window.WingerProspect = (() => {
    * ⚠️ 등급을 매기는 값은 **정점 기준값(`card.stats`)**이에요 — 위 레이더가 그리는
    * *지금 실력*이 아닙니다. 두 값이 다른 걸 일부러 그대로 둡니다:
    *   레이더 = 지금 얼마나 여물었나 (나이·성장타입이 만드는 반대급부)
-   *   등급   = 타고난 몸이 어떤 모양인가 (세 장의 총합이 같은 그 값)
-   * 등급을 지금 실력으로 매기면 세 장이 전부 `F`로 깔려요 —
-   * 열일곱의 곡선이 0.56~0.84라 18~54가 10~45로 눌립니다. 그러면 카드를 못 고릅니다.
+   *   등급   = 타고난 몸이 어떤 모양인가 (총합이 언제나 194인 그 값)
+   * 등급을 지금 실력으로 매기면 여섯 칸이 전부 `F`로 깔려요 —
+   * 열일곱의 곡선이 0.56~0.84라 18~54가 10~45로 눌립니다. 그러면 🎲를 눌러도 뭐가 달라졌는지 못 봐요.
    *
    * 🔑 **글자보다 바가, 바보다 ⭐가 일합니다.** 열일곱의 타고난 값은 18~54라
    * 여섯 칸이 거의 `F`(~39) 아니면 `E`(40~57)예요. 전부 F일 때 알아야 할 건
@@ -619,79 +686,73 @@ window.WingerProspect = (() => {
      * 이해합니다 — 그건 거짓말이에요. 36턴 훈련이 ≈100점을 더하고 프로 커리어가 더 얹어요.
      * 타이틀이 이미 *"동네 유망주에서 프로 계약까지"*라고 적어 뒀습니다.
      * **출발점이 `F`인 게 이 게임입니다.** */
-    return `<span class="pc-grades">`
+    return `<span class="pc-grades pb-slot" data-slot="2">`
       + `<span class="pcg-cap"><b>🌱 출발점</b> — 열일곱의 타고난 몸이에요. 훈련이 여기서부터 키웁니다`
       + `<br/>⭐ 가장 크게 자랄 칸 · 바는 여섯 칸을 <b>같은 자</b>로 재요</span>`
       + rows + `</span>`;
   }
 
-  /* 화면에 나가는 문자열은 전부 이 파일 안의 상수예요(남이 올린 값이 아닙니다).
-   * 그래도 카드 골격을 innerHTML로 짜니, 사람이 넣는 값이 여기 들어오면
-   * **반드시 이스케이프해서** 붙이세요 — 🧒 이름이 그 자리라 esc()로 감쌌습니다. */
+  /* 화면에 나가는 문자열은 대부분 이 파일 안의 상수예요(남이 올린 값이 아닙니다).
+   * 그런데 🧒 **이름은 사람이 직접 칩니다.** 조립대 골격을 innerHTML로 짜니
+   * **반드시 이스케이프해서** 붙이세요 — 이름 자리가 정확히 그 자리라 esc()로 감쌌습니다. */
   const esc = (s) => String(s == null ? "" : s)
     .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 
-  function open(market, pos, onPick, onBack) {
-    draw = { market, pos, left: REROLL_MAX, idx: 0 };
-    const r = rollCards(market.id, pos);
-    draw.cards = r.cards; draw.talents = r.talents;
-    render(onPick);
-    const back = document.getElementById("btn-back-prospect");
-    if (back) back.onclick = onBack;
-    show("screen-prospect");
+  const footLabel = (f) => (f === "L" ? "🦶 왼발" : "🦶 오른발");
+
+  /* 🧬 조립대 본문 한 벌.
+   *
+   * ⚠️ 📏 **키는 이번 범위가 아닙니다** — 5번 작업에서 들어오고, 자리는
+   *    아래 `.pb-meta`(🔒 잠긴 사실 줄)에 `🎂 17세` 옆으로 **합류**합니다.
+   *    화면 순서는 📏 키 화면 → 🎯 포지션 → 🧬 조립대라, 여기 오는 건 이미 정해진 값이에요. */
+  function benchHTML(b, who, talents) {
+    const tr = traitById(b.trait), fl = flawById(b.flaw);
+    return `
+      <span class="pb-head">
+        ${figureHTML(b)}
+        <span class="pc-id">
+          <span class="pc-name">🧒 ${esc(who.name || "이름 없는 유망주")}</span>
+          <span class="pb-meta">🎂 ${b.age}세 · ${footLabel(who.foot)}</span>
+        </span>
+      </span>
+      <span class="pc-now pb-slot" data-slot="1">
+        <span class="pc-cap"><b>📈 지금 실력</b> — 늦게 크는 선수일수록 작아 보여요</span>
+        <span class="pc-radar-box"><canvas class="pc-radar" width="300" height="260"></canvas></span>
+      </span>
+      ${gradeStripHTML(b, talents)}
+      <span class="pb-gift pb-slot" data-slot="3">
+        <span class="pcg-cap"><b>🎁 타고난 것</b> <span class="pb-lock" title="굴려서 못 바꿔요" aria-label="잠김">🔒</span>
+          — 🎲는 <b>📊 배분만</b> 다시 뽑아요. 여기는 안 바뀝니다</span>
+        <span class="pc-hint">🗣️ ${b.hint.text}</span>
+        <span class="pc-trait">${tr ? `${tr.emoji} ${esc(tr.name)}<span class="pc-eff">${esc(tr.desc)}</span>` : ""}</span>
+        <span class="pc-flaw">${fl ? `${fl.emoji} ${esc(fl.name)}<span class="pc-eff">${esc(fl.desc)}</span>` : ""}</span>
+      </span>`;
   }
 
-  /* 지금 보고 있는 카드만 바꿔 그려요 — 카드 세 장을 다시 만들지 않습니다
-   * (레이더를 다시 그리면 캔버스가 세 번 지워졌다 그려져요). */
-  function setIdx(n) {
-    if (!draw || !draw.cards) return;
-    const max = draw.cards.length - 1;
-    draw.idx = Math.max(0, Math.min(max, n));
-    const list = document.getElementById("prospect-list");
-    if (list) list.style.transform = `translateX(${-draw.idx * 100}%)`;
-    const cards = document.querySelectorAll("#prospect-list .prospect-card");
-    cards.forEach((el, i) => {
-      const on = i === draw.idx;
-      el.classList.toggle("on", on);
-      /* 안 보이는 카드는 탭 순서·스크린리더에서 빠져요 — 있는데 안 보이면
-       * 손가락과 낭독이 엉뚱한 카드에 닿습니다. */
-      el.tabIndex = on ? 0 : -1;
-      el.setAttribute("aria-hidden", on ? "false" : "true");
-    });
-    const dots = document.querySelectorAll("#prospect-dots .pc-dot");
-    dots.forEach((el, i) => el.classList.toggle("on", i === draw.idx));
-    const prev = document.getElementById("btn-pc-prev");
-    const next = document.getElementById("btn-pc-next");
-    if (prev) prev.disabled = draw.idx <= 0;
-    if (next) next.disabled = draw.idx >= max;
-    const pick = document.getElementById("btn-prospect-pick");
-    const c = draw.cards[draw.idx];
-    if (pick) pick.textContent = c && c.name ? `${c.name} 선수로 갈게요` : "이 선수로 갈게요";
-    const nav = document.getElementById("prospect-dots");
-    if (nav) nav.setAttribute("aria-label", `유망주 ${draw.idx + 1} / ${draw.cards.length}`);
-  }
-
-  /* 📊 견주기 시트 — **원래의 3열 의도가 사는 자리**예요.
-   * 숫자 없이 글자만이라 390px에서 세 칸이 안 깨집니다 (한 칸이 한 글자니까요).
-   * ⚠️ 여기 등급도 **정점 기준값**이에요. 캡션이 그 말을 합니다. */
-  function compareHTML(cards, talents) {
+  /* 📊 견주기 시트 — **3열(세 장) → 2열(「지금 ↔ 표준」)**입니다.
+   *
+   * ⚠️ 「직전 ↔ 지금」이 **아닙니다.** 되돌릴 수 없는 걸 나란히 보여주는 건
+   *    손잡이 없는 정보예요(원칙 ③의 역방향). 무제한이라 직전은 잃은 것도 아니고요.
+   * 🔑 무제한 굴림에서 플레이어가 묻는 건 ***"이거 멈춰도 되나"***입니다 —
+   *    표준(총합 194를 고르게 나눈 모양)과 견줘야 그 답이 나와요.
+   *
+   * ⚠️ 여기 등급도 **정점 기준값**입니다. 캡션이 그 말을 해요.
+   * 🔑 자는 **고정 분모**(값 ÷ STAT_HI)라 🎲 전후로 안 바뀝니다 —
+   *    자가 판마다 늘었다 줄면 *못한 굴림이 좋아 보입니다.* */
+  function compareHTML(cur, talents) {
     if (!window.W2Grade) return "";
     const stars = starKeys(talents);
+    const cols = [{ mark: "🧒", lab: "지금", tone: "a", stats: cur.stats },
+      { mark: "📊", lab: "표준", tone: "b", stats: evenStats() }];
     const head = `<tr><th class="pcs-lab">칸</th>`
-      + cards.map((c, i) => `<th class="pcs-col tone-${TONE[i % 3]}">${MARK[i % 3]}<span>${esc(c.name || `${i + 1}번`)}</span></th>`).join("")
+      + cols.map((c) => `<th class="pcs-col tone-${c.tone}">${c.mark}<span>${c.lab}</span></th>`).join("")
       + `</tr>`;
-    /* 📏 시트도 카드와 **같은 잠재력 바**를 씁니다 (`값 ÷ STAT_HI`).
-     *
-     * 🔴 예전엔 분모가 `max(40, 이번 판 18칸의 최대)`라 **자가 판마다 늘었다 줄었어요.**
-     *    세 장이 다 약하면 바가 통째로 길어져서 **못한 뽑기가 좋아 보입니다.**
-     *    🎲 리롤이 2회 있으니 *"이번 뽑기는 통째로 별로다"*가 읽혀야 하고,
-     *    그러려면 **리롤 전후로 자가 안 바뀌어야** 해요. 그래서 고정 분모입니다. */
     const rows = STAT_DEFS.map((d) => {
-      const vals = cards.map((c) => c.stats[d.key]);
+      const vals = cols.map((c) => c.stats[d.key]);
       const best = Math.max.apply(null, vals);
       return `<tr><th class="pcs-lab">${d.emoji} ${d.name}${stars.indexOf(d.key) >= 0 ? `<span class="pcg-star">⭐</span>` : ""}</th>`
-        + cards.map((c) => {
+        + cols.map((c) => {
           const g = W2Grade.of(c.stats[d.key]);
           return `<td class="${c.stats[d.key] === best ? "pcs-best" : ""}">`
             + `<span class="stat-grade g-${g.base}">${g.label}</span>`
@@ -699,157 +760,161 @@ window.WingerProspect = (() => {
             + `</td>`;
         }).join("") + `</tr>`;
     }).join("");
-    const line = (lab, fn) => `<tr><th class="pcs-lab">${lab}</th>`
-      + cards.map((c) => `<td class="pcs-txt">${fn(c)}</td>`).join("") + `</tr>`;
-    const tr = line("⭐ 특능", (c) => { const t = traitById(c.trait); return t ? `${t.emoji} ${esc(t.name)}` : "—"; });
-    const fl = line("🩹 결함", (c) => { const f = flawById(c.flaw); return f ? `${f.emoji} ${esc(f.name)}` : "—"; });
-    return `<p class="pcs-cap"><b>🌱 출발점</b>의 모양이에요 — 카드의 레이더(지금 실력)와 <b>다른 자</b>입니다.<br/>`
-      + `바는 세 장을 <b>같은 자</b>(${STAT_HI} 만점)로 재요 — <b>바가 긴 쪽</b>이 앞섭니다. 🎲 다시 뽑아도 자는 안 바뀝니다.</p>`
-      + `<table class="pcs-tbl">${head}${rows}${tr}${fl}</table>`;
+    return `<p class="pcs-cap"><b>📊 표준</b>은 총합 ${POOL}을 여섯 칸에 <b>고르게</b> 나눈 모양이에요 — 굴림이 아니라 <b>자</b>입니다.<br/>`
+      + `바는 둘을 <b>같은 자</b>(${STAT_HI} 만점)로 재요. <b>총합은 양쪽 다 ${POOL}</b>라 `
+      + `표준보다 긴 칸이 있으면 <b>그만큼 다른 칸을 내준 것</b>이에요.<br/>`
+      + `👉 <b>얼마나 치우쳤나</b>가 이 표가 답하는 질문입니다 — 멈출지 더 굴릴지는 여기서 정하세요.</p>`
+      + `<table class="pcs-tbl">${head}${rows}</table>`;
   }
 
-  function render(onPick) {
-    const hint = document.getElementById("prospect-hint");
-    /* 🎂 셋 다 열일곱이라, 레이더 크기 차이는 **오직 얼마나 여물었나**에서 옵니다.
-     * 그 이유를 화면이 말해 주지 않으면 *"왜 이 카드만 약하지?"*가 노이즈가 돼요(원칙 ③). */
-    if (hint) hint.textContent =
-      `한 장씩 넘겨 보세요. 세 명의 잠재력 총합은 같아요.`;
+  /* ══════════════════════════════════════════════════════════════════
+   * 🎲 다시 뽑기 · ↩️ 되돌리기
+   * ══════════════════════════════════════════════════════════════════ */
 
-    const box = document.getElementById("prospect-list");
-    box.innerHTML = "";
-    draw.cards.forEach((c, i) => {
-      const tr = traitById(c.trait), fl = flawById(c.flaw);
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = `card prospect-card tone-${TONE[i % 3]}`;
-      btn.dataset.idx = String(i);
-      /* 📈 레이더 캔버스가 300×260인 건 **공용 radar.js를 안 고치고** 크게 그리려고예요.
-       * `R = min(W,H)/2 - 36`이라 캔버스가 작으면 반지름이 통째로 라벨에 먹힙니다
-       * (200×168 → 반지름 48px). 300×260이면 94px이 남아요. 8종 공용 파일이라
-       * 저 상수는 못 건드리니, **이쪽 캔버스를 키워서 풉니다.** */
-      btn.innerHTML = `
-        <span class="pc-head">
-          <span class="pc-mark">${MARK[i % 3]}</span>
-          <span class="pc-id">
-            <span class="pc-name">🧒 ${esc(c.name || `${i + 1}번 유망주`)}</span>
-            <span class="pc-age">🎂 ${c.age}세 · ${esc((tr && tr.name) || "유망주")}</span>
-          </span>
-          ${figureHTML(c, i)}
-        </span>
-        <span class="pc-tap">👆 이 카드를 누르면 이 선수로 갑니다 · 좌우로 쓸어서 넘겨요</span>
-        <span class="pc-now">
-          <span class="pc-cap"><b>📈 지금 실력</b> — 늦게 크는 선수일수록 작아 보여요</span>
-          <span class="pc-radar-box"><canvas class="pc-radar" width="300" height="260"></canvas></span>
-        </span>
-        ${gradeStripHTML(c, draw.talents)}
-        <span class="pc-hint">🗣️ ${c.hint.text}</span>
-        <span class="pc-trait">${tr ? `${tr.emoji} ${tr.name}<span class="pc-eff">${tr.desc}</span>` : ""}</span>
-        <span class="pc-flaw">${fl ? `${fl.emoji} ${fl.name}<span class="pc-eff">${fl.desc}</span>` : ""}</span>`;
-      /* ⚠️ pointerdown이 아니라 click이에요. pointerdown에서 화면을 갈아치우면
-       * 손을 뗄 때 그 자리의 새 요소로 click이 가서 **두 번 먹힙니다.**
-       * 미니게임 준비 화면에서 실제로 났던 버그예요. */
-      btn.addEventListener("click", () => {
-        if (dragged) return;                       // 🖐️ 끌어서 넘긴 거예요 — 고른 게 아닙니다
-        if (i !== draw.idx) { setIdx(i); return; } // 옆 카드를 눌렀으면 그 카드로 넘어가기만
-        if (onPick) onPick(draw.cards[i], draw.talents, REROLL_MAX - draw.left);
-      });
-      box.appendChild(btn);
+  /* 🎲 — **📊 배분만** 굴립니다. 🎁도 ⭐ 잠재력도 안 건드려요.
+   * ♾️ 무제한이라 **이 함수가 굴리는 게 곧 「굴려도 안전한 축」의 전부**예요.
+   * 🔴 예전 `rollCards`를 통째로 다시 부르던 자리입니다. 그러면 `rollTalents`가
+   *    같이 굴러서 🎲가 **잠재력 리롤**이 됐어요 — 그 배선을 끊은 게 이 함수입니다. */
+  function doReroll() {
+    if (!draw || leftOf() <= 0) return;
+    draw.used += 1;
+    const sh = rollShape(draw.market.id, draw.pos);
+    draw.build.stats = sh.stats;
+    draw.build.shapeKey = sh.shapeKey;
+    render();
+  }
+
+  function render() {
+    const b = draw.build, who = draw.who;
+    const hint = document.getElementById("prospect-hint");
+    if (hint) hint.textContent =
+      `🎲는 몇 번이든 눌러도 돼요 — 총합은 언제나 ${POOL}라 세지는 게 아니라 모양만 달라집니다.`;
+
+    const body = document.getElementById("prospect-body");
+    if (body) {
+      body.innerHTML = benchHTML(b, who, draw.talents);
       if (window.Radar) {
-        /* 📊 **곡선을 곱한 값**을 그려요 — 지금 실력이 그대로 보여야 나이가 반대급부가 됩니다.
+        /* 📈 레이더 캔버스가 300×260인 건 **공용 radar.js를 안 고치고** 크게 그리려고예요.
+         * `R = min(W,H)/2 - 36`이라 캔버스가 작으면 반지름이 통째로 라벨에 먹힙니다
+         * (200×168 → 반지름 48px). 300×260이면 94px이 남아요. 8종 공용 파일이라
+         * 저 상수는 못 건드리니, **이쪽 캔버스를 키워서 풉니다.**
+         * ⚠️ **더 키우면 안 돼요** — 라벨이 12px로 박혀 있어 비가 1.15를 넘으면 안 읽힙니다.
+         *
+         * 📊 **곡선을 곱한 값**을 그려요 — 지금 실력이 그대로 보여야 성장타입이 반대급부가 됩니다.
          * max 44 = `STAT_HI(54) × 열일곱의 가장 이른 곡선(0.80)` — **테두리 = 지금 나이에
-         * 가능한 최대**예요. 기본값 60을 쓰면
-         * 가장 좋은 카드도 73%까지만 차서 **셋 다 늘 미완성으로 보입니다.** */
-        window.Radar.draw(btn.querySelector(".pc-radar"), STAT_DEFS, cardShown(c), {
+         * 가능한 최대**예요. 기본값 60을 쓰면 가장 좋은 모양도 73%까지만 차서 늘 미완성으로 보입니다. */
+        window.Radar.draw(body.querySelector(".pc-radar"), STAT_DEFS, cardShown(b), {
           max: 44, stroke: "#5fa8ff", fill: "rgba(95, 168, 255, 0.28)",
         });
       }
-    });
-
-    const dots = document.getElementById("prospect-dots");
-    if (dots) {
-      dots.innerHTML = draw.cards.map((c, i) => `<span class="pc-dot tone-${TONE[i % 3]}"></span>`).join("");
-      dots.onclick = null;
-    }
-    const prev = document.getElementById("btn-pc-prev");
-    const next = document.getElementById("btn-pc-next");
-    if (prev) prev.onclick = () => setIdx(draw.idx - 1);
-    if (next) next.onclick = () => setIdx(draw.idx + 1);
-    const pick = document.getElementById("btn-prospect-pick");
-    if (pick) pick.onclick = () => { if (onPick) onPick(draw.cards[draw.idx], draw.talents, REROLL_MAX - draw.left); };
-
-    bindSwipe();
-    setIdx(draw.idx || 0);
-
-    /* ⭐ 잠재력은 세 장이 공유해요 — 📊 견주기 시트 안에 한 번만 적습니다.
-     * (카드 밖에 그냥 떠 있으면 뭘 말하는 줄인지 알 수가 없었어요) */
-    const tal = document.getElementById("prospect-talent");
-    if (tal) {
-      tal.innerHTML = STAT_DEFS
-        .map((d) => `${d.emoji} ${d.name} ${"⭐".repeat(talentStars(draw.talents[d.key]))}`)
-        .join(" · ") + `<br/>⭐ = 잠재력 — 세 명이 함께 쓰는 값이에요 (다시 뽑으면 같이 바뀝니다)`;
     }
 
-    const cmpBox = document.getElementById("prospect-compare");
-    if (cmpBox) cmpBox.innerHTML = compareHTML(draw.cards, draw.talents);
-    const sheet = document.getElementById("prospect-sheet");
-    const cmpBtn = document.getElementById("btn-prospect-compare");
-    const closeBtn = document.getElementById("btn-sheet-close");
-    if (sheet && cmpBtn) {
-      cmpBtn.onclick = () => { sheet.hidden = false; sheet.classList.add("on"); };
-      const close = () => { sheet.classList.remove("on"); sheet.hidden = true; };
-      if (closeBtn) closeBtn.onclick = close;
-      sheet.onclick = (e) => { if (e.target === sheet) close(); };
-      close();
+    /* 🎲 몇 번 뽑았나 — **남은 횟수가 아니라 쓴 횟수**예요(무제한이라 남은 수가 없습니다).
+     * ⚠️ 예산이 유한한 정책으로 되돌아가면 여기에 ●○을 다시 그리면 됩니다. */
+    const left = leftOf();
+    const capped = Number.isFinite(REROLL_MAX);
+    const bud = document.getElementById("prospect-budget");
+    if (bud) {
+      let pips = "";
+      if (capped) {
+        const cells = [];
+        for (let i = 0; i < REROLL_MAX; i++) cells.push(`<span class="pb-pip${i < left ? " on" : ""}"></span>`);
+        pips = `<span class="pb-pips" role="img" aria-label="남은 다시 뽑기 ${left} / ${REROLL_MAX}회">${cells.join("")}</span>`;
+      }
+      bud.innerHTML = `<span class="pb-bud-lab">${capped ? "🎲 남은 다시 뽑기"
+        : draw.used ? `🎲 지금까지 ${draw.used}번 뽑았어요` : "🎲 마음에 들 때까지 뽑아도 돼요"}</span>`
+        + pips
+        + `<span class="pb-bud-note">총합은 언제나 ${POOL}라 굴려도 <b>세지지 않아요</b> — 바뀌는 건 모양뿐입니다</span>`;
     }
 
     const rb = document.getElementById("btn-prospect-reroll");
     if (rb) {
-      rb.textContent = draw.left > 0 ? `🎲 다시 뽑기 ${draw.left}회` : "🎲 다시 뽑기를 다 썼어요";
-      rb.disabled = draw.left <= 0;
-      rb.onclick = () => {
-        if (draw.left <= 0) return;
-        draw.left -= 1;
-        const rr = rollCards(draw.market.id, draw.pos);
-        draw.cards = rr.cards; draw.talents = rr.talents;
-        draw.idx = 0;
-        render(onPick);
+      rb.textContent = left <= 0 ? "🎲 다시 뽑기를 다 썼어요"
+        : capped ? `🎲 다시 뽑기 ${left}회` : "🎲 다시 뽑기";
+      rb.disabled = left <= 0;
+      rb.onclick = () => { if (!dragged) doReroll(); };
+    }
+
+    const cmpBox = document.getElementById("prospect-compare");
+    if (cmpBox) cmpBox.innerHTML = compareHTML(draw.build, draw.talents);
+
+    /* ⭐ 잠재력은 🔒 잠긴 축이라 시트 아래에 **한 번만** 적습니다 */
+    const tal = document.getElementById("prospect-talent");
+    if (tal) {
+      tal.innerHTML = STAT_DEFS
+        .map((d) => `${d.emoji} ${d.name} ${"⭐".repeat(talentStars(draw.talents[d.key]))}`)
+        .join(" · ") + `<br/>⭐ = 잠재력 — 🔒 <b>타고난 값이라 🎲로 안 바뀌어요</b>`;
+    }
+
+    const sheet = document.getElementById("prospect-sheet");
+    const cmpBtn = document.getElementById("btn-prospect-compare");
+    const closeBtn = document.getElementById("btn-sheet-close");
+    const keepBtn = document.getElementById("btn-sheet-keep");
+    const rerollBtn = document.getElementById("btn-sheet-reroll");
+    if (sheet && cmpBtn) {
+      const close = () => { sheet.classList.remove("on"); sheet.hidden = true; };
+      cmpBtn.onclick = () => { if (dragged) return; sheet.hidden = false; sheet.classList.add("on"); };
+      if (closeBtn) closeBtn.onclick = close;
+      if (keepBtn) keepBtn.onclick = close;
+      /* 🎲 시트 안에서도 바로 굴릴 수 있어요 — 표를 보고 *"더 굴리자"*가 되는 자리라
+       * 닫았다 다시 여는 왕복을 만들면 안 됩니다. 시트는 **열어 둔 채** 다시 그려요. */
+      if (rerollBtn) {
+        rerollBtn.disabled = leftOf() <= 0;
+        rerollBtn.onclick = () => { if (!dragged) doReroll(); };
+      }
+      sheet.onclick = (e) => { if (e.target === sheet) close(); };
+      if (!sheet.classList.contains("on")) close();
+    }
+
+    const start = document.getElementById("btn-prospect-start");
+    if (start) {
+      start.textContent = who.name ? `${who.name} 선수로 시작` : "이 선수로 시작";
+      /* ⚠️ pointerdown이 아니라 click이에요. pointerdown에서 화면을 갈아치우면
+       * 손을 뗄 때 그 자리의 새 요소로 click이 가서 **두 번 먹힙니다.**
+       * 미니게임 준비 화면에서 실제로 났던 버그예요. */
+      start.onclick = () => {
+        if (dragged) return;
+        if (draw.onPick) draw.onPick(draw.build, draw.talents, draw.used);
       };
     }
   }
 
-  /* 🖐️ 스와이프 — 화면 하나에 한 번만 겁니다(다시 그려도 다시 안 걸어요).
+  /* 🖐️ 화면 하나에 한 번만 겁니다(다시 그려도 다시 안 걸어요).
    * ⚠️ 좌표가 없는 합성 이벤트(검사 하네스)에서도 안 죽어야 해요 — 그때는 `dragged`가
    * 늘 false라 **탭으로만** 동작합니다. */
   let dragged = false;
-  let swipeBound = false;
-  function bindSwipe() {
-    const vp = document.getElementById("prospect-viewport");
-    if (!vp || swipeBound) return;
-    swipeBound = true;
-    let x0 = null;
-    vp.addEventListener("pointerdown", (e) => {
+  let dragBound = false;
+  function bindDragGuard() {
+    const sc = document.getElementById("screen-prospect");
+    if (!sc || dragBound) return;
+    dragBound = true;
+    let x0 = null, y0 = null;
+    sc.addEventListener("pointerdown", (e) => {
       x0 = typeof e.clientX === "number" ? e.clientX : null;
+      y0 = typeof e.clientY === "number" ? e.clientY : null;
       dragged = false;
     });
-    vp.addEventListener("pointermove", (e) => {
+    sc.addEventListener("pointermove", (e) => {
       if (x0 == null) return;
-      if (Math.abs(e.clientX - x0) > DRAG_MIN) dragged = true;
+      if (Math.abs(e.clientX - x0) > DRAG_MIN || Math.abs(e.clientY - y0) > DRAG_MIN) dragged = true;
     });
-    const end = (e) => {
-      if (x0 == null) return;
-      const dx = (typeof e.clientX === "number" ? e.clientX : x0) - x0;
-      x0 = null;
-      if (Math.abs(dx) > 40) setIdx(draw.idx + (dx < 0 ? 1 : -1));
-      /* click은 pointerup **다음**에 와요 — 그 한 번만 막고 바로 풉니다 */
-      if (dragged) setTimeout(() => { dragged = false; }, 0);
-    };
-    vp.addEventListener("pointerup", end);
-    vp.addEventListener("pointercancel", () => { x0 = null; dragged = false; });
-    /* ⌨️ 화살표로도 넘겨요 */
-    vp.addEventListener("keydown", (e) => {
-      if (e.key === "ArrowLeft") { setIdx(draw.idx - 1); e.preventDefault(); }
-      if (e.key === "ArrowRight") { setIdx(draw.idx + 1); e.preventDefault(); }
-    });
+    /* click은 pointerup **다음**에 와요 — 그 한 번만 막고 바로 풉니다 */
+    sc.addEventListener("pointerup", () => { x0 = null; if (dragged) setTimeout(() => { dragged = false; }, 0); });
+    sc.addEventListener("pointercancel", () => { x0 = null; dragged = false; });
+  }
+
+  /* `who`는 **이름 화면이 이미 정해 준 것**이에요 — { name, foot }.
+   * (📏 키가 5번에서 들어오면 여기 `height`가 함께 옵니다) */
+  function open(market, pos, who, onPick, onBack) {
+    draw = { market, pos, who: who || {}, used: 0, onPick };
+    /* ⭐ 잠재력·🧬 성장타입·⭐ 특능·🩹 결함은 **여기서 한 번**만 굴러요 */
+    draw.talents = rollTalents(pos);
+    draw.build = rollBuild(market.id, pos);
+    bindDragGuard();
+    render();
+    const back = document.getElementById("btn-back-prospect");
+    if (back) back.onclick = onBack;
+    show("screen-prospect");
   }
 
   return {
@@ -857,10 +922,14 @@ window.WingerProspect = (() => {
     ageOf, typeOf, peakAgeOf, ageMul, curveAt, flawOf, traitsOf,
     nowStats, trainMul, cardShown,
     birthday, seasonTally, mustRetire, suggestRetire,
-    rollCards, applyCard, open,
-    POOL, CARDS, REROLL_MAX,
+    /* 🔓 `rollCards`가 사라진 자리예요 — 3택을 폐기했습니다.
+     * · `rollShape` = 📊 배분 한 벌 (**🎲가 굴리는 유일한 것** · 총합 언제나 POOL)
+     * · `rollBuild` = 선수 한 명 (조립대에 들어올 때 한 번)
+     * · `rollTalents` = ⭐ 잠재력 (**따로** 부릅니다 — 🎲가 못 건드리게 뺀 자리) */
+    rollShape, rollBuild, rollTalents, applyCard, open,
+    POOL, REROLL_MAX, evenStats,
     RETIRE_AGE, RETIRE_CURVE, LOW_APPS, LOW_RUN, CARD_AGE,
     START_AGE, PEAK_SHIFT_MAX, HOT_RUN, HOT_BAR,
-    _t: { spread, pickW, pieceAt, rollTalents, trainStep, TRAIN_NEUTRAL, YOUTH_FOCUS, STAT_LO, STAT_HI, state: () => draw },
+    _t: { spread, pickW, pieceAt, trainStep, TRAIN_NEUTRAL, YOUTH_FOCUS, STAT_LO, STAT_HI, state: () => draw },
   };
 })();

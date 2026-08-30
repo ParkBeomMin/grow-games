@@ -443,15 +443,17 @@ const fmtMoney = (v) => (v >= 10000 ? `${(v / 10000).toFixed(1)}억` : `${Math.r
  * 없어집니다 — 마음에 들 때까지 누르면 되니까요. 유스5 × 포지션4 × 주발2 = 40조합이
  * 전부 같은 출발선이 된 것도 같은 뿌리예요.
  *
- * 이제 세 장 중 하나를 고르고 **리롤은 2회**입니다. 세 장의 스탯 총합은 같고,
- * 다른 건 분포 · 성장타입(흐릿함) · 특능 · 결함 · 나이예요. */
+ * 이제 🧬 **조립대에서 한 명을 만듭니다** (2026-08-30 · 3택 폐기). 🎲 다시 뽑기가
+ * 돌아왔지만 예전과 형태가 달라요 — **총합이 정확히 194로 고정**이라 굴려도 모양만
+ * 바뀌고, ⭐ 잠재력·🧬 성장타입·⭐ 특능·🩹 결함은 **첫 굴림에 잠깁니다.**
+ * 무제한이 위험했던 건 횟수가 아니라 **총합이 기댓값이었기 때문**이에요. */
 function newState(market, pos, name, roll) {
   const { stats, talents } = roll;
   return {
     market: market.id, pos, name,
     year: 1, month: 1,
-    /* 🎂 나이는 유망주 카드가 정해요(셋 다 17세 — 유스 3년을 지나 만 20세에 데뷔합니다).
-     * applyCard가 바로 뒤에 덮어써요 — 여기 값은 카드 없이 만들어지는
+    /* 🎂 나이는 조립대가 정해요(만 17세 — 유스 3년을 지나 만 20세에 데뷔합니다).
+     * applyCard가 바로 뒤에 덮어써요 — 여기 값은 조립대 없이 만들어지는
      * 경로(검사·픽스처)의 기본값이라 옛 세이브 기본값(START_AGE)과 같이 둡니다. */
     age: WingerProspect.START_AGE,
     stats, talents,
@@ -803,9 +805,11 @@ window.addEventListener("popstate", (e) => {
   }
 });
 
-$("btn-back-first")?.addEventListener("click", () => show("screen-title"));
+/* ⬅️ 흐름이 **이름 → 유스 → 포지션 → 조립대**로 바뀌었어요 (74번 판정 · 이름이 맨 앞).
+ * 뒤로 가기도 그 순서를 그대로 거슬러 올라갑니다. */
+$("btn-back-first")?.addEventListener("click", () => show("screen-name"));
 $("btn-back-position")?.addEventListener("click", () => show("screen-agency"));
-$("btn-back-name")?.addEventListener("click", () => show("screen-prospect"));
+$("btn-back-name")?.addEventListener("click", () => show("screen-title"));
 const goHome = () => { if (S) save(); location.reload(); };
 $("btn-home-main")?.addEventListener("click", goHome);
 $("btn-home-pro")?.addEventListener("click", goHome);
@@ -1297,8 +1301,10 @@ function initTitle() {
     $("btn-continue").onclick = showSlotPicker;
   }
   $("btn-new").onclick = () => {
-    renderMarkets();
-    show("screen-agency");
+    /* 🧒 빈 칸으로 시작하면 아무도 안 씁니다 — 하나 채워 두고 고쳐 쓰게 해요.
+     * 이미 친 이름이 있으면(뒤로 갔다 온 경우) 안 덮어씁니다. */
+    if (!$("input-name").value.trim()) $("input-name").value = randomPlayerName(null);
+    show("screen-name");
   };
   if (window.Match && Match.enabled()) {
     Match.count("winger2").then((n) => {
@@ -1404,41 +1410,35 @@ function renderMarkets() {
   }
 }
 
-/* 🌱 포지션을 고르면 **유망주 3택**으로 갑니다 (§6-1의 흐름 1→2→4).
- * 이름·주발은 카드를 고른 뒤에 정해요 — 누구를 데려올지가 먼저입니다. */
+/* 🎯 포지션을 고르면 **🧬 조립대**로 갑니다 (74번 판정 ⑤ — 3택은 폐기).
+ * 🧒 이름·🦶 주발은 **맨 앞 화면**에서 이미 정했어요 — 이름이 붙은 몸을 굴려야
+ * *"내 선수의 몸"*이 됩니다. 조립대는 그 이름을 머리글에 그대로 답니다. */
+let chosenName = "";
+let chosenFoot = "R";
 let chosenCard = null;
 let chosenTalents = null;
 let usedRerolls = 0;
 
-function openProspect() {
-  WingerProspect.open(chosenMarket, chosenPos, (card, talents, rerolls) => {
-    chosenCard = card;
-    chosenTalents = talents;
-    usedRerolls = rerolls;
-    const t = WingerProspect.TRAITS.find((x) => x.id === card.trait);
-    const f = WingerProspect.FLAWS.find((x) => x.id === card.flaw);
-    $("name-hint").textContent = `${chosenMarket.name} ${POS_INFO[chosenPos].name} 유망주의 이름은?`;
-    /* 무엇을 골랐는지 이름 화면에도 한 줄 남겨요 — 안 그러면 카드를 고른 순간
-     * 그 정보가 화면에서 사라져서 "내가 뭘 골랐더라?"가 됩니다. */
-    $("name-recap").textContent =
-      `🎂 ${card.age}세` + (t ? ` · ${t.emoji} ${t.name}` : "") + (f ? ` · ${f.emoji} ${f.name}` : "");
-    /* 🧒 카드에 적혀 있던 이름을 그대로 들고 옵니다 — 방금 고른 선수와 다른 이름이
-     * 뜨면 "내가 고른 그 아이"가 아니게 돼요. 물론 여기서 고쳐 쓸 수 있어요. */
-    $("input-name").value = card.name || randomPlayerName(chosenMarket);
-    show("screen-name");
-  }, () => show("screen-position"));
+function openBench() {
+  WingerProspect.open(chosenMarket, chosenPos, { name: chosenName, foot: chosenFoot },
+    (build, talents, rerolls) => {
+      chosenCard = build;
+      chosenTalents = talents;
+      usedRerolls = rerolls;
+      startCareer();
+    },
+    () => show("screen-position"));
 }
 
 document.querySelectorAll("#position-list .card").forEach((btn) => {
   btn.addEventListener("click", () => {
     chosenPos = btn.dataset.pos;
-    openProspect();
+    openBench();
   });
 });
 
 /* 🦶 주발은 **고르는 것**이에요 — 포지션처럼요.
  * 약발 숫자는 여전히 타고나요(경기에서 붙습니다). 고를 수 있는 건 어느 발잡이냐뿐이에요. */
-let chosenFoot = "R";
 document.querySelectorAll("#screen-name .foot-opt").forEach((b) => {
   b.addEventListener("click", () => {
     chosenFoot = b.dataset.foot;
@@ -1446,14 +1446,24 @@ document.querySelectorAll("#screen-name .foot-opt").forEach((b) => {
   });
 });
 
+/* 🎲 랜덤 이름 — 유스를 아직 안 골랐으니 지역 편향 없이 뽑아요(15%가 유럽 이름).
+ * 유스에 맞춘 이름은 3택 카드가 하던 일인데, 카드가 사라져 그 자리가 없어졌습니다. */
 $("btn-random-name").addEventListener("click", () => {
-  $("input-name").value = randomPlayerName(chosenMarket);
+  $("input-name").value = randomPlayerName(null);
 });
 
-$("btn-start").addEventListener("click", () => {
-  // 카드를 안 고르고 이 화면에 닿는 길은 없어야 하지만, 없으면 그 자리에서 되돌려요
-  if (!chosenCard || !chosenTalents) { openProspect(); return; }
-  const name = $("input-name").value.trim() || randomPlayerName(chosenMarket);
+$("btn-name-next").addEventListener("click", () => {
+  chosenName = $("input-name").value.trim() || randomPlayerName(null);
+  $("input-name").value = chosenName;
+  renderMarkets();
+  show("screen-agency");
+});
+
+/* 🚀 입단 — **조립대의 [이 선수로 시작]**이 부릅니다 (예전 이름 화면의 「입단하기」 자리) */
+function startCareer() {
+  // 조립대를 안 거치고 여기 닿는 길은 없어야 하지만, 없으면 그 자리에서 되돌려요
+  if (!chosenCard || !chosenTalents) { openBench(); return; }
+  const name = chosenName || randomPlayerName(chosenMarket);
   curSlot = null;
   /* ⚠️ 이름 말고 **id**를 함께 남겨요. 예전에는 표시 이름만 남겨서, 선택지 이름을
    * 바꾸는 순간 통계에서 같은 항목이 옛 이름·새 이름으로 쪼개졌어요 —
@@ -1469,7 +1479,7 @@ $("btn-start").addEventListener("click", () => {
   save();
   renderMain();
   show("screen-main");
-});
+}
 
 // ---------- 메인 렌더 ----------
 function renderMain() {

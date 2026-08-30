@@ -1242,48 +1242,60 @@ button.pf-slot { cursor: pointer; font-family: inherit; }
   .w2m-gate.w2m-strong, .w2m-half.w2m-strong { background: var(--m-strong-2); }
 }
 
-/* ---------- 🌱 유망주 3택 (§6-2 · 갈래 B3) ----------
+/* ---------- 🧬 선수 만들기 (조립대) ----------
  *
- * 🔴 **3열을 폐기했습니다** (2026-08-30 · director · 390px 실측).
- *    옛 주석은 *"세 장을 세로로 쌓으면 셋을 견줄 수가 없어요"*라고 가로를 지켰는데,
- *    390px에서 카드 한 장의 실폭이 **115px**이었습니다. `기본기부터 차근 / 히 쌓는
- *    스타일이래 / 요`처럼 끊겼고, 레이더는 지름 49px, XP 바는 26px이라
- *    **여섯 줄이 셋 다 똑같아 보였어요.** 의도는 옳고 수단이 틀렸습니다.
+ * 🔴 **3택 카드를 폐기했습니다** (2026-08-30 · 74번 판정 ⑤).
+ *    옛 주석은 3열 → 1열 캐러셀로 옮겨 온 내력을 적고 있었는데, **선수가 하나가 되어**
+ *    캐러셀 자체가 사라졌어요 — 스와이프 · `●○○` · ‹ › 넘기기가 전부 없습니다.
+ *    원래의 *"견줌"*은 📊 견주기 시트가 **직전 ↔ 지금 2열**로 이어받습니다.
  *
- *    → **한 장씩 넘기고**, 원래의 3열 의도는 **📊 견주기 시트**가 맡습니다.
- *      등급 글자만 쓰면 한 칸이 한 글자라 390px에서도 세 칸이 안 깨져요.
- *
- * 🎨 색은 전부 테마 변수예요. 카드 셋의 구분색만 여기서 정합니다 —
- *    🅰️🅱️🅲의 색이 카드·점·시트 열머리에서 **같아야** 어디를 보는지가 읽혀요. */
-.prospect-card.tone-a { --pc-tone: var(--sky); }
-.prospect-card.tone-b { --pc-tone: var(--accent); }
-.prospect-card.tone-c { --pc-tone: var(--accent2); }
-.pc-dot.tone-a, .pcs-col.tone-a { --pc-tone: var(--sky); }
-.pc-dot.tone-b, .pcs-col.tone-b { --pc-tone: var(--accent); }
-.pc-dot.tone-c, .pcs-col.tone-c { --pc-tone: var(--accent2); }
+ * 🎨 색: 조립대는 선수가 하나라 구분색이 필요 없어요. `--pc-tone` 하나만 씁니다.
+ *    📊 시트의 두 열(↩️ 직전 · 🎲 지금)만 색으로 갈라요. */
+.pbench { --pc-tone: var(--sky); }
+.pcs-col.tone-a { --pc-tone: var(--sky); }
+.pcs-col.tone-b { --pc-tone: var(--accent2); }
 
-/* 🎞️ 캐러셀 — 세 장 다 DOM에 있고, 트랙만 움직여요.
- * transform만 씁니다 (left/top은 레이아웃을 다시 돌려서 저사양에서 끊겨요). */
-.pc-viewport { overflow: hidden; }
-.prospect-grid {
+/* 🧬 조립대 본문 — 세로로 길어요. 스크롤을 허용하고 [이 선수로 시작]은 아래에 둡니다. */
+.pbench {
   display: flex;
-  align-items: flex-start;
-  transition: transform .28s ease;
-  will-change: transform;
-}
-.prospect-card {
-  flex: 0 0 100%;
-  min-width: 0;
+  flex-direction: column;
   gap: 8px;
   padding: 12px 12px 10px;
   text-align: left;
   border-color: var(--line);
 }
-.prospect-card.on { border-color: var(--pc-tone); }
+/* 🎬 슬롯 — 들어올 때 순서대로 굴러 채워지는 자리예요 (`data-slot` 순서).
+ * ⚠️ 지금은 **자리 표시만** 합니다. 연출은 director 몫이에요. */
+.pb-slot { display: block; }
 
-/* 🧒 머리글 — 이름 · 나이 · 실루엣. **이름이 여기 생겼습니다** */
-.pc-head { display: flex; align-items: center; gap: 8px; }
-.pc-mark { font-size: 1.1rem; flex: 0 0 auto; }
+.pb-head { display: flex; align-items: center; gap: 10px; }
+/* 🔒 잠긴 사실 줄 — 🎂 나이 · 🦶 주발. 📏 키가 5번 작업에서 여기 합류합니다 */
+.pb-meta { display: block; font-size: .78rem; color: var(--dim); }
+
+/* 🎁 타고난 것 — **굴릴 수 있는 것과 없는 것의 대비가 이 화면의 교육입니다.**
+ * 그래서 📊 배분 상자(노랑 점선)와 **다른 색**으로 잠금을 말해요. */
+.pb-gift {
+  border: 1px dashed rgba(167, 139, 250, .34);
+  border-radius: 12px;
+  padding: 6px 8px;
+  background: rgba(167, 139, 250, .06);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.pb-gift .pcg-cap b { color: #c4b5fd; }
+.pb-lock { font-size: .8rem; }
+
+/* 🎲 남은 예산 — 숫자와 점 **둘 다**로 읽혀야 해요.
+ * ⚠️ 예산이 무제한이면 점이 없습니다(그릴 수가 없어요) — 그때는 쓴 횟수만 나옵니다. */
+.pb-budget { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 10px 0 6px; font-size: .78rem; color: var(--dim); }
+.pb-bud-lab { color: var(--text); }
+.pb-pips { display: inline-flex; gap: 6px; align-items: center; }
+.pb-pip { width: 10px; height: 10px; border-radius: 50%; background: var(--line); }
+.pb-pip.on { background: var(--accent); box-shadow: 0 0 6px rgba(255, 209, 102, .6); }
+.pb-bud-note { flex: 1 1 100%; font-size: .7rem; opacity: .85; word-break: keep-all; }
+
+/* 🧒 머리글 — 이름 · 🔒 잠긴 사실 · 실루엣 */
 .pc-id { flex: 1 1 auto; min-width: 0; display: block; }
 .pc-name { display: block; font-family: "Jua", sans-serif; font-size: 1.15rem; color: var(--pc-tone); line-height: 1.3; }
 .pc-age { display: block; font-size: .76rem; color: var(--dim); }
@@ -1307,8 +1319,8 @@ button.pf-slot { cursor: pointer; font-family: inherit; }
  * 더 줄이면 radar.js가 캔버스 좌표에 12px로 박아 그리는 **라벨이 안 읽힙니다.** */
 .pc-radar { width: 100%; max-width: 272px; height: auto; }
 
-/* 📊 능력치 여섯 줄 — 3열 시절 26px이던 바가 **줄의 주인공**이 됐어요.
- * 열일곱의 타고난 값은 18~54라 글자는 거의 F~E입니다. 셋을 가르는 건 바와 ⭐예요. */
+/* 📊 능력치 여섯 줄 — **줄의 주인공은 바와 ⭐**예요.
+ * 열일곱의 타고난 값은 18~54라 글자는 거의 F~E입니다. 🎲 전후를 가르는 건 바예요. */
 .pc-grades {
   display: block;
   border: 1px dashed rgba(255, 209, 102, .3);
@@ -1332,11 +1344,11 @@ button.pf-slot { cursor: pointer; font-family: inherit; }
 .pcg-row.is-top { background: rgba(255, 209, 102, .13); box-shadow: inset 2px 0 0 var(--accent); }
 .pcg-row .stat-grade { flex: 0 0 18px; min-width: 18px; font-size: .82rem; opacity: .9; }
 
-/* 📏 **잠재력 바** (`.pcg-fill`) — 카드와 📊 견주기 시트가 함께 쓰는 **절대 자**(값 ÷ 54).
+/* 📏 **잠재력 바** (`.pcg-fill`) — 조립대와 📊 견주기 시트가 함께 쓰는 **절대 자**(값 ÷ 54).
  *
  * ⚠️ 아래 `.bar-fill.xp`(**XP 바** — 다음 승급까지)와 **다른 자예요. 합치지 마세요.**
  *    자는 그 화면이 던지는 질문이 정합니다:
- *      🌱 카드 · 📊 시트   *"셋 중 어느 게 나은가"*   → 절대 크기   → 잠재력 바
+ *      🧬 조립대 · 📊 시트 *"직전과 지금 중 어느 모양이 나은가"* → 절대 크기 → 잠재력 바
  *      🏠 유스 홈 · 💼 준비 *"다음 승급까지 얼마나"*  → 구간 진행률 → XP 바
  *    구간 진행률로 그렸더니 렌더에서 `패스 40(E)`이 **0px**, `스피드 24(F)`가 **99.6px**였어요 —
  *    바가 순서를 **거꾸로** 말하고 있었습니다. */
@@ -1348,10 +1360,6 @@ button.pf-slot { cursor: pointer; font-family: inherit; }
 .pc-trait { color: var(--accent); }
 .pc-flaw { color: var(--accent2); }
 .pc-eff { display: block; font-size: .72rem; color: var(--dim); }
-/* 👆 고르는 법은 **카드 위쪽**에 둡니다 — 카드가 한 화면보다 길어서,
- * 아래에 두면 스크롤해야 보이는 안내가 돼요 (390px 렌더에서 접혀 있었습니다). */
-.pc-tap { font-size: .7rem; color: var(--dim); text-align: center; opacity: .85; word-break: keep-all; }
-
 /* 🧒 CSS 실루엣 — `<i>` 여덟 개. 이미지도 캔버스도 없어요.
  * (3D char3d.js가 들어오면 이 자리를 덮되, **폴백으로 남습니다**) */
 .pc-silhouette {
@@ -1379,23 +1387,6 @@ button.pf-slot { cursor: pointer; font-family: inherit; }
   border: 1px solid #2a3550;
 }
 
-/* ‹ › 넘기기 · 점 — 탭 칸은 44px 아래로 내려가지 않아요 */
-.pc-nav { display: flex; align-items: center; justify-content: center; gap: 12px; margin: 10px 0 8px; }
-.pc-arrow {
-  flex: 0 0 auto;
-  min-width: 48px; min-height: 48px;
-  border-radius: 50%;
-  border: 2px solid var(--line);
-  background: var(--bg2);
-  color: var(--text);
-  font-size: 1.4rem;
-  line-height: 1;
-  cursor: pointer;
-}
-.pc-arrow:disabled { opacity: .35; cursor: default; }
-.pc-dots { display: flex; gap: 8px; align-items: center; }
-.pc-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--line); transition: transform .2s ease; }
-.pc-dot.on { background: var(--pc-tone); transform: scale(1.45); }
 .pc-tools { display: flex; gap: 8px; }
 .pc-tools .btn { margin: 0; flex: 1 1 0; font-size: .86rem; padding: 12px 4px; }
 
@@ -1441,8 +1432,6 @@ button.pf-slot { cursor: pointer; font-family: inherit; }
 .pcs-best { background: rgba(255, 209, 102, .1); border-radius: 8px; }
 .pcs-txt { font-size: .72rem; color: var(--text); line-height: 1.4; }
 .prospect-talent { line-height: 1.8; font-size: .72rem; margin-top: 10px; }
-/* ✏️ 이름 화면에 "무엇을 골랐나" 한 줄 */
-.pick-recap { font-size: .8rem; color: var(--sky); margin: 6px 0 10px; }
 
 @media (max-width: 359px) {
   /* 320px — 실루엣을 접고 글자만 남겨요 */
@@ -1452,9 +1441,7 @@ button.pf-slot { cursor: pointer; font-family: inherit; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .prospect-grid { transition: none; }
   .pcs-panel { animation: none; }
-  .pc-dot { transition: none; }
 }
 
 /* ---------- 📊 능력치 등급 F~S · XP 바 · 승급 카드 (70번 갈래 F2) ----------
@@ -1462,8 +1449,9 @@ button.pf-slot { cursor: pointer; font-family: inherit; }
  * ⚠️ **뼈대만입니다. 연출은 director 몫이에요.** 클래스는 여기 다 나와 있어요:
  *   .stat-row.graded > .stat-grade(.g-F ~ .g-S) · .bar.xp-bar > .bar-fill.xp · .stat-xp
  *   .grade-up-layer > .grade-up-card > .gu-stat · .gu-from · .gu-arrow · .gu-to · .gu-say
+ *   .pbench > .pb-head · .pb-meta · .pb-gift(.pb-lock) · .pb-slot · .pb-budget > .pb-pip
  *   .pc-grades > .pcg-cap · .pcg-row > .pcg-name · .pcg-star · .stat-grade · .pcg-bar > .pcg-fill
- *     ⚠️ 카드의 바는 **잠재력 바(.pcg-fill)**예요 — 아래 XP 바(.bar-fill.xp)와 자가 다릅니다
+ *     ⚠️ 조립대의 바는 **잠재력 바(.pcg-fill)**예요 — 아래 XP 바(.bar-fill.xp)와 자가 다릅니다
  *
  * ⚠️ `.stat-row` · `.bar` · `.stat-val`의 본체는 **base.css(8종 공유)**에 있어요.
  * 여기서는 winger2 전용 클래스만 얹습니다 — 공유 파일은 안 건드려요. */
@@ -1485,8 +1473,8 @@ button.pf-slot { cursor: pointer; font-family: inherit; }
 
 /* 📶 **XP 바** — **다음 승급까지 얼마**를 그려요. 100칸짜리 절대 막대가 아닙니다.
  * 🏠 유스 홈 · 💼 준비가 던지는 질문이 *"다음 승급까지 얼마나"*라서요.
- * ⚠️ 🌱 유망주 카드·📊 견주기 시트의 **잠재력 바(.pcg-fill)**와 자가 다릅니다 —
- *    거기 질문은 *"셋 중 어느 게 나은가"*라 절대 크기예요. **한 클래스로 묶지 마세요.** */
+ * ⚠️ 🧬 조립대·📊 견주기 시트의 **잠재력 바(.pcg-fill)**와 자가 다릅니다 —
+ *    거기 질문은 *"직전과 지금 중 어느 모양이 나은가"*라 절대 크기예요. **한 클래스로 묶지 마세요.** */
 .bar-fill.xp { background: linear-gradient(90deg, #6ee7a0, #ffd166); }
 .stat-xp { flex: 0 0 auto; min-width: 40px; text-align: right; font-size: .66rem; color: var(--dim); }
 /* 🔢 숫자는 **작게 병기**해요 — 주인공은 등급입니다 */

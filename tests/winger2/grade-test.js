@@ -6,7 +6,7 @@
  *
  *      · 등급 판정을 죽여 **모든 능력치가 영원히 F**  → 검사 10종 전부 초록불
  *      · `W2Grade.tick` 제거 — **승급 카드가 영영 안 뜸** → 전부 초록불
- *      · 유망주 카드 등급의 자를 바꿔 **3장 전부 F**   → 전부 초록불
+ *      · 유망주 카드 등급의 자를 바꿔 **여섯 칸 전부 F** → 전부 초록불
  *
  *    넷째(`index.html`에서 grade.js 제거)만 `wiring-test`가 잡았는데,
  *    **잡은 이유가 등급이 아니라 `sw.js` 정합성**이었습니다. 같이 지웠으면 넷 다 초록불이에요.
@@ -15,7 +15,7 @@
  * 여기서 메우는 넷 (engineer §7의 검사 1~4)
  *   B·C  등급이 **실제로 오른다** — 경계 여섯을 **이 파일에 직접 적어서**
  *   D    승급하면 **카드가 뜬다** (한 턴에 두 칸이 올라도 **한 장에 두 줄**)
- *   E    유망주 카드 3장의 등급이 **정점 기준값**에서 나온다 (지금 실력이 아니라)
+ *   E    🧬 조립대의 등급이 **정점 기준값**에서 나온다 (지금 실력이 아니라)
  *   F    XP 바가 **구간 안의 위치**다 — `v/100`이 아니라 **톱니**
  *
  * ─────────────────────────────────────────────────────────────────────────
@@ -26,8 +26,8 @@
  *      **표를 바꿔도 검사가 따라가서 아무것도 안 잡혀요** (이 저장소가 데인 형태)
  *   ③ **자기 자신과 비교하지 않습니다.** `W2Grade.of()`의 출력을 정답으로 삼으면
  *      등급표를 통째로 갈아도 안 잡혀요. 정답은 **이 파일의 BOUND/LAB**입니다
- *   ④ **게임 입구를 통해** — 새 게임 → 에이전시 → 포지션 → 유망주 → 이름 → 입단 →
- *      훈련 버튼. 실기기 순서 그대로(pointerdown → pointerup → click)
+ *   ④ **게임 입구를 통해** — 새 게임 → ✏️ 이름 → 🏟️ 유스 → 🎯 포지션 → 🧬 조립대 →
+ *      입단 → 훈련 버튼. 실기기 순서 그대로(pointerdown → pointerup → click)
  *   ⑤ **시드 하나로 안 잽니다** — 훈련 성장량이 재능·유스·컨디션 배수를 타요
  *
  * ─────────────────────────────────────────────────────────────────────────
@@ -148,17 +148,23 @@ function boot(seed, muts) {
   return { W, D, press, active, close: () => W.close() };
 }
 
-/* 새 게임 → 에이전시 → 포지션 → **유망주 3택** */
-function toProspect(h) {
+/* 🚪 타이틀 → ✏️ 이름·🦶 주발 → 🏟️ 유스 → 🎯 포지션 → **🧬 조립대**
+ *
+ * ⚠️ 2026-08-30에 **이름 화면이 맨 앞으로** 왔습니다 (74번 판정 ④-B).
+ *    `renderMarkets()`가 `btn-new`에서 **`btn-name-next`**로 옮겨가서,
+ *    그 한 단계를 빼면 `#agency-list`가 **비어 있고** press가 던집니다. */
+function toBench(h) {
   h.press(h.D.getElementById("btn-new"));
+  h.press(h.D.getElementById("btn-name-next"));
   h.press(h.D.querySelector("#agency-list button, .agency-card, [data-market]"));
   h.press(h.D.querySelector("[data-pos]"));
   return h;
 }
-/* 유망주 3택 → 이름 → 입단 → 🏠 유스 능력치 화면 */
-function toMain(h, idx) {
-  h.press(h.D.querySelectorAll(".prospect-card")[idx || 0]);
-  h.press(h.D.getElementById("btn-start"));
+/* 🧬 조립대 → 입단 → 🏠 유스 능력치 화면
+ * ⚠️ 3택 카드(`.prospect-card`)와 이름 화면의 `btn-start`가 **둘 다 사라졌습니다** —
+ *    이제 조립대의 [이 선수로 시작] 한 번이면 끝이에요. */
+function toMain(h) {
+  h.press(h.D.getElementById("btn-prospect-start"));
   return h;
 }
 
@@ -246,7 +252,7 @@ function careers(style, muts, seeds, turns) {
     cardless: 0, extraCards: 0, cardsSeen: 0, labelChanges: 0, runs: 0, maxRank: 0,
     upsPerRun: [], changesPerRun: [] };
   for (const s of (seeds || SEEDS)) {
-    const h = toMain(toProspect(boot(s, muts)));
+    const h = toMain(toBench(boot(s, muts)));
     const r = career(h, style, turns);
     all.fills = all.fills.concat(r.fills);
     all.ups = all.ups.concat(r.ups);
@@ -452,7 +458,7 @@ const MAIN = careers("main");
    * ⚠️ 두 칸이 같은 턴에 오르는 건 자연 플레이에선 드물어서, **화면을 그리기 직전에**
    *    두 칸을 다음 문턱까지 밀어 올리고 **휴식 버튼을 실제로 눌러** 렌더를 일으킵니다.
    *    (승급 감지는 화면 그리는 자리에 달려 있으니 경로는 그대로예요) */
-  const h = toMain(toProspect(boot(101)));
+  const h = toMain(toBench(boot(101)));
   const S = h.W.__get("S");
   const defs = h.W.__get("STAT_DEFS");
   const main = h.W.__get("POS_INFO")[S.pos].stat;
@@ -483,32 +489,41 @@ const MAIN = careers("main");
 }
 
 /* ══════════════════════════════════════════════════════════════
- * E. 🌱 검사 3 — 유망주 카드의 등급이 **정점 기준값**에서 나온다
+ * E. 🌱 검사 3 — 🧬 조립대의 등급이 **정점 기준값**에서 나온다
  *
- * 지금 실력(`cardShown`)으로 매기면 열여덟의 곡선이 0.56~0.84라 18~54가 10~45로
- * 눌려서 **3장 전부 F**가 됩니다 — 그러면 카드를 못 골라요.
+ * 지금 실력(`cardShown`)으로 매기면 열일곱의 곡선이 0.56~0.84라 18~54가 10~45로
+ * 눌려서 **여섯 칸이 전부 F**가 됩니다 — 그러면 🎲를 눌러도 뭐가 달라졌는지 못 봐요.
  *
- * 🔒 여기서도 `W2Grade.of()`를 정답으로 안 씁니다. 카드가 들고 있는 `card.stats`에
+ * 🔒 여기서도 `W2Grade.of()`를 정답으로 안 씁니다. 조립대가 들고 있는 `build.stats`에
  *    **이 파일의 표**를 대 봐요. 두 값이 어긋나면 그린 자가 바뀐 겁니다.
+ *
+ * 🌍 **2026-08-30에 세계가 바뀐 자리입니다.** 옛 E-2는
+ *    *"**세 장이** 전부 같은 글자로 깔리는 판이 40% 미만"*이었는데, 3택이 폐기돼서
+ *    **선수가 하나**예요. 그래서 *"**여섯 칸이** 전부 같은 글자"*로 다시 겨눴습니다 —
+ *    **잡으려던 것은 그대로**입니다(지금 실력으로 매기면 전부 F로 깔린다).
+ *    ⚠️ 문턱도 다시 쟀어요: 기준선 27.7% · 변이(cardShown) 95.8% → **60%**는 그 사이입니다
  * ══════════════════════════════════════════════════════════════ */
 function drawProbe(muts, seeds, per) {
   const KEYS = ["shoot", "pass", "dribble", "defense", "stamina", "speed"];
   const out = { draws: 0, allSame: 0, mismatch: [], noStrip: 0 };
   for (const s of (seeds || [11, 23, 37])) {
-    const h = toProspect(boot(s, muts));
+    const h = toBench(boot(s, muts));
     for (let i = 0; i < (per || 40); i++) {
-      const cards = Array.from(h.D.querySelectorAll(".prospect-card"));
-      const data = h.W.WingerProspect._t.state().cards;
-      const letters = cards.map((c) => Array.from(c.querySelectorAll(".pc-grades .stat-grade")).map((x) => x.textContent.trim()));
+      /* 🧬 선수가 **한 명**이에요 — `.prospect-card` 3장도 `state().cards`도 없습니다 */
+      const build = h.W.WingerProspect._t.state().build;
+      const letters = Array.from(h.D.querySelectorAll("#prospect-body .pc-grades .stat-grade"))
+        .map((x) => x.textContent.trim());
       out.draws += 1;
-      if (letters.some((l) => l.length !== KEYS.length)) { out.noStrip += 1; }
+      if (letters.length !== KEYS.length) { out.noStrip += 1; }
       else {
-        const want = data.map((c) => KEYS.map((k) => tbl(c.stats[k])));
-        letters.forEach((l, ci) => l.forEach((g, gi) => {
-          if (g !== want[ci][gi]) out.mismatch.push(`카드${ci} ${KEYS[gi]} ${data[ci].stats[KEYS[gi]].toFixed(1)} → 화면 "${g}" · 표 "${want[ci][gi]}"`);
-        }));
-        if (new Set([].concat(...letters)).size === 1) out.allSame += 1;
+        const want = KEYS.map((k) => tbl(build.stats[k]));
+        letters.forEach((g, gi) => {
+          if (g !== want[gi]) out.mismatch.push(`${KEYS[gi]} ${build.stats[KEYS[gi]].toFixed(1)} → 화면 "${g}" · 표 "${want[gi]}"`);
+        });
+        if (new Set(letters).size === 1) out.allSame += 1;
       }
+      /* ↩️ 뒤로 → 🎯 포지션을 다시 골라 **새 선수 한 명**을 뽑습니다
+       * (🎲는 배분만 바꿔요 — 여기서는 🎁까지 새로 굴린 판을 봐야 합니다) */
       h.press(h.D.getElementById("btn-back-prospect"));
       h.press(h.D.querySelector("[data-pos]"));
     }
@@ -519,27 +534,28 @@ function drawProbe(muts, seeds, per) {
 const DRAW = drawProbe();
 {
   check(DRAW.draws >= 100 && DRAW.noStrip === 0,
-    `E-0. 🌱 유망주 3택을 **${DRAW.draws}판** 실제로 뽑았고 카드마다 등급 여섯 줄이 있다 (없는 판 ${DRAW.noStrip})`);
+    `E-0. 🌱 🧬 조립대를 **${DRAW.draws}판** 실제로 열었고 판마다 등급 여섯 줄이 있다 (없는 판 ${DRAW.noStrip})`);
   check(DRAW.mismatch.length === 0,
-    `E-1. 🌱 카드에 그린 등급이 **정점 기준값(card.stats)**과 맞는다 — ${DRAW.draws}판 × 3장 × 6칸`
+    `E-1. 🌱 조립대에 그린 등급이 **정점 기준값(build.stats)**과 맞는다 — ${DRAW.draws}판 × 6칸`
     + (DRAW.mismatch.length
       ? `\n     🔴 어긋난 것 ${DRAW.mismatch.length}칸 — 예: ${DRAW.mismatch.slice(0, 3).join(" · ")}`
-        + `\n     👉 지금 실력(cardShown)으로 매기면 열여덟의 곡선에 눌려 3장이 전부 F로 깔립니다`
+        + `\n     👉 지금 실력(cardShown)으로 매기면 열일곱의 곡선에 눌려 여섯 칸이 전부 F로 깔립니다`
       : ""));
-  /* 🔒 문턱은 여기 박습니다. 실측 2~3% 옆에 붙이지 않고 **기준선과 변이(100%) 사이**에 둬요 */
+  /* 🔒 문턱은 여기 박습니다. 실측(27.7%) 옆에 붙이지 않고 **기준선과 변이(95.8%) 사이**에 둬요 */
+  const ALL_SAME_MAX = 60;
   const rate = (DRAW.allSame / DRAW.draws) * 100;
-  check(rate < 40,
-    `E-2. 🌱 세 장이 **전부 같은 한 글자로 깔리는 판이 40% 미만** — 실측 ${rate.toFixed(1)}% (${DRAW.allSame}/${DRAW.draws})`
-    + `\n     👉 전부 같으면 등급으로는 카드를 못 골라요. 지금 실력으로 매기면 100%가 됩니다`);
+  check(rate < ALL_SAME_MAX,
+    `E-2. 🌱 **여섯 칸이 전부 같은 한 글자로 깔리는 판이 ${ALL_SAME_MAX}% 미만** — 실측 ${rate.toFixed(1)}% (${DRAW.allSame}/${DRAW.draws})`
+    + `\n     👉 전부 같으면 등급으로는 🎲의 결과를 못 읽어요. 지금 실력으로 매기면 96%가 됩니다`);
 }
 
 /* 🧪 E 변이 — 카드 등급의 자를 지금 실력으로 */
 {
-  const m = mutRun("CARD_SHOWN", () => drawProbe(MUT.CARD_SHOWN, [11], 12));
+  const m = mutRun("CARD_SHOWN", () => drawProbe(MUT.CARD_SHOWN, [11], 20));
   const rate = m ? (m.allSame / m.draws) * 100 : NaN;
-  check(!!m && m.mismatch.length > 0 && rate >= 40,
-    `E-변이. 카드 등급을 **지금 실력**으로 매기면 → 빨간불`
-    + (m ? ` (정점 기준값과 어긋난 칸 ${m.mismatch.length} · 세 장이 전부 같은 판 ${rate.toFixed(0)}%)` : MUT_DEAD));
+  check(!!m && m.mismatch.length > 0 && rate >= 60,
+    `E-변이. 조립대 등급을 **지금 실력**으로 매기면 → 빨간불`
+    + (m ? ` (정점 기준값과 어긋난 칸 ${m.mismatch.length} · 여섯 칸이 전부 같은 판 ${rate.toFixed(0)}%)` : MUT_DEAD));
 }
 
 /* ══════════════════════════════════════════════════════════════

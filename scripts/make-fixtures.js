@@ -166,17 +166,42 @@ function snapshot(P) {
 }
 
 // ---------- 공통 조작 (전부 실제 클릭이에요) ----------
+/* ⚠️ 게임마다 화면 순서가 달라요 — **게임 이름이 아니라 버튼의 있고 없음으로** 가릅니다.
+ * 이름으로 가르면 게임이 늘 때마다 여기를 고쳐야 하고, 안 고치면 조용히 실패해요.
+ *
+ * ⚽ 더 윙어 II는 이름·주발을 맨 앞에서 받고 마지막이 🧬 조립대예요:
+ *     btn-new → (이름·주발) btn-name-next → 유스 → 포지션 → (조립대) btn-prospect-start
+ * 나머지 게임은:
+ *     btn-new → 소속 → 포지션 → (이름) btn-start
+ *
+ * 🔴 여기가 한 번 조용히 깨졌습니다. winger2가 조립대로 바뀌었는데 이 함수는 옛 버튼을
+ *    누르고 있었어요. 디스크에 픽스처가 남아 있어서 검사는 전부 초록불이었고,
+ *    makeWinger2가 시드 30개를 통째로 삼키며 한 줄만 찍었습니다.
+ *    **그래서 이제 못 닿으면 던집니다.** 조용히 넘어가지 않아요. */
 function newPlayer(P, agencyIdx, pos, name) {
   const { w, $ } = P;
   $("btn-new").click();
+
+  /* ⚠️ 버튼을 변수에 담아 누르지 마세요 — 이 함수를 **소스에서 읽어** 그대로 눌러 보는
+   * 검사가 있어요(`bench-test` G-1). `x.click()`으로 쓰면 어느 버튼인지 안 보입니다. */
+  const nameFirst = !!$("btn-name-next");      // 이름을 맨 앞에서 받는 흐름인가
+  if (nameFirst) {
+    $("input-name").value = name;
+    $("btn-name-next").click();
+  }
+
   const cards = w.document.querySelectorAll("#agency-list .card");
   if (!cards[agencyIdx]) throw new Error(`소속 카드 ${agencyIdx}번이 없어요`);
   cards[agencyIdx].click();
   const posCard = w.document.querySelector(`#position-list .card[data-pos="${pos}"]`);
   if (!posCard) throw new Error(`포지션 카드 ${pos}가 없어요`);
   posCard.click();
-  $("input-name").value = name;
-  $("btn-start").click();
+
+  if (!nameFirst) $("input-name").value = name;
+  if ($("btn-prospect-start")) $("btn-prospect-start").click();
+  else if ($("btn-start")) $("btn-start").click();
+  else throw new Error("시작 버튼을 못 찾았어요 (btn-prospect-start · btn-start 둘 다 없어요)");
+
   if (P.active() !== "screen-main") throw new Error(`육성 화면에 못 갔어요 (${P.active()})`);
 }
 
