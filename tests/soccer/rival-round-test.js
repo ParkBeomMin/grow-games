@@ -194,9 +194,13 @@ check(/roundRes\[r\.club\]/.test(parts.raceRate),
  * 예전에는 승패만 알고 실점은 raceConceded로 짐작했어요. */
 check(/oppGoals: info0 \? info0\.ga : raceConceded\(res\)/.test(parts.raceRate),
   "실점은 그 라운드 실제 스코어를 쓴다 (모를 때만 짐작해요)");
-/* ⭐ 평점은 **골을 나눈 다음에** 매겨야 그 경기에 한 일을 봐요 */
-check(parts.raceRate.indexOf("shareGoals(out, roundRes);") < parts.raceRate.indexOf("matchRating("),
-  "골을 나눈 다음에 평점을 매긴다 — 먼저 매기면 그 경기에 한 일을 못 봐요");
+/* ⭐ 평점은 **골을 나눈 다음에** 매겨야 그 경기에 한 일을 봐요.
+ * ⚠️ 자리를 문자열로 찾으면 인자가 늘 때 -1이 나와서 검사가 **항상 통과**해요.
+ * 못 찾으면 그 자리에서 빨간불이 뜨게 둡니다. */
+const shareAt = parts.raceRate.indexOf("shareGoals(out, roundRes, mineRound);");
+const rateAt = parts.raceRate.indexOf("matchRating(");
+check(shareAt >= 0 && rateAt >= 0 && shareAt < rateAt,
+  `골을 나눈 다음에 평점을 매긴다 — 먼저 매기면 그 경기에 한 일을 못 봐요 (${shareAt} < ${rateAt})`);
 /* 이제 **리그 전 선발**이 이 산식을 지난다 — 예전에는 시즌 초에 뽑은 여덟만
  * 굴려서, 다른 클럽 아홉 번째 선수는 평점표에 아예 못 올라왔다. */
 check(/WingerSquad\.leagueXI\(\)/.test(parts.raceRate),

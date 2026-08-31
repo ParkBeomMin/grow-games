@@ -196,9 +196,14 @@ check(!!ENSURE && /act\.raceFilled/.test(ENSURE),
  * 8명)가 아예 다른 사람들이라, 득점 1위가 평점표에 없는 게 정상 동작이었다.
  * 지금은 act.race 하나만 쓴다. */
 const FINAL = grab(C, /const roundRes = recordRound\(act\.opp, info\.res[^)]*\);[\s\S]*?\.sort\([^;]*\);/);
-check(!!FINAL && /const scored = leagueRound\(roundRes\);/.test(FINAL)
-  && /applyMateGoals\(info\.mateGoals\);/.test(FINAL),
+/* ⚠️ 계약이 바뀌었어요. 예전에는 `leagueRound(roundRes)` 뒤에 applyMateGoals가
+ * 따로 붙어서, 동료 골이 **평점을 다 매긴 뒤에** 얹혔어요 — 그래서 중계에서
+ * 2골을 넣은 동료도 그 경기 평점은 0골짜리였습니다. 이제 중계에 뜬 골을
+ * 라운드에 **넘겨주고** 한 자리에서 셉니다. */
+check(!!FINAL && /const scored = leagueRound\(roundRes, null, \{ goals: info\.mateGoals, myGoals: info\.myGoals \}\);/.test(FINAL),
   "경기 후 평점표가 리그 전 선발의 그 라운드 기록을 그대로 쓴다 (동료 골 반영 포함)");
+check(!/applyMateGoals/.test(C),
+  "평점을 매긴 뒤에 골을 얹는 옛 경로가 남아 있지 않다");
 check(!!FINAL && /\.\.\.scored\.map/.test(FINAL) && !/act\.rivals/.test(FINAL),
   "평점표 행이 act.rivals(옛 별도 명단)를 안 본다");
 // 주석에는 옛 이름이 설명으로 남아 있어요 — **호출·접근**만 봅니다
@@ -207,10 +212,14 @@ check(!/rollRivals\(|fillRivals\(|act\.rivals\.|act\.rivals =/.test(C),
 /* 평점·MOM이 명단에 쌓이는지 — 개인 순위의 ⭐/🏅 칸 근거다 */
 const RATEFN = grab(C, /function leagueRound\([^)]*\) \{[\s\S]*?\n  \}/);
 check(!!RATEFN && /r\.p\.rate = \(r\.p\.rate \|\| 0\) \+ clamp/.test(RATEFN), "선수에게 평점이 누적된다 (⭐ 평균 평점)");
-/* 우리 팀은 **굴리지 않는다** — 중계에 뜬 골이 따로 들어오므로, 굴리면 같은
- * 라운드를 두 번 세게 된다(🌏 월드컵의 skip 규칙과 같다). */
-check(!!RATEFN && /const mine = club === S\.group;/.test(RATEFN) && /mine \? 0 :/.test(RATEFN),
-  "우리 팀은 굴리지 않고 중계에 뜬 값을 쓴다 — 같은 라운드를 두 번 세지 않아요");
+/* 우리 팀 **골은** 굴리지 않는다 — 중계에 뜬 골이 따로 들어오므로, 굴리면 같은
+ * 라운드를 두 번 세게 된다(🌏 월드컵의 skip 규칙과 같다).
+ * 반대로 🛡️ 수비는 **우리 팀도 굴린다** — `mine ? 0 :`으로 묶던 시절에는 그 0이
+ * 동료의 시즌 수비 기록이자 그 경기 평점이 됐다(5:1로 이겨도 동료는 5점대). */
+check(!!RATEFN && /mineRound/.test(RATEFN),
+  "우리 팀 골은 굴리지 않고 중계에 뜬 값을 쓴다 — 같은 라운드를 두 번 세지 않아요");
+check(!!RATEFN && !/mine \? 0 :/.test(RATEFN),
+  "우리 팀 동료의 수비를 0으로 묶지 않는다");
 check(!!RATEFN && /if \(p\.me\) continue;/.test(RATEFN),
   "내 기록은 여기서 안 쌓는다 — S.activity 한 곳에만 남아요");
 check(/top\.p\.mom = \(top\.p\.mom \|\| 0\) \+ 1/.test(C), "그 라운드 1위에게 MOM이 쌓인다 (🏅)");
@@ -356,30 +365,60 @@ check(!!RENDER_RACE && !/renderPrep\(\)/.test(RENDER_RACE),
  *
  * 우리 팀 선수는 나와 같은 경기를 뛴 사람이라, 굴린 값 대신 **중계에 뜬 골**을 쓴다.
  * 안 그러면 같은 라운드를 두 번 세게 된다. */
-const MATE_FN = grab(C, /function applyMateGoals\(names\) \{[\s\S]*?\n  \}/);
-check(!!MATE_FN, "applyMateGoals를 소스에서 찾았다");
-/* 기록이 **명단 한 벌**에만 남게 되면서 이 함수도 아주 단순해졌다 —
- * 예전에는 race와 squads 두 벌을 손으로 맞추느라 굴린 몫을 물리고 다시 더했다. */
-const applyMate = new Function("S", "names", "window", "WingerSquad",
-  `${MATE_FN} return applyMateGoals(names);`);
-{
-  const mine = [
-    { name: "동료A", g: 5 },
-    { name: "동료B", g: 3 },
-    { name: "나", me: true, g: 0 },
+const SHARE_FN = grab(C, /function shareGoals\([^)]*\) \{[\s\S]*?\n  \}/);
+check(!!SHARE_FN, "shareGoals를 소스에서 찾았다");
+/* 무게·확률은 **소스에서 뽑아** 그대로 실행한다. 값을 옮겨 적으면 계수를
+ * 바꿔도 검사가 따라와서 아무것도 못 잡는다. */
+const shareDeps = ["const GOAL_W = \\{[^}]*\\};", "const ASSIST_P2 = [^;]+;", "const ACE_W = [^;]+;",
+  "const ASSIST_W = \\{[^}]*\\};", "const MAKER_W = [^;]+;"]
+  .map((re) => grab(C, new RegExp(re)));
+check(shareDeps.every(Boolean), "골·도움 무게를 소스에서 뽑았다");
+const runShare = new Function("S", "rows", "roundRes", "mineRound", "clamp", "window", "WingerSquad", "Math",
+  `${shareDeps.join("\n")}\n${SHARE_FN}\nreturn shareGoals(rows, roundRes, mineRound);`);
+const WS = { slotOf: () => ({ g: 1, a: 1, d: 1 }) };
+const mkRows = () => {
+  const mk = (club, name, pos, str) => ({ club, p: { name, pos, str, g: 0, a: 0 }, dg: 0, da: 0, dd: 0 });
+  return [
+    mk("우리팀", "동료A", "fw", 80), mk("우리팀", "동료B", "mf", 78), mk("우리팀", "동료C", "df", 70),
+    mk("남의팀", "남선수1", "fw", 80), mk("남의팀", "남선수2", "mf", 75),
   ];
-  const other = [{ name: "남의팀선수", g: 7 }];
-  const WS = { squadOf: (c) => (c === "우리팀" ? mine : other) };
-  applyMate({ group: "우리팀" }, ["동료A", "동료A"], { WingerSquad: WS }, WS);
-  const by = Object.fromEntries(mine.concat(other).map((x) => [x.name, x]));
-  check(by["동료A"].g === 7, `중계에 2골 뜬 동료가 시즌 7골이 된다 (5 + 2 · 실제 ${by["동료A"].g}골)`);
-  check(by["동료B"].g === 3, `중계에 안 나온 동료는 그대로다 (3골 · 실제 ${by["동료B"].g}골)`);
-  check(by["남의팀선수"].g === 7, `다른 클럽 선수는 안 건드린다 (7골 · 실제 ${by["남의팀선수"].g}골)`);
-  check(by["나"].g === 0, "내 줄에는 안 넣는다 — 내 골은 S.activity에 따로 쌓여요");
+};
+const ROUND = { 우리팀: { res: "W", gf: 3, ga: 1 }, 남의팀: { res: "L", gf: 1, ga: 3 } };
+/* 중계에 **동료A가 2골**, 내가 1골 — 팀 3골이다. 우리 팀 골은 굴리지 않고
+ * 이 이름을 그대로 쓴다. 안 그러면 화면(중계)과 표(개인 순위)가 갈라진다. */
+{
+  let aG = 0, bG = 0, mateA = 0, otherG = 0, n = 400;
+  for (let i = 0; i < n; i++) {
+    const rows = mkRows();
+    runShare({ group: "우리팀" }, rows, ROUND, { goals: ["동료A", "동료A"], myGoals: 1 },
+      clampF, { WingerSquad: WS }, WS, Math);
+    const by = Object.fromEntries(rows.map((r) => [r.p.name, r]));
+    aG += by["동료A"].p.g; bG += by["동료B"].p.g;
+    mateA += by["동료A"].p.a + by["동료B"].p.a + by["동료C"].p.a;
+    otherG += by["남선수1"].p.g + by["남선수2"].p.g;
+  }
+  check(aG === 2 * n, `중계에 2골 뜬 동료가 매번 2골을 받는다 (${aG / n}골/경기)`);
+  check(bG === 0, `중계에 안 나온 동료는 골이 0이다 (${bG / n}골/경기)`);
+  check(otherG === 1 * n, `다른 클럽은 그 라운드 득점만큼만 나눈다 (${otherG / n}골/경기)`);
+  /* 🅰️ **동료 도움이 실제로 붙는가.** 예전에는 우리 클럽을 통째로 건너뛰어서
+   * 이 값이 시즌 내내 0이었다 — 골 셋(동료 2 + 내 1)에 도움이 하나도 없었다. */
+  check(mateA / n > 1.5, `우리 팀 골 셋에 동료 도움이 붙는다 (${(mateA / n).toFixed(2)}/경기)`);
 }
-// 배선 — 라운드 반영이 실제로 이 함수를 통과한다
-check(/const scored = leagueRound\(roundRes\);\s*\n\s*applyMateGoals\(info\.mateGoals\);/.test(C),
-  "라운드를 굴린 **바로 다음에** 중계의 동료 골을 얹는다 — 순서가 바뀌면 우리 팀 골이 덮여요");
+/* 변이 검증 — mineRound를 안 넘기면(옛 계약) 우리 팀은 골도 도움도 0이 된다.
+ * 이 갈래가 안 잡히면 위의 검사는 아무것도 안 지키는 것이다. */
+{
+  const rows = mkRows();
+  for (let i = 0; i < 200; i++) {
+    const r2 = mkRows();
+    runShare({ group: "우리팀" }, r2, ROUND, null, clampF, { WingerSquad: WS }, WS, Math);
+    for (let k = 0; k < 3; k++) { rows[k].p.g += r2[k].p.g; rows[k].p.a += r2[k].p.a; }
+  }
+  const dead = rows.slice(0, 3).reduce((a, r) => a + r.p.g + r.p.a, 0);
+  check(dead === 0, `변이 검증 — 중계 골을 안 넘기면 우리 팀은 골·도움이 0이 된다 (${dead})`);
+}
+// 배선 — 라운드 반영이 실제로 중계의 골을 넘긴다
+check(/leagueRound\(roundRes, null, \{ goals: info\.mateGoals, myGoals: info\.myGoals \}\)/.test(C),
+  "라운드를 굴릴 때 중계의 동료 골을 **같이** 넘긴다 — 뒤에 얹으면 그 경기 평점에 안 들어가요");
 // 중계가 이름을 붙이고 돌려주는가
 check(/text: who \? `⚽ \$\{who\}의 골!/.test(G), "중계가 동료 이름으로 골을 알린다");
 check(/mateGoals,\s*\/\/ 이 경기에서 골을 넣은/.test(G), "중계가 누가 넣었는지 info로 돌려준다");

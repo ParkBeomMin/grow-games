@@ -222,16 +222,25 @@ console.log("=== ⑦ 변이 검증 ===");
   check(sum !== teamGoals, `따로 굴리면 팀 ${teamGoals}골에 선수 합 ${sum}골이 된다 — ①이 그걸 막아요`);
   const round = (CAREER.match(/function leagueRound\([^)]*\) \{[\s\S]*?\n  \}/) || [""])[0];
   check(/dg: 0, da: 0/.test(round), "골·도움을 선수마다 굴리지 않는다");
+  /* 🛡️ 수비는 **우리 팀 동료도** 굴려요. `mine ? 0 : …`으로 우리 팀을 0에 묶던
+   * 시절에는, 그 0이 동료의 시즌 수비 기록이자 그 경기 평점이 됐어요. */
+  check(!/const dd = mine \? 0/.test(round), "우리 팀 동료의 수비를 0으로 묶지 않는다");
   // 굴리는 건 🛡️ 수비뿐이에요 — 팀 스코어로는 알 수 없는 값이니까요
   const lam = (round.match(/raceLam\([^)]*\)/g) || []);
   check(lam.length === 1 && /def\.d/.test(lam[0]),
     `raceLam을 수비에만 쓴다 (${lam.join(" · ") || "안 씀"})`);
-  check(/shareGoals\(out, roundRes\);/.test(round), "그 클럽이 실제로 넣은 골을 나눈다");
+  check(/shareGoals\(out, roundRes, mineRound\);/.test(round), "그 클럽이 실제로 넣은 골을 나눈다");
   const share = (CAREER.match(/function shareGoals\([^)]*\) \{[\s\S]*?\n  \}/) || [""])[0];
-  check(/if \(club === S\.group\) continue;/.test(share),
-    "우리 팀은 건너뛴다 — 중계에 뜬 골이 따로 들어오니까요");
+  /* ⚠️ 계약이 뒤집혔어요. 예전에는 우리 클럽을 **통째로** 건너뛰었는데
+   * (`if (club === S.group) continue;`), 그 continue에 도움까지 딸려 나가서
+   * 동료의 도움 칸이 시즌 내내 0이었어요. 이제 **골만** 안 굴립니다 —
+   * 골은 중계에 뜬 그 골(mineRound.goals)이 임자예요. */
+  check(!/if \(club === S\.group\) continue;/.test(share),
+    "우리 팀을 통째로 건너뛰지 않는다 — 도움까지 같이 빠졌어요");
+  check(/for \(const n of mineRound\.goals \|\| \[\]\)/.test(share),
+    "우리 팀 골은 중계에 뜬 그 골을 쓴다 (굴리지 않아요)");
   check(/for \(let i = 0; i < info\.gf; i\+\+\)/.test(share),
-    "그 라운드 득점 수만큼만 나눈다");
+    "다른 클럽은 그 라운드 득점 수만큼만 나눈다");
 }
 
 console.log(fail ? `\n❌ ${fail}건 실패` : "\n✅ 통과");

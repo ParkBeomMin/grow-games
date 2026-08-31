@@ -222,6 +222,27 @@ window.WingerCareer = (() => {
   const loadHof = () => JSON.parse(localStorage.getItem(HOF_KEY) || "[]");
   const saveHof = (list) => localStorage.setItem(HOF_KEY, JSON.stringify(list));
 
+  /* 🧬 **같은 헌액인지 가리는 지문.**
+   *
+   * `id`는 헌액할 때마다 `"w" + Date.now()`로 새로 나서, 같은 커리어가 두 번
+   * 올라가면 서로 다른 사람이 됩니다. 실제로 그렇게 됐어요 — 명예의 전당 1위와
+   * 2위가 같은 선수였고, 두 행은 **49.6초 차이**에 37칸 중 `id`·`at`·`word`만
+   * 달랐습니다(제보). 두 창에서 각각 은퇴했거나, 은퇴 뒤 세이브가 되살아나
+   * 한 번 더 은퇴한 경우예요.
+   *
+   * `hof` 표에는 UPDATE도 DELETE도 열려 있지 않아서 **이미 올라간 행은 지울 수
+   * 없어요.** 그래서 두 곳에서 막습니다 — 올리기 전(enshrine)과 그리기 전(showHof).
+   *
+   * ⏱️ 시각이 가까운 것만 봐요. 지문이 우연히 겹칠 수 있는 건 기록이 텅 빈
+   * 커리어(0시즌·0골)뿐인데, 같은 사람이 며칠 뒤에 또 그런 커리어를 만들면
+   * 그건 **다른 헌액**이라 합치면 안 돼요. */
+  const TWIN_MS = 10 * 60 * 1000;
+  const hofFp = (e) => [e.game, e.name, e.score, e.seasons, e.apps,
+    e.goals, e.assists, e.defense, e.finalOvr, e.gen]
+    .map((v) => (v == null ? "" : v)).join("|");
+  const hofTwin = (list, e) => list.find((x) => x !== e && hofFp(x) === hofFp(e)
+    && Math.abs((x.at || 0) - (e.at || 0)) < TWIN_MS);
+
   /* 아직 안 올린 헌액을 원격으로 보내요.
    * `sent`가 **정확히 false**인 것만 봅니다 — 이 칸이 없는 옛 항목은 만들 때
    * 이미 올라갔어요. undefined를 "안 올림"으로 보면 올릴 수 없는 항목(같은 id는
@@ -796,9 +817,10 @@ window.WingerCareer = (() => {
    * 기록은 **명단 한 벌에만** 쌓아요(S.squads). 예전에는 같은 사람의 기록이
    * race와 squads 두 벌로 있어서 우리 팀만 손으로 맞춰 주고 있었습니다.
    *
-   * 우리 팀은 여기서 **굴리지 않아요** — 내가 뛴 그 경기의 값(중계에 뜬 골)이
-   * applyMateGoals로 들어옵니다. 굴리면 같은 라운드를 두 번 세요.
+   * 우리 팀 **골은** 여기서 굴리지 않아요 — 내가 뛴 그 경기의 중계에 뜬 골이
+   * mineRound로 들어옵니다. 굴리면 같은 라운드를 두 번 세요.
    * 🌏 월드컵의 advanceOthers(skip)와 같은 규칙이에요.
+   * 도움·수비·평점은 우리 팀도 여기서 같이 매겨요 — 자세한 건 아래 각 자리에.
    *
    * 역할은 포지션에서 정해요 — 센터백에게 스트라이커 생산량을 물리면 안 되니까요. */
   const ROLE_BY_POS = { fw: ["st", "st2"], wg: ["wg"], mf: ["am", "mf", "ut"], df: ["cb", "cb2"] };
@@ -810,7 +832,9 @@ window.WingerCareer = (() => {
     }
     return RACE_ROLES.find((r) => r.key === x.role) || RACE_ROLES[0];
   };
-  function leagueRound(roundRes, skip) {
+  /* mineRound — 내가 뛴 그 경기예요. `{ goals: [골 넣은 동료 이름], myGoals: 내 골 }`.
+   * 안 넘기면(옛 세이브 메우기) 우리 팀 골은 비어요. */
+  function leagueRound(roundRes, skip, mineRound) {
     if (!window.WingerSquad) return [];
     const out = [];
     for (const { club, p } of WingerSquad.leagueXI()) {
@@ -825,16 +849,21 @@ window.WingerCareer = (() => {
       const def = roleOf(p);
       const pop = clamp(p.str, 40, 95);
       /* 🛡️ 수비는 사람마다 굴려요 — 팀 스코어로는 알 수 없는 값이에요.
-       * 우리 팀은 굴리지 않아요(중계에 뜬 내 수비가 따로 쌓입니다). */
+       *
+       * ⚠️ **우리 팀 동료도 굴려요.** 예전에는 여기서 0으로 뒀는데, 그 0이 곧
+       * 동료의 시즌 수비 기록이자 그 경기 평점이 됐어요 — 5:1로 이겨도 동료는
+       * 늘 5점대였습니다(제보: "5대1로 이겼는데 우리팀 다른 선수는 평점이 낮은거야?").
+       * 내 수비는 S.activity에 따로 쌓이고 **내 줄은 위에서 이미 빠졌으니**(p.me),
+       * 여기서 굴려도 두 번 세지 않아요. */
       const dSl = (window.WingerSquad ? WingerSquad.slotOf(p) : null) || {};
-      const dd = mine ? 0 : poissonish(raceLam(def.d, pop) * (dSl.d || 1));
+      const dd = poissonish(raceLam(def.d, pop) * (dSl.d || 1));
       p.d = (p.d || 0) + dd;
       out.push({ p, club, mine, role: def.name, dg: 0, da: 0, dd });
     }
     /* 🏆 **골은 굴리지 않아요.** 그 클럽이 그 라운드에 실제로 넣은 만큼만 나눠요.
      * 개인별로 또 굴리면 팀 스코어와 선수 골 합이 서로 다른 말을 합니다 —
      * 이 저장소가 계속 앓아 온 자리예요(🌏 월드컵에서는 이미 고쳤어요). */
-    shareGoals(out, roundRes);
+    shareGoals(out, roundRes, mineRound);
     /* ⭐ 평점은 **골을 나눈 다음에** 매겨요. 먼저 매기면 그 경기에 한 일을 못 봐요.
      * 실점도 실제 스코어(ga)를 씁니다 — 지어내지 않아요. */
     for (const r of out) {
@@ -938,14 +967,32 @@ window.WingerCareer = (() => {
    * 그러면 내가 종합 100만 돼도 🎯 플레이메이커가 확정이 됩니다. */
   const ASSIST_W = { mf: 1.0, wg: 0.9, fw: 0.5, df: 0.2 };
   const MAKER_W = 3.0;
-  function shareGoals(rows, roundRes) {
+  /* mineRound — 내가 뛴 그 경기. 우리 클럽만 이 값을 봐요.
+   *
+   * ⚠️ 예전에는 우리 클럽을 **통째로 건너뛰었어요**(`if (club === S.group) continue`).
+   * 골은 중계에서 따로 들어오니 맞는 것 같았지만, 그 continue에 도움까지 딸려
+   * 나갔습니다 — 동료의 도움 칸이 시즌 내내 0이었고, 그 0이 경기 평점으로도
+   * 들어가서 5:1로 이겨도 동료는 5점대였어요. 이제 **골만** 안 굴려요.
+   *
+   * ⚖️ **부문상 문턱이 올라가요.** 우리 팀 열한 명이 도움·수비 경쟁에 들어오니
+   * 당연한 값이지만, 크기를 재 뒀습니다 (60시즌 × 38라운드 · 챔피언십):
+   *
+   *   리그 1위      🅰️ 16.9 → 18.9 · 🛡️ 59.8 → 60.8 · ⚽ 24.5 → 25.4
+   *   우리 팀 최고  🅰️  0.0 → 15.2 · 🛡️  0.0 → 50.9
+   *   18도움이면 🎯 플레이메이커 68% → 32% · 60수비면 🛡️ 철벽상 50% → 38%
+   *
+   * 도움 쪽이 크게 움직인 건 MAKER_W(3.0)가 우리 팀 도움도 한 명에게 몰아주기
+   * 때문이에요. 손잡이로 되돌리지 않았습니다 — 상이 귀해진 게 아니라 **경쟁에서
+   * 빠져 있던 열한 명이 돌아온 것**이고, 여기서 ASSIST_P2나 MAKER_W를 깎으면
+   * 다른 클럽의 곡선까지 같이 내려가요. */
+  function shareGoals(rows, roundRes, mineRound) {
     if (!roundRes) return;
     const byClub = {};
     for (const r of rows) (byClub[r.club] = byClub[r.club] || []).push(r);
     for (const club of Object.keys(byClub)) {
-      if (club === S.group) continue;
+      const isMine = club === S.group;
       const info = roundRes[club];
-      if (!info || !info.gf) continue;
+      if (isMine ? !mineRound : (!info || !info.gf)) continue;
       const xi = byClub[club];
       /* 에이스는 그 클럽 선발 공격수 중 가장 잘하는 사람이에요. 공격수가 없으면
        * 제일 잘하는 사람이 그 자리를 맡아요(포메이션이 바뀌어도 안 깨져요). */
@@ -970,43 +1017,44 @@ window.WingerCareer = (() => {
         for (const r of list) { t -= weight(r); if (t <= 0) return r; }
         return list[0];
       };
-      for (let i = 0; i < info.gf; i++) {
-        const who = pick1(xi, wOf);
+      /* 도움은 **골을 넣은 사람을 빼고** 한 명에게 가요. 골 임자가 나여서
+       * 이 표에 없으면(내 골) 열한 명 전부가 후보예요. */
+      const assistTo = (who) => {
+        const others = who ? xi.filter((r) => r !== who) : xi;
+        if (!others.length || Math.random() >= ASSIST_P2) return;
+        const as = pick1(others, aOf);
+        as.p.a = (as.p.a || 0) + 1; as.da = (as.da || 0) + 1;
+      };
+      const score1 = (who) => {
         who.p.g = (who.p.g || 0) + 1;
         who.dg = (who.dg || 0) + 1;
-        const others = xi.filter((r) => r !== who);
-        if (others.length && Math.random() < ASSIST_P2) {
-          const as = pick1(others, aOf);
-          as.p.a = (as.p.a || 0) + 1; as.da = (as.da || 0) + 1;
+        assistTo(who);
+      };
+      if (isMine) {
+        /* 🏟️ 우리 팀 골은 **중계에 뜬 그 골**이에요 — 굴리지 않아요.
+         * 이름을 못 찾으면(명단이 바뀐 옛 세이브) 가중으로 임자를 정해요.
+         * 골을 통째로 버리면 팀 스코어와 선수 골 합이 갈라집니다. */
+        for (const n of mineRound.goals || []) {
+          score1(xi.find((r) => r.p.name === n) || pick1(xi, wOf));
         }
+        /* ⚠️ **내 골에도 누군가 도움을 줘요.** 이게 없으면 내가 골을 쓸어 담는
+         * 동안 우리 팀 도움 칸만 비어요 — 혼자 뛰는 팀이 됩니다
+         * (🌏 월드컵에서 같은 제보로 이미 고친 자리예요). */
+        for (let i = 0; i < (mineRound.myGoals || 0); i++) assistTo(null);
+      } else {
+        for (let i = 0; i < info.gf; i++) score1(pick1(xi, wOf));
       }
     }
   }
 
-  // 우리 팀 선발 이름 — 경기 중 '동료의 골'에 붙일 이름이에요
+  /* 우리 팀 선발 이름 — 경기 중 '동료의 골'에 붙일 이름이에요.
+   *
+   * ⚠️ **그 경기에 실제로 뛴 열한 명**에서 골라요(matchXI). 실력 순 선발
+   * (startingXI)에서 고르면 중계에서 골을 넣은 동료가 그 경기 선발이 아닐 수
+   * 있는데, 순위표는 matchXI로 세니 화면과 표가 다른 말을 합니다.
+   * 출전 수(markApps)도 득점자(pickScorer)도 전부 matchXI를 봐요. */
   const mateNames = () => (window.WingerSquad
-    ? WingerSquad.startingXI().filter((x) => !x.me).map((x) => x.name) : []);
-
-  /* 경기에서 동료가 넣은 골을 그 선수의 시즌 기록으로 옮겨요.
-   *
-   * 우리 팀 선수는 **나와 같은 경기를 뛴 사람**이에요. 그 경기에서 실제로 나온
-   * 골만 세야 화면(중계)과 표(개인 순위)가 같은 것을 봅니다. 그래서 굴린 값(dg)을
-   * 물리고 중계에 뜬 골 수로 바꿔요 — 안 그러면 같은 라운드를 두 번 세게 됩니다.
-   * 다른 클럽 선수는 내가 볼 수 없는 경기라 굴린 값을 그대로 써요. */
-  /* 중계에 뜬 동료 골을 그 선수의 시즌 기록으로 옮겨요.
-   *
-   * 우리 팀 선수는 **나와 같은 경기를 뛴 사람**이에요. 그 경기에서 실제로 나온
-   * 골만 세야 화면(중계)과 표(개인 순위)가 같은 것을 봅니다.
-   * 이제 기록이 명단 한 벌뿐이라 여기 한 곳만 고치면 돼요 —
-   * 예전에는 race와 squads 두 벌을 손으로 맞추고 있었습니다. */
-  function applyMateGoals(names) {
-    if (!window.WingerSquad) return;
-    const mine = WingerSquad.squadOf(S.group);
-    for (const n of names || []) {
-      const who = mine.find((x) => x.name === n && !x.me);
-      if (who) who.g = (who.g || 0) + 1;
-    }
-  }
+    ? WingerSquad.matchXI().filter((x) => !x.me).map((x) => x.name) : []);
 
   /* 경쟁자 실점 — 소속 클럽의 그 라운드 결과에서 짐작해요. 실제로 굴리지는
    * 않으니(순위표는 승패만 굴려요) 결과에 어울리는 값을 뽑습니다.
@@ -1794,10 +1842,10 @@ window.WingerCareer = (() => {
      * 둘이 같은 라운드를 보면서도 서로 모르는 사이였습니다. */
     const roundRes = recordRound(act.opp, info.res, info.teamGoals, info.oppGoals);
     ensureLeagueRecords();              // 옛 세이브면 여기서 먼저 채워요
-    /* 🥇 리그 전 선발이 그 라운드를 치러요. 우리 팀은 굴리지 않고,
-     * 중계에 실제로 뜬 동료 골을 바로 이어서 얹습니다(같은 라운드를 두 번 세지 않아요). */
-    const scored = leagueRound(roundRes);
-    applyMateGoals(info.mateGoals);
+    /* 🥇 리그 전 선발이 그 라운드를 치러요. 우리 팀 골은 굴리지 않고
+     * **중계에 실제로 뜬 골**을 그대로 넘겨서, 한 자리에서 한 번만 셉니다.
+     * 내 골도 같이 넘겨요 — 그 골에 도움을 준 동료가 있어야 하니까요. */
+    const scored = leagueRound(roundRes, null, { goals: info.mateGoals, myGoals: info.myGoals });
     const rows = [
       { name: S.name, club: S.group, score: myRankScore, me: true, res: info.res },
       /* 라이벌 줄이 개인 순위와 **같은 명단**이에요. 예전에는 명단이 둘로 갈려 있어서
@@ -3256,7 +3304,14 @@ window.WingerCareer = (() => {
      * 이 칸이 없는 옛 항목은 그때 이미 올라간 것이라 건드리지 않아요. */
     entry.sent = false;
     const hof = loadHof();
-    hof.push(entry);
+    /* 🧬 같은 커리어가 이미 헌액돼 있으면 **그 자리에 덮어써요.**
+     * 두 창에서 각각 은퇴해도 localStorage는 한 벌이라 여기서 만나요.
+     * 이미 올라간 항목이면(sent) 그 도장도 그대로 물려받아, 올릴 수 없는 걸
+     * 다시 두드리지 않아요. */
+    const twin = hofTwin(hof, entry);
+    if (twin) { entry.id = twin.id; entry.at = twin.at; entry.sent = twin.sent; }
+    const slot = twin ? hof.indexOf(twin) : -1;
+    if (slot >= 0) hof[slot] = entry; else hof.push(entry);
     saveHof(hof);
     if (window.Stats) Stats.log("retire", {
       years: entry.seasons, wins: entry.wins, score: entry.score,
@@ -3343,17 +3398,29 @@ window.WingerCareer = (() => {
     await flushHof();                      // 은퇴식에서 못 올린 게 있으면 여기서 올라가요
     const local = loadHof().filter((e) => e.game === "soccer");
     const localIds = new Set(local.map((e) => e.id));
-    let list = local, global = false;
     const remote = window.Match ? await window.Match.fetchHof("soccer") : null;
-    if (remote && remote.length) {
-      global = true;
-      const seen = new Set();
-      list = [];
-      for (const e of [...remote, ...local]) {
-        if (!e || seen.has(e.id)) continue;
-        seen.add(e.id);
-        list.push(e);
+    /* 🧬 **같은 헌액은 한 장으로 접어요.** id만 보면 같은 커리어가 두 번 올라간
+     * 경우(위 hofFp의 사연)가 둘로 남습니다 — 1위와 2위가 같은 선수였어요.
+     * 원격 표에는 DELETE가 열려 있지 않아서, 그리는 자리에서 접는 게 유일한 길이에요.
+     *
+     * · 한마디는 **있는 쪽을 남겨요** — 한마디를 쓰기 전에 올라간 장이 흔해요
+     * · 내 기록 표시(me)도 따라가요 — 남긴 장이 원격 것이어도 내 것은 내 것이에요 */
+    const list = [];
+    const seenId = new Set();
+    const byFp = new Map();
+    for (const e of (remote && remote.length ? remote : []).concat(local)) {
+      if (!e || seenId.has(e.id)) continue;
+      seenId.add(e.id);
+      const fp = hofFp(e);
+      const twin = (byFp.get(fp) || [])
+        .find((x) => Math.abs((x.at || 0) - (e.at || 0)) < TWIN_MS);
+      if (twin) {
+        if (!twin.word && e.word) twin.word = e.word;
+        if (localIds.has(e.id)) localIds.add(twin.id);
+        continue;
       }
+      byFp.set(fp, (byFp.get(fp) || []).concat([e]));
+      list.push(e);
     }
     list.sort((a, b) => hofScore(b) - hofScore(a));
     hofShown = 20;
@@ -3539,7 +3606,10 @@ window.WingerCareer = (() => {
         bp: Math.round(overall() * 3 + (S.fandom || 0) * 0.15 + years * 8),
       });
     }
-    for (const e of loadHof().filter((x) => x.game === "soccer")) {
+    // 🧬 같은 커리어가 두 번 헌액됐으면 상대도 하나예요 (hofFp의 사연)
+    const past = loadHof().filter((x) => x.game === "soccer");
+    for (const e of past) {
+      if (hofTwin(past.slice(0, past.indexOf(e)), e)) continue;
       list.push({ id: e.id, name: e.name, bp: bpOf(hofScore(e), e.finalOvr) });
     }
     return list;
@@ -3745,7 +3815,7 @@ window.WingerCareer = (() => {
     _t: {
       ratingOf, FAN_CAP, RATING_DIV, POS_AXIS, posAxis, AXIS_K, AXIS_OFF,
       RATE, RATE_RESULT, RATE_CONCEDE, ratingParts, matchRating, ratingWhyHTML,
-      RACE_POS, leagueRound, ensureLeagueRecords, raceConceded, applyMateGoals, mateNames,
+      RACE_POS, leagueRound, ensureLeagueRecords, raceConceded, mateNames,
       recordRound, initTable, tableRows, tableHTML, shareGoals, clubGoals, splitMine, myTeamGoals,
       raceRank, raceTop,
       LEAGUES, leagueOf, barOf, CLUBS, clubStrOf, debutClubs, DEBUT_POOL, weakestClub,
