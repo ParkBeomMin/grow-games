@@ -564,10 +564,36 @@ window.WingerProspect = (() => {
   /* 만든 선수를 세이브에 심어요. 특능·결함은 **자리만** 잡습니다 (효과는 §11-7).
    * ⚠️ 인자 이름이 `card`인 건 **세이브 스키마와 호출부를 안 건드리려고**예요 —
    *    3택은 사라졌지만 여기 들어오는 모양(age·growthType·trait·flaw·stats)은 그대로입니다. */
+  /* 🔢 **등번호** — 이번에 새로 생긴 값이에요 (유니폼 등에 새겨집니다).
+   *
+   * 🔑 **포지션 관례를 기본값으로** 주고 그중에서 고르게 했습니다. 왜 「자유 입력」이
+   *    아니냐면 — 등번호는 **고르는 재미**지 채우는 칸이 아니에요. 자유 입력이면
+   *    검증(0? 100? 빈칸?)과 키보드가 붙고, 세로 화면이 한 칸 더 길어집니다.
+   *    세 개면 탭 세 번이고 전부 그럴듯한 번호예요.
+   *
+   * 🔴 **등번호는 꾸미기입니다. 효과를 붙이지 마세요** (설계 83번 §11).
+   *    효과가 붙는 순간 **최적 번호가 확정되고, 그건 취향이 아니라 정답**이 됩니다.
+   *    *"기록이 효과"*도 아니에요 — 번호는 그냥 꾸미기입니다.
+   *
+   * ⚠️ **세이브 스키마는 마이그레이션하지 않습니다.** 옛 세이브엔 `shirtNo`가 없어요 —
+   *    읽는 쪽이 `shirtNoOf()`로 기본값을 줍니다.
+   * 🚧 설계 83번은 나중에 📍 세부 자리(`wantSlot`)가 생기면 그 관례값으로 가자고 합니다.
+   *    `defaultNo(pos)` 한 함수만 갈면 되게 뒀어요 — 부르는 쪽은 안 바뀝니다. */
+  const SHIRT_NOS = { fw: [9, 10, 19], wg: [7, 11, 17], mf: [8, 10, 6], df: [4, 5, 3] };
+  const shirtNosOf = (pos) => SHIRT_NOS[pos] || SHIRT_NOS.mf;
+  const defaultNo = (pos) => shirtNosOf(pos)[0];
+  /* 👕 화면·유니폼이 함께 쓰는 **하나의 읽는 자리**입니다 (옛 세이브 = 기본값) */
+  const shirtNoOf = (st) => {
+    const S0 = st || S;
+    return (S0 && Number(S0.shirtNo)) || defaultNo(S0 && S0.pos);
+  };
+
   function applyCard(st, card, rerolls) {
     const S0 = st || S;
     if (!S0 || !card) return S0;
     S0.age = card.age;
+    /* 🔢 조립대에서 고른 등번호. 안 골랐으면 포지션 관례값이에요 */
+    S0.shirtNo = Number(card.shirtNo) || defaultNo(S0.pos);
     S0.growthType = card.growthType;
     S0.peakShift = 0;
     S0.flaw = card.flaw || "";
@@ -613,31 +639,42 @@ window.WingerProspect = (() => {
    * 세로로 끌다 손을 떼면 🎲가 먹히는 자리라 문턱은 그대로 남깁니다. */
   const DRAG_MIN = 12;
 
-  /* 🧍 **무대** — 3D 캐릭터(char3d.js)가 서는 자리예요.
+  /* 👕 **무대** — 3D 유니폼(char3d.js)이 서는 자리예요. (캐릭터였다가 유니폼이 됐습니다)
    *
-   * 🔑 무대 안에는 **CSS 실루엣이 늘 깔려 있습니다.** 3D는 그 위를 덮을 뿐이에요.
+   * 🔑 무대 안에는 **CSS 유니폼이 늘 깔려 있습니다.** 3D는 그 위를 덮을 뿐이에요.
    *    WebGL이 없거나(jsdom·구형 기기) three.js 내려받기가 실패하거나 컨텍스트를 잃으면
-   *    **아무것도 안 해도 실루엣이 그대로 보입니다.** 폴백을 따로 만드는 게 아니라
+   *    **아무것도 안 해도 CSS 유니폼이 그대로 보입니다.** 폴백을 따로 만드는 게 아니라
    *    **폴백 위에 3D를 얹는** 구조예요 — 그래야 실패해도 화면이 멀쩡합니다.
+   *    🔑 폴백에도 **이름과 번호가 글자로** 들어갑니다 — 3D가 없어도 *"내 선수"*는 남아요.
    *
-   * 🦶 **주발 — 공이 그 발 옆에 놓입니다.**
-   *    ⚠️ 캐릭터가 **우리를 마주 보고** 서 있어서 **캐릭터의 왼발은 화면 오른쪽**이에요.
-   *       거울이 한 번 뒤집힙니다. 예전에 🦶 표시 색이 판정과 반대이던 버그가 이 형태였어요.
-   *    🔒 그래서 `🦶 왼발` 칩을 **공 바로 옆에** 붙입니다. 라벨이 물건 옆에 있으면
-   *       거울 문제가 아예 안 생겨요 — 화면 좌우를 외울 필요가 없습니다.
+   * 🦶 **주발은 글자 칩이 말합니다 — 좌우로 뜻을 만들지 않았어요.**
+   *    ⚠️ 유니폼은 돌아갑니다. 앞을 보면 착용자의 왼쪽이 화면 오른쪽이고 뒤를 보면 반대예요.
+   *       **안정된 좌우가 없습니다.** 공을 한쪽에 놓으면 **반 바퀴마다 거짓말**이 돼요 —
+   *       예전에 🦶 표시 색이 판정과 반대이던 버그가 정확히 그 형태였습니다.
+   *    ✅ 그래서 ⚽ 공은 **가운데**에 두고, 칩이 글자로 주발을 말합니다.
    *
-   * ⚠️ 머리 모양은 `shapeKey`에서 나와요. 🎲로 배분을 다시 뽑으면 같이 바뀝니다. */
-  function stageHTML(b, who) {
-    const h = (String(b.shapeKey || "").charCodeAt(0) || 65) % 3;
-    const L = who.foot === "L";
-    return `<span class="w2c-stage foot-${L ? "L" : "R"}" id="pc-stage">`
-      + `<span class="pc-silhouette hair-${h}" aria-hidden="true">`
-      + `<i class="s-leg l"></i><i class="s-leg r"></i>`
-      + `<i class="s-arm l"></i><i class="s-arm r"></i>`
-      + `<i class="s-body"></i><i class="s-head"></i><i class="s-hair"></i><i class="s-ball"></i>`
+   * ⚠️ 이름이 비어 있어도 됩니다 — 그때는 **무지 유니폼**이에요 (아무것도 안 새겨집니다). */
+  function stageHTML(who, no) {
+    const nm = String(who.name || "").trim();
+    return `<span class="w2c-stage" id="pc-stage">`
+      + `<span class="pc-jersey" aria-hidden="true">`
+      + `<i class="j-sleeve l"></i><i class="j-sleeve r"></i>`
+      + `<i class="j-body"></i><i class="j-hem"></i><i class="j-collar"></i>`
+      + `<b class="j-name">${esc(nm)}</b><b class="j-no">${esc(no || "")}</b>`
       + `</span>`
       + `<span class="w2c-foot" aria-hidden="true">${footLabel(who.foot)}</span>`
       + `</span>`;
+  }
+
+  /* 🔢 등번호 고르기 — **자기 안에서 끝나는 한 칸**이에요.
+   * ⚠️ 조립대 구성이 바뀔 수 있다고 들었습니다(포메이션 그림 등). 그래서 이 줄은
+   *    `benchHTML`에서 **한 줄 옮기면 어디로든 가게** 만들어 뒀어요 — 무대와 안 얽힙니다. */
+  function shirtHTML(pos, no) {
+    const opts = shirtNosOf(pos).map((n) =>
+      `<button type="button" class="pc-no${n === no ? " on" : ""}" data-no="${n}" `
+      + `aria-pressed="${n === no}">${n}</button>`).join("");
+    return `<span class="pc-shirt" role="group" aria-label="등번호 고르기">`
+      + `<span class="pc-shirt-lab">🔢 등번호</span>${opts}</span>`;
   }
 
   /* 🧍 무대에 선수를 세워요 — **3D가 없어도 아무 일도 안 일어납니다.**
@@ -651,13 +688,35 @@ window.WingerProspect = (() => {
     if (!stage) return;
     try {
       if (window.W2Char) window.W2Char.show(stage, {
-        stats: draw.build.stats,
+        name: draw.who.name,
+        number: draw.build.shirtNo,
         foot: draw.who.foot,
-        shapeKey: draw.build.shapeKey,
-        /* 📏 키는 아직 없어요 — 5번 작업에서 `draw.who.height`가 들어오면 그대로 실립니다 */
-        height: draw.who.height,
+        /* 👕 **킷은 아직 안 넘깁니다** — 무대의 CSS 변수(`--kit-*` = 무지)를 씁니다.
+         * 팀 색·무늬가 생기면 여기 `kit: { body, sleeve, trim, text, pattern }` 한 줄이면 돼요.
+         * char3d.js에 **절대색이 한 개도 없어서** 그 한 줄로 끝납니다. */
       });
     } catch (e) { /* 연출이 게임을 멈추면 안 됩니다 */ }
+  }
+
+  /* 🔢 등번호를 갈아 끼워요 — **화면을 통째로 다시 그리지 않습니다.**
+   *
+   * 🔑 `render()`를 부르면 `innerHTML`이 통째로 새로 그려지고 🎬 슬롯 연출이 세 칸 다시 돕니다.
+   *    번호 하나 바꾸는 데 화면이 한 번 깜빡이면 **고르는 맛이 사라져요.**
+   *    그래서 ① 3D는 `set()`으로 등판만 ② 폴백 글자와 버튼 상태만 손댑니다. */
+  function setShirtNo(no) {
+    if (!draw || !(no > 0)) return;
+    draw.build.shirtNo = no;
+    const body = document.getElementById("prospect-body");
+    if (body) {
+      body.querySelectorAll(".pc-no").forEach((btn) => {
+        const on = Number(btn.dataset.no) === no;
+        btn.classList.toggle("on", on);
+        btn.setAttribute("aria-pressed", String(on));
+      });
+      const fb = body.querySelector(".j-no");
+      if (fb) fb.textContent = String(no);
+    }
+    try { if (window.W2Char) window.W2Char.set({ number: no }); } catch (e) {}
   }
 
   /* 🧹 조립대를 **완전히 떠날 때** 컨텍스트까지 놓습니다.
@@ -755,16 +814,17 @@ window.WingerProspect = (() => {
    * ⚠️ 📏 **키는 이번 범위가 아닙니다** — 5번 작업에서 들어오고, 자리는
    *    아래 `.pb-meta`(🔒 잠긴 사실 줄)에 `🎂 17세` 옆으로 **합류**합니다.
    *    화면 순서는 📏 키 화면 → 🎯 포지션 → 🧬 조립대라, 여기 오는 건 이미 정해진 값이에요. */
-  function benchHTML(b, who, talents) {
+  function benchHTML(b, who, talents, pos) {
     const tr = traitById(b.trait), fl = flawById(b.flaw);
     return `
       <span class="pb-head">
-        ${stageHTML(b, who)}
+        ${stageHTML(who, b.shirtNo)}
         <span class="pc-id">
           <span class="pc-name">🧒 ${esc(who.name || "이름 없는 유망주")}</span>
-          <span class="pb-meta">🎂 ${b.age}세 · ${footLabel(who.foot)}</span>
         </span>
       </span>
+      <span class="pb-meta">🎂 ${b.age}세 · ${footLabel(who.foot)}</span>
+      ${shirtHTML(pos, b.shirtNo)}
       ${gradeStripHTML(b, talents)}
       <span class="pc-now pb-slot" data-slot="2">
         <span class="pc-cap"><b>📈 지금 실력</b> — 늦게 크는 선수일수록 작아 보여요</span>
@@ -831,6 +891,10 @@ window.WingerProspect = (() => {
     draw.build.stats = sh.stats;
     draw.build.shapeKey = sh.shapeKey;
     render();
+    /* 🎲 **유니폼은 안 바뀝니다** — 바뀌는 건 🌱 등급 여섯 줄(바로 아래)이에요.
+     * 배분을 유니폼에 실으면 *색·무늬로 능력치를 읽는 화면*이 되고, 그건 등급 줄이 할 말입니다.
+     * 대신 손엔 대답해야 하니 **한 번 흔듭니다** — 아무것도 안 뜻해서 거짓말을 할 수가 없어요. */
+    try { if (window.W2Char) window.W2Char.nudge(); } catch (e) {}
   }
 
   function render() {
@@ -841,7 +905,7 @@ window.WingerProspect = (() => {
 
     const body = document.getElementById("prospect-body");
     if (body) {
-      body.innerHTML = benchHTML(b, who, draw.talents);
+      body.innerHTML = benchHTML(b, who, draw.talents, draw.pos);
       if (window.Radar) {
         /* 📈 레이더 캔버스가 300×260인 건 **공용 radar.js를 안 고치고** 크게 그리려고예요.
          * `R = min(W,H)/2 - 36`이라 캔버스가 작으면 반지름이 통째로 라벨에 먹힙니다
@@ -856,9 +920,13 @@ window.WingerProspect = (() => {
           max: 44, stroke: "#5fa8ff", fill: "rgba(95, 168, 255, 0.28)",
         });
       }
-      /* 🧍 무대는 **다시 그린 다음** 세웁니다 — innerHTML이 옛 캔버스를 통째로 버리니까요.
-       * `W2Char.show`는 이미 서 있으면 컨텍스트를 새로 만들지 않고 **모양만 갈아입혀요**. */
+      /* 👕 무대는 **다시 그린 다음** 세웁니다 — innerHTML이 옛 캔버스를 통째로 버리니까요.
+       * `W2Char.show`는 이미 서 있으면 컨텍스트를 새로 만들지 않고 **갈아입히기만** 해요. */
       paintChar();
+      /* 🔢 등번호 버튼 — 다시 그릴 때마다 새 요소라 매번 겁니다 */
+      body.querySelectorAll(".pc-no").forEach((btn) => {
+        btn.onclick = () => { if (!dragged) setShirtNo(Number(btn.dataset.no)); };
+      });
     }
 
     /* 🎲 몇 번 뽑았나 — **남은 횟수가 아니라 쓴 횟수**예요(무제한이라 남은 수가 없습니다).
@@ -965,6 +1033,8 @@ window.WingerProspect = (() => {
     /* ⭐ 잠재력·🧬 성장타입·⭐ 특능·🩹 결함은 **여기서 한 번**만 굴러요 */
     draw.talents = rollTalents(pos);
     draw.build = rollBuild(market.id, pos);
+    /* 🔢 포지션 관례 번호로 시작해요 — 🎲로는 **안 바뀝니다**(안 바뀌는 축이에요) */
+    draw.build.shirtNo = defaultNo(pos);
     bindDragGuard();
     render();
     const back = document.getElementById("btn-back-prospect");
@@ -982,6 +1052,7 @@ window.WingerProspect = (() => {
      * · `rollBuild` = 선수 한 명 (조립대에 들어올 때 한 번)
      * · `rollTalents` = ⭐ 잠재력 (**따로** 부릅니다 — 🎲가 못 건드리게 뺀 자리) */
     rollShape, rollBuild, rollTalents, applyCard, open,
+    SHIRT_NOS, shirtNosOf, defaultShirtNo: defaultNo, shirtNoOf,
     POOL, REROLL_MAX, evenStats,
     RETIRE_AGE, RETIRE_CURVE, LOW_APPS, LOW_RUN, CARD_AGE,
     START_AGE, PEAK_SHIFT_MAX, HOT_RUN, HOT_BAR,

@@ -1259,6 +1259,20 @@ button.pf-slot { cursor: pointer; font-family: inherit; }
  * 🎨 색: 조립대는 선수가 하나라 구분색이 필요 없어요. `--pc-tone` 하나만 씁니다.
  *    📊 시트의 두 열(↩️ 직전 · 🎲 지금)만 색으로 갈라요. */
 .pbench { --pc-tone: var(--sky); }
+
+/* 👕 **킷** — 유니폼의 색이 여기 한 곳에 있습니다. 3D도 CSS 폴백도 이 넷을 읽어요.
+ *
+ * 🔑 char3d.js에는 **절대색이 한 개도 없습니다.** 팀 색이 생기면 ① 여기를 갈거나
+ *    ② `W2Char.show(stage, { kit: {...} })`로 넘기면 끝이에요 — 셰이더도 지오메트리도
+ *    안 건드립니다. (아이돌에서 절대색을 박았다가 그 화면만 다른 게임 색이 됐어요)
+ * ⚠️ **지금은 무지 유니폼**입니다 — 참고 이미지의 흰 유니폼을 야간 조명 톤으로 옮겼어요.
+ *    `--cream`은 순백이 아니라 살짝 푸른 흰색이라 네이비 무대 위에서 안 튑니다. */
+.w2c-stage {
+  --kit-body: #eaf0ff;      /* = --cream. 3D가 이 값을 문자열로 읽어서 var()를 못 풀어요 */
+  --kit-sleeve: #eaf0ff;
+  --kit-trim: #1a2547;      /* 소매·목·밑단 트림 — 참고 이미지의 검은 트림 자리 */
+  --kit-text: #141d3c;      /* 등에 새기는 글자색 */
+}
 .pcs-col.tone-a { --pc-tone: var(--sky); }
 .pcs-col.tone-b { --pc-tone: var(--accent2); }
 
@@ -1295,8 +1309,9 @@ button.pf-slot { cursor: pointer; font-family: inherit; }
   overflow: hidden;
   background: var(--field);          /* 스크롤한 내용이 무대 뒤로 비치면 안 돼요 */
 }
-/* 🔒 잠긴 사실 줄 — 🎂 나이 · 🦶 주발. 📏 키가 5번 작업에서 여기 합류합니다 */
-.pb-meta { display: block; font-size: .78rem; color: var(--dim); }
+/* 🔒 잠긴 사실 줄 — 🎂 나이 · 🦶 주발. **무대 밖으로 내렸습니다** (위 `.pc-id` 주석 참고).
+ * 📏 키가 5번 작업에서 여기 합류합니다 */
+.pb-meta { display: block; font-size: .78rem; color: var(--dim); margin-top: -2px; }
 
 /* 🎁 타고난 것 — **굴릴 수 있는 것과 없는 것의 대비가 이 화면의 교육입니다.**
  * 그래서 📊 배분 상자(노랑 점선)와 **다른 색**으로 잠금을 말해요. */
@@ -1322,17 +1337,28 @@ button.pf-slot { cursor: pointer; font-family: inherit; }
 .pb-bud-note { flex: 1 1 100%; font-size: .7rem; opacity: .85; word-break: keep-all; }
 
 /* 🧒 머리글 — 이름 · 🔒 잠긴 사실 · 실루엣 */
-/* 🧒 이름표 — **무대 위에 얹습니다.** 3D 뒤로 글자가 묻히지 않게 아래쪽에 그늘(scrim)을 깔아요. */
+/* 🧒 이름표 — **무대 위에 얹습니다.** 3D 뒤로 글자가 묻히지 않게 위쪽에 그늘(scrim)을 깔아요.
+ *
+ * 🔴 **이름 한 줄만 남겼습니다.** 🎂 나이·🦶 주발을 여기 같이 뒀더니 320px에서 두 줄로
+ *    접히면서 **유니폼 등의 이름 위를 덮었어요**(렌더에서 확인 — 이름이 두 번 겹쳐 보입니다).
+ *    이제 등에 진짜 이름이 새겨져 있으니, 무대 위 이름표는 **낭독용 한 줄**이면 충분합니다.
+ * 🔒 `nowrap` + `ellipsis`가 **두 줄이 되는 길을 아예 막습니다** — 긴 이름이 와도
+ *    세로로 자라지 않아요. 전체 이름은 등판이 보여 줍니다.
+ * 🔒 렌더 검사가 `.pc-id`와 **등판의 화면 사각형이 안 겹치는지**를 잽니다(N절). */
 .pc-id {
   position: absolute;
-  left: 12px; right: 40%; top: 9px;
+  left: 12px; right: 40%; top: 6px;
   z-index: 2;
   min-width: 0;
   display: block;
   pointer-events: none;             /* 무대를 끌어 돌리는 손을 막지 않아요 */
   text-shadow: 0 1px 3px rgba(4, 8, 20, .85);
 }
-.pc-name { display: block; font-family: "Jua", sans-serif; font-size: 1.15rem; color: var(--text); line-height: 1.3; }
+.pc-name {
+  display: block; font-family: "Jua", sans-serif; font-size: 1.08rem;
+  color: var(--text); line-height: 1.25;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
 .pc-age { display: block; font-size: .76rem; color: var(--dim); }
 
 /* 📈/📊 두 개의 자 — **같은 선수를 다른 잣대로 두 번** 봅니다.
@@ -1423,13 +1449,13 @@ button.pf-slot { cursor: pointer; font-family: inherit; }
     radial-gradient(120% 78% at 50% 118%, rgba(255, 159, 69, .20) 0%, rgba(255, 159, 69, 0) 62%),
     radial-gradient(86% 70% at 50% 8%, var(--bg2) 0%, var(--bg) 100%);
 }
-/* 무대 바닥 — 선수가 공중에 뜬 것처럼 안 보이게 하는 타원 하나.
- * ⚠️ 캐릭터를 오른쪽으로 비켜 세웠으니(char3d.js `root.position.x`) 여기도 같이 옮깁니다 */
+/* 무대 바닥 — ⚽ 공이 놓인 자리의 그림자 한 장. 유니폼이 그 위에 **떠 있습니다.**
+ * ⚠️ 유니폼은 무대 **가운데**예요 (캐릭터판은 이름표에 왼쪽을 내주려고 오른쪽으로 비켰습니다) */
 .w2c-stage::before {
   content: "";
   position: absolute;
-  left: 60%; bottom: 17%;
-  width: 32%; height: 6%;
+  left: 50%; bottom: 16%;
+  width: 30%; height: 5.5%;
   transform: translateX(-50%);
   border-radius: 50%;
   background: radial-gradient(closest-side, rgba(4, 8, 20, .6), rgba(4, 8, 20, 0));
@@ -1462,16 +1488,20 @@ button.pf-slot { cursor: pointer; font-family: inherit; }
 }
 .w2c-canvas:active { cursor: grabbing; }
 
-/* 🦶 주발 칩 — **공 바로 옆**에 붙습니다.
+/* 🦶 주발 칩 — **글자가 말합니다. 좌우로 뜻을 만들지 않아요.**
  *
- * 🔴 캐릭터는 우리를 마주 보고 서 있어서 **캐릭터의 왼발이 화면 오른쪽**이에요.
- *    거울이 한 번 뒤집힙니다. 예전에 🦶 주발 표시의 **색이 판정과 반대쪽**이던 버그가
- *    정확히 이 형태였어요 — *"안 보이는 것"*이 아니라 **거짓말을 하고 있던 것**입니다.
- *    라벨을 공 옆에 두면 좌우를 외울 필요가 없어져요. 그게 이 규칙의 이유입니다. */
+ * 🔴 캐릭터판은 ⚽ 공을 **주발 쪽**에 놓았어요. 캐릭터가 우리를 마주 보니
+ *    *캐릭터의 왼발이 화면 오른쪽*이라 거울이 한 번 뒤집혔고, 그걸 세 겹으로 막았습니다.
+ *    **유니폼은 돌아갑니다** — 앞을 보면 착용자의 왼쪽이 화면 오른쪽, 뒤를 보면 반대예요.
+ *    **안정된 좌우가 없어서**, 공을 한쪽에 놓으면 **반 바퀴마다 거짓말**이 됩니다.
+ *    예전에 🦶 표시의 색이 판정과 반대이던 버그가 정확히 그 형태였어요 —
+ *    *"안 보이는 것"*이 아니라 **거짓말을 하고 있던 것**입니다.
+ * ✅ 그래서 공은 **가운데**, 칩은 그 아래. 좌우를 외울 일이 아예 없습니다. */
 .w2c-foot {
   position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
   bottom: 7%;
-  z-index: 2;
   z-index: 2;
   font-size: .72rem;
   color: var(--text);
@@ -1481,62 +1511,99 @@ button.pf-slot { cursor: pointer; font-family: inherit; }
   padding: 2px 8px;
   white-space: nowrap;
 }
-/* 🎯 **3D가 서면 칩이 공을 따라갑니다.** char3d.js가 공의 화면 위치를 재서
- * `--ball-x`(가운데 %) · `--ball-w`(지름 %)로 넘겨줘요.
+/* 🎯 **3D가 서면 칩이 ⚽ 공을 따라갑니다.** char3d.js가 공의 화면 위치를 재서
+ * `--ball-x`(가운데 %) · `--ball-bot`(밑동 %)로 넘겨줘요.
  *
- * 🔴 처음엔 이 값을 **손으로 박았습니다.** 그랬더니 왼발잡이에서 칩이 공을 **덮었어요** —
- *    캐릭터를 오른쪽으로 비켜 세운 탓에 공의 화면 위치가 좌우 대칭이 아니었거든요.
- *    무대 높이·카메라 거리·다리 굵기가 전부 이 위치를 움직입니다. **CSS는 그걸 모릅니다.**
- *    그래서 재는 쪽이 알려 주고, 붙이는 쪽이 그 옆에 답니다.
- *
- * ⚠️ 칩은 **공 바로 아래**에 앉습니다. 옆에 두면 한쪽 주발에서 👟 축구화를 덮었어요
- *    (왼발잡이 렌더에서 확인). 아래는 두 주발 모두 자리가 나고 좌우도 안 헷갈립니다.
+ * 🔴 처음엔 이 값을 **손으로 박았습니다.** 그랬더니 칩이 공을 **덮었어요** —
+ *    무대 높이·카메라 거리가 전부 이 위치를 움직입니다. **CSS는 그걸 모릅니다.**
+ *    그래서 재는 쪽이 알려 주고, 붙이는 쪽이 그 아래에 답니다.
  * ⚠️ `--ball-bot`은 **무대 아래에서 잰 %**예요 (NDC y를 그대로 쓴 값이라 위가 아니라 아래 기준). */
 .w2c-stage.is-3d .w2c-foot {
   left: var(--ball-x);
-  right: auto;
   bottom: calc(var(--ball-bot) - 13%);
-  transform: translateX(-50%);
 }
-/* 폴백(WebGL 없음)에서 쓰는 기본 자리 — 실루엣의 공 위치에 맞춘 값입니다 */
-.foot-L .w2c-foot { left: 62%; }     /* 캐릭터의 왼발 = 화면 오른쪽 */
-.foot-R .w2c-foot { right: 62%; }
 
-/* 🧒 CSS 실루엣 — `<i>` 여덟 개. 이미지도 캔버스도 없어요.
+/* 👕 **CSS 유니폼** — `<i>` 다섯 개와 글자 두 줄. 이미지도 캔버스도 없어요.
  *
  * 🔑 **폴백을 따로 만들지 않고 그 위에 3D를 얹습니다.** WebGL이 없거나(jsdom·구형 기기)
  *    three.js 내려받기가 실패하거나 컨텍스트를 잃으면 **아무것도 안 해도 이게 보입니다.**
- *    `.is-3d`가 붙으면 조용히 사라져요. */
-.pc-silhouette {
+ *    `.is-3d`가 붙으면 조용히 사라져요.
+ * 🔑 **여기에도 이름과 번호가 글자로 들어갑니다.** 3D가 못 떠도 *"내 선수"*는 남아야 해요 —
+ *    캐릭터판의 폴백은 실루엣이라 **누구인지 알 수 없었습니다.**
+ * 🎨 색은 전부 `--kit-*` — 3D와 **같은 네 값**을 읽습니다. 팀 색이 생기면 같이 갑니다. */
+.pc-jersey {
   position: absolute;
-  left: 50%; top: 50%;
-  transform: translate(-50%, -50%) scale(2.5);
-  transform-origin: center;
+  left: 50%; top: 46%;
+  transform: translate(-50%, -50%);
   display: block;
-  width: 54px;
-  height: 62px;
+  width: 132px;
+  height: 148px;
 }
-.w2c-stage.is-3d .pc-silhouette { display: none; }
-/* 🦶 실루엣의 공도 주발을 따릅니다 — 여기도 **화면 오른쪽 = 캐릭터의 왼발**이에요.
- * (기본 `left: 36px`이 화면 오른쪽이라 왼발잡이가 그대로 맞습니다) */
-.foot-R .s-ball { left: 5px; }
-.pc-silhouette i { position: absolute; display: block; }
-.s-head { left: 17px; top: 2px; width: 20px; height: 20px; border-radius: 50%; background: #e8bd93; }
-.s-hair { left: 15px; top: 0; width: 24px; height: 11px; border-radius: 12px 12px 3px 3px; background: #3a2b23; }
-.hair-1 .s-hair { background: #5b3a22; height: 13px; }
-.hair-2 .s-hair { background: #1f1a17; border-radius: 12px 12px 8px 8px; }
-.s-body { left: 15px; top: 21px; width: 24px; height: 25px; border-radius: 8px 8px 5px 5px; background: var(--pc-tone); }
-.s-arm { top: 23px; width: 6px; height: 20px; border-radius: 4px; background: var(--pc-tone); opacity: .85; }
-.s-arm.l { left: 9px; transform: rotate(8deg); }
-.s-arm.r { left: 39px; transform: rotate(-8deg); }
-.s-leg { top: 45px; width: 8px; height: 16px; border-radius: 4px; background: #24304a; }
-.s-leg.l { left: 17px; }
-.s-leg.r { left: 29px; }
-.s-ball {
-  left: 36px; top: 48px; width: 13px; height: 13px; border-radius: 50%;
-  background: radial-gradient(circle at 35% 35%, #fff 55%, #c8d3e0 100%);
-  border: 1px solid #2a3550;
+.w2c-stage.is-3d .pc-jersey { display: none; }
+.pc-jersey i { position: absolute; display: block; }
+/* 몸통 — **아래로 벌어지는 사다리꼴.** 참고 이미지의 실루엣이에요 */
+.j-body {
+  left: 14px; top: 14px; width: 104px; height: 118px;
+  background: var(--kit-body);
+  clip-path: polygon(11% 0, 89% 0, 100% 96%, 97% 100%, 3% 100%, 0 96%);
 }
+.j-hem {
+  left: 14px; top: 122px; width: 104px; height: 10px;
+  background: var(--kit-trim);
+  clip-path: polygon(1% 0, 99% 0, 100% 60%, 97% 100%, 3% 100%, 0 60%);
+}
+/* 소매 — 바깥·아래로 벌어져요 */
+.j-sleeve {
+  top: 16px; width: 34px; height: 46px;
+  background: var(--kit-sleeve);
+  border-bottom: 5px solid var(--kit-trim);
+}
+.j-sleeve.l { left: 0; clip-path: polygon(30% 0, 100% 0, 100% 100%, 0 76%); border-radius: 4px 0 0 6px; }
+.j-sleeve.r { right: 0; clip-path: polygon(0 0, 70% 0, 100% 76%, 0 100%); border-radius: 0 4px 6px 0; }
+/* 목 트림 */
+.j-collar {
+  left: 50%; top: 13px; width: 34px; height: 13px;
+  transform: translateX(-50%);
+  border-radius: 50%;
+  background: var(--kit-trim);
+}
+/* 🇰🇷 등에 새겨지는 이름과 번호 — **비어 있으면 무지 유니폼**입니다 */
+.pc-jersey b {
+  position: absolute;
+  left: 14px; width: 104px;
+  text-align: center;
+  color: var(--kit-text);
+  font-family: "Jua", sans-serif;
+  font-weight: 400;
+  line-height: 1;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.j-name { top: 36px; font-size: .82rem; letter-spacing: .5px; }
+.j-no { top: 56px; font-size: 3.1rem; }
+
+/* 🔢 **등번호 고르기** — 유니폼 등에 새겨질 번호를 여기서 정합니다.
+ *
+ * 🔑 포지션 관례 셋 중 하나예요 (공격수 9 · 윙어 7 · 미드 8 · 수비 4 …).
+ *    자유 입력이 아닌 이유는 `prospect.js`의 `SHIRT_NOS` 주석에 적어 뒀습니다 —
+ *    한 줄로 요약하면 **고르는 재미지 채우는 칸이 아니라서**예요.
+ * ⚠️ 누르면 화면을 다시 그리지 않고 **등판 글자만** 갈아 끼웁니다 (`setShirtNo`).
+ *    다시 그리면 🎬 슬롯 연출이 세 칸 다시 돌아서 고르는 맛이 사라져요.
+ * ⚠️ 이 줄은 **자기 안에서 끝납니다** — 조립대 구성이 바뀌면 통째로 옮기면 돼요. */
+.pc-shirt { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.pc-shirt-lab { font-size: .78rem; color: var(--dim); }
+.pc-no {
+  min-width: 46px; min-height: 44px;      /* 👍 손가락 기준 — 44px 밑으로 내리지 마세요 */
+  padding: 0 10px;
+  font-family: "Jua", sans-serif;
+  font-size: 1.05rem;
+  color: var(--text);
+  background: var(--bg2);
+  border: 2px solid var(--line);
+  border-radius: 10px;
+  cursor: pointer;
+}
+.pc-no.on { color: var(--ink); background: var(--accent); border-color: var(--accent); }
 
 /* 🎲 · 📊 — **화면 아래에 붙는 행동 줄**입니다 (위 「무대」 절의 짝).
  *
@@ -1600,13 +1667,12 @@ button.pf-slot { cursor: pointer; font-family: inherit; }
 .prospect-talent { line-height: 1.8; font-size: .72rem; margin-top: 10px; }
 
 @media (max-width: 359px) {
-  /* 320px — 무대를 낮추고 실루엣을 줄여요. **접지는 않습니다** —
-   * 여기서 무대를 없애면 *"내 선수가 나타난다"*는 이 화면의 유일한 이유가 사라져요.
-   * (예전 규칙은 실루엣이 54×62짜리 곁다리였을 때 만든 것입니다) */
+  /* 320px — 무대를 낮추고 폴백 유니폼을 줄여요. **접지는 않습니다** —
+   * 여기서 무대를 없애면 *"내 이름이 새겨진다"*는 이 화면의 유일한 이유가 사라져요. */
   .w2c-stage { height: clamp(150px, 26vh, 190px); }
   /* 320px은 무대가 좁아요 — 칩 글자만 줄입니다 (자리는 `--ball-x`가 알아서 따라갑니다) */
   .w2c-foot { font-size: .68rem; padding: 2px 6px; }
-  .pc-silhouette { transform: translate(-50%, -50%) scale(2); }
+  .pc-jersey { transform: translate(-50%, -50%) scale(.86); }
   .pc-name { font-size: 1rem; }
   .pcg-name { flex: 0 0 64px; font-size: .68rem; }
   .pcg-row { gap: 4px; }
