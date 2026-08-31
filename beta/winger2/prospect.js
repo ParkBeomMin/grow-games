@@ -655,14 +655,37 @@ window.WingerProspect = (() => {
    *
    * ⚠️ 이름이 비어 있어도 됩니다 — 그때는 **무지 유니폼**이에요 (아무것도 안 새겨집니다). */
   function stageHTML(who, no) {
-    const nm = String(who.name || "").trim();
     return `<span class="w2c-stage" id="pc-stage">`
-      + `<span class="pc-jersey" aria-hidden="true">`
+      + jerseyHTML({ name: who.name, no })
+      + `<span class="w2c-foot" aria-hidden="true">${footLabel(who.foot)}</span>`
+      + `</span>`;
+  }
+
+  /* 👕 **CSS 유니폼 한 벌 — 이 함수가 유일한 출처입니다.**
+   *
+   * 🔑 쓰는 곳이 **둘**이에요:
+   *    ① 🧬 조립대 무대의 **폴백** (WebGL이 없거나 three.js가 못 왔을 때. 3D가 뜨면 가려집니다)
+   *    ② 🏠 유스 홈 · 💼 프로 화면의 **HUD 미니 유니폼** (`W2Hud.paint`)
+   *    같은 함수를 쓰는 이유는 하나입니다 — **두 벌로 나뉘면 반드시 갈라집니다.**
+   *    조립대에서 본 유니폼과 HUD의 유니폼이 다른 옷이면 *"내 선수"*가 깨져요.
+   *
+   * 🎨 색은 전부 `--kit-*` 네 변수. 절대색이 한 개도 없습니다 — 팀 색이 생기면
+   *    그 요소에 변수만 갈아 끼우면 이 함수도 3D도 같이 갑니다.
+   *
+   * ⚠️ `mini`면 **이름을 안 넣습니다.** HUD 크기(0.33배)에서 이름은 4px이라 못 읽어요 —
+   *    못 읽는 글자를 넣으면 정보가 아니라 얼룩입니다. 번호는 15px이라 읽힙니다. */
+  function jerseyHTML(opt) {
+    const o = opt || {};
+    const nm = String(o.name || "").trim();
+    const no = o.no == null ? "" : String(o.no);
+    const a11y = o.label
+      ? ` role="img" aria-label="${esc(o.label)}"`
+      : ` aria-hidden="true"`;
+    return `<span class="pc-jersey${o.mini ? " is-mini" : ""}"${a11y}>`
       + `<i class="j-sleeve l"></i><i class="j-sleeve r"></i>`
       + `<i class="j-body"></i><i class="j-hem"></i><i class="j-collar"></i>`
-      + `<b class="j-name">${esc(nm)}</b><b class="j-no">${esc(no || "")}</b>`
-      + `</span>`
-      + `<span class="w2c-foot" aria-hidden="true">${footLabel(who.foot)}</span>`
+      + (o.mini ? "" : `<b class="j-name">${esc(nm)}</b>`)
+      + `<b class="j-no">${esc(no)}</b>`
       + `</span>`;
   }
 
@@ -675,6 +698,24 @@ window.WingerProspect = (() => {
       + `aria-pressed="${n === no}">${n}</button>`).join("");
     return `<span class="pc-shirt" role="group" aria-label="등번호 고르기">`
       + `<span class="pc-shirt-lab">🔢 등번호</span>${opts}</span>`;
+  }
+
+  /* 👕 **HUD 미니 유니폼을 칠합니다** — 🏠 유스 홈 · 💼 프로 화면이 부릅니다.
+   *
+   * 🔴 **WebGL을 한 줄도 안 씁니다.** HUD는 늘 떠 있는 자리라, 여기서 3D가 돌면
+   *    🔥 순간 카드의 프레임을 갉아먹고 **곡선이 기기 성능에 의존**하게 돼요.
+   *    (자세한 판단은 `style.css`의 `.w2-hudkit` 주석에 적어 뒀습니다)
+   *
+   * 🔑 **같은 번호면 다시 안 그립니다.** `renderMain`은 턴마다 도는데 `innerHTML`을
+   *    매번 새로 쓰면 그때마다 파싱·레이아웃이 한 번씩 돕니다 — 유니폼은 안 바뀌는 축이라
+   *    다시 그릴 이유가 없어요.
+   * ⚠️ 세이브를 안 건드립니다. `shirtNoOf`가 옛 세이브에도 기본 번호를 줘요. */
+  function paintJersey(el, st) {
+    if (!el) return;
+    const no = shirtNoOf(st);
+    if (el.dataset.kitNo === String(no)) return;
+    el.dataset.kitNo = String(no);
+    el.innerHTML = jerseyHTML({ no, mini: true, label: `등번호 ${no}번 유니폼` });
   }
 
   /* 🧍 무대에 선수를 세워요 — **3D가 없어도 아무 일도 안 일어납니다.**
@@ -1053,6 +1094,8 @@ window.WingerProspect = (() => {
      * · `rollTalents` = ⭐ 잠재력 (**따로** 부릅니다 — 🎲가 못 건드리게 뺀 자리) */
     rollShape, rollBuild, rollTalents, applyCard, open,
     SHIRT_NOS, shirtNosOf, defaultShirtNo: defaultNo, shirtNoOf,
+    /* 👕 HUD가 같은 유니폼을 그리려고 씁니다 — **마크업의 유일한 출처**예요 */
+    jerseyHTML, paintJersey,
     POOL, REROLL_MAX, evenStats,
     RETIRE_AGE, RETIRE_CURVE, LOW_APPS, LOW_RUN, CARD_AGE,
     START_AGE, PEAK_SHIFT_MAX, HOT_RUN, HOT_BAR,

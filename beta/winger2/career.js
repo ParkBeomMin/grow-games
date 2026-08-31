@@ -1336,6 +1336,9 @@ window.WingerCareer = (() => {
   function renderPrep() {
     checkTitle();
     $("pro-name").textContent = `${S.name} (${POS_INFO[S.pos].name})`;
+    /* 👕 미니 유니폼 — 유스 홈과 **같은 함수·같은 색 변수**로 그립니다.
+     * 🔴 CSS예요. HUD에서 WebGL이 돌면 안 됩니다(`style.css`의 `.w2-hudkit` 주석). */
+    try { if (window.WingerProspect) WingerProspect.paintJersey($("pro-kit"), S); } catch (e) {}
     // 리그 이름을 함께 보여줘요 — 승격·강등하면 여기가 바뀌는 게 제일 먼저 눈에 띄어야 해요
     $("pro-team").textContent =
       `${leagueOf(S).flag} ${S.group}${S.center ? " · 주장" : ""} · ${leagueOf(S).name}`

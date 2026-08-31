@@ -118,7 +118,6 @@ const FIT = {
   collarR: 0.126,
   sleeveY: 1.13, sleeveX: 0.30, sleeveLen: 0.27, sleeveR: 0.118,
   sleeveTilt: 0.78,             // 아래로 내려올수록 옷처럼 보입니다 (0.95는 날개였어요)
-  ballR: 0.135, ballZ: 0.30,
 };
 /* 🖨️ 등 프린트 판 — **정사각**입니다. 캔버스도 정사각이라 글자가 안 늘어나요.
  *    (직사각으로 두면 캔버스 비율만큼 글자가 늘어붙습니다 — 두 번 고쳤어요) */
@@ -285,14 +284,13 @@ function buildRig(kit) {
   printTex.anisotropy = 4;
   const M = {
     body: mat(kit.body), sleeve: mat(kit.sleeve), trim: mat(kit.trim),
-    ball: mat("#ffffff"), ballDot: mat(kit.trim),
     /* 🖨️ 프린트는 **옷 위에 얹힌 한 장**이에요. `transparent`라 글자 없는 곳은 옷이 그대로 보입니다.
      * `depthWrite: false` — 판이 옷보다 0.008 앞에 있어서 깊이를 안 써도 안전하고,
      * 반투명이 겹칠 때 생기는 지저분한 경계를 막아요. */
     print: new T.MeshToonMaterial({ map: printTex, gradientMap: ramp, transparent: true, depthWrite: false, opacity: 1 }),
   };
-  /* ⚽ 공은 흰색 하나 — 무대의 킷과 무관합니다. 옷 색이 바뀌어도 공은 공이에요.
-   * (`--kit-*`가 아니라 여기만 절대색인 이유: 공은 **팀 물건이 아닙니다.**) */
+  /* 🎨 **이 파일에 절대색이 한 개도 없습니다.** 전부 `kit`(= 무대의 `--kit-*`)에서 옵니다.
+   * 2026-08-31에 마지막 절대색이던 ⚽ 공(`#ffffff`)이 사라졌어요 — 아래 「⚽」 절. */
 
   /* 📐 단위 지오메트리 — `scale`이 곧 반지름/길이가 되게 만듭니다.
    * ⚠️ `CapsuleGeometry(1, 1, …)`는 총 높이가 3이에요. 그걸 반지름으로 착각하면
@@ -301,12 +299,11 @@ function buildRig(kit) {
   const pipe = new T.CylinderGeometry(1, 1.06, 1, 12, 1, true).translate(0, -0.5, 0);  // 소매 — 위 끝이 원점
   const capG = new T.SphereGeometry(1, 20, 5, 0, TAU, 0, Math.PI * 0.5);         // 어깨 덮개
   const ringG = new T.TorusGeometry(1, 0.24, 5, 14).rotateX(-Math.PI / 2);       // 목·소매 트림
-  const sph = new T.SphereGeometry(1, 12, 8);
   const prnG = printGeo(T);
 
   const root = new T.Group();
-  /* 🔑 **유니폼만 돌아갑니다.** 공은 `root`에 매달려 바닥에 그대로 있어요 —
-   * 옷이 돌 때 공이 같이 돌면 「주발 쪽」처럼 읽히기 시작합니다(위 🦶 절). */
+  /* 🔑 무대에 **유니폼 한 벌만** 있습니다. `shirt`가 돌고, `root`에는 그것 말고
+   * 아무것도 안 매답니다 — `probe().stray`가 그걸 세요(아래 「⚽」 절). */
   const shirt = new T.Group();
   root.add(shirt);
 
@@ -330,12 +327,9 @@ function buildRig(kit) {
 
   shirt.add(body, cap, collar, hem, print, slL.g, slR.g);
 
-  const ball = new T.Mesh(sph, M.ball);
-  root.add(ball);
-
-  return { root, shirt, body, cap, collar, hem, print, slL, slR, ball, M, ramp,
+  return { root, shirt, body, cap, collar, hem, print, slL, slR, M, ramp,
     printTex, printCv: cv, printInfo: { empty: true },
-    geo: [tube, pipe, capG, ringG, sph, prnG] };
+    geo: [tube, pipe, capG, ringG, prnG] };
 }
 
 /* 📐 치수를 실어요 — **한 번 부르면 끝.** 핏이 고정이라 갈아입힐 때 다시 안 부릅니다 */
@@ -365,9 +359,6 @@ function layoutRig(rig) {
     s.cuff.scale.set(FIT.sleeveR * 1.14, FIT.sleeveR * 1.14, FIT.sleeveR * 1.0);
     s.cuff.position.set(0, -FIT.sleeveLen, 0);
   }
-
-  rig.ball.scale.setScalar(FIT.ballR);
-  rig.ball.position.set(0, FIT.ballR, FIT.ballZ);
 
   /* 카메라가 늘 같은 자리를 보게 — 위쪽 끝을 알려 줍니다 */
   rig.top = FIT.topY + FIT.capY;
@@ -486,46 +477,52 @@ function applySpec(spec, first) {
   paintKit(R.rig, kit);
   const changed = first || prev.name !== R.spec.name || String(prev.number) !== String(R.spec.number);
   if (changed) paintName(R.rig, R.spec.name, R.spec.number, kit, !first);
-  markBall();
   R.dirty = true;
 }
 
-/* ⚽ **공이 화면 어디에 있는지를 CSS로 넘겨줍니다.**
+/* ⚽ **공을 지웠습니다** (2026-08-31 · 범민 님 *"공은 없애도 되고"*).
  *
- * 🔑 🦶 주발 칩이 공 아래에 앉아요. 공의 화면 위치는 카메라 거리·무대 비율에 따라
- *    움직이는데 **CSS는 그걸 모릅니다.** %를 손으로 박으면 무대 높이 하나만 바꿔도
- *    칩이 공을 덮어요 (캐릭터판에서 실제로 났습니다).
- * ⚠️ 폴백(WebGL 없음)에서는 이 변수가 안 생겨요 — 그때는 CSS 기본 자리가 쓰입니다. */
-function markBall() {
-  if (!R) return;
-  try {
-    const V3 = THREE.Vector3;
-    const w = R.rig.ball.getWorldPosition(new V3());
-    const c = w.clone().project(R.camera);
-    const e = w.clone().add(new V3(R.rig.ball.scale.x, 0, 0)).project(R.camera);
-    const u = w.clone().add(new V3(0, -R.rig.ball.scale.x, 0)).project(R.camera);
-    R.stage.style.setProperty("--ball-x", (((c.x + 1) / 2) * 100).toFixed(2) + "%");
-    R.stage.style.setProperty("--ball-w", (Math.abs(e.x - c.x) * 100).toFixed(2) + "%");
-    R.stage.style.setProperty("--ball-bot", (((u.y + 1) / 2) * 100).toFixed(2) + "%");
-  } catch (err) {}
-}
+ * 🔴 공은 이미 **아무 일도 안 하고 있었어요.** 캐릭터판에서는 공이 **주발 쪽**에 놓여
+ *    좌우로 뜻을 말했는데, 유니폼은 돌아가서 안정된 좌우가 없습니다 — 그래서 공을
+ *    **가운데**로 옮기고 🦶는 글자 칩이 말하게 했어요(82번 §3). 그 순간부터 공은
+ *    **장식**이었습니다. 장식은 지울 수 있고, 지우면 다음 셋이 같이 사라집니다:
+ *      ① 이 파일의 **마지막 절대색**(`#ffffff`) — 이제 색은 전부 `kit`에서 옵니다
+ *      ② `markBall()`이 CSS로 넘기던 `--ball-x`/`--ball-w`/`--ball-bot` **세 변수**와,
+ *         그걸 읽던 `.w2c-stage.is-3d .w2c-foot` 규칙 — **3D와 CSS 사이의 배선 하나**
+ *      ③ 구 메시 하나(드로우콜 −1)
+ *
+ * 🔒 **검사가 공을 다시 찾지 않게** 만들었습니다. `probe()`가 `ball*` 필드를 아예 안 내고,
+ *    대신 `stray`(= `shirt` 바깥에 매달린 메시 수)를 냅니다. 공을 되살리면 `stray`가
+ *    1이 되고 A절이 빨간불이에요 — **이름이 아니라 형태로** 막습니다. */
 
 function resize() {
   if (!R) return;
   const w = Math.max(1, R.stage.clientWidth), h = Math.max(1, R.stage.clientHeight);
   R.renderer.setSize(w, h, false);
   R.camera.aspect = w / h;
-  /* 📐 **바닥이 무대의 80% 지점에 오게** 잡습니다 — 아래 20%는 ⚽ 공과 🦶 칩 자리예요.
-   *    무대 높이가 `clamp()`라 기기마다 달라서, 고정 거리로 두면 짧은 폰에서 어깨가 잘립니다.
-   *    보이는 세로 구간 = [-0.20·V, 0.80·V] · V = (위쪽 끝 + 여유) / 0.80 */
-  const top = (R.rig.top || 1.5) + 0.12;
-  const V = top / 0.80;
-  const midY = V * 0.30;                              // (0.80 + (-0.20)) / 2 = 0.30
+  /* 📐 **유니폼에 맞춰 잡습니다 — 바닥이 아니라.** (2026-08-31 · ⚽ 공을 지우면서)
+   *
+   * 🔴 예전엔 바닥(y=0)을 무대의 80% 지점에 뒀어요. 그런데 옷의 아랫단은 y=0.42라
+   *    **밑에 33%가 통째로 비어 있었습니다** — 그 자리가 ⚽ 공 자리였거든요.
+   *    공을 지우고 나니 *"옷이 위쪽에 조그맣게 떠 있는"* 화면이 남았어요.
+   * ✅ 이제 **옷의 아랫단~어깨 위**를 무대에 채우고 위아래로 여유만 둡니다.
+   *    같은 무대에서 유니폼이 **1.5배 커집니다** — 등에 새긴 이름을 읽으라고 만든 화면이니
+   *    거기에 픽셀을 쓰는 게 맞아요.
+   * ⚠️ 여유(`PAD`)를 0으로 줄이지 마세요 — 소매가 옆으로 벌어져 있어서 가로가 먼저 잘립니다.
+   *    그리고 아래 여유가 없으면 CSS 바닥 그림자가 옷에 붙어 버려요. */
+  /* ⚠️ `PAD_B`는 🦶 칩 자리입니다. 줄이면 칩이 옷자락을 덮어요 — 렌더 검사 A절이 잽니다.
+   * 🔑 세로 프레이밍이 무대 크기·비율과 **무관**해졌어요(위아래 다 FIT에서 옵니다).
+   *    그래서 옷자락의 화면 %가 **어느 기기에서나 같습니다** — 칩 자리를 CSS %로 박아도
+   *    안전해진 이유예요(공을 매번 재서 넘기던 배선이 필요 없어졌습니다). */
+  const PAD_T = 0.16, PAD_B = 0.32;
+  const hi = (R.rig.top || 1.5) + PAD_T;
+  const lo = FIT.hemY - PAD_B;
+  const V = hi - lo;
+  const midY = (hi + lo) / 2;
   const dist = (V / 2) / Math.tan((R.camera.fov * Math.PI) / 360);
   R.camera.position.set(0, midY, dist);
   R.camera.lookAt(0, midY, 0);
   R.camera.updateProjectionMatrix();
-  markBall();
   R.dirty = true;
 }
 
@@ -581,7 +578,6 @@ function frame() {
     rig.body.scale.z = FIT.rBot * FIT.flat * bl;
     rig.slL.g.rotation.x = Math.sin(t * 0.9) * 0.085;
     rig.slR.g.rotation.x = -Math.sin(t * 0.9 + 0.6) * 0.085;
-    rig.ball.rotation.y = t * 0.5;
     /* 🎲 **굴린 손에 대한 대답** — 감쇠 진동 한 번. 아무것도 뜻하지 않아요 */
     let kick = 0;
     if (R.nudgeT) {
@@ -722,11 +718,20 @@ const W2Char = {
     if (!R) return null;
     const V3 = THREE.Vector3;
     const rig = R.rig;
-    const bw = rig.ball.getWorldPosition(new V3());
-    const v = bw.clone().project(R.camera);
-    const e = bw.clone().add(new V3(rig.ball.scale.x, 0, 0)).project(R.camera);
-    const bt = bw.clone().add(new V3(0, rig.ball.scale.x, 0)).project(R.camera);
-    const bb = bw.clone().add(new V3(0, -rig.ball.scale.x, 0)).project(R.camera);
+    /* ⚽ **무대에 유니폼 말고 뭐가 더 매달려 있나** — `shirt` 바깥의 메시를 셉니다.
+     * 공을 되살리면 여기가 1이 되고 렌더 검사 A절이 빨간불이에요.
+     * 🔑 *"공이 없다"*를 **이름으로 재지 않는 이유**: 이름만 바꿔 되살리면 통과합니다.
+     *    이 저장소가 「폐기는 이름이 아니라 형태」로 한 번 데였어요. */
+    let stray = 0;
+    R.scene.traverse((o) => { if (o.isMesh && !rig.shirt.getObjectById(o.id)) stray++; });
+    /* 👕 유니폼 한 벌이 **화면 어디를 차지하나** — 소매 끝까지 포함한 사각형이에요.
+     * 🦶 칩이 이걸 덮지 않는지를 A절이 잽니다 (예전엔 ⚽ 공을 덮는지 쟀어요). */
+    const sb = new THREE.Box3().setFromObject(rig.shirt);
+    const sxs = [], sys = [];
+    for (let i = 0; i < 8; i++) {
+      const q = new V3(i & 1 ? sb.max.x : sb.min.x, i & 2 ? sb.max.y : sb.min.y, i & 4 ? sb.max.z : sb.min.z).project(R.camera);
+      sxs.push(((q.x + 1) / 2) * 100); sys.push(((1 - (q.y + 1) / 2)) * 100);
+    }
     /* 🖨️ 등판이 **화면 어디에 얼마나** 나오는지 — 실제 지오메트리의 상자 여덟 귀퉁이를
      * 투영해서 잽니다. "글자를 그렸다"가 아니라 **"카메라 쪽을 보고 있고 무대 안에
      * 들어온다"**를 재는 자리예요.
@@ -756,12 +761,14 @@ const W2Char = {
         t: +Math.min.apply(null, ys).toFixed(1), b: +Math.max.apply(null, ys).toFixed(1),
         facing: +nrm2.dot(toCam).toFixed(3),   // 1 = 등이 카메라 정면
       }),
-      /* ⚽ 공은 **가운데**예요. 좌우로 주발을 말하지 않습니다 — A절이 이걸 잽니다 */
-      ball: { x: +rig.ball.position.x.toFixed(3), y: +rig.ball.position.y.toFixed(3) },
-      ballPct: +(((v.x + 1) / 2) * 100).toFixed(1),
-      ballW: +(Math.abs(e.x - v.x) * 100).toFixed(1),
-      ballTopPct: +(((1 - (bt.y + 1) / 2)) * 100).toFixed(1),
-      ballBotPct: +(((1 - (bb.y + 1) / 2)) * 100).toFixed(1),
+      /* ⚽ **공은 없습니다** — `stray`가 0이면 무대에 유니폼 한 벌뿐이에요.
+       * `ball*` 필드를 **일부러 안 냅니다.** 남겨 두면 검사가 그걸 계속 읽고,
+       * 읽는 검사가 있으면 다음 사람이 공을 되살릴 자리가 생깁니다. */
+      stray,
+      shirtBox: {
+        l: +Math.min.apply(null, sxs).toFixed(1), r: +Math.max.apply(null, sxs).toFixed(1),
+        t: +Math.min.apply(null, sys).toFixed(1), b: +Math.max.apply(null, sys).toFixed(1),
+      },
       top: +(rig.top || 0).toFixed(3),
       spinY: +rig.shirt.rotation.y.toFixed(3),
       /* 🔴 **🎲를 굴려도 여기가 1이어야 합니다.** 조립대는 굴릴 때마다 `innerHTML`로

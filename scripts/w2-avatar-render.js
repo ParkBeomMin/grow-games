@@ -7,10 +7,15 @@
  * 🔴 이 파일이 있는 이유 — 예전에 🦶 주발 표시의 **색이 판정과 반대쪽**이던 버그를
  *    렌더 없이는 못 봤어요. *"안 보이는 것"*이 아니라 **거짓말을 하고 있던 것**입니다.
  *
- *    👕 유니폼으로 바꾸면서 그 자리가 **뒤집혔습니다.** 캐릭터판은 *"공이 주발 쪽인가"*를
- *    쟀는데, 유니폼은 **돌아가서 안정된 좌우가 없어요.** 그래서 이제 A절이 재는 건
- *    ***"좌우로 뜻을 만들지 않았다"*** 입니다 — 왼발판과 오른발판에서 공의 x가 **같아야**
- *    합니다. 검사가 지키는 것이 「올바른 방향」에서 **「방향을 안 쓴다」로 바뀌었어요.**
+ *    👕 유니폼으로 바꾸면서 그 자리가 **뒤집혔고**(공이 주발 쪽 → 공이 가운데),
+ *    2026-08-31에 **공 자체가 사라졌습니다.** 그래서 A절이 재는 것도 세 번째 모양이에요 —
+ *    지금은 ***"그 장치가 없다"***(`stray === 0`)를 잽니다. 없는 것을 재는 검사를 남겨 두면
+ *    다음 사람이 거기에 공을 되살립니다.
+ *
+ * 🆕 **H절**이 붙었습니다 — 🏠 유스 홈 · 💼 프로 화면의 **HUD 미니 유니폼**.
+ *    H절이 지키는 가장 중요한 한 줄: **HUD에서 WebGL이 돌지 않는다.**
+ *    HUD는 늘 떠 있는 자리라, 여기서 3D가 돌면 🔥 순간 카드의 프레임을 갉아먹고
+ *    `s` 분포가 내려가서 **곡선이 기기 성능에 의존**합니다.
  *
  * ⚠️ **손맛은 여기서 못 잽니다.** 3D가 뜨는 순간이 덜컥거리는지, 끌어 돌리는 손맛이
  *    어떤지, 폰이 뜨거워지는지는 **실기기 목록**(`beta/_check.html`)으로 넘겼습니다.
@@ -27,6 +32,28 @@ const OUT = "/workspace/grow-games/shots";
 let fail = 0;
 const ck = (ok, m, extra) => { console.log(`${ok ? "✅" : "❌"} ${m}${extra != null ? "  " + extra : ""}`); if (!ok) fail++; };
 
+/* 🔴 **WebGL을 「요청」한 횟수를 셉니다 — 「성공」이 아니라 요청입니다.**
+ *
+ * 🔴 이걸 왜 이렇게 재는지가 중요해요. 처음엔 *"HUD에 3D 캔버스가 없다"*로 쟀는데,
+ *    HUD가 `W2Char.show()`를 부르도록 **일부러 망가뜨려도 초록불이었습니다.**
+ *    헤드리스 크로미움이 조립대에서 쓴 컨텍스트를 놓은 직후 새 컨텍스트를 안 내줘서,
+ *    3D가 그냥 **실패**하고 CSS로 떨어졌거든요 — 즉 검사가 지킨 게 아니라
+ *    **환경이 우연히 막아 준 것**이었어요. 실기기에서는 그 컨텍스트가 나옵니다.
+ *    (이 저장소가 여덟 번 넘게 겪은 「초록불인데 아무것도 안 지키는 검사」의 아홉 번째 모양)
+ *
+ * ✅ 그래서 **컨텍스트가 나왔는지가 아니라 달라고 했는지**를 셉니다.
+ *    `W2Char.show()`는 무엇보다 먼저 `webglOK()`로 컨텍스트를 만들어 봐요 —
+ *    HUD 화면에서 그 숫자가 1이라도 오르면 **누군가 HUD에 3D를 세우려 한 것**입니다.
+ *    성공·실패와 무관하게 잡히고, 기기 성능과도 무관합니다. */
+const GL_SPY = () => {
+  window.__glReq = 0;
+  const orig = HTMLCanvasElement.prototype.getContext;
+  HTMLCanvasElement.prototype.getContext = function (t) {
+    if (String(t).indexOf("webgl") >= 0) window.__glReq++;
+    return orig.apply(this, arguments);
+  };
+};
+
 /* 🇰🇷 **한글 세 글자**가 등판에 들어가는지가 이번 판의 핵심 질문이에요.
  * 참고 이미지는 알파벳(`APELLIDO`)이고, 우리 이름은 한글입니다. */
 const KO3 = "김하늘";
@@ -38,6 +65,7 @@ async function bench(b, { w = 390, rm = false, foot = "R", gl = true, name = KO3
   const p = await ctx.newPage();
   const errs = [];
   p.on("pageerror", (e) => errs.push(String(e.message)));
+  await p.addInitScript(GL_SPY);
   if (!gl) await p.addInitScript(() => {
     const orig = HTMLCanvasElement.prototype.getContext;
     HTMLCanvasElement.prototype.getContext = function (t) {
@@ -63,6 +91,84 @@ async function bench(b, { w = 390, rm = false, foot = "R", gl = true, name = KO3
   return { p, ctx, errs };
 }
 
+/* 🏠 유스 홈까지 — **게임 입구를 통해 실제 버튼을 눌러** 갑니다 (값을 심지 않아요) */
+async function youthHome(b, { w = 390, rm = false } = {}) {
+  const { p, ctx, errs } = await bench(b, { w, rm });
+  /* 🧬 조립대는 3D를 **정당하게** 씁니다 — 그 몫을 빼고 재려고 여기서 눈금을 찍어요 */
+  const glBefore = await p.evaluate(() => window.__glReq);
+  await p.click("#btn-prospect-start");
+  await p.waitForTimeout(900);
+  return { p, ctx, errs, glBefore };
+}
+
+/* 💼 프로 준비 화면까지 — 확인 페이지 픽스처(`winger2-match`) + **이어하기 버튼**.
+ * ⚠️ 값을 손으로 짓지 않습니다. `beta/_fixtures.js`는 jsdom에서 실제로 그 상태까지 간 뒤
+ *    localStorage를 통째로 뜬 것이라, 여기 뜨는 이름·리그·번호가 **진짜 세이브**예요. */
+async function proPrep(b, { w = 390, rm = false } = {}) {
+  const ctx = await b.newContext({ viewport: { width: w, height: 844 }, deviceScaleFactor: 2,
+    reducedMotion: rm ? "reduce" : "no-preference" });
+  const p = await ctx.newPage();
+  const errs = [];
+  p.on("pageerror", (e) => errs.push(String(e.message)));
+  await p.addInitScript(GL_SPY);
+  await p.goto("http://127.0.0.1:8731/beta/winger2/index.html", { waitUntil: "networkidle" });
+  await p.addScriptTag({ url: "http://127.0.0.1:8731/beta/_fixtures.js" });
+  const ok = await p.evaluate(() => {
+    const f = (window.CHECK_FIXTURES.items || []).find((x) => x.id === "winger2-match");
+    if (!f) return false;
+    localStorage.clear();
+    for (const k in f.keys) localStorage.setItem(k, f.keys[k]);
+    return true;
+  });
+  if (!ok) throw new Error("픽스처 winger2-match를 못 찾았어요 — node scripts/make-fixtures.js");
+  await p.reload({ waitUntil: "networkidle" });
+  await p.waitForTimeout(300);
+  await p.click("#btn-continue");
+  await p.waitForTimeout(200);
+  /* 💼 프로 화면은 3D를 쓸 일이 아예 없어요 — 여기서 눈금이 0이어야 합니다 */
+  const glBefore = await p.evaluate(() => window.__glReq);
+  await p.click(".slot-go");
+  await p.waitForTimeout(900);
+  return { p, ctx, errs, glBefore };
+}
+
+/* 👕 HUD 미니 유니폼의 상태를 한 번에 읽어요 */
+const hudKit = (p) => p.evaluate(() => {
+  const act = document.querySelector(".screen.active");
+  const hud = act && act.querySelector(".hud");
+  const kit = hud && hud.querySelector(".w2-hudkit");
+  const jsy = kit && kit.querySelector(".pc-jersey");
+  const no = kit && kit.querySelector(".j-no");
+  const acts = hud && hud.querySelector(".hud-acts");
+  const rk = kit && kit.getBoundingClientRect();
+  const rh = hud && hud.getBoundingClientRect();
+  const ra = acts && acts.getBoundingClientRect();
+  const cs = jsy && getComputedStyle(jsy);
+  const csn = no && getComputedStyle(no);
+  const body = kit && kit.querySelector(".j-body");
+  return {
+    screen: act && act.id,
+    has: !!kit, hasJersey: !!jsy,
+    label: jsy && jsy.getAttribute("aria-label"),
+    no: no && no.textContent.trim(),
+    noPx: csn ? Math.round(parseFloat(csn.fontSize) * (cs ? (cs.transform.match(/matrix\(([\d.]+)/) || [0, 1])[1] : 1)) : 0,
+    bodyColor: body && getComputedStyle(body).backgroundColor,
+    rootKit: getComputedStyle(document.documentElement).getPropertyValue("--kit-body").trim(),
+    kitBox: rk ? { w: +rk.width.toFixed(1), h: +rk.height.toFixed(1) } : null,
+    hudH: rh ? +rh.height.toFixed(1) : 0,
+    actsTop: ra && rh ? +(ra.top - rh.top).toFixed(1) : 0,     // 📱 하단 액션바가 시작하는 자리
+    /* 🔴 이 넷이 이 절의 핵심입니다 — HUD에서 WebGL이 돌면 안 됩니다.
+     * `glReq`가 **가장 센 자물쇠**예요(위 GL_SPY 주석). 나머지 셋은 그 옆의 보조 자물쇠입니다.
+     * `mark`는 **char3d.js가 이 요소에 손댄 흔적**이에요 — `is-3d`/`is-flat`은
+     * 그 파일만 붙입니다. 3D가 실패해서 CSS로 떨어져도 흔적은 남아요. */
+    glReq: window.__glReq,
+    mark: kit ? (kit.classList.contains("is-3d") ? "is-3d" : kit.classList.contains("is-flat") ? "is-flat" : "") : null,
+    live: !!(window.W2Char && window.W2Char.live),
+    glCanvas: document.querySelectorAll("canvas.w2c-canvas").length,
+    overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  };
+});
+
 /* 🖐️ 무대를 끌어 돌립니다 — `spin`은 1px에 0.012rad이라 반 바퀴는 약 262px이에요 */
 async function spin(p, px) {
   const r = await p.evaluate(() => {
@@ -79,19 +185,37 @@ async function spin(p, px) {
 (async () => {
   const b = await chromium.launch({ executablePath: EXE, args: ["--no-sandbox"] });
 
-  /* ── A. 🦶 주발 — **좌우로 뜻을 만들지 않았나** ─────────────────────────
-   * 🔴 캐릭터판의 A절과 **정반대 방향**을 잽니다. 유니폼은 돌아가서 안정된 좌우가 없어요.
-   *    "왼발이면 공이 오른쪽"을 지키면 반 바퀴 뒤에 그게 거짓말이 됩니다. */
-  const ballX = {};
+  /* ── A. 🦶 주발 · ⚽ **공을 지운 자리** ─────────────────────────────────
+   *
+   * 🔴 이 절은 이제 **세 번째 모양**입니다. 무엇을 재는지가 두 번 뒤집혔어요:
+   *
+   *   ① 캐릭터판   *"공이 **주발 쪽**인가"*            → 방향이 **맞다**를 지킴
+   *   ② 유니폼판   *"공이 **어느 쪽도 아닌가**"*        → 방향을 **안 쓴다**를 지킴
+   *   ③ 지금       *"공이 **없나**"*                    → 그 장치가 **없다**를 지킴
+   *
+   *   ②에서 공은 이미 아무 뜻도 없는 장식이었어요(82번 §3). 장식을 지웠으니
+   *   검사도 공을 찾으면 안 됩니다 — **없는 것을 재는 검사는 다음 사람이 그걸
+   *   되살릴 자리**가 됩니다.
+   *
+   * 🔒 **되살리면 빨간불이 되게** 만들었습니다. `probe()`가 `ball*` 필드를 아예 안 내고
+   *    `stray`(= `shirt` 바깥에 매달린 메시 수)를 냅니다. 이름을 바꿔 공을 되살려도
+   *    `stray`가 1이 돼요 — **이름이 아니라 형태로** 막습니다
+   *    (이 저장소가 「폐기는 이름이 아니라 형태」로 한 번 데였습니다).
+   *
+   * ✅ 그리고 ②가 지키던 것은 **칩으로 옮겨서 그대로 지킵니다** —
+   *    왼발판과 오른발판에서 🦶 칩의 화면 x가 **같아야** 합니다. */
+  const chipX = {};
   for (const foot of ["L", "R"]) {
     const { p, ctx, errs } = await bench(b, { foot, shot: `w2-jersey-390-foot${foot}` });
     const shownFoot = await p.textContent(".pb-meta");
     const pr = await p.evaluate(() => window.W2Char && window.W2Char.probe());
     ck(!!pr, `[A/${foot}] 👕 유니폼이 실제로 섰다`);
     if (pr) {
-      ballX[foot] = pr.ballPct;
-      ck(pr.ball.x === 0 && Math.abs(pr.ballPct - 50) <= 6,
-        `[A/${foot}] ⚽ 공이 가운데 — 주발을 좌우로 말하지 않는다`, `world.x=${pr.ball.x} 화면 ${pr.ballPct}%`);
+      /* 🔒 변이가 잡히는 자리 ① — 공(이든 뭐든)을 무대에 다시 매달면 빨간불 */
+      ck(pr.stray === 0, `[A/${foot}] ⚽ 무대에 👕 유니폼 말고 아무것도 없다 (공을 지웠어요)`,
+        `shirt 바깥 메시 ${pr.stray}개`);
+      ck(pr.ball === undefined && pr.ballPct === undefined,
+        `[A/${foot}] probe()가 공을 **보고하지도 않는다**`, `ball=${pr.ball} ballPct=${pr.ballPct}`);
       const chip = await p.evaluate(() => {
         const s = document.querySelector(".w2c-stage"), c = document.querySelector(".w2c-foot");
         if (!s || !c) return null;
@@ -101,26 +225,34 @@ async function spin(p, px) {
           t: +(((rc.y - rs.y) / rs.height) * 100).toFixed(1), b: +(((rc.bottom - rs.y) / rs.height) * 100).toFixed(1),
           h: +rc.height.toFixed(1), txt: c.textContent.trim() };
       });
-      ck(chip && Math.abs(chip.pct - pr.ballPct) <= 20,
-        `[A/${foot}] 🦶 칩이 공 옆 (가운데 차이 ≤ 20%p)`, `칩 ${chip && chip.pct}% · 공 ${pr.ballPct}%`);
-      /* 🔴 옆에 있는 것과 **덮는 것**은 다릅니다 — 칩이 공을 가리면 주발이 안 보여요. */
-      const bl = pr.ballPct - pr.ballW / 2, br2 = pr.ballPct + pr.ballW / 2;
-      const noOv = chip && (chip.r <= bl + 0.5 || chip.l >= br2 - 0.5
-        || chip.t >= pr.ballBotPct - 0.5 || chip.b <= pr.ballTopPct + 0.5);
-      ck(noOv, `[A/${foot}] 🦶 칩이 ⚽ 공을 안 덮는다`,
-        `칩 x${chip && chip.l}~${chip && chip.r} y${chip && chip.t}~${chip && chip.b} · 공 x${bl.toFixed(1)}~${br2.toFixed(1)} y${pr.ballTopPct}~${pr.ballBotPct}`);
+      chipX[foot] = chip && chip.pct;
+      ck(chip && Math.abs(chip.pct - 50) <= 6,
+        `[A/${foot}] 🦶 칩이 무대 가운데 — 주발을 좌우로 말하지 않는다`, `칩 ${chip && chip.pct}%`);
+      /* 🔴 공이 사라지면서 유니폼이 1.3배 커졌어요 — **옷자락이 칩 자리까지 내려옵니다.**
+       * 예전엔 *"칩이 공을 덮나"*를 쟀는데, 이제 덮일 수 있는 건 **옷**입니다.
+       * `PAD_B`(char3d.js)나 `.w2c-foot { bottom }`을 건드리면 여기가 빨간불이에요. */
+      const sb = pr.shirtBox;
+      const noOv = chip && sb && (chip.t >= sb.b - 0.5 || chip.b <= sb.t + 0.5
+        || chip.r <= sb.l + 0.5 || chip.l >= sb.r - 0.5);
+      ck(noOv, `[A/${foot}] 🦶 칩이 👕 유니폼을 안 덮는다`,
+        `칩 x${chip && chip.l}~${chip && chip.r} y${chip && chip.t}~${chip && chip.b} · 옷 x${sb && sb.l}~${sb && sb.r} y${sb && sb.t}~${sb && sb.b}`);
       ck(chip && chip.l >= 0 && chip.r <= 100 && chip.b <= 100 && chip.t >= 0,
         `[A/${foot}] 🦶 칩이 무대 안에 들어온다`, `x${chip && chip.l}~${chip && chip.r} y${chip && chip.t}~${chip && chip.b}`);
       ck(chip && chip.txt === (foot === "L" ? "🦶 왼발" : "🦶 오른발") && String(shownFoot).indexOf(foot === "L" ? "왼발" : "오른발") >= 0,
         `[A/${foot}] 칩 글자 = 실제 주발`, `${chip && chip.txt} / ${String(shownFoot).trim()}`);
       ck(pr.foot === foot, `[A/${foot}] 3D가 받은 주발이 화면과 같다`, pr.foot);
+      /* 👕 유니폼이 무대를 실제로 채우나 — 공 자리를 비워 두던 시절엔 세로 45%였어요.
+       * ⚠️ 문턱을 실측 뒤에 적었습니다(예전에 추정치로 적었다가 틀렸어요 · 82번 §11). */
+      ck(sb && (sb.b - sb.t) >= 60,
+        `[A/${foot}] 👕 유니폼이 무대 세로를 채운다 (공 자리를 되찾았어요)`,
+        sb && `세로 ${(sb.b - sb.t).toFixed(1)}%`);
     }
     ck(errs.length === 0, `[A/${foot}] 페이지 에러 없음`, errs.join(" | "));
     await ctx.close();
   }
-  /* 🔒 **변이가 잡히는 자리** — 공을 다시 주발 쪽으로 옮기면 여기가 빨간불입니다 */
-  ck(ballX.L != null && ballX.L === ballX.R,
-    `[A] 🦶 왼발판과 오른발판에서 ⚽ 공의 화면 x가 **같다** (좌우에 뜻이 없음)`, `L ${ballX.L}% · R ${ballX.R}%`);
+  /* 🔒 변이가 잡히는 자리 ② — 주발을 다시 **좌우로** 말하기 시작하면 빨간불 */
+  ck(chipX.L != null && chipX.L === chipX.R,
+    `[A] 🦶 왼발판과 오른발판에서 칩의 화면 x가 **같다** (좌우에 뜻이 없음)`, `L ${chipX.L}% · R ${chipX.R}%`);
 
   /* ── N. 🖨️ 등판 — 🇰🇷 한글이 새겨지고, 안 잘리고, 카메라를 본다 ──────── */
   {
@@ -347,6 +479,122 @@ async function spin(p, px) {
     });
     ck(s2.stageBot > 40 && s2.toolsTop < 844 && s2.stageBot < s2.toolsTop,
       `[E/${w}] 420px 스크롤해도 👕 무대와 🎲가 함께 보인다`, JSON.stringify(s2));
+    await ctx.close();
+  }
+
+  /* ── H. 👕 **HUD 미니 유니폼** ────────────────────────────────────────
+   *
+   * 🔴 이 절이 지키는 **가장 중요한 한 줄**: HUD에서 **WebGL이 돌지 않는다.**
+   *    HUD는 🏠 유스 홈 36턴 내내 떠 있는 자리예요. 여기서 3D가 돌면 🔥 순간 카드의
+   *    프레임을 갉아먹고, 미니게임은 **프레임 위에서 판정**합니다 →
+   *    `s` 분포가 내려가고 **곡선이 기기 성능에 의존**해요.
+   *    밸런스 사고가 아니라 **밸런스를 잴 수 없게 되는 사고**입니다.
+   *
+   * 🔒 그래서 `live === false` · `canvas.w2c-canvas === 0`을 **화면마다** 잽니다.
+   *    한쪽만 재면 안 돼요 — 컨텍스트를 놓고도 캔버스가 남거나, 그 반대일 수 있습니다.
+   *
+   * 🔑 그리고 **조립대와 같은 옷인지**를 잽니다. 두 벌로 갈라지면 *"내 선수"*가 깨져요.
+   *    같은 색 변수(`--kit-body`)를 읽는지 · 같은 마크업(`.pc-jersey`)인지 둘 다 봅니다. */
+  {
+    for (const [nm, fn] of [["유스", youthHome], ["프로", proPrep]]) {
+      for (const w of [320, 390]) {
+        const { p, ctx, errs, glBefore } = await fn(b, { w });
+        const k = await hudKit(p);
+        await p.screenshot({ path: `${OUT}/w2-hudkit-${nm}-${w}.png` });
+
+        ck(k.has && k.hasJersey, `[H/${nm}/${w}] 👕 HUD에 유니폼이 있다`, k.screen);
+        /* 🔴🔴 여기가 이 절의 이유입니다 — 그리고 **자물쇠가 셋**인 이유가 있어요.
+         * 캔버스만 세면 3D가 실패했을 때 초록불이 됩니다(실제로 그렇게 속았어요 · GL_SPY 주석). */
+        ck(k.glReq === glBefore,
+          `[H/${nm}/${w}] 🔴 HUD 화면에서 **WebGL을 한 번도 요청하지 않는다**`,
+          `요청 ${glBefore} → ${k.glReq}`);
+        ck(k.mark === "",
+          `[H/${nm}/${w}] 🔴 char3d.js가 HUD 유니폼에 **손댄 흔적이 없다**`, `class 표식 "${k.mark}"`);
+        ck(k.live === false && k.glCanvas === 0,
+          `[H/${nm}/${w}] HUD에 3D 캔버스가 없다`, `live=${k.live} 3D캔버스=${k.glCanvas}`);
+        ck(k.no && /^[0-9]+$/.test(k.no),
+          `[H/${nm}/${w}] 🔢 등번호가 글자로 읽힌다`, `"${k.no}"`);
+        /* ⚠️ 안 읽히는 글자를 넣으면 정보가 아니라 얼룩입니다 — 10px이 바닥선이에요 */
+        ck(k.noPx >= 10, `[H/${nm}/${w}] 🔢 번호가 읽을 만한 크기 (≥10px)`, `${k.noPx}px`);
+        ck(!!k.label, `[H/${nm}/${w}] ♿ 스크린리더가 읽을 이름이 붙어 있다`, k.label);
+        /* 🔑 **조립대와 같은 옷** — 같은 색 변수를 읽습니다 (팀 색이 생기면 같이 갑니다) */
+        ck(!!k.rootKit && k.bodyColor === "rgb(234, 240, 255)",
+          `[H/${nm}/${w}] 🎨 조립대와 **같은 --kit-* 를 읽는다**`, `:root --kit-body=${k.rootKit} · 실제 ${k.bodyColor}`);
+        ck(k.overflow <= 0 || nm === "프로" && w === 320,
+          `[H/${nm}/${w}] 가로 넘침 없음`, `${k.overflow}px${k.overflow > 0 ? " (⚠️ 유니폼 이전부터 있던 것 — 89번 §6)" : ""}`);
+        /* 📱 designer 로드맵의 하단 액션바 자리(.hud-acts)를 **안 건드렸는지** */
+        ck(k.actsTop > k.kitBox.h,
+          `[H/${nm}/${w}] 📱 유니폼이 하단 액션바 자리를 안 뺏는다 (윗줄에 있다)`,
+          `유니폼 ${k.kitBox.w}×${k.kitBox.h} · 액션바 시작 ${k.actsTop}px`);
+        ck(errs.length === 0, `[H/${nm}/${w}] 페이지 에러 없음`, errs.join(" | "));
+        await ctx.close();
+      }
+    }
+  }
+
+  /* ── H3. ♿ `prefers-reduced-motion`에서도 **정보를 안 잃는가** ──────────
+   * 👕 HUD 유니폼은 애니메이션이 하나도 없어서 reduce에서도 그대로여야 합니다.
+   * 🔑 *"움직임이 없으니 볼 것도 없다"*가 아니에요 — 움직임을 끄는 규칙이 실수로
+   *    `display: none`이나 `opacity: 0`을 잡으면 **번호가 통째로 사라집니다.**
+   *    (조립대에서 실제로 `animation: none`이 `both`의 시작 상태에 갇힌 적이 있어요) */
+  {
+    for (const [nm, fn] of [["유스", youthHome], ["프로", proPrep]]) {
+      const { p, ctx, glBefore } = await fn(b, { w: 390, rm: true });
+      const k = await hudKit(p);
+      const vis = await p.evaluate(() => {
+        const j = document.querySelector(".screen.active .w2-hudkit .pc-jersey");
+        if (!j) return null;
+        const cs = getComputedStyle(j), no = j.querySelector(".j-no");
+        const cn = no && getComputedStyle(no);
+        const r = no && no.getBoundingClientRect();
+        return { disp: cs.display, op: cs.opacity, noOp: cn && cn.opacity, noDisp: cn && cn.display,
+          noW: r && +r.width.toFixed(1), noH: r && +r.height.toFixed(1) };
+      });
+      ck(vis && vis.disp !== "none" && vis.op === "1" && vis.noOp === "1" && vis.noDisp !== "none" && vis.noH > 0,
+        `[H3/${nm}] ♿ reduce에서도 👕 유니폼과 🔢 번호가 그대로 보인다`, JSON.stringify(vis));
+      ck(k.glReq === glBefore, `[H3/${nm}] ♿ reduce에서도 WebGL을 요청하지 않는다`, `요청 ${glBefore} → ${k.glReq}`);
+      await p.screenshot({ path: `${OUT}/w2-hudkit-${nm}-390-reduce.png` });
+      await ctx.close();
+    }
+  }
+
+  /* ── H2. 🔥 **순간 카드가 도는 화면** — HUD도 3D도 없어야 합니다 ────────
+   * 🔴 designer가 못박은 자리예요: *"순간 카드가 도는 동안 3D를 렌더하지 않습니다."*
+   *    유니폼을 HUD에 붙였으니 **그게 경기 화면까지 따라오지 않았는지**를 재야 합니다. */
+  {
+    const { p, ctx, errs, glBefore } = await proPrep(b, { w: 390 });
+    /* ⚽ 경기하러 가기 — 실제 버튼으로 갑니다 */
+    await p.click("#pro-actions .go-game");
+    await p.waitForTimeout(2400);
+    const st = await p.evaluate(() => {
+      const act = document.querySelector(".screen.active");
+      return {
+        screen: act && act.id,
+        hudInScreen: !!(act && act.querySelector(".hud")),
+        kitInScreen: !!(act && act.querySelector(".w2-hudkit")),
+        glReq: window.__glReq,
+        live: !!(window.W2Char && window.W2Char.live),
+        glCanvas: document.querySelectorAll("canvas.w2c-canvas").length,
+        cards: document.querySelectorAll("#stage-card .w2-card, #stage-card > *").length,
+      };
+    });
+    ck(st.screen === "screen-stage", `[H2] ⚽ 경기 화면에 도달`, st.screen);
+    ck(st.kitInScreen === false && st.hudInScreen === false,
+      `[H2] 🔥 순간 카드가 도는 화면에는 **HUD도 유니폼도 없다**`, JSON.stringify(st));
+    ck(st.glReq === glBefore && st.live === false && st.glCanvas === 0,
+      `[H2] 🔴 순간 카드가 도는 동안 **WebGL을 요청하지도 않는다**`,
+      `요청 ${glBefore} → ${st.glReq} · live=${st.live} 3D캔버스=${st.glCanvas}`);
+
+    /* ⏱️ **프레임을 실제로 셉니다** — "안 돌 것 같다"가 아니라 재서 적습니다.
+     * ⚠️ 헤드리스 크로미움의 절대 fps는 실기기와 다릅니다. 그래서 **문턱을 손으로 적지 않고**
+     *    조립대(3D가 도는 판)와 **견줍니다** — 경기 화면이 조립대보다 느리면 뭔가 도는 거예요. */
+    const fps = await p.evaluate(() => new Promise((res) => {
+      let n = 0; const t0 = performance.now();
+      const tick = () => { n++; if (performance.now() - t0 < 1000) requestAnimationFrame(tick); else res(n); };
+      requestAnimationFrame(tick);
+    }));
+    ck(fps >= 45, `[H2] ⏱️ 순간 카드 화면이 프레임을 지킨다`, `${fps} frames/s (헤드리스 기준)`);
+    ck(errs.length === 0, `[H2] 페이지 에러 없음`, errs.join(" | "));
     await ctx.close();
   }
 

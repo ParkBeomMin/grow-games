@@ -1490,6 +1490,11 @@ function renderMain() {
   const m = marketOf();
   $("hud-name").textContent = `${S.name} (${POS_INFO[S.pos].name})`;
   $("hud-school").textContent = `${m.emoji} ${m.name} · 종합 ${Math.round(overall())}`;
+  /* 👕 미니 유니폼 — 🧬 조립대에서 등에 이름을 새긴 그 옷이 HUD에도 섭니다.
+   * 🔴 **CSS입니다. WebGL이 아니에요** — HUD에서 3D가 돌면 🔥 순간 카드의 프레임을
+   *    갉아먹고 곡선이 기기 성능에 의존합니다(`style.css`의 `.w2-hudkit` 주석).
+   * ⚠️ 연출이 게임을 멈추면 안 돼요 — 없으면 그냥 안 그립니다. */
+  try { if (window.WingerProspect) WingerProspect.paintJersey($("hud-kit"), S); } catch (e) {}
   $("hud-turn").textContent = `${S.year}년차 ${S.month}월`;
 
   $("hud-money").textContent = `💰 ${fmtMoney(S.money || 0)}`;
