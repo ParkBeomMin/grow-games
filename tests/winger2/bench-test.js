@@ -52,7 +52,7 @@
  * ⏱️ 약 25초.
  */
 "use strict";
-const { bootPage, pageMutsOK } = require("./_load.js");
+const { bootPage, pageMutsOK, townAuto, passTown } = require("./_load.js");
 
 let fail = 0;
 const check = (ok, msg) => { console.log(`${ok ? "✅" : "❌"} ${msg}`); if (!ok) fail += 1; };
@@ -132,8 +132,8 @@ function mulberry32(a) {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
-function boot(seed, muts) {
-  const W = bootPage(muts ? { muts } : undefined);
+function boot(seed, muts, keys) {
+  const W = bootPage(muts || keys ? { muts, keys } : undefined);
   if (seed != null) W.Math.random = mulberry32(seed);
   const D = W.document;
   /* 🖱️ 실기기 이벤트 순서 그대로 — pointerdown → pointerup → click.
@@ -149,14 +149,17 @@ function boot(seed, muts) {
   return { W, D, press, active, close: () => W.close() };
 }
 
-/* 🚪 타이틀 → ✏️ 이름·🦶 주발 → 🏟️ 유스 → 🎯 포지션 → 🧬 조립대
- * ⚠️ 2026-08-30에 **이름 화면이 맨 앞으로** 왔습니다. `renderMarkets()`가
- *    `btn-new`에서 `btn-name-next`로 옮겨가서, 그 한 단계를 빼면 `#agency-list`가 비어 있어요. */
+/* 🚪 타이틀 → ✏️ 이름·🦶 주발 → 📍 자리 → 🏘️ 동네 3장 → 🏟️ 입단 제안 → 🧬 조립대
+ * ⚠️ 2026-08-31에 **🏘️ 동네가 들어오면서 순서가 바뀌었습니다** (85번 「순-B」) —
+ *    유스가 「고르는 화면」에서 「제안받는 화면」이 되어 **자리 뒤로** 갔어요.
+ *    `#agency-list`는 동네를 지나야 채워집니다(`showOffers` → `renderMarkets`). */
 function toBench(h) {
   h.press(h.D.getElementById("btn-new"), "btn-new");
   h.press(h.D.getElementById("btn-name-next"), "btn-name-next");
-  h.press(h.D.querySelector("#agency-list button"), "🏟️ 유스");
-  h.press(h.D.querySelector("#position-list .card[data-pos]"), "🎯 포지션");
+  const back = townAuto(h.W);
+  h.press(h.D.querySelector("#position-list .card[data-pos]"), "📍 자리");
+  passTown(h.W, h.press, back);
+  h.press(h.D.querySelector("#agency-list button"), "🏟️ 입단 제안");
   return h;
 }
 
@@ -482,9 +485,15 @@ const BASE = benchProbe(null, SEEDS, ROLLS_UI);
   const body = src.match(/function newPlayer\([^)]*\)\s*\{([\s\S]*?)\n\}/);
   const POS = "wg";
   const steps = [];
+  /* 🔑 **누르기 전에 심는 것도 소스에서 뜯습니다.** `newPlayer()`는 🏘️ 동네 순간 카드를
+   * 🤖 자동 진행으로 지나가려고 `localStorage.setItem`을 먼저 부르는데, 그 줄을 안 읽으면
+   * 이 재현본은 **진짜 미니게임이 뜬 화면**을 누르게 됩니다 — 손이 없어서 영영 못 지나가요.
+   * 🔴 값을 여기 베껴 적지 않습니다(그러면 소스가 바뀌어도 안 잡혀요). */
+  const pre = {};
   if (body) {
     for (const line of body[1].split("\n")) {
       let g;
+      if ((g = line.match(/localStorage\.setItem\(\s*["']([\w-]+)["']\s*,\s*["']([^"']*)["']\s*\)/))) { pre[g[1]] = g[2]; continue; }
       if ((g = line.match(/\$\("([\w-]+)"\)\.click\(\)/))) steps.push(`#${g[1]}`);
       else if ((g = line.match(/querySelectorAll\(["'`]([^"'`]+)["'`]\)/))) steps.push(g[1]);
       else if ((g = line.match(/querySelector\(`([^`]+)`\)/))) steps.push(g[1].replace(/\$\{pos\}/g, POS));
@@ -494,9 +503,10 @@ const BASE = benchProbe(null, SEEDS, ROLLS_UI);
   check(!!body && steps.length >= 3,
     `G-0. 🧰 \`make-fixtures.js\`의 \`newPlayer()\`에서 **누르는 것 ${steps.length}개**를 뜯었다`
     + ` (${steps.join(" → ")})`
+    + `\n     먼저 심는 것: ${Object.keys(pre).length ? Object.entries(pre).map(([k, v]) => `${k}=${v}`).join(" · ") : "없음"}`
     + (body ? "" : `\n     🔴 함수를 못 찾았어요 — 정규식을 고치세요 (이 검사는 지금 "안 돈" 상태입니다)`));
 
-  const h = boot(11);
+  const h = boot(11, null, pre);
   const skipped = [];
   for (const sel of steps) {
     const el = h.D.querySelector(sel);
@@ -510,8 +520,9 @@ const BASE = benchProbe(null, SEEDS, ROLLS_UI);
       `\n     🔴 **\`beta/_fixtures.js\`의 winger2 시나리오 3종을 다시 만들 수 없습니다**`
       + `\n        (\`winger2-match\` · \`winger2-def\` · \`winger2-bench\`)`
       + `\n     🔴 지금 화면에 없어서 건너뛴 것: ${skipped.length ? skipped.join(" · ") : "없음"}`
-      + `\n     👉 \`scripts/make-fixtures.js:169 newPlayer()\` — \`btn-new\` 뒤에`
-      + ` **\`btn-name-next\`** 한 단계가 필요하고, \`btn-start\`는 **\`btn-prospect-start\`**입니다`
+      + `\n     👉 \`scripts/make-fixtures.js\`의 \`newPlayer()\` — 지금 ⚽ 더 윙어 II의 순서는`
+      + ` **\`btn-new\` → \`btn-name-next\` → 📍 자리 → 🏘️ \`btn-town-next\` ×3 → 🏟️ 유스 카드`
+      + ` → \`btn-prospect-start\`**입니다`
       + `\n     👉 ⚠️ soccer도 같은 함수를 씁니다 — **게임별로 갈라 주세요**`
       + `\n     👉 이건 **조용히 실패하는 자리**예요: 디스크의 픽스처가 남아 있어서`
       + ` \`check-page-test\`도 \`_check.html\`도 통과합니다`));

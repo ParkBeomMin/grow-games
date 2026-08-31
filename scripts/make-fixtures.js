@@ -169,8 +169,9 @@ function snapshot(P) {
 /* ⚠️ 게임마다 화면 순서가 달라요 — **게임 이름이 아니라 버튼의 있고 없음으로** 가릅니다.
  * 이름으로 가르면 게임이 늘 때마다 여기를 고쳐야 하고, 안 고치면 조용히 실패해요.
  *
- * ⚽ 더 윙어 II는 이름·주발을 맨 앞에서 받고 마지막이 🧬 조립대예요:
- *     btn-new → (이름·주발) btn-name-next → 유스 → 포지션 → (조립대) btn-prospect-start
+ * ⚽ 더 윙어 II는 이름·주발을 맨 앞에서 받고, 📍 자리 뒤에 🏘️ 동네 3장이 끼어요
+ * (2026-08-31 · 85번 「순-B」 — 유스가 「고르는 화면」에서 「제안받는 화면」이 됐습니다):
+ *     btn-new → (이름·주발) btn-name-next → 📍 자리 → 🏘️ 동네 ×3 → 🏟️ 제안 → btn-prospect-start
  * 나머지 게임은:
  *     btn-new → 소속 → 포지션 → (이름) btn-start
  *
@@ -180,6 +181,9 @@ function snapshot(P) {
  *    **그래서 이제 못 닿으면 던집니다.** 조용히 넘어가지 않아요. */
 function newPlayer(P, agencyIdx, pos, name) {
   const { w, $ } = P;
+  /* 🤖 순간 카드를 **자동 진행(중립 s = 0.5)**으로 지나갑니다 — 픽스처 생성기에는 손이 없어요.
+   * ⚠️ 이 열쇠는 `SKIP_KEYS`라 만들어진 픽스처에는 안 실립니다. */
+  w.localStorage.setItem("grow-auto-mini", "1");
   $("btn-new").click();
 
   /* ⚠️ 버튼을 변수에 담아 누르지 마세요 — 이 함수를 **소스에서 읽어** 그대로 눌러 보는
@@ -190,12 +194,31 @@ function newPlayer(P, agencyIdx, pos, name) {
     $("btn-name-next").click();
   }
 
-  const cards = w.document.querySelectorAll("#agency-list .card");
-  if (!cards[agencyIdx]) throw new Error(`소속 카드 ${agencyIdx}번이 없어요`);
-  cards[agencyIdx].click();
+  /* 🏘️ 동네가 있는 흐름(⚽ 더 윙어 II)은 **📍 자리가 먼저**고, 유스는 그 뒤에 제안으로 옵니다.
+   * 게임 이름이 아니라 **화면의 있고 없음**으로 가려요 — 이름으로 가르면 게임이 늘 때마다
+   * 여기를 고쳐야 하고, 안 고치면 조용히 실패합니다.
+   * ⚠️ 두 갈래를 **한 줄기로** 적습니다 — G-1이 이 함수를 소스에서 읽어 `.click()` 줄을
+   *    차례로 눌러 보기 때문에, 갈래마다 같은 선택자를 따로 적으면 순서가 어긋나요. */
+  const townFirst = !!$("screen-town");
+  if (!townFirst) {
+    const cards = w.document.querySelectorAll("#agency-list .card");
+    if (!cards[agencyIdx]) throw new Error(`소속 카드 ${agencyIdx}번이 없어요`);
+    cards[agencyIdx].click();
+  }
   const posCard = w.document.querySelector(`#position-list .card[data-pos="${pos}"]`);
   if (!posCard) throw new Error(`포지션 카드 ${pos}가 없어요`);
   posCard.click();
+  if (townFirst) {
+    /* 🏘️ 동네 3장 — 카드마다 [다음]이 한 번씩이에요.
+     * 🔴 **세 줄을 그대로 적습니다.** 반복문으로 쓰면 G-1이 `.click()` 줄을 한 번만
+     *    뜯어가서 동네 한 판만 지나간 채로 판정합니다. */
+    $("btn-town-next").click();
+    $("btn-town-next").click();
+    $("btn-town-next").click();
+    const cards = w.document.querySelectorAll("#agency-list .card");
+    if (!cards[agencyIdx]) throw new Error(`유스 카드 ${agencyIdx}번이 없어요`);
+    cards[agencyIdx].click();
+  }
 
   if (!nameFirst) $("input-name").value = name;
   if ($("btn-prospect-start")) $("btn-prospect-start").click();

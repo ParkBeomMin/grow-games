@@ -309,12 +309,30 @@ const FX = (() => {
 })();
 if (!FX) { console.log("❌ winger2 확인용 세이브를 못 찾았어요 (beta/_fixtures.js)"); process.exit(1); }
 
-function openSave(extraMuts) {
+/* 🎲 재현 가능한 난수 — 시드를 박아야 이 파일의 꼬리(🚧 알려진 미달 목록)가
+ * 실행마다 안 달라집니다. 여러 시드로 재는 자리는 그때그때 `openSave(muts, seed)`로 갈아요. */
+const SAVE_SEED = 20260831;
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+function openSave(extraMuts, seed) {
   const muts = Object.assign({}, EXPOSE);
   for (const [f, list] of Object.entries(extraMuts || {})) {
     muts[f] = (muts[f] || []).concat(list);
   }
   const win = bootPage({ muts, keys: FX.keys });
+  /* 🎲 **시드를 박습니다.** 안 박으면 이 파일의 꼬리가 실행마다 달라져요 —
+   *    실제로 `알려진 미달 2건 ↔ 1건`으로 갈렸습니다 (engineer 90번 §6 곁다리 관찰).
+   *    원인은 41-4/41-5가 `rollLineup`을 15만 번 굴리는데 페이지의 `Math.random`이
+   *    그대로였던 것이고, **fw 평균이 10.0 ~ 11.3으로 바(11.4) 위아래를 넘나들었어요.**
+   *    ⚠️ 엔진은 로드 시점에 `Math.random`을 잡아 두므로(`let _rng = Math.random;`)
+   *       엔진 쪽이 필요하면 `WingerEngine._t.seed()`를 따로 불러야 합니다. */
+  win.Math.random = mulberry32(seed == null ? SAVE_SEED : seed);
   win.document.getElementById("btn-continue").click();
   const go = win.document.querySelector(".slot-modal .slot-go");
   if (go) go.click();
@@ -861,13 +879,26 @@ function cardAges(Pr, rolls) {
     }
     return out;
   }
+  /* 🎲 **시드 하나로 안 잽니다.** ⚔️ fw는 자리가 2개뿐이라 크게 흔들려요 —
+   *    시드를 안 박던 시절 실측이 **10.0 ~ 11.3**이었고, 바(11.4)가 바로 그 위였습니다.
+   *    한 시드만 보면 "바를 넘었다/못 넘었다"가 **동전 던지기**가 돼요. */
+  const APP_SEEDS = [11, 23, 37];
   const wA = openSave();
-  const A = debutApps(wA);
+  const runs = APP_SEEDS.map((sd) => { wA.Math.random = mulberry32(sd); return debutApps(wA); });
   const POS4 = ["fw", "wg", "mf", "df"];
-  const allAvg = POS4.reduce((a, p) => a + A[p].avg, 0) / POS4.length;
-  console.log(`   🎯 신인 데뷔 출전 (만성 · 만 20세 · ${SEASONS}시즌/클럽)`);
+  const A = {};
   for (const p of POS4) {
-    console.log(`      ${p} 평균 ${A[p].avg.toFixed(1)} — 클럽별 ${A[p].per.map((x) => `${x.club.str} ${x.v.toFixed(1)}`).join(" · ")}`);
+    A[p] = {
+      avg: runs.reduce((a, r) => a + r[p].avg, 0) / runs.length,
+      per: runs[0][p].per.map((x, i) => ({ club: x.club, v: runs.reduce((a, r) => a + r[p].per[i].v, 0) / runs.length })),
+      bySeed: runs.map((r) => r[p].avg),
+    };
+  }
+  const allAvg = POS4.reduce((a, p) => a + A[p].avg, 0) / POS4.length;
+  console.log(`   🎯 신인 데뷔 출전 (만성 · 만 20세 · ${SEASONS}시즌/클럽 × 시드 ${APP_SEEDS.length}개)`);
+  for (const p of POS4) {
+    console.log(`      ${p} 평균 ${A[p].avg.toFixed(1)} — 클럽별 ${A[p].per.map((x) => `${x.club.str} ${x.v.toFixed(1)}`).join(" · ")}`
+      + ` · 시드별 ${A[p].bySeed.map((v) => v.toFixed(1)).join(" / ")}`);
   }
   check(allAvg >= DEBUT_BAR,
     `41-4. 🎯 신인 데뷔 시즌 출전이 **38의 30%(${DEBUT_BAR}경기) 이상** — 4포지션 평균 **${allAvg.toFixed(1)}**`
@@ -879,10 +910,17 @@ function cardAges(Pr, rolls) {
    * 대신 **상한**을 걸어 더 나빠지면 잡습니다 — 현상은 기록하고 회귀는 잡아요. */
   const FW_FLOOR = 7;            // 이보다 더 나빠지면 빨간불 (상한이지 목표가 아니에요)
   const fw = A.fw;
-  if (fw.avg >= DEBUT_BAR) {
-    check(true, `41-5. ⚔️ 공격수 칸도 ${DEBUT_BAR}경기를 넘었다 (${fw.avg.toFixed(1)}) — 🎉 바에 걸치던 게 해소됐어요`);
+  /* 🔴 **해소 판정은 「가장 낮은 시드」로 합니다.** 평균 하나로 재면 시드가 바뀔 때마다
+   *    🚧와 ✅ 사이를 오가고, 그러면 이 파일의 꼬리가 실행마다 달라져요 —
+   *    실제로 `알려진 미달 2건 ↔ 1건`으로 갈렸던 자리입니다. */
+  const fwLo = Math.min(...fw.bySeed);
+  if (fwLo >= DEBUT_BAR) {
+    check(true, `41-5. ⚔️ 공격수 칸도 ${DEBUT_BAR}경기를 넘었다 (시드 ${APP_SEEDS.length}개 전부 · 최저 ${fwLo.toFixed(1)} · 평균 ${fw.avg.toFixed(1)}) — 🎉 바에 걸치던 게 해소됐어요`
+      + `\n     👉 **이제 이 갈래를 지우고 41-4처럼 회귀로 거세요** — note가 아니라 check로요`);
   } else {
     note(`41-5. ⚔️ **공격수 칸이 바에 걸쳐 있습니다** — 평균 ${fw.avg.toFixed(1)} vs 목표 ${DEBUT_BAR}`
+      + `\n        시드별 ${fw.bySeed.map((v) => v.toFixed(1)).join(" / ")} (최저 ${fwLo.toFixed(1)} · 최고 ${Math.max(...fw.bySeed).toFixed(1)})`
+      + `\n        🎲 시드 폭이 바를 넘나들어서 **한 시드로는 판정이 동전 던지기**예요`
       + `\n        클럽별 ${fw.per.map((x) => `전력 ${x.club.str} → ${x.v.toFixed(1)}경기`).join(" · ")}`
       + `\n        engineer 하네스는 **12.8로 통과**라고 잽니다 — 바가 두 하네스 사이에 있어요`
       + `\n        👉 자리가 **2개뿐**이고 그 2자리 경쟁자가 팀 최상위입니다.`

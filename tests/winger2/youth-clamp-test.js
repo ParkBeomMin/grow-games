@@ -38,7 +38,7 @@
  * ⏱️ 약 2분.
  */
 "use strict";
-const { bootPage, pageMutsOK } = require("./_load.js");
+const { bootPage, pageMutsOK, passTown } = require("./_load.js");
 
 let fail = 0;
 const check = (ok, msg) => { console.log(`${ok ? "✅" : "❌"} ${msg}`); if (!ok) fail += 1; };
@@ -133,8 +133,10 @@ function playthrough(seed, muts) {
   };
   press(D.getElementById("btn-new"), "btn-new");
   press(D.getElementById("btn-name-next"), "btn-name-next");
-  press(D.querySelector("#agency-list button"), "🏟️ 유스");
-  press(D.querySelector(`#position-list .card[data-pos="${POS}"]`), `🎯 ${POS}`);
+  /* 🏘️ 동네 3장 — 이 파일은 `grow-auto-mini`를 켜고 뜨므로 그대로 지나갑니다 (85번 「순-B」) */
+  press(D.querySelector(`#position-list .card[data-pos="${POS}"]`), `📍 ${POS}`);
+  passTown(W, press);
+  press(D.querySelector("#agency-list button"), "🏟️ 입단 제안");
   press(D.getElementById("btn-prospect-start"), "btn-prospect-start");
   const S = () => W.__get("S");
   const screen = () => ((D.querySelector(".screen.active") || {}).id || "");

@@ -36,7 +36,8 @@
  *   ③ **게임 입구를 통해** — 타이틀 → ✏️ 이름·🦶 주발 → 🏟️ 유스 → 🎯 포지션 →
  *      🧬 조립대 → 🏠 훈련장 6턴 → 🏆 평가전. 실기기 순서 그대로
  *      (pointerdown → pointerup → click)
- *   ④ **시드 하나로 안 잽니다** — D절은 시드 여럿의 평가전을 모아 봅니다
+ *   ④ **시드 하나로 안 잽니다** — D절은 시드 여럿의 평가전을 모아 봅니다.
+ *      그리고 **커버리지는 운으로 안 잽니다** — D-2는 🎲 뽑기를 직접 겨눕니다(아래 D-2 주석)
  *   ⑤ **변이가 지금 소스에 걸리는지 0번이 먼저** 확인합니다 (안 걸리면 ❌ 한 줄,
  *      죽지 않아요)
  *
@@ -44,7 +45,7 @@
  * ⏱️ 약 60초.
  */
 "use strict";
-const { bootPage, pageMutsOK } = require("./_load.js");
+const { bootPage, pageMutsOK, townAuto, passTown } = require("./_load.js");
 
 let fail = 0;
 const check = (ok, msg) => { console.log(`${ok ? "✅" : "❌"} ${msg}`); if (!ok) fail += 1; };
@@ -82,6 +83,10 @@ const MUT = {
   /* 🔴 **M3 — 평가전이 턴을 먹습니다.**
    *    36턴 성장 곡선이 조용히 움직이는 자리예요. 화면에는 아무 증상이 없습니다. */
   M3_EAT_TURN: { "game.js": [[/ {4}ev\.totalPts \+= pts;/, "    ev.totalPts += pts; advanceMonth();"]] },
+  /* 🔴 **M4 — 경기 성격 뽑기 풀을 한 칸으로.** 화면은 멀쩡히 돌고 **성격만 하나로 굳습니다.**
+   *    D-1(화면과 손이 같은 말)은 그대로 초록불이에요 — 나오는 한 종류는 여전히 맞으니까요.
+   *    **D-2만** 갈립니다. */
+  M4_ONE_TYPE: { "game.js": [[/STAGE_TYPES\[pick\(\[0, 1, 2\]\)\]/, "STAGE_TYPES[pick([0])]"]] },
 };
 
 /* ══════════════════════════════════════════════════════════════
@@ -137,13 +142,18 @@ function boot(o) {
     close: () => W.close() };
 }
 
-/* 🚪 타이틀 → ✏️ 이름·🦶 주발 → 🏟️ 유스 → 🎯 포지션 → 🧬 조립대 → 🏠 훈련장 */
+/* 🚪 타이틀 → ✏️ 이름·🦶 주발 → 📍 자리 → 🏘️ 동네 3장 → 🏟️ 입단 제안 → 🧬 조립대 → 🏠 훈련장
+ * ⚠️ 2026-08-31에 **🏘️ 동네가 들어오면서 순서가 바뀌었습니다** (85번 「순-B」) —
+ *    유스가 「고르는 화면」에서 「제안받는 화면」이 되어 **자리 뒤로** 갔어요.
+ *    `#agency-list`는 동네를 지나야 채워집니다(`showOffers` → `renderMarkets`). */
 function toHome(h, o) {
   h.press(h.D.getElementById("btn-new"), "btn-new");
   if (o.foot === "L") h.press(h.D.querySelector('#screen-name .foot-opt[data-foot="L"]'), "🦶 왼발");
   h.press(h.D.getElementById("btn-name-next"), "btn-name-next");
-  h.press(h.D.querySelector("#agency-list button"), "🏟️ 유스");
-  h.press(h.D.querySelector(`#position-list .card[data-pos="${o.pos}"]`), `🎯 ${o.pos}`);
+  const back = townAuto(h.W);
+  h.press(h.D.querySelector(`#position-list .card[data-pos="${o.pos}"]`), `📍 ${o.pos}`);
+  passTown(h.W, h.press, back);      // ♻️ 되돌립니다 — 이 파일은 진짜 미니게임을 잽니다
+  h.press(h.D.querySelector("#agency-list button"), "🏟️ 입단 제안");
   h.press(h.D.getElementById("btn-prospect-start"), "btn-prospect-start");
   return h;
 }
@@ -463,15 +473,91 @@ async function runD() {
   check(bad.length === 0,
     `D-1. 🗣️ 화면의 경기 성격과 .w2m-stake가 **같은 말을 한다** (${recs.length}판 × ${GAMES_PER_EVAL}경기)`
     + (bad.length ? `\n     🔴 어긋난 것 ${bad.length}건: ${bad.slice(0, 4).join(" | ")}` : ""));
-  /* ⚔️ "포지션과 무관하게 4종이 전부 유스에 나온다"의 앞자리 — 성격 셋이 다 나오나 */
-  const kinds = new Set(Array.from(seen.keys()));
-  const need = ["공격 전개", "중원 장악", "수비 조직"];
-  const miss = need.filter((k) => !kinds.has(k));
-  check(miss.length === 0,
-    `D-2. ⚔️ 시드 ${SEEDS.length}판에서 경기 성격 셋이 다 나온다`
-    + `\n     ${Array.from(seen.entries()).map(([k, v]) => `${k}×${v}`).join(" · ")}`
-    + (miss.length ? `\n     🚧 안 나온 것: ${miss.join(", ")} — 시드를 늘려 다시 보세요` : ""));
+  /* 📊 시드가 실제로 뭘 뽑았는지는 **정보로만** 남깁니다 — 판정은 D-2가 합니다.
+   *    (여기서 판정하면 난수 흐름이 한 칸만 밀려도 빨간불이 돼요. 아래 D-2 주석 참고) */
+  console.log(`     📊 이 시드들이 뽑은 성격: ${Array.from(seen.entries()).map(([k, v]) => `${k}×${v}`).join(" · ")}`);
   base.D = recs;
+  base.Dseen = seen;
+}
+
+/* ══════════════════════════════════════════════════════════════
+ * D-2. ⚔️ **경기 성격 셋이 전부 뽑힌다** — 🎲 뽑기를 검사가 직접 겨눕니다
+ *
+ * 🔴 **2026-08-31에 다시 겨눴습니다. 그 전에는 "운"을 재고 있었어요.**
+ *
+ * 옛 D-2는 시드 3판(자유 추첨 **6번**)에서 셋이 다 나오는지를 셌습니다.
+ * `3·(2/3)⁶ − 3·(1/3)⁶ ≈ 26%` — **네 번에 한 번은 그냥 빨간불**입니다.
+ * 실제로 🏘️ 동네가 들어오면서 `rollOffers`가 유스마다 `Math.random()`을 5회 쓰자
+ * 난수 흐름이 밀렸고, **경기 성격 코드는 한 글자도 안 바뀌었는데** 빨간불이 됐어요.
+ *
+ * 🚨 그리고 그게 **남의 변이 신호까지 먹었습니다.** engineer가 동네를 되돌린
+ *    여섯 변이가 전부 「잡힘」으로 보였는데, 사실은 전부 이 D-2 하나를 다시 빨간불로
+ *    만들고 있었을 뿐이었어요 (`91_engineer_hometown.md` §5).
+ *    **이미 빨간불인 검사는 그 옆의 진짜 실패를 안 보이게 만듭니다.**
+ *
+ * 🔧 그래서 **운을 재지 않고 뽑기를 직접 겨눕니다.**
+ *    `pick(arr)`은 `arr[Math.floor(Math.random() * arr.length)]`이에요. 그러니
+ *    **클릭 핸들러가 도는 동안만** `Math.random`을 상수 c로 고정하면,
+ *    그게 **몇 번째 난수든** `pick([0,1,2])`는 언제나 `floor(c·3)`번 칸을 집습니다.
+ *    → c = 0.10 / 0.50 / 0.90 이 각각 0 / 1 / 2번 칸이에요.
+ *    🔑 **난수 소비량에 안 흔들립니다.** 앞으로 누가 난수를 몇 개 더 쓰든 그대로예요.
+ *
+ * 🔒 지키는 것
+ *   · **게임 입구를 통해** 갑니다 — 타이틀부터 눌러 🏆 대회 출전까지 걸어가요
+ *   · 고정은 **그 한 번의 클릭 동안만**입니다. 누른 직후 원래 난수로 되돌려요
+ *   · 기대하는 성격 셋(`공격 전개 · 중원 장악 · 수비 조직`)은 **여기 박습니다**
+ *     — `STAGE_TYPES`에서 읽어 오면 표를 통째로 갈아도 검사가 따라갑니다
+ *   · c와 칸의 **짝은 안 박습니다.** 표 순서가 바뀌어도 계약은 "셋이 다 나온다"예요
+ * ══════════════════════════════════════════════════════════════ */
+const DRAW_C = [0.10, 0.50, 0.90];              // 🎲 pick([0,1,2])의 0 / 1 / 2번 칸
+const NEED_TYPES = ["공격 전개", "중원 장악", "수비 조직"];   // 🔒 여기 박습니다
+
+/* 🎲 그 경기의 성격을 **강제로** 한 번 뽑아 화면에서 읽어 옵니다.
+ * ⚠️ 경기는 안 칩니다 — `stage-round`는 `playEvalStage`가 그 자리에서 적어요.
+ *    (미니게임을 굴리지 않으니 판마다 1초도 안 걸립니다) */
+async function drawStageType(seed, pos, c, muts) {
+  const h = toHome(boot({ seed, muts }), { pos, foot: "R" });
+  const ok = await restUntilStage(h);
+  if (!ok) { h.close(); return { name: "(대회 버튼이 안 열렸어요)", ok: false }; }
+  h.press(h.D.querySelector(".go-game"), "🏆 대회 출전");
+  await wait(5);
+  const real = h.W.Math.random;
+  h.W.Math.random = () => c;                    // 🔒 이 한 번의 클릭 동안만
+  h.press(h.D.getElementById("btn-stage-next"), "첫 경기 출전");
+  h.W.Math.random = real;
+  const round = (h.D.getElementById("stage-round") || {}).textContent || "";
+  h.close();
+  return { name: (round.split("·")[1] || "").trim(), round, ok: true };
+}
+
+async function runD2(muts) {
+  const out = [];
+  for (const c of DRAW_C) out.push({ c, ...(await drawStageType(SEEDS[0], "wg", c, muts)) });
+  return out;
+}
+
+async function runD2Base() {
+  const got = await runD2(null);
+  const names = got.map((g) => g.name);
+  const uniq = new Set(names);
+  const miss = NEED_TYPES.filter((n) => !uniq.has(n));
+  check(miss.length === 0 && uniq.size === NEED_TYPES.length,
+    `D-2. ⚔️ 🎲 뽑기를 0/1/2번 칸으로 **강제**하면 경기 성격 **셋이 다** 나온다`
+    + `\n     ${got.map((g) => `c=${g.c.toFixed(2)} → ${g.name || "(빈칸)"}`).join(" · ")}`
+    + `\n     🔑 난수 소비량에 안 흔들려요 — 옛 D-2는 자유 추첨 6번의 운을 재느라 26% 확률로 헛빨간불이었습니다`
+    + (miss.length ? `\n     🔴 안 나온 것: ${miss.join(", ")} — 뽑기 풀이 좁아졌나요?` : "")
+    + (uniq.size === NEED_TYPES.length ? "" : `\n     🔴 서로 다른 성격이 ${uniq.size}종뿐이에요 (계약은 ${NEED_TYPES.length}종)`));
+}
+
+/* 🧪 M4 — 뽑기 풀을 한 칸으로 줄입니다. 세 c가 전부 같은 성격을 내야 해요. */
+async function runD_M4() {
+  if (!mutOK("M4_ONE_TYPE")) { check(false, `D-M4. 🧪 변이(경기 성격 뽑기 풀을 1종으로)${MUT_DEAD}`); return; }
+  const got = await runD2(MUT.M4_ONE_TYPE);
+  const uniq = new Set(got.map((g) => g.name));
+  check(uniq.size < NEED_TYPES.length,
+    `D-M4. 🧪 **변이 — 경기 성격 뽑기 풀을 \`pick([0])\` 한 칸으로** → D-2가 빨간불`
+    + `\n     ${got.map((g) => `c=${g.c.toFixed(2)} → ${g.name}`).join(" · ")} (서로 다른 성격 ${uniq.size}종)`
+    + (uniq.size < NEED_TYPES.length ? "" : `\n     🔴 풀을 줄였는데 아직 ${uniq.size}종이 나와요 — D-2가 뽑기를 안 겨누고 있습니다`));
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -528,12 +614,24 @@ async function runF() {
   await runA();
   checkC(base.r, "C");
   await runD();
+  await runD2Base();
   await runB();
   await runF();
+  /* 🔴 **변이 검증 전에 기준선이 초록불인지 먼저 봅니다.**
+   *    이미 빨간불인 검사는 **남의 변이 신호까지 통째로 먹어요** — 실제로
+   *    engineer의 동네 여섯 변이가 전부 「잡힘」으로 보였는데, 사실은 전부
+   *    D-2 하나를 다시 빨간불로 만들고 있었을 뿐이었습니다 (91번 §5). */
   console.log("\n── 🧪 변이 검증 (고치기 전에 빨간불이 뜨는지) ──");
+  if (fail) {
+    console.log(`   ⚠️ **기준선이 이미 ${fail}건 빨간불입니다** — 아래 변이 판정은 그 신호를 먹을 수 있어요.`);
+    console.log(`      먼저 위 ❌를 없앤 다음 변이 결과를 믿으세요.`);
+  } else {
+    console.log(`   ✔ 기준선(무변이) 전부 초록불 — 아래 빨간불은 **변이가 만든 것**이 맞습니다.`);
+  }
   await runA_M1();
   await runB_M2();
   await runC_M3();
+  await runD_M4();
   console.log(fail ? `\n❌ ${fail}건 실패` : "\n✅ 통과");
   process.exit(fail ? 1 : 0);
 })();

@@ -484,6 +484,20 @@ function newState(market, pos, name, roll) {
 }
 
 const marketOf = () => MARKETS.find((m) => m.id === S.market);
+/* 📣 **주목 배수** — 유스의 `spot`에 🏟️ 입단 제안 등급이 **한 겹** 곱해집니다 (85번 §2-2).
+ *
+ * 🔴 **동네가 닿는 축은 여기 하나뿐이에요.** `growth`·`debut`에는 한 톨도 안 닿습니다:
+ *   `growth`는 **36턴 복리**라 조작 3장을 걸면 육성이 아니라 **처벌**이 되고,
+ *   `debut`은 유스 선택의 **트레이드오프 축**이라 닿으면 *"못한 사람이 오히려 데뷔가
+ *   쉬워지는"* 뒤집힘이 납니다.
+ * 🔴 **이 자리를 지키는 검사가 아직 없습니다** (91번 §5). 실측으로는 확인했어요 —
+ *    `spotMul`을 0.90 ↔ 1.10으로 흔들어도 24짝 전부에서 `growth`·`debut`과
+ *    36턴 훈련 궤적이 **비트 단위로 같습니다.** 검사는 inspector에게 넘겼습니다.
+ * ✅ `spot`이 **곱**이라 *"덜 키운 쪽은 +0"*이 산식으로 보장되고(원칙 ⑥),
+ *    ⭐ 명성은 누적·무상한이라 `score = fandom + overall()×2`에 **훈련으로 만회할 길**이
+ *    이미 들어 있습니다(선형 누적 — 복리와 다릅니다).
+ * ⚠️ 새 필드예요. **마이그레이션 없이 읽는 쪽에서 기본값 1**(= 중립)을 줍니다. */
+const spotOf = (m) => ((m && m.spot) || 1) * ((S && S.spotMul) || 1);
 /* ⚡ 스피드 칸이 없는 옛 세이브는 **그 선수의 평균**으로 읽어요.
  *
  * 평균을 넣으면 종합이 정확히 그대로예요 — (합 + 평균) ÷ 6 = 평균.
@@ -809,10 +823,11 @@ window.addEventListener("popstate", (e) => {
   }
 });
 
-/* ⬅️ 흐름이 **이름 → 유스 → 포지션 → 조립대**로 바뀌었어요 (74번 판정 · 이름이 맨 앞).
- * 뒤로 가기도 그 순서를 그대로 거슬러 올라갑니다. */
-$("btn-back-first")?.addEventListener("click", () => show("screen-name"));
-$("btn-back-position")?.addEventListener("click", () => show("screen-agency"));
+/* ⬅️ 흐름은 **이름 → 📍 자리 → 🏘️ 동네 → 🏟️ 제안 → 🧬 조립대**입니다 (85번 「순-B」).
+ * 뒤로 가기도 그 순서를 그대로 거슬러 올라가되, 🏘️ 동네만 건너뜁니다 —
+ * 🔴 **되돌아가서 다시 굴리는 길이 곧 재도전 버튼**이라서요(설계 §5-3). */
+$("btn-back-first")?.addEventListener("click", () => show("screen-position"));
+$("btn-back-position")?.addEventListener("click", () => show("screen-name"));
 $("btn-back-name")?.addEventListener("click", () => show("screen-title"));
 const goHome = () => { if (S) save(); location.reload(); };
 $("btn-home-main")?.addEventListener("click", goHome);
@@ -1308,6 +1323,10 @@ function initTitle() {
     /* 🧒 빈 칸으로 시작하면 아무도 안 씁니다 — 하나 채워 두고 고쳐 쓰게 해요.
      * 이미 친 이름이 있으면(뒤로 갔다 온 경우) 안 덮어씁니다. */
     if (!$("input-name").value.trim()) $("input-name").value = randomPlayerName(null);
+    /* 🏘️ 동네를 **새로 굴립니다.** 한 커리어를 끝내고 새 게임을 시작할 때
+     * 지난 판의 점수와 제안이 남아 있으면 동네가 통째로 건너뛰어져요. */
+    if (window.WingerTown) WingerTown.reset();
+    chosenOffer = null;
     show("screen-name");
   };
   if (window.Match && Match.enabled()) {
@@ -1388,37 +1407,62 @@ function showSlotPicker() {
   });
 }
 
+/* 🏟️ **입단 제안** — 🏘️ 동네 세 판을 보고 유스 5곳이 각자 손을 듭니다 (85번 §4-2).
+ *
+ * 🔴 **5곳이 전부 옵니다. `id`·`debut`·`growth`·`spot`·`desc`는 전부 불변이에요.**
+ *    바뀌는 건 카드에 붙는 **제안 등급 한 줄**뿐입니다. 목록을 줄이면 축이 뒤집혀요
+ *    (못한 사람이 데뷔가 가장 쉬운 🇰🇷만 받게 됩니다 — 85번 §3-2).
+ *
+ * 🔑 **`📣 주목 ×1.15 → ×1.21`을 숫자로 적습니다** (원칙 ③ — 효과가 있으면 손잡이도).
+ *    조작했는데 결과가 화면에 안 보이면 동네가 **컷신처럼 읽힙니다.** */
 function renderMarkets() {
   const box = $("agency-list");
   box.innerHTML = "";
   const starBar = (v, vals) => { const lo = Math.min(...vals), hi = Math.max(...vals); const n = hi === lo ? 3 : Math.min(5, Math.max(1, 1 + Math.round(((v - lo) / (hi - lo)) * 4))); return "★".repeat(n) + "☆".repeat(5 - n); };
   const GVALS = MARKETS.map((x) => x.growth), DVALS = MARKETS.map((x) => x.debut);
+  const hint = $("agency-hint");
+  if (hint && window.WingerTown && WingerTown.played()) {
+    hint.innerHTML = `동네에서 세 판, 스카우트가 지켜봤어요 — <b>${WingerTown.score()}점</b>.`
+      + `<br/>유스에 따라 성장 환경과 프로 진출 난이도가 달라져요.`;
+  }
   for (const m of MARKETS) {
+    /* 🎲 **유스마다 따로 굴러온 등급**이에요 (원칙 ⑧ — 재미의 절반은 「모른다」에서).
+     * 동네 성적은 **기댓값**만 올립니다. 5곳이 한꺼번에 굴러 다 같아지면
+     * *"잘했으면 다 좋음"* 이 되어 선택이 사라져요. */
+    const off = window.WingerTown ? WingerTown.offerFor(m.id) : null;
     const btn = document.createElement("button");
-    btn.className = "card";
+    btn.className = "card" + (off ? ` offer-t${off.tier}` : "");
     btn.innerHTML = `
       <span class="card-emoji">${m.emoji}</span>
       <span class="card-title">${m.name}</span>
       <span class="card-sub">${m.tier}</span>
+      ${off ? `<span class="offer-grade">${off.star} ${off.label}</span>` : ""}
+      ${off ? `<span class="offer-word">"${off.word}"</span>` : ""}
       <span class="card-desc">${m.desc}</span>
       <span class="card-tags">
         <span class="tag">성장 ${starBar(m.growth, GVALS)}</span>
         <span class="tag">안정성 ${starBar(m.debut, DVALS)}</span>
+        ${off ? `<span class="tag offer-spot">📣 주목 ×${m.spot.toFixed(2)} → ×${(m.spot * off.mul).toFixed(2)}</span>` : ""}
       </span>`;
     btn.onclick = () => {
       chosenMarket = m;
-      $("position-hint").textContent = `${m.name} 입단! 어떤 포지션으로 뛸까요?`;
-      show("screen-position");
+      chosenOffer = off;
+      openBench();
     };
     box.appendChild(btn);
   }
 }
 
-/* 🎯 포지션을 고르면 **🧬 조립대**로 갑니다 (74번 판정 ⑤ — 3택은 폐기).
+/* 📍 포지션을 고르면 **🏘️ 동네**로 갑니다 → 🏟️ 입단 제안 → 🧬 조립대 (85번 「순-B」).
  * 🧒 이름·🦶 주발은 **맨 앞 화면**에서 이미 정했어요 — 이름이 붙은 몸을 굴려야
- * *"내 선수의 몸"*이 됩니다. 조립대는 그 이름을 머리글에 그대로 답니다. */
+ * *"내 선수의 몸"*이 됩니다. 조립대는 그 이름을 머리글에 그대로 답니다.
+ *
+ * 🔑 **왜 동네가 포지션 뒤인가** — `MINI[kind][pos]`가 `pos`를 요구합니다(engine.js).
+ *    동네를 맨 앞에 두면 미니게임을 배정할 수가 없어요. 덕분에 부수효과가 하나 붙습니다:
+ *    **📍 자리 선택이 30초 안에 화면에서 닫힙니다**(고른 자리로 바로 뜁니다 · 원칙 ③). */
 let chosenName = "";
 let chosenFoot = "R";
+let chosenOffer = null;      // 🏟️ 그 유스가 내민 제안 { tier, mul, star, label, word }
 let chosenCard = null;
 let chosenTalents = null;
 let usedRerolls = 0;
@@ -1431,13 +1475,27 @@ function openBench() {
       usedRerolls = rerolls;
       startCareer();
     },
-    () => show("screen-position"));
+    () => show("screen-agency"));
 }
 
+/* 🏟️ 제안 화면으로. 동네를 이미 굴렸다면 **다시 굴리지 않습니다.** */
+function showOffers() {
+  renderMarkets();
+  show("screen-agency");
+}
+
+/* 📍 자리를 고르면 🏘️ 동네로 갑니다.
+ * 🔴 **동네는 한 번만 굴러요 — 이건 재도전 경로가 아닙니다.** 자리를 다시 고르러
+ *    돌아왔다 나가도 점수는 그대로입니다(`WingerTown.played()`). 여기에 다시 굴리는
+ *    길을 열면 그 순간 **동네가 「최고가 나올 때까지 돌리는 화면」**이 되고,
+ *    설계가 금지한 재도전 버튼을 뒷문으로 만드는 셈이에요. */
 document.querySelectorAll("#position-list .card").forEach((btn) => {
   btn.addEventListener("click", () => {
     chosenPos = btn.dataset.pos;
-    openBench();
+    if (!window.WingerTown) { showOffers(); return; }   // 스크립트가 안 왔으면 조용히 넘어가요
+    if (WingerTown.played()) { showOffers(); return; }
+    show("screen-town");
+    WingerTown.open({ pos: chosenPos, foot: chosenFoot }, showOffers);
   });
 });
 
@@ -1459,8 +1517,8 @@ $("btn-random-name").addEventListener("click", () => {
 $("btn-name-next").addEventListener("click", () => {
   chosenName = $("input-name").value.trim() || randomPlayerName(null);
   $("input-name").value = chosenName;
-  renderMarkets();
-  show("screen-agency");
+  $("position-hint").textContent = `${chosenName}, 어떤 자리에서 뛸까요? 동네 공터에 친구들이 모였어요.`;
+  show("screen-position");
 });
 
 /* 🚀 입단 — **조립대의 [이 선수로 시작]**이 부릅니다 (예전 이름 화면의 「입단하기」 자리) */
@@ -1479,7 +1537,13 @@ function startCareer() {
   // 🌱 나이·성장타입·특능·결함·리롤 사용 수를 심어요 (효과는 특능 엔진에서 §11-7)
   WingerProspect.applyCard(S, chosenCard, usedRerolls);
   S.foot.main = chosenFoot;          // 🦶 고른 주발 (약발 숫자는 타고난 그대로예요)
-  addLog(`⚽ ${chosenMarket.name} 입단! ${name}의 축구 인생이 시작됐어요.`);
+  /* 🏘️ 동네 점수(0~6)와 📣 그 제안이 준 주목 배수를 심어요.
+   * ⚠️ **마이그레이션은 안 합니다** — 옛 세이브는 읽는 쪽 기본값(중립 3 · ×1)으로 삽니다. */
+  const off = chosenOffer || (window.WingerTown ? WingerTown.offerFor(chosenMarket.id) : null);
+  S.townScore = window.WingerTown ? WingerTown.score() : 3;
+  S.spotMul = (off && off.mul) || 1;
+  addLog(`⚽ ${chosenMarket.name} ${off ? off.label : "입단"}! ${name}의 축구 인생이 시작됐어요.`
+    + ` (🏘️ 동네 ${window.WingerTown ? WingerTown.scoreOf(S) : 3}점 · 📣 주목 ×${(S.spotMul).toFixed(2)})`);
   save();
   renderMain();
   show("screen-main");
@@ -1686,7 +1750,7 @@ function maybeEvent() {
       addLog(`🧑‍🏫 감독님의 특별 개인지도! ${d.name} +3`);
     },
     () => {
-      const pts = Math.round(8 * m.spot);
+      const pts = Math.round(8 * spotOf(m));
       S.fandom += pts;
       addLog(`📱 연습 경기 하이라이트가 화제! 명성 +${pts}`);
     },
@@ -2259,7 +2323,10 @@ const YOUTH_CARD_P = { goal: 1 / 3, assist: 1 / 3, defend: 0.5 };
 const PEER_REF = {
   /* 🏘️ 동네 — 전원이 `evenStats()`(194 ÷ 6 ≈ 32.33)라 평가전 기준선이 그대로 중립이에요.
    * 비율 1.009. **전원이 같은 값이라 태울 자리가 아예 없어서** 전용 상수를 안 둡니다.
-   * ⚠️ 아직 화면이 없습니다 — 칸만 열어 둬요. 동네가 생기면 이 칸을 그대로 씁니다. */
+   * ✅ `town.js`가 이 칸을 씁니다 (2026-08-31 · 85번 「동네 축구」).
+   * 🔴 **여기에 「동네 전용 카드 확률 상수」를 다시 만들지 마세요** — 전원이 같은 몸이라
+   *    결과는 똑같은데, 상수를 따로 두면 다음 사람이 그걸 난이도 손잡이로 만집니다.
+   *    폐기된 건 이름이 아니라 **「동네만 따로 세기를 정하는 값」이라는 형태**예요. */
   town: 32.0,
   eval: 32.0,        // 🏆 유스 평가전 (1·2년차 6·12월 · 3년차 6월 — 15경기)
   survival: 36.5,    // 🔥 프로 도전 (3년차 12월 · 4라운드)
@@ -2577,7 +2644,7 @@ function playEvalStage() {
   $("stage-round").textContent = `${ev.idx}번째 경기 · ${type.name}`;
   /* ⚔️ 카드 종류는 **그 경기의 성격**이 정해요 — "포지션 자유"(kind: null)면 내 포지션이요. */
   renderStageSim(type, grade, (fg, info) => {
-    const pts = Math.round(fg.pts * m.spot);
+    const pts = Math.round(fg.pts * spotOf(m));
     const pay = { S: 60, A: 40, B: 25, C: 10, D: 0 }[fg.g] || 0;
     S.money = (S.money || 0) + pay;
     S.fandom = Math.max(0, S.fandom + pts);
@@ -2655,7 +2722,7 @@ function playSurvivalRound() {
   S.condition = clamp(S.condition - 5, 0, 100);
   $("stage-round").textContent = `${roundName} · ${type.name}`;
   renderStageSim(type, grade, (fg, info) => {
-    const pts = Math.round(fg.pts * m.spot) + ev.round * 4;
+    const pts = Math.round(fg.pts * spotOf(m)) + ev.round * 4;
     S.money = (S.money || 0) + 30 + ev.round * 20;
     S.fandom = Math.max(0, S.fandom + pts);
     S.stages += 1;

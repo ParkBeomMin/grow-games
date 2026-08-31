@@ -49,7 +49,7 @@
 "use strict";
 const fs = require("fs");
 const path = require("path");
-const { bootPage, pageMutsOK, PAGE_DIR } = require("./_load.js");
+const { bootPage, pageMutsOK, PAGE_DIR, townAuto, passTown } = require("./_load.js");
 
 let fail = 0;
 const check = (ok, msg) => { console.log(`${ok ? "✅" : "❌"} ${msg}`); if (!ok) fail += 1; };
@@ -148,16 +148,17 @@ function boot(seed, muts) {
   return { W, D, press, active, close: () => W.close() };
 }
 
-/* 🚪 타이틀 → ✏️ 이름·🦶 주발 → 🏟️ 유스 → 🎯 포지션 → **🧬 조립대**
- *
- * ⚠️ 2026-08-30에 **이름 화면이 맨 앞으로** 왔습니다 (74번 판정 ④-B).
- *    `renderMarkets()`가 `btn-new`에서 **`btn-name-next`**로 옮겨가서,
- *    그 한 단계를 빼면 `#agency-list`가 **비어 있고** press가 던집니다. */
+/* 🚪 타이틀 → ✏️ 이름·🦶 주발 → 📍 자리 → 🏘️ 동네 3장 → 🏟️ 입단 제안 → 🧬 조립대
+ * ⚠️ 2026-08-31에 **🏘️ 동네가 들어오면서 순서가 바뀌었습니다** (85번 「순-B」) —
+ *    유스가 「고르는 화면」에서 「제안받는 화면」이 되어 **자리 뒤로** 갔어요.
+ *    `#agency-list`는 동네를 지나야 채워집니다(`showOffers` → `renderMarkets`). */
 function toBench(h) {
   h.press(h.D.getElementById("btn-new"));
   h.press(h.D.getElementById("btn-name-next"));
+  const back = townAuto(h.W);
+  h.press(h.D.querySelector("#position-list .card[data-pos]"));
+  passTown(h.W, h.press, back);
   h.press(h.D.querySelector("#agency-list button, .agency-card, [data-market]"));
-  h.press(h.D.querySelector("[data-pos]"));
   return h;
 }
 /* 🧬 조립대 → 입단 → 🏠 유스 능력치 화면

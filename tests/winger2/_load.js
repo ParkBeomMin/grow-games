@@ -271,7 +271,19 @@ window.requestAnimationFrame=(cb)=>setTimeout(()=>cb(0),0);window.scrollTo=()=>{
 window.alert=()=>{};window.confirm=()=>false;
 window.__errs=[];window.addEventListener("error",function(e){window.__errs.push(String(e.message||e.error));});
 ` + Object.entries(o.keys || {}).map(([k, v]) => `localStorage.setItem(${JSON.stringify(k)},${JSON.stringify(v)});`).join("");
-  const html = fs.readFileSync(path.join(PAGE_DIR, "index.html"), "utf8")
+  /* 🔴 **`index.html` 자신도 변이 대상입니다.** 예전에는 `<script src>`로 실린 .js만
+   *    갈아치웠는데, 그러면 `muts["index.html"]`을 넘겨도 **조용히 아무 일도 안 일어나요**
+   *    — `pageMutsOK`는 디스크에서 읽어 "걸린다"고 답하니 0번 검사도 초록불입니다.
+   *    (실제로 🏘️ 동네 건너뛰기 버튼 변이가 그 상태로 「안 잡힘」을 냈습니다.)
+   *    ⚠️ 마크업을 갈 때는 스크립트 태그를 인라인으로 바꾸기 **전**에 갈아야 해요. */
+  let rawHtml = fs.readFileSync(path.join(PAGE_DIR, "index.html"), "utf8");
+  for (const [re, rep] of muts["index.html"] || []) {
+    const before = rawHtml;
+    rawHtml = rawHtml.replace(re, rep);
+    if (rawHtml === before) throw new Error(`index.html에 변이가 안 걸렸어요 — ${re}`);
+    applied["index.html"] = (applied["index.html"] || 0) + 1;
+  }
+  const html = rawHtml
     .replace(/<script src="([^"]+)"><\/script>/g, (m0, src) => {
       const f = path.resolve(PAGE_DIR, src.split("?")[0]);
       if (!fs.existsSync(f)) return "";
@@ -309,6 +321,41 @@ function pageMutsOK(table) {
   return bad;
 }
 
+/* ═══════════════════════════════════════════════════════════════════════
+ * 🏘️ **동네 축구를 지나가는 드라이버** (2026-08-31 · 85번 「순-B」)
+ *
+ * 흐름이 바뀌었습니다 — `타이틀 → ✏️ 이름 → 📍 자리 → 🏘️ 동네 → 🏟️ 입단 제안 → 🧬 조립대`.
+ * 📍 자리를 누르면 **곧바로 동네 순간 카드 3장**이 열려요. 조립대까지 가려면 그 셋을
+ * 지나야 합니다.
+ *
+ * ⚠️ **`townAuto(W)`를 자리 누르기 「전」에 부르세요.** 첫 카드는 `WingerTown.open`이
+ *    불리는 순간 바로 열립니다 — 그 뒤에 켜면 이미 진짜 미니게임이 떠 있어요.
+ * 🤖 자동 진행은 `s = 0.5` **중립 조작**이에요. 판정 산식을 우회하는 게 아니라
+ *    게임이 이미 갖고 있는 갈래(`autoMiniOn`)를 그대로 씁니다.
+ * ♻️ 돌려받은 함수를 부르면 **원래 설정으로 되돌아갑니다** — 진짜 미니게임을 재는
+ *    검사(youth-moment-test)가 이 뒤에 이어지니 켜 둔 채로 두면 안 돼요. */
+function townAuto(W) {
+  const prev = W.localStorage.getItem("grow-auto-mini");
+  W.localStorage.setItem("grow-auto-mini", "1");
+  return () => W.localStorage.setItem("grow-auto-mini", prev == null ? "0" : prev);
+}
+/* 🏘️ 동네 화면에 서 있으면 [다음]을 눌러 끝까지 지나갑니다. 동네가 없으면 아무것도 안 해요.
+ * 돌려주는 값: 지나간 카드 수 (0이면 동네 화면이 아니었다는 뜻) */
+function passTown(W, press, restore) {
+  const D = W.document;
+  let n = 0;
+  for (let g = 0; g < 8; g++) {
+    const cur = D.querySelector(".screen.active");
+    if (!cur || cur.id !== "screen-town") break;
+    const b = D.getElementById("btn-town-next");
+    if (!b || b.disabled || b.classList.contains("hidden")) break;
+    press(b, "🏘️ 동네 다음");
+    n += 1;
+  }
+  if (restore) restore();
+  return n;
+}
+
 module.exports = { load, mutsOK, xiOf, xiAll, statsOf, play, spreadFor, SRC, ENGINE,
-  bootPage, pageMutsOK, PAGE_DIR,
+  bootPage, pageMutsOK, PAGE_DIR, townAuto, passTown,
   loadMoment, momentMutsOK, MSRC, MOMENT };
