@@ -2067,10 +2067,24 @@ button.pf-slot { cursor: pointer; font-family: inherit; }
   background: var(--bg2); border: 2px solid var(--line);
   filter: grayscale(.7) opacity(.5);        /* 아직 안 뛴 판은 흐리게 */
 }
-.town-dot.now { filter: none; border-color: var(--accent); box-shadow: 0 0 0 4px rgba(255, 159, 69, .16); }
-.town-dot.hit { filter: none; border-color: var(--good); background: rgba(110, 231, 160, .18); }
-.town-dot.mid { filter: none; border-color: var(--accent); background: rgba(255, 159, 69, .18); }
-.town-dot.bad { filter: none; border-color: var(--accent2); background: rgba(255, 77, 109, .18); }
+/* 🚨 **처음엔 판정색을 `rgba(…, .18)`로 얹었는데, 헤드리스로 재 보니 perfect 칩이
+ *    「초록」이 아니었습니다** — 칠한 색의 평균이 `(37, 73, 74)`, 즉 **파랑이 초록과
+ *    같았어요. 바탕(`--bg2` = 남색)이 82%나 비쳐서, 민트를 얇게 얹으면 **청록**이 됩니다.
+ *    잘한 판이 화면에서 「좋음」으로 안 읽히던 거예요 — 🦶 주발 색이 판정과 반대였던
+ *    그 사고와 **같은 형태**(색이 판정과 다른 말을 함)입니다.
+ * ✅ 그래서 **판정색을 바탕에 섞지 않고, 검은 스크림 아래에 통째로 깝니다.**
+ *    `rgba(0,0,0,.55)` + `var(--good)` → `(50, 104, 72)` — 초록이 초록입니다.
+ * 🔑 겸사겸사 **절대색이 사라집니다** — 예전 세 줄은 `--good`·`--accent`·`--accent2`를
+ *    손으로 베낀 값이라, 테마가 움직이면 이 칸만 옛 색으로 남았어요.
+ * 📏 재는 자: `scripts/w2-avatar-render.js` **T2절** (다섯을 한 줄에 세워 찍습니다) */
+.town-dot.now {
+  filter: none; border-color: var(--accent);
+  background: linear-gradient(rgba(255, 255, 255, .10), rgba(255, 255, 255, .10)), var(--bg2);
+  box-shadow: 0 0 0 4px rgba(255, 159, 69, .16);
+}
+.town-dot.hit { filter: none; border-color: var(--good); background: linear-gradient(rgba(0, 0, 0, .55), rgba(0, 0, 0, .55)), var(--good); }
+.town-dot.mid { filter: none; border-color: var(--accent); background: linear-gradient(rgba(0, 0, 0, .55), rgba(0, 0, 0, .55)), var(--accent); }
+.town-dot.bad { filter: none; border-color: var(--accent2); background: linear-gradient(rgba(0, 0, 0, .55), rgba(0, 0, 0, .55)), var(--accent2); }
 /* ♿ **색만으로 말하지 않습니다** — 색각 이상이면 초록/빨강이 같은 회색이에요.
  * 결과마다 글자 표식을 하나씩 답니다. 접근성은 축약 대상이 아니에요. */
 .town-dot.hit::after, .town-dot.mid::after, .town-dot.bad::after {
@@ -2110,9 +2124,200 @@ button.pf-slot { cursor: pointer; font-family: inherit; }
 .offer-word { font-size: .76rem; color: var(--sky); line-height: 1.5; }
 .card.offer-t0 .offer-word, .card.offer-t1 .offer-word { color: var(--dim); }
 
+/* ═══════════════════════════════════════════════════════════════════════
+ * 🏫 학교 3단계 — **무대가 커집니다** (설계 93번 §5-2 · engineer 96번 §7)
+ * ═══════════════════════════════════════════════════════════════════════
+ * 🔑 이 아크에서는 **능력치가 안 자랍니다.** 그래서 「1년이 지났다」를 말하는 것이
+ *    화면밖에 없어요 — 글자만 바뀌면 세 단계가 통째로 같은 화면입니다.
+ *
+ * 🔴 **마크업을 한 줄도 안 늘렸습니다.** 검사 20종이 게임 입구로 걸어 들어와서
+ *    버튼을 누르는 구조라, 요소를 하나 끼우면 그 길이 어긋나요.
+ *    `#screen-town[data-stage]`(e/m/h) + 가상 요소 둘만으로 무대를 세웁니다.
+ *
+ * 📏 **기계로 잰 것** (`scripts/w2-avatar-render.js` T절 · 390/320 × 기본/reduce):
+ *      무대 띠     34 → 48 → 66px   ← 단조 증가. 「커진다」가 숫자로 섭니다
+ *      관중 자리   20 → 34 → 52px   (띠에서 바닥 14px을 뺀 하늘 몫)
+ *      제목        1.6 → 1.7 → 1.85rem
+ * ⚠️ **손맛은 못 잽니다** — 세 단계가 「자란 것」으로 읽히는지는 실기기에서 봐야 해요.
+ *
+ * 🎨 색은 전부 테마 변수 + **중립 스크림**(검정/흰색 알파)으로만 만듭니다.
+ *    앰버·초록을 직접 박으면 🌏 대회 모드(`body.wc-mode`가 --accent를 골드로 바꿔요)에서
+ *    이 화면만 옛 색으로 남아요. 스크림은 밑에 깔린 테마색을 어둡게/밝게만 합니다. */
+#screen-town { --st-h: 34px; }            /* 🏫 초등 — 공터 */
+#screen-town[data-stage="m"] { --st-h: 48px; }   /* 🏫 중등 — 운동장 */
+#screen-town[data-stage="h"] { --st-h: 66px; }   /* 🏫 고등 — 관중석 */
+
+.town-place {
+  position: relative; overflow: hidden;
+  margin: .25rem 0 .85rem;
+  padding: calc(var(--st-h) + 12px) 12px 12px;
+  border: 1px solid var(--line); border-radius: 14px;
+  background: linear-gradient(180deg, var(--bg), var(--bg2));
+  font-size: .84rem; line-height: 1.6; color: var(--dim);
+}
+/* 글자는 무대 「위」가 아니라 무대 「아래」에 섭니다 — 배경 위에 얹으면 대비가 무너져요 */
+.town-place > * { position: relative; z-index: 1; }
+.town-place::before, .town-place::after { content: ""; position: absolute; left: 0; right: 0; }
+.town-place::before { top: 0; height: calc(var(--st-h) - 14px); }   /* 하늘 · 관중 */
+.town-place::after { top: calc(var(--st-h) - 14px); height: 14px; } /* 바닥 */
+
+/* 🏫 초등 — 해질녘 공터. **아무도 안 봅니다** (관중 0) · 흙바닥 · 선이 없어요 */
+#screen-town[data-stage="e"] .town-place::before {
+  /* 🌇 해가 지는 쪽은 **아래**입니다 — 위로 뿌리면 대낮 하늘이 돼요 */
+  background: linear-gradient(0deg, var(--accent), transparent 85%); opacity: .26;
+}
+#screen-town[data-stage="e"] .town-place::after {
+  background: linear-gradient(rgba(0, 0, 0, .46), rgba(0, 0, 0, .46)), var(--sand);
+}
+/* 🏫 중등 — 학교 운동장. 멀리 한 줄 · **바닥에 흰 선이 그어집니다** */
+#screen-town[data-stage="m"] .town-place::before {
+  background:
+    radial-gradient(circle at 50% 100%, var(--dim) 40%, transparent 43%) left bottom / 13px 10px repeat-x,
+    linear-gradient(180deg, var(--sky), transparent 72%);
+  opacity: .3;
+}
+#screen-town[data-stage="m"] .town-place::after {
+  background:
+    linear-gradient(180deg, transparent 60%, rgba(255, 255, 255, .34) 60% 64%, transparent 64%),
+    var(--turf);
+}
+/* 🏫 고등 — 관중석이 찼어요. 조명 · 머리들이 층층이 · **라인 밖에 낯선 어른들**
+ * 🔴 「스카우트」라고 쓰지 않습니다 (원칙 ⑧ — 누군지는 다음 화면에서 밝혀져요).
+ *    그래서 실루엣입니다. 글자로 설명하지 않아요. */
+#screen-town[data-stage="h"] .town-place::before {
+  background:
+    radial-gradient(circle at 50% 100%, var(--bg) 44%, transparent 47%) left bottom / 26px 17px repeat-x,
+    radial-gradient(circle at 50% 100%, var(--dim) 40%, transparent 43%) left bottom / 13px 10px repeat,
+    radial-gradient(ellipse 70% 130% at 50% 0%, rgba(255, 255, 255, .22), transparent 66%),
+    var(--bg2);
+  opacity: .92;
+}
+#screen-town[data-stage="h"] .town-place::after {
+  background:
+    linear-gradient(180deg, transparent 56%, rgba(255, 255, 255, .38) 56% 60%, transparent 60%),
+    repeating-linear-gradient(90deg, var(--turf) 0 20px, var(--turf2) 20px 40px);
+}
+
+/* 📍 장소와 머리글 — 구분자(` — `)는 마크업에만 남기고 화면에서는 줄을 바꿉니다.
+ * 🔒 CSS가 안 와도 읽히도록 engineer가 일부러 넣어 둔 글자예요. 지우지 마세요. */
+.town-place-at {
+  display: block; font-family: "Jua", sans-serif; font-size: 1rem;
+  color: var(--accent); margin-bottom: .15rem;
+}
+.town-sep { display: none; }
+.town-head { display: block; color: var(--dim); }
+/* 제목도 같이 자랍니다 — 1.6 → 1.7 → 1.85rem */
+#screen-town[data-stage="m"] #town-title { font-size: 1.7rem; }
+#screen-town[data-stage="h"] #town-title { font-size: 1.85rem; text-shadow: 0 0 16px rgba(255, 255, 255, .2); }
+
+/* 📏 편차 칩 — 🏫 결과줄과 📨 제안 힌트가 **같은 자를 씁니다.**
+ * 🔴 부호로 색을 가르지 않습니다. `편차 -1`은 「못했다」가 아니라 「기준보다 하나 낮다」이고,
+ *    밴드는 0을 축으로 대칭이에요. 빨강을 칠하면 중립인 값이 벌점처럼 읽힙니다. */
+.town-dev, .agency-dev {
+  display: inline-block; white-space: nowrap;
+  padding: 1px 8px; border-radius: 99px;
+  background: var(--bg2); border: 1px solid var(--line);
+  font-size: .74rem; color: var(--dim); font-variant-numeric: tabular-nums;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+ * 📨 조기 제안 (98번 §8) — **최종 카드와 다른 몸입니다**
+ * ═══════════════════════════════════════════════════════════════════════
+ * 🔴 ⭐도 `📣 주목 ×`도 여기엔 없습니다. 조기 등급은 아무 데도 안 쓰여서
+ *    보여주는 순간 거짓말이 돼요 (98번 §3-3). 그 자리는 **그 팀이 하는 말**이 씁니다.
+ * 🔴 그리고 이 카드는 **누르는 물건이 아닙니다** — 누르는 건 안에 든 버튼 하나뿐이에요.
+ *    그래서 `.card`의 손가락 커서와 뜨는 효과를 **꺼야 합니다.** 안 끄면 카드가
+ *    「눌러도 되는 것처럼」 보이고, 눌러도 아무 일이 없는 화면이 됩니다. */
+.card-grid .offer-early {
+  grid-column: 1 / -1;              /* 2열 격자에서 반쪽으로 서면 글이 다 깨져요 */
+  display: grid; grid-template-columns: 46px 1fr; gap: 2px 10px;
+  align-items: center; text-align: left; padding: 14px; cursor: default;
+}
+.card.offer-early:hover, .card.offer-early:focus-visible { transform: none; border-color: var(--line); }
+.offer-early .card-emoji { grid-column: 1; grid-row: 1 / span 2; font-size: 2rem; text-align: center; }
+.offer-early .card-title, .offer-early .card-sub { grid-column: 2; }
+/* 🗣️ 말이 주인공이라 그 위 줄은 한 칸 물러섭니다 — 하늘색이 둘이면 둘 다 안 읽혀요 */
+.offer-early .card-sub { color: var(--dim); }
+.offer-early .offer-word, .offer-early .card-desc, .offer-early .offer-take { grid-column: 1 / -1; }
+/* 🗣️ 이 화면의 주인공 — 등급이 빠진 자리를 이 한마디가 대신합니다 */
+.offer-early .offer-word { margin-top: .5rem; font-size: .9rem; line-height: 1.6; }
+.offer-early .card-desc { margin-top: .1rem; }
+/* 🤝 카드 안의 결정 버튼 — 손가락 기준 44px을 넘깁니다 */
+.offer-take { min-height: 46px; margin-top: .65rem; padding: 12px 16px; font-size: 1rem; }
+
+/* ℹ️ 승낙/거절이 무슨 뜻인지 — 숫자 없이 **말로** (원칙 ③ · 설계 §6-4) */
+.offer-note {
+  margin: 14px 0 2px; padding: 12px 14px;
+  border-radius: 14px; background: var(--bg2); border: 1px solid var(--line);
+  display: flex; flex-direction: column; gap: .55rem; text-align: left;
+}
+.offer-note-line {
+  margin: 0; padding-left: .7rem; border-left: 3px solid var(--line);
+  font-size: .82rem; line-height: 1.65; color: var(--dim);
+}
+.offer-note-line:first-child { border-left-color: var(--accent); }
+.offer-note-line b { color: var(--text); }
+.offer-note-line:first-child b:first-child { color: var(--accent); }
+/* 🔴 잃는 것을 잃는 색으로 — 첫 줄의 마지막 강조는 *"다른 팀은 못 봐요"*입니다.
+ * 얻는 것만 색칠하면 그 화면은 광고가 돼요. */
+.offer-note-line:first-child b:last-of-type { color: var(--accent2); }
+
+/* 🙅 거절 = **계속 뛰기**. 카드가 있는 판에서는 결정이 카드 안(🤝)에 있으니
+ * 이 버튼은 한 칸 내려섭니다 — 같은 화면에 원색 버튼이 둘이면 어느 쪽이 「진행」인지
+ * 안 읽혀요. 🔑 다만 **0곳 판에서는 이게 유일한 조작**이라 원색 그대로 둡니다
+ * (`#agency-list:empty`가 정확히 「손 든 곳이 없다」예요 — 최종 화면은 항상 5곳입니다). */
+#agency-list:not(:empty) ~ #btn-early-next {
+  background: transparent; color: var(--sky); border: 2px solid var(--line);
+  box-shadow: none; font-size: 1rem;
+}
+/* 📭 0곳 — **화면을 건너뛰지 않기로 한 자리**(designer §18 수정 ②)라
+ * 여기가 허전하면 「고장」으로 읽힙니다. 빈 벤치를 그려 「비어 있음」을 상태로 만들어요.
+ * 🔒 그림만입니다 — 글자는 안 넣습니다. 사실은 이미 위 힌트가 말하고 있고(낭독 대상),
+ *    가상 요소로 문장을 넣으면 그 문장은 복사도 번역도 안 되는 글이 돼요. */
+#agency-list:empty {
+  display: block; min-height: 92px;
+  border: 1px dashed var(--line); border-radius: 16px; opacity: .5;
+  /* 🏟️ 선만 그어진 빈 라인 하나. 🚫 벤치·사람 모양을 그리려다 지웠어요 —
+   *    추상적인 도형은 「그리다 만 것」으로 읽혀서 **고장으로 보입니다.** */
+  background: linear-gradient(180deg, transparent 48%, var(--line) 48% 51%, transparent 51%);
+  background-size: 66% 100%;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+/* 🏟️ 제안 화면의 **세 얼굴** — 한 화면이 세 몫을 합니다 (98번 §13-3).
+ *   📨 …이 끝났어요  (조기)   · 🏟️ 입단 제안 (최종) · 🤝 입단 확정 (승낙 뒤)
+ * 🔑 CSS는 글자를 못 읽으니 **상태로** 가릅니다:
+ *   조기 = `#btn-early-next`가 안 감춰진 판  ·  확정 = 감춰졌는데 카드가 한 장인 판
+ *   (최종은 언제나 5곳이라 「카드 한 장」이 곧 승낙입니다 — `renderMarkets`의 `continue`)
+ * ⚠️ `:has()`를 모르는 브라우저에서는 **세 얼굴이 다 기본 제목으로 보입니다.**
+ *    정보는 제목 글자에 이미 다 있어요(📨/🏟️/🤝). 없어도 안 깨지는 층입니다. */
+#screen-agency:has(#btn-early-next:not(.hidden)) #agency-title {
+  font-size: 1.32rem; color: var(--sky);   /* 중간 소식 — 최종보다 한 칸 낮게 */
+}
+#screen-agency:has(#btn-early-next.hidden) #agency-list .card:only-child {
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, .12);
+}
+/* 카드가 한 장이면 2열 격자에서 **반쪽**으로 섭니다 — 확정 화면이 그래요 */
+#agency-list .card:only-child { grid-column: 1 / -1; }
+
+/* 🤝 조기 계약 — 🏛️ 은퇴식 카드의 한 줄 (career.js `.hint.sign-note`).
+ * 🔒 안 했으면 줄 자체가 없습니다. 그래서 **있으면 사건**이라 배지로 세웁니다. */
+.sign-note {
+  display: inline-block; margin: .4rem 0 .1rem; padding: .3rem .85rem;
+  border-radius: 99px; background: var(--bg2); border: 1px solid var(--accent);
+  color: var(--text); font-size: .82rem; line-height: 1.5;
+}
+
 /* ♿ 움직임을 줄이는 설정 — **정보는 하나도 안 줄입니다.**
  * 흔들림·떠오름만 끄고 색·테두리·판정 창 폭 차이는 그대로 남아요.
- * 🦶 발을 고른 뒤의 320ms 대기도 `intro.js`가 건너뜁니다(연출이 진행을 붙잡으면 안 돼요). */
+ * 🦶 발을 고른 뒤의 320ms 대기도 `intro.js`가 건너뜁니다(연출이 진행을 붙잡으면 안 돼요).
+ *
+ * 🏫 **학교 3단계 무대와 📨 제안 화면에는 끌 것이 없습니다** — 일부러 그렇게 만들었어요.
+ *    무대가 커지는 것 자체가 연출이라 움직임을 하나도 안 썼습니다. 🔑 그래서
+ *    **reduce 판이 기본 판과 값이 같습니다** — 띠 46/60/78px · 관중 자리 20/34/52px ·
+ *    제목 25.6/27.2/29.6px이 네 판(390/320 × 기본/reduce)에서 전부 같아요.
+ *    🔴 여기에 흔들림·번쩍임을 나중에 얹는다면 **이 블록에 끄는 줄도 같이** 넣으세요. */
 @media (prefers-reduced-motion: reduce) {
   .foot-card, .foot-ball, .om-do { transition: none !important; }
   .foot-card.picked { transform: none; }

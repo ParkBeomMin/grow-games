@@ -59,7 +59,73 @@ const GL_SPY = () => {
 const KO3 = "김하늘";
 const KO_LONG = "남궁도영훈";     // 다섯 글자 — 줄어들어야 하는 쪽
 
-async function bench(b, { w = 390, rm = false, foot = "R", gl = true, name = KO3, shot = null } = {}) {
+/* ══════════════════════════════════════════════════════════════════════
+ * 🚶 **생성 흐름을 처음부터 걸어갑니다** (2026-09-01 · 93번 §5 · 98번)
+ * ══════════════════════════════════════════════════════════════════════
+ *   ✏️ 이름 → 🦶 주발 → 🗺️ 동네 → 🏫 초등(2) → 📨 조기 → 🎯 자리
+ *                        → 🏫 중등(3) → 📨 조기 → 🏫 고등(3) → 🏟️ 최종 → 🧬 조립대
+ *
+ * 🔴 **이 경로가 한 번 바뀌면 A~H절이 통째로 죽습니다.** 실제로 그랬어요 —
+ *    🏫 학교 아크가 들어오면서 예전 경로(이름 → 🏟️ 제안)가 끊겼고,
+ *    `#agency-list button`을 30초 기다리다 전체가 멈추면서 **렌더 도구가 통째로 멈췄습니다.**
+ *    🔑 그래서 경로를 **한 군데**(`walk`)로 모았어요. 다음에 흐름이 바뀌면 여기만 고칩니다.
+ *
+ * 🤖 단계 카드는 **게임이 이미 가진 갈래**(`grow-auto-mini`)로 지납니다 — 중립 조작(s = 0.5).
+ *    판정 산식을 우회하는 게 아니고, 검사 드라이버(`tests/winger2/_load.js`)와 같은 문입니다.
+ *
+ * `stop`으로 **중간에서 멈춥니다**: `town:e` `early:e` `town:m` `early:m` `town:h` `agency` `bench` */
+async function walk(p, { foot = "R", name = KO3, origin = "seoul", pos = "wg", stop = "bench" } = {}) {
+  const cur = () => p.evaluate(() => (document.querySelector(".screen.active") || {}).id || "");
+  const go = async (sel) => { await p.click(sel); await p.waitForTimeout(160); };
+  const leave = async (id) => p.waitForFunction((x) => {
+    const a = document.querySelector(".screen.active");
+    return !a || a.id !== x;
+  }, id, { timeout: 8000 });
+  await go("#btn-new");
+  await p.fill("#input-name", name);
+  await go("#btn-name-next");
+  /* 🦶 주발 — **320ms 뒤에 넘어갑니다.** 숫자를 박지 않고 「화면이 바뀔 때까지」를 기다려요
+   *    (♿ reduce에서는 즉시입니다 — 연출이 진행을 붙잡으면 안 돼요). */
+  await go(`#screen-foot .foot-card[data-foot="${foot === "L" ? "L" : "R"}"]`);
+  await leave("screen-foot");
+  /* 🤖 🏫 카드를 자동으로 — 🗺️ [다음] 앞에 켜야 합니다. 초등 첫 카드는
+   *    `openStage`가 불리는 순간 바로 열려서, 그 뒤에 켜면 이미 진짜 미니게임이 떠 있어요. */
+  await p.evaluate(() => localStorage.setItem("grow-auto-mini", "1"));
+  await go(`#origin-map .om-do[data-id="${origin}"], #origin-cities .om-city[data-id="${origin}"]`);
+  await go("#btn-origin-next");
+  /* 🏫 지금 서 있는 단계의 카드를 끝까지. 단계가 끝나면 화면이 바뀜서 저절로 멈춰요. */
+  const stage = async () => {
+    for (let g = 0; g < 12; g++) {
+      const st = await p.evaluate(() => {
+        const a = document.querySelector(".screen.active");
+        const b = document.getElementById("btn-town-next");
+        return { id: a && a.id, ok: !!b && !b.disabled && !b.classList.contains("hidden") };
+      });
+      if (st.id !== "screen-town" || !st.ok) return;
+      await go("#btn-town-next");
+    }
+  };
+  /* 📨 조기 제안은 **반드시 「거절」**입니다 — 카드를 누르면 🤝 예비 계약이라
+   *    🏟️ 최종에 한 곳만 옵니다(`_load.js`의 `passEarly`와 같은 근거). */
+  const early = async () => { await go("#btn-early-next"); };
+  if (stop === "town:e") return p;
+  await stage();
+  if (stop === "early:e") return p;
+  await early();
+  if (stop === "position") return p;
+  await go(`#position-list .card[data-pos="${pos}"]`);
+  if (stop === "town:m") return p;
+  await stage();
+  if (stop === "early:m") return p;
+  await early();
+  if (stop === "town:h") return p;
+  await stage();
+  if (stop === "agency") return p;
+  await go("#agency-list button");
+  return p;
+}
+
+async function bench(b, { w = 390, rm = false, foot = "R", gl = true, name = KO3, shot = null, stop = null } = {}) {
   const ctx = await b.newContext({ viewport: { width: w, height: 844 }, deviceScaleFactor: 2,
     reducedMotion: rm ? "reduce" : "no-preference" });
   const p = await ctx.newPage();
@@ -76,17 +142,8 @@ async function bench(b, { w = 390, rm = false, foot = "R", gl = true, name = KO3
   await p.goto("http://127.0.0.1:8731/beta/winger2/index.html", { waitUntil: "networkidle" });
   await p.evaluate(() => { try { localStorage.clear(); } catch (e) {} });
   await p.reload({ waitUntil: "networkidle" });
-  const go = async (sel) => { await p.click(sel); await p.waitForTimeout(180); };
-  await go("#btn-new");
-  /* 🦶 주발을 실제 버튼으로 고릅니다 — 값을 심지 않아요 */
-  const footSel = `#screen-name [data-foot="${foot}"], #screen-name input[value="${foot}"]`;
-  if (await p.locator(footSel).count()) await go(footSel);
-  /* 🇰🇷 이름도 **실제 입력칸에 쳐서** 넣습니다 — `S.name`을 심으면 화면을 안 거쳐요 */
-  await p.fill("#input-name", name);
-  await go("#btn-name-next");
-  await go("#agency-list button");
-  await go("#position-list .card[data-pos]");
-  await p.waitForTimeout(gl ? 2600 : 800);
+  await walk(p, { foot, name, stop: stop || "bench" });
+  if (!stop) await p.waitForTimeout(gl ? 2600 : 800);
   if (shot) { await p.screenshot({ path: `${OUT}/${shot}.png` }); await p.screenshot({ path: `${OUT}/${shot}-full.png`, fullPage: true }); }
   return { p, ctx, errs };
 }
@@ -619,6 +676,296 @@ async function spin(p, px) {
     await p.waitForTimeout(500);
     const st = await p.evaluate(() => window.W2Char.probe());
     ck(st && st.paused === true, `[F] 무대가 화면 밖이면 루프가 멈춘다`, JSON.stringify(st && { paused: st.paused }));
+    await ctx.close();
+  }
+
+
+  /* ── T. 🏫 학교 3단계 — **무대가 커지는가** ──────────────────────────
+   * 🔴 이 절이 있는 이유: 이 아크는 **능력치가 안 자랍니다.** 「1년이 지났다」를
+   *    말하는 건 화면뿐이라, 세 단계가 같은 크기면 3단계가 화면에 없는 거예요.
+   * ⚠️ **재는 것은 기하입니다** — 「자란 것으로 읽히나」는 못 잽니다(실기기 목록으로).
+   *    여기서 잡는 건 *"무대가 실제로는 안 커져 있는데 커졌다고 적는 것"*입니다. */
+  for (const w of [390, 320]) for (const rm of [false, true]) {
+    const tag = `T/${w}${rm ? "/reduce" : ""}`;
+    const ctx = await b.newContext({ viewport: { width: w, height: 844 }, deviceScaleFactor: 2,
+      reducedMotion: rm ? "reduce" : "no-preference" });
+    const p = await ctx.newPage();
+    const errs = [];
+    p.on("pageerror", (e) => errs.push(String(e.message)));
+    await p.goto("http://127.0.0.1:8731/beta/winger2/index.html", { waitUntil: "networkidle" });
+    await p.evaluate(() => { try { localStorage.clear(); } catch (e) {} });
+    await p.reload({ waitUntil: "networkidle" });
+    const read = () => p.evaluate(() => {
+      const scr = document.getElementById("screen-town");
+      const pl = document.getElementById("town-place");
+      const cs = getComputedStyle(pl);
+      const be = getComputedStyle(pl, "::before"), af = getComputedStyle(pl, "::after");
+      /* 🖼️ 배경 「층」을 셉니다 — 괄호 안의 콤마는 층 구분이 아니에요 */
+      const layers = (v) => { let d = 0, n = 1; for (const c of v) { if (c === "(") d++; else if (c === ")") d--; else if (c === "," && d === 0) n++; } return v === "none" ? 0 : n; };
+      const box = pl.getBoundingClientRect();
+      const btn = document.getElementById("btn-town-next");
+      const bb = btn && !btn.classList.contains("hidden") ? btn.getBoundingClientRect() : null;
+      return {
+        stage: scr.dataset.stage,
+        band: parseFloat(cs.paddingTop),
+        sky: parseFloat(be.height), ground: parseFloat(af.height),
+        skyLayers: layers(be.backgroundImage), groundLayers: layers(af.backgroundImage),
+        title: parseFloat(getComputedStyle(document.getElementById("town-title")).fontSize),
+        atDisplay: getComputedStyle(document.querySelector(".town-place-at")).display,
+        sepDisplay: getComputedStyle(document.querySelector(".town-sep")).display,
+        headText: (document.querySelector(".town-head") || {}).textContent || "",
+        placeW: Math.round(box.width),
+        over: Math.max(0, document.documentElement.scrollWidth - window.innerWidth),
+        btnH: bb ? Math.round(bb.height) : null,
+        dotH: Math.round((document.querySelector(".town-dot") || { getBoundingClientRect: () => ({ height: 0 }) }).getBoundingClientRect().height),
+      };
+    });
+    const seen = {};
+    for (const st of ["town:e", "town:m", "town:h"]) {
+      await walk(p, { stop: st });
+      const r = await read();
+      seen[r.stage] = r;
+      ck(r.over <= 0, `[${tag}/${r.stage}] 가로 넘침 없음`, `${r.over}px`);
+      ck(r.dotH >= 24, `[${tag}/${r.stage}] 🔘 진행 칩이 이모지를 담는 크기`, `${r.dotH}px`);
+      ck(r.atDisplay === "block" && r.sepDisplay === "none",
+        `[${tag}/${r.stage}] 📍 장소는 제 줄에 · 구분자는 안 보임`, `${r.atDisplay} / ${r.sepDisplay}`);
+      ck(r.headText.length > 5, `[${tag}/${r.stage}] 머리글이 서 있다`, r.headText);
+      /* 🔄 한 판 안에서 세 단계를 다 보려면 다시 걸어야 해요 — 세이브를 비우고 처음부터 */
+      await p.evaluate(() => { try { localStorage.clear(); } catch (e) {} });
+      await p.reload({ waitUntil: "networkidle" });
+    }
+    const [e, m, h] = ["e", "m", "h"].map((k) => seen[k]);
+    ck(e.band < m.band && m.band < h.band,
+      `[${tag}] 🔴 **무대 띠가 단계마다 커진다**`, `${e.band} → ${m.band} → ${h.band}px`);
+    ck(e.sky < m.sky && m.sky < h.sky,
+      `[${tag}] 🏟️ 하늘(관중 자리)이 넓어진다`, `${e.sky} → ${m.sky} → ${h.sky}px`);
+    ck(e.skyLayers < m.skyLayers && m.skyLayers < h.skyLayers,
+      `[${tag}] 🏟️ 무대에 놓인 것이 늘어난다 (배경 층 수)`, `${e.skyLayers} → ${m.skyLayers} → ${h.skyLayers}`);
+    ck(e.title <= m.title && m.title < h.title,
+      `[${tag}] 🏫 제목도 같이 자란다`, `${e.title} → ${m.title} → ${h.title}px`);
+    ck(e.ground === m.ground && m.ground === h.ground,
+      `[${tag}] 🌱 바닥 두께는 그대로 (커지는 건 무대지 바닥이 아님)`, `${e.ground}px`);
+    ck(errs.length === 0, `[${tag}] 페이지 에러 없음`, errs.join(" | "));
+    await ctx.close();
+  }
+
+  /* ── T2. 🎨 판정 색 — **다섯을 따로 세워 잽니다** ────────────────────
+   * 🔴 실제 화면에는 두세 상태밖에 안 떠서, 그대로는 **뒤집혀 있어도 안 보입니다.**
+   *    `.offer-t*`에서 실제로 그랬어요 — 중립 t2가 그 위 t3보다 **밝았습니다**
+   *    (색상을 섞으면 밝기 순서가 뒤집힙니다). 그래서 다섯을 한 줄에 세워 재요.
+   * 🔴 그리고 `.town-dot`의 기본 상태는 `filter: grayscale(.7) opacity(.5)`라
+   *    **계산된 스타일로는 못 봅니다** — 필터는 픽셀에만 있어요. 그래서 찍어서 셉니다.
+   *    (크로미움이 자기 스크린샷을 스스로 디코드하게 시킵니다 — 새 의존성 없이) */
+  {
+    const ctx = await b.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1 });
+    const p = await ctx.newPage();
+    await p.goto("http://127.0.0.1:8731/beta/winger2/index.html", { waitUntil: "networkidle" });
+    /* 📸 찍은 그림을 브라우저가 다시 읽어 평균 색을 냅니다 */
+    const avg = async (box) => {
+      const buf = await p.screenshot({ clip: box });
+      const q = await ctx.newPage();
+      const c = await q.evaluate(async (u) => await new Promise((res) => {
+        const im = new Image();
+        im.onload = () => {
+          const cv = document.createElement("canvas");
+          cv.width = im.width; cv.height = im.height;
+          cv.getContext("2d").drawImage(im, 0, 0);
+          const d = cv.getContext("2d").getImageData(0, 0, im.width, im.height).data;
+          let r = 0, g = 0, bl = 0, n = 0;
+          for (let i = 0; i < d.length; i += 4) { r += d[i]; g += d[i + 1]; bl += d[i + 2]; n++; }
+          res([Math.round(r / n), Math.round(g / n), Math.round(bl / n)]);
+        };
+        im.src = u;
+      }), "data:image/png;base64," + buf.toString("base64"));
+      await q.close();
+      return c;
+    };
+    /* 상대 휘도 (ITU-R BT.601 가중 — 사람 눈이 초록을 가장 밝게 봅니다) */
+    const lum = (c) => Math.round((0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2]) * 10) / 10;
+    const rgb = (s) => (s.match(/\d+/g) || []).slice(0, 3).map(Number);
+
+    for (const wc of [false, true]) {
+      const nm = wc ? "🌏대회" : "평상시";
+      /* 🏟️ 제안 등급 다섯 — 테두리 색의 밝기가 **단조 증가**여야 합니다 */
+      const tiers = await p.evaluate((on) => {
+        document.body.classList.toggle("wc-mode", on);
+        const old = document.getElementById("__rack"); if (old) old.remove();
+        const d = document.createElement("div");
+        d.id = "__rack";
+        d.style.cssText = "position:fixed;left:0;top:0;z-index:99999;display:flex;gap:6px;background:var(--bg);padding:6px";
+        d.innerHTML = [0, 1, 2, 3, 4].map((t) =>
+          `<div class="card offer-t${t}" style="width:60px;height:40px"></div>`).join("");
+        document.body.appendChild(d);
+        return [0, 1, 2, 3, 4].map((t) =>
+          getComputedStyle(d.querySelector(`.offer-t${t}`)).borderTopColor);
+      }, wc);
+      const L = tiers.map((c) => lum(rgb(c)));
+      ck(L.every((v, i) => i === 0 || v > L[i - 1]),
+        `[T2/${nm}] 🔴 **제안 등급 t0→t4 밝기가 단조 증가**`, L.join(" → "));
+      /* 🔘 진행 칩 다섯 — 기본 / now / hit / mid / bad */
+      const boxes = await p.evaluate((on) => {
+        document.body.classList.toggle("wc-mode", on);
+        const old = document.getElementById("__rack2"); if (old) old.remove();
+        const d = document.createElement("div");
+        d.id = "__rack2";
+        d.style.cssText = "position:fixed;left:0;top:120px;z-index:99999;display:flex;gap:10px;background:var(--bg);padding:10px";
+        /* 🔒 이모지를 빼고 세웁니다 — 글자가 섞이면 평균이 글자 색을 잽니다.
+         *    (이모지가 칩 안에 담기는지는 T절이 실제 화면에서 따로 봐요) */
+        d.innerHTML = ["", "now", "hit", "mid", "bad"].map((k) =>
+          `<span class="town-dot ${k}"></span>`).join("");
+        document.body.appendChild(d);
+        return [...d.children].map((el) => {
+          const r = el.getBoundingClientRect();
+          /* 오른쪽 아래 표식(✓··✕)을 피해 안쪽만 잽니다 */
+          return { x: r.x + 6, y: r.y + 6, width: r.width - 14, height: r.height - 14 };
+        });
+      }, wc);
+      const names = ["기본", "now", "hit", "mid", "bad"];
+      const cols = [];
+      for (const bx of boxes) cols.push(await avg(bx));
+      const CL = cols.map(lum);
+      console.log(`   [T2/${nm}] 🔘 ${names.map((n, i) => `${n} ${CL[i]}(${cols[i].join(",")})`).join(" · ")}`);
+      ck(CL.slice(1).every((v) => v > CL[0]),
+        `[T2/${nm}] 🔘 **아직 안 뛴 판이 가장 어둡다** (물러나 있어야 하는 쪽)`, CL.join(" / "));
+      const [, , hit, mid, bad] = cols;
+      ck(hit[1] > hit[0] && hit[1] > hit[2],
+        `[T2/${nm}] ✅ perfect(hit)는 **초록 쪽**`, hit.join(","));
+      ck(bad[0] > bad[1] && bad[0] > bad[2],
+        `[T2/${nm}] ❌ miss(bad)는 **붉은 쪽**`, bad.join(","));
+      ck(mid[0] > mid[2] && mid[1] > mid[2] && mid[0] >= mid[1],
+        `[T2/${nm}] 🙂 ok(mid)는 **가운데(앰버)**`, mid.join(","));
+      const far = (a, c) => Math.max(Math.abs(a[0] - c[0]), Math.abs(a[1] - c[1]), Math.abs(a[2] - c[2]));
+      ck(far(hit, mid) >= 12 && far(mid, bad) >= 12 && far(hit, bad) >= 12,
+        `[T2/${nm}] 🎨 셋이 서로 구분된다`, `hit↔mid ${far(hit, mid)} · mid↔bad ${far(mid, bad)} · hit↔bad ${far(hit, bad)}`);
+    }
+    await ctx.close();
+  }
+
+  /* ── O. 📨 제안 화면의 **세 얼굴** ─────────────────────────────────
+   *   📨 …이 끝났어요(조기) · 🏟️ 입단 제안(최종) · 🤝 입단 확정(승낙 뒤)
+   * 🔴 한 화면이 세 몫을 하면 **「끄는 쪽」을 빼먹는 게 단골 버그**예요. 그래서
+   *    얼굴마다 「무엇이 서 있고 무엇이 꺼져 있나」를 통째로 읽습니다. */
+  const face = (p) => p.evaluate(() => {
+    const $ = (id) => document.getElementById(id);
+    const list = $("agency-list"), note = $("agency-note"), cont = $("btn-early-next");
+    const vis = (el) => !!el && !el.classList.contains("hidden") && getComputedStyle(el).display !== "none";
+    const cards = [...list.querySelectorAll(".card")];
+    const cs = cont && getComputedStyle(cont);
+    const lb = list.getBoundingClientRect();
+    return {
+      title: ($("agency-title") || {}).textContent || "",
+      titlePx: parseFloat(getComputedStyle($("agency-title")).fontSize),
+      n: cards.length,
+      early: cards.filter((c) => c.classList.contains("offer-early")).length,
+      grade: list.querySelectorAll(".offer-grade").length,
+      spot: list.querySelectorAll(".offer-spot").length,
+      full: cards.every((c) => Math.round(c.getBoundingClientRect().width) >= Math.round(lb.width) - 1),
+      takes: [...list.querySelectorAll(".offer-take")].map((t) => Math.round(t.getBoundingClientRect().height)),
+      noteVis: vis(note), noteLines: (note || { children: [] }).children.length,
+      contVis: vis(cont), contH: cont ? Math.round(cont.getBoundingClientRect().height) : 0,
+      contBg: cs ? cs.backgroundImage !== "none" || cs.backgroundColor !== "rgba(0, 0, 0, 0)" : false,
+      contBorder: cs ? cs.borderTopWidth : "",
+      emptyBox: list.children.length === 0 ? Math.round(list.getBoundingClientRect().height) : null,
+      over: Math.max(0, document.documentElement.scrollWidth - window.innerWidth),
+      /* 🃏 카드가 서로 안 겹치는가 — 2열 격자에 전폭 카드를 섞으면 여기가 깨집니다 */
+      overlap: cards.some((a, i) => cards.some((c, j) => {
+        if (j <= i) return false;
+        const x = a.getBoundingClientRect(), y = c.getBoundingClientRect();
+        return x.right > y.left + 1 && y.right > x.left + 1 && x.bottom > y.top + 1 && y.bottom > x.top + 1;
+      })),
+    };
+  });
+
+  for (const w of [390, 320]) for (const rm of [false, true]) {
+    const tag = `O/${w}${rm ? "/reduce" : ""}`;
+    const ctx = await b.newContext({ viewport: { width: w, height: 844 },
+      reducedMotion: rm ? "reduce" : "no-preference" });
+    const p = await ctx.newPage();
+    const errs = [];
+    p.on("pageerror", (e) => errs.push(String(e.message)));
+    await p.goto("http://127.0.0.1:8731/beta/winger2/index.html", { waitUntil: "networkidle" });
+    /* ♻️ 얼굴 하나를 볼 때마다 **처음부터 다시 걸어갑니다** — 세이브를 비우고 새로 고침.
+     *    한 판에서 이어 걸으면 앞 얼굴이 만든 상태가 다음 얼굴에 섞여요. */
+    const fresh = async () => {
+      await p.evaluate(() => { try { localStorage.clear(); } catch (e) {} });
+      await p.reload({ waitUntil: "networkidle" });
+    };
+    await fresh();
+
+    /* 얼굴 ① 📨 조기 (🏫 초등 뒤) — 🇰🇷 홈이 **항상** 손을 들어서 카드가 최소 한 장입니다 */
+    await walk(p, { stop: "early:e" });
+    const f1 = await face(p);
+    console.log(`   [${tag}] ① ${f1.title} · 카드 ${f1.n}(조기 ${f1.early}) · 안내 ${f1.noteVis}`);
+    ck(f1.title.indexOf("📨") === 0, `[${tag}] ① 제목이 📨 얼굴`, f1.title);
+    ck(f1.n > 0 && f1.early === f1.n, `[${tag}] ① 카드가 전부 조기 몸`, `${f1.early}/${f1.n}`);
+    ck(f1.grade === 0 && f1.spot === 0,
+      `[${tag}] 🔴 ① **⭐도 📣 주목 ×도 없다** (조기 등급은 아무 데도 안 쓰여요)`, `⭐${f1.grade} 📣${f1.spot}`);
+    ck(f1.full, `[${tag}] ① 조기 카드가 전폭 (2열에 반쪽으로 안 섬)`);
+    ck(!f1.overlap, `[${tag}] ① 카드끼리 안 겹침`);
+    ck(f1.takes.length === f1.n && f1.takes.every((h) => h >= 44),
+      `[${tag}] ① 🤝 예비 계약 탭 칸 ≥ 44px`, f1.takes.join(","));
+    ck(f1.noteVis && f1.noteLines === 2, `[${tag}] ① ℹ️ 안내가 두 줄로 선다`, `${f1.noteLines}줄`);
+    ck(f1.contVis && f1.contH >= 44, `[${tag}] ① 🙅 거절 탭 칸 ≥ 44px`, `${f1.contH}px`);
+    /* 🔑 카드가 있는 판에서 거절 버튼이 **한 칸 내려섰나** — 테두리가 그 표식이에요
+     *    (원색 버튼은 테두리가 0px, 내려선 쪽은 2px). 선택자가 죽으면 여기서 잡힙니다. */
+    ck(f1.contBorder === "2px",
+      `[${tag}] ① 🙅 거절은 **한 칸 내려선 모습** (결정은 카드 안 🤝에 있어요)`, f1.contBorder);
+    ck(f1.over <= 0, `[${tag}] ① 가로 넘침 없음`, `${f1.over}px`);
+
+    /* 얼굴 ①′ 📭 0곳 — **건너뛰지 않기로 한 화면**이라 허전하면 「고장」으로 읽힙니다 */
+    await fresh();
+    await walk(p, { stop: "early:m" });
+    const f0 = await face(p);
+    console.log(`   [${tag}] ①′ ${f0.title} · 카드 ${f0.n} · 빈 상자 ${f0.emptyBox} · 안내 ${f0.noteVis}`);
+    if (f0.n === 0) {
+      ck(f0.emptyBox >= 60, `[${tag}] 📭 0곳에 **빈 자리가 그려진다** (화면이 안 무너짐)`, `${f0.emptyBox}px`);
+      ck(!f0.noteVis, `[${tag}] 📭 0곳에는 승낙/거절 안내가 꺼져 있다`);
+      ck(f0.contVis && f0.contH >= 44, `[${tag}] 📭 유일한 조작이 서 있다`, `${f0.contH}px`);
+      ck(f0.contBg && f0.contBorder === "0px",
+        `[${tag}] 📭 그 조작은 **원색 그대로** (이 판의 유일한 길)`, f0.contBorder);
+    } else {
+      ck(true, `[${tag}] 🟡 이 시드에서는 중등 0곳이 안 떴어요 — 카드 ${f0.n}장`, f0.title);
+    }
+
+    /* 얼굴 ② 🏟️ 최종 제안 — **5곳이 전부 옵니다.** 여기엔 ⭐도 📣 주목 ×도 **있어야** 해요 */
+    await fresh();
+    await walk(p, { stop: "agency" });
+    const f2 = await face(p);
+    console.log(`   [${tag}] ② ${f2.title} · 카드 ${f2.n} · ⭐${f2.grade} 📣${f2.spot}`);
+    ck(f2.title.indexOf("🏟") === 0, `[${tag}] ② 제목이 🏟️ 얼굴`, f2.title);
+    ck(f2.n === 5 && f2.early === 0, `[${tag}] ② 5곳이 전부, 조기 몸은 하나도 없다`, `${f2.n}장`);
+    ck(f2.grade === 5 && f2.spot === 5, `[${tag}] ② 최종에는 ⭐와 📣 주목 ×가 있다`, `⭐${f2.grade} 📣${f2.spot}`);
+    ck(!f2.noteVis && !f2.contVis, `[${tag}] 🔴 ② 조기의 안내·거절 버튼이 **꺼져 있다**`,
+      `note ${f2.noteVis} · cont ${f2.contVis}`);
+    ck(!f2.overlap && f2.over <= 0, `[${tag}] ② 겹침·넘침 없음`, `${f2.over}px`);
+
+    /* 얼굴 ③ 🤝 입단 확정 — 🤝 예비 계약 → 아크 끝 → 🧬 조립대 **취소**의 착지점 */
+    await fresh();
+    await walk(p, { stop: "early:e" });
+    await p.click("#agency-list .offer-take");
+    await p.waitForTimeout(160);
+    let land = "";
+    for (let g = 0; g < 40; g++) {
+      land = await p.evaluate(() => (document.querySelector(".screen.active") || {}).id || "");
+      if (land === "screen-prospect") break;
+      if (land === "screen-town") await p.click("#btn-town-next");
+      else if (land === "screen-agency") await p.click("#btn-early-next");
+      else if (land === "screen-position") await p.click("#position-list .card[data-pos=\"wg\"]");
+      else break;
+      await p.waitForTimeout(140);
+    }
+    ck(land === "screen-prospect",
+      `[${tag}] 🤝 승낙 판은 아크가 끝나면 🏟️ 최종을 안 거치고 🧬 조립대로`, land);
+    await p.click("#btn-back-prospect");           // 🧬 취소
+    await p.waitForTimeout(200);
+    const f3 = await face(p);
+    console.log(`   [${tag}] ③ ${f3.title} · 카드 ${f3.n} · 폭 ${f3.full}`);
+    ck(f3.title.indexOf("🤝") === 0, `[${tag}] ③ 제목이 🤝 얼굴 (「제안」이 아니라 「확정」)`, f3.title);
+    ck(f3.n === 1 && f3.early === 0, `[${tag}] ③ 도장을 찍은 그 한 곳만 선다`, `${f3.n}장`);
+    ck(f3.full, `[${tag}] 🔴 ③ 그 한 장이 **전폭** (2열 격자에 반쪽으로 서면 잘린 화면으로 읽혀요)`);
+    ck(!f3.noteVis && !f3.contVis, `[${tag}] ③ 조기의 안내·거절 버튼이 꺼져 있다`);
+    ck(f3.over <= 0, `[${tag}] ③ 가로 넘침 없음`, `${f3.over}px`);
+    ck(errs.length === 0, `[${tag}] 페이지 에러 없음`, errs.join(" | "));
     await ctx.close();
   }
 
