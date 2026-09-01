@@ -53,7 +53,7 @@
 "use strict";
 const fs = require("fs");
 const path = require("path");
-const { bootPage, PAGE_DIR } = require("./_load.js");
+const { bootPage, PAGE_DIR, passTown } = require("./_load.js");
 
 let fail = 0;
 const t0 = Date.now();
@@ -435,15 +435,14 @@ async function toMain(h, o) {
   await tapFoot(h, o.foot || "R");
   pickOrigin(h, o.origin);
   const prev = h.W.localStorage.getItem("grow-auto-mini");
-  h.W.localStorage.setItem("grow-auto-mini", "1");     // 🤖 중립 조작(s=0.5)으로 동네를 지나갑니다
+  h.W.localStorage.setItem("grow-auto-mini", "1");     // 🤖 중립 조작(s=0.5)으로 학교를 지나갑니다
   h.press(h.D.querySelector(`#position-list .card[data-pos="${o.pos || "wg"}"]`), `📍 ${o.pos || "wg"}`);
-  for (let g = 0; g < 8; g++) {
-    const cur = h.D.querySelector(".screen.active");
-    if (!cur || cur.id !== "screen-town") break;
-    const b = h.D.getElementById("btn-town-next");
-    if (!b || b.disabled || b.classList.contains("hidden")) break;
-    h.press(b, "🏘️ 동네 다음");
-  }
+  /* 🔴 **여기 있던 town 루프를 `passTown`으로 바꿨습니다** (2026-09-01 · 98번 §6-1 ③).
+   *    사본을 갖고 있어서 📨 조기 제안이 생겼을 때 **이 함수만 안 고쳐졌고**, 중등 뒤
+   *    조기 화면에서 멈춘 채 `#agency-list button`을 눌러 **승낙**해 버렸어요 —
+   *    그러면 🏟️ 최종이 안 와서 `btn-prospect-start`가 없고 **`S`가 null**이 됩니다.
+   * 🔒 루프를 두 벌 두지 않습니다 — 드라이버가 갈라지면 한쪽만 고쳐지는 게 이 사고예요. */
+  passTown(h.W, h.press);
   h.W.localStorage.setItem("grow-auto-mini", prev == null ? "0" : prev);
   h.press(h.D.querySelector("#agency-list button"), "🏟️ 입단 제안");
   h.press(h.D.getElementById("btn-prospect-start"), "btn-prospect-start");

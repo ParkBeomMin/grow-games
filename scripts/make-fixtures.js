@@ -213,12 +213,16 @@ function newPlayer(P, agencyIdx, pos, name) {
   if (!posCard) throw new Error(`포지션 카드 ${pos}가 없어요`);
   posCard.click();
   if (townFirst) {
-    /* 🏫 중등부 3장 + 고등부 3장 — 카드마다 [다음]이 한 번씩이에요.
-     * 🔴 **여섯 줄을 그대로 적습니다.** 반복문으로 쓰면 G-1이 `.click()` 줄을 한 번만
+    /* 🏫 중등부 3장 + 📨 조기 제안 + 고등부 3장 — 카드마다 [다음]이 한 번씩이에요.
+     * 🔴 **줄을 그대로 적습니다.** 반복문으로 쓰면 G-1이 `.click()` 줄을 한 번만
      *    뜯어가서 한 판만 지나간 채로 판정합니다. */
     $("btn-town-next").click();
     $("btn-town-next").click();
     $("btn-town-next").click();
+    /* 📨 중등부 뒤의 조기 제안 — 픽스처는 **늘 거절합니다.** 예비 계약을 하면 🏟️ 최종
+     * 제안이 안 오고(그 팀으로 갑니다) 아래 `유스 카드 ${agencyIdx}번`이 사라져요.
+     * 🔒 편차 밴드는 카드 수·계약 여부에 무관하게 중립이라 이 선택이 곡선을 안 움직입니다. */
+    $("btn-early-next").click();
     $("btn-town-next").click();
     $("btn-town-next").click();
     $("btn-town-next").click();

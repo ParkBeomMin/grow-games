@@ -1,6 +1,7 @@
 # 검증 — 🏫 초·중·고 3단계 + 📏 편차 밴드 (🔴 직렬 레인 ①-B″)
 
 2026-09-01 · grow-inspector · **2차 갱신** (engineer 수정 다섯을 닫은 뒤 — §9)
+📨 **3차(조기 제안 · 예비 계약)는 별도 문서입니다 → `99_inspector_offer-tests.md`**
 입력: `96_engineer_school-stages.md`(§5 빨간불 둘 · §6-2 S-1~S-9) · `93_designer_school-arc.md`(설계 · 판정 ④·⑧) ·
 `92_inspector_town-tests.md` · `95_inspector_foot-map-tests.md`(제 이전 작업)
 

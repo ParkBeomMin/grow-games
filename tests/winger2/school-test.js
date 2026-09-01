@@ -44,7 +44,7 @@
  * 종료 코드: 0 통과 · 1 빨간불 · 2 💥 죽음(안 돌았음) — `_load.js`가 걸어 줍니다.
  */
 "use strict";
-const { bootPage, pageMutsOK, townAuto, passStage, tapFoot, pickOrigin }
+const { bootPage, pageMutsOK, townAuto, passStage, passEarly, tapFoot, pickOrigin }
   = require("./_load.js");
 
 let fail = 0;
@@ -62,9 +62,15 @@ const ARC_CARDS = 8;
 const STAGE_PLAN_B = [["e", 2], ["m", 2], ["h", 2]];
 const STAGE_SEQ_B = "eemmhh";
 const ARC_CARDS_B = 6;
-/* 🎯 화면 순서 — 🔑 **자리가 초등부 「뒤」**라는 것이 이 배열의 핵심입니다. */
+/* 🎯 화면 순서 — 🔑 **자리가 초등부 「뒤」**라는 것이 이 배열의 핵심입니다.
+ * 📨 2026-09-01: 단계마다 **조기 제안(`screen-agency`)이 한 번씩** 끼었습니다 (98번).
+ *    🔑 최종도 `screen-agency`예요 — 화면을 새로 안 만들었거든요(*"제안 화면에 서는 길은
+ *    전부 `showOffers`를 지난다"*를 한 군데에서 지키려고). 그래서 이 배열에
+ *    `screen-agency`가 **세 번** 나옵니다: 조기(e) · 조기(m) · 최종. */
 const SCREEN_SEQ = ["screen-title", "screen-name", "screen-foot", "screen-origin",
-  "screen-town", "screen-position", "screen-town", "screen-agency"];
+  "screen-town", "screen-agency", "screen-position",
+  "screen-town", "screen-agency", "screen-town", "screen-agency"];
+const EARLY_STAGES = ["e", "m"];        // 📨 조기 제안이 서는 단계 (고등 뒤는 최종입니다)
 const KINDS = ["g", "a", "d"];       // ⚽ 결정 · 🅰️ 전개 · 🧱 수비
 const DEAL_P = 2 / 3;                // 🃏 초등 2장이 3종 중 둘 → 종류마다 ⅔
 const FIRST_P = 1 / 3;               // 🃏 첫 장이 각 종류일 확률
@@ -119,8 +125,8 @@ const MUT = {
   /* 🔴 **M-NOPOS — 🎯 자리 화면을 건너뜁니다.** 초등 다음이 바로 중등이 되고,
    *    자리를 한 번도 안 고른 채 여덟 판이 끝나요. **오류는 하나도 안 납니다**
    *    (`o.pos`가 없으면 `ELEM_POS`로 조용히 떨어지거든요). */
-  M_NOPOS_SKIP: { "game.js": [[/function goElementary\(\) \{ goSchool\("e", goPosition\); \}/,
-    'function goElementary() { goSchool("e", goMiddle); }']] },
+  M_NOPOS_SKIP: { "game.js": [[/goSchool\("e", \(\) => goEarly\("e", goPosition\)\)/,
+    'goSchool("e", () => goEarly("e", goMiddle))']] },
   /* 🔴 **M-DEAL — 초등이 늘 같은 짝(⚽🅰️)을 뽑습니다.** 🧱 수비가 초등에 안 나와요.
    *    §7의 `fit`이 한 나라로 쏠립니다 (설계 93번 §8-2 ⚠️). */
   M_DEAL_FIX: { "town.js": [[/const j = i \+ Math\.floor\(Math\.random\(\) \* \(idx\.length - i\)\);/,
@@ -133,8 +139,7 @@ const MUT = {
     "const pos = o.pos || ELEM_POS;"]] },
   /* 🔴🔑 **M-ABS — 등급을 편차가 아니라 절대 점수로 정합니다.** 설계 93번 §9가
    *    *"진행 중인 커리어가 전부 ×0.90으로 조용히 내려갑니다"*라고 적은 그 자리예요. */
-  M_ABS_SCORE: { "town.js": [[/state\.offers = rollOffers\(deviation\(\)\);/,
-    "state.offers = rollOffers(state.score);"]] },
+  M_ABS_SCORE: { "town.js": [[/rollOffers\(deviation\(\)\)/, "rollOffers(state.score)"]] },
 };
 
 {
@@ -197,16 +202,24 @@ async function runArc(muts, seed, pos) {
   mark();
   const stages = passStage(h.W, h.press);                    // 🏫 초등부
   mark();
+  const early = [];
+  /* 📨 조기 제안은 **늘 거절**합니다 — 승낙하면 최종에 한 곳만 와서 아크 계약이 어긋나요.
+   *    🤝 승낙 갈래는 `offer-test.js`가 따로 몰고 갑니다. */
+  if (passEarly(h.W, h.press)) early.push("e");
+  mark();
   if (h.active() === "screen-position")
     h.press(h.D.querySelector(`#position-list .card[data-pos="${pos || "wg"}"]`), `🎯 ${pos || "wg"}`);
   mark();
   stages.push(...passStage(h.W, h.press));                   // 🏫 중등부
+  mark();
+  if (passEarly(h.W, h.press)) early.push("m");
+  mark();
   stages.push(...passStage(h.W, h.press));                   // 🏫 고등부
   mark();
   back();
   const T = h.W.WingerTown;
   const r = {
-    seed, seen, stages, cards: stages.length, screen: h.active(),
+    seed, seen, stages, early, cards: stages.length, screen: h.active(),
     score: T.score(), n: T.cards(), dev: T.deviation(),
     base: T._t.tierOfD(T.deviation()),
     tiers: h.W.__get("MARKETS").map((m) => T.offerFor(m.id).tier),
@@ -248,6 +261,7 @@ async function s6(muts) {
     + `\n     ${rows.map((r) => `시드 ${r.seed}: ${r.seen.join(" → ")}`).join("\n     ")}`
     + (same
       ? `\n     🔑 초등부가 자리보다 앞이라 **초등에는 자리가 없습니다** — S-8이 그걸 지켜요`
+        + `\n     📨 조기 제안이 단계마다 한 번씩 낍니다 — 지난 단계 [${rows[0].early.join(" · ")}] (계약 ${EARLY_STAGES.join(" · ")})`
       : `\n     🔴 순서가 달라요 — 자리가 앞으로 가면 「추천」의 뒷문이 열리고, 뒤로 가면 자리를 못 고릅니다`));
 
   /* ══════════════════════════════════════════════════════════════════

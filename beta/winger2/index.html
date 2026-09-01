@@ -135,10 +135,19 @@
          (85번 §3-1). 바뀌는 건 카드마다 붙는 **제안 등급 한 줄**뿐입니다.
          🔴 **목록을 줄이지 마세요** — 못한 사람에게 🇰🇷(데뷔 0.66 · 가장 쉬움)만 주면
             데뷔가 오히려 쉬워지고 잘한 사람이 험한 🇮🇹를 받습니다. **축이 뒤집혀요.** -->
+    <!-- 🏟️ 제안 — **한 화면이 두 몫**을 합니다 (📨 조기 제안 · 🏟️ 최종 제안).
+         🔑 화면을 새로 만들지 않은 이유: 조기 제안이 최종과 **같은 자리에 서야**
+         「제안 화면에 서는 길은 전부 `showOffers`를 지난다」가 한 군데에서 지켜집니다.
+         🔒 `screen-agency` id는 그대로예요 (`BACK_SAFE` · 검사 19종). -->
     <section class="screen" id="screen-agency">
-      <h2>🏟️ 입단 제안</h2>
+      <h2 id="agency-title">🏟️ 입단 제안</h2>
       <p class="hint" id="agency-hint">초·중·고 여덟 판, 스카우트가 지켜봤어요.<br/>어디서 축구를 시작할까요? 유스에 따라 성장 환경과 프로 진출 난이도가 달라져요.</p>
       <div class="card-grid" id="agency-list"></div>
+      <!-- ℹ️ 📨 조기 제안에서만 보입니다 — 손잡이의 효과를 그 자리에서 말로 (원칙 ③).
+           🔴 `📣 주목 ×`는 **최종 화면에만** 둡니다. 조기에는 최종 편차가 아직 안 정해져서
+              숫자를 쓰면 거짓말이 돼요 (설계 93번 §6-4). -->
+      <div class="offer-note hidden" id="agency-note"></div>
+      <button class="btn btn-primary hidden" id="btn-early-next"></button>
       <button class="btn btn-ghost" id="btn-back-first">← 자리 다시 고르기</button>
     </section>
 

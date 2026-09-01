@@ -368,18 +368,49 @@ function townAuto(W) {
   W.localStorage.setItem("grow-auto-mini", "1");
   return () => W.localStorage.setItem("grow-auto-mini", prev == null ? "0" : prev);
 }
-/* 🏘️ 동네 화면에 서 있으면 [다음]을 눌러 끝까지 지나갑니다. 동네가 없으면 아무것도 안 해요.
- * 돌려주는 값: 지나간 카드 수 (0이면 동네 화면이 아니었다는 뜻) */
+/* ═══════════════════════════════════════════════════════════════════════
+ * 📨 **조기 제안 화면을 지나갑니다 — 반드시 「거절」입니다** (2026-09-01 · 98번)
+ * ═══════════════════════════════════════════════════════════════════════
+ * 🏫 초등·중등이 끝날 때마다 `screen-agency`가 **조기 제안 모드**로 한 번씩 섭니다.
+ * 드라이버가 이걸 모르면 그 자리에서 **멈춰요** — 검사 9종이 그래서 💥로 죽었습니다.
+ *
+ * 🔴🔴 **`#agency-list`의 카드를 누르면 안 됩니다. 그건 「🤝 예비 계약」(승낙)이에요.**
+ *    승낙하면 🏟️ 최종 제안에 **그 한 곳만** 옵니다 — `#agency-list`가 **1장**이 되어
+ *    「5곳이 전부 온다」 위에 선 검사들이 통째로 어긋나요.
+ *    ✅ 눌러야 하는 건 **`#btn-early-next`(🙅 거절하고 계속 뛸래요)** 하나뿐입니다.
+ *
+ * 🔑 **「조기 화면인가」를 화면 id로 판단하지 않습니다** — 최종도 `screen-agency`거든요.
+ *    **`#btn-early-next`가 안 감춰져 있는가**로 봅니다. 그게 조기 모드의 표식이에요
+ *    (`renderMarkets`가 최종 모드에서 이 버튼을 다시 감춥니다).
+ *
+ * 돌려주는 값: 거절을 눌렀으면 true. */
+function passEarly(W, press) {
+  const D = W.document;
+  const cur = D.querySelector(".screen.active");
+  if (!cur || cur.id !== "screen-agency") return false;
+  const b = D.getElementById("btn-early-next");
+  if (!b || b.disabled || b.classList.contains("hidden")) return false;
+  press(b, "🙅 조기 제안 거절");
+  return true;
+}
+
+/* 🏘️/🏫 학교 화면에 서 있으면 [다음]을 눌러 끝까지 지나갑니다. 없으면 아무것도 안 해요.
+ * 📨 사이에 낀 조기 제안 화면은 **거절로** 지나갑니다 (위 `passEarly`).
+ * 돌려주는 값: 지나간 카드 수 (0이면 학교 화면이 아니었다는 뜻) */
 function passTown(W, press, restore) {
   const D = W.document;
   let n = 0;
-  for (let g = 0; g < 8; g++) {
+  for (let g = 0; g < 24; g++) {
     const cur = D.querySelector(".screen.active");
-    if (!cur || cur.id !== "screen-town") break;
-    const b = D.getElementById("btn-town-next");
-    if (!b || b.disabled || b.classList.contains("hidden")) break;
-    press(b, "🏘️ 동네 다음");
-    n += 1;
+    if (cur && cur.id === "screen-town") {
+      const b = D.getElementById("btn-town-next");
+      if (!b || b.disabled || b.classList.contains("hidden")) break;
+      press(b, "🏫 다음");
+      n += 1;
+      continue;
+    }
+    /* 📨 조기 제안이면 거절하고 계속 뜁니다. 아니면 여기서 끝이에요. */
+    if (!passEarly(W, press)) break;
   }
   if (restore) restore();
   return n;
@@ -436,9 +467,14 @@ function passStage(W, press, max) {
 }
 /* 🏫 **아크 전체**를 지나 🏟️ 제안 화면까지. 게임 입구(타이틀)에서 출발합니다.
  *
- *   돌려주는 것: { stages, cards, screens }
+ *   돌려주는 것: { stages, cards, screens, early }
  *     stages   카드마다 읽은 `data-stage` — 계약은 `e e m m m h h h`
- *     screens  🏫 첫 카드 **앞**에 선 화면들 (결정 수를 세는 자리)
+ *     screens  지나온 화면들 (연달아 같은 화면은 한 번만)
+ *     early    📨 조기 제안을 **거절로** 지난 단계들 — 계약은 `["e", "m"]`
+ *
+ * 🔴 **조기 제안은 늘 「거절」입니다.** 승낙하면 최종 제안에 한 곳만 와서 그 위에 선
+ *    검사들이 통째로 어긋나요 (`passEarly` 주석 참고). 🤝 승낙 갈래를 재는 검사는
+ *    `offer-test.js`가 **따로** 몰고 갑니다.
  *
  * ⚠️ `townAuto`는 **🗺️ 지역 [다음]을 누르기 전**에 켜세요 — 초등 첫 카드는
  *    `openStage`가 불리는 순간 바로 열립니다. */
@@ -459,15 +495,20 @@ async function passArc(W, press, opt) {
   pickOrigin(W, press, o.origin || "seoul");
   mark();
   const stages = passStage(W, press);                       // 🏫 초등부
+  const early = [];
+  if (passEarly(W, press)) early.push("e");                 // 📨 초등 뒤 — **거절**
+  mark();
   if (cur() === "screen-position")
     press(D.querySelector(`#position-list .card[data-pos="${o.pos || "wg"}"]`), `🎯 ${o.pos || "wg"}`);
   stages.push(...passStage(W, press));                      // 🏫 중등부
+  if (passEarly(W, press)) early.push("m");                 // 📨 중등 뒤 — **거절**
+  mark();
   stages.push(...passStage(W, press));                      // 🏫 고등부
   if (back) back();
-  return { stages, cards: stages.length, screens };
+  return { stages, cards: stages.length, screens, early };
 }
 
 module.exports = { load, mutsOK, xiOf, xiAll, statsOf, play, spreadFor, SRC, ENGINE,
   bootPage, pageMutsOK, PAGE_DIR, townAuto, passTown,
-  wait, tapFoot, pickOrigin, passStage, passArc,
+  wait, tapFoot, pickOrigin, passStage, passEarly, passArc,
   loadMoment, momentMutsOK, MSRC, MOMENT };

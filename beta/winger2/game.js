@@ -1424,6 +1424,16 @@ function showSlotPicker() {
 function renderMarkets() {
   const box = $("agency-list");
   box.innerHTML = "";
+  /* 🏟️ 최종 모드로 화면을 되돌립니다 — 📨 조기 제안이 켜 둔 것을 끕니다.
+   * 🔴 **한 화면이 두 몫을 하면 「끄는 쪽」을 빼먹는 게 단골 버그**라 여기서 한 번에 꺼요. */
+  const title = $("agency-title"), note = $("agency-note"), cont = $("btn-early-next");
+  if (title) title.textContent = "🏟️ 입단 제안";
+  if (note) { note.classList.add("hidden"); note.innerHTML = ""; }
+  if (cont) { cont.classList.add("hidden"); cont.onclick = null; }
+  /* 🤝 **예비 계약을 했으면 그 한 곳만** 섭니다 (설계 93번 §6-2 — *"다른 팀은 못 봅니다"*).
+   * 🔒 그래도 목록을 도는 줄은 `MARKETS` 그대로예요 — **「5곳 전부」가 기본**이고
+   *    예비 계약은 **내가 이미 고른 결과**입니다. 둘을 헷갈리면 축이 뒤집혀요. */
+  const signed = window.WingerTown ? WingerTown.signed() : null;
   const starBar = (v, vals) => { const lo = Math.min(...vals), hi = Math.max(...vals); const n = hi === lo ? 3 : Math.min(5, Math.max(1, 1 + Math.round(((v - lo) / (hi - lo)) * 4))); return "★".repeat(n) + "☆".repeat(5 - n); };
   const GVALS = MARKETS.map((x) => x.growth), DVALS = MARKETS.map((x) => x.debut);
   const hint = $("agency-hint");
@@ -1434,9 +1444,11 @@ function renderMarkets() {
     const n = WingerTown.cards(), d = WingerTown.deviation();
     hint.innerHTML = `초·중·고 ${n}판, 스카우트가 지켜봤어요 — <b>${WingerTown.score()}점</b>`
       + ` <span class="agency-dev">(기준 ${n}점 · 편차 ${d > 0 ? "+" : ""}${d})</span>`
-      + `<br/>유스에 따라 성장 환경과 프로 진출 난이도가 달라져요.`;
+      + (signed ? `<br/>🤝 <b>${SIGN_STAGE[signed.stage] || "일찍"}</b> 예비 계약한 곳으로 갑니다.`
+        : `<br/>유스에 따라 성장 환경과 프로 진출 난이도가 달라져요.`);
   }
   for (const m of MARKETS) {
+    if (signed && m.id !== signed.market) continue;
     /* 🎲 **유스마다 따로 굴러온 등급**이에요 (원칙 ⑧ — 재미의 절반은 「모른다」에서).
      * 동네 성적은 **기댓값**만 올립니다. 5곳이 한꺼번에 굴러 다 같아지면
      * *"잘했으면 다 좋음"* 이 되어 선택이 사라져요. */
@@ -1466,8 +1478,11 @@ function renderMarkets() {
 
 /* 🖼️ 생성 흐름 — **🎯 자리가 카드 「사이」로 들어갔습니다** (설계 93번 §5 · 옛 85번 「순-B」를 대체).
  *
- *   ✏️ 이름 → 🦶 주발 → 🗺️ 동네 → 🏫 초등부(2장) → 🎯 자리
- *                     → 🏫 중등부(3장) → 🏫 고등부(3장) → 🏟️ 제안 → 🧬 조립대
+ *   ✏️ 이름 → 🦶 주발 → 🗺️ 동네 → 🏫 초등부(2장) → 📨 조기 제안 → 🎯 자리
+ *                     → 🏫 중등부(3장) → 📨 조기 제안 → 🏫 고등부(3장) → 🏟️ 제안 → 🧬 조립대
+ *
+ * 🤝 **예비 계약을 하면 🏟️ 최종 제안이 안 오고 곧장 🧬 조립대**입니다 — 남은 대항전은
+ *    그대로 다 뛰고요(§6-2). 🔴 승낙이 카드를 건너뛰게 하면 그게 「콘텐츠 건너뛰기 버튼」이에요.
  *
  * 🔑 **왜 🎯 자리가 초등부 「뒤」인가** — *"어릴 땐 다 같이 공만 쫓아다녔어요."*
  *    그리고 이게 **첫 순간 카드를 한 화면 앞당깁니다**(자리 화면이 카드 뒤로 빠져서요).
@@ -1503,25 +1518,120 @@ function openBench() {
     showOffers);
 }
 
-/* 🏟️ 제안 화면으로.
+/* 📨 예비 계약을 한 시점을 사람 말로. 🔒 `id`는 세이브(`S.signedAt`)가 가리키는 값이라 안 바꿔요. */
+const SIGN_STAGE = { e: "초등부에서", m: "중등부에서" };
+
+/* 📨 **조기 제안 화면** — 그 단계가 끝나고 손을 든 유스를 보여줍니다 (설계 93번 §6·§7).
+ *
+ * 🔑 **「얼마나 잘했나」가 아니라 「무엇을 잘했나(fit)」가 누가 오는지를 정합니다.**
+ *    목록이 갈리는 건 여기까지고 🏟️ **최종은 언제나 5곳**이에요 — *"못하면 선택 자체를
+ *    잃는다"*가 안 생깁니다(85번 §3-1). 갈리는 건 **언제 손을 드는가**뿐입니다.
+ *
+ * 🔴 **등급(⭐)도 `📣 주목 ×`도 여기서는 안 적습니다.** 조기 제안의 등급은
+ *    **최종에 안 쓰입니다** — 승낙하면 최종 편차로 다시 굴고(§6-3), 거절하면 그냥 사라져요.
+ *    여기서 ⭐⭐⭐⭐를 보여주면 끝에 ⭐⭐가 나왔을 때 **거짓말이 됩니다.**
+ *    그 자리는 **그 유스가 하는 말**이 대신해요(등급이 높을수록 색이 진해집니다).
+ *
+ * 🔴 **거절은 재도전이 아닙니다** — 이미 굴린 카드는 그대로 남고, 되돌아가는 게 아니라
+ *    **앞으로** 갑니다. 그래서 [거절]은 「다시 굴리기」가 아니라 「다음 판으로」예요. */
+function renderEarly(stageId) {
+  const box = $("agency-list");
+  box.innerHTML = "";
+  const T = window.WingerTown;
+  const E = T.earlyOffers(stageId);
+  const st = (T.STAGES || []).find((s) => s.id === stageId) || { title: "🏫 대항전" };
+  const n = T.cards(), d = T.deviation();
+  const title = $("agency-title");
+  if (title) title.textContent = `📨 ${st.title.replace(/^🏫\s*/, "")}이 끝났어요`;
+  const hint = $("agency-hint");
+  if (hint) {
+    hint.innerHTML = (E.list.length
+      ? "벤치 끝에서 누가 보고 있었어요."
+      : "이번엔 아무도 손을 들지 않았어요.")
+      + `<br/>🏫 ${n} / ${T.TOTAL_CARDS}판 — <b>${T.score()}점</b>`
+      + ` <span class="agency-dev">(기준 ${n}점 · 편차 ${d > 0 ? "+" : ""}${d})</span>`;
+  }
+  for (const m of MARKETS) {
+    const off = E.offers[m.id];
+    if (!off) continue;                       // 🎯 손을 안 든 유스는 아예 안 그립니다
+    const card = document.createElement("div");
+    card.className = "card offer-early";
+    card.innerHTML = `
+      <span class="card-emoji">${m.emoji}</span>
+      <span class="card-title">${m.name}</span>
+      <span class="card-sub">${m.tier}</span>
+      <span class="offer-word">"${off.word}"</span>
+      <span class="card-desc">${m.desc}</span>`;
+    const take = document.createElement("button");
+    take.className = "btn btn-primary offer-take";
+    take.dataset.id = m.id;
+    take.textContent = "🤝 예비 계약";
+    /* 🔴 `click`에서 화면을 바꿉니다 — `pointerdown`에서 갈아치우면 손을 뗄 때
+     *    그 자리의 새 요소로 `click`이 한 번 더 가서 **두 번 먹혀요.** */
+    take.onclick = () => decideEarly(stageId, m.id);
+    card.appendChild(take);
+    box.appendChild(card);
+  }
+  /* ℹ️ 손잡이의 효과를 **그 자리에서 말로** (원칙 ③). 숫자는 안 씁니다 —
+   *    최종 편차가 아직 안 정해져서 지금은 어떤 숫자도 거짓말이에요. */
+  const note = $("agency-note");
+  if (note) {
+    note.classList.toggle("hidden", E.list.length === 0);
+    note.innerHTML = E.list.length ? `
+      <p class="offer-note-line"><b>🤝 예비 계약을 하면</b> — 고등학교까지 여기서 뛰고,
+        그 팀이 <b>가장 세게</b> 불러요. 대신 <b>다른 팀은 못 봐요.</b></p>
+      <p class="offer-note-line"><b>🙅 거절하면</b> — 고등부가 끝나고 <b>5곳 전부</b> 와요.
+        등급은 그때 다시 정해져요.</p>` : "";
+  }
+  const cont = $("btn-early-next");
+  if (cont) {
+    cont.textContent = E.list.length ? "🙅 거절하고 계속 뛸래요" : "🏫 계속 뛸래요";
+    cont.classList.remove("hidden");
+    cont.onclick = () => decideEarly(stageId, null);
+  }
+}
+
+/* 🏟️ 제안 화면으로 — **최종(인자 없음)과 📨 조기(단계 id)가 같은 자리에 섭니다.**
+ *
+ * 🔑 **제안 화면에 서는 길은 전부 이 함수를 지납니다.** 조기든 최종이든 조립대에서
+ *    돌아오는 길이든요 — 「무엇을 감출까」를 **한 군데에서** 다시 정하기 위해서예요.
+ *    🔴 `show("screen-agency")`를 직접 부르는 길을 만들지 마세요. 그게 뒷문의 자리입니다.
  *
  * 🔴 **「← 자리 다시 고르기」를 🏫 중등부 뒤에는 감춥니다** (designer 판정 · 96번 §8 ②).
  *    🎯 자리는 **「출력」이 아니라 「굴림에 들어간 입력」**입니다 —
  *    `MINI[kind][pos]`(어느 미니게임이 뜨나)와 `blendOf`(조작 폭)가 그 값으로 이미 굴렀어요.
  *    🔑 **출력만 잠그고 입력을 열어 두면, 같은 판을 다시 굴리지 않고도 판을 바꿀 수 있습니다** —
- *    *"차단이 쉬우니 df로 뛰고 커리어는 fw로"*가 **탭 두 번**이면 됩니다.
- *    **재도전보다 나빠요.**
+ *    *"차단이 쉬우니 df로 뛰고 커리어는 fw로"*가 **탭 두 번**이면 됩니다. **재도전보다 나빠요.**
+ *    그리고 `disabled`가 아니라 **감춥니다**: 못 누르는 버튼이 서 있으면 *"왜 안 눌리지"*가
+ *    되는데, 여기서 되돌아갈 길은 정말로 없어요.
  *
- * 🔒 **버튼을 지우지는 마세요** — 📨 조기 제안(①-C)의 「되돌리기」가 그 자리를 씁니다.
- *    그리고 `disabled`가 아니라 **감춥니다**: 못 누르는 버튼이 서 있으면
- *    *"왜 안 눌리지"*가 되는데, 여기서 되돌아갈 길은 정말로 없어요.
+ * 🔧 **버튼을 지우지 않은 이유가 바뀌었습니다** — 96번은 *"📨 조기 제안의 되돌리기가
+ *    그 자리를 쓴다"*고 적어 뒀지만, 📨 조기 제안에는 **되돌아갈 자리가 없었습니다**
+ *    (카드가 이미 굴렀고 🎯 자리는 아직 고르지도 않았어요). 그래서 조기 화면에서는
+ *    **감춥니다.** 버튼이 남아 있는 건 🏟️ **최종 화면의 계약**(중등 전에는 보임) 때문이에요.
  *
- * 🔑 새 조작적 정의 — **"뛴 뒤에는 「뛸 때 쓴 값」을 못 바꿉니다.
+ * 🔑 조작적 정의 — **"뛴 뒤에는 「뛸 때 쓴 값」을 못 바꿉니다.
  *    굴림을 막는 것만으로는 부족합니다."** */
-function showOffers() {
-  renderMarkets();
+function showOffers(stage) {
+  /* ⚠️ **아무 값이나 참으로 받으면 안 됩니다.** 🧬 조립대의 취소가 이 함수를 콜백으로
+   *    넘기는데, `prospect.js`가 `onBack(e)`로 **클릭 이벤트를 실어 보냅니다** —
+   *    그대로 믿으면 조립대에서 돌아올 때 📨 조기 제안 화면이 떠요. 단계 id 둘만 봅니다. */
+  const early = (stage === "e" || stage === "m") ? stage : null;
+  if (early && window.WingerTown) renderEarly(early); else renderMarkets();
   const back = $("btn-back-first");
+  /* 🚨 **먼저 되돌립니다 — 이 한 줄이 없으면 아래 계약이 조용히 죽습니다.**
+   *    📨 조기 제안이 감춰 둔 상태가 그대로 남으면, 아래 `toggle` 줄을 통째로 지워도
+   *    화면이 이미 감춰져 있어 **증상이 0장**이에요 — 「감추기」를 지키는 검사가
+   *    아무것도 못 잡게 됩니다. 96번 ⓔ(가드 셋이 서로를 덮던 자리)와 **같은 형태**이고,
+   *    이번에도 실제로 한 번 그 상태가 됐습니다(변이 M-BACK이 초록불로 통과했어요).
+   * 🔒 **한 화면이 두 몫을 하면 「켜는 줄」마다 「끄는 줄」이 있어야 합니다.** */
+  if (back) back.classList.remove("hidden");
   if (back) back.classList.toggle("hidden", !!(window.WingerTown && WingerTown.playedStage("m")));
+  /* 🔴 **📨 조기 제안에는 되돌아갈 자리가 없습니다.** 카드가 이미 굴렀고, 🎯 자리는
+   *    아직 고르지도 않았어요 — 「자리 다시 고르기」가 뜨면 그 자체로 거짓말입니다.
+   *    🔒 위 한 줄을 지우고 이 줄만 두지 마세요. 저건 **최종 화면**의 계약이고
+   *       이건 **조기 화면**의 계약이라, 하나로 합치면 한쪽 신호가 사라집니다. */
+  if (early && back) back.classList.add("hidden");
   show("screen-agency");
 }
 
@@ -1548,9 +1658,53 @@ function goSchool(id, after) {
  *    *"어릴 땐 다 같이 공만 쫓아다녔어요."* town.js가 미니게임 대표 3종으로 돕니다.
  *    🔴 그리고 **초등 결과가 🎯 자리를 「추천」하면 안 됩니다** (70번 §8 (a) —
  *       *"조작 실력은 선수의 것이 아니다"*). 점수는 자리 화면에 한 글자도 안 넘깁니다. */
-function goElementary() { goSchool("e", goPosition); }
-function goMiddle() { goSchool("m", goHigh); }
-function goHigh() { goSchool("h", showOffers); }
+/* 📨 **조기 제안 한 판** — 그 단계가 끝나면 손을 든 유스를 보여주고, 정하면 `after()`.
+ *
+ * 🔴 **한 번 정한 판은 다시 안 물어요.** 되돌아와서 다시 물으면, 뒤 판 결과를 보고
+ *    앞 판의 결정을 바꾸는 길이 열립니다 — *"이미 나온 걸 버리고 앞으로"*가 아니라
+ *    **「이미 나온 걸 다시 고르기」**가 되고, 그건 거절이 아니라 재도전이에요(§6-1 ②).
+ * 🔴 **예비 계약을 했으면 다음 판은 아예 안 옵니다** — *"다른 팀은 못 봅니다"*를
+ *    화면에 적어 놓고 갈아탈 길을 열어 두면 그 문장이 거짓말이 됩니다.
+ * 🔒 두 가드는 **서로 다른 것을 봅니다**(이 판을 정했나 / 이미 계약했나) — 겹치지 않아요.
+ *    ⚠️ 가드를 여기 더 늘리지 마세요. 겹치면 하나를 빼도 증상이 0장이라
+ *       검사가 통째로 아무것도 못 지킵니다(96번 ⓔ에서 실제로 났던 일입니다). */
+let earlyAfter = null;
+function goEarly(id, after) {
+  if (!window.WingerTown) { after(); return; }   // 스크립트가 안 왔으면 조용히 넘어가요
+  if (WingerTown.decidedEarly(id)) { after(); return; }
+  if (WingerTown.signed()) { after(); return; }
+  earlyAfter = after;
+  showOffers(id);
+}
+/* 📨 승낙(`marketId`) 또는 거절(`null`). **판정은 `WingerTown`이 합니다** —
+ * 화면은 무엇을 눌렀는지만 넘겨요(안 온 유스의 id는 거기서 막힙니다). */
+function decideEarly(id, marketId) {
+  if (window.WingerTown) WingerTown.decideEarly(id, marketId || null);
+  const after = earlyAfter;
+  earlyAfter = null;
+  /* ♻️ **뒤로 가기로 이미 정한 화면에 다시 들어와 누른 자리** — `screen-agency`는
+   *    `BACK_SAFE`라 🎯 자리에서 브라우저 뒤로 가기로 이 화면에 다시 설 수 있어요.
+   *    🔒 판정은 `WingerTown.decideEarly`가 이미 막았습니다(한 번만) — 여기서는
+   *    **앞으로 보내기만** 합니다. 아무것도 안 하면 *"눌러도 안 되는 버튼"*이 돼요. */
+  (after || (id === "e" ? goPosition : goHigh))();
+}
+
+function goElementary() { goSchool("e", () => goEarly("e", goPosition)); }
+function goMiddle() { goSchool("m", () => goEarly("m", goHigh)); }
+function goHigh() { goSchool("h", finishArc); }
+
+/* 🏁 아크가 끝난 자리.
+ * 🤝 **예비 계약을 했으면 🏟️ 최종 제안 화면이 안 옵니다 — 그 팀으로 갑니다** (설계 93번 §6-2).
+ *    🔴 그래도 **남은 대항전은 다 뛴 뒤**예요. 승낙이 카드를 건너뛰게 하면 그게 정확히
+ *       *"콘텐츠를 건너뛰는 버튼"*이고, 최적 플레이가 «초등에서 무조건 승낙»이 됩니다. */
+function finishArc() {
+  const signed = window.WingerTown ? WingerTown.signed() : null;
+  const m = signed ? MARKETS.find((x) => x.id === signed.market) : null;
+  if (!m) { showOffers(); return; }
+  chosenMarket = m;
+  chosenOffer = WingerTown.offerFor(m.id);
+  openBench();
+}
 
 /* 📍 자리를 고르면 🏫 중등부로 갑니다.
  * ⚠️ 예전에 여기 있던 `if (WingerTown.played()) { showOffers(); return; }`는
@@ -1636,8 +1790,15 @@ function startCareer() {
   S.townScore = window.WingerTown ? WingerTown.score() : 3;
   S.schoolN = window.WingerTown ? WingerTown.cards() : 3;
   S.spotMul = (off && off.mul) || 1;
+  /* 🤝 **예비 계약을 한 시점** — `"e"`/`"m"`, 안 했으면 `null`. 기록·서사용이에요.
+   * 🔴 **등급에는 한 톨도 안 닿습니다** — 등급은 이미 위 `off`(최종 편차로 굴린 값)가
+   *    정했어요. 이 칸을 보고 배수를 더하면 그 순간 «일찍 승낙이 항상 이득»이 됩니다.
+   * ⚠️ **마이그레이션 없음** — 옛 세이브는 읽는 쪽에서 `null`(= 조기 계약 없음)입니다. */
+  const sg = window.WingerTown ? WingerTown.signed() : null;
+  S.signedAt = sg ? sg.stage : null;
   const dev = window.WingerTown ? WingerTown.deviationOf(S) : 0;
   addLog(`⚽ ${chosenMarket.name} ${off ? off.label : "입단"}! ${name}의 축구 인생이 시작됐어요.`
+    + (S.signedAt ? ` 🤝 ${SIGN_STAGE[S.signedAt] || "일찍"} 도장을 먼저 찍었어요.` : "")
     + ` (🏫 학교 ${S.townScore}점/${S.schoolN}판 · 편차 ${dev > 0 ? "+" : ""}${dev}`
     + ` · 📣 주목 ×${(S.spotMul).toFixed(2)})`);
   save();

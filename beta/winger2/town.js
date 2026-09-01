@@ -3,6 +3,9 @@
  *   WingerTown.openStage(id, { pos, foot }, done)   🏫 그 단계의 카드를 굴리고 `done()`
  *   WingerTown.playedStage(id) / played()           그 단계를 굴렸나 / 🏫 아크가 끝났나
  *   WingerTown.score() / cards() / deviation()      누적 점수 · 뛴 카드 수 · 편차 d
+ *   WingerTown.earlyOffers(id)                      📨 그 단계 뒤에 **손을 든 유스** (한 번만 굴러요)
+ *   WingerTown.decideEarly(id, marketId|null)       📨 승낙(id) / 거절(null) — **한 번만**
+ *   WingerTown.decidedEarly(id) / signed()          그 판을 정했나 / 🤝 예비 계약한 곳
  *   WingerTown.offerFor(marketId)                   🏟️ 그 유스가 내민 제안
  *   WingerTown.scoreOf(st)/cardsOf(st)/deviationOf(st)   세이브에서 읽기 — **옛 세이브는 d = 0**
  *
@@ -19,11 +22,11 @@
  * 초·중·고 여덟 판을 뛰는 동안 **몸은 한 번도 안 바뀝니다.**
  * 3단계를 3단계로 만드는 것은 능력치가 아니라 **무대 · 자리 · 미니게임 해금**이에요:
  *
- *   | 단계        | 카드 | 📍 자리 | 미니게임        | 무대 |
- *   | 🏫 초등부   | 2   | 🔴 없음 | 대표 3종        | 공터 · 아무도 안 봄 |
- *   | 🎯 포지션   | —   | ✅ 여기서 고릅니다 | | 중학교 진학 |
- *   | 🏫 중등부   | 3   | ✅      | `MINI[kind][pos]` 4종 | 학교 운동장 |
- *   | 🏫 고등부   | 3   | ✅      | 〃              | 관중 · 스카우트석 |
+ *   | 단계        | 카드 | 📍 자리 | 미니게임        | 📨 걸린 것 | 무대 |
+ *   | 🏫 초등부   | 2   | 🔴 없음 | 대표 3종        | 조기 제안 (🇰🇷 항상 + fit) | 공터 · 아무도 안 봄 |
+ *   | 🎯 포지션   | —   | ✅ 여기서 고릅니다 | |            | 중학교 진학 |
+ *   | 🏫 중등부   | 3   | ✅      | `MINI[kind][pos]` 4종 | 조기 제안 (fit) | 학교 운동장 |
+ *   | 🏫 고등부   | 3   | ✅      | 〃              | 🏟️ **최종 5곳** | 관중 · 스카우트석 |
  *
  * 🔴 **단계별 기준선 3칸(`PEER_REF`에 초/중/고)을 만들지 마세요.** 그건 87번이 폐기한
  *    **「동네만 따로 세기를 정하는 값」과 정확히 같은 형태**입니다 — 이름만 다르고요.
@@ -49,10 +52,12 @@
  *                          **누적·무상한**이라 `score = fandom + overall()×2`에
  *                          **훈련으로 만회할 길이 이미 들어 있습니다.**
  *
- * 🔴 **유스 5곳은 못해도 전부 옵니다. 목록을 줄이지 않습니다** (설계 85번 §3-1).
+ * 🔴 **🏟️ 최종(고등 뒤)에는 유스 5곳이 못해도 전부 옵니다. 목록을 줄이지 않습니다** (설계 85번 §3-1).
  *    못한 사람에게 🇰🇷(`debut` 0.66 · 가장 쉬움)만 주면 **데뷔가 오히려 쉬워지고**,
  *    잘한 사람이 험한 🇮🇹를 받습니다 — **처벌이 처벌이 아니고 보상이 보상이 아니게 돼요.**
  *    바뀌는 건 각 카드에 붙는 **제안 등급 한 줄**뿐입니다.
+ *    🔑 **갈리는 것은 「차오르는 속도」뿐이에요** (설계 93번 §7-1) — 📨 조기 제안은
+ *    `fit`으로 갈리지만 **최종 목록은 언제나 5곳**입니다.
  *
  * 🔴 **건너뛰기·난이도 선택·재도전 버튼을 붙이지 마세요** (설계 93번 §2-2).
  *    기준이 바뀌었습니다 — 옛 기준은 *"생성 화면의 결정 탭이 4를 안 넘는다"*였고,
@@ -203,6 +208,70 @@ window.WingerTown = (() => {
    *    그건 흔들림이 아니라 **난이도 조정**이 돼요. */
   const SHAKE = [[-1, 0.25], [0, 0.50], [1, 0.25]];
 
+  /* ══════════════════════════════════════════════════════════════════
+   * 🤝 **승낙(예비 계약) 전용 흔들림** — *"일찍 알아본 팀이 가장 세게 부릅니다"*
+   * ══════════════════════════════════════════════════════════════════
+   * 🔒 **위의 `SHAKE`는 한 칸도 안 건드립니다.** 이건 **승낙한 한 팀에만** 쓰는 딴 표예요 —
+   *    거절 쪽의 좌우 대칭(= 밴드 대칭)이 그대로 살아 있어야 하니까요(원칙 ⑪).
+   *
+   * ── 🔴 왜 「+1 확정」이 아닌가 — **재 봤더니 문턱을 넘었습니다** ──
+   * 설계 93번 §6-3이 권한 승-1(**+1 확정**)을 §11 실측 2번의 자(*"승낙과 거절의
+   * `E[spotMul]` 차이 ≤ 1%"*)로 재니:
+   *
+   *   거절(5곳 중 최고) 1.03592   ← 설계가 적어 둔 기준선 1.03593과 같습니다
+   *   승낙 +1 확정      1.04680   → **+1.089%p 🔴 넘습니다**
+   *   승낙 위로만 50%   1.02392   → **−1.199%p 🔴 반대로 넘습니다**
+   *
+   * 🔑 **설계가 지정한 대비책(「위로만 굴림」)의 방향은 맞고 폭이 지나쳤습니다.**
+   *    같은 형태(0 또는 +1)에서 확률만 맞춘 값이 **+1이 0.80**이에요:
+   *
+   *   p(+1) 0.50 → −1.20%p · 0.70 → −0.29%p · **0.80 → +0.18%p ✅** · 1.00 → +1.09%p
+   *
+   * 🟢 **+0.18%p를 고른 이유** — 0.75는 차이가 정확히 0(−0.05%p)인데, 승낙은
+   *    **5곳 중 고를 자유를 버리는 결정**이라 spotMul이 같으면 거절이 항상 이득이 됩니다
+   *    (그게 설계가 폐기한 승-2 「더미 결정」의 다른 방향이에요). **아주 조금 위**여야
+   *    양쪽이 다 살아 있습니다.
+   * 🟢 그리고 **+1이 확정이 아닌 게 원칙 ⑧을 지킵니다** — 승낙해도 「모른다」가 한 뼘 남아요.
+   *
+   * 🔴 **여기를 난이도로 만지지 마세요.** 이 값이 재는 것은 **「승낙과 거절 중 정답이
+   *    없는가」** 하나뿐입니다. 세기를 바꾸려면 `OFFER` 표를 **평행이동**하세요. */
+  const SIGN_SHAKE = [[0, 0.20], [1, 0.80]];
+
+  /* ══════════════════════════════════════════════════════════════════
+   * 🎯 **`fit` — 「무엇을 잘했나」가 조기 제안을 정합니다** (설계 93번 §1-4 · §7-2)
+   * ══════════════════════════════════════════════════════════════════
+   * 🔴 **`fit`은 「누가 손을 드는가」만 정합니다. 등급(`d`)에 한 톨도 안 닿아요.**
+   *    그래서 이 표를 어떻게 흔들어도 `E[spotMul]`이 안 움직입니다 — 원칙 ④가
+   *    **구조로** 통과해요. 🔒 **`fit`과 `d`는 다른 함수·다른 표입니다.**
+   *    ⚠️ 다음 사람이 *"🇮🇹가 잘 안 온다"*를 `OFFER`나 `BAND_EDGE`에서 고치려 들 겁니다.
+   *    **그건 다른 축이에요** (원칙 ⑪ — `NPC_SPOT_D`로 철벽상을 고치려던 그 자리).
+   *
+   * 🔑 **새 축을 만드는 게 아니라 `MARKETS`의 `desc`에 이미 적힌 성격을 꺼낸 것**입니다:
+   *   🇯🇵 *"정교한 패스 축구"* → 🅰️ 전개 · 🇧🇷 *"길거리 개인기"* → ⚽ 결정
+   *   🇮🇹 *"수비 조직을 뼈에"* → 🧱 수비 · 🇬🇧 *"고르게 · 경쟁이 거칠어요"* → 🔑 **총점**
+   *
+   * 🔴 **「얼마나 잘했나」로 목록을 가르면 안 됩니다.** 이 게임엔 **명문이 없어요** —
+   *    🇮🇹를 명문으로 두면 잘한 사람의 보상이 *"더 험한 길이 열렸습니다"*가 되고
+   *    🇰🇷로 두면 반대로 뒤집힙니다. **어느 쪽으로 매핑해도 `MARKETS`의 트레이드오프
+   *    축을 탑니다**(85번 제-1이 폐기된 그 형태). 「무엇을」은 그 축과 **직교**해요.
+   *
+   * 🟢 그리고 🇬🇧이 **총점**을 보는 게 원칙 ⑦을 세웁니다 — 한 종류에 몰린 사람은
+   *    그 나라 하나, **고르게 잘한 사람은 🇬🇧까지** 옵니다. 몰빵에 반대 압력이 걸려요. */
+  const FIT_ALL = "*";                                    // 🇬🇧 — 종류가 아니라 총점
+  const FIT = { jp: "a", br: "g", eu: "d", af: FIT_ALL };
+  /* 🇰🇷 **홈은 초등에 항상 옵니다** (설계 93번 §7-3 「홈-A」). `fit`이 없는 게 아니라
+   * **홈이라 처음부터 보고 있습니다.** 🔴 이유가 밸런스가 아니라 **학습**이에요 —
+   * 첫 판에 「제안 0곳」이 나오면 거절/승낙이라는 장치를 **한 번도 못 보고** 지나갑니다.
+   * 🔒 시·도별로 나누지 마세요 — 나누는 순간 지역이 `fit`에 들어갑니다(93번 §4-2). */
+  const FIT_HOME = "k";
+  /* 🎯 문턱 — **종류별 편차 ≥ +1** · 🇬🇧 **총점 편차 ≥ +2** (설계 93번 §8-2).
+   * 🔑 초등(2장·종류마다 0~1장)에서 「그 종류 전부 perfect」는 편차 +1과 **같은 말**이고,
+   *    중등(누적 5장)의 「점수 ≥ 카드 수 + 1」도 편차 +1입니다 — 한 줄로 둘 다 됩니다.
+   * 🔴 **`BAND_EDGE`와 이름이 비슷하다고 같은 표에 넣지 마세요.** 이건 「누가」,
+   *    저건 「몇 등급」입니다. 한 표가 둘 다 하면 다음 사람이 *"제안이 안 온다"*를
+   *    등급 표에서 고칩니다. */
+  const FIT_EDGE = { kind: 1, all: 2 };
+
   /* 🗣️ 그 유스의 말 — 등급이 높을수록 그 유스의 색이 드러나요
    * (0~2는 미지근한 공통, 3~4는 유스마다 다릅니다). */
   const COLD = [
@@ -219,8 +288,10 @@ window.WingerTown = (() => {
   };
 
   /* 🏫 아크 전체의 누적입니다 — **단계마다 초기화하지 않아요.**
-   *   stages  굴린 단계 { e: true, … }   ·  rows  뛴 카드 전부(종류·판정·점수) */
-  const state = { stages: {}, score: 0, cards: 0, rows: [], offers: null };
+   *   stages  굴린 단계 { e: true, … }   ·  rows  뛴 카드 전부(종류·판정·점수)
+   *   early   📨 단계별 조기 제안 { e: { list, offers, done }, … } — **한 번만 굴러요**
+   *   signed  🤝 예비 계약 { market, stage } 또는 null */
+  const state = { stages: {}, score: 0, cards: 0, rows: [], offers: null, early: {}, signed: null };
 
   /* ── 🏫 학교에서 엔진이 보는 몸 ────────────────────────────────
    * **여덟 판 내내 전원이 같은 값**이에요 — `evenStats()`는 `POOL`을 여섯 칸에 고르게 나눈 모양입니다.
@@ -270,20 +341,89 @@ window.WingerTown = (() => {
   /* 🎲 5곳의 제안을 **한 번만** 굴립니다 — 화면을 다시 열어도 다시 안 굴러요.
    * (다시 굴리면 뒤로 가기가 곧 재도전이 됩니다)
    * 🔑 인자는 **점수가 아니라 편차 `d`**입니다. 점수를 넣으면 옛 세이브가 깨져요. */
+  function shakeBy(table) {
+    let r = Math.random();
+    for (const [v, w] of table) { r -= w; if (r <= 0) return v; }
+    return 0;
+  }
+  /* 🔒 **등급을 만드는 자리는 여기 하나뿐입니다.** 거절 쪽(`SHAKE`)이든 승낙 쪽
+   * (`SIGN_SHAKE`)이든 조기든 최종이든 이 함수를 지나요 — 표만 다릅니다. */
+  function offerOf(m, base, sh) {
+    const tier = clamp(base + sh, 0, OFFER.length - 1);
+    const o = OFFER[tier];
+    return {
+      tier, mul: o.mul, star: o.star, label: o.label,
+      word: tier >= NEUTRAL_TIER + 1 ? (PITCH[m.id] || COLD[NEUTRAL_TIER]) : COLD[tier],
+    };
+  }
   function rollOffers(d) {
     const base = tierOfD(d);
     const out = {};
     for (const m of MARKETS) {
-      let r = Math.random(), sh = 0;
-      for (const [v, w] of SHAKE) { r -= w; if (r <= 0) { sh = v; break; } }
-      const tier = clamp(base + sh, 0, OFFER.length - 1);
-      const o = OFFER[tier];
-      out[m.id] = {
-        tier, mul: o.mul, star: o.star, label: o.label,
-        word: tier >= NEUTRAL_TIER + 1 ? (PITCH[m.id] || COLD[NEUTRAL_TIER]) : COLD[tier],
-      };
+      out[m.id] = offerOf(m, base, shakeBy(SHAKE));
     }
     return out;
+  }
+  /* 🤝 **예비 계약한 한 곳** — 최종 `d`로 다시 굴리되 `SIGN_SHAKE`(위로만)를 씁니다.
+   * 🔴 승낙 시점의 등급을 **하한으로 굳히지 않습니다** — 그러면 순수 이득이라
+   *    항상 승낙이 정답이 되고, 결정이 아니게 돼요(설계 93번 §6-3 승-3). */
+  function rollSigned(d, marketId) {
+    const m = MARKETS.find((x) => x.id === marketId);
+    if (!m) return null;
+    const out = {};
+    out[m.id] = offerOf(m, tierOfD(d), shakeBy(SIGN_SHAKE));
+    return out;
+  }
+
+  /* ── 📨 조기 제안 ────────────────────────────────────────────
+   * 🔴 **한 번 굴린 판은 다시 안 굴립니다** — 화면을 다시 열어도, 뒤로 갔다 와도요.
+   *    (다시 굴리면 그게 곧 재도전이고, 그건 v2의 정체를 건너뛰는 버튼입니다)
+   * 🔑 `fit`으로 **누가** 손을 들지 고르고, 등급은 그때의 **편차 `d`**가 정합니다 —
+   *    두 축이 여기서도 안 섞여요. */
+  function rowsUpTo(stageId) {
+    const at = STAGES.findIndex((s) => s.id === stageId);
+    const ids = STAGES.slice(0, at < 0 ? STAGES.length : at + 1).map((s) => s.id);
+    return state.rows.filter((r) => ids.indexOf(r.stage) >= 0);
+  }
+  const devOf = (rows) => rows.reduce((a, r) => a + r.pts, 0) - rows.length;
+  /* 🎯 그 시점에 손을 드는 유스들. **점수도 등급도 안 돌려줍니다 — 명단뿐이에요.** */
+  function fitFor(stageId) {
+    const rows = rowsUpTo(stageId);
+    const out = [];
+    if (stageId === STAGES[0].id) out.push(FIT_HOME);          // 🇰🇷 홈은 초등에 항상
+    for (const m of MARKETS) {
+      const key = FIT[m.id];
+      if (!key || out.indexOf(m.id) >= 0) continue;
+      const seen = key === FIT_ALL ? rows : rows.filter((r) => r.key === key);
+      const edge = key === FIT_ALL ? FIT_EDGE.all : FIT_EDGE.kind;
+      if (seen.length && devOf(seen) >= edge) out.push(m.id);
+    }
+    return out;
+  }
+  function earlyOffers(stageId) {
+    if (!state.early[stageId]) {
+      const list = fitFor(stageId);
+      /* 🎲 **여기서는 흔들지 않습니다 — 난수를 한 톨도 안 씁니다.** 이유 둘:
+       *
+       *   ① 🔴 **조기 제안의 등급은 아무 데도 안 쓰입니다.** 승낙하면 최종 편차로
+       *      다시 굴고(§6-3), 거절하면 그냥 사라져요(§6-1 ②). 화면에도 ⭐를 안 적습니다.
+       *      **쓰이지 않는 값 때문에 난수를 쓰면**, 뒤에 오는 카드 순서가 통째로 어긋납니다 —
+       *      🦶 주발만 뒤집어 견주는 검사(youth-moment B-0·B-2)가 **실제로 그렇게 갈렸어요.**
+       *   ② 🔑 원칙 ⑧(모른다)은 여기서 **다른 자리**가 맡습니다 — 조기 제안의 「모른다」는
+       *      *"이번엔 누가 손을 들까"*(`fit`)이지 *"몇 등급일까"*가 아니에요.
+       *      🎲 `SHAKE`는 **최종 등급**의 것입니다.
+       *
+       * 🔒 그래서 남는 건 **그 유스가 하는 말** 하나뿐이고, 그건 편차만 보고 정해집니다
+       *    (잘했으면 유스마다 제 목소리로, 미지근하면 다 같이 미지근하게). */
+      const base = tierOfD(devOf(rowsUpTo(stageId)));
+      const offers = {};
+      for (const m of MARKETS) {
+        if (list.indexOf(m.id) < 0) continue;
+        offers[m.id] = offerOf(m, base, 0);
+      }
+      state.early[stageId] = { stage: stageId, list, offers, done: false, took: null };
+    }
+    return state.early[stageId];
   }
 
   // ---------- 🏫 화면 ----------
@@ -386,13 +526,22 @@ window.WingerTown = (() => {
         btn.onclick = () => {
           btn.disabled = true;
           if (!last) { playCard(); return; }
-          /* 🏟️ 제안은 **마지막 단계가 끝나야** 굴립니다 (조기 제안은 다음 작업 ①-C).
-           * ⚠️ 한 번 굴린 뒤에는 다시 안 굴러요 — 그게 재도전 뒷문의 자리입니다.
+          /* 📨 **제안은 단계가 끝나는 그 자리에서 굴립니다** — 마지막이면 🏟️ 최종,
+           *    아니면 조기 제안이에요. ⚠️ 한 번 굴린 뒤에는 다시 안 굴러요 —
+           *    그게 재도전 뒷문의 자리입니다.
            * 🔑 `played()`(세 단계 전부)가 아니라 **마지막 단계**를 봅니다 — 픽스처 생성기처럼
            *    앞 단계를 건너뛰고 온 길에서도 제안이 조용히 안 굴러 ×1.00으로 굳는 일이
-           *    없어야 해요. 편차는 그때까지 실제로 뛴 카드로 재니까 여전히 중립입니다. */
-          if (stage.id === STAGES[STAGES.length - 1].id && !state.offers) {
-            state.offers = rollOffers(deviation());
+           *    없어야 해요. 편차는 그때까지 실제로 뛴 카드로 재니까 여전히 중립입니다.
+           * 🤝 **예비 계약을 했으면 그 한 곳만** 굴립니다 — 최종 화면이 안 오니까요.
+           *    🔴 그래도 **최종 `d`가 등급을 정합니다** — 승낙 뒤에도 남은 카드가 계속
+           *    걸려야 «승낙하면 조작이 아무 일도 안 하는» 구간이 안 생겨요(원칙 ③). */
+          if (stage.id === STAGES[STAGES.length - 1].id) {
+            if (!state.offers) {
+              state.offers = state.signed
+                ? rollSigned(deviation(), state.signed.market) : rollOffers(deviation());
+            }
+          } else {
+            earlyOffers(stage.id);
           }
           done();
         };
@@ -419,6 +568,25 @@ window.WingerTown = (() => {
     rows: () => state.rows.slice(),
     STAGES: STAGES.map((s) => ({ id: s.id, n: s.n, title: s.title })),
     TOTAL_CARDS,
+    /* 📨 그 단계의 조기 제안. `{ stage, list, offers, done, took }` — **처음 부를 때 한 번만 굴러요.** */
+    earlyOffers,
+    /* 📨 승낙(`marketId`) 또는 거절(`null`). 🔴 **손을 든 곳으로만 갈 수 있습니다** —
+     * 안 온 유스의 id를 넣으면 조용히 거절로 처리해요(화면이 무엇을 그리든 여기서 막힙니다).
+     * 🔒 **한 번 정하면 끝**입니다. 되돌아와도 `decidedEarly`가 참이라 다시 안 물어요 —
+     *    나중 결과를 보고 앞 판의 결정을 바꾸는 게 정확히 「이미 나온 걸 다시 고르기」예요. */
+    decideEarly: (id, marketId) => {
+      const e = earlyOffers(id);
+      if (e.done) return e;
+      e.done = true;
+      if (marketId && e.offers[marketId]) {
+        e.took = marketId;
+        state.signed = { market: marketId, stage: id };
+      }
+      return e;
+    },
+    decidedEarly: (id) => !!(state.early[id] && state.early[id].done),
+    /* 🤝 예비 계약한 곳 — `{ market, stage }` 또는 `null`. 사본을 돌려줍니다. */
+    signed: () => (state.signed ? { market: state.signed.market, stage: state.signed.stage } : null),
     offerFor: (id) => (state.offers && state.offers[id])
       || { tier: NEUTRAL_TIER, mul: OFFER[NEUTRAL_TIER].mul, star: OFFER[NEUTRAL_TIER].star,
            label: OFFER[NEUTRAL_TIER].label, word: COLD[NEUTRAL_TIER] },
@@ -430,12 +598,16 @@ window.WingerTown = (() => {
     cardsOf: (st) => (st && st.schoolN != null ? st.schoolN : 3),
     deviationOf: (st) => ((st && st.townScore != null ? st.townScore : 3)
       - (st && st.schoolN != null ? st.schoolN : 3)),
-    reset: () => { state.stages = {}; state.score = 0; state.cards = 0; state.rows = []; state.offers = null; },
+    reset: () => {
+      state.stages = {}; state.score = 0; state.cards = 0; state.rows = [];
+      state.offers = null; state.early = {}; state.signed = null;
+    },
     /* 🧪 실측·검사 창구. **문턱을 여기서 읽어 가지 마세요** — 상수를 바꿔도 검사가
      * 따라가서 아무것도 안 잡힙니다. 기준값은 검사에 직접 적으세요.
      * 🔑 `tierOfD`는 **구조 검사용**이에요 — 모든 `d`에서
      *    `tierOfD(d) + tierOfD(-d) === 4`인지 보면 대칭이 한 줄로 지켜집니다. */
-    _t: { OFFER, SHAKE, CARDS, STAGES, PTS, NEUTRAL_TIER, BAND_EDGE, TOTAL_CARDS, ELEM_POS,
-          tierOfD, rollOffers, judgeFor, evenBody, deal, TOWN_CONDITION },
+    _t: { OFFER, SHAKE, SIGN_SHAKE, CARDS, STAGES, PTS, NEUTRAL_TIER, BAND_EDGE, TOTAL_CARDS,
+          ELEM_POS, FIT, FIT_EDGE, FIT_HOME, FIT_ALL,
+          tierOfD, rollOffers, rollSigned, fitFor, judgeFor, evenBody, deal, TOWN_CONDITION },
   };
 })();
