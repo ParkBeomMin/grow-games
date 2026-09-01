@@ -3435,6 +3435,7 @@ window.WingerCareer = (() => {
     const c = S.career || { years: [], wins: 0, daesang: 0, bonsang: 0, rookie: 0 };
     const score = careerScore();
     const moves = moveLog(S);   // S를 비우기 전에 뽑아 둬요
+    const youth = marketOf().name;   // 🤝 조기 계약 줄이 씁니다 — 여기서 같이 뽑아 둬요
     const entry = {
       id: "w" + Date.now(),
       /* 🗓️ 헌액 시각 — 명예의 전당을 달별로 나누는 기준이에요. id에서도 꺼낼 수
@@ -3446,6 +3447,12 @@ window.WingerCareer = (() => {
       /* 🗺️ 자란 곳 — 🏛️ **지역별 기록**이 여기서 나옵니다 (`WingerIntro.topOf`).
        * ⚠️ 옛 헌액에는 이 칸이 없어요. 읽는 쪽이 그냥 안 걸리게 두면 됩니다(마이그레이션 없음). */
       origin: (S.origin || ""),
+      /* 🤝 조기 계약 시점 — `"e"`/`"m"`, 안 했으면 `""`.
+       * 🔑 **기록이 곧 효과입니다** (79번 「기록이 효과」 · designer 93번 §18 수정 ③).
+       *    승낙은 📣 주목에서 **+0.166%p**밖에 안 움직여요 — 그 결정이 어디에도 안 남으면
+       *    **정말로 0.166%p짜리 결정**이 됩니다. 남는 자리가 있어야 고른 것이 살아요.
+       * ⚠️ 옛 헌액에는 이 칸이 없어요. 읽는 쪽이 그냥 안 걸리게 둡니다(마이그레이션 없음). */
+      signedAt: (S.signedAt || ""),
       team: S.group || marketOf().name,
       seasons: c.years ? c.years.length : 0,
       wins: c.wins, daesang: c.daesang, bonsang: c.bonsang, rookie: c.rookie,
@@ -3512,6 +3519,9 @@ window.WingerCareer = (() => {
       <div class="hint">🏷️ 최고 ${entry.bestTitle}${entry.bestTitle !== entry.title ? ` · 은퇴 시 ${entry.title}` : ""} · 마지막 종합 ${entry.finalOvr}</div>
       <div class="hint lg-path">🌍 ${entry.leagues}${entry.leagues.includes("→") ? ` · 최고 ${entry.peakLg}` : ""}</div>
       ${moves ? `<div class="hint move-log">🔁 이적 이력 — ${moves}</div>` : ""}
+      ${/* 🤝 조기 계약 — 안 했으면 줄 자체를 안 그려요(빈 줄은 "기록이 없다"와 "0"을 섞습니다). */
+        SIGN_STAGE[entry.signedAt]
+          ? `<div class="hint sign-note">🤝 ${SIGN_STAGE[entry.signedAt]} 때 ${esc(youth)}가 먼저 도장을 찍었어요</div>` : ""}
       <div class="draft-summary">
         통산 ${entry.apps}경기(유스 포함) ⚽ ${entry.goals}골 · 🅰️ ${entry.assists}도움 · 🛡️ ${entry.defense}수비<br/>
         🏆 우승 ${entry.trophies} · 🏅 발롱도르 ${c.ballon || 0} · 🎖️ 리그MVP ${entry.daesang} · 🥈 베스트11 ${entry.bonsang}${entry.rookie ? " · 🌟 신인왕" : ""}<br/>
@@ -3726,6 +3736,10 @@ window.WingerCareer = (() => {
         ${row("📅 통산", e.seasons ? `${e.seasons}시즌${e.apps ? ` · ${e.apps}경기` : ""}` : "")}
         ${row("📊 통산 기록", e.goals != null
           ? `⚽ ${e.goals}골 · 🅰️ ${e.assists || 0}도움${e.defense != null ? ` · 🛡️ ${e.defense}수비` : ""}` : "")}
+        ${/* 🤝 조기 계약 — 🔒 **클라우드에서 온 값을 그대로 안 그립니다.** `SIGN_STAGE`에
+             있는 두 글자만 나가요(화이트리스트). `row`가 또 이스케이프합니다 — 둘 다 해야
+             하나가 새도 버팁니다. 옛 헌액에는 이 칸이 없어 그냥 줄이 안 그려집니다. */
+          row("🤝 조기 계약", SIGN_STAGE[e.signedAt] || "")}
         ${row("🌍 밟아 온 리그", e.leagues)}
         ${row("⛰️ 최고 리그", e.leagues && e.leagues.includes("→") ? e.peakLg : "")}
         ${row("🏆 수상", awards)}

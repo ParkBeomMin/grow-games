@@ -58,12 +58,36 @@ const STAGE_SEQ = "eemmmhhh";
 const EARLY_STAGES = ["e", "m"];     // 📨 조기 제안이 서는 단계 (고등 뒤는 최종)
 const OFFER_COUNT = 5;               // 🙅 거절하면 최종에 5곳 전부
 const SIGNED_COUNT = 1;              // 🤝 승낙하면 그 한 곳만
+/* 🧬 🤝 계약 판 착지점의 제목 — **「제안」이 아니라 「확정」**입니다 (designer §19 ⑥).
+ * 🔒 `$("agency-title")`의 삼항에서 읽어 오지 않습니다 — 갈아도 검사가 따라가요. */
+const SIGNED_TITLE = "🤝 입단 확정";
+/* 📨 그 화면에 「언제 도장을 찍었는지」가 사람 말로 적혀야 합니다 (`S.signedAt` 노출).
+ * 🔒 `SIGN_STAGE` 표를 읽지 않고 **여기 박습니다** — 표를 비워도 검사가 따라가면 안 돼요. */
+const SIGN_LABEL = ["초등부", "중등부"];
+/* 🇬🇧 **총점을 보는 유스는 🏫 초등에 안 옵니다** (designer 93번 §18 수정 ① · 2026-09-01).
+ * 🔑 초등은 2장이고 종류마다 카드가 0~1장이라 「총점 편차 ≥ +2」가 **두 장 다 perfect일 때만**
+ *    서는데, 그건 총점 문턱이 아니라 **만점 문턱**이에요 — 그러면 🇬🇧이 종류 문턱과 **함께만**
+ *    오는 팀이 되고, 실제로 곳 수 분포에 **「3곳」이라는 구멍**이 생겼습니다.
+ * 🔒 `_t.FIT`/`_t.FIT_ALL_FROM`에서 읽지 않고 **여기 박습니다** — 표를 갈아도 검사가 따라가면 안 돼요. */
+const ALL_KIND_ID = "af";            // 🇬🇧 잉글랜드 아카데미 — 종류가 아니라 총점을 봅니다
 const TIER_SHAKE = 1;                // 🎲 최종 등급이 기준 칸에서 흔들리는 폭 (±1칸)
 /* 🤝 **승낙 등급 − `tierOfD(최종 편차)`가 가질 수 있는 값.** `SIGN_SHAKE`는 「위로만」이에요.
  * 🔴 **`_t.SIGN_SHAKE`에서 읽어 오지 않습니다** — 표를 `[[0,0],[2,1]]`로 갈아도
  *    검사가 따라가서 아무것도 안 잡힙니다. 폐기된 「승-3(순수 이득)」이 정확히 그 형태예요. */
 const SIGN_GAIN = [0, 1];
 const SEEDS = [3, 9, 17, 27, 41, 55, 63, 71];
+/* 🇬🇧 O-1b 전용 시드 — **마흔**입니다. 🔑 개수가 아니라 **판정 방식**이 요점이에요:
+ *
+ *    🔴 처음엔 *"변이를 넣으면 초등에 🇬🇧이 온 판이 하나라도 있다"*로 셌는데,
+ *       8판 중 **1판**만 잡혀서 **놓칠 확률이 27%**였습니다. 시드를 늘려도 확률 게임이에요.
+ *    ✅ 그래서 **조건을 고정했습니다** — 🇬🇧은 「총점 편차 ≥ +2」에서만 손을 듭니다.
+ *       그러니 **편차 ≥ +2인 판만 골라** 그 판들에서 **전부** 안 오는지(무변이) /
+ *       **전부** 오는지(변이) 봅니다. 실측: 80판 중 편차 ≥ +2가 10판이고,
+ *       무변이 **0/10** · 변이 **10/10** — **확률이 아니라 정의**가 됩니다.
+ * 🔑 그리고 이 검사만 **아크 전체가 아니라 🏫 초등 한 단계만** 굴려요 — 그래야 쌉니다. */
+const FIT_SEEDS = (() => { const a = []; for (let i = 1; i <= 40; i++) a.push(i * 7 + 2); return a; })();
+const FIT_ALL_EDGE = 2;              // 🇬🇧 총점 편차 문턱 (검사에 박습니다)
+const FIT_MIN_CASES = 3;             // 📊 그 문턱을 넘은 판이 최소 이만큼은 나와야 잽니다
 
 /* ══════════════════════════════════════════════════════════════
  * 🧪 이 파일이 쓰는 변이 전부 — 0번이 먼저 소스와 대조합니다.
@@ -100,13 +124,24 @@ const MUT = {
   /* 🔴🔑 **M-REDECIDE — 이미 정한 판을 다시 묻습니다.** 뒤 판 결과를 보고 앞 판 결정을
    *    바꾸는 건 *"이미 나온 걸 버리고 앞으로"*가 아니라 **「이미 나온 걸 다시 고르기」**예요. */
   M_REDECIDE: { "game.js": [[/ {2}if \(WingerTown\.decidedEarly\(id\)\) \{ after\(\); return; \}\n/, ""]] },
-  /* 🔴 **M-EARLYBACK — 📨 조기 화면에 「← 자리 다시 고르기」가 보입니다.**
-   *    카드가 이미 굴렀고 🎯 자리는 **아직 고르지도 않았어요** — 뜨면 그 자체로 거짓말입니다.
-   *    ⚠️ 이건 **조기** 화면의 계약이에요. **최종** 화면의 것(T-6b · M-BACK)과 **별개**입니다. */
-  M_EARLYBACK: { "game.js": [[/ {2}if \(early && back\) back\.classList\.add\("hidden"\);\n/, ""]] },
   /* 🔴 **M-SIGNONLY — 🤝 계약했는데 최종 화면에 5곳이 다 옵니다.**
    *    *"다른 팀은 못 봐요"*가 계약의 대가인데 그게 사라지면 승낙이 **순수 이득**이 돼요. */
   M_SIGNONLY: { "game.js": [[/ {4}if \(signed && m\.id !== signed\.market\) continue;\n/, ""]] },
+  /* 🔴🔑 **M-BENCH — 🧬 조립대의 「취소」가 `show("screen-agency")`를 직접 부릅니다.**
+   *    🤝 승낙 판에서는 🏟️ 최종 화면이 **한 번도 안 그려진 채** 조립대로 갑니다 —
+   *    그래서 되돌아올 때 `showOffers`를 안 지나면 **📨 조기 제안의 잔재**(제목 · 🙅 거절 버튼 ·
+   *    조기 카드)가 그대로 서 있고, 정작 **누를 카드는 0장**이에요. **막다른 길**입니다.
+   *    🔑 *"제안 화면에 서는 길은 전부 `showOffers`를 지난다"*가 이걸 막는 계약이고,
+   *    승낙 판이 그 계약을 **실제로 재는 유일한 경로**입니다. */
+  M_BENCH_BACK: { "game.js": [[/ {4}showOffers\);\n\}/, '    () => show("screen-agency"));\n}']] },
+  /* 🔴 **M-TITLE — 고를 게 없는 화면에 「🏟️ 입단 제안」이라고 적습니다.**
+   *    🤝 계약 판의 착지점은 **고르는 화면이 아니라 확인 화면**이에요 —
+   *    「제안」이라고 적으면 *"아무도 안 고른 제안 화면"*으로 읽힙니다 (designer §19 ⑥). */
+  M_TITLE: { "game.js": [[/if \(title\) title\.textContent = signed \? "🤝 입단 확정" : "🏟️ 입단 제안";/,
+    'if (title) title.textContent = "🏟️ 입단 제안";']] },
+  /* 🔴 **M-ALLEARLY — 🇬🇧(총점)이 🏫 초등에도 옵니다.** 그러면 총점 문턱이 초등에서
+   *    **만점 문턱**이 되어 🇬🇧이 종류 문턱과 함께만 오고, 곳 수 분포에 구멍이 생깁니다. */
+  M_ALLEARLY: { "town.js": [[/ {6}if \(key === FIT_ALL && at < FIT_ALL_FROM\) continue;\n/, ""]] },
 };
 
 {
@@ -157,10 +192,6 @@ function boot(o) {
     active: () => (D.querySelector(".screen.active") || {}).id,
     takes: () => Array.from(D.querySelectorAll("#agency-list .offer-take")),
     finalCards: () => Array.from(D.querySelectorAll("#agency-list button:not(.offer-take)")),
-    backHidden: () => {
-      const b = D.getElementById("btn-back-first");
-      return b ? b.classList.contains("hidden") : null;
-    },
     earlyOn: () => {
       const b = D.getElementById("btn-early-next");
       return !!(b && !b.classList.contains("hidden"));
@@ -190,8 +221,7 @@ async function runArc(o) {
   /* 📨 조기 화면에 선 그 자리에서 잽니다 — 화면이 바뀌기 **전**에요. */
   const grab = (id) => {
     const E = T.earlyOffers(id);
-    snap.push({ id, screen: h.active(), earlyOn: h.earlyOn(),
-      backHidden: h.backHidden(), takes: h.takes().length,
+    snap.push({ id, screen: h.active(), earlyOn: h.earlyOn(), takes: h.takes().length,
       list: E.list.slice(), dev: T.deviation(), cards: T.cards(),
       band: T._t.tierOfD(T.deviation()),
       tiers: E.list.map((k) => (E.offers[k] || {}).tier) });
@@ -226,6 +256,29 @@ async function runArc(o) {
     rng: h.cnt.n,
   };
   return r;
+}
+
+/* 🏫 **초등 한 단계만** 굴려 그때 손 든 명단을 받아옵니다 (O-1b 전용 · 가볍습니다).
+ * 🔑 `W2Moment.play`를 기록기로 바꾸고 판정은 게임이 자동 진행에서 쓰는 그 갈래
+ *    (`ctx.judge(0.5)`)를 그대로 불러요 — 산식을 우회하지 않습니다. */
+function elemFit(muts, seeds) {
+  const out = [];
+  for (const seed of seeds) {
+    const h = boot({ muts, seed });
+    h.W.W2Moment = { play: (el, ctx, cb) => cb(ctx.judge(0.5)) };
+    const T = h.T();
+    T.reset();
+    let done = false;
+    T.openStage("e", { pos: "mf", foot: "R" }, () => { done = true; });
+    for (let g = 0; g < 12 && !done; g++) {
+      const b = h.D.getElementById("btn-town-next");
+      if (!b || b.disabled || b.classList.contains("hidden")) break;
+      h.press(b, "🏫 다음");
+    }
+    out.push({ seed, list: T.earlyOffers("e").list.slice(), dev: T.deviation() });
+    h.close();
+  }
+  return out;
 }
 
 /* ══════════════════════════════════════════════════════════════════════
@@ -263,6 +316,34 @@ function o1(rows) {
   check(lens.size >= 2 && bands.size >= 2,
     `O-1-조건. 📊 명단 길이와 기준 칸이 **시드마다 다르다** — 명단 {${Array.from(lens).sort().join(",")}}곳 · 칸 {${Array.from(bands).sort().join(",")}}`
     + `\n     🔑 둘 다 하나뿐이면 O-1은 "잴 게 없어서 통과"입니다`);
+
+}
+
+/* 🇬🇧 **총점을 보는 유스는 🏫 초등에 안 옵니다** — 이름과 하는 일을 맞추는 자리 */
+function fitCases(E) {
+  const hot = E.filter((r) => r.dev >= FIT_ALL_EDGE);          // 🇬🇧이 「손을 들 만한」 판
+  return { hot, came: hot.filter((r) => r.list.indexOf(ALL_KIND_ID) >= 0) };
+}
+{
+  const E = elemFit(null, FIT_SEEDS);
+  const F = fitCases(E);
+  const atM = BASE.flatMap((r) => r.snap.filter((e) => e.id === "m")).filter((e) => e.list.indexOf(ALL_KIND_ID) >= 0);
+  const dist = {};
+  for (const r of E) dist[r.dev] = (dist[r.dev] || 0) + 1;
+  check(F.came.length === 0 && atM.length > 0,
+    `O-1b. 🇬🇧 **총점을 보는 유스(\`${ALL_KIND_ID}\`)는 🏫 초등에 안 오고 중등부터 옵니다**`
+    + `\n     🔑 **편차 ≥ +${FIT_ALL_EDGE}인 판만** 봅니다 — 그게 🇬🇧이 손을 들 조건이라 거기서 «안 왔다»가 뜻이 있어요`
+    + `\n     초등 편차 분포 {${Object.keys(dist).map(Number).sort((x, y) => x - y).map((k) => `${k}:${dist[k]}`).join(" ")}} (${E.length}판)`
+    + `\n     편차 ≥ +${FIT_ALL_EDGE}인 판 **${F.hot.length}개** 중 🇬🇧이 온 판 **${F.came.length}개** · 중등에 온 판 ${atM.length}개`
+    + (F.came.length === 0
+      ? (atM.length > 0
+        ? `\n     🔑 초등은 종류마다 카드가 0~1장이라 「총점 문턱」이 **만점 문턱**이 됩니다 —`
+          + `\n        그러면 🇬🇧이 종류 문턱과 **함께만** 오고 곳 수 분포에 구멍이 생겨요`
+        : `\n     🔴 중등에도 한 번도 안 왔어요 — 위 줄은 "안 재서 통과"입니다 (측정 조건 불만족)`)
+      : `\n     🔴 초등에 왔어요 — 총점 축이 만점 축으로 변질됩니다`));
+  check(F.hot.length >= FIT_MIN_CASES,
+    `O-1b-조건. 📊 편차 ≥ +${FIT_ALL_EDGE}인 판이 **${F.hot.length}개**(시드 ${E.length}개 · 최소 ${FIT_MIN_CASES}) 나왔다`
+    + `\n     🔑 이 판이 없으면 O-1b도 아래 M-ALLEARLY도 **확률 게임**이 됩니다 — 시드를 늘리세요`);
 }
 
 /* ══════════════════════════════════════════════════════════════════════
@@ -290,26 +371,6 @@ function o8(rows) {
       ? `\n     🔑 소비량이 \`fit\`을 타면 **뒤 카드 순서가 통째로 밀립니다** — 등급이 아니라 아크가 어긋나요`
       : `\n     🔴 소비량이 시드마다 다릅니다 — 조기 제안이 난수를 쓰고 있어요`)
     + `\n     📊 측정 조건: 명단 길이 폭 ${r.span}곳 ${r.span >= 2 ? "✔" : "🔴 (폭이 없으면 잴 게 없습니다)"}`);
-}
-
-/* ══════════════════════════════════════════════════════════════════════
- * O-6. 📨 **조기 화면에는 「← 자리 다시 고르기」가 없다**
- * ══════════════════════════════════════════════════════════════════════ */
-console.log("\n── 📨 O-6. 조기 화면의 버튼 ──");
-{
-  const rows = BASE.flatMap((r) => r.snap.map((e) => ({ seed: r.seed, ...e })));
-  const okHide = rows.every((e) => e.backHidden === true);
-  const okOn = rows.every((e) => e.earlyOn === true && e.screen === "screen-agency");
-  const stages = new Set(rows.map((e) => e.id));
-  check(okHide && okOn,
-    `O-6. 📨 조기 화면이 \`screen-agency\`에 서고, 「← 자리 다시 고르기」가 **감춰진다** (${rows.length}자리)`
-    + `\n     선 단계 {${Array.from(stages).sort().join(",")}} (계약 ${EARLY_STAGES.join(",")}) · 🙅 거절 버튼이 떠 있나 ${okOn ? "✔" : "🔴"}`
-    + (okHide ? `\n     🔑 카드가 이미 굴렀고 🎯 자리는 **아직 고르지도 않았어요** — 뜨면 그 자체로 거짓말입니다`
-      : `\n     🔴 조기 화면에 되돌아가기가 떠 있어요`)
-    + `\n     ⚠️ 이건 **조기** 화면의 계약입니다 — **최종** 화면의 것은 \`town-test\`의 T-6b·T-6d가 봅니다 (별개예요)`);
-  check(EARLY_STAGES.every((id) => stages.has(id)),
-    `O-6-조건. 📊 조기 제안이 **${EARLY_STAGES.join(" · ")} 두 단계 모두**에서 실제로 섰다`
-    + ` — 안 서면 위 줄은 "안 재서 통과"입니다`);
 }
 
 /* ══════════════════════════════════════════════════════════════════════
@@ -364,33 +425,87 @@ console.log("\n── 🤝 O-4. 계약 뒤에는 안 물어요 ──");
 /* ══════════════════════════════════════════════════════════════════════
  * O-5. ♻️ **되감아 와도 이미 정한 판을 다시 묻지 않는다**
  * ══════════════════════════════════════════════════════════════════════
- * 🔑 `town-test`의 T-6a와 **같은 길**입니다 — 🏟️ 최종 → 자리 → 🗺️ 동네 → 지역 다시.
+ * 🔑 `town-test`의 T-6a와 **같은 길**입니다 — 🎯 자리 화면 → 🗺️ 동네 → 지역 다시.
  *    그 끝에서 🏫이 다시 안 굴러야 하고(T-6a), **📨도 다시 안 떠야** 합니다(여기).
+ * ✅ 2026-09-01 — 🏟️ 제안 화면의 「← 자리 다시 고르기」가 삭제돼서(designer §19 ⒝)
+ *    되감는 길이 **아크 중간의 `btn-back-position` 하나**로 줄었습니다. 그 길로 재요.
  * ══════════════════════════════════════════════════════════════════════ */
 console.log("\n── ♻️ O-5. 되감아도 다시 안 물어요 ──");
 async function rewind(muts) {
-  const r = await runArc({ seed: SEEDS[0], muts });
-  const h = r.h;
-  h.press(h.D.getElementById("btn-back-first"), "← 자리 다시 고르기");
-  h.press(h.D.getElementById("btn-back-position"), "← 동네로");
+  const h = boot({ seed: SEEDS[0], muts });
+  const T = h.T();
+  h.press(h.D.getElementById("btn-new"), "btn-new");
+  h.press(h.D.getElementById("btn-name-next"), "btn-name-next");
+  await tapFoot(h.W, h.press, "R");
   const back = townAuto(h.W);
+  pickOrigin(h.W, h.press, "seoul");
+  passStage(h.W, h.press);                    // 🏫 초등부
+  passEarly(h.W, h.press);                    // 📨 조기 제안 — 🙅 거절
+  const atPos = h.active(), cards0 = T.cards();
+  h.press(h.D.getElementById("btn-back-position"), "← 뒤로");
+  const originScreen = h.active();
   pickOrigin(h.W, h.press, "busan");
-  const out = { screen: h.active(), earlyOn: h.earlyOn(), takes: h.takes().length,
-    extra: passStage(h.W, h.press).length,
-    cards: r.T.cards(), cards0: r.n };
+  const out = { atPos, originScreen, screen: h.active(), earlyOn: h.earlyOn(),
+    takes: h.takes().length, extra: passStage(h.W, h.press).length,
+    cards0, cards: T.cards() };
   back();
   h.close();
   return out;
 }
 {
   const r = await rewind(null);
-  const ok = !r.earlyOn && r.screen !== "screen-town" && r.extra === 0 && r.cards === r.cards0;
+  const ok = r.atPos === "screen-position" && r.screen === "screen-position"
+    && r.extra === 0 && r.cards === r.cards0;
   check(ok,
     `O-5. ♻️ 🗺️ 동네까지 되감아 지역을 다시 골라도 **📨 조기 제안이 다시 안 뜬다**`
-    + `\n     지역 다시 → ${r.screen} · 🙅 거절 버튼 ${r.earlyOn ? "🔴 되살아남" : "안 뜸 ✔"} · 손든곳 ${r.takes}`
+    + `\n     🎯 자리(${r.atPos}) → 뒤로(${r.originScreen}) → 지역 다시 → **${r.screen}**`
     + `\n     그 뒤 더 지나간 카드 ${r.extra}장 · 카드 ${r.cards0} → ${r.cards}`
     + (ok ? `\n     🔑 뒤 판 결과를 보고 앞 판 결정을 바꾸는 건 **「이미 나온 걸 다시 고르기」**예요`
-      : `\n     🔴 이미 정한 판을 다시 묻습니다`));
+      : `\n     🔴 \`screen-agency\`로 돌아갔어요 — 이미 정한 판을 다시 묻습니다`));
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+ * O-9. 🧬🔑 **🤝 계약 판의 착지점이 막다른 길이 아니다**
+ * ══════════════════════════════════════════════════════════════════════
+ * 🚨 **승낙 판에서는 🏟️ 최종 화면이 한 번도 안 그려집니다** — `finishArc`가 곧장 🧬 조립대로
+ *    가거든요. 그래서 조립대에서 **되돌아오는 순간**이 그 화면이 처음 그려지는 자리예요.
+ *    🔴 그때 `showOffers`를 안 지나면 **📨 조기 제안의 잔재**가 그대로 서 있고
+ *    **누를 카드는 0장**입니다 — 아무 데도 못 가는 화면이 됩니다.
+ * 🔑 *"제안 화면에 서는 길은 전부 `showOffers`를 지난다"*는 계약을 **실제로 재는 유일한 경로**가
+ *    여기예요 (거절 판에서는 최종 화면이 이미 그려져 있어 **변이를 넣어도 증상이 0장**입니다).
+ * ══════════════════════════════════════════════════════════════════════ */
+console.log("\n── 🧬 O-9. 계약 판의 착지점 ──");
+async function landing(muts, opt) {
+  const o = opt || {};
+  const r = await runArc({ seed: SEEDS[0], sign: o.sign === undefined ? "e" : o.sign, muts });
+  const h = r.h;
+  h.press(h.D.getElementById("btn-back-prospect"), "🧬 조립대 취소");
+  const t = h.D.getElementById("agency-title");
+  const hint = h.D.getElementById("agency-hint");
+  const out = { screen: h.active(), title: t ? t.textContent : null,
+    earlyOn: h.earlyOn(), takes: h.takes().length, n: h.finalCards().length,
+    hint: (hint ? hint.textContent : "").replace(/\s+/g, " "),
+    signedAt: r.signed ? r.signed.stage : null };
+  h.close();
+  return out;
+}
+{
+  const L = await landing(null);
+  const okLand = L.screen === "screen-agency" && L.n === SIGNED_COUNT
+    && L.earlyOn === false && L.takes === 0;
+  const okTitle = L.title === SIGNED_TITLE;
+  const okStamp = SIGN_LABEL.some((w) => L.hint.indexOf(w) >= 0);
+  check(okLand && okTitle,
+    `O-9. 🧬 🤝 계약 판에서 조립대를 취소하면 **누를 수 있는 화면**에 선다 — 막다른 길이 아니에요`
+    + `\n     → ${L.screen} · 제목 "${L.title}" (계약 "${SIGNED_TITLE}") · 카드 **${L.n}장** · 📨 잔재(거절 버튼 ${L.earlyOn} · 조기 카드 ${L.takes}장)`
+    + (okLand && okTitle
+      ? `\n     🔑 승낙 판은 🏟️ 최종 화면이 **한 번도 안 그려진 채** 조립대로 가요 — 이 길이 그 화면의 첫 렌더입니다`
+      : `\n     🔴 조기 제안 잔재가 남았거나 카드가 없어요 — **아무 데도 못 가는 화면**입니다`));
+  check(okStamp,
+    `O-9a. 📨 그 화면에 **언제 도장을 찍었는지**(\`S.signedAt\` = ${L.signedAt})가 사람 말로 적혀 있다`
+    + `\n     "${L.hint.slice(0, 100)}"`
+    + (okStamp ? `\n     🔑 승낙이 📣 주목을 +0.166%p밖에 안 움직이니, **그 결정이 화면에 안 남으면 정말로 0.166%p짜리 결정**이 됩니다`
+      : `\n     🔴 계약 시점이 화면 어디에도 없어요 (찾은 말: ${SIGN_LABEL.join(" · ")})`));
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -421,6 +536,21 @@ for (const [name, label] of [
     + `\n     ${rows.slice(0, 3).map((r) => `시드 ${r.seed}: ` + r.snap.map((e) => `${e.id} 칸 ${e.band} ↔ 등급[${e.tiers.join("")}]`).join(" · ")).join("\n     ")}`
     + (bad.length ? `\n     ✔ 등급이 편차 말고 **다른 것**을 보기 시작했어요` : `\n     🔴 스몄는데 초록불이에요 — O-1이 아무것도 안 지킵니다`));
   closeAll(rows);
+}
+
+/* 🧪 M-ALLEARLY — 🇬🇧이 초등에도 옴. O-1b가 갈려야 합니다. */
+if (!mutOK("M_ALLEARLY")) check(false, `🧪 **변이 M-ALLEARLY — 🇬🇧이 초등에도 옴**${MUT_DEAD}`);
+else {
+  const E = elemFit(MUT.M_ALLEARLY, FIT_SEEDS);
+  const F = fitCases(E);
+  const all = F.hot.length > 0 && F.came.length === F.hot.length;
+  check(all,
+    `🧪 **변이 M-ALLEARLY — 🇬🇧(총점)이 🏫 초등에도 옴** → O-1b가 빨간불`
+    + `\n     편차 ≥ +${FIT_ALL_EDGE}인 판 **${F.hot.length}개** 중 🇬🇧이 온 판 **${F.came.length}개**`
+    + `\n     보기 ${F.came.slice(0, 3).map((e) => `[${e.list.join(",")}](편차 ${e.dev})`).join(" · ") || "(없음)"}`
+    + (all
+      ? `\n     ✔ **그 판 전부**에서 왔습니다 — 확률이 아니라 **정의**로 갈려요`
+      : `\n     🔴 일부만 왔거나 하나도 안 왔어요 — 문턱(\`FIT_ALL_EDGE\`)이 바뀌었는지 보세요`));
 }
 
 /* 🧪🔑 M-EARLYSHAKE — O-8(그리고 O-1)이 갈려야 합니다. */
@@ -491,18 +621,6 @@ else {
       : `\n     🔴 가드를 뺐는데 초록불이에요 — O-5가 아무것도 안 지킵니다`));
 }
 
-/* 🧪 M-EARLYBACK — O-6이 갈려야 합니다. */
-if (!mutOK("M_EARLYBACK")) check(false, `🧪 **변이 M-EARLYBACK — 조기 화면에 되돌아가기가 보임**${MUT_DEAD}`);
-else {
-  const rows = await underArc("M_EARLYBACK", { seeds: SEEDS.slice(0, 3) });
-  const shown = rows.flatMap((r) => r.snap).filter((e) => e.backHidden === false);
-  check(shown.length > 0,
-    `🧪 **변이 M-EARLYBACK — 📨 조기 화면에 「← 자리 다시 고르기」가 보임** → O-6이 빨간불`
-    + `\n     보이는 자리 ${shown.length}개 — ${rows.map((r) => `시드 ${r.seed}: [${r.snap.map((e) => `${e.id}:${e.backHidden}`).join(",")}]`).join(" · ")}`
-    + (shown.length ? `\n     ✔ 자리를 고르지도 않았는데 「자리 다시 고르기」가 떴어요` : `\n     🔴 되돌렸는데 초록불이에요`));
-  closeAll(rows);
-}
-
 /* 🧪 M-SIGNONLY — O-7이 갈려야 합니다.
  * 🔑 승낙하면 최종 화면이 **안 오므로**, 🧬 조립대에서 **취소**해 최종 화면에 세워서 봅니다. */
 if (!mutOK("M_SIGNONLY")) check(false, `🧪 **변이 M-SIGNONLY — 계약했는데 5곳이 다 옴**${MUT_DEAD}`);
@@ -517,14 +635,37 @@ else {
   const base = await backFromBench(null);
   const mut = await backFromBench(MUT.M_SIGNONLY);
   check(base.n === SIGNED_COUNT && mut.n !== SIGNED_COUNT,
-    `🧪 **변이 M-SIGNONLY — 🤝 계약했는데 최종 목록이 안 줄어듦** → O-7a가 빨간불`
+    `🧪 **변이 M-SIGNONLY — 🤝 계약했는데 최종 목록이 안 줄어듦** → O-7이 빨간불`
     + `\n     🧬 조립대에서 취소 → ${base.screen} · 무변이 **${base.n}장**(계약 ${SIGNED_COUNT}) · 변이 **${mut.n}장**`
     + (base.n === SIGNED_COUNT && mut.n !== SIGNED_COUNT
       ? `\n     ✔ *"다른 팀은 못 봐요"*가 계약의 대가입니다 — 사라지면 승낙이 순수 이득이 돼요`
       : `\n     🔴 목록이 계약과 달라요`));
-  /* 🔑 무변이 쪽은 **O-7a 그 자체**입니다 — 변이 없이도 지켜야 하는 줄이라 따로 찍어요. */
-  check(base.n === SIGNED_COUNT,
-    `O-7a. 🤝 계약한 뒤 🧬 조립대에서 **취소하면 최종 화면에 그 한 곳만** 선다 (${base.n}장 · 계약 ${SIGNED_COUNT})`);
+}
+
+/* 🧪🔑 M-BENCH — 조립대 취소가 `showOffers`를 건너뜀. O-9가 갈려야 합니다. */
+if (!mutOK("M_BENCH_BACK")) check(false, `🧪 **변이 M-BENCH — 조립대 취소가 판단을 건너뜀**${MUT_DEAD}`);
+else {
+  const L = await landing(MUT.M_BENCH_BACK);
+  const caught = L.n !== SIGNED_COUNT || L.earlyOn || L.title !== SIGNED_TITLE;
+  check(caught,
+    `🧪🔑 **변이 M-BENCH — 🧬 조립대 취소가 \`show("screen-agency")\`를 직접 부름** → O-9가 빨간불`
+    + `\n     → ${L.screen} · 제목 "${L.title}" · 카드 **${L.n}장** · 📨 잔재(거절 버튼 ${L.earlyOn} · 조기 카드 ${L.takes}장)`
+    + (caught
+      ? `\n     ✔ **📨 조기 제안 화면이 그대로 서 있고 누를 카드가 ${L.n}장**입니다 — 막다른 길이에요`
+        + `\n     🔑 거절 판에서는 최종 화면이 이미 그려져 있어 **이 변이가 증상 0장**입니다 — 승낙 판만 잡아요`
+      : `\n     🔴 건너뛰게 했는데 초록불이에요 — O-9가 아무것도 안 지킵니다`));
+}
+
+/* 🧪 M-TITLE — 고를 게 없는 화면에 「제안」이라고 적음. O-9가 갈려야 합니다. */
+if (!mutOK("M_TITLE")) check(false, `🧪 **변이 M-TITLE — 계약 판에도 「입단 제안」**${MUT_DEAD}`);
+else {
+  const L = await landing(MUT.M_TITLE);
+  check(L.title !== SIGNED_TITLE && L.n === SIGNED_COUNT,
+    `🧪 **변이 M-TITLE — 🤝 계약 판에도 「🏟️ 입단 제안」이라고 적음** → O-9가 빨간불`
+    + `\n     제목 "${L.title}" · 카드 ${L.n}장`
+    + (L.title !== SIGNED_TITLE
+      ? `\n     ✔ 고를 게 ${L.n}장뿐인데 「제안」이라고 적혀요 — *"아무도 안 고른 제안 화면"*으로 읽힙니다`
+      : `\n     🔴 바꿨는데 초록불이에요`));
 }
 
 closeAll(BASE); closeAll(SIGNED);

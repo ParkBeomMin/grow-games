@@ -1,4 +1,4 @@
-/* 🏫 ⚽ 더 윙어 II — 학교 아크가 **닿는 곳과 안 닿는 곳** · 화면 배선 (T-2 · T-3 · T-4s · T-5 · T-6 · T-7)
+/* 🏫 ⚽ 더 윙어 II — 학교 아크가 **닿는 곳과 안 닿는 곳** · 화면 배선 (T-2 · T-3 · T-4s · T-5 · T-6a · T-7)
  *
  * 🔴 **2026-09-01에 계약이 바뀌어 두 줄이 옛말이 됐습니다** (96번 §5-2):
  *      · T-5가 *"🏘️ 동네 3장"*을 재고 있었는데 아크가 **8장**이 됐어요
@@ -19,18 +19,22 @@
  *   · 🏟️ **5곳이 전부 옵니다.** 바뀌는 건 카드에 붙는 제안 등급 한 줄뿐이에요
  *   · ♻️ **한 번 구른 단계는 다시 안 굴러요.** 뒤로 갔다 와도 점수·카드 수가 그대로
  *   · 📨 **초등·중등이 끝날 때마다 조기 제안이 한 번씩** `screen-agency`에 섭니다 (98번).
- *     🔑 **한 화면이 두 몫**을 해요 — 그래서 「켜는 줄마다 끄는 줄」이 필요하고,
- *     그 「끄는 줄」의 감도를 **T-6d**가 지킵니다. 조기 화면 자체의 계약은 `offer-test.js`가 봐요
- *   · 🎯 **뛴 뒤에는 「뛸 때 쓴 값」을 못 바꿉니다** (2026-09-01 · designer 판정 · 96번 ⓑ).
- *     🏫 중등부를 뛰면 「← 자리 다시 고르기」가 **감춰집니다** — 자리는 「출력」이 아니라
- *     `MINI[kind][pos]`·`blendOf`가 **이미 그 값으로 굴린 입력**이거든요.
- *     🔑 **굴림을 막는 것만으로는 부족합니다** — 그게 T-6a와 T-6b가 따로 있는 이유예요
+ *     조기 화면 자체의 계약은 `offer-test.js`가 봐요
+ *   · 🎯 **뛴 뒤에는 「뛸 때 쓴 값」을 못 바꿉니다** (designer 판정 · 96번 ⓑ → 93번 §17-2).
+ *     ✅ **2026-09-01 — 「← 자리 다시 고르기」 버튼이 삭제됐습니다** (designer §19 판정 ⒝).
+ *     §17-2가 그 계약을 정한 순간 **버튼이 보일 수 있는 상태가 구조적으로 0**이 됐거든요.
+ *     🗑️ 그래서 **T-6b · T-6c · T-6d와 변이 M-BACK · M-RESET · M-BENCH를 지웠습니다** —
+ *     **대상이 사라지면 검사도 같이 사라져야 합니다.** 남기면 그게 「검사가 옛 계약을 지킴」이에요.
+ *     🔑 T-6d의 **「감도 검사」 형태는 `.claude/skills/grow-test-writing`에 올려 뒀습니다** —
+ *     인스턴스가 사라졌다고 도구까지 잃으면 같은 사고가 세 번째 납니다
+ *   · ♻️ **되감는 길이 하나 남았습니다** — 🎯 자리 화면의 `btn-back-position` → 🗺️ 동네.
+ *     🏟️ 제안 화면에는 이제 되돌아가는 버튼이 **아예 없습니다**
  *   · 📀 옛 세이브는 **점수 3 · 카드 3 → 편차 0 → ×1.00**으로 삽니다 (마이그레이션 없음).
  *     🔑 **두 칸이 짝으로** 기본값을 가져야 해요 — 한쪽만 주면 `d = 3 − 8 = −5`로
  *     진행 중인 커리어가 **조용히 전부 ×0.90**이 됩니다 (설계 93번 §9)
  *
  * ⚠️ **판정이 바뀌면 뒤집히는 문장들 — 값을 고치기 전에 이 파일을 먼저 여세요**
- *   · 「뒤로 가면 학교도 다시 굴린다」는 판정이 나오면 **T-6·T-6a가 옛 계약**입니다
+ *   · 「뒤로 가면 학교도 다시 굴린다」는 판정이 나오면 **T-6a가 옛 계약**입니다
  *   · 「학교를 growth에도 태우자」는 판정이 나오면 **T-2가 통째로 뒤집힙니다**
  *   · 🔴 **카드 수(2/3/3)는 designer가 아직 만질 수 있습니다** — 그래서 이 파일은
  *     8이라는 값을 T-5 한 줄에서만 쓰고, 단계 구조 자체는 `school-test.js`가 봅니다
@@ -55,7 +59,7 @@
 "use strict";
 const fs = require("fs");
 const path = require("path");
-const { bootPage, pageMutsOK, townAuto, passArc, passStage, tapFoot, pickOrigin, PAGE_DIR }
+const { bootPage, pageMutsOK, townAuto, passArc, passStage, passEarly, tapFoot, pickOrigin, PAGE_DIR }
   = require("./_load.js");
 
 let fail = 0;
@@ -115,31 +119,6 @@ const MUT = {
   M_R_GUARD: {
     "game.js": [[/ {2}if \(WingerTown\.playedStage\(id\)\) \{ after\(\); return; \}\n/, ""]],
   },
-  /* 🔴🔑 **M-BACK — 뛴 뒤에도 「← 자리 다시 고르기」가 보입니다.**
-   *    🎯 자리는 **「출력」이 아니라 「굴림에 들어간 입력」**이에요 — `MINI[kind][pos]`와
-   *    `blendOf`가 그 값으로 **이미 굴렀습니다.** 굴림만 막고 입력을 열어 두면
-   *    *"차단이 쉬우니 df로 뛰고 커리어는 fw로"*가 **탭 두 번**입니다. **재도전보다 나빠요.**
-   *    ⚠️ designer 지시 — 이 변이(자리가 **뒤**로 새는 것)를 M-H(자리가 **앞**으로 새는 것)와
-   *       **한 검사에 묶지 않습니다.** 한 벌이지만 별개예요. */
-  M_BACK_SHOW: { "game.js": [[/ {2}if \(back\) back\.classList\.toggle\("hidden", !!\(window\.WingerTown && WingerTown\.playedStage\("m"\)\)\);\n/, ""]] },
-  /* 🚨🔑 **M-RESET — 「끄는 줄」을 지웁니다.** 이 변이는 **혼자서는 증상이 0장**이에요.
-   *
-   *    `showOffers`가 `btn-back-first`를 세 줄로 정합니다:
-   *      ① `remove("hidden")`  ← 먼저 되돌리기 (이 변이가 지우는 줄)
-   *      ② `toggle("hidden", playedStage("m"))`  ← 🏟️ 최종의 계약 (M-BACK이 지우는 줄)
-   *      ③ `if (early) add("hidden")`            ← 📨 조기의 계약 (M-EARLYBACK이 지우는 줄)
-   *    ②가 이미 `toggle(x, false)`로 되돌려 주니 **①은 무변이 코드에서 하는 일이 없습니다.**
-   *    🔑 ①이 하는 일은 **②의 감도를 떠받치는 것**이에요 — ①이 없으면 ③이 감춰 둔 상태가
-   *    최종까지 남아서, **②를 통째로 지워도 화면이 이미 감춰져 있어 증상이 0장**입니다.
-   *    (engineer의 첫 구현이 실제로 그 상태였고, M-BACK이 초록불로 통과했습니다 · 98번 §5)
-   *
-   * 🔴 **그래서 이 변이는 「계약을 깨는 변이」가 아니라 「검사를 가리는 변이」입니다.**
-   *    단독 판정이 안 돼요 — 아래 T-6d가 **M-BACK과 한 벌로** 넣어서 잽니다. */
-  M_RESET: { "game.js": [[/ {2}if \(back\) back\.classList\.remove\("hidden"\);\n/, ""]] },
-  /* 🔴 **M-BENCH — 🧬 조립대의 「취소」가 `show("screen-agency")`를 직접 부릅니다.**
-   *    그러면 「← 자리 다시 고르기」를 감추는 판단(`showOffers`)을 **건너뜁니다** —
-   *    되돌리기 뒷문이 조립대 쪽에 생겨요. engineer가 막은 자리입니다 (96번 ⓑ). */
-  M_BENCH_BACK: { "game.js": [[/ {4}showOffers\);\n\}/, '    () => show("screen-agency"));\n}']] },
   /* 🔴 **M-G — 🏫 학교에 건너뛰기 버튼을 답니다.** *"길어지면 카드 수를 줄이지
    *    화면(버튼)을 붙이지 마세요."* */
   M_G_SKIP: { "index.html": [[/<button class="btn btn-primary hidden" id="btn-town-next"><\/button>/,
@@ -276,64 +255,57 @@ async function runT7(muts) {
 }
 
 /* ══════════════════════════════════════════════════════════════
- * T-5. 🏫 **여덟 판을 지나면 🏟️ 제안** · T-6. ♻️ 학교는 한 번만 굴러요
+ * T-5. 🏫 **여덟 판을 지나면 🏟️ 제안** · T-6a. ♻️ 학교는 한 번만 굴러요
  * ══════════════════════════════════════════════════════════════ */
-console.log("\n── 🏟️ T-5·T-6. 아크 · 제안 목록 · 재도전 뒷문 ──");
+console.log("\n── 🏟️ T-5·T-6a. 아크 · 제안 목록 · 재도전 뒷문 ──");
 async function runOffers(muts) {
   const h = boot({ seed: SEEDS[0], muts });
   const arc = await toOffers(h, "wg");
   const names = new Set(offerCards(h).map((c) => (c.querySelector(".card-title") || {}).textContent));
   const all = h.W.__get("MARKETS").map((m) => m.name);
   const T = h.W.WingerTown;
-  const backBtn = () => h.D.getElementById("btn-back-first");
   const r = {
     arc, screen: h.active(), n: offerCards(h).length,
     titles: Array.from(names), missing: all.filter((n) => !names.has(n)),
     score: T.score(), cards: T.cards(), dev: T.deviation(), tiers: tiersOf(h),
     spots: offerCards(h).map((c) => (c.querySelector(".tag.offer-spot") || {}).textContent || ""),
-    /* 🎯 **뛴 뒤에는 자리를 못 바꿉니다** — 버튼이 서 있는지부터 봅니다 (T-6b) */
-    backExists: !!backBtn(),
-    backHidden: backBtn() ? backBtn().classList.contains("hidden") : null,
-    playedM: T.playedStage("m"),
   };
-  /* 🧬 조립대를 다녀오는 길이 `showOffers`를 지나는가 (T-6c).
-   * 🔑 **버튼을 손으로 다시 보이게 해 놓고** 갑니다 — 지금 흐름에서는 먼저 지나간
-   *    `showOffers`가 이미 감춰 놔서, 그대로 가면 **변이를 넣어도 증상이 없어요**(실측 확인).
-   *
-   * 📨 **2026-09-01 갱신 — 예전 주석의 예고는 「절반만」 맞았습니다** (engineer 98번 §2):
-   *    ✅ 경로는 생겼어요 — 🏫 초등 뒤 조기 제안이 정확히 *"`playedStage("m")`이 false인데
-   *       `screen-agency`"* 입니다.
-   *    🔴 **그래도 「버튼이 보이는 상태」는 안 생깁니다** — 조기 화면은 `btn-back-first`를
-   *       **일부러 감추거든요**(카드는 이미 굴렀고 🎯 자리는 아직 고르지도 않았어요 ·
-   *       `offer-test`의 O-6이 그걸 지킵니다).
-   *    🔑 그리고 🧬 조립대는 **최종 화면에서만** 열리는데 그때는 늘 `playedStage("m") === true`라,
-   *       **T-6c는 앞으로도 상태를 손으로 만들어 놓고 재야 합니다.** 예고가 아니라 항구적인 조건이에요.
-   * 🚨 그리고 그 「겹치는 화면 상태」가 이번에 실제로 **검사 하나를 가렸습니다** — 아래 T-6d를 보세요. */
-  if (backBtn()) backBtn().classList.remove("hidden");
-  h.press(offerCards(h)[0], "🏟️ 입단 제안");
-  r.benchScreen = h.active();
-  h.press(h.D.getElementById("btn-back-prospect"), "🧬 조립대 취소");
-  r.afterBench = h.active();
-  r.backHiddenAfterBench = backBtn() ? backBtn().classList.contains("hidden") : null;
-  /* ♻️ 뒷문 ① — 뒤로 → 🎯 자리 다시 고르기 */
-  h.press(h.D.getElementById("btn-back-first"), "← 자리 다시 고르기");
-  r.backScreen = h.active();
-  h.press(h.D.querySelector('#position-list .card[data-pos="df"]'), "🎯 df (다시)");
-  r.afterScreen = h.active();
-  /* ♻️ 뒷문 ② — 🎯 자리 → 뒤로 → 🗺️ 동네 → 지역 다시 고르고 [다음]
-   *    🔑 **이 길이 진짜 뒷문입니다** — `goOrigin`의 done이 `goElementary()`를 다시 부르거든요. */
-  h.press(h.D.getElementById("btn-back-first"), "← 자리 다시 고르기");
-  h.press(h.D.getElementById("btn-back-position"), "← 동네로");
-  r.originScreen = h.active();
-  const back = townAuto(h.W);
-  pickOrigin(h.W, h.press, "busan");
-  r.afterOrigin = h.active();
-  r.extra = passStage(h.W, h.press);      // 🏫 다시 열렸다면 여기서 카드가 더 굴러요
-  back();
-  r.score2 = T.score(); r.cards2 = T.cards(); r.tiers2 = tiersOf(h);
   h.close();
   return r;
 }
+
+/* ══════════════════════════════════════════════════════════════
+ * ♻️ **되감는 길 — 🎯 자리 화면의 `btn-back-position` 하나뿐입니다**
+ * ══════════════════════════════════════════════════════════════
+ * ✅ 2026-09-01에 🏟️ 제안 화면의 「← 자리 다시 고르기」가 **삭제**됐습니다(designer §19 ⒝).
+ *    그래서 옛 T-6의 길(제안 → 뒤로 → 자리 다시 고르기)은 **없어졌고**, 그 검사도 지웠어요.
+ * 🔑 **남은 길은 아크 「중간」에 있습니다** — 🏫 초등 + 📨 조기 제안을 지난 🎯 자리 화면에서
+ *    `btn-back-position` → 🗺️ 동네 → 지역 다시 고르고 [다음] → `goElementary()`가 **다시 불립니다.**
+ *    거기서 `goSchool`의 `playedStage` 한 줄이 막아야 해요 — 그게 T-6a입니다.
+ * 🔴 되감기를 아크 「끝」에서 재던 옛 판보다 **오히려 낫습니다** — 그때는 `playedStage`가
+ *    셋 다 true였는데, 지금은 `e`만 true인 **진짜 경계**에서 재거든요. */
+async function runRewind(muts) {
+  const h = boot({ seed: SEEDS[0], muts });
+  const T = h.W.WingerTown;
+  h.press(h.D.getElementById("btn-new"), "btn-new");
+  h.press(h.D.getElementById("btn-name-next"), "btn-name-next");
+  await tapFoot(h.W, h.press, "R");
+  const back = townAuto(h.W);
+  pickOrigin(h.W, h.press, "seoul");
+  passStage(h.W, h.press);                    // 🏫 초등부
+  passEarly(h.W, h.press);                    // 📨 조기 제안 — 🙅 거절
+  const r = { atPos: h.active(), cards: T.cards(), score: T.score() };
+  h.press(h.D.getElementById("btn-back-position"), "← 뒤로");
+  r.originScreen = h.active();
+  pickOrigin(h.W, h.press, "busan");
+  r.afterOrigin = h.active();
+  r.extra = passStage(h.W, h.press);          // 🏫 다시 열렸다면 여기서 카드가 더 굴러요
+  back();
+  r.cards2 = T.cards(); r.score2 = T.score();
+  h.close();
+  return r;
+}
+
 const O = await runOffers(null);
 check(O.arc.cards === ARC_CARDS && O.screen === "screen-agency",
   `T-5. 🏫 **여덟 판**(${ARC_CARDS}장)을 지나면 🏟️ 제안 화면에 선다`
@@ -348,29 +320,18 @@ check(O.n === OFFER_COUNT && O.missing.length === 0,
 check(O.spots.every((s) => /×[\d.]+ → ×[\d.]+/.test(s)),
   `T-5b. 📣 카드마다 **주목 배수가 숫자로** 적혀 있다 (원칙 ③ — 효과가 있으면 손잡이도)`
   + `\n     ${O.spots.map((s) => s.replace(/📣 주목 /, "")).join(" · ")}`);
-check(O.backScreen === "screen-position" && O.afterScreen === "screen-agency",
-  `T-6. ♻️ 뒤로 갔다 🎯 자리를 다시 골라도 **학교가 안 열린다**`
-  + `\n     뒤로 → ${O.backScreen} · 자리 다시 → ${O.afterScreen}`);
-check(O.originScreen === "screen-origin" && O.afterOrigin !== "screen-town"
-  && O.extra.length === 0 && O.score === O.score2 && O.cards === O.cards2 && O.tiers === O.tiers2,
-  `T-6a. ♻️🔑 **🗺️ 동네까지 되돌아가 지역을 다시 골라도 학교가 안 굴러요** — 여기가 진짜 뒷문입니다`
-  + `\n     자리 → 뒤로 → ${O.originScreen} · 지역 다시 → **${O.afterOrigin}** · 그 뒤 더 지나간 카드 ${O.extra.length}장`
-  + `\n     점수 ${O.score} → ${O.score2} · 카드 ${O.cards} → ${O.cards2} · 제안 등급 ${O.tiers} → ${O.tiers2}`
-  + (O.afterOrigin !== "screen-town" && O.extra.length === 0 ? ""
-    : `\n     🔴 🏫이 다시 열렸어요 — **되돌아가기가 곧 재도전 버튼**이 됐습니다`));
-check(O.backExists && O.backHidden === true && O.playedM === true,
-  `T-6b. 🎯🔑 **뛴 뒤에는 「← 자리 다시 고르기」가 안 보인다** — 자리는 「출력」이 아니라 **굴림에 들어간 입력**이에요`
-  + `\n     \`playedStage("m")\` ${O.playedM} · 버튼 존재 ${O.backExists} · hidden ${O.backHidden}`
-  + (O.backExists && O.backHidden === true
-    ? `\n     🔑 굴림만 막고 입력을 열어 두면 *"df로 뛰고 커리어는 fw로"*가 **탭 두 번**입니다 — 재도전보다 나빠요`
-      + `\n     🔒 버튼을 **지우지는** 않았습니다(📨 조기 제안의 「되돌리기」가 그 자리를 씁니다) — 감춘 것만 봅니다`
-    : `\n     🔴 되돌아가는 길이 열려 있어요`)
-  + `\n     ⚠️ 이건 자리가 **뒤로** 새는 자리예요 — **앞으로** 새는 것(T-7 · M-H)과 **별개 검사**입니다 (designer 지시)`);
-check(O.afterBench === "screen-agency" && O.backHiddenAfterBench === true,
-  `T-6c. 🧬 **🏟️ 제안 화면에 서는 길은 전부 \`showOffers\`를 지난다** — 조립대에서 되돌아와도 감추기 판단을 다시 한다`
-  + `\n     제안 → ${O.benchScreen} → 취소 → ${O.afterBench} · 돌아온 뒤 hidden ${O.backHiddenAfterBench}`
-  + `\n     🔑 검사가 가기 전에 버튼을 **일부러 보이게** 해 뒀어요 — 안 그러면 이미 감춰져 있어서 아무것도 안 잽니다`
-  + (O.backHiddenAfterBench === true ? "" : `\n     🔴 \`show("screen-agency")\`를 직접 불러 판단을 건너뛰었습니다 — 뒷문이 조립대 쪽에 생겼어요`));
+{
+  const R = await runRewind(null);
+  const ok = R.atPos === "screen-position" && R.originScreen === "screen-origin"
+    && R.afterOrigin !== "screen-town" && R.extra.length === 0
+    && R.cards === R.cards2 && R.score === R.score2;
+  check(ok,
+    `T-6a. ♻️🔑 **🗺️ 동네까지 되감아 지역을 다시 골라도 🏫이 다시 안 굴러요** — 여기가 진짜 뒷문입니다`
+    + `\n     🎯 자리(${R.atPos}) 카드 ${R.cards}장 → 뒤로(${R.originScreen}) → 지역 다시 → **${R.afterOrigin}**`
+    + `\n     그 뒤 더 지나간 카드 ${R.extra.length}장 · 카드 ${R.cards} → ${R.cards2} · 점수 ${R.score} → ${R.score2}`
+    + (ok ? `\n     🔑 \`goSchool\`의 \`playedStage\` **한 줄**이 유일한 가드예요 — 늘리면 변이가 또 죽습니다`
+      : `\n     🔴 🏫이 다시 열렸어요 — **되돌아가기가 곧 재도전 버튼**이 됐습니다`));
+}
 
 /* ══════════════════════════════════════════════════════════════
  * T-3. 📀 **옛 세이브가 정확히 중립이다** — 점수 3 **· 카드 3 · 편차 0** · ×1.00
@@ -576,78 +537,15 @@ else {
 /* 🧪🔑 M-R — 재도전 뒷문. T-6a가 갈려야 합니다. */
 if (!mutOK("M_R_GUARD")) check(false, `🧪 **변이 M-R — \`goSchool\`의 가드 한 줄 제거**${MUT_DEAD}`);
 else {
-  const r = await runOffers(MUT.M_R_GUARD);
-  check(r.afterOrigin === "screen-town" || r.extra.length > 0 || r.cards2 !== r.cards,
+  const R = await runRewind(MUT.M_R_GUARD);
+  const caught = R.afterOrigin === "screen-town" || R.extra.length > 0 || R.cards2 !== R.cards;
+  check(caught,
     `🧪🔑 **변이 M-R — ♻️ \`goSchool\`의 가드 한 줄을 빼서 재도전 뒷문을 엶** → T-6a가 빨간불`
-    + `\n     지역 다시 → **${r.afterOrigin}** · 더 지나간 카드 ${r.extra.length}장(${r.extra.join("")})`
-    + `\n     점수 ${r.score} → ${r.score2} · 카드 ${r.cards} → ${r.cards2}`
-    + (r.afterOrigin === "screen-town" || r.extra.length > 0
-      ? `\n     ✔ 🏫이 다시 열렸어요 — 이게 곧 재도전 버튼입니다`
+    + `\n     지역 다시 → **${R.afterOrigin}** · 더 지나간 카드 ${R.extra.length}장(${R.extra.join("")})`
+    + `\n     카드 ${R.cards} → ${R.cards2} · 점수 ${R.score} → ${R.score2}`
+    + (caught ? `\n     ✔ 🏫 초등이 다시 굴렀어요 — 이게 곧 재도전 버튼입니다`
       : `\n     🔴 가드를 뺐는데 초록불이에요 — T-6a가 아무것도 안 지킵니다`)
     + `\n     ✅ **한 줄로 잡힙니다.** 가드가 셋이던 때는 하나를 빼도 증상이 0장이었어요 (96번 ⓔ)`);
-}
-
-/* 🧪🔑 M-BACK — 뛴 뒤에도 되돌아가기가 보임. T-6b가 갈려야 합니다. */
-if (!mutOK("M_BACK_SHOW")) check(false, `🧪 **변이 M-BACK — 되돌아가기를 안 감춤**${MUT_DEAD}`);
-else {
-  const r = await runOffers(MUT.M_BACK_SHOW);
-  check(r.backExists && r.backHidden === false,
-    `🧪🔑 **변이 M-BACK — 🎯 뛴 뒤에도 「← 자리 다시 고르기」를 안 감춤** → T-6b가 빨간불`
-    + `\n     \`playedStage("m")\` ${r.playedM} · 버튼 hidden **${r.backHidden}**`
-    + (r.backHidden === false
-      ? `\n     ✔ 굴림에 들어간 입력을 다시 바꿀 수 있게 됐어요 — 탭 두 번짜리 뒷문입니다`
-      : `\n     🔴 감추기를 뺐는데 초록불이에요 — T-6b가 아무것도 안 지킵니다`));
-}
-
-/* ══════════════════════════════════════════════════════════════════════
- * 🚨🔑 T-6d. **감도 검사 — 📨 조기 화면이 🏟️ 최종의 계약을 「가리지」 않는다**
- * ══════════════════════════════════════════════════════════════════════
- * 🔴 **이 검사가 재는 것은 게임 동작이 아니라 「다른 검사의 감도」입니다.**
- *    그래서 **기준선이 무변이 소스가 아니라 「M-BACK을 넣은 소스」**예요 — 그 점이 특이합니다.
- *
- * 이 저장소가 **같은 형태에 두 번** 걸렸습니다:
- *   · 96번 ⓔ — 재도전 **가드가 셋**이라 하나를 빼도 증상이 0장 (검사가 통째로 죽음)
- *   · 98번 §5 — 📨 조기 화면이 감춰 둔 **화면 상태**가 남아 M-BACK이 초록불로 통과
- *   🔑 **형태가 같아요: 여러 자리가 같은 상태를 쓰는데, 뒤 자리가 앞 자리의 흔적을 못 지우면
- *      앞 자리가 뒤 자리의 검사를 가립니다.** 방어는 「켜는 줄마다 끄는 줄」 + 이 감도 검사.
- *
- * 🔒 **`remove("hidden")` 줄이 사라지면 무엇이 잡나요 — 세 겹입니다:**
- *   ① **0번 검사** — `M_RESET` 정규식이 소스에 안 걸려 ❌ 한 줄이 뜹니다 (가장 먼저)
- *   ② **T-6d** — 아래 ⒜⒝가 뒤집힙니다
- *   ③ 사람 — 이 주석
- * ⚠️ **⒝(가려짐)를 단언하는 건 「결함을 정답으로 단언」하는 게 아닙니다** — *"①이 ②를
- *    떠받치고 있다"*는 **참인 성질**을 못 박는 거예요. 구조를 바꿔 «①이 없어도 ②가 잡히게»
- *    만들면 이 줄이 빨간불이 되고, **그때 사람이 이 파일을 봅니다.** 그게 노리는 마찰이에요.
- * 🔴 그리고 ②③을 **한 줄로 합치지 마세요**(`toggle("hidden", !!early || playedStage("m"))`) —
- *    최종의 계약과 조기의 계약이 **다른 문장**이라, 합치면 한쪽 신호가 사라집니다.
- *    designer도 「앞으로 새는 것 ↔ 뒤로 새는 것」을 별개 검사로 두라고 했어요.
- * ══════════════════════════════════════════════════════════════════════ */
-if (!mutOK("M_RESET") || !mutOK("M_BACK_SHOW")) {
-  check(false, `🚨 **T-6d 감도 검사 — \`remove("hidden")\` 또는 \`toggle\` 줄이 소스에 없습니다**${MUT_DEAD}`
-    + `\n     🔑 「끄는 줄」이 사라졌다면 그것만으로 **M-BACK이 안 잡히게** 됩니다 — 소스를 보세요`);
-} else {
-  const solo = await runOffers(MUT.M_BACK_SHOW);
-  const combo = await runOffers({ "game.js": MUT.M_RESET["game.js"].concat(MUT.M_BACK_SHOW["game.js"]) });
-  check(solo.backHidden === false && combo.backHidden === true,
-    `T-6d. 🚨🔑 **감도 검사 — 「끄는 줄」이 T-6b를 떠받치고 있다**`
-    + `\n     ⒜ M-BACK 단독            → hidden **${solo.backHidden}** ${solo.backHidden === false ? "(T-6b 빨간불 ✔ 감도 있음)" : "🔴 안 잡힘"}`
-    + `\n     ⒝ M-RESET + M-BACK 한 벌 → hidden **${combo.backHidden}** ${combo.backHidden === true ? "(🔴 가려짐 — 그래서 ①이 필요합니다)" : "가려지지 않음"}`
-    + (solo.backHidden === false && combo.backHidden === true
-      ? `\n     🔑 ⒝가 «M-RESET은 단독으로 증상이 0장인데 M-BACK을 죽인다»의 증거예요`
-        + `\n     🔒 \`remove("hidden")\` 줄이 사라지면 **0번 검사**가 먼저 ❌를 냅니다`
-      : `\n     🔴 감도 구조가 바뀌었습니다 — \`showOffers\`의 세 줄을 열어 보고 이 검사를 다시 쓰세요`));
-}
-
-/* 🧪 M-BENCH — 조립대 취소가 `showOffers`를 건너뜀. T-6c가 갈려야 합니다. */
-if (!mutOK("M_BENCH_BACK")) check(false, `🧪 **변이 M-BENCH — 조립대 취소가 판단을 건너뜀**${MUT_DEAD}`);
-else {
-  const r = await runOffers(MUT.M_BENCH_BACK);
-  check(r.backHiddenAfterBench === false,
-    `🧪 **변이 M-BENCH — 🧬 조립대 취소가 \`show("screen-agency")\`를 직접 부름** → T-6c가 빨간불`
-    + `\n     제안 → ${r.benchScreen} → 취소 → ${r.afterBench} · 돌아온 뒤 hidden **${r.backHiddenAfterBench}**`
-    + (r.backHiddenAfterBench === false
-      ? `\n     ✔ 감추기 판단을 건너뛰었어요 — 되돌리기 뒷문이 조립대 쪽에 생깁니다`
-      : `\n     🔴 건너뛰게 했는데 초록불이에요 — T-6c가 아무것도 안 지킵니다`));
 }
 
 /* 🧪 M-B — 옛 세이브 점수 기본값 0. T-3b가 갈려야 합니다. */
