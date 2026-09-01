@@ -3443,6 +3443,9 @@ window.WingerCareer = (() => {
       game: "winger2",
       name: S.name,
       pos: S.pos,
+      /* 🗺️ 자란 곳 — 🏛️ **지역별 기록**이 여기서 나옵니다 (`WingerIntro.topOf`).
+       * ⚠️ 옛 헌액에는 이 칸이 없어요. 읽는 쪽이 그냥 안 걸리게 두면 됩니다(마이그레이션 없음). */
+      origin: (S.origin || ""),
       team: S.group || marketOf().name,
       seasons: c.years ? c.years.length : 0,
       wins: c.wins, daesang: c.daesang, bonsang: c.bonsang, rookie: c.rookie,

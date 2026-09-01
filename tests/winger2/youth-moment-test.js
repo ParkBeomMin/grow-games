@@ -142,14 +142,33 @@ function boot(o) {
     close: () => W.close() };
 }
 
-/* 🚪 타이틀 → ✏️ 이름·🦶 주발 → 📍 자리 → 🏘️ 동네 3장 → 🏟️ 입단 제안 → 🧬 조립대 → 🏠 훈련장
+/* 🚪 타이틀 → ✏️ 이름 → 🦶 주발 → 🗺️ 동네(지나감) → 📍 자리 → 🏘️ 동네 3장 → 🏟️ 입단 제안
+ *    → 🧬 조립대 → 🏠 훈련장
  * ⚠️ 2026-08-31에 **🏘️ 동네가 들어오면서 순서가 바뀌었습니다** (85번 「순-B」) —
  *    유스가 「고르는 화면」에서 「제안받는 화면」이 되어 **자리 뒤로** 갔어요.
- *    `#agency-list`는 동네를 지나야 채워집니다(`showOffers` → `renderMarkets`). */
-function toHome(h, o) {
+ *    `#agency-list`는 동네를 지나야 채워집니다(`showOffers` → `renderMarkets`).
+ * ⚠️ 2026-09-01에 **🦶 주발이 `#screen-name`에서 나가 자기 화면이 됐습니다** (94번 §6-1).
+ *    이 드라이버가 그때 죽었어요 — 종료 코드 2였습니다. 아래 세 줄이 그 수리예요. */
+async function toHome(h, o) {
   h.press(h.D.getElementById("btn-new"), "btn-new");
-  if (o.foot === "L") h.press(h.D.querySelector('#screen-name .foot-opt[data-foot="L"]'), "🦶 왼발");
   h.press(h.D.getElementById("btn-name-next"), "btn-name-next");
+  /* 🦶 **주발이 자기 화면으로 나갔습니다** (2026-09-01 · director 94번 §2·§6-1).
+   *    ① 선택자가 `#screen-name .foot-opt` → **`#screen-foot .foot-card`**
+   *    ② 누르는 차례가 `btn-name-next` **뒤**로 밀렸고
+   *    ③ 탭이 곧 답이라 **오른발도 눌러야** 합니다 (예전에는 토글 기본값이라 그냥 넘어갔어요)
+   * ⏳ 발을 누르면 ⚽ 공이 굴러들어오고 **그 뒤에** 다음 화면으로 갑니다.
+   *    안 기다리고 `#position-list`를 누르면 그 사이에 `goOrigin()`이 떨어져 화면이 어긋나요.
+   *    ⚠️ **320ms라는 값은 안 박습니다 — 「화면이 바뀔 때까지」를 기다려요.**
+   *    연출 길이가 바뀌어도(♿ reduce면 즉시) 드라이버는 그대로 살아야 하니까요.
+   * 🗺️ 동네 화면(`#screen-origin`)은 **지나갑니다** — 자리 카드 핸들러가 살아 있어서
+   *    `S.origin`은 설계 93번 §4-3이 뚫어 둔 기본값 `""`(🌍 미상)으로 삽니다.
+   *    ⚠️ 이 파일은 🦶만 봐요. 🗺️ 지역 계약은 `foot-map-test.js`가 맡습니다. */
+  const want = o.foot === "L" ? "L" : "R";
+  h.press(h.D.querySelector(`#screen-foot .foot-card[data-foot="${want}"]`),
+    `🦶 ${want === "L" ? "왼발" : "오른발"}`);
+  for (let i = 0; i < 400 && h.active() === "screen-foot"; i++) await wait(3);
+  if (h.active() === "screen-foot")
+    throw new Error("🦶 발을 눌렀는데 화면이 안 넘어가요 — openFoot의 done 배선을 보세요");
   const back = townAuto(h.W);
   h.press(h.D.querySelector(`#position-list .card[data-pos="${o.pos}"]`), `📍 ${o.pos}`);
   passTown(h.W, h.press, back);      // ♻️ 되돌립니다 — 이 파일은 진짜 미니게임을 잽니다
@@ -247,7 +266,7 @@ const A_PRED = [
 ];
 
 async function runA() {
-  const h = toHome(boot({ seed: SEEDS[0] }), { pos: "wg", foot: "R" });
+  const h = await toHome(boot({ seed: SEEDS[0] }), { pos: "wg", foot: "R" });
   const ok = await restUntilStage(h);
   check(ok && h.active() === "screen-main",
     `A-1. 🚪 게임 입구 → 🏠 훈련장 6턴 → 🏆 **1년차 6월 평가전 버튼이 열린다** (${h.active()})`
@@ -279,7 +298,7 @@ async function runA() {
 
 async function runA_M1() {
   if (!mutOK("M1_NO_MOMENT")) { check(false, `A-M1. 🧪 변이(v1 승부처로 복귀)${MUT_DEAD}`); return; }
-  const h = toHome(boot({ seed: SEEDS[0], muts: MUT.M1_NO_MOMENT }), { pos: "wg", foot: "R" });
+  const h = await toHome(boot({ seed: SEEDS[0], muts: MUT.M1_NO_MOMENT }), { pos: "wg", foot: "R" });
   await restUntilStage(h);
   const r = await playEval(h);
   const flip = A_PRED.map(([n, f]) => [n, f(r)]);
@@ -324,9 +343,9 @@ function footFlip(R, L) {
 }
 
 async function runB() {
-  const R = await (async () => { const h = toHome(boot({ seed: SEEDS[0] }), { pos: "wg", foot: "R" });
+  const R = await (async () => { const h = await toHome(boot({ seed: SEEDS[0] }), { pos: "wg", foot: "R" });
     await restUntilStage(h); const r = await playEval(h); h.close(); return r; })();
-  const L = await (async () => { const h = toHome(boot({ seed: SEEDS[0] }), { pos: "wg", foot: "L" });
+  const L = await (async () => { const h = await toHome(boot({ seed: SEEDS[0] }), { pos: "wg", foot: "L" });
     await restUntilStage(h); const r = await playEval(h); h.close(); return r; })();
 
   /* 같은 시드면 **같은 카드가 같은 순서로** 와야 해요 — 안 그러면 A/B가 성립 안 합니다 */
@@ -358,7 +377,7 @@ async function runB() {
     + ` — 잰 값 ${ratios.map((v) => v.toFixed(4)).join(", ") || "(컷인 카드가 안 나왔어요)"}`);
 
   /* B-3 — ♿ 판정 확대. 같은 시드·같은 카드끼리 폭의 비만 봅니다 */
-  const Wd = await (async () => { const h = toHome(boot({ seed: SEEDS[0], keys: { "grow-wide-judge": "1" } }),
+  const Wd = await (async () => { const h = await toHome(boot({ seed: SEEDS[0], keys: { "grow-wide-judge": "1" } }),
     { pos: "wg", foot: "R" }); await restUntilStage(h); const r = await playEval(h); h.close(); return r; })();
   const wg0 = R.cards.filter((c) => c.gates.length === 2);
   const wg1 = Wd.cards.filter((c) => c.gates.length === 2);
@@ -373,7 +392,7 @@ async function runB() {
 
 async function runB_M2() {
   if (!mutOK("M2_NO_FOOT")) { check(false, `B-M2. 🧪 변이(🦶가 유스에 안 닿음)${MUT_DEAD}`); return; }
-  const mk = async (foot) => { const h = toHome(boot({ seed: SEEDS[0], foot, muts: MUT.M2_NO_FOOT }),
+  const mk = async (foot) => { const h = await toHome(boot({ seed: SEEDS[0], foot, muts: MUT.M2_NO_FOOT }),
     { pos: "wg", foot }); await restUntilStage(h); const r = await playEval(h); h.close(); return r; };
   const R = await mk("R"), L = await mk("L");
   const ff = footFlip(R, L);           // 🔒 B-1과 **같은 술어**
@@ -426,7 +445,7 @@ function checkC(r, tag) {
 
 async function runC_M3() {
   if (!mutOK("M3_EAT_TURN")) { check(false, `C-M3. 🧪 변이(평가전이 턴을 먹음)${MUT_DEAD}`); return; }
-  const h = toHome(boot({ seed: SEEDS[0], muts: MUT.M3_EAT_TURN }), { pos: "wg", foot: "R" });
+  const h = await toHome(boot({ seed: SEEDS[0], muts: MUT.M3_EAT_TURN }), { pos: "wg", foot: "R" });
   await restUntilStage(h);
   const r = await playEval(h);
   /* 🔒 기준선 C-1·C-5와 **같은 술어**를 그대로 다시 겁니다 */
@@ -456,7 +475,7 @@ async function runD() {
   const recs = [];
   for (const seed of SEEDS) {
     const pos = { 11: "wg", 23: "mf", 37: "df" }[seed] || "wg";
-    const h = toHome(boot({ seed }), { pos, foot: "R" });
+    const h = await toHome(boot({ seed }), { pos, foot: "R" });
     await restUntilStage(h);
     const r = await playEval(h);
     recs.push({ seed, pos, r });
@@ -516,7 +535,7 @@ const NEED_TYPES = ["공격 전개", "중원 장악", "수비 조직"];   // �
  * ⚠️ 경기는 안 칩니다 — `stage-round`는 `playEvalStage`가 그 자리에서 적어요.
  *    (미니게임을 굴리지 않으니 판마다 1초도 안 걸립니다) */
 async function drawStageType(seed, pos, c, muts) {
-  const h = toHome(boot({ seed, muts }), { pos, foot: "R" });
+  const h = await toHome(boot({ seed, muts }), { pos, foot: "R" });
   const ok = await restUntilStage(h);
   if (!ok) { h.close(); return { name: "(대회 버튼이 안 열렸어요)", ok: false }; }
   h.press(h.D.querySelector(".go-game"), "🏆 대회 출전");
@@ -581,7 +600,7 @@ async function runF() {
     + (leaked.length ? `\n     🔴 넘기는 파일: ${leaked.join(", ")} — 그쪽 승부처가 조용히 갈아 끼워졌어요` : ""));
 
   /* ② 안 넘겼을 때 실제로 v1이 뜨는가 — 진짜 MatchSim을 부릅니다 */
-  const h = toHome(boot({ seed: SEEDS[0] }), { pos: "wg", foot: "R" });
+  const h = await toHome(boot({ seed: SEEDS[0] }), { pos: "wg", foot: "R" });
   const D = h.D;
   const MS = h.W.__get("MatchSim");
   await new Promise((res) => {

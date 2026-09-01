@@ -51,20 +51,17 @@
          (2026-08-31 · 85번 「순-B」 — 🏘️ 동네가 붙으면서 유스가 **고르는 화면에서
           제안받는 화면**으로 바뀌었고, 그래서 유스가 포지션 뒤로 갑니다). -->
     <section class="screen" id="screen-name">
-      <h2>✏️ 선수 등록</h2>
-      <p class="hint" id="name-hint">먼저 이름과 주발부터 정해요.<br/>어느 자리에서 뛸지는 다음 화면에서 고릅니다.</p>
+      <div class="step-head"><h2>✏️ 선수 등록</h2><span class="step-no" id="step-name"></span></div>
+      <p class="hint" id="name-hint">먼저 이름부터 정해요.<br/>주발과 자란 동네는 다음 화면에서 고릅니다.</p>
       <div class="name-box">
         <input id="input-name" type="text" maxlength="8" placeholder="이름 입력" />
         <button class="btn btn-ghost" id="btn-random-name">🎲 랜덤</button>
       </div>
-      <!-- 🦶 주발 — 포지션처럼 **고르는 것**이에요. 약발은 타고나고 경기에서 붙어요 -->
-      <div class="foot-pick">
-        <span class="foot-pick-label">🦶 주발</span>
-        <div class="foot-pick-btns">
-          <button type="button" class="foot-opt" data-foot="L">왼발</button>
-          <button type="button" class="foot-opt on" data-foot="R">오른발</button>
-        </div>
-      </div>
+      <!-- 🦶 주발은 **자기 화면으로 나갔습니다** (설계 93번 §3-2).
+           🔑 *결과판이 같아도, 그 결정이 「경기 판정에 직접 걸리는」 것이면 자기 화면을 가진다.*
+              ✏️ 이름·🔢 등번호·🗺️ 출신은 **기록**이고 🦶 주발은 **판정**이에요 —
+              판정 창 ±25%가 걸리는데 화면 지분이 작은 토글 두 개였습니다(원칙 ③의 거울).
+           ⚠️ 여기에 다시 붙이지 마세요. `#screen-foot`이 그 자리입니다. -->
       <!-- 🔓 **"🎲 능력치 다시 뽑기"가 ♾️ 무제한으로 돌아왔습니다** — 자리는 여기가 아니라
            🧬 조립대(screen-prospect)예요. (2026-08-30 · 74번 판정 ③-C)
 
@@ -89,6 +86,49 @@
               지우면 다음 사람이 `POOL`을 밴드로 푸는 근거를 잃습니다. -->
       <button class="btn btn-primary" id="btn-name-next">다음</button>
       <button class="btn btn-ghost" id="btn-back-name">← 타이틀로</button>
+    </section>
+
+    <!-- 🦶 주발 — **자기 화면**입니다 (설계 93번 §3).
+         🔑 *"이름·번호·출신은 **기록**이고 주발은 **판정**이다."* 판정 창 ±25% · 자리 ·
+            골도움 배수 셋에 걸리는데 이름 옆 작은 토글이었어요 — **효과가 가장 큰데
+            화면 지분이 가장 작은** 자리였습니다(원칙 ③의 거울).
+         🔴 **「다음」 버튼을 두지 마세요.** 발을 탭하는 게 곧 답이에요 — 붙이면 탭이
+            2회가 되고 첫 순간 카드가 그만큼 밀립니다. 되돌리기는 **뒤로**가 맡습니다.
+         🎬 발 그림·판정 창 미리보기는 `intro.js`가 그려요. 좌우는 winger-moment.js의
+            판정 줄과 **같은 모양**으로 씁니다 — 한쪽만 고치면 또 갈라집니다. -->
+    <section class="screen" id="screen-foot">
+      <div class="step-head"><h2>🦶 주발</h2><span class="step-no" id="step-foot"></span></div>
+      <p class="hint">어느 발로 축구를 시작할까요?<br/>탭하면 바로 다음으로 넘어가요.</p>
+      <div class="foot-pair" id="foot-pair" role="group" aria-label="주발 고르기"></div>
+      <p class="foot-cap">고른 쪽 발에만 ⚽ 공이 붙어요.</p>
+      <!-- ♿ 판정 창 ±%는 `W2Moment._t.K.FOOT_WIN`에서 읽어 채웁니다 — 숫자를 여기
+           베껴 적으면 상수를 바꾼 날 화면만 옛말을 해요. -->
+      <ul class="foot-eff" id="foot-eff"></ul>
+      <button class="btn btn-ghost" id="btn-back-foot">← 뒤로</button>
+    </section>
+
+    <!-- 🗺️ 동네 + 📖 스토리 — **한 화면**입니다 (설계 93번 §4-3).
+         🔴 스토리에 화면을 주지 마세요 — **읽기만 하는 화면은 개입 밀도 0**이에요.
+            시·도를 탭하면 **그 자리 아래** 3줄이 펼쳐지고 버튼 글자가 바뀝니다.
+         🔒 **지역은 산식에 한 톨도 안 닿습니다 — 텍스트만 바꿔요**(93번 §4-2).
+            *"고르는데 효과가 없다"*는 압박이 반드시 오는데, 지역은 **정체성 + 기록**이고
+            보상은 🏛️ 지역별 명예의 전당입니다.
+         🖐️ 🏙️ 광역시 8곳은 지도에서 점 하나 크기라 **폴리곤으로는 못 눌러요** —
+            지도에는 핀만 찍고 탭은 옆 목록(`#origin-cities`)이 받습니다. -->
+    <section class="screen" id="screen-origin">
+      <div class="step-head"><h2>🗺️ 어디서 자랐나요?</h2><span class="step-no" id="step-origin"></span></div>
+      <p class="hint">자란 곳은 <b>이야기와 기록</b>에 남아요 — 실력에는 안 닿아요.</p>
+      <div class="origin-wrap">
+        <div class="origin-map" id="origin-map"></div>
+        <div class="origin-cities" id="origin-cities" role="group" aria-label="특별시·광역시 고르기"></div>
+      </div>
+      <!-- ♿ 고른 순간 여기서만 내용이 바뀝니다 — 알림이 없으면 낭독 사용자에게는
+           아무 일도 안 일어난 화면이 돼요. -->
+      <div class="origin-story" id="origin-story" aria-live="polite"></div>
+      <div class="origin-bar">
+        <button class="btn btn-ghost" id="btn-back-origin">← 뒤로</button>
+        <button class="btn btn-primary" id="btn-origin-next" disabled>지역을 골라 주세요</button>
+      </div>
     </section>
 
     <!-- 🏟️ 입단 제안 — **고르는 건 그대로입니다.** 5곳이 전부 오고 순서도 그대로예요
@@ -421,6 +461,7 @@
   <!-- 🏘️ 동네 축구 · 🏟️ 입단 제안 — ⚽ 전용 파일이에요 (timing.js 같은 8종 공유 자리가 아닙니다).
        game.js의 최상위 const(PEER_REF·youthAutoP·show…)를 그대로 보므로 **game.js 뒤**여야 하고,
        WingerEngine·W2Moment는 실행 시점에만 보니 winger-moment.js 뒤에 둡니다. -->
+  <script src="intro.js"></script>
   <script src="town.js"></script>
   <!-- 🎬 순간 카드 경기 화면 — career.js의 runV2Match가 window.W2Scene을 봐요.
        engine.js 뒤, career.js 앞이어야 합니다. -->

@@ -809,7 +809,10 @@ function show(id) {
   if (window.WingerFever) WingerFever.tick();
 }
 
-const BACK_SAFE = ["screen-title", "screen-agency", "screen-position", "screen-prospect", "screen-name", "screen-hof", "screen-battle"];
+/* 🔙 되돌아가도 아무것도 다시 안 굴러가는 화면만 여기 옵니다.
+ * 🦶 주발·🗺️ 동네는 **고르기만** 하는 화면이라 안전해요 —
+ * 🏘️ 동네 순간 카드(`screen-town`)는 여전히 빠져 있습니다(뒤로 가기가 곧 재도전이 돼요). */
+const BACK_SAFE = ["screen-title", "screen-agency", "screen-position", "screen-prospect", "screen-name", "screen-foot", "screen-origin", "screen-hof", "screen-battle"];
 window.addEventListener("popstate", (e) => {
   const target = e.state && e.state.s;
   const cur = document.querySelector(".screen.active");
@@ -827,7 +830,9 @@ window.addEventListener("popstate", (e) => {
  * 뒤로 가기도 그 순서를 그대로 거슬러 올라가되, 🏘️ 동네만 건너뜁니다 —
  * 🔴 **되돌아가서 다시 굴리는 길이 곧 재도전 버튼**이라서요(설계 §5-3). */
 $("btn-back-first")?.addEventListener("click", () => show("screen-position"));
-$("btn-back-position")?.addEventListener("click", () => show("screen-name"));
+$("btn-back-position")?.addEventListener("click", () => show("screen-origin"));
+$("btn-back-origin")?.addEventListener("click", () => show("screen-foot"));
+$("btn-back-foot")?.addEventListener("click", () => show("screen-name"));
 $("btn-back-name")?.addEventListener("click", () => show("screen-title"));
 const goHome = () => { if (S) save(); location.reload(); };
 $("btn-home-main")?.addEventListener("click", goHome);
@@ -1328,6 +1333,7 @@ function initTitle() {
     if (window.WingerTown) WingerTown.reset();
     chosenOffer = null;
     show("screen-name");
+    stampStep("screen-name");
   };
   if (window.Match && Match.enabled()) {
     Match.count("winger2").then((n) => {
@@ -1462,6 +1468,9 @@ function renderMarkets() {
  *    **📍 자리 선택이 30초 안에 화면에서 닫힙니다**(고른 자리로 바로 뜁니다 · 원칙 ③). */
 let chosenName = "";
 let chosenFoot = "R";
+/* 🗺️ 자란 곳. 🔒 **산식에 안 닿습니다** — 📖 스토리와 🏛️ 지역 기록만 바꿔요.
+ * 빈 값이면 🌍 미상으로 삽니다(지도를 안 거치고 온 옛 경로도 그대로 돌아요). */
+let chosenOrigin = "";
 let chosenOffer = null;      // 🏟️ 그 유스가 내민 제안 { tier, mul, star, label, word }
 let chosenCard = null;
 let chosenTalents = null;
@@ -1499,14 +1508,34 @@ document.querySelectorAll("#position-list .card").forEach((btn) => {
   });
 });
 
-/* 🦶 주발은 **고르는 것**이에요 — 포지션처럼요.
- * 약발 숫자는 여전히 타고나요(경기에서 붙습니다). 고를 수 있는 건 어느 발잡이냐뿐이에요. */
-document.querySelectorAll("#screen-name .foot-opt").forEach((b) => {
-  b.addEventListener("click", () => {
-    chosenFoot = b.dataset.foot;
-    document.querySelectorAll("#screen-name .foot-opt").forEach((x) => x.classList.toggle("on", x === b));
-  });
-});
+/* 🦶 주발 · 🗺️ 동네 — **각자 자기 화면**입니다 (설계 93번 §3·§4).
+ *
+ * 🔑 game.js가 아는 것은 `openFoot`·`openOrigin` 둘과 `chosenFoot`·`chosenOrigin`
+ *    두 칸뿐이에요. 화면 안쪽(발 그림 · 지도 SVG · 📖 스토리)은 전부 `intro.js` 몫입니다.
+ *    ⚠️ **곧 재배치됩니다** — 🏫 학교 3단계가 들어오면 🎯 자리가 카드 뒤로 빠져요.
+ *       그때 고칠 곳이 여기 세 줄이면 됩니다.
+ *
+ * 🔢 차례 표시(`1 / 4`)는 `WingerIntro.STEPS`가 정합니다 — 순서가 바뀌면 거기 한 줄만요. */
+function stampStep(id) {
+  const el = $("step-" + id.replace("screen-", ""));
+  if (el && window.WingerIntro) el.textContent = WingerIntro.step(id);
+}
+function goFoot() {
+  show("screen-foot");
+  stampStep("screen-foot");
+  if (!window.WingerIntro) { goOrigin(); return; }   // 스크립트가 안 왔으면 조용히 넘어가요
+  WingerIntro.openFoot(chosenFoot, (f) => { chosenFoot = f; goOrigin(); });
+}
+function goOrigin() {
+  show("screen-origin");
+  stampStep("screen-origin");
+  if (!window.WingerIntro) { goPosition(); return; }
+  WingerIntro.openOrigin(chosenOrigin, (id) => { chosenOrigin = id; goPosition(); });
+}
+function goPosition() {
+  show("screen-position");
+  stampStep("screen-position");
+}
 
 /* 🎲 랜덤 이름 — 유스를 아직 안 골랐으니 지역 편향 없이 뽑아요(15%가 유럽 이름).
  * 유스에 맞춘 이름은 3택 카드가 하던 일인데, 카드가 사라져 그 자리가 없어졌습니다. */
@@ -1518,7 +1547,7 @@ $("btn-name-next").addEventListener("click", () => {
   chosenName = $("input-name").value.trim() || randomPlayerName(null);
   $("input-name").value = chosenName;
   $("position-hint").textContent = `${chosenName}, 어떤 자리에서 뛸까요? 동네 공터에 친구들이 모였어요.`;
-  show("screen-position");
+  goFoot();
 });
 
 /* 🚀 입단 — **조립대의 [이 선수로 시작]**이 부릅니다 (예전 이름 화면의 「입단하기」 자리) */
@@ -1537,6 +1566,9 @@ function startCareer() {
   // 🌱 나이·성장타입·특능·결함·리롤 사용 수를 심어요 (효과는 특능 엔진에서 §11-7)
   WingerProspect.applyCard(S, chosenCard, usedRerolls);
   S.foot.main = chosenFoot;          // 🦶 고른 주발 (약발 숫자는 타고난 그대로예요)
+  /* 🗺️ 자란 곳. ⚠️ **마이그레이션은 안 합니다** — 옛 세이브는 읽는 쪽에서 🌍 미상이에요.
+   * 🔒 여기서 갈라지는 것은 📖 텍스트와 🏛️ 지역 기록뿐입니다. */
+  S.origin = chosenOrigin || "";
   /* 🏘️ 동네 점수(0~6)와 📣 그 제안이 준 주목 배수를 심어요.
    * ⚠️ **마이그레이션은 안 합니다** — 옛 세이브는 읽는 쪽 기본값(중립 3 · ×1)으로 삽니다. */
   const off = chosenOffer || (window.WingerTown ? WingerTown.offerFor(chosenMarket.id) : null);
