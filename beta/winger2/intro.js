@@ -3,16 +3,17 @@
  *   WingerIntro.openFoot(cur, done)     🦶 발 두 짝을 그리고, 탭하면 done("L"|"R")
  *   WingerIntro.openOrigin(cur, done)   🗺️ 17개 시·도 지도. [다음]에서 done(originId)
  *   WingerIntro.nameOf(id) / lineOf(id) 🗂️ 세이브·기록이 읽는 창구 (없으면 "🌍 미상")
- *   WingerIntro.step(screenId)          🔢 "2 / 4" — 화면 순서가 바뀌면 STEPS 한 줄만 고치세요
+ *   WingerIntro.step(screenId)          🔢 "2 / 3" — 화면 순서가 바뀌면 STEPS 한 줄만 고치세요
  *
  * ── 왜 전용 파일인가 ─────────────────────────────────────────
  * `timing.js`·`base.css`·`match.js`는 **8개 게임이 전부 내려받습니다.** 축구 하나만 쓰는
  * 화면을 거기 넣으면 안 쓰는 게임까지 무게를 집니다 — 🏘️ `town.js`와 같은 이유예요.
  *
- * ⚠️ **이 두 화면은 곧 재배치됩니다** (93번 §5 · 🏫 학교 3단계).
- *    초등부에는 포지션이 없어져서 🎯 자리 화면이 카드 뒤로 빠지고, 그때 흐름이
- *    `이름 → 🦶 주발 → 🗺️ 동네 → 🏫 초등부`가 돼요. **그래서 주변과 안 얽히게 짰습니다** —
- *    game.js가 아는 것은 `openFoot`·`openOrigin` 둘과 `S.origin` 한 칸뿐입니다.
+ * ✅ **재배치가 끝났습니다** (93번 §5 · 🏫 학교 3단계).
+ *    흐름은 `이름 → 🦶 주발 → 🗺️ 동네 → 🏫 초등부 → 🎯 자리`예요 — 초등부에는 포지션이
+ *    없어서 🎯 자리 화면이 **첫 순간 카드 뒤**로 갔습니다. **주변과 안 얽히게 짜 둔 덕에**
+ *    game.js에서 고친 건 `goOrigin`의 마지막 한 줄뿐이었어요 —
+ *    이 파일이 아는 것은 여전히 `openFoot`·`openOrigin` 둘과 `S.origin` 한 칸뿐입니다.
  *
  * ══════════════════════════════════════════════════════════════════════
  * 🔒 **지역은 산식에 한 톨도 안 닿습니다 — 텍스트만 바꿉니다** (설계 93번 §4-2)
@@ -28,9 +29,11 @@ window.WingerIntro = (() => {
   "use strict";
   const $ = (id) => document.getElementById(id);
 
-  /* 🔢 생성 화면의 차례. **화면 순서가 바뀌면 여기 한 줄만** 고치면 됩니다.
-   * ⚠️ 🎯 자리는 학교 아크가 들어오면 이 목록에서 빠져 카드 뒤로 갑니다(93번 §2). */
-  const STEPS = ["screen-name", "screen-foot", "screen-origin", "screen-position"];
+  /* 🔢 **첫 순간 카드 「앞」의 차례**입니다. 화면 순서가 바뀌면 여기 한 줄만 고치면 돼요.
+   * 🔑 **🎯 자리가 빠졌습니다** — 학교 아크가 들어오면서 🏫 초등부 **뒤**로 갔거든요(93번 §5).
+   *    이 목록이 재는 것은 「화면 수」가 아니라 **「첫 카드 앞에 놓인 결정 수」**라
+   *    카드 뒤의 결정은 여기 안 셉니다. 🔒 **3을 넘기지 마세요** (93번 §2-2). */
+  const STEPS = ["screen-name", "screen-foot", "screen-origin"];
   const step = (id) => {
     const i = STEPS.indexOf(id);
     return i < 0 ? "" : `${i + 1} / ${STEPS.length}`;

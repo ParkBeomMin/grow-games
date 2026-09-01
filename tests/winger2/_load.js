@@ -304,6 +304,35 @@ window.__errs=[];window.addEventListener("error",function(e){window.__errs.push(
   w.Ads = { display() {}, init() {} };
   w.Stats = { log() {} };
   w.__applied = applied;
+
+  /* ═══════════════════════════════════════════════════════════════════
+   * 💥 **`W.close()` 뒤에 늦게 도는 콜백이 검사를 통째로 죽이는 자리** — 여기서 한 번에 막습니다
+   * ═══════════════════════════════════════════════════════════════════
+   * jsdom은 `close()` 뒤에 창 안의 `document`를 **`undefined`로 만듭니다.** 그런데
+   * `bootPage`가 심어 둔 `fetch`는 **즉시 거절**이라, 그 `.catch`가 창을 닫은 **뒤에**
+   * 돌면 `cloud.js`의 `syncPill`이 `document.body`를 읽다 `TypeError`로 던져요
+   * (`syncPill → syncEnd → index.html:234`). 그 던짐은 `uncaughtException`이라
+   * `die()`가 받아 **종료 코드 2(💥 안 돌았음)**가 됩니다 — 초록불도 빨간불도 아니에요.
+   *
+   * 🔴 **창마다 따로 피하지 않습니다.** 예전에는 검사가 각자
+   *    `W.Cloud.touch = () => {}` · `W.fetch = () => new Promise(() => {})`로 무력화했는데,
+   *    그러면 **그 줄을 안 적은 검사가 그대로 죽습니다**(engineer도 실측 스크립트에서
+   *    같은 자리를 만나 「창을 안 닫는 것」으로 피했어요 — 96번 §5-4).
+   *
+   * 🔧 두 겹으로 막아요:
+   *   ① ☁️ 클라우드 전송을 먼저 끕니다 — 새로 시작되는 왕복이 없어집니다
+   *   ② **진짜 close는 한 틱 뒤에** 합니다. 이미 예약된 마이크로태스크(`.catch` 등)는
+   *      `setImmediate`보다 **먼저** 도니까, 그때 `document`가 아직 살아 있어요.
+   * 🔒 세이브 내용에도, 화면에도 손대지 않습니다 — **닫는 순서만** 바꿉니다. */
+  const rawClose = w.close.bind(w);
+  let closed = false;
+  w.close = () => {
+    if (closed) return;
+    closed = true;
+    try { if (w.Cloud) { w.Cloud.touch = () => {}; w.Cloud.pushAll = () => {}; } } catch (e) { /* 이미 죽은 창 */ }
+    try { w.fetch = () => new Promise(() => {}); } catch (e) { /* 이미 죽은 창 */ }
+    setImmediate(() => { try { rawClose(); } catch (e) { /* 이미 닫힘 */ } });
+  };
   return w;
 }
 /* 변이 정규식이 그 파일에 걸리는지 미리 확인 — 죽지 않고 목록을 돌려줍니다. */
@@ -356,6 +385,89 @@ function passTown(W, press, restore) {
   return n;
 }
 
+/* ═══════════════════════════════════════════════════════════════════════
+ * 🏫 **초·중·고 학교 아크를 지나가는 드라이버** (2026-09-01 · 93번 §5 · 96번)
+ *
+ * 흐름이 또 바뀌었습니다 —
+ *   `타이틀 → ✏️ 이름 → 🦶 주발 → 🗺️ 동네 → 🏫 초등부(2) → 🎯 자리 → 🏫 중등부(3) → 🏫 고등부(3) → 🏟️ 제안`
+ *
+ * 🔴 **`passTown`(옛 3장 드라이버)은 그대로 둡니다.** 그건 🎯 자리 카드를 곧바로 눌러
+ *    🦶 주발·🗺️ 동네·🏫 초등부를 **건너뛰고** 중·고등 6장만 지나는 길이라, 그 위에 선
+ *    검사 여섯(bench·grade·worldcup·youth-*)의 기준선이 안 흔들려요.
+ *    🔑 **아크 전체(8장)를 재려면 반드시 `passArc`를 쓰세요** — `passTown`으로는
+ *    초등 2장이 통째로 안 들어옵니다(그게 96번 §5-2 T-5의 「6장」이었어요).
+ *
+ * ⏳ **🦶 주발은 320ms 뒤에 넘어갑니다** — 그래서 이 드라이버들은 **async**예요.
+ *    ⚠️ 320ms를 박지 않습니다. **「화면이 바뀔 때까지」**를 기다려요(♿ reduce면 즉시입니다). */
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/* 🦶 발을 누르고 화면이 넘어갈 때까지 기다립니다. */
+async function tapFoot(W, press, foot) {
+  const D = W.document;
+  const cur = () => (D.querySelector(".screen.active") || {}).id;
+  press(D.querySelector(`#screen-foot .foot-card[data-foot="${foot === "L" ? "L" : "R"}"]`),
+    `🦶 ${foot === "L" ? "왼발" : "오른발"}`);
+  for (let i = 0; i < 400 && cur() === "screen-foot"; i++) await wait(3);
+  if (cur() === "screen-foot")
+    throw new Error("🦶 발을 눌렀는데 화면이 안 넘어가요 — openFoot의 done 배선을 보세요");
+}
+/* 🗺️ 지역 하나를 골라 [다음]. 🏞️ 도는 지도 폴리곤 · 🏙️ 광역시는 옆 목록입니다. */
+function pickOrigin(W, press, id) {
+  const D = W.document;
+  const el = D.querySelector(`#origin-map .om-do[data-id="${id}"]`)
+    || D.querySelector(`#origin-cities .om-city[data-id="${id}"]`);
+  press(el, `🗺️ ${id}`);
+  press(D.getElementById("btn-origin-next"), "🏫 초등부로");
+}
+/* 🏫 **지금 서 있는 그 단계**의 카드를 끝까지 누릅니다. 단계가 끝나면 화면이 바뀌므로
+ * 저절로 멈춰요. 돌려주는 값: 지나간 카드 수와 카드마다 읽은 `data-stage`. */
+function passStage(W, press, max) {
+  const D = W.document;
+  const seen = [];
+  for (let g = 0; g < (max || 12); g++) {
+    const cur = D.querySelector(".screen.active");
+    if (!cur || cur.id !== "screen-town") break;
+    const b = D.getElementById("btn-town-next");
+    if (!b || b.disabled || b.classList.contains("hidden")) break;
+    seen.push(cur.dataset.stage || "?");
+    press(b, "🏫 다음");
+  }
+  return seen;
+}
+/* 🏫 **아크 전체**를 지나 🏟️ 제안 화면까지. 게임 입구(타이틀)에서 출발합니다.
+ *
+ *   돌려주는 것: { stages, cards, screens }
+ *     stages   카드마다 읽은 `data-stage` — 계약은 `e e m m m h h h`
+ *     screens  🏫 첫 카드 **앞**에 선 화면들 (결정 수를 세는 자리)
+ *
+ * ⚠️ `townAuto`는 **🗺️ 지역 [다음]을 누르기 전**에 켜세요 — 초등 첫 카드는
+ *    `openStage`가 불리는 순간 바로 열립니다. */
+async function passArc(W, press, opt) {
+  const o = opt || {};
+  const D = W.document;
+  const cur = () => (D.querySelector(".screen.active") || {}).id;
+  const screens = [];
+  const mark = () => { const id = cur(); if (screens[screens.length - 1] !== id) screens.push(id); };
+  mark();
+  press(D.getElementById("btn-new"), "btn-new");
+  mark();
+  press(D.getElementById("btn-name-next"), "btn-name-next");
+  mark();
+  await tapFoot(W, press, o.foot || "R");
+  mark();
+  const back = o.auto === false ? null : townAuto(W);
+  pickOrigin(W, press, o.origin || "seoul");
+  mark();
+  const stages = passStage(W, press);                       // 🏫 초등부
+  if (cur() === "screen-position")
+    press(D.querySelector(`#position-list .card[data-pos="${o.pos || "wg"}"]`), `🎯 ${o.pos || "wg"}`);
+  stages.push(...passStage(W, press));                      // 🏫 중등부
+  stages.push(...passStage(W, press));                      // 🏫 고등부
+  if (back) back();
+  return { stages, cards: stages.length, screens };
+}
+
 module.exports = { load, mutsOK, xiOf, xiAll, statsOf, play, spreadFor, SRC, ENGINE,
   bootPage, pageMutsOK, PAGE_DIR, townAuto, passTown,
+  wait, tapFoot, pickOrigin, passStage, passArc,
   loadMoment, momentMutsOK, MSRC, MOMENT };

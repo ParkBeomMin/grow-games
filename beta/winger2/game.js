@@ -1427,8 +1427,13 @@ function renderMarkets() {
   const starBar = (v, vals) => { const lo = Math.min(...vals), hi = Math.max(...vals); const n = hi === lo ? 3 : Math.min(5, Math.max(1, 1 + Math.round(((v - lo) / (hi - lo)) * 4))); return "★".repeat(n) + "☆".repeat(5 - n); };
   const GVALS = MARKETS.map((x) => x.growth), DVALS = MARKETS.map((x) => x.debut);
   const hint = $("agency-hint");
-  if (hint && window.WingerTown && WingerTown.played()) {
-    hint.innerHTML = `동네에서 세 판, 스카우트가 지켜봤어요 — <b>${WingerTown.score()}점</b>.`
+  /* 📏 **편차를 숫자로 적습니다** (원칙 ③ — 효과가 있으면 손잡이도 보여야 해요).
+   * 🔑 등급을 정하는 것은 점수가 아니라 `d = 점수 − 뛴 카드 수`입니다.
+   *    점수만 적으면 *"8점인데 왜 보통이지"*가 되고, 그게 곧 밴드를 난이도로 오해하는 자리예요. */
+  if (hint && window.WingerTown && WingerTown.cards() > 0) {
+    const n = WingerTown.cards(), d = WingerTown.deviation();
+    hint.innerHTML = `초·중·고 ${n}판, 스카우트가 지켜봤어요 — <b>${WingerTown.score()}점</b>`
+      + ` <span class="agency-dev">(기준 ${n}점 · 편차 ${d > 0 ? "+" : ""}${d})</span>`
       + `<br/>유스에 따라 성장 환경과 프로 진출 난이도가 달라져요.`;
   }
   for (const m of MARKETS) {
@@ -1459,13 +1464,22 @@ function renderMarkets() {
   }
 }
 
-/* 📍 포지션을 고르면 **🏘️ 동네**로 갑니다 → 🏟️ 입단 제안 → 🧬 조립대 (85번 「순-B」).
- * 🧒 이름·🦶 주발은 **맨 앞 화면**에서 이미 정했어요 — 이름이 붙은 몸을 굴려야
- * *"내 선수의 몸"*이 됩니다. 조립대는 그 이름을 머리글에 그대로 답니다.
+/* 🖼️ 생성 흐름 — **🎯 자리가 카드 「사이」로 들어갔습니다** (설계 93번 §5 · 옛 85번 「순-B」를 대체).
  *
- * 🔑 **왜 동네가 포지션 뒤인가** — `MINI[kind][pos]`가 `pos`를 요구합니다(engine.js).
- *    동네를 맨 앞에 두면 미니게임을 배정할 수가 없어요. 덕분에 부수효과가 하나 붙습니다:
- *    **📍 자리 선택이 30초 안에 화면에서 닫힙니다**(고른 자리로 바로 뜁니다 · 원칙 ③). */
+ *   ✏️ 이름 → 🦶 주발 → 🗺️ 동네 → 🏫 초등부(2장) → 🎯 자리
+ *                     → 🏫 중등부(3장) → 🏫 고등부(3장) → 🏟️ 제안 → 🧬 조립대
+ *
+ * 🔑 **왜 🎯 자리가 초등부 「뒤」인가** — *"어릴 땐 다 같이 공만 쫓아다녔어요."*
+ *    그리고 이게 **첫 순간 카드를 한 화면 앞당깁니다**(자리 화면이 카드 뒤로 빠져서요).
+ *    새 기준은 「첫 순간 카드 앞의 결정이 3을 안 넘는다」 — ✏️ 이름 · 🦶 주발 · 🗺️ 동네 = **3**.
+ *
+ * 🔑 **그런데 `MINI[kind][pos]`는 여전히 `pos`를 요구합니다**(engine.js · 🔒 안 고칩니다).
+ *    초등부는 `town.js`가 `mf` 칸(각 종류의 대표 하나 = 3종)을 읽어 넘어갑니다 —
+ *    「초등은 미드필더」가 아니라 **`cutin`이 아직 안 열렸다**는 뜻이에요.
+ *    학교 아크의 몸은 전원 `evenStats()`라 포지션이 판정값을 안 바꿉니다.
+ *
+ * 🧒 이름·🦶 주발은 **맨 앞 화면**에서 이미 정했어요 — 이름이 붙은 몸을 굴려야
+ * *"내 선수의 몸"*이 됩니다. 조립대는 그 이름을 머리글에 그대로 답니다. */
 let chosenName = "";
 let chosenFoot = "R";
 /* 🗺️ 자란 곳. 🔒 **산식에 안 닿습니다** — 📖 스토리와 🏛️ 지역 기록만 바꿔요.
@@ -1484,27 +1498,69 @@ function openBench() {
       usedRerolls = rerolls;
       startCareer();
     },
-    () => show("screen-agency"));
+    /* 🔴 `show("screen-agency")`를 직접 부르지 않습니다 — 그러면 「← 자리 다시 고르기」를
+     * 감추는 판단(위 `showOffers`)을 건너뛰어 **되돌리기 뒷문이 조립대 쪽에** 생겨요. */
+    showOffers);
 }
 
-/* 🏟️ 제안 화면으로. 동네를 이미 굴렸다면 **다시 굴리지 않습니다.** */
+/* 🏟️ 제안 화면으로.
+ *
+ * 🔴 **「← 자리 다시 고르기」를 🏫 중등부 뒤에는 감춥니다** (designer 판정 · 96번 §8 ②).
+ *    🎯 자리는 **「출력」이 아니라 「굴림에 들어간 입력」**입니다 —
+ *    `MINI[kind][pos]`(어느 미니게임이 뜨나)와 `blendOf`(조작 폭)가 그 값으로 이미 굴렀어요.
+ *    🔑 **출력만 잠그고 입력을 열어 두면, 같은 판을 다시 굴리지 않고도 판을 바꿀 수 있습니다** —
+ *    *"차단이 쉬우니 df로 뛰고 커리어는 fw로"*가 **탭 두 번**이면 됩니다.
+ *    **재도전보다 나빠요.**
+ *
+ * 🔒 **버튼을 지우지는 마세요** — 📨 조기 제안(①-C)의 「되돌리기」가 그 자리를 씁니다.
+ *    그리고 `disabled`가 아니라 **감춥니다**: 못 누르는 버튼이 서 있으면
+ *    *"왜 안 눌리지"*가 되는데, 여기서 되돌아갈 길은 정말로 없어요.
+ *
+ * 🔑 새 조작적 정의 — **"뛴 뒤에는 「뛸 때 쓴 값」을 못 바꿉니다.
+ *    굴림을 막는 것만으로는 부족합니다."** */
 function showOffers() {
   renderMarkets();
+  const back = $("btn-back-first");
+  if (back) back.classList.toggle("hidden", !!(window.WingerTown && WingerTown.playedStage("m")));
   show("screen-agency");
 }
 
-/* 📍 자리를 고르면 🏘️ 동네로 갑니다.
- * 🔴 **동네는 한 번만 굴러요 — 이건 재도전 경로가 아닙니다.** 자리를 다시 고르러
- *    돌아왔다 나가도 점수는 그대로입니다(`WingerTown.played()`). 여기에 다시 굴리는
- *    길을 열면 그 순간 **동네가 「최고가 나올 때까지 돌리는 화면」**이 되고,
- *    설계가 금지한 재도전 버튼을 뒷문으로 만드는 셈이에요. */
+/* 🏫 **학교 대항전 한 단계**를 엽니다 — 끝나면 `after()`로 갑니다 (설계 93번 §5).
+ *
+ *   🗺️ 동네 → 🏫 초등부(2) → 🎯 자리 → 🏫 중등부(3) → 🏫 고등부(3) → 🏟️ 제안
+ *
+ * 🔴 **한 번 구른 단계는 다시 안 굴러요 — 이건 재도전 경로가 아닙니다.** 여기에 다시
+ *    굴리는 길을 열면 그 순간 **학교가 「최고가 나올 때까지 돌리는 화면」**이 되고,
+ *    설계가 금지한 재도전 버튼을 뒷문으로 만드는 셈이에요.
+ *
+ * 🔑 **아래 `playedStage` 한 줄이 그 「유일한」 가드입니다.** 예전엔 가드가 셋이었어요
+ *    (여기 · `town.js`의 `openStage` · 자리 핸들러의 `played()`). 🔴 **겹치면 하나를 빼도
+ *    증상이 0장**이라, 「재도전 뒷문」을 지키는 검사가 **통째로 아무것도 못 지킵니다**
+ *    (inspector ⑤ — 변이가 안 잡혀서 드러났습니다). 나머지 둘을 지웠어요.
+ * 🔒 **가드를 다시 늘리지 마세요.** 새 호출자가 생기면 이 함수를 지나게 하세요. */
+function goSchool(id, after) {
+  if (!window.WingerTown) { after(); return; }   // 스크립트가 안 왔으면 조용히 넘어가요
+  if (WingerTown.playedStage(id)) { after(); return; }
+  show("screen-town");
+  WingerTown.openStage(id, { pos: chosenPos, foot: chosenFoot, origin: chosenOrigin }, after);
+}
+/* 🔴 초등부에는 `chosenPos`가 아직 없습니다 — **그게 맞아요.**
+ *    *"어릴 땐 다 같이 공만 쫓아다녔어요."* town.js가 미니게임 대표 3종으로 돕니다.
+ *    🔴 그리고 **초등 결과가 🎯 자리를 「추천」하면 안 됩니다** (70번 §8 (a) —
+ *       *"조작 실력은 선수의 것이 아니다"*). 점수는 자리 화면에 한 글자도 안 넘깁니다. */
+function goElementary() { goSchool("e", goPosition); }
+function goMiddle() { goSchool("m", goHigh); }
+function goHigh() { goSchool("h", showOffers); }
+
+/* 📍 자리를 고르면 🏫 중등부로 갑니다.
+ * ⚠️ 예전에 여기 있던 `if (WingerTown.played()) { showOffers(); return; }`는
+ *    **한 번도 안 걸리는 죽은 줄**이었습니다 — `goMiddle` → `goHigh`가 각자
+ *    `playedStage`로 넘어가 어차피 제안 화면에 서거든요. 지웠습니다(inspector ⑤). */
 document.querySelectorAll("#position-list .card").forEach((btn) => {
   btn.addEventListener("click", () => {
     chosenPos = btn.dataset.pos;
     if (!window.WingerTown) { showOffers(); return; }   // 스크립트가 안 왔으면 조용히 넘어가요
-    if (WingerTown.played()) { showOffers(); return; }
-    show("screen-town");
-    WingerTown.open({ pos: chosenPos, foot: chosenFoot }, showOffers);
+    goMiddle();
   });
 });
 
@@ -1512,10 +1568,10 @@ document.querySelectorAll("#position-list .card").forEach((btn) => {
  *
  * 🔑 game.js가 아는 것은 `openFoot`·`openOrigin` 둘과 `chosenFoot`·`chosenOrigin`
  *    두 칸뿐이에요. 화면 안쪽(발 그림 · 지도 SVG · 📖 스토리)은 전부 `intro.js` 몫입니다.
- *    ⚠️ **곧 재배치됩니다** — 🏫 학교 3단계가 들어오면 🎯 자리가 카드 뒤로 빠져요.
- *       그때 고칠 곳이 여기 세 줄이면 됩니다.
+ *    ✅ 재배치가 끝났습니다 — 🗺️ 동네 다음이 **🏫 초등부**이고 🎯 자리는 카드 뒤예요.
  *
- * 🔢 차례 표시(`1 / 4`)는 `WingerIntro.STEPS`가 정합니다 — 순서가 바뀌면 거기 한 줄만요. */
+ * 🔢 차례 표시(`1 / 3`)는 `WingerIntro.STEPS`가 정합니다 — 순서가 바뀌면 거기 한 줄만요.
+ *    🔑 **🎯 자리는 그 목록에 없습니다** — 첫 순간 카드 「뒤」라 「시작 전 차례」가 아니에요. */
 function stampStep(id) {
   const el = $("step-" + id.replace("screen-", ""));
   if (el && window.WingerIntro) el.textContent = WingerIntro.step(id);
@@ -1529,8 +1585,8 @@ function goFoot() {
 function goOrigin() {
   show("screen-origin");
   stampStep("screen-origin");
-  if (!window.WingerIntro) { goPosition(); return; }
-  WingerIntro.openOrigin(chosenOrigin, (id) => { chosenOrigin = id; goPosition(); });
+  if (!window.WingerIntro) { goElementary(); return; }
+  WingerIntro.openOrigin(chosenOrigin, (id) => { chosenOrigin = id; goElementary(); });
 }
 function goPosition() {
   show("screen-position");
@@ -1546,7 +1602,9 @@ $("btn-random-name").addEventListener("click", () => {
 $("btn-name-next").addEventListener("click", () => {
   chosenName = $("input-name").value.trim() || randomPlayerName(null);
   $("input-name").value = chosenName;
-  $("position-hint").textContent = `${chosenName}, 어떤 자리에서 뛸까요? 동네 공터에 친구들이 모였어요.`;
+  /* 🔴 **초등부 결과를 여기에 넣지 마세요.** 점수도, 잘한 종류도, 추천도 안 됩니다
+   *    (70번 §8 (a) — *"조작 실력은 선수의 것이 아니다"*). 순서만 바뀐 것이지 추천은 없어요. */
+  $("position-hint").textContent = `${chosenName}, 중학교에 갑니다. 이제 어느 자리에서 뛸까요?`;
   goFoot();
 });
 
@@ -1569,13 +1627,19 @@ function startCareer() {
   /* 🗺️ 자란 곳. ⚠️ **마이그레이션은 안 합니다** — 옛 세이브는 읽는 쪽에서 🌍 미상이에요.
    * 🔒 여기서 갈라지는 것은 📖 텍스트와 🏛️ 지역 기록뿐입니다. */
   S.origin = chosenOrigin || "";
-  /* 🏘️ 동네 점수(0~6)와 📣 그 제안이 준 주목 배수를 심어요.
-   * ⚠️ **마이그레이션은 안 합니다** — 옛 세이브는 읽는 쪽 기본값(중립 3 · ×1)으로 삽니다. */
+  /* 🏫 학교 점수와 **뛴 카드 수**, 📣 그 제안이 준 주목 배수를 심어요.
+   * 🔑 **두 칸은 반드시 짝으로 갑니다** — 등급을 정하는 건 점수가 아니라
+   *    `d = townScore − schoolN`이라서요. 점수만 남기면 카드 수가 바뀐 날
+   *    **옛 세이브가 조용히 내려갑니다**(3 − 8 = −5 → ×0.90).
+   * ⚠️ **마이그레이션은 안 합니다** — 옛 세이브는 읽는 쪽 기본값(3점 · 3장 → d = 0 · ×1)으로 삽니다. */
   const off = chosenOffer || (window.WingerTown ? WingerTown.offerFor(chosenMarket.id) : null);
   S.townScore = window.WingerTown ? WingerTown.score() : 3;
+  S.schoolN = window.WingerTown ? WingerTown.cards() : 3;
   S.spotMul = (off && off.mul) || 1;
+  const dev = window.WingerTown ? WingerTown.deviationOf(S) : 0;
   addLog(`⚽ ${chosenMarket.name} ${off ? off.label : "입단"}! ${name}의 축구 인생이 시작됐어요.`
-    + ` (🏘️ 동네 ${window.WingerTown ? WingerTown.scoreOf(S) : 3}점 · 📣 주목 ×${(S.spotMul).toFixed(2)})`);
+    + ` (🏫 학교 ${S.townScore}점/${S.schoolN}판 · 편차 ${dev > 0 ? "+" : ""}${dev}`
+    + ` · 📣 주목 ×${(S.spotMul).toFixed(2)})`);
   save();
   renderMain();
   show("screen-main");

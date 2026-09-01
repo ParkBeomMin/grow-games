@@ -137,7 +137,7 @@
             데뷔가 오히려 쉬워지고 잘한 사람이 험한 🇮🇹를 받습니다. **축이 뒤집혀요.** -->
     <section class="screen" id="screen-agency">
       <h2>🏟️ 입단 제안</h2>
-      <p class="hint" id="agency-hint">동네에서 세 판, 스카우트가 지켜봤어요.<br/>어디서 축구를 시작할까요? 유스에 따라 성장 환경과 프로 진출 난이도가 달라져요.</p>
+      <p class="hint" id="agency-hint">초·중·고 여덟 판, 스카우트가 지켜봤어요.<br/>어디서 축구를 시작할까요? 유스에 따라 성장 환경과 프로 진출 난이도가 달라져요.</p>
       <div class="card-grid" id="agency-list"></div>
       <button class="btn btn-ghost" id="btn-back-first">← 자리 다시 고르기</button>
     </section>
@@ -171,19 +171,27 @@
       <button class="btn btn-ghost" id="btn-back-position">← 뒤로</button>
     </section>
 
-    <!-- 🏘️ 동네 축구 — **순간 카드 3장 · 약 30초.** v2의 정체(내가 개입하는 순간)를
-         첫 화면 셋 안으로 당기는 자리예요 (85번 · 첫 순간 카드 2~3분 → 30~40초).
+    <!-- 🏫 학교 대항전 — **한 화면이 세 번 열립니다** (초등 2장 · 중등 3장 · 고등 3장 = 8장).
+         🔒 **`screen-town` id를 절대 바꾸지 마세요** — `BACK_SAFE`(game.js)와 검사 18종이
+            이 문자열을 봅니다. 단계는 `data-stage`(e/m/h)로 갈라요.
 
          🔴 **여기에 건너뛰기·난이도 선택·재도전 버튼을 붙이지 마세요.**
-            결정 탭이 4(🪪 신원·📍 위치·🏟️ 제안·🧬 조립대)를 넘으면 검산이 무너지고,
-            무엇보다 **그건 v2의 정체를 건너뛰는 버튼**입니다.
-            ⏱️ 실기기에서 길어지면 **길이를 줄이지 버튼을 붙이지 마세요.**
+            기준이 바뀌었습니다 — 옛 기준은 *"생성 화면의 결정 탭이 4를 안 넘는다"*였고,
+            새 기준은 **「첫 순간 카드 앞의 결정이 3을 안 넘는다」**(✏️ 이름·🦶 주발·🗺️ 동네)예요.
+            카드 사이에 놓인 🎯 자리는 첫 카드를 1초도 안 밉니다.
+            ⏱️ 실기기에서 아크가 길어지면 **카드 수를 줄이지 화면을 줄이지 마세요.**
 
-         🎬 연출(골목·공터 배경 · 연습복)은 director 몫이에요 — 클래스만 남깁니다:
-            `.town-prog`/`.town-dot`(now·hit·mid·bad) · `#town-card`의 `.w2m-town`
-            · `.town-res`(good·mid·bad) · `.town-line` -->
-    <section class="screen" id="screen-town">
-      <h2>🏘️ 동네 축구</h2>
+         🎬 연출은 director 몫이에요 — **단계마다 무대가 커지는 게 보여야 합니다**
+            (공터 → 학교 운동장 → 관중석). 🔑 능력치가 안 자라므로 **여기가 성장의
+            유일한 시각 증거**입니다. 클래스를 남깁니다:
+            `#screen-town[data-stage="e|m|h"]` · `#town-title` · `.town-place`
+            · `.town-place-at`/`.town-head` · `.town-prog`/`.town-dot`(now·hit·mid·bad)
+            · `#town-card`의 `.w2m-town` · `.town-res`(good·mid·bad) · `.town-line`/`.town-dev` -->
+    <section class="screen" id="screen-town" data-stage="e">
+      <h2 id="town-title">🏫 초등부 대항전</h2>
+      <!-- ♿ 단계가 바뀔 때 여기 글이 통째로 바뀝니다 — 알림이 없으면 낭독 사용자에게는
+           같은 화면이 계속 서 있는 것처럼 들려요. -->
+      <p class="town-place" id="town-place" aria-live="polite"></p>
       <p class="hint" id="town-hint"></p>
       <div class="town-prog" id="town-prog"></div>
       <!-- ♿ 판정 결과가 여기서만 바뀌어요 — 알림이 없으면 낭독 사용자에게는
