@@ -1937,23 +1937,18 @@ button.pf-slot { cursor: pointer; font-family: inherit; }
  * (`.foot-name`·판정 창은 밖에 있어서 안 뒤집혀요 — 글자가 뒤집히면 안 되니까요). */
 /* 📐 그림은 **크게**. 96 × 104로 그리고 통째로 1.2배 키웁니다 —
  * 안쪽 좌표를 전부 다시 잡는 것보다 안 어긋나요(반전도 같은 transform에 얹습니다). */
-.foot-art { position: relative; width: 96px; height: 104px; flex: 0 0 128px; transform: scale(1.2); }
+.foot-art { position: relative; width: 96px; height: 104px; flex: 0 0 128px; }
 /* 🔴 **좌우가 눈에 띄게 달라야 합니다.** 앞코가 어디를 향하는지가 안 보이면
  *    두 카드가 똑같아 보여서 「왼발/오른발」이 글자로만 남아요(원칙 ③).
- *    그래서 clip-path로 **앞코가 뾰족한 축구화 옆모습**을 그립니다 —
- *    기본이 오른발이고, 왼발은 그림만 통째로 좌우 반전해요. */
-.foot-card[data-foot="L"] .foot-art { transform: scale(-1.2, 1.2); }
-.foot-sock {          /* ⚽ 축구 양말 — 위쪽 띠는 팀 색 */
-  position: absolute; left: 31px; top: 2px; width: 28px; height: 50px;
-  border-radius: 10px 10px 4px 4px;
-  background: linear-gradient(180deg, var(--cream) 0%, var(--cream) 64%, #d6c9a8 100%);
-  box-shadow: inset 0 11px 0 var(--accent2), inset 0 -5px 0 rgba(0, 0, 0, .12);
-}
-.foot-shoe {          /* 👟 축구화 옆모습 — 뒤꿈치는 둥글고 앞코가 오른쪽으로 뻗어요 */
-  position: absolute; left: 6px; top: 48px; width: 84px; height: 36px;
-  background: linear-gradient(180deg, #3c5182 0%, #1a2540 72%, var(--accent2) 72%, var(--accent2) 100%);
-  clip-path: polygon(6% 0%, 32% 0%, 47% 26%, 74% 47%, 93% 60%, 100% 79%, 97% 100%, 8% 100%, 0% 74%, 0% 22%);
-  filter: drop-shadow(0 3px 2px rgba(0, 0, 0, .4));
+ *
+ *    처음엔 clip-path로 축구화 옆모습을 그렸는데 **범민 님이 「그림이 이상하다」**고
+ *    하셨어요. 이모지는 폰트가 그려 주니 어느 기기에서도 축구화로 보입니다.
+ *    👟은 **앞코가 오른쪽**을 향하니 기본이 오른발이고, 왼발은 통째로 뒤집어요. */
+.foot-card[data-foot="L"] .foot-art { transform: scaleX(-1); }
+.foot-shoe {
+  position: absolute; left: 8px; top: 26px;
+  font-size: 62px; line-height: 1; font-style: normal;
+  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, .45));
 }
 /* ⚽ 공은 **고른 쪽 발 앞**에만 붙어요 — 탭한 순간 굴러들어옵니다 */
 .foot-ball {

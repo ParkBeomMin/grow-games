@@ -95,7 +95,7 @@ window.WingerIntro = (() => {
     return `<button type="button" class="foot-card" data-foot="${foot}"`
       + ` aria-label="${nm}잡이로 시작해요">`
       + `<span class="foot-art" aria-hidden="true">`
-      + `<i class="foot-sock"></i><i class="foot-shoe"></i><i class="foot-ball">⚽</i></span>`
+      + `<i class="foot-shoe">👟</i><i class="foot-ball">⚽</i></span>`
       + `<span class="foot-name">${nm}</span>`
       + gateHTML(foot)
       + `<span class="foot-gate-cap">판정 창</span>`
