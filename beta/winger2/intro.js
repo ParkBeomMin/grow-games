@@ -3,7 +3,7 @@
  *   WingerIntro.openFoot(cur, done)     🦶 발 두 짝을 그리고, 탭하면 done("L"|"R")
  *   WingerIntro.openOrigin(cur, done)   🗺️ 17개 시·도 지도. [다음]에서 done(originId)
  *   WingerIntro.nameOf(id) / lineOf(id) 🗂️ 세이브·기록이 읽는 창구 (없으면 "🌍 미상")
- *   WingerIntro.step(screenId)          🔢 "2 / 3" — 화면 순서가 바뀌면 STEPS 한 줄만 고치세요
+ *   WingerIntro.step(screenId)          🔢 "2 / 5" — 화면 순서가 바뀌면 STEPS 한 줄만 고치세요
  *
  * ── 왜 전용 파일인가 ─────────────────────────────────────────
  * `timing.js`·`base.css`·`match.js`는 **8개 게임이 전부 내려받습니다.** 축구 하나만 쓰는
@@ -29,11 +29,21 @@ window.WingerIntro = (() => {
   "use strict";
   const $ = (id) => document.getElementById(id);
 
-  /* 🔢 **첫 순간 카드 「앞」의 차례**입니다. 화면 순서가 바뀌면 여기 한 줄만 고치면 돼요.
-   * 🔑 **🎯 자리가 빠졌습니다** — 학교 아크가 들어오면서 🏫 초등부 **뒤**로 갔거든요(93번 §5).
-   *    이 목록이 재는 것은 「화면 수」가 아니라 **「첫 카드 앞에 놓인 결정 수」**라
-   *    카드 뒤의 결정은 여기 안 셉니다. 🔒 **3을 넘기지 마세요** (93번 §2-2). */
-  const STEPS = ["screen-name", "screen-foot", "screen-origin"];
+  /* 🔢 **선수를 만드는 차례 다섯**입니다. 화면 순서가 바뀌면 여기 한 줄만 고치면 돼요.
+   *
+   * 🚨 **옛 규칙을 지웁니다 (2026-09-01 · 101번 §1-4).** 여기는 「첫 순간 카드 **앞**에 놓인
+   *    결정 수」를 세던 자리라 🎯 자리와 🧬 조립대가 빠져 있었고, 그래서 🗺️ 동네에
+   *    **「3 / 3」**이 떴습니다. 뒤에 두 화면이 더 있는데 **끝났다고 약속한 것**이에요 —
+   *    원칙 ①의 가장 싼 형태입니다. 범민 님이 *"능력치 고르는 게 없어졌네…?"*라고 하신
+   *    가장 유력한 원인이 이 한 줄입니다.
+   *
+   * ★ 이제 세는 것은 **「선수가 완성되기까지 남은 결정」**이에요 — 첫 카드 뒤에 오는
+   *    결정도 셉니다. 🟢 *"3 / 5 뒤에 경기가 나오는 게 어색하지 않나"*는 오히려 맞아요.
+   *    **뛰면서 남은 둘이 채워집니다.**
+   *
+   * 🔒 **화면을 늘리는 자리가 아닙니다.** `STEPS`는 **세는 것**이지 만드는 게 아니에요 —
+   *    🔒 첫 카드 앞의 탭 5(여유 0)는 그대로입니다(93번 §2-2). 앞의 셋 뒤에 바로 카드가 와요. */
+  const STEPS = ["screen-name", "screen-foot", "screen-origin", "screen-position", "screen-prospect"];
   const step = (id) => {
     const i = STEPS.indexOf(id);
     return i < 0 ? "" : `${i + 1} / ${STEPS.length}`;

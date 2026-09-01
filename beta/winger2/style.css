@@ -1293,7 +1293,8 @@ button.pf-slot { cursor: pointer; font-family: inherit; }
   text-align: left;
   border-color: var(--line);
 }
-/* 🎬 슬롯 — 들어올 때 `data-slot` 순서대로 채워집니다 (1 🌱 등급 → 2 📈 레이더 → 3 🎁 타고난 것).
+/* 🎬 슬롯 — 들어올 때 `data-slot` 순서대로 채워집니다
+ * (0 🎲 두 벌 고르기 → 1 🌱 등급 → 2 📈 레이더 → 3 🎁 타고난 것). 0은 지연 없이 맨 먼저예요.
  *
  * ⚠️ **번호는 화면에 보이는 순서**예요. DOM 순서와 같습니다 — CSS `order`로 눈속임하면
  *    낭독 순서가 어긋나요. 순서를 바꿀 일이 생기면 `prospect.js`의 `benchHTML`에서 바꾸세요.
@@ -2323,3 +2324,32 @@ button.pf-slot { cursor: pointer; font-family: inherit; }
   .foot-card.picked { transform: none; }
   .foot-card.on .foot-ball { opacity: 1; transform: none; }
 }
+
+/* ══════════════════════════════════════════════════════════════
+ * 🎲 **두 벌 중 하나 고르기** (`.pb-pick`) — 2026-09-01 · 101번 §1-6
+ * ══════════════════════════════════════════════════════════════
+ * 🔴 **나란히**여야 합니다. 세로로 쌓으면 스크롤이 둘을 갈라서 **견줌이 사라져요** —
+ *    2택의 값어치는 *"고를 수 있다"*가 아니라 ***"견줄 수 있다"***에 있습니다.
+ * ♿ 고른 쪽을 **색으로만** 말하지 않아요 — 글자(고른 모양 / 이걸로)와 `aria-pressed`가
+ *    함께 말합니다. 색만 쓰면 색을 못 가리는 눈에는 두 벌이 똑같아 보여요.
+ * ⚠️ 여기는 **동작하는 최소한**입니다 — 390px 다듬기는 director 몫이에요 (101번 §6).
+ * 📏 등급 글자와 바는 아래 🌱 등급 여섯 줄과 **같은 자**(`.stat-grade`·`.pcg-bar`)를 씁니다 —
+ *    자가 다르면 두 벌을 견주는 뜻이 사라집니다. 🔴 다만 **줄 이름은 `.pbo-row`로 갈라 뒀어요**
+ *    (`.pcg-row`로 두면 *"조립대에 능력치 여섯 줄"*을 세는 검사가 18줄을 봅니다). */
+.pb-pick { display: block; }
+.pb-opts { display: flex; gap: 8px; align-items: stretch; margin-top: 6px; }
+.pb-opt {
+  flex: 1 1 0; min-width: 0; display: block; text-align: left;
+  padding: 8px 8px 6px; border-radius: 12px; cursor: pointer;
+  font-family: inherit; color: var(--text);
+  border: 1px solid var(--line); background: var(--bg2);
+}
+.pb-opt.on { border-color: var(--accent); background: rgba(255, 209, 102, .10); box-shadow: inset 0 0 0 1px var(--accent); }
+.pbo-lab { display: block; font-size: .72rem; color: var(--dim); margin-bottom: 4px; }
+.pb-opt.on .pbo-lab b { color: var(--accent); }
+.pbo-row { display: flex; align-items: center; gap: 5px; margin: 3px 0; }
+.pbo-name { flex: 0 0 18px; font-size: .8rem; line-height: 1; text-align: center; }
+/* ⭐ 가장 크게 자랄 칸 — 여기서는 별을 따로 안 그리고 **칸 이모지를 빛냅니다**
+ *    (좁은 두 칸에 ⭐ 자리를 또 만들면 바가 죽어요. 별의 뜻은 아래 여섯 줄이 말합니다) */
+.pbo-row.is-top .pbo-name { filter: drop-shadow(0 0 6px rgba(255, 209, 102, .85)); }
+.pbo-row .stat-grade { flex: 0 0 16px; min-width: 16px; font-size: .74rem; opacity: .9; }

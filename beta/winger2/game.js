@@ -1516,6 +1516,7 @@ let chosenTalents = null;
 let usedRerolls = 0;
 
 function openBench() {
+  stampStep("screen-prospect");        // 🔢 5 / 5 — 여기가 선수를 만드는 마지막 차례예요
   WingerProspect.open(chosenMarket, chosenPos, { name: chosenName, foot: chosenFoot },
     (build, talents, rerolls) => {
       chosenCard = build;
@@ -1733,8 +1734,11 @@ document.querySelectorAll("#position-list .card").forEach((btn) => {
  *    두 칸뿐이에요. 화면 안쪽(발 그림 · 지도 SVG · 📖 스토리)은 전부 `intro.js` 몫입니다.
  *    ✅ 재배치가 끝났습니다 — 🗺️ 동네 다음이 **🏫 초등부**이고 🎯 자리는 카드 뒤예요.
  *
- * 🔢 차례 표시(`1 / 3`)는 `WingerIntro.STEPS`가 정합니다 — 순서가 바뀌면 거기 한 줄만요.
- *    🔑 **🎯 자리는 그 목록에 없습니다** — 첫 순간 카드 「뒤」라 「시작 전 차례」가 아니에요. */
+ * 🔢 차례 표시(`1 / 5`)는 `WingerIntro.STEPS`가 정합니다 — 순서가 바뀌면 거기 한 줄만요.
+ *    🚨 **옛 규칙이 지워졌습니다 (2026-09-01 · 101번 §1-4).** 예전엔 이 목록이
+ *    「첫 순간 카드 **앞**의 차례」라 🎯 자리·🧬 조립대가 빠져 있었고, 그래서 🗺️ 동네가
+ *    **「3 / 3」**이라며 *"생성이 끝났다"*고 거짓말을 했어요. 이제 다섯 화면 전부 셉니다 —
+ *    🎯 자리가 **4 / 5**, 🧬 조립대가 **5 / 5**예요. 화면마다 `stampStep`을 부릅니다. */
 function stampStep(id) {
   const el = $("step-" + id.replace("screen-", ""));
   if (el && window.WingerIntro) el.textContent = WingerIntro.step(id);

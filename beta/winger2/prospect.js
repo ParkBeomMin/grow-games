@@ -174,6 +174,30 @@ window.WingerProspect = (() => {
   const HOT_RUN = 3;              // 평균 평점 7.0↑ 시즌이 이만큼 연속이면 정점 +1
   const HOT_BAR = 7.0;
 
+  /* ══════════════════════════════════════════════════════════════════
+   * 🔒 **조립대가 🏫 학교 아크 「뒤」인 이유 — 이제 하나입니다: 편차 밴드**
+   * ══════════════════════════════════════════════════════════════════
+   * (2026-09-01 · designer 101번 §1-2·§1-3 — **「바뀔 조건」이 닫혔습니다**)
+   *
+   * 🔴 **조립대를 아크 앞으로 옮기지 마세요.** §5-3의 편차 밴드가 중립인 근거는
+   *    **모든 카드의 기대 점수가 정확히 1**이라는 것이고, 그건 여덟 판 내내
+   *    **전원이 `evenStats()`라는 같은 몸**으로 설 때만 성립합니다.
+   *    앞으로 옮기면 몸에 개인차가 생기고, **잘 굴린 몸은 `d`(= 점수 − 카드 수)를
+   *    양수 쪽으로 밀어 `E[spotMul] > 1.000`**이 돼요 —
+   *    🔑 그건 **「굴림이 `spotMul`을 산다」**는 뜻이라 **원칙 ⑥ 정면**입니다
+   *    (*"선택이 육성을 대체하면 안 된다 · 덜 키운 쪽은 +0"*).
+   *    그리고 §5-2의 「층이 하나씩 쌓인다」(학교=조작만 → 유스=조작+능력치)도 무너집니다.
+   *
+   * 🔴 **93번 §5-1의 「바뀔 조건」(*"조립대를 앞으로 옮기면 성-2를 다시 본다"*)은 철회됐습니다.**
+   *    그 문장을 쓴 시점에는 **편차 밴드가 아직 없었어요.** 밴드가 들어온 뒤로
+   *    「전원 같은 몸」은 서사가 아니라 **산식의 전제**가 됐습니다.
+   *    ⚠️ **「바뀔 조건」은 새 결정이 들어올 때마다 다시 읽어야 합니다** — 안 그러면
+   *    이미 닫힌 문을 열려고 다음 사람이 밴드를 부숩니다.
+   *
+   * 🔑 **죽은 근거를 붙들지 마세요.** 85번 §4-3이 순-B를 고른 근거는
+   *    *"🎯 자리가 30초 안에 화면에서 닫힌다"*였는데, **아크가 8장(2~3분)이 되면서
+   *    그 근거는 이미 죽었습니다.** 서사(*"입단 뒤 재능 발견"*)도 **덤이지 근거가 아니에요.**
+   *    살아 있는 근거는 **편차 밴드 하나**입니다. */
   /* 🧬 조립대 — **3택 카드에서 「내가 만드는 선수」로** (2026-08-30 · 74번 판정 ②·⑤)
    *
    * 🔓 여기 있던 `const CARDS = 3;`이 사라졌습니다. 카드 3택을 폐기하고 **한 명을
@@ -622,11 +646,13 @@ window.WingerProspect = (() => {
    *    (`data-slot` 순서). `prefers-reduced-motion`이면 한 번에 — director 항목입니다.
    * ══════════════════════════════════════════════════════════════════ */
 
-  /* { market, pos, who, talents, build, prev, used, onPick }
+  /* { market, pos, who, talents, build, picks, pick, used, onPick }
    * · `talents` · `build`의 🎁 칸은 **한 번 굴리고 안 바뀝니다**
+   * · `picks`는 🎲가 낸 **두 벌**이고 `pick`이 고른 쪽(0 | 1)이에요 —
+   *   `build.stats`·`build.shapeKey`는 **고른 쪽의 사본**입니다 (2026-09-01 · 101번 §1-6)
    * · `used`는 🎲를 쓴 횟수예요 — 남은 횟수는 `leftOf()`가 계산합니다
    *   (예산이 `Infinity`일 수 있어서 **쓴 횟수**를 셉니다. 남은 수를 세면 세이브에 ∞가 들어가요)
-   * · ↩️ 되돌리기가 없어서 **직전 배분을 안 들고 있습니다** — 굴리면 그대로예요.
+   * · ↩️ 되돌리기가 없어서 **직전 두 벌을 안 들고 있습니다** — 굴리면 그대로예요.
    *   무제한이라 후회할 이유가 없어요(다시 굴리면 또 나옵니다) */
   let draw = null;
   const leftOf = () => REROLL_MAX - (draw ? draw.used : 0);
@@ -850,12 +876,65 @@ window.WingerProspect = (() => {
 
   const footLabel = (f) => (f === "L" ? "🦶 왼발" : "🦶 오른발");
 
+  /* ══════════════════════════════════════════════════════════════════
+   * 🎲 **두 벌 중 하나를 고릅니다** (2026-09-01 · 101번 §1-6)
+   * ══════════════════════════════════════════════════════════════════
+   *
+   * 🔑 범민 님 낱말이 *"능력치 **고르는** 게 없어졌네…?"*였습니다. 그전까지 조립대에서
+   *    **고르는** 것은 🔢 등번호 하나(성능에 안 닿아요)뿐이었고 📊 배분은 **굴리는 것**,
+   *    나머지(⭐ 잠재력 · 🧬 성장타입 · ⭐ 특능 · 🩹 결함)는 전부 🔒 잠김이었어요 —
+   *    **화면 전체에 「내가 정하는 것」이 사실상 없었습니다.**
+   *    나란히 놓으면 **견줌**이 생기고, 견주면 그게 선택입니다.
+   *
+   * 🟢 **곡선은 안 움직입니다.** 무제한 굴림에서 2택은 **굴림 횟수를 반으로 줄이는 것**과
+   *    같아요 — 위 `REROLL_MAX` 주석의 `V = E[max(X, V)]`가 그대로 `sup(X)`로 수렴합니다.
+   *    2택은 그 **지연을 줄일 뿐 상한을 안 올려요.** 두 벌 다 총합이 `POOL`이라 세지지도 않고요.
+   *    (실측 2026-09-01 · 101번 ② — 2택 R번 ↔ 1택 2R번이 같은 곡선입니다)
+   *
+   * 🔒 **3택으로 늘리지 마세요.** 74번이 3택 카드를 폐기한 근거(*"넘길 게 없다 ·
+   *    한 명을 펼친다"*)는 살아 있습니다. **2는 견줌이고 3은 목록이에요** — 390px에서 특히요.
+   * 🔒 **총합을 밴드로 풀지 마세요.** 두 벌 다 `POOL` 고정입니다(위 `POOL` 주석) —
+   *    한쪽 총합이 커지는 순간 「고르기」가 **세지는 손잡이**가 됩니다.
+   *
+   * ⚠️ 등급·바는 아래 `gradeStripHTML`과 **같은 자**(값 ÷ `STAT_HI`)예요 — 자가 다르면
+   *    두 벌을 견주는 뜻이 사라집니다. 그래서 `.pcg-*` 클래스를 그대로 씁니다. */
+  function pickHTML(picks, sel, talents) {
+    if (!window.W2Grade || !picks || picks.length < 2) return "";
+    const stars = starKeys(talents);
+    const opts = picks.map((p, i) => {
+      const rows = STAT_DEFS.map((d) => {
+        const g = W2Grade.of(p.stats[d.key]);
+        if (!g) return "";
+        const top = stars.indexOf(d.key) >= 0;
+        /* 🔴 클래스가 `.pcg-*`가 **아닙니다.** 아래 🌱 등급 여섯 줄과 이름이 같으면
+         * *"조립대에 능력치 여섯 줄"*을 세는 검사가 **18줄을 봅니다**(bench A-2).
+         * 자는 같게 쓰되(`.stat-grade`·`.pcg-bar`) **세는 이름은 갈라 둡니다.** */
+        return `<span class="pbo-row${top ? " is-top" : ""}">`
+          + `<span class="pbo-name">${d.emoji}</span>`
+          + `<span class="stat-grade g-${g.base}">${g.label}</span>`
+          + `<span class="pcg-bar"><span class="pcg-fill" style="width:${potPct(p.stats[d.key]).toFixed(1)}%"></span></span>`
+          + `</span>`;
+      }).join("");
+      const on = i === sel;
+      const mark = i === 0 ? "🅰️" : "🅱️";
+      /* ♿ 고른 쪽이 색으로만 보이면 안 돼요 — `aria-pressed`와 글자가 함께 말합니다 */
+      return `<button type="button" class="pb-opt${on ? " on" : ""}" data-opt="${i}" aria-pressed="${on ? "true" : "false"}">`
+        + `<span class="pbo-lab">${mark} <b>${on ? "고른 모양" : "이걸로"}</b></span>`
+        + rows
+        + `</button>`;
+    }).join("");
+    return `<span class="pb-pick pb-slot" data-slot="0">`
+      + `<span class="pcg-cap"><b>🎲 두 벌 중 하나를 고르세요</b> — 총합은 <b>양쪽 다 ${POOL}</b>라 `
+      + `고른다고 세지는 게 아니라 <b>모양이 정해집니다</b></span>`
+      + `<span class="pb-opts">${opts}</span></span>`;
+  }
+
   /* 🧬 조립대 본문 한 벌.
    *
    * ⚠️ 📏 **키는 이번 범위가 아닙니다** — 5번 작업에서 들어오고, 자리는
    *    아래 `.pb-meta`(🔒 잠긴 사실 줄)에 `🎂 17세` 옆으로 **합류**합니다.
    *    화면 순서는 📏 키 화면 → 🎯 포지션 → 🧬 조립대라, 여기 오는 건 이미 정해진 값이에요. */
-  function benchHTML(b, who, talents, pos) {
+  function benchHTML(b, who, talents, pos, picks, sel) {
     const tr = traitById(b.trait), fl = flawById(b.flaw);
     return `
       <span class="pb-head">
@@ -866,6 +945,7 @@ window.WingerProspect = (() => {
       </span>
       <span class="pb-meta">🎂 ${b.age}세 · ${footLabel(who.foot)}</span>
       ${shirtHTML(pos, b.shirtNo)}
+      ${pickHTML(picks, sel, talents)}
       ${gradeStripHTML(b, talents)}
       <span class="pc-now pb-slot" data-slot="2">
         <span class="pc-cap"><b>📈 지금 실력</b> — 늦게 크는 선수일수록 작아 보여요</span>
@@ -924,13 +1004,49 @@ window.WingerProspect = (() => {
   /* 🎲 — **📊 배분만** 굴립니다. 🎁도 ⭐ 잠재력도 안 건드려요.
    * ♾️ 무제한이라 **이 함수가 굴리는 게 곧 「굴려도 안전한 축」의 전부**예요.
    * 🔴 예전 `rollCards`를 통째로 다시 부르던 자리입니다. 그러면 `rollTalents`가
-   *    같이 굴러서 🎲가 **잠재력 리롤**이 됐어요 — 그 배선을 끊은 게 이 함수입니다. */
+   *    같이 굴러서 🎲가 **잠재력 리롤**이 됐어요 — 그 배선을 끊은 게 이 함수입니다.
+   *
+   * ★ **한 번 누르면 두 벌이 나옵니다** (2026-09-01 · 101번 §1-6). 고르는 건 아래 `choosePick`. */
+  /* 🎲 **한 번 굴리면 두 벌입니다 — 조건과 무관하게 항상 2회** (§18-5 · 101번 §1-6).
+   * 🔴 *"한쪽이 마음에 들면 한 벌만"* 같은 분기를 넣지 마세요. 난수는 **값이 아니라
+   *    소비량으로** 뒤쪽 전부와 결합해서, 굴림 횟수가 조건을 타면 같은 시드에서도
+   *    이 뒤의 모든 것이 어긋납니다. 두 줄을 나란히 두는 게 그 계약이에요. */
+  function rollPair(marketId, pos) {
+    const a = rollShape(marketId, pos);
+    const b = rollShape(marketId, pos);
+    return [a, b];
+  }
+
+  /* 고른 쪽을 `build`에 옮겨 담습니다. **난수를 안 씁니다** — 고르는 건 굴리는 게 아니에요.
+   * 🔑 **🎲가 배분을 `build`에 싣는 유일한 자리**예요 (예전엔 `doReroll` 안에 있었습니다).
+   *    ⭐ 잠재력·🧬 성장타입이 여기 딸려 오면 🎲가 그것들까지 굴리는 게 됩니다 —
+   *    `bench-test`의 변이 M2·M3·DEAD_ROLL이 겨누는 줄이 아래 두 줄입니다. */
+  function usePick(i) {
+    if (!draw || !draw.picks || !draw.picks.length) return;
+    const n = draw.picks[i] ? i : 0;
+    const sh = draw.picks[n];
+    draw.pick = n;
+    draw.build.stats = sh.stats;
+    draw.build.shapeKey = sh.shapeKey;
+  }
+
+  /* 🅰️🅱️ — **고르는 손잡이**입니다. 총합은 두 벌 다 `POOL`이라 고른다고 세지지 않고,
+   * 정해지는 건 **모양**뿐이에요. 🔒 난수를 여기서 쓰면 안 됩니다(위 `rollPair` 주석). */
+  function choosePick(i) {
+    if (!draw || !draw.picks || !draw.picks[i] || draw.pick === i) return;
+    usePick(i);
+    render();
+    /* ♿ 본문을 통째로 다시 그리니 **눌렀던 버튼이 사라집니다.** 초점을 새 버튼으로 옮겨요 —
+     * 안 하면 키보드·낭독 사용자는 고른 순간 초점이 문서 맨 위로 튕깁니다. */
+    const b = document.querySelector(`#prospect-body .pb-opt[data-opt="${i}"]`);
+    if (b && typeof b.focus === "function") b.focus();
+  }
+
   function doReroll() {
     if (!draw || leftOf() <= 0) return;
     draw.used += 1;
-    const sh = rollShape(draw.market.id, draw.pos);
-    draw.build.stats = sh.stats;
-    draw.build.shapeKey = sh.shapeKey;
+    draw.picks = rollPair(draw.market.id, draw.pos);
+    usePick(0);
     render();
     /* 🎲 **유니폼은 안 바뀝니다** — 바뀌는 건 🌱 등급 여섯 줄(바로 아래)이에요.
      * 배분을 유니폼에 실으면 *색·무늬로 능력치를 읽는 화면*이 되고, 그건 등급 줄이 할 말입니다.
@@ -942,11 +1058,11 @@ window.WingerProspect = (() => {
     const b = draw.build, who = draw.who;
     const hint = document.getElementById("prospect-hint");
     if (hint) hint.textContent =
-      `🎲는 몇 번이든 눌러도 돼요 — 총합은 언제나 ${POOL}라 세지는 게 아니라 모양만 달라집니다.`;
+      `🎲가 두 벌을 냅니다 — 하나를 고르세요. 총합은 언제나 ${POOL}라 세지는 게 아니라 모양만 달라져요.`;
 
     const body = document.getElementById("prospect-body");
     if (body) {
-      body.innerHTML = benchHTML(b, who, draw.talents, draw.pos);
+      body.innerHTML = benchHTML(b, who, draw.talents, draw.pos, draw.picks, draw.pick);
       if (window.Radar) {
         /* 📈 레이더 캔버스가 300×260인 건 **공용 radar.js를 안 고치고** 크게 그리려고예요.
          * `R = min(W,H)/2 - 36`이라 캔버스가 작으면 반지름이 통째로 라벨에 먹힙니다
@@ -968,6 +1084,12 @@ window.WingerProspect = (() => {
       body.querySelectorAll(".pc-no").forEach((btn) => {
         btn.onclick = () => { if (!dragged) setShirtNo(Number(btn.dataset.no)); };
       });
+      /* 🅰️🅱️ 두 벌 고르기 — ⚠️ `pointerdown`이 아니라 `click`이에요.
+       * `pointerdown`에서 본문을 갈아치우면 손을 뗄 때 **그 자리의 새 요소로 click**이 가서
+       * 두 번 먹힙니다(미니게임 준비 화면에서 실제로 났던 버그). */
+      body.querySelectorAll(".pb-opt").forEach((btn) => {
+        btn.onclick = () => { if (!dragged) choosePick(Number(btn.dataset.opt)); };
+      });
     }
 
     /* 🎲 몇 번 뽑았나 — **남은 횟수가 아니라 쓴 횟수**예요(무제한이라 남은 수가 없습니다).
@@ -985,13 +1107,13 @@ window.WingerProspect = (() => {
       bud.innerHTML = `<span class="pb-bud-lab">${capped ? "🎲 남은 다시 뽑기"
         : draw.used ? `🎲 지금까지 ${draw.used}번 뽑았어요` : "🎲 마음에 들 때까지 뽑아도 돼요"}</span>`
         + pips
-        + `<span class="pb-bud-note">총합은 언제나 ${POOL}라 굴려도 <b>세지지 않아요</b> — 바뀌는 건 모양뿐입니다</span>`;
+        + `<span class="pb-bud-note">총합은 <b>두 벌 다</b> ${POOL}라 굴려도·골라도 <b>세지지 않아요</b> — 바뀌는 건 모양뿐입니다</span>`;
     }
 
     const rb = document.getElementById("btn-prospect-reroll");
     if (rb) {
       rb.textContent = left <= 0 ? "🎲 다시 뽑기를 다 썼어요"
-        : capped ? `🎲 다시 뽑기 ${left}회` : "🎲 다시 뽑기";
+        : capped ? `🎲 두 벌 다시 뽑기 ${left}회` : "🎲 두 벌 다시 뽑기";
       rb.disabled = left <= 0;
       rb.onclick = () => { if (!dragged) doReroll(); };
     }
@@ -1074,6 +1196,12 @@ window.WingerProspect = (() => {
     /* ⭐ 잠재력·🧬 성장타입·⭐ 특능·🩹 결함은 **여기서 한 번**만 굴러요 */
     draw.talents = rollTalents(pos);
     draw.build = rollBuild(market.id, pos);
+    /* 🎲 조립대는 **두 벌을 나란히 내고 하나를 고르는** 화면이에요 (101번 §1-6).
+     * `rollBuild`가 이미 한 벌을 굴렸으니 **짝이 될 한 벌만 더** 굴립니다 —
+     * 합쳐서 `rollShape` **2회**라 아래 🎲(`rollPair`)와 소비량이 같아요.
+     * 🔒 여기를 조건부로 만들지 마세요(§18-5 · `rollPair` 주석). */
+    draw.picks = [{ shapeKey: draw.build.shapeKey, stats: draw.build.stats }, rollShape(market.id, pos)];
+    draw.pick = 0;
     /* 🔢 포지션 관례 번호로 시작해요 — 🎲로는 **안 바뀝니다**(안 바뀌는 축이에요) */
     draw.build.shirtNo = defaultNo(pos);
     bindDragGuard();
