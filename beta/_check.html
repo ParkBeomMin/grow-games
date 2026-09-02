@@ -94,6 +94,12 @@
     .mg-item .mg-stat { color: var(--sky); }
     .mg-now { color: var(--dim); font-size: .78rem; margin: 12px 0 6px; }
     .mg-frame { display: block; width: 100%; min-height: 240px; border: 0; border-radius: 12px; background: var(--bg); }
+    /* 📏 🥅 격자 판은 **폭이 곧 판정 대상**이라(칸 ≥ 44px) 칸을 화면 폭 그대로 폅니다.
+     * 🔴 안 그러면 확인 페이지가 **거짓말을 합니다** — `#app` 16 + 카드 16이 좌우로 64px을
+     *    먹어서 iframe이 320px 화면에서 256px이 되고, 안쪽 `100vw`가 256이라
+     *    칸이 **34.67px**로 나왔어요. 진짜 게임은 같은 화면에서 **45.33px**입니다.
+     * 🔑 iframe을 화면 폭에 딱 맞추면 안쪽 `100vw`가 **기기 폭과 같아져** 숫자가 맞습니다. */
+    #w2m-hold { width: 100vw; margin-inline: calc(50% - 50vw); }
     .mg-res { color: var(--cream); font-size: .92rem; margin: 10px 0; min-height: 1.3em; }
     .mg-acts { display: flex; gap: 8px; }
     .mg-acts .btn { flex: 1; margin: 0; }
