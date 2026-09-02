@@ -66,7 +66,7 @@
  * 종료 코드: 0 통과 · 1 빨간불 · 2 💥 죽음(안 돌았음) — `_load.js`가 걸어 줍니다.
  */
 "use strict";
-const { bootPage, pageMutsOK, townAuto, tapFoot, pickOrigin, passStage, passEarly,
+const { bootPage, pageMutsOK, townAuto, tapFoot, tapChild, pickOrigin, passStage, passEarly,
   seedBoth } = require("./_load.js");
 
 let fail = 0;
@@ -79,14 +79,17 @@ const check = (ok, msg) => { console.log(`${ok ? "✅" : "❌"} ${msg}`); if (!o
 /* 🔢 선수를 만드는 화면 **다섯**과 그 라벨 칸. 순서가 곧 차례예요.
  *    🔴 `WingerIntro.STEPS`에서 읽어 오면 **5칸을 3칸으로 줄여도 검사가 따라갑니다** —
  *       그게 이 파일이 생긴 이유입니다. */
+/* 🧒 2026-09-02: 🗺️ 동네와 🎯 자리 **사이**에 `screen-child`(초1)가 들어왔습니다 (117번 §2-3).
+ *    🔴 화면이 하나 늘면 **분모도 같이** 늘어야 해요 — 안 그러면 «끝났다»는 거짓말이 다시 납니다. */
 const SCREENS = [
   { id: "screen-name", what: "✏️ 이름" },
   { id: "screen-foot", what: "🦶 주발" },
   { id: "screen-origin", what: "🗺️ 동네" },
+  { id: "screen-child", what: "🧒 초1" },
   { id: "screen-position", what: "🎯 자리" },
   { id: "screen-prospect", what: "🧬 조립대" },
 ];
-const N_STEP = 5;           // 🔢 차례 수 (= SCREENS.length). 분모로도 씁니다
+const N_STEP = 6;           // 🔢 차례 수 (= SCREENS.length). 분모로도 씁니다
 const OPTS = 2;             // 🧬 2택 — 🔒 3택은 74번이 폐기했어요
 const POOL_WANT = 194;      // 📊 한 벌의 총합. **양쪽 다** 정확히 이 값
 const SLOTS = 6;            // 🌱 등급 줄 수 (조립대 아래 여섯 줄)
@@ -99,8 +102,10 @@ const ROLLS = 6;            // 🎲를 시드마다 이만큼 눌러 봅니다
 const MUT = {
   /* 🔴 **M-STEPS3 — `STEPS`를 3칸으로 되돌립니다** (= 🗺️ 동네가 다시 「3 / 3」).
    *    engineer가 실제로 되돌려 본 그 변경이고, 그때 검사 20종이 **전부 초록불**이었어요. */
+  /* 🔒 **목록을 통째로 베끼지 않습니다.** 🧒 초1이 끼며 `STEPS`가 **두 줄**이 되자
+   *    통문장 정규식이 안 걸려 이 변이가 「안 도는」 상태가 됐어요 (2026-09-02). */
   M_STEPS3: { "intro.js": [[
-    /const STEPS = \["screen-name", "screen-foot", "screen-origin", "screen-position", "screen-prospect"\];/,
+    /const STEPS = \[[\s\S]*?\];/,
     'const STEPS = ["screen-name", "screen-foot", "screen-origin"];']] },
   /* 🔴 **M-NOSTAMP — 마지막 화면이 차례를 안 찍습니다.** `STEPS`는 5칸 그대로라
    *    **목록만 보는 검사는 통과합니다** — 🎯 자리·🧬 조립대에 칸 자체가 없어서
@@ -109,21 +114,23 @@ const MUT = {
   /* 🔴 **M-PICK1 — 2택을 1택으로.** `open()`과 `rollPair` **양쪽**을 되돌립니다 —
    *    한쪽만 되돌리면 첫 화면과 🎲가 서로 다른 세계가 돼요. */
   M_PICK1: { "prospect.js": [
-    [/    draw\.picks = \[\{ shapeKey: draw\.build\.shapeKey, stats: draw\.build\.stats \}, rollShape\(market\.id, pos\)\];/,
+    /* 🔒 **인자 목록을 통째로 안 겨눕니다.** 🧒 초1이 `rollShape(marketId, pos, childPicks)`로
+     *    셋째 인자를 더하면서 옛 정규식이 셋 다 안 걸렸어요 (2026-09-02). */
+    [/    draw\.picks = \[\{ shapeKey: draw\.build\.shapeKey, stats: draw\.build\.stats \},[\s\S]*?\];/,
       "    draw.picks = [{ shapeKey: draw.build.shapeKey, stats: draw.build.stats }];"],
-    [/    const b = rollShape\(marketId, pos\);\n    return \[a, b\];/, "    return [a];"],
+    [/    const b = rollShape\([^;]*\);\n    return \[a, b\];/, "    return [a];"],
   ] },
   /* 🔴🔑 **M-PICKCOND — 굴림 횟수가 「지금 고른 쪽」을 탑니다.**
    *    두 벌은 그대로 나오고 총합도 194라 **값으로는 아무것도 안 보입니다.**
    *    B-4b(소비량)만 잡아요 — 이 변이가 이 파일의 §🎲 절이 있는 이유입니다. */
   M_PICKCOND: { "prospect.js": [[
-    /    draw\.picks = rollPair\(draw\.market\.id, draw\.pos\);/,
-    "    draw.picks = draw.pick === 1 ? [rollShape(draw.market.id, draw.pos), draw.picks[1]] : rollPair(draw.market.id, draw.pos);"]] },
+    /    draw\.picks = rollPair\([^;]*\);/,
+    "    draw.picks = draw.pick === 1 ? [rollShape(draw.market.id, draw.pos, []), draw.picks[1]] : rollPair(draw.market.id, draw.pos, []);"]] },
   /* 🔴 **M-PICKBIG — 한쪽 벌의 총합을 키웁니다.** 그 순간 「고르기」가 모양이 아니라
    *    **세지는 손잡이**가 돼요 (102번 §5 ⓑ). */
   M_PICKBIG: { "prospect.js": [[
-    /    const b = rollShape\(marketId, pos\);\n    return \[a, b\];/,
-    "    const b = rollShape(marketId, pos);\n    b.stats[Object.keys(b.stats)[0]] += 6;\n    return [a, b];"]] },
+    /    const b = rollShape\([^;]*\);\n    return \[a, b\];/,
+    "    const b = rollShape(marketId, pos, childPicks);\n    b.stats[Object.keys(b.stats)[0]] += 6;\n    return [a, b];"]] },
 };
 
 {
@@ -193,6 +200,8 @@ async function toBench(h, opt) {
   stamp();                                                  // 🗺️ 동네
   const back = townAuto(h.W);
   pickOrigin(h.W, h.press, o.origin || "seoul");
+  stamp();                                                  // 🧒 초1
+  await tapChild(h.W, h.press, o.child || "ball");
   passStage(h.W, h.press);                                  // 🏫 초등부
   passEarly(h.W, h.press);                                  // 📨 조기 제안 — **거절**
   stamp();                                                  // 🎯 자리
@@ -234,6 +243,7 @@ async function arcOf(seed, engineSeed) {
   await tapFoot(W, press, "R");
   const back = townAuto(W);
   pickOrigin(W, press, "seoul");
+  await tapChild(W, press, "ball");                         // 🧒 초1
   passStage(W, press); passEarly(W, press);
   press(D.querySelector('#position-list .card[data-pos="wg"]'), "🎯 wg");
   passStage(W, press); passEarly(W, press); passStage(W, press);
@@ -418,9 +428,14 @@ async function arcOf(seed, engineSeed) {
     const mkt = stA.market.id, pos = stA.pos;
     const pA = A.s.i; A.press(A.D.getElementById("btn-prospect-reroll"), "🎲"); const cA = A.s.i - pA;
     A.close();
+    /* 🧒 **게임이 부르는 그대로 부릅니다** — `childPicks`를 빼면 `focus` 배열이 짧아져
+     *    `spread()`의 소비량이 **한 개 어긋납니다**(실측 15 ↔ 14). 그건 고장이 아니라
+     *    **검사가 다른 모양으로 불러서** 나는 값이에요 — 「픽스처가 다른 모양」의 형태입니다.
+     * 🔒 값을 박지 않고 **그 판의 세이브에서** 가져옵니다. */
+    const kid = (stA.who && Array.isArray(stA.who.child)) ? stA.who.child : [];
     const B = boot(seed); await toBench(B, {});
     const pB = B.s.i;
-    B.W.WingerProspect.rollShape(mkt, pos); B.W.WingerProspect.rollShape(mkt, pos);
+    B.W.WingerProspect.rollShape(mkt, pos, kid); B.W.WingerProspect.rollShape(mkt, pos, kid);
     const cB = B.s.i - pB;
     B.close();
     const C = boot(seed); await toBench(C, {});

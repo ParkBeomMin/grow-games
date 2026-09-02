@@ -43,7 +43,7 @@
 "use strict";
 const fs = require("fs");
 const path = require("path");
-const { bootPage, pageMutsOK, townAuto, tapFoot, pickOrigin, passEarly, seedBoth, PAGE_DIR }
+const { bootPage, pageMutsOK, townAuto, tapFoot, tapChild, pickOrigin, passEarly, seedBoth, PAGE_DIR }
   = require("./_load.js");
 
 let fail = 0;
@@ -56,14 +56,21 @@ const STAGE_N = { e: 2, m: 3, h: 3 };
  * 🔴 늘린 이유 — A-2b가 *"승패 뒤집기가 🏁 스코어를 실제로 갈랐나"*를 재는데,
  *    **골이 하나도 안 난 아크에서는 뒤집어도 0:0 → 0:0**이라 안 갈립니다.
  *    시드 셋 중 42번이 그런 판이어서 2/3이 됐어요 — **커버리지가 난수에 걸린** 모양입니다.
- * 🌍 그리고 지금은 그 판이 **더 흔합니다**: 🧱 수비가 `PLAYABLE`에서 빠지면서
- *    `GOAL_BY.d.miss = "them"`이 **닿을 수 없게** 됐고, 학교 경기는 늘 `N:0`으로 끝나요.
- *    즉 «갈린다»는 곧 «N > 0»입니다.
+ * 🌍 **2026-09-02 오전까지**는 그 판이 더 흔했습니다: 🧱 수비가 `PLAYABLE`에서 빠지면서
+ *    `GOAL_BY.d.miss = "them"`이 **닿을 수 없게** 됐고, 학교 경기가 늘 `N:0`으로 끝났어요.
+ *    🔄 **그날 오후에 뒤집혔습니다** — 🅰️ 전개의 끊긴 패스가 역습 실점이 되면서
+ *    (`GOAL_BY.a.miss = "them"` · 120번 §3-4) **상대도 넣습니다**(실측 24단계 중 13).
+ *    🔑 그래서 「0:0인 아크」가 다시 드물어졌고, A-2b의 표본 바닥은 **여유가 늘었습니다.**
+ *    🔒 시드를 여덟로 유지합니다 — 줄이면 그 판정이 또 뒤집힐 때 바닥에 붙어요.
  * 🔑 **문턱을 내리지 않고 표본을 키웠습니다** — 아래 A-2b는 「골이 난 판은 **전부** 갈렸다」에
  *    **더해** 「골이 난 판이 최소 `MIN_SCORING`벌」을 같이 봅니다. */
 const SEEDS = [7, 42, 1201, 5, 88, 301, 777, 4242];
 /* 🔒 문턱은 여기 박습니다 — 골이 난 아크가 이만큼은 나와야 A-2가 뜻을 가져요 */
 const MIN_SCORING = 4;
+/* 🥅 ⓸ **상대가 득점한 단계**의 바닥 — 실측 12 / 24(시드 8벌 × 단계 셋).
+ *    🔒 실측의 절반에 뒀습니다. 되돌리면(`a.miss` 제거) **정확히 0**이라 사이가 넓어요 —
+ *       기준선 옆에 붙이면 카드 뽑기가 한 번만 기울어도 **고장이 아니라 우연으로** 빨간불이 납니다. */
+const MIN_CONCEDE = 6;
 /* 🎬 B절 전용 — **셋**입니다. B는 시드마다 간격 두 벌씩(120·200ms) 아크를 굴려서
  * 여기를 늘리면 파일 전체가 곱으로 길어져요. B가 재는 것은 **세대가 갈리는 시점**이지
  * 판정 분포가 아니라, 표본을 키워도 문장이 안 세집니다 — A절과 갈라 둡니다. */
@@ -79,6 +86,11 @@ const GOAL_BY = (() => {
   const m = TOWN_SRC.match(/const GOAL_BY = (\{.*\});/);
   return m ? new Function(`return ${m[1]};`)() : null;
 })();
+/* 🔄 **승패를 뒤집은 표를 소스에서 만듭니다** — 표를 베껴 적으면 칸이 하나 늘 때
+ *    정규식이 조용히 안 걸려요(2026-09-02에 실제로 났습니다). */
+const GOAL_RE = /const GOAL_BY = \{.*\};/;
+const GOAL_FLIP = (TOWN_SRC.match(GOAL_RE) || [""])[0]
+  .replace(/"us"/g, "\u0000").replace(/"them"/g, '"us"').replace(/\u0000/g, '"them"');
 
 /* 🔴 변이 셋 — engineer가 105번 §6에 적은 그대로입니다. */
 const MUT = {
@@ -99,9 +111,14 @@ const MUT = {
     "  async function push(card, g) {\n    await new Promise((r) => setTimeout(r, 260));"]] },
   /* ⓒ 단계 스코어가 0으로 안 돌아갑니다 */
   "M-G": { "town.js": [[/    let hg = 0, ag = 0;/, "    let hg = state.cards, ag = 0;"]] },
-  /* 🔩 A-2 전용 — **판정은 그대로 두고 승패만 뒤집습니다.** 못을 정면으로 재는 자리예요 */
-  "FLIP": { "town.js": [[/  const GOAL_BY = \{ g: \{ perfect: "us" \}, a: \{ perfect: "us" \}, d: \{ miss: "them" \} \};/,
-    '  const GOAL_BY = { g: { perfect: "them" }, a: { perfect: "them" }, d: { miss: "us" } };']] },
+  /* 🔩 A-2 전용 — **판정은 그대로 두고 승패만 뒤집습니다.** 못을 정면으로 재는 자리예요.
+   * 🔴 **표를 베껴 적지 않습니다.** 2026-09-02에 `GOAL_BY.a`에 `miss: "them"`이 한 칸
+   *    늘자 통문장 정규식이 **안 걸려 FLIP이 「안 도는」 상태**가 됐어요(0-2가 잡았습니다).
+   * 🔒 그래서 **소스에서 뜯어 "us" ↔ "them"만 바꿉니다** — 칸이 늘어도 삽니다. */
+  "FLIP": { "town.js": [[GOAL_RE, GOAL_FLIP]] },
+  /* 🔴 ⓸ 전용 — 🅰️ **끊긴 패스의 역습 실점을 도로 막습니다**(그 칸 하나만 지워요).
+   *    🔑 되돌리면 학교 경기가 다시 **늘 `N:0`**이 됩니다 — A-3이 그걸 봐야 해요. */
+  "NO_CONCEDE": { "town.js": [[/a: \{ perfect: "us", miss: "them" \}/, 'a: { perfect: "us" }']] },
 };
 
 /* ══════════════════════════════════════════════════════════════
@@ -175,6 +192,7 @@ async function arc(seed, muts, cadence) {
   await tapFoot(W, press, "R");
   const back = townAuto(W);
   pickOrigin(W, press, "seoul");
+  await tapChild(W, press, "ball");                   // 🧒 초1 — `_load.js`의 한 벌
   await stage("e");
   passEarly(W, press);
   press(D.querySelector('#position-list .card[data-pos="wg"]'), "🎯 wg");
@@ -262,11 +280,60 @@ const finOf = (txt) => {
       `A-2b. 🔑 그 변이가 **🏁 스코어를 실제로 갈랐다** — 골이 난 판 **${scoring.length}벌**(바닥 ${MIN_SCORING}) 중 갈린 판 **${scoringSplit.length}벌**`
       + `\n     🔎 측정 조건 — 🏁 0:0인 아크는 뒤집어도 0:0이라 **잴 것이 없어서** 뺐습니다 (시드 ${SEEDS.length}벌 중 ${SEEDS.length - scoring.length}벌)`
       + `\n     ${SEEDS.map((s) => `${s}:${(finOf(base[s].stages.h.fin) || []).join(":")}→${(finOf(flip[s].stages.h.fin) || []).join(":")}`).join(" · ")}`
-      + `\n     🌍 🧱이 \`PLAYABLE\`에서 빠져 \`GOAL_BY.d.miss\`(상대 골)가 **닿을 수 없습니다** — 학교 경기는 늘 \`N:0\`이에요`
+      + `\n     🌍 2026-09-02까지는 🧱이 \`PLAYABLE\`에서 빠져 \`GOAL_BY.d.miss\`가 **닿을 수 없었고**, 학교 경기가 늘 \`N:0\`이었어요.`
+      + ` 🅰️ 끊긴 패스(\`a.miss\`)가 역습 실점이 되면서 **그 문장은 틀렸습니다** — 지금은 A-3이 「상대도 넣는다」를 봅니다`
       + (b2 ? "" :
         scoring.length < MIN_SCORING
           ? `\n     🔴 골이 난 판이 ${scoring.length}벌뿐이라 A-2가 "원래 같은 값"을 재고 있을 수 있어요 — **시드를 늘리세요**`
           : `\n     🔴 골이 났는데 안 갈린 판이 있어요 — 승패 뒤집기가 화면에 안 닿습니다`));
+  }
+
+  /* ══════════════════════════════════════════════════════════════════════
+   * ⓸ A-3. 🥅 **상대도 넣습니다** — 학교 경기가 늘 `N:0`이 아니다
+   * ══════════════════════════════════════════════════════════════════════
+   * 🔴 **2026-09-02 이전에는 이게 거짓이었습니다.** 🧱 수비가 `PLAYABLE`에서 빠지면서
+   *    실점으로 이어지는 유일한 칸(`GOAL_BY.d.miss`)이 **닿을 수 없게** 됐고,
+   *    학교 경기는 여덟 판 내내 `N:0`으로 끝났어요 — **져 본 적이 없는 경기**였습니다.
+   *    engineer가 🅰️ 전개의 끊긴 패스를 역습 실점(`a.miss = "them"`)으로 열었습니다(120번 §3-4).
+   *
+   * 🔑 **이 문장이 왜 A-2와 따로 서 있나** — A-2는 「승패가 `d`로 안 샌다」는 **변이**예요.
+   *    변이는 «뒤집어도 d가 같은가»만 보니 **표에 실점 칸이 있는지는 안 봅니다.**
+   *    그래서 `a.miss`를 지워도 A-2·A-2b는 **전부 초록불**입니다(실제로 확인했어요).
+   *
+   * 📐 문턱 두 줄:
+   *   ① **무엇과 견주는가** — 「상대가 한 골이라도 넣은 단계」의 수. **화면의 🏁**을 읽습니다.
+   *      🔴 검사가 디스크의 `GOAL_BY`로 다시 세면 변이를 걸어도 값이 안 움직여요 — 실제로
+   *      처음에 그렇게 짜서 13 → 13으로 **아무것도 안 잡혔습니다.**
+   *   ② **어느 칸에서 재는가** — 시드 8벌 × 단계 셋(e·m·h) = 24 단계. 실측 12.
+   *      🔒 바닥은 **6**(실측의 절반) — 되돌리면 **정확히 0**이라 사이가 넓습니다.
+   * 🌍 이 문장이 서 있는 세계: 「실점이 **내 카드의 `miss`에서만** 나오는 세계」입니다.
+   *    🔴 상대 팀을 따로 굴리는 판정이 나오면(소스가 지금 금지한 자리) 여기부터 여세요. */
+  {
+    const STAGE_IDS = ["e", "m", "h"];
+    /* 🔴 **재구성(`scoreOf`)이 아니라 화면의 🏁을 읽습니다.** `scoreOf`는 검사가 **디스크의**
+     *    `GOAL_BY`로 다시 세는 자라서, 실점 칸을 지우는 변이를 걸어도 **값이 안 움직입니다**
+     *    (처음에 그렇게 짜서 변이가 13 → 13으로 안 잡혔어요 — 「자기 자신과 비교」의 사촌).
+     * 🔒 화면 🏁이 판정과 같다는 건 **C-1이 따로** 지킵니다 — 그래서 여기서 화면을 읽어도
+     *    「연출이 판정과 갈라지는」 구멍이 안 생겨요(겹쳐 보기). */
+    const conceded = (r) => STAGE_IDS.filter((id) => ((finOf(r.stages[id].fin) || [0, 0])[1] > 0)).length;
+    const got = SEEDS.reduce((a, s) => a + conceded(base[s]), 0);
+    const tot = SEEDS.length * STAGE_IDS.length;
+    const ok = got >= MIN_CONCEDE;
+    check(ok,
+      `A-3. 🥅 **상대도 넣는다** — 상대가 득점한 단계 **${got} / ${tot}** (바닥 ${MIN_CONCEDE})`
+      + `\n     🔎 측정 조건 — 시드 ${SEEDS.length}벌 × 단계 셋. 🏁은 **화면에서** 읽습니다(C-1이 화면 = 판정을 따로 지켜요)`
+      + `\n     ${SEEDS.map((s) => `${s}:${STAGE_IDS.map((id) => (finOf(base[s].stages[id].fin) || []).join(":")).join(" ")}`).join(" · ")}`
+      + `\n     🌍 실점은 **내 카드의 \`miss\`에서만** 납니다 — 상대를 따로 굴리는 판정이 나오면 이 문장부터 다시 보세요`
+      + (ok ? "" : `\n     🔴 **학교 경기가 다시 \`N:0\`입니다** — 져 본 적이 없는 경기가 돼요. \`GOAL_BY\`의 실점 칸을 보세요`));
+
+    /* 🧪 변이 — 🅰️ 실점 칸 하나를 지우면 **정확히 0**이어야 합니다 */
+    const nc = {};
+    for (const s of SEEDS) nc[s] = await arc(s, MUT.NO_CONCEDE);
+    const got2 = SEEDS.reduce((a, s) => a + conceded(nc[s]), 0);
+    check(got2 === 0,
+      `변이-NO_CONCEDE → **A-3이 빨간불**이어야 한다 — 상대가 득점한 단계 ${got2} / ${tot}`
+      + (got2 === 0 ? `\n     🔑 되돌리면 **정확히 0**이라 기준선(${got})과 사이가 넓습니다 — 문턱이 어느 쪽에도 안 붙었어요`
+        : `\n     🔴 실점 칸을 지웠는데도 상대가 넣습니다 — 다른 경로가 생겼어요. A-3의 세계 문장을 다시 보세요`));
   }
 
   /* ══════════ ⓑ B. 세대가 갈리면 옛 카드가 새 피드에 안 써진다 ══════════

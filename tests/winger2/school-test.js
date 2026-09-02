@@ -49,7 +49,7 @@
  * 종료 코드: 0 통과 · 1 빨간불 · 2 💥 죽음(안 돌았음) — `_load.js`가 걸어 줍니다.
  */
 "use strict";
-const { bootPage, pageMutsOK, townAuto, passStage, passEarly, tapFoot, pickOrigin, seedBoth }
+const { bootPage, pageMutsOK, townAuto, passStage, passEarly, tapFoot, tapChild, pickOrigin, seedBoth }
   = require("./_load.js");
 
 let fail = 0;
@@ -72,7 +72,11 @@ const ARC_CARDS_B = 6;
  *    🔑 최종도 `screen-agency`예요 — 화면을 새로 안 만들었거든요(*"제안 화면에 서는 길은
  *    전부 `showOffers`를 지난다"*를 한 군데에서 지키려고). 그래서 이 배열에
  *    `screen-agency`가 **세 번** 나옵니다: 조기(e) · 조기(m) · 최종. */
-const SCREEN_SEQ = ["screen-title", "screen-name", "screen-foot", "screen-origin",
+/* 🧒 2026-09-02: 🗺️ 지도와 🏫 초등부 **사이**에 `screen-child`(초1)가 들어왔습니다 (117번 §2-3).
+ *    🔑 자리(`screen-position`)는 **한 칸도 안 옮겼어요** — 여전히 초등부 「뒤」·중등 「앞」입니다.
+ *    🔴 초1이 자리 **뒤**로 가면 「무엇을 하고 놀았나」가 이미 정해진 자리를 못 바꿔서
+ *       그 화면이 장식이 됩니다. 그래서 순서를 여기서 못 박아요. */
+const SCREEN_SEQ = ["screen-title", "screen-name", "screen-foot", "screen-origin", "screen-child",
   "screen-town", "screen-agency", "screen-position",
   "screen-town", "screen-agency", "screen-town", "screen-agency"];
 const EARLY_STAGES = ["e", "m"];        // 📨 조기 제안이 서는 단계 (고등 뒤는 최종입니다)
@@ -231,6 +235,10 @@ async function runArc(muts, seed, pos) {
   const back = townAuto(h.W);
   pickOrigin(h.W, h.press, "seoul");
   mark();
+  /* 🧒 초1 — 🔒 **`_load.js`의 한 벌을 부릅니다**(복붙본을 만들지 않아요).
+   *    🔴 돌려받은 값이 `null`이면 **화면을 못 만난 것**이라 S-6b가 그걸 봅니다. */
+  const child = await tapChild(h.W, h.press, "ball");
+  mark();
   const stages = passStage(h.W, h.press);                    // 🏫 초등부
   mark();
   const early = [];
@@ -250,7 +258,7 @@ async function runArc(muts, seed, pos) {
   back();
   const T = h.W.WingerTown;
   const r = {
-    seed, seen, stages, early, cards: stages.length, screen: h.active(),
+    seed, seen, stages, early, child, cards: stages.length, screen: h.active(),
     score: T.score(), n: T.cards(), dev: T.deviation(),
     base: T._t.tierOfD(T.deviation()),
     tiers: h.W.__get("MARKETS").map((m) => T.offerFor(m.id).tier),
@@ -283,6 +291,18 @@ async function s6(muts) {
     + `\n     ${rows.map((r) => `시드 ${r.seed}: [${r.stages.join("")}] ${r.cards}장 → ${r.screen}`).join("\n     ")}`
     + `\n     단계별: ${perStage.map(([id, n, got]) => `${id} ${got.join("/")}장(계약 ${n})`).join(" · ")}`
     + (seqOK && countOK ? "" : `\n     🔴 단계 열이 계약과 달라요 — 카드 수를 바꿨다면 \`STAGE_PLAN\`·\`STAGE_SEQ\` 두 줄을 같이 고치세요`));
+
+  /* 🧒 **눌렀는가** — 🔴 화면 순서(S-6a)는 「지나갔는가」만 봅니다. `tapChild`가 화면을
+   *    못 만나면 조용히 `null`을 돌려주고 흐름은 끝까지 밀려요 — 그 상태로도 S-6a는
+   *    `screen-child`가 목록에 없으니 빨간불이 나지만, **화면이 있는데 안 누른** 길은
+   *    (예: 카드 선택자가 바뀜) `press`가 던져 💥가 됩니다. 여기서 **눌린 키**를 확인해
+   *    「도달 = 조작」이 아니라는 걸 못 박습니다. */
+  const tapped = rows.filter((r) => r.child != null).length;
+  check(tapped === rows.length,
+    `S-6c. 🧒 **초1 카드를 실제로 눌렀다** — ${tapped} / ${rows.length}판`
+    + `\n     🔑 「도달했는가」가 아니라 「눌렀는가」예요 — 안 누르고도 지나가면 그게`
+    + ` **자가 복구가 실패를 삼킴**입니다`
+    + (tapped === rows.length ? "" : `\n     🔴 초1 화면을 한 번도 안 지났어요 — 흐름이 바뀌었는지 보세요`));
 
   const seqScreens = rows.map((r) => r.seen.join(" → "));
   const same = seqScreens.every((x) => x === SCREEN_SEQ.join(" → "));

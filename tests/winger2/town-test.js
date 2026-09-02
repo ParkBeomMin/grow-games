@@ -59,7 +59,7 @@
 "use strict";
 const fs = require("fs");
 const path = require("path");
-const { bootPage, pageMutsOK, townAuto, passArc, passStage, passEarly, tapFoot, pickOrigin, PAGE_DIR,
+const { bootPage, pageMutsOK, townAuto, passArc, passStage, passEarly, tapFoot, tapChild, pickOrigin, PAGE_DIR,
   seedBoth } = require("./_load.js");
 
 let fail = 0;
@@ -69,8 +69,14 @@ const check = (ok, msg) => { console.log(`${ok ? "✅" : "❌"} ${msg}`); if (!o
 /* ══════════════════════════════════════════════════════════════
  * 🔒 문턱 — **전부 여기 박습니다.** 소스에서 읽어 오지 않아요.
  * ══════════════════════════════════════════════════════════════ */
-const DECISIONS_BEFORE_CARD = 3;   // ⏱️ ✏️ 이름 · 🦶 주발 · 🗺️ 동네 (설계 93번 §2-2)
-const PRE_CARD_SCREENS = ["screen-name", "screen-foot", "screen-origin"];
+/* ⏱️ ✏️ 이름 · 🦶 주발 · 🗺️ 동네 · 🧒 초1 (설계 93번 §2-2 → 117번 §2-3)
+ * 🔄 **2026-09-02: 3 → 4.** 🧒 초1이 🗺️ 지도와 🏫 초등부 **사이**에 들어왔습니다.
+ * 🔑 **이 문장이 지키는 건 「몇 개냐」가 아니라 「무엇이 오냐」예요** — 🎯 자리가 여기로
+ *    앞당겨지면(M-H) 「추천」의 뒷문이 열립니다. 그래서 **목록까지** 못 박습니다.
+ * 🔴 초1을 여기서 빼는 판정이 나오면 그때 3으로 되돌리세요 — 값만 고치지 말고
+ *    `_load.js`의 `tapChild`와 `school-test.js`의 `SCREEN_SEQ`를 **같이** 보세요. */
+const DECISIONS_BEFORE_CARD = 4;
+const PRE_CARD_SCREENS = ["screen-name", "screen-foot", "screen-origin", "screen-child"];
 const ARC_CARDS = 8;               // 🏫 초등 2 + 중등 3 + 고등 3
 const OFFER_COUNT = 5;             // 🏟️ 유스 5곳이 **전부** 옵니다 (줄이면 축이 뒤집혀요)
 const OLD_SAVE_SCORE = 3;          // 📀 옛 세이브의 중립 점수
@@ -125,7 +131,9 @@ const MUT = {
     '<button class="btn btn-ghost" id="btn-town-skip">건너뛰기</button>\n      <button class="btn btn-primary hidden" id="btn-town-next"></button>']] },
   /* 🔴 **M-H — 🎯 자리를 첫 카드 「앞」으로 되돌립니다.** 옛 순서로 가는 변이예요.
    *    결정이 4가 되고, 그 순간 *"첫 순간 카드 앞의 결정이 3을 안 넘는다"*가 깨집니다. */
-  M_H_POSFIRST: { "game.js": [[/WingerIntro\.openOrigin\(chosenOrigin, \(id\) => \{ chosenOrigin = id; goElementary\(\); \}\);/,
+  /* 🔒 **다음에 가는 곳의 이름을 정규식에 안 박습니다.** 🗺️ 지도 뒤가 🏫 초등부에서
+   *    🧒 초1로 바뀌자 `goElementary\(\)`가 **안 걸려 M-H가 「안 도는」 상태**가 됐어요. */
+  M_H_POSFIRST: { "game.js": [[/WingerIntro\.openOrigin\(chosenOrigin, \(id\) => \{ chosenOrigin = id; \w+\(\); \}\);/,
     "WingerIntro.openOrigin(chosenOrigin, (id) => { chosenOrigin = id; goPosition(); });"]] },
 };
 
@@ -203,6 +211,8 @@ async function runT7(muts) {
   await tapFoot(h.W, h.press, "R");
   mark();
   pickOrigin(h.W, h.press, "seoul");
+  mark();
+  await tapChild(h.W, h.press, "ball");               // 🧒 초1 — `_load.js`의 한 벌
   mark();
   /* 🔴 여기서 🏫이 아니라 🎯 자리가 서 있으면 **그게 결정 하나가 더 낀 것**입니다.
    *    검사가 멈추지 않고 지나가서, 카드 앞에 뭐가 몇 개 왔는지 그대로 셉니다. */
@@ -282,6 +292,7 @@ async function runRewind(muts) {
   await tapFoot(h.W, h.press, "R");
   const back = townAuto(h.W);
   pickOrigin(h.W, h.press, "seoul");
+  await tapChild(h.W, h.press, "ball");       // 🧒 초1
   passStage(h.W, h.press);                    // 🏫 초등부
   passEarly(h.W, h.press);                    // 📨 조기 제안 — 🙅 거절
   const r = { atPos: h.active(), cards: T.cards(), score: T.score() };
@@ -289,6 +300,11 @@ async function runRewind(muts) {
   r.originScreen = h.active();
   pickOrigin(h.W, h.press, "busan");
   r.afterOrigin = h.active();
+  /* 🧒 **되감은 뒤에도 초1을 다시 지납니다** — 2026-09-02에 🗺️ 지도와 🏫 사이에 화면이
+   *    하나 끼면서, 되감기 경로도 **한 칸 길어졌어요.** 🔴 여기서 안 누르면 화면이
+   *    `screen-child`에 멈추고 `afterOrigin !== "screen-town"`이 **공짜로 참**이 됩니다 —
+   *    뒷문이 열려 있어도 초록불이 나는 자리예요(실제로 그렇게 됐습니다). */
+  r.afterChild = await tapChild(h.W, h.press, "eye") ? h.active() : r.afterOrigin;
   r.extra = passStage(h.W, h.press);          // 🏫 다시 열렸다면 여기서 카드가 더 굴러요
   back();
   r.cards2 = T.cards(); r.score2 = T.score();
@@ -312,12 +328,15 @@ check(O.spots.every((s) => /×[\d.]+ → ×[\d.]+/.test(s)),
   + `\n     ${O.spots.map((s) => s.replace(/📣 주목 /, "")).join(" · ")}`);
 {
   const R = await runRewind(null);
+  /* 🔴 **끝까지 걸어서 봅니다.** 되감기 뒤 화면이 `screen-child`에 멈춰 있으면
+   *    `afterOrigin !== "screen-town"`은 **공짜로 참**이에요 — 초1을 다시 지난 뒤의
+   *    `afterChild`가 진짜로 물어야 하는 자리입니다(「도달 경로가 조용히 죽음」의 형태). */
   const ok = R.atPos === "screen-position" && R.originScreen === "screen-origin"
-    && R.afterOrigin !== "screen-town" && R.extra.length === 0
+    && R.afterOrigin !== "screen-town" && R.afterChild !== "screen-town" && R.extra.length === 0
     && R.cards === R.cards2 && R.score === R.score2;
   check(ok,
     `T-6a. ♻️🔑 **🗺️ 동네까지 되감아 지역을 다시 골라도 🏫이 다시 안 굴러요** — 여기가 진짜 뒷문입니다`
-    + `\n     🎯 자리(${R.atPos}) 카드 ${R.cards}장 → 뒤로(${R.originScreen}) → 지역 다시 → **${R.afterOrigin}**`
+    + `\n     🎯 자리(${R.atPos}) 카드 ${R.cards}장 → 뒤로(${R.originScreen}) → 지역 다시 → ${R.afterOrigin} → 🧒 초1 다시 → **${R.afterChild}**`
     + `\n     그 뒤 더 지나간 카드 ${R.extra.length}장 · 카드 ${R.cards} → ${R.cards2} · 점수 ${R.score} → ${R.score2}`
     + (ok ? `\n     🔑 \`goSchool\`의 \`playedStage\` **한 줄**이 유일한 가드예요 — 늘리면 변이가 또 죽습니다`
       : `\n     🔴 🏫이 다시 열렸어요 — **되돌아가기가 곧 재도전 버튼**이 됐습니다`));
@@ -528,10 +547,11 @@ else {
 if (!mutOK("M_R_GUARD")) check(false, `🧪 **변이 M-R — \`goSchool\`의 가드 한 줄 제거**${MUT_DEAD}`);
 else {
   const R = await runRewind(MUT.M_R_GUARD);
-  const caught = R.afterOrigin === "screen-town" || R.extra.length > 0 || R.cards2 !== R.cards;
+  const caught = R.afterOrigin === "screen-town" || R.afterChild === "screen-town"
+    || R.extra.length > 0 || R.cards2 !== R.cards;
   check(caught,
     `🧪🔑 **변이 M-R — ♻️ \`goSchool\`의 가드 한 줄을 빼서 재도전 뒷문을 엶** → T-6a가 빨간불`
-    + `\n     지역 다시 → **${R.afterOrigin}** · 더 지나간 카드 ${R.extra.length}장(${R.extra.join("")})`
+    + `\n     지역 다시 → ${R.afterOrigin} → 🧒 초1 다시 → **${R.afterChild}** · 더 지나간 카드 ${R.extra.length}장(${R.extra.join("")})`
     + `\n     카드 ${R.cards} → ${R.cards2} · 점수 ${R.score} → ${R.score2}`
     + (caught ? `\n     ✔ 🏫 초등이 다시 굴렀어요 — 이게 곧 재도전 버튼입니다`
       : `\n     🔴 가드를 뺐는데 초록불이에요 — T-6a가 아무것도 안 지킵니다`)

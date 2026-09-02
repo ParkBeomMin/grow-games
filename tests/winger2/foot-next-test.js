@@ -67,7 +67,7 @@
 "use strict";
 const fs = require("fs");
 const path = require("path");
-const { bootPage, pageMutsOK, seedBoth, townAuto, tapFoot } = require("./_load.js");
+const { bootPage, pageMutsOK, seedBoth, townAuto, tapFoot, tapChild } = require("./_load.js");
 
 let fail = 0;
 const t0 = Date.now();
@@ -84,11 +84,15 @@ const N_CARDS = 2;           // 🦶 발 두 짝
  *   600ms면 그 1.9배라 옛 전환이 돌아오면 확실히 걸리고, 기준선 쪽으로는 여유가 무한입니다
  *   — 기준선 옆에 붙은 문턱이 아니에요. */
 const HOLD_MS = 600;
-/* 🚪 첫 순간 카드 앞의 탭 수. **5 → 6**입니다 (2026-09-02 · 111번 §2에서 재서 확인).
- *   새로 시작 · 이름 다음 · 🦶 발 · 🆕 🦶 다음 · 🗺️ 지역 · 🗺️ 다음
- *   ⚠️ designer의 초1 아크에서 이 검산을 다시 잡습니다. **여기서 조용히 되돌리지 마세요** —
- *      값을 바꿔야 하면 근거를 남기고 바꾸라는 뜻이지, 지우라는 뜻이 아니에요. */
-const TAPS_TO_TOWN = 6;
+/* 🚪 첫 순간 카드 앞의 탭 수. **5 → 6 → 7**입니다.
+ *   새로 시작 · 이름 다음 · 🦶 발 · 🆕 🦶 다음 · 🗺️ 지역 · 🗺️ 다음 · 🆕 🧒 초1
+ *   · 2026-09-02(111번 §2) 🦶 주발에 [다음]이 붙어 **5 → 6**
+ *   · 2026-09-02(117번 §2-3) 🧒 초1이 🗺️ 지도와 🏫 사이에 들어와 **6 → 7**
+ *     🔑 초1은 **[다음]이 없어서 탭이 하나**예요 — 두 걸음이었다면 8이 됐을 자리입니다.
+ * ⚠️ **여기서 조용히 되돌리지 마세요** — 값을 바꿔야 하면 근거를 남기고 바꾸라는 뜻이지,
+ *    지우라는 뜻이 아니에요. 이 값이 움직이면 `town-test.js`의 `DECISIONS_BEFORE_CARD`와
+ *    `school-test.js`의 `SCREEN_SEQ`도 **같이** 움직여야 합니다(셋이 한 흐름을 봅니다). */
+const TAPS_TO_TOWN = 7;
 
 /* ══════════════════════════════════════════════════════════════
  * 🧪 이 파일이 쓰는 변이 전부 — **0번이 먼저 소스와 대조합니다**
@@ -353,15 +357,19 @@ async function main() {
     h.press(h.D.querySelector('#origin-map .om-do[data-id="gyeonggi"]')
       || h.D.querySelector('#origin-cities .om-city[data-id="seoul"]'), "🗺️ 지역");
     h.press(h.D.getElementById("btn-origin-next"), "🗺️ 다음");
+    /* 🧒 초1 — 탭 하나가 고르기 겸 넘김입니다. 🔒 `_load.js`의 한 벌을 부릅니다.
+     * 🔴 **돌려받은 값을 봅니다** — 화면을 못 만나면 `null`이라, 「도달만 재고 아무것도
+     *    안 눌렀는데 통과」가 안 됩니다(자가 복구가 실패를 삼키는 자리). */
+    const kid = await tapChild(h.W, h.press, "ball");
     const n = h.taps();
     const at = h.active();
     back();
     h.close();
-    check(n === TAPS_TO_TOWN && at === "screen-town",
-      `N-8. 🔢 첫 순간 카드까지 **탭 ${TAPS_TO_TOWN}번** — 새로 시작 · 이름 다음 · 🦶 발 · 🆕 🦶 다음 · 🗺️ 지역 · 🗺️ 다음`
-      + `\n     쟀더니 ${n}번 · 도착 ${at}`
-      + `\n     🔒 111번에서 **5 → 6**이 됐습니다(요청대로 [다음]이 붙어서요).`
-      + ` ⚠️ **designer의 초1 아크가 이 검산을 다시 잡습니다** — 여기서 조용히 되돌리지 마세요`);
+    check(n === TAPS_TO_TOWN && at === "screen-town" && kid != null,
+      `N-8. 🔢 첫 순간 카드까지 **탭 ${TAPS_TO_TOWN}번** — 새로 시작 · 이름 다음 · 🦶 발 · 🆕 🦶 다음 · 🗺️ 지역 · 🗺️ 다음 · 🧒 초1`
+      + `\n     쟀더니 ${n}번 · 도착 ${at} · 🧒 초1에서 누른 것 ${kid || "🔴 안 눌렀어요"}`
+      + `\n     🔒 111번에서 5 → 6(🦶 [다음]) · 117번에서 6 → **7**(🧒 초1). 초1은 [다음]이 없어 탭이 하나예요`
+      + `\n     ⚠️ 여기서 조용히 되돌리지 마세요 — \`town-test\`의 \`DECISIONS_BEFORE_CARD\`(4)와 한 흐름입니다`);
   }
 
   /* ── N-9. 🔒 `tapFoot` 복붙본이 없는가 ── */

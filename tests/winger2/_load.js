@@ -573,12 +573,43 @@ function passStage(W, press, max) {
   }
   return seen;
 }
+/* ═══════════════════════════════════════════════════════════════════════
+ * 🧒 **초1 — 탭 하나가 고르기 겸 넘김입니다** (2026-09-02 · 117번 §2-3)
+ * ═══════════════════════════════════════════════════════════════════════
+ * 🔴 **복붙본을 만들지 마세요.** 🦶 주발이 [다음]을 갖게 된 날 `tapFoot`의 사본 **셋**이
+ *    한꺼번에 죽어 검사 7종이 종료 코드 2가 됐습니다 — 여기도 같은 자리예요.
+ *    지금 이 함수를 부르는 곳은 `passArc`와 `school-test.js`의 `runArc` **둘**입니다.
+ *
+ * 🔒 **시간을 박지 않습니다** — 「화면이 바뀔 때까지」 기다려요. `ECHO_MS`(620ms)를 박으면
+ *    연출이 사라지는 날 이 줄이 **의미 없이 620ms를 버리는 줄**이 됩니다.
+ * 🔴 **돌려주는 값은 「눌렀는가」입니다** — 화면을 못 만나면 `null`이에요. 「도달했는가」만
+ *    재면 화면이 사라져도 흐름이 끝까지 밀려 **아무것도 안 누르고 초록불**이 납니다.
+ *
+ * 🌍 이 드라이버가 서 있는 세계:
+ *   「🧒 초1이 **[다음] 없이 탭 하나**인 세계」입니다. [다음]이 붙으면 여기서 화면이
+ *   안 넘어가 던지므로 **이 함수부터 다시 보세요**(`tapFoot`처럼 두 걸음이 됩니다). */
+async function tapChild(W, press, want) {
+  const D = W.document;
+  const cur = () => (D.querySelector(".screen.active") || {}).id;
+  if (cur() !== "screen-child") return null;
+  const key = want || "ball";
+  press(D.querySelector(`#child-list .card[data-child="${key}"]`), `🧒 초1 ${key}`);
+  for (let i = 0; i < 600 && cur() === "screen-child"; i++) await wait(3);
+  if (cur() === "screen-child")
+    throw new Error("🧒 초1 카드를 눌렀는데 화면이 안 넘어가요 — openChild의 done 배선을 보세요");
+  return key;
+}
+
 /* 🏫 **아크 전체**를 지나 🏟️ 제안 화면까지. 게임 입구(타이틀)에서 출발합니다.
  *
- *   돌려주는 것: { stages, cards, screens, early }
+ *   돌려주는 것: { stages, cards, screens, early, child }
  *     stages   카드마다 읽은 `data-stage` — 계약은 `e e m m m h h h`
  *     screens  지나온 화면들 (연달아 같은 화면은 한 번만)
  *     early    📨 조기 제안을 **거절로** 지난 단계들 — 계약은 `["e", "m"]`
+ *     child    🧒 초1에서 **실제로 누른** 카드의 키 · 화면을 못 만났으면 `null`
+ *              🔴 **「도달했다」가 아니라 「눌렀다」를 셉니다** — 화면이 사라지거나 순서가
+ *              바뀌면 아래 `if`가 **조용히 건너뛰고** 흐름은 끝까지 갑니다(자가 복구가
+ *              실패를 삼키는 자리예요). 이 값을 안 보는 검사는 그 상태에서 초록불이 나요.
  *
  * 🔴 **조기 제안은 늘 「거절」입니다.** 승낙하면 최종 제안에 한 곳만 와서 그 위에 선
  *    검사들이 통째로 어긋나요 (`passEarly` 주석 참고). 🤝 승낙 갈래를 재는 검사는
@@ -602,6 +633,8 @@ async function passArc(W, press, opt) {
   const back = o.auto === false ? null : townAuto(W);
   pickOrigin(W, press, o.origin || "seoul");
   mark();
+  const child = await tapChild(W, press, o.child);
+  mark();
   const stages = passStage(W, press);                       // 🏫 초등부
   const early = [];
   if (passEarly(W, press)) early.push("e");                 // 📨 초등 뒤 — **거절**
@@ -613,7 +646,7 @@ async function passArc(W, press, opt) {
   mark();
   stages.push(...passStage(W, press));                      // 🏫 고등부
   if (back) back();
-  return { stages, cards: stages.length, screens, early };
+  return { stages, cards: stages.length, screens, early, child };
 }
 
 
@@ -675,6 +708,6 @@ function pressRetarget(W, oldEl, root, newSel) {
 module.exports = { load, mutsOK, xiOf, xiAll, statsOf, play, spreadFor, SRC, ENGINE,
   bootPage, pageMutsOK, PAGE_DIR, pagePre, RAF_SHIM, seedBoth, SEED_SPLIT, mulberry32,
   townAuto, passTown,
-  wait, tapFoot, pickOrigin, passStage, passEarly, passArc,
+  wait, tapFoot, tapChild, pickOrigin, passStage, passEarly, passArc,
   loadMoment, momentMutsOK, MSRC, MOMENT,
   momentDom, pressDom, pressRetarget };

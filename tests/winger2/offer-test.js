@@ -43,7 +43,7 @@
  * 종료 코드: 0 통과 · 1 빨간불 · 2 💥 죽음(안 돌았음) — `_load.js`가 걸어 줍니다.
  */
 "use strict";
-const { bootPage, pageMutsOK, townAuto, passStage, passEarly, tapFoot, pickOrigin, seedBoth }
+const { bootPage, pageMutsOK, townAuto, passStage, passEarly, tapFoot, tapChild, pickOrigin, seedBoth }
   = require("./_load.js");
 
 let fail = 0;
@@ -218,6 +218,8 @@ async function runArc(o) {
   await tapFoot(h.W, h.press, "R");
   const back = townAuto(h.W);
   pickOrigin(h.W, h.press, opt.origin || "seoul");
+  mark();
+  await tapChild(h.W, h.press, opt.child || "ball");         // 🧒 초1 — `_load.js`의 한 벌
   mark();
   const stages = passStage(h.W, h.press);                    // 🏫 초등부
   mark();
@@ -450,12 +452,16 @@ async function rewind(muts) {
   await tapFoot(h.W, h.press, "R");
   const back = townAuto(h.W);
   pickOrigin(h.W, h.press, "seoul");
+  await tapChild(h.W, h.press, "ball");       // 🧒 초1
   passStage(h.W, h.press);                    // 🏫 초등부
   passEarly(h.W, h.press);                    // 📨 조기 제안 — 🙅 거절
   const atPos = h.active(), cards0 = T.cards();
   h.press(h.D.getElementById("btn-back-position"), "← 뒤로");
   const originScreen = h.active();
   pickOrigin(h.W, h.press, "busan");
+  /* 🧒 **되감은 뒤에도 초1을 다시 지납니다** — 안 누르면 화면이 `screen-child`에 멈춰
+   *    `screen === "screen-position"`이 빨간불이 되고, 진짜 뒷문은 못 보게 돼요. */
+  await tapChild(h.W, h.press, "eye");
   const out = { atPos, originScreen, screen: h.active(), earlyOn: h.earlyOn(),
     takes: h.takes().length, extra: passStage(h.W, h.press).length,
     cards0, cards: T.cards() };
