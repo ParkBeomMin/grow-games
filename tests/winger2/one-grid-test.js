@@ -17,16 +17,30 @@
  * ═════════════════════════════════════════════════════════════════════════
  * (2026-09-02 · engineer 113번 · designer 112번 §11)
  *
- *   · 🥅는 **골문 5칸**이고 `onTap`은 **`.w2m-goal` 하나**에만 달립니다(탭 자리 6 유지)
+ * 🔄 **2026-09-02 갱신** — 미니게임이 **넷 → 하나**가 됐습니다(116번). 🏃 컷인 · 🎯 킬패스 ·
+ *    🧱 차단은 **형태째** 사라졌고, 판은 🥅 **골문 6칸** 하나예요.
+ *
+ *   · 🥅는 **골문 6칸**이고 `onTap`은 **`.w2m-goal` 하나**에만 달립니다
  *   · 🔑 **밝기(`opacity`)가 곧 그 칸의 `s`**입니다 — 그려진 것과 판정하는 것이 같은 값
- *   · 🦶 주발 쪽 절반의 칸이 **더 넓게** 밝습니다 (판정 창 ±25%가 그대로 밝기)
- *   · 🧤 키퍼가 각을 좁힙니다 — **「좋은 지점」은 거의 안 움직이고 창만 좁아져요**
+ *   · 🦶 주발 쪽 절반의 칸이 **더 넓게** 밝습니다. 🔒 **6칸은 50에 앉는 칸이 없어 3 : 3**이에요
+ *   · 🧤 키퍼가 **가운데(50)에서 출발해 한쪽으로 미끄러지며** 각을 좁힙니다
+ *     🔒 **계약 ①** 가운데를 안 넘어요 (넘으면 좌우 대칭인데 한쪽만 골 = 절벽) → **G-8**
+ *     🔒 **계약 ②** 빈 곳이 늘 줄어요 (넓어지면 «빨리 차라»가 죽음) → **G-9**
+ *     🔑 여기는 **화면에서 재는 쪽**이에요. 같은 계약의 **구조 쪽**(소스 상수의 부등호)은
+ *        `moment-test.js` **D-2b**가 봅니다 — 한 계약에 주인은 하나입니다
+ *   · 🧱 **수비는 판을 안 엽니다** — `s = 0.5`만 돌려줘요(designer 117번 §6 c안) → **G-10**
+ *   · 🏔️ `CELL_FLOOR`가 `s`의 **천장**을 잡습니다 → **G-11·G-11b·G-11c**
  *   · `.w2m-half` · `.w2m-keeper-body` · `.w2m-stake`는 **일부러 살렸습니다**(다른 검사가 봐요)
  *
  * ⚠️ **뒤집히면 이 파일이 옛 계약이 되는 판정**
  *   · *"자유 좌표로 되돌리자"* → G-1·G-2·G-3·G-4가 통째로 옛 계약입니다
  *   · *"밝기에 보정 곡선을 얹자"* → **G-2가 그 판정을 막는 유일한 자리**예요.
  *     얹기로 정했다면 값을 고치지 말고 **먼저 여기를 여세요**
+ *   · *"키퍼를 다시 한 자리에 세우자"* · *"양쪽에서 협공하자"* → **G-8**을 먼저 여세요.
+ *     🔑 옛 세계에서 계약 ①은 `|kc − 50| ≥ 4`라는 **거리**였습니다. 출발이 가운데로 오면서
+ *     거리로는 못 막게 됐고 **부호 고정**으로 형태가 바뀌었어요 — 관계도 뒤집힙니다
+ *   · *"🥅를 우리 골문으로 돌려 수비용을 만들자"*(117번 §6-4) → **G-10**이 옛 계약이 됩니다.
+ *     🚨 그때도 🧱 차단의 **형태**(칩 둘 읽기 · 2단 국면 · 띠)는 되살리지 마세요
  *   · 🥅 판정 줄(`cellS`)의 구조 계약(`sBar` 한 함수 · `상수 × mul`)은 여기가 아니라
  *     **`moment-test.js` E절**이 봅니다. 둘을 섞지 않았습니다
  *
@@ -70,6 +84,7 @@ let fail = 0;
 const t0 = Date.now();
 const check = (ok, msg) => { console.log(`${ok ? "✅" : "❌"} ${msg}`); if (!ok) fail += 1; };
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+const a_w = (r) => r.floors.map((f) => f.w);
 
 /* ══════════════════════════════════════════════════════════════
  * 🔒 문턱 — **전부 여기 박습니다.** 소스에서 읽어 오지 않아요.
@@ -129,7 +144,7 @@ const MUT = {
     "const cellS = (c, a) => sOne(oneErr(c.x, a.best), a.tight);"]],
   /* 🔴 M6 — 🧤 **「좋은 지점」이 늘 한가운데.** 키퍼가 어디 서 있든 상관이 없어집니다
    *    (무대가 있는 척하는 무대 — 판이 신호 하나짜리가 돼요). */
-  M6_BEST50: [[/ {6}best: left \? \(near \+ 100\) \/ 2 : near \/ 2,/, "      best: 50,"]],
+  M6_BEST50: [[/ {6}best: openLeft \? near \/ 2 : \(near \+ 100\) \/ 2,/, "      best: 50,"]],
   /* 🔴 M8 — 🔮 **예고 띠를 판정에 씁니다.** 소스가 *"⛔ 예고 띠를 판정에 쓰지 마세요 —
    *    그 순간 규칙이 둘이 되고, 화면이 결과를 만드는 자리가 됩니다"*라고 못 박은 자리예요.
    *    🔑 눈으로는 **아무것도 안 달라 보입니다** — 밝기도 예고도 그대로 그려지니까요. */
@@ -137,11 +152,50 @@ const MUT = {
     "      const s = cellS(c, oneAt(board, (nowMs() - t0) \/ 1000 + ONE.look \/ 1000));"]],
   /* 🔮 M9 — **미래 흘리기의 손잡이만** 흔듭니다(0.45초 → 1.5초). 변이가 아니라 **자**예요:
    *    화면은 달라지고 **`s`는 한 톨도 안 달라져야** 합니다(G-7). 아래 M9_0은 반대쪽 끝. */
-  M9_LOOK_LONG: [[/look: 450,/, "look: 1500,"]],
-  M9_LOOK_ZERO: [[/look: 450,/, "look: 0,"]],
+  M9_LOOK_LONG: [[/look: \d+,/, "look: 1500,"]],
+  M9_LOOK_ZERO: [[/look: \d+,/, "look: 0,"]],
   /* 🔴 M7 — 🗣️ **폐기한 낱말을 되살립니다.** 「판정 창」은 만든 사람의 말이에요. */
-  M7_WORD: [[/head\(ctx\.stake, ctx\.title, "키퍼가 지운 반대쪽 — 가장 밝은 칸을 누르세요"\)/,
-    'head(ctx.stake, ctx.title, "판정 창이 가장 넓은 코스 칸을 누르세요")']],
+  /* 🔴 M7 — 🗣️ **폐기한 낱말을 되살립니다.** 「판정 창」·「코스 칸」은 만든 사람의 말이에요.
+   *    🔑 옛 정규식은 `head(ctx.stake, ctx.title, "…")`를 겨눴는데, 낱말이 `WORDS`로
+   *       옮겨 가면서 **안 걸리게 됐습니다** — 그 상태의 변이 검사는 「안 도는」 겁니다. */
+  M7_WORD: [[/ {6}why: "🧤 키퍼가 미끄러진 <b>반대쪽<\/b> — 가장 밝은 칸으로 차요",/,
+    '      why: "판정 창이 가장 넓은 코스 칸을 누르세요",']],
+
+  /* ══════════════════════════════════════════════════════════════
+   * 🚨 여기부터 다섯은 **2026-09-02에 새로 겨눈 자리**입니다
+   *    engineer가 116번 §6에서 흠 여덟을 내 봤더니 **아무도 안 잡았어요.**
+   *    격자를 보던 검사가 전부 죽거나 빨간불이라 그랬습니다.
+   * ══════════════════════════════════════════════════════════════ */
+
+  /* 🔴 E-M5 — 🎚️ **판정 창을 두 배로.** 난이도가 통째로 반이 됩니다.
+   *    🔑 밝기도 판정도 **같이** 커지니 G-1·G-2·G-3은 전부 초록불이에요 —
+   *       「그림과 판정이 같은가」만 보는 문장은 **난이도를 못 봅니다.**
+   *       보이는 자리는 둘: **`s`의 천장**(G-11b)과 **6칸이 다 밝아지는 것**(G-11c). */
+  /* 🔒 **값을 정규식에 박지 않습니다** — `ONE_WIN`이 23으로 움직이는 날
+   *    `/= 22;/`는 **안 걸리고**, 그 변이 검사는 조용히 «안 도는» 상태가 돼요
+   *    (G-0이 잡아 주긴 하지만, 고칠 자리가 하나 더 느는 건 그 자체로 빚입니다). */
+  E_WIN2: [[/const ONE_WIN = [\d.]+;/, "const ONE_WIN = 44;"]],
+
+  /* 🔴 E-M6 — 🧤 **키퍼가 가운데를 넘게** 합니다(계약 ①의 정확한 반대).
+   *    출발 거리의 부호를 뒤집으면 `-off0` → `slide-off0`으로 가운데를 지나가요.
+   *    그 순간 좌우 빈 곳이 같아지는 프레임이 생기고 — **대칭으로 보이는 화면인데
+   *    한쪽만 정답**인 절벽이 납니다(거울 칸이 0점). */
+  E_KEEPER_CROSS: [[/ {4}const kc = 50 \+ b\.side \* \(b\.off0 \+ b\.slide \* p\);/,
+    "    const kc = 50 + b.side * (-b.off0 + b.slide * p);"]],
+
+  /* 🔴 E-M7 — 🧱 **수비 가드를 뺍니다.** 수비 상황에 **상대 골문**이 뜹니다 —
+   *    화면이 만드는 기대(넣는다)와 상황의 핵심(막는다)이 정면으로 싸워요. */
+  E_NO_DEFEND_GUARD: [[/ {4}if \(o\.kind === "defend"\) \{ done\(judge\(0\.5\), \{ s: 0\.5, moment: o\.moment \|\| "block", weak: false \}\); return; \}/,
+    "    /* 🧪 가드 제거 */"]],
+
+  /* 🔴 E-M8 — 🏔️ **`CELL_FLOOR`를 0으로.** `s`의 천장이 사라져 능숙이 만점을 굽습니다.
+   *    🔑 **판정도 밝기도 여전히 같은 한 줄을 지나서** G-2는 초록불이에요. */
+  E_FLOOR0: [[/const CELL_FLOOR = [\d.]+;/, "const CELL_FLOOR = 0;"]],
+
+  /* 🔴 K2 — 🧤 **미끄러지는 거리를 몸이 벌어지는 폭보다 크게.** 계약 ②의 반대예요 —
+   *    빈 곳이 **넓어지는** 판이 생겨 «기다릴수록 유리»가 되고 «빨리 차라»가 죽습니다.
+   *    (`slide` 최대 16 < `cov1 − cov0` = 24 라는 구조가 이걸 막고 있어요) */
+  K_SLIDE_FAST: [[/slide: \[[\d.]+, [\d.]+\]/, "slide: [5, 40]"]],
 };
 
 /* ══════════════════════════════════════════════════════════════
@@ -166,10 +220,16 @@ async function open(o) {
   W.requestAnimationFrame = (cb) => W.setTimeout(() => cb(clk), 0);
   const st = W.setTimeout;
   W.setTimeout = (fn) => st(fn, 0);                 // ⏳ `ender`의 620ms 지연만 뭉갭니다
+  /* ♿ **판정 창 확대는 `localStorage`로만 켜집니다.** `momentDom`이 url 없이 jsdom을 띄우면
+   *    origin이 opaque라 `getItem`이 던지고, `wideOn()`의 try/catch가 그걸 삼켜
+   *    **확대가 검사에서 한 번도 안 걸립니다** — 「환경이 우연히 막아 줌」의 형태예요.
+   *    `_load.js`의 `momentDom`에 url을 넣어 고쳤고, 여기서 실제로 켜 봅니다. */
+  if (o.wide) W.localStorage.setItem("grow-wide-judge", "1");
   const host = W.document.getElementById("host");
-  let info = null;
-  W.W2Moment.play(host, { moment: "oneone", kind: "goal", condition: 80, foot: o.foot || "R" },
-    (j, i2) => { info = i2; });
+  let info = null, calls = 0;
+  W.W2Moment.play(host, { moment: "oneone", kind: o.kind || "goal",
+    condition: o.cond == null ? 80 : o.cond, foot: o.foot || "R" },
+  (j, i2) => { info = i2; calls += 1; });
   await wait(6);
   /* ▶️ 준비 화면을 실기기 순서로 지납니다 — **게임이 여는 문으로** 들어가요 */
   const go = host.querySelector(".w2m-go");
@@ -177,6 +237,7 @@ async function open(o) {
   return {
     W, host, T: W.W2Moment._t,
     s: () => (info ? info.s : null),
+    info: () => info, calls: () => calls,
     at: async (ms) => { clk = BASE + ms; await wait(6); },
     close: () => { try { W.close(); } catch (e) { /* 이미 닫힘 */ } },
   };
@@ -197,6 +258,33 @@ const kcOf = (h) => {
   const m = (h.host.querySelector(".w2m-keeper") || { style: {} }).style.transform || "";
   const g = m.match(/translateX\(([-\d.]+)%\)/);
   return g ? Number(g[1]) : NaN;
+};
+/* 🧤 **몸통의 반폭** — `.w2m-keeper-body`의 `scaleX`가 곧 `cov / 50`입니다(몸통 폭이 골문 폭).
+ *    🔒 소스에서 상수를 읽어 오지 않고 **그려진 transform을 되읽습니다.** */
+const covOf = (h) => {
+  const m = (h.host.querySelector(".w2m-keeper-body") || { style: {} }).style.transform || "";
+  const g = m.match(/scaleX\(([-\d.]+)\)/);
+  return g ? Number(g[1]) * 50 : NaN;
+};
+/* 🥅 **화면만으로 읽는 판의 기하** — 숨은 정보가 없다는 계약을 그대로 씁니다.
+ *
+ *   빈 곳  = 골문 끝(0 또는 100) ↔ 🧤 몸의 가까운 끝 사이
+ *   좋은 지점 = 그 빈 곳의 **한가운데**
+ *
+ * 🌍 **이 문장이 서 있는 세계**: 「좋은 지점 = 빈 곳의 한가운데」인 세계입니다.
+ *    🔴 *"좋은 지점을 구석으로 밀자"* 같은 판정이 나오면 **여기부터 여세요** —
+ *       G-3·G-8·G-9·G-11이 전부 이 한 줄 위에 서 있습니다.
+ * 🔑 소스의 `_t.oneAt`을 안 부릅니다. 옛 G-3이 `oneAt({ kc }, …)`로 불렀는데
+ *    무대의 **모양이 바뀌어**(`{side, off0, slide}`) 늘 `NaN`이 나왔고,
+ *    조건이 한 번도 안 맞아 **「쓸 만한 판 0벌」로 조용히 아무것도 안 지켰습니다.** */
+const geomOf = (h) => {
+  const kc = kcOf(h), cov = covOf(h);
+  if (!isFinite(kc) || !isFinite(cov)) return null;
+  const openLeft = kc > 50;                       // 키퍼가 오른쪽에 있으면 빈 곳은 왼쪽
+  const near = openLeft ? kc - cov : kc + cov;    // 빈 곳을 향한 몸 끝
+  return { kc, cov, openLeft, near,
+    openW: openLeft ? near : 100 - near,
+    best: openLeft ? near / 2 : (near + 100) / 2 };
 };
 /* 🦶 **반쪽 색이 어느 쪽을 강하다고 말하나** — 장식이지만, 판정과 대조할 값이에요 */
 const halfStrongRight = (h) => {
@@ -226,7 +314,10 @@ async function main() {
     const nexts = h.host.querySelectorAll(".w2m-cell-next").length;
     const lits = h.host.querySelectorAll(".w2m-cell-lit").length;
     const ghost = h.host.querySelectorAll(".w2m-keeper-ghost").length;   // 🔮 0.45초 뒤 키퍼
-    check(cs.length === 5 && h.host.querySelectorAll(".w2m-goal").length === 1
+    /* 🔒 **6칸**입니다(2026-09-02 · 116번). 5칸을 단언하던 문장이 그대로 남아 있었어요 —
+     *    판이 정상인데 검사가 빨간불이면 **그 빨간불이 남의 변이 신호까지 먹습니다.**
+     *    🔑 6은 「50에 앉는 칸이 없다 = 🦶가 3:3으로 갈린다」는 계약이 걸린 수예요. */
+    check(cs.length === 6 && h.host.querySelectorAll(".w2m-goal").length === 1
       && h.host.querySelectorAll(".w2m-half").length === 2 && isFinite(kc)
       && lits === cs.length && nexts === cs.length && ghost === 1
       && cs.some((c) => c.op > 0),
@@ -362,28 +453,43 @@ async function main() {
     const rows = [];
     for (const seed of WIN_SEEDS) {
       const h = await open({ seed, muts });
-      const kc = kcOf(h);
       const n = h.host.querySelectorAll(".w2m-cell").length;
       const gap = 100 / n;                                   // 칸 중심 간격 = 한 칸 폭
       const ws = [];
+      let kc0 = NaN;
       for (const ms of TIMES) {
         await h.at(ms);
         const cs = cellsOf(h);
-        const best = h.T.oneAt({ kc }, ms / 1000).best;       // 🔒 소스가 내보낸 닫힌 식
-        for (const [i, j] of [[0, 1], [3, 4]]) {              // 같은 절반의 이웃 쌍
-          if (cs[i].op <= 0 || cs[j].op <= 0) continue;
-          if (!(best > cs[i].x && best < cs[j].x)) continue;  // 「좋은 지점」이 사이에 들어야
+        /* 🔒 「좋은 지점」을 **화면에서** 읽습니다(🧤 자리 + 몸통 폭).
+         * 🔴 옛 줄은 `h.T.oneAt({ kc }, …)`였어요 — 무대의 **모양이 바뀌어**
+         *    (`{ kc }` → `{ side, off0, slide }`) `best`가 늘 `NaN`이 됐고,
+         *    아래 조건이 한 번도 안 맞아 **「쓸 만한 판 0벌」**이 됐습니다.
+         *    「픽스처가 다른 모양」의 정확한 형태예요 — 빨간불이 났지만 **아무것도 안 쟀습니다.** */
+        const g = geomOf(h);
+        if (!g) break;
+        if (!isFinite(kc0)) kc0 = g.kc;
+        /* 🔒 **같은 절반의 이웃 쌍 전부**를 봅니다 — 옛 줄은 `[[0,1],[3,4]]`로 칸 번호를
+         *    박아 뒀는데, 6칸에서는 `[1,2]`·`[4,5]`도 같은 절반이에요.
+         *    🔑 칸 번호를 박으면 칸 수가 바뀔 때 **수확만 줄고 아무 말도 안 합니다.** */
+        const pairs = [];
+        for (let i = 0; i + 1 < cs.length; i++) {
+          if (cs[i].strong === cs[i + 1].strong) pairs.push([i, i + 1]);
+        }
+        for (const [i, j] of pairs) {
+          /* 🔒 양끝이 눌린 칸(0 또는 1)은 역산이 안 됩니다 */
+          if (cs[i].op <= 0 || cs[j].op <= 0 || cs[i].op >= 1 || cs[j].op >= 1) continue;
+          if (!(g.best > cs[i].x && g.best < cs[j].x)) continue;  // 「좋은 지점」이 사이에 들어야
           /* 🏔️ **`CELL_FLOOR` 바닥이 걸린 칸은 뺍니다** — 바닥이 걸리면 오차 합이
            *    칸 간격이 아니게 되어 역산이 틀려요. 바닥이 걸렸는지는 **소스가 내보낸
            *    `oneErr`**에게 물어봅니다(상수를 베껴 오지 않았어요). */
-          if (h.T.oneErr(cs[i].x, best) !== Math.abs(cs[i].x - best)) continue;
-          if (h.T.oneErr(cs[j].x, best) !== Math.abs(cs[j].x - best)) continue;
+          if (h.T.oneErr(cs[i].x, g.best) !== Math.abs(cs[i].x - g.best)) continue;
+          if (h.T.oneErr(cs[j].x, g.best) !== Math.abs(cs[j].x - g.best)) continue;
           ws.push({ ms, w: gap / ((1 - cs[i].op) + (1 - cs[j].op)) });
           break;
         }
       }
       /* 🔒 한 판에서 **두 시각 이상** 잴 수 있어야 「좁아진다」를 말할 수 있어요 */
-      if (ws.length >= 2) rows.push({ seed, kc, ws });
+      if (ws.length >= 2) rows.push({ seed, kc: kc0, ws });
       h.close();
     }
     return rows;
@@ -442,18 +548,24 @@ async function main() {
     const BAN = ["갭", "코스 칸", "판정 창", "초록 존", "결정적인 순간"];
     async function words(muts) {
       const out = [];
-      for (const moment of ["cutin", "oneone", "killpass", "block"]) {
+      /* 🔴 옛 줄은 `["cutin", "oneone", "killpass", "block"]` **moment 네 가지**를 돌았어요 —
+       *    판이 넷이던 시절입니다. 지금은 `moment`가 **화면을 고르는 데 안 쓰입니다**
+       *    (엔진이 준 이름을 그대로 되돌려 줄 뿐이에요). 그대로 두면 **같은 판을 네 번**
+       *    열면서 «넷을 봤다»고 말하는 검사가 됩니다.
+       * ✅ 갈리는 것은 **카드 종류(낱말)**뿐이라 `kind`로 돕니다.
+       *    🧱 `defend`는 화면이 아예 안 떠서 여기 없는 게 맞아요 — **G-10이 봅니다.** */
+      for (const kind of ["goal", "assist"]) {
         const W = momentDom(muts);
         W.Math.random = mulberry32(SEEDS[0]);
         const st = W.setTimeout; W.setTimeout = (fn) => st(fn, 0);
         const host = W.document.getElementById("host");
-        W.W2Moment.play(host, { moment, kind: "goal", condition: 80, foot: "R" }, () => {});
+        W.W2Moment.play(host, { moment: "oneone", kind, condition: 80, foot: "R" }, () => {});
         await wait(6);
         const go = host.querySelector(".w2m-go");
         const ready = host.textContent || "";
         if (go) { pressDom(W, go); await wait(6); }
         const live = host.textContent || "";
-        out.push({ moment, text: ready + " " + live,
+        out.push({ moment: kind, text: ready + " " + live,
           stake: !!host.querySelector(".w2m-stake"),
           what: !!host.querySelector(".w2m-what"), why: !!host.querySelector(".w2m-why") });
         try { W.close(); } catch (e) { /* 이미 닫힘 */ }
@@ -463,13 +575,14 @@ async function main() {
     const P5 = (rows) => {
       const hits = rows.flatMap((r) => BAN.filter((b) => r.text.indexOf(b) >= 0).map((b) => `${r.moment}: "${b}"`));
       const noHead = rows.filter((r) => !(r.stake && r.what && r.why)).map((r) => r.moment);
-      return { hits, noHead, ok: hits.length === 0 && noHead.length === 0 && rows.length === 4 };
+      return { hits, noHead, ok: hits.length === 0 && noHead.length === 0 && rows.length === 2 };
     };
     const baseW = await words(null);
     const g5 = P5(baseW);
     check(g5.ok,
-      `G-5. 🗣️ **렌더된 화면에 폐기한 낱말이 없다** (${BAN.map((b) => `「${b}」`).join(" · ")}) · 세 줄 위계가 넷 다 선다`
-      + `\n     🔎 측정 조건 — 준비 화면 + 본 게임의 \`textContent\`를 넷 다 봅니다(소스가 아니에요 — 주석에는 남아야 합니다)`
+      `G-5. 🗣️ **렌더된 화면에 폐기한 낱말이 없다** (${BAN.map((b) => `「${b}」`).join(" · ")}) · 세 줄 위계가 ⚽🅰️ 둘 다 선다`
+      + `\n     🔎 측정 조건 — 준비 화면 + 본 게임의 \`textContent\`를 **카드 종류 둘 다** 봅니다`
+      + ` (소스가 아니에요 — 주석에는 남아야 합니다). 🧱 수비는 화면이 없어 G-10이 봐요`
       + (g5.ok ? "" : `\n     🔴 걸린 말: ${g5.hits.join(" · ") || "없음"}`
         + (g5.noHead.length ? `\n     🔴 세 줄이 안 서는 판: ${g5.noHead.join(" · ")}` : "")));
     /* 변이 검증에서 다시 쓰려고 밖으로 뺍니다 */
@@ -577,6 +690,202 @@ async function main() {
   }
 
   /* ══════════════════════════════════════════════════════════════════════
+   * 🧤 G-8·G-9·🏔️ G-11 — **한 번 쓸어서 넷을 같이 잽니다**
+   * ══════════════════════════════════════════════════════════════════════
+   * 🚨 **왜 새로 생겼나** — engineer가 116번 §6에서 새 코드에 흠 여덟을 냈는데
+   *    **아무도 안 잡았습니다.** 격자를 보던 검사가 전부 죽거나 빨간불이었어요.
+   *    아래 넷이 그 중 넷을 맡습니다(나머지 넷은 G-1·G-2·G-3이 이미 봐요).
+   *
+   * 🌍 **이 문장들이 서 있는 세계** (2026-09-02 · 116번 §1-2)
+   *    🥅 판은 하나 · 🧤 키퍼가 **가운데(50)에서 출발해 한쪽으로 미끄러지는** 세계입니다.
+   *    🔴 옛 세계는 *"키퍼가 한 자리에 서 있고 몸만 벌어진다"*(`ONE.kc = [18, 82]`)였고,
+   *       그 세계에서는 계약 ①이 `|kc − 50| ≥ 4`라는 **거리**로 서 있었어요.
+   *       출발이 가운데로 오면서 거리로는 못 막게 됐고 **부호 고정**으로 형태가 바뀌었습니다.
+   *    ⚠️ *"키퍼를 다시 세우자"* 또는 *"양쪽에서 협공하자"*는 판정이 나오면
+   *       **G-8을 먼저 여세요** — 그때는 이 문장이 통째로 옛 계약이 됩니다.
+   */
+  const SWEEP_SEEDS = [];
+  for (let i = 1; i <= 20; i++) SWEEP_SEEDS.push(i * 11 + 3);      // 🎲 판 20벌 × ♿ 2 = 40벌
+  const SWEEP_T = [];
+  for (let i = 0; i <= 12; i++) SWEEP_T.push(i * 280);             // ⏱️ 0 ~ 3360ms (`life` 안쪽)
+  /* 🔒 **문턱은 전부 여기 박습니다** — 소스에서 읽어 오면 상수를 바꿔도 안 잡혀요.
+   * 🏔️ `CELL_FLOOR`의 **비**(0.30)는 지금 확정값이고, balancer가 0.36을 재고 있습니다.
+   *    바뀌면 이 줄이 빨간불로 알려 줍니다 — 그때 **여기 하나만** 고치세요. */
+  const FLOOR_R = 0.30;
+  /* 🔑 역산의 잡음 폭: `opacity`가 `toFixed(3)`이라 `s`에 ±0.0005가 실립니다.
+   *    실측 흔들림은 바닥값 5.000에서 **±0.023**이었어요. 문턱은 그 **4배**에 뒀습니다 —
+   *    변이(`CELL_FLOOR = 0`)는 **1.0 이상** 벌어지니 사이가 넉넉합니다. */
+  const FLOOR_EPS = 0.10;
+  const MIN_FLOOR_N = 60;                                          // 🔒 표본 바닥 (실측 ~150)
+  /* 🎚️ **`s`의 천장** — 만점(1.0)과 견줍니다. `CELL_FLOOR`가 만드는 바닥이 천장을 잡아요.
+   * 🔎 **격자의 어느 칸에서 재나** — 천장이 가장 높이 서는 칸입니다:
+   *    🫀 컨디션 100 · ♿ 확대 켬 · 🦶 주발 쪽. 여기서도 안 닿으면 어디서도 안 닿아요.
+   * 📏 실측 0.866. 계획된 움직임을 다 넣어 봐도 안전합니다 —
+   *    `CELL_FLOOR` 0.36 → 0.839(내려감) · `ONE_WIN` 23.7 → 0.876.
+   *    변이(창 ×2)는 **0.933**, (바닥 0)은 **0.986**입니다. */
+  const S_CEIL = 0.90;
+  /* 🔦 **6칸이 전부 밝은 프레임의 비율.** 격자가 «고를 것»을 보여 주려면 어두운 칸이 남아야 해요.
+   *    실측 **0 / 520**. 창을 두 배로 하면 **3.7%**가 됩니다. 문턱은 1%. */
+  const ALL_LIT_R = 0.01;
+
+  async function sweep(muts) {
+    const boards = [];
+    const floors = [];
+    let sMax = 0, allLit = 0, frames = 0;
+    for (const seed of SWEEP_SEEDS) {
+      for (const wide of [false, true]) {
+        /* 🫀 100 · ♿ 켬 — **천장이 가장 높이 서는 칸**에서 잽니다 */
+        const h = await open({ seed, wide, cond: 100, muts });
+        const sides = new Set();
+        let grew = 0, prev = Infinity, minAbs = Infinity, seen = 0;
+        for (const ms of SWEEP_T) {
+          await h.at(ms);
+          const g = geomOf(h);
+          const cs = cellsOf(h);
+          if (!g || !cs.length) break;
+          seen += 1;
+          /* 🧤 계약 ① — **가운데를 넘지 않는다.** 부호가 판 내내 하나여야 해요 */
+          sides.add(Math.sign(g.kc - 50));
+          minAbs = Math.min(minAbs, Math.abs(g.kc - 50));
+          /* 🧤 계약 ② — **빈 곳이 늘 줄어든다.** 넓어진 프레임이 하나라도 있으면 빨간불 */
+          if (prev !== Infinity && g.openW > prev + 1e-9) grew += 1;
+          prev = g.openW;
+          for (const c of cs) sMax = Math.max(sMax, c.op);
+          if (cs.every((c) => c.op > 0)) allLit += 1;
+          /* 🏔️ **바닥을 두 칸으로 역산합니다 — 창(`ONE_WIN`)이 약분돼 사라져요**
+           *
+           *    A = 「좋은 지점」이 **바닥 안**에 든 칸   → 1 − sA = 바닥 ÷ 창
+           *    B = 같은 절반의 **바닥 밖**에 있는 칸    → 1 − sB = dB  ÷ 창
+           *    ⇒ 바닥 = dB × (1 − sA) ÷ (1 − sB)      ← 창이 약분됩니다
+           *
+           * 🔑 그래서 **`ONE_WIN`이 움직여도 이 문장은 안 흔들립니다** — 종속값을 관계로
+           *    잡은 자리예요. 잡히는 건 **바닥 자체가 바뀌는 것**뿐입니다.
+           * 🔒 A·B는 **같은 절반**이라야 해요 — 🦶 배수가 다르면 창이 달라서 약분이 안 됩니다. */
+          const cellW = 100 / cs.length;
+          const fw = cellW * FLOOR_R;
+          const A = cs.filter((c) => Math.abs(c.x - g.best) < fw - 1.0 && c.op > 0 && c.op < 1)
+            .sort((a, b) => Math.abs(a.x - g.best) - Math.abs(b.x - g.best))[0];
+          if (A) {
+            const B = cs.filter((c) => c.strong === A.strong && c !== A
+              && Math.abs(c.x - g.best) > fw + 2 && c.op > 0.02 && c.op < 0.98)
+              .sort((a, b) => Math.abs(a.x - g.best) - Math.abs(b.x - g.best))[0];
+            if (B) floors.push({ seed, ms, w: Math.abs(B.x - g.best) * (1 - A.op) / (1 - B.op), want: fw });
+          }
+          frames += 1;
+        }
+        boards.push({ seed, wide, sides: sides.size, grew, minAbs, seen });
+        h.close();
+      }
+    }
+    return { boards, floors, sMax, allLit, frames };
+  }
+
+  const P8 = (r) => {
+    const bad = r.boards.filter((b) => b.seen < 2 || b.sides !== 1 || !(b.minAbs > 0));
+    return { bad, ok: r.boards.length > 0 && bad.length === 0 };
+  };
+  const P9 = (r) => {
+    const bad = r.boards.filter((b) => b.grew > 0);
+    return { bad, n: r.boards.reduce((n, b) => n + b.grew, 0), ok: r.boards.length > 0 && bad.length === 0 };
+  };
+  const P11a = (r) => {
+    const bad = r.floors.filter((f) => Math.abs(f.w - f.want) > FLOOR_EPS);
+    return { bad, n: r.floors.length,
+      ok: r.floors.length >= MIN_FLOOR_N && bad.length === 0 };
+  };
+  const P11b = (r) => ({ sMax: r.sMax, ok: r.frames > 0 && r.sMax <= S_CEIL });
+  const P11c = (r) => ({ rate: r.frames ? r.allLit / r.frames : 1,
+    ok: r.frames > 0 && r.allLit / r.frames <= ALL_LIT_R });
+
+  const base8 = await sweep(null);
+  {
+    const g8 = P8(base8), g9 = P9(base8);
+    const a = P11a(base8), b = P11b(base8), c = P11c(base8);
+    const minAbs = Math.min(...base8.boards.map((x) => x.minAbs));
+    check(g8.ok,
+      `G-8. 🧤 **계약 ① — 키퍼가 가운데를 안 넘는다** (판 ${base8.boards.length}벌 · 프레임 ${base8.frames} · 어긋난 판 ${g8.bad.length})`
+      + `\n     🔎 측정 조건 — 화면의 \`translateX(%)\` 부호가 **판 내내 하나**인가. 가장 가까이 온 거리 ${isFinite(minAbs) ? minAbs.toFixed(2) : "??"}%`
+      + `\n     🚨 넘으면 **좌우 빈 곳이 같아지는 프레임**이 생깁니다 — 화면은 대칭인데 한쪽만 정답인 절벽이에요(거울 칸이 0점)`
+      + (g8.ok ? "" : `\n     🔴 ${g8.bad.slice(0, 4).map((x) => `seed${x.seed}(wide:${x.wide}) 부호 ${x.sides}가지 · 최소거리 ${x.minAbs.toFixed(2)}`).join(" · ")}`));
+    check(g9.ok,
+      `G-9. 🧤 **계약 ② — 빈 곳이 늘 줄어든다** (넓어진 프레임 ${g9.n} · 어긋난 판 ${g9.bad.length})`
+      + `\n     🔎 측정 조건 — 빈 곳 = 골문 끝 ↔ 🧤 몸의 가까운 끝. \`translateX\`와 \`scaleX\` **둘 다 화면에서** 읽어요`
+      + `\n     🚨 넓어지면 «기다릴수록 유리»가 되어 **«빨리 차라»가 통째로 죽습니다**`
+      + (g9.ok ? "" : `\n     🔴 ${g9.bad.slice(0, 4).map((x) => `seed${x.seed}(wide:${x.wide}) ${x.grew}프레임`).join(" · ")}`));
+    check(a.ok,
+      `G-11. 🏔️ **\`CELL_FLOOR\`가 아직 바닥을 깐다 — 두 칸으로 역산** (표본 ${a.n} · 어긋남 ${a.bad.length})`
+      + `\n     🔎 측정 조건 — 바닥 = dB × (1−sA) ÷ (1−sB). **창이 약분돼 사라집니다** —`
+      + ` \`ONE_WIN\`이 움직여도 안 흔들려요(종속값을 관계로 잡은 자리)`
+      + `\n     🔒 기대값은 **칸 폭 × ${FLOOR_R}** (비는 검사에 박았습니다) · 허용 ±${FLOOR_EPS} (실측 흔들림 ±0.023의 4배)`
+      + `\n     📮 balancer(119번 §1-6)가 **\`CELL_FLOOR\` 0.36 + \`ONE_WIN\` 23을 「한 벌」**로 재 뒀습니다`
+      + ` — 🚨 **따로 넣을 수 없어요.** 확정되면 여기 \`FLOOR_R\`과 \`moment-test.js\`의 **D-1**을 **같이** 고치세요`
+      + (a.n ? `\n     실측 ${Math.min(...a_w(base8)).toFixed(3)} ~ ${Math.max(...a_w(base8)).toFixed(3)} (기대 ${(100 / 6 * FLOOR_R).toFixed(3)})` : "")
+      + (a.ok ? "" : (a.n < MIN_FLOOR_N ? `\n     🔴 표본이 ${a.n}개뿐이라 문장이 안 섭니다(바닥 ${MIN_FLOOR_N})` : "")
+        + (a.bad.length ? `\n     🔴 ${a.bad.slice(0, 4).map((f) => `seed${f.seed}@${f.ms}ms 바닥 ${f.w.toFixed(3)} (기대 ${f.want.toFixed(3)})`).join(" · ")}` : "")));
+    check(b.ok,
+      `G-11b. 🎚️ **\`s\`의 천장이 만점에 안 닿는다** — 실측 ${b.sMax.toFixed(4)} ≤ ${S_CEIL}`
+      + `\n     🔎 측정 조건 — 🫀 컨디션 100 · ♿ 확대 켬 · 🦶 주발 쪽. **천장이 가장 높이 서는 칸**이에요`
+      + `\n     🔑 **견주는 것은 만점(1.0)**입니다. 여기가 1에 닿으면 능숙이 만점을 굽고 조작 축이 포화해요`
+      + (b.ok ? "" : `\n     🔴 천장이 ${b.sMax.toFixed(4)}까지 올라왔습니다 — \`CELL_FLOOR\`가 죽었거나 \`ONE_WIN\`이 크게 움직였어요`));
+    check(c.ok,
+      `G-11c. 🔦 **6칸이 전부 밝은 프레임이 거의 없다** — ${(c.rate * 100).toFixed(2)}% ≤ ${(ALL_LIT_R * 100).toFixed(0)}%`
+      + `\n     🔎 측정 조건 — 같은 쓸기(${base8.frames}프레임). 어두운 칸이 남아야 **격자가 «고를 것»을 보여 줍니다**`
+      + `\n     🔑 G-11b와 **겹쳐 보는 자리**예요 — 판정 창이 커지면 둘 다 움직입니다(하나가 죽어도 다른 하나가 잡아요)`
+      + (c.ok ? "" : `\n     🔴 ${base8.allLit}프레임에서 6칸이 전부 밝습니다 — 격자가 아무것도 안 가릅니다`));
+  }
+
+  /* 🔒 **구조 쪽(소스 상수 사이의 부등호)은 여기가 아니라 `moment-test.js`가 봅니다** —
+   *    `D-2b`가 `slide 최대 < cov1 − cov0` · `off 최소 > 0`을 그대로 지키고 있어요.
+   *    🔑 **한 계약에 주인은 하나**입니다. 같은 부등호를 두 파일에 두면
+   *       계수가 움직이는 날 **고칠 자리가 넷**이 되고, 그 중 하나가 남으면
+   *       *"저건 원래 빨간불이야"*가 됩니다. 여기는 **화면에서 재는 쪽**(G-8·G-9)만 맡아요.
+
+  /* ══════════════════════════════════════════════════════════════════════
+   * 🧱 G-10. **수비는 판이 없다** — 화면을 한 조각도 안 그린다
+   * ══════════════════════════════════════════════════════════════════════
+   * 🌍 **이 문장이 서 있는 세계**: designer 117번 §6의 **c안**입니다 —
+   *    `cardP(autoP, a, 0.5) = autoP`가 **모든 능력치에 대해 정의상** 성립해서,
+   *    육성은 그대로 살고 **조작만 빠지는** 세계예요.
+   * 🚨 가드가 빠지면 **수비 상황에 상대 골문이 뜹니다** — 화면이 만드는 기대(넣는다)와
+   *    상황의 핵심(막는다)이 정면으로 싸워요.
+   * 🔴 입구는 넷입니다(`career.js` · `game.js` · `town.js` · 여기 `play()`).
+   *    여기는 **마지막 안전망**이라, 앞의 셋이 다 빠져도 골문이 안 뜨는지를 봅니다.
+   * ⚠️ 범민 님이 *"**일단** 공격 상황에서"*라고 하셨어요 — 🥅를 **우리 골문으로 돌려**
+   *    수비용을 만드는 판정이 나오면 **이 문장이 통째로 옛 계약**이 됩니다(117번 §6-4).
+   *    🚨 그때도 🧱 차단의 **형태**(칩 둘 읽기 · 세기로 정답이 뒤집힘 · 2단 국면 · 띠)는
+   *       되살리지 마세요 — 폐기된 건 이름이 아니라 형태입니다. */
+  async function defendProbe(muts) {
+    const rows = [];
+    for (const seed of SEEDS.slice(0, 6)) {
+      const h = await open({ seed, kind: "defend", muts });
+      await h.at(400);
+      rows.push({ seed,
+        html: (h.host.innerHTML || "").length,
+        goal: h.host.querySelectorAll(".w2m-goal").length,
+        cell: h.host.querySelectorAll(".w2m-cell").length,
+        go: h.host.querySelectorAll(".w2m-go").length,
+        calls: h.calls(), s: h.info() ? h.info().s : null });
+      h.close();
+    }
+    return rows;
+  }
+  const P10 = (rows) => {
+    const bad = rows.filter((r) => !(r.html === 0 && r.goal === 0 && r.cell === 0
+      && r.go === 0 && r.calls === 1 && r.s === 0.5));
+    return { bad, ok: rows.length > 0 && bad.length === 0 };
+  };
+  {
+    const rows = await defendProbe(null);
+    const g10 = P10(rows);
+    check(g10.ok,
+      `G-10. 🧱 **수비는 판이 없다** — 화면 0조각 · 준비 화면도 없음 · \`s = 0.5\`가 **한 번** 온다 (판 ${rows.length}벌)`
+      + `\n     🔎 측정 조건 — \`play(host, { kind: "defend" }, cb)\`를 부르고 400ms 뒤 \`innerHTML\` 길이를 봅니다`
+      + `\n     🔑 «안 그렸는가»가 아니라 «**한 조각도** 안 그렸는가»예요 — 손잡이처럼 보이는 게 떠 있으면 그게 노이즈입니다`
+      + (g10.ok ? "" : `\n     🔴 ${g10.bad.slice(0, 3).map((r) => `seed${r.seed} html ${r.html}자 · 골문 ${r.goal} · 칸 ${r.cell} · cb ${r.calls}회 · s=${r.s}`).join(" · ")}`
+        + `\n     🚨 **수비 상황에 상대 골문이 떴습니다**`));
+  }
+
+  /* ══════════════════════════════════════════════════════════════════════
    * 🚧 G-6. **알려진 미달** — JS가 켜는 상태 클래스에 CSS 규칙이 없습니다
    * ══════════════════════════════════════════════════════════════════════
    * 🔑 **CSS는 기계가 못 봅니다 — 하지만 「이름이 맞는지」는 볼 수 있어요.**
@@ -617,6 +926,12 @@ async function main() {
     }
   }
 
+  /* 🎚️ **난이도 계수 지문도 여기가 아닙니다** — `moment-test.js` `D-1`이 판정 창·속도 상수
+   *    **11개**를, `D-2`가 🧤 무대 상수를 박아 두고 «어느 축이 움직였는지»까지 말합니다.
+   *    🔴 **여기에 같은 표를 또 두지 마세요.** balancer가 `CELL_FLOOR` 0.36 + `ONE_WIN` 23을
+   *       「한 벌」로 넣는 날(119번 §1-6), 고칠 자리는 **둘이면 충분**해요 —
+   *       `moment-test` D-1(상수가 움직였다) · 여기 `FLOOR_R`(바닥 관계의 기대값).
+
   /* ══════════════════════════════════════════════════════════════════════
    * 🧪 변이 — **기준선이 초록불인 걸 위에서 먼저 찍고** 시작합니다
    * ══════════════════════════════════════════════════════════════════════ */
@@ -640,6 +955,18 @@ async function main() {
         await main.lookProbe(m, MUT.M9_LOOK_ZERO),
         await main.lookProbe(m, MUT.M9_LOOK_LONG)).ok],
       ["M7_WORD", "G-5", async (m) => !main.P5(await main.words(m)).ok],
+      /* 🚨 여기부터 다섯이 **116번 §6에서 「아무도 안 잡던」 흠**입니다.
+       * 🔑 한 쓸기로 넷을 재니, 변이 하나가 **어느 문장을 물어야 하는지**를 이름에 적었어요 —
+       *    엉뚱한 문장이 물면 그건 잡은 게 아니라 **다른 것이 깨진** 겁니다. */
+      ["E_KEEPER_CROSS", "G-8", async (m) => !P8(await sweep(m)).ok],
+      ["K_SLIDE_FAST", "G-9", async (m) => !P9(await sweep(m)).ok],
+      ["E_FLOOR0", "G-11", async (m) => !P11a(await sweep(m)).ok],
+      ["E_WIN2", "G-11b", async (m) => !P11b(await sweep(m)).ok],
+      ["E_WIN2", "G-11c", async (m) => !P11c(await sweep(m)).ok],
+      ["E_NO_DEFEND_GUARD", "G-10", async (m) => !P10(await defendProbe(m)).ok],
+      /* 🔑 **밝기 변이(M1)는 🏔️ 역산도 물어야** 합니다 — 화면이 어두워지면 역산한 바닥이
+       *    5.0에서 9~13으로 벌어져요. G-2가 죽어도 여기가 잡습니다(겹쳐 보기). */
+      ["M1_DIM", "G-11", async (m) => !P11a(await sweep(m)).ok],
     ];
     for (const [name, guard, bites] of CASES) {
       let hit = null, err = null;

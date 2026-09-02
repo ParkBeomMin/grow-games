@@ -812,7 +812,7 @@ function show(id) {
 /* 🔙 되돌아가도 아무것도 다시 안 굴러가는 화면만 여기 옵니다.
  * 🦶 주발·🗺️ 동네는 **고르기만** 하는 화면이라 안전해요 —
  * 🏘️ 동네 순간 카드(`screen-town`)는 여전히 빠져 있습니다(뒤로 가기가 곧 재도전이 돼요). */
-const BACK_SAFE = ["screen-title", "screen-agency", "screen-position", "screen-prospect", "screen-name", "screen-foot", "screen-origin", "screen-hof", "screen-battle"];
+const BACK_SAFE = ["screen-title", "screen-agency", "screen-position", "screen-prospect", "screen-name", "screen-foot", "screen-origin", "screen-child", "screen-hof", "screen-battle"];
 window.addEventListener("popstate", (e) => {
   const target = e.state && e.state.s;
   const cur = document.querySelector(".screen.active");
@@ -835,6 +835,9 @@ window.addEventListener("popstate", (e) => {
  *    🔒 되돌리기는 **자리 화면 안에서**(`btn-back-position`). ⚠️ 되살리지 마세요. */
 $("btn-back-position")?.addEventListener("click", () => show("screen-origin"));
 $("btn-back-origin")?.addEventListener("click", () => show("screen-foot"));
+/* 🧒 초1에서 뒤로 — 🗺️ 지도로. 🔒 **아직 아무것도 안 굴렸습니다**(굴림은 🧬 조립대에서
+ * 한 번뿐이에요). 그래서 이건 재도전 뒷문이 아니라 그냥 되돌리기입니다. */
+$("btn-back-child")?.addEventListener("click", () => show("screen-origin"));
 $("btn-back-foot")?.addEventListener("click", () => show("screen-name"));
 $("btn-back-name")?.addEventListener("click", () => show("screen-title"));
 const goHome = () => { if (S) save(); location.reload(); };
@@ -1486,10 +1489,14 @@ function renderMarkets() {
   }
 }
 
-/* 🖼️ 생성 흐름 — **🎯 자리가 카드 「사이」로 들어갔습니다** (설계 93번 §5 · 옛 85번 「순-B」를 대체).
+/* 🖼️ 생성 흐름 — **🧒 초1이 🗺️ 지도와 첫 카드 사이에 들어왔습니다** (설계 117번 §2).
  *
- *   ✏️ 이름 → 🦶 주발 → 🗺️ 동네 → 🏫 초등부(2장) → 📨 조기 제안 → 🎯 자리
+ *   ✏️ 이름 → 🦶 주발 → 🗺️ 동네 → 🧒 초1 → 🏫 초등부(2장) → 📨 조기 제안 → 🎯 자리
  *                     → 🏫 중등부(3장) → 📨 조기 제안 → 🏫 고등부(3장) → 🏟️ 제안 → 🧬 조립대
+ *
+ * 🔴 **초2·초3은 없습니다** (실측 119번 §2) — `spread()`가 `focus`를 `indexOf`로 봐서
+ *    `⚽×1`과 `⚽×3`이 **완전히 같은 stats**입니다. 같은 걸 또 고르면 값이 정확히 0이라
+ *    화면만 늘고 축은 안 늘어요. 🔒 **되살리려면 「같은 걸 두 번 고르면 달라지는」 구조가 먼저**입니다.
  *
  * 🤝 **예비 계약을 하면 🏟️ 최종 제안이 안 오고 곧장 🧬 조립대**입니다 — 남은 대항전은
  *    그대로 다 뛰고요(§6-2). 🔴 승낙이 카드를 건너뛰게 하면 그게 「콘텐츠 건너뛰기 버튼」이에요.
@@ -1510,14 +1517,20 @@ let chosenFoot = "R";
 /* 🗺️ 자란 곳. 🔒 **산식에 안 닿습니다** — 📖 스토리와 🏛️ 지역 기록만 바꿔요.
  * 빈 값이면 🌍 미상으로 삽니다(지도를 안 거치고 온 옛 경로도 그대로 돌아요). */
 let chosenOrigin = "";
+/* 🧒 초1에 고른 것 — `["ball"|"body"|"eye"]`. **배열입니다.**
+ * 🔑 설계가 초2·초3을 열어 둔 자리라(117번 §9-1) 칸 모양을 바꾸지 않으려고 배열로 둡니다 —
+ *    나중에 해가 늘어도 **세이브 스키마가 안 바뀝니다.**
+ * 🔒 읽는 쪽 기본값은 `[]`이고, 빈 배열이면 `CHILD_FOCUS` 기여가 **정확히 0**이에요. */
+let chosenChild = [];
 let chosenOffer = null;      // 🏟️ 그 유스가 내민 제안 { tier, mul, star, label, word }
 let chosenCard = null;
 let chosenTalents = null;
 let usedRerolls = 0;
 
 function openBench() {
-  stampStep("screen-prospect");        // 🔢 5 / 5 — 여기가 선수를 만드는 마지막 차례예요
-  WingerProspect.open(chosenMarket, chosenPos, { name: chosenName, foot: chosenFoot },
+  stampStep("screen-prospect");        // 🔢 6 / 6 — 여기가 선수를 만드는 마지막 차례예요
+  WingerProspect.open(chosenMarket, chosenPos,
+    { name: chosenName, foot: chosenFoot, child: chosenChild },
     (build, talents, rerolls) => {
       chosenCard = build;
       chosenTalents = talents;
@@ -1734,13 +1747,14 @@ document.querySelectorAll("#position-list .card").forEach((btn) => {
  *
  * 🔑 game.js가 아는 것은 `openFoot`·`openOrigin` 둘과 `chosenFoot`·`chosenOrigin`
  *    두 칸뿐이에요. 화면 안쪽(발 그림 · 지도 SVG · 📖 스토리)은 전부 `intro.js` 몫입니다.
- *    ✅ 재배치가 끝났습니다 — 🗺️ 동네 다음이 **🏫 초등부**이고 🎯 자리는 카드 뒤예요.
+ *    ✅ 재배치가 끝났습니다 — 🗺️ 동네 다음이 **🧒 초1**, 그다음이 🏫 초등부이고 🎯 자리는 카드 뒤예요.
  *
- * 🔢 차례 표시(`1 / 5`)는 `WingerIntro.STEPS`가 정합니다 — 순서가 바뀌면 거기 한 줄만요.
+ * 🔢 차례 표시(`1 / 6`)는 `WingerIntro.STEPS`가 정합니다 — 순서가 바뀌면 거기 한 줄만요.
  *    🚨 **옛 규칙이 지워졌습니다 (2026-09-01 · 101번 §1-4).** 예전엔 이 목록이
  *    「첫 순간 카드 **앞**의 차례」라 🎯 자리·🧬 조립대가 빠져 있었고, 그래서 🗺️ 동네가
- *    **「3 / 3」**이라며 *"생성이 끝났다"*고 거짓말을 했어요. 이제 다섯 화면 전부 셉니다 —
- *    🎯 자리가 **4 / 5**, 🧬 조립대가 **5 / 5**예요. 화면마다 `stampStep`을 부릅니다. */
+ *    **「3 / 3」**이라며 *"생성이 끝났다"*고 거짓말을 했어요. 이제 여섯 화면 전부 셉니다 —
+ *    🧒 초1이 **4 / 6**, 🎯 자리가 **5 / 6**, 🧬 조립대가 **6 / 6**예요.
+ *    화면마다 `stampStep`을 부릅니다. */
 function stampStep(id) {
   const el = $("step-" + id.replace("screen-", ""));
   if (el && window.WingerIntro) el.textContent = WingerIntro.step(id);
@@ -1754,8 +1768,22 @@ function goFoot() {
 function goOrigin() {
   show("screen-origin");
   stampStep("screen-origin");
-  if (!window.WingerIntro) { goElementary(); return; }
-  WingerIntro.openOrigin(chosenOrigin, (id) => { chosenOrigin = id; goElementary(); });
+  if (!window.WingerIntro) { goChild(); return; }
+  WingerIntro.openOrigin(chosenOrigin, (id) => { chosenOrigin = id; goChild(); });
+}
+/* 🧒 **초1** — 🗺️ 지도와 🏫 초등부 카드 **사이**입니다 (설계 117번 §2).
+ * 🔑 game.js가 아는 것은 `openChild` 하나와 `chosenChild` 한 칸뿐이에요 —
+ *    무엇이 바뀌는지는 `prospect.js`의 `CHILD_FOCUS`가 정합니다.
+ * 🔴 **초2·초3은 없습니다** (실측 119번 §2) — `spread()`가 `focus`를 `indexOf`로 봐서
+ *    같은 걸 또 고르면 값이 **정확히 0**이라, 화면만 늘고 축은 안 늘어요. */
+function goChild() {
+  show("screen-child");
+  stampStep("screen-child");
+  if (!window.WingerIntro || !WingerIntro.openChild) { goElementary(); return; }
+  WingerIntro.openChild({ origin: chosenOrigin, key: chosenChild[0] }, (key) => {
+    chosenChild = key ? [key] : [];
+    goElementary();
+  });
 }
 function goPosition() {
   show("screen-position");
@@ -1796,6 +1824,10 @@ function startCareer() {
   /* 🗺️ 자란 곳. ⚠️ **마이그레이션은 안 합니다** — 옛 세이브는 읽는 쪽에서 🌍 미상이에요.
    * 🔒 여기서 갈라지는 것은 📖 텍스트와 🏛️ 지역 기록뿐입니다. */
   S.origin = chosenOrigin || "";
+  /* 🧒 초1에 고른 것. ⚠️ **마이그레이션은 안 합니다** — 칸이 없는 옛 세이브는 읽는 쪽에서
+   * `[]`이고, 빈 배열이면 기여가 **정확히 0**이라 개편 전과 똑같이 굽니다.
+   * 🔒 굴림은 이미 끝났으니 여기 남는 값은 **기록·화면용**이에요 (산식에 다시 안 들어갑니다). */
+  S.childPicks = chosenChild.slice();
   /* 🏫 학교 점수와 **뛴 카드 수**, 📣 그 제안이 준 주목 배수를 심어요.
    * 🔑 **두 칸은 반드시 짝으로 갑니다** — 등급을 정하는 건 점수가 아니라
    *    `d = townScore − schoolN`이라서요. 점수만 남기면 카드 수가 바뀐 날
@@ -2681,8 +2713,14 @@ function playYouthMoment(container, cb, kindKey) {
   const autoP = youthAutoP(kind, overall(), ev && ev.kind === "survival" ? PEER_REF.survival : PEER_REF.eval);
   const judge = (s) => E.judgeAtP(kind, autoP, ability, s);
   /* 🧱 **수비는 판을 안 엽니다** (117번 §6 · c안) — 🤖 자동 진행과 **같은 갈래**로 흘려요.
-   * `cardP(autoP, a, 0.5) = autoP`라 결과가 자동 갈래와 정의상 같고, 중계 한 줄은 그대로 나갑니다. */
-  if (autoMiniOn() || kind === "defend") { cb(judge(0.5), T); return; }
+   * `cardP(autoP, a, 0.5) = autoP`라 결과가 자동 갈래와 정의상 같고, 중계 한 줄은 그대로 나갑니다.
+   *
+   * 🔴 **`kind === "defend"`라고 여기 따로 적지 않습니다.** 그러면 판단이 둘이 되어
+   *    한쪽을 지워도 증상이 0장이 되고, **검사가 통째로 아무것도 못 지킵니다**
+   *    (CLAUDE.md 「방어가 겹침」). 🔑 주인은 `W2Moment.opens(kind)` **하나**예요.
+   * ⚠️ 그리고 이 물음은 **상자를 비우기 전에** 와야 합니다 — 뒤로 가면 `play()`가
+   *    화면을 안 그리고 돌아왔을 때 **아무것도 안 하는 빈 유스 상자**가 남아요. */
+  if (autoMiniOn() || (M.opens && !M.opens(kind))) { cb(judge(0.5), T); return; }
   if (container) {
     container.innerHTML = "";           // 앞 카드의 잔해 위에 쌓이지 않게
     container.classList.add("w2m-youth");   // 🎨 유스 맥락 — 연출은 director가 이어받아요

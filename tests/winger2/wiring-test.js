@@ -452,7 +452,7 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
    *   ▶️ 시작 → 판을 누르기까지 화면이 멈춰요. 검사가 그 손 노릇을 합니다.
    *   **자동 진행 토글로 우회하지 않습니다** — 그러면 미니게임이 아예 안 열려도
    *   초록불이라, 지금 메우려는 구멍(①)을 그대로 남겨 두게 돼요.
-   *   네 판의 누르는 자리: `.w2m-side`(🏃) · `.w2m-goal`(🥅) · `.w2m-run-btn`(🎯) · `.w2m-dir`(🧱) */
+   *   🔴 2026-09-02 — 판이 **하나**가 됐습니다. 누르는 자리는 `.w2m-goal`(🥅 골문) 하나예요 */
   /* ─────────────────────────────────────────────────────────────────────
    * 🚨 **「자가 복구가 실패를 삼키는」 자리** (2026-09-01 · engineer 106번 §6)
    * ─────────────────────────────────────────────────────────────────────
@@ -467,15 +467,21 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
    * `seen`은 pump가 아니라 **독립된 훑기**가 셉니다. 그래야 목록에서 빠진 셀렉터가
    * "안 뜬 것"으로 둔갑하지 않아요 — 그게 정확히 이번에 놓쳤던 경로입니다.
    * ───────────────────────────────────────────────────────────────────── */
-  const SELS = [".w2m-go", ".w2m-side", ".w2m-run-btn", ".w2m-dir", ".w2m-goal", ".w2m-blk-go"];
+  /* 🔴 2026-09-02 — 판이 넷에서 하나가 되며 **네 자리를 지웠습니다**(116번):
+   *    `.w2m-side`(🏃 컷인) · `.w2m-run-btn`(🎯 킬패스) · `.w2m-dir`·`.w2m-blk-go`(🧱 차단 2단 국면).
+   *    🚨 그 판들은 **형태째** 없어졌어요 — 이름을 갈아 되살리지 마세요.
+   * ✅ 남은 둘: `.w2m-go`(준비 화면 ▶️ 시작) · `.w2m-goal`(🥅 골문 — **탭을 받는 자리는 여기 하나**).
+   *    🔑 칸(`.w2m-cell`)마다 손잡이를 달지 않습니다 — 달면 탭 자리가 여섯 군데로 늘어요. */
+  const SELS = [".w2m-go", ".w2m-goal"];
   const MOMENT_SEL = SELS.join(", ");
 
   /* 🔒 **이 목록이 소스와 안 맞으면 검사가 통째로 눈이 멉니다.**
    *    `.w2m-blk-go`가 빠져 있던 게 정확히 그 상태였어요 — 안 눌러도 타임아웃이 끝내 주니까요.
    *    그래서 목록을 소스와 **두 갈래로** 맞춰 봅니다:
    *      ① `onTap(...querySelector("<선택자>"))`로 **직접 적힌** 자리는 전부 SELS에 있어야 한다
-   *      ② 🔑 `onTap(` **호출 자리의 개수**가 그대로여야 한다 — 변수로 넘기는 두 자리
-   *         (`.w2m-goal` · `.w2m-run-btn`)는 ①로 못 뜯으니, **새 탭 자리가 생기면 여기서 걸립니다**
+   *      ② 🔑 `onTap(` **호출 자리의 개수**가 그대로여야 한다 — 변수로 넘기는 자리
+   *         (`.w2m-goal`은 `onTap(goal, …)`이라 ①로 못 뜯어요)는 여기서만 걸립니다.
+   *         🔑 그래서 ①이 한 개(`.w2m-go`)만 뜯고 ②가 둘을 세는 게 **정상**이에요
    *    🚨 개수는 **검사에 박습니다**(소스에서 세어 오면 늘어나도 따라가서 안 잡혀요). */
   const MOM_SRC = fs.readFileSync(path.join(BETA, "winger-moment.js"), "utf8");
   const litSels = Array.from(new Set(
@@ -484,7 +490,7 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   check(litSels.length > 0 && notReg.length === 0,
     `🔒 소스에 직접 적힌 탭 자리가 전부 SELS에 등록돼 있다 (${litSels.join(" · ") || "**한 개도 못 뜯었어요**"})`
     + (notReg.length ? `\n     🔴 **SELS에 없는 것: ${notReg.join(" · ")}** — 그 자리는 안 눌려도 검사가 통과합니다` : ""));
-  const TAP_SITES = 6;                     // 🚨 문턱은 박습니다 (정의 줄 제외한 onTap 호출 자리)
+  const TAP_SITES = 2;                     // 🚨 문턱은 박습니다 (정의 줄 제외한 onTap 호출 자리)
   const nSites = (MOM_SRC.match(/\bonTap\(\s*(?!el, fn, gate)/g) || []).length;
   check(nSites === TAP_SITES,
     `🔒 winger-moment.js의 탭 자리가 ${TAP_SITES}군데 그대로다 (지금 ${nSites}군데)`
@@ -572,7 +578,7 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   if (NEVER.length) {
     console.log(`🚧 이번 판에 안 나온 미니게임 자리: ${NEVER.join(" · ")}`
       + ` — **검증됨이 아니라 미도달**입니다 (포지션·난수 탓이에요).`
-      + ` 그 자리는 \`minigame-tap-test.js\`·\`block-test.js\`가 따로 지킵니다`);
+      + ` 그 자리는 \`minigame-tap-test.js\`·\`one-grid-test.js\`가 따로 지킵니다`);
   }
   check(opened,
     `⚽ 경기하러 가기 → 순간 카드 경기에 도달했다 (🪑 벤치인 주 ${benched}회 건너뜀 · ${rounds + 1}라운드째`

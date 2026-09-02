@@ -503,18 +503,57 @@ const MAIN = careers("main");
  *    **선수가 하나**예요. 그래서 *"**여섯 칸이** 전부 같은 글자"*로 다시 겨눴습니다 —
  *    **잡으려던 것은 그대로**입니다(지금 실력으로 매기면 전부 F로 깔린다).
  *    ⚠️ 문턱도 다시 쟀어요: 기준선 27.7% · 변이(cardShown) 95.8% → **60%**는 그 사이입니다
+ *
+ * ═════════════════════════════════════════════════════════════════════════
+ * 🚨 **2026-09-02 — 이 절의 표본이 「되풀이」였습니다** (도달 경로가 조용히 죽음)
+ * ═════════════════════════════════════════════════════════════════════════
+ * `drawProbe`는 판마다 **↩️ 뒤로 → 🎯 자리 다시 고르기**로 새 선수를 뽑는다고 적어 뒀는데,
+ * 흐름이 바뀌면서 **그 길이 더는 다시 굴리지 않습니다.** 실측 — 같은 창에서 6판을 떠 보면
+ * `build.stats`가 **여섯 번 다 똑같아요**:
+ *
+ *     시드 8 : 37.0/31.0/27.0/25.0/48.0/26.0 · 합 194.0 · 글자 FFFFEF   (6판 전부 동일)
+ *     시드 15: 31.0/36.0/34.0/31.0/33.0/29.0 · 합 194.0 · 글자 FFFFFF   (6판 전부 동일)
+ *
+ * 🔑 즉 *"120판"*은 **시드 3개를 40번씩 센 것**이었습니다. 시드별 「전부 같은 글자」 비율이
+ *    **0% 아니면 100%**로만 나왔어요(24시드 실측) — 판이 갈리질 않으니까요.
+ *    → E-2의 66.7%는 **3판 중 2판**입니다. 밴드가 나빠진 게 아니라 **표본이 셋**이었어요.
+ *
+ * 🔴 **그래서 「🧱을 학교 덱에서 뺐기 때문」이 아닙니다.** 짝지어 재 봤습니다 —
+ *    🧱을 `PLAYABLE`에 되돌려도 **66.7% 그대로**였고, `deal()`의 **난수 소비만** 옛 모양으로
+ *    되돌리면(종류는 2종 그대로) **33.3%**로 돌아왔어요. 옛 `deal()`은 `n === CARDS.length`일 때
+ *    `Math.random()`을 **한 번도 안 썼습니다** — 새 `deal()`은 늘 씁니다.
+ *    🔑 **난수 열이 밀린 것**이지 분포가 바뀐 게 아니에요. 시드를 12개로 늘리면 옛/새의
+ *       대소가 **뒤집힙니다**(16.7% ↔ 41.7%). 잡음입니다.
+ *
+ * ✅ **고친 것: 🎲 재굴림 버튼(`#btn-prospect-reroll`)을 실제로 누릅니다.**
+ *    그러면 판마다 배분이 진짜로 갈려요 — 실측 **240판 = 서로 다른 배분 240벌**:
+ *
+ *      | | 전부 같은 글자 | 표와 어긋난 칸 |
+ *      |---|---|---|
+ *      | 무변이            | **36.7%** (시드별 23~47%) | 0 |
+ *      | 🧪 변이 CARD_SHOWN | **95.0%** (시드별 83~100%) | 145 |
+ *
+ *    🔑 **문턱 60%는 그대로 씁니다** — 두 값 사이에 여유 있게 서 있어요(아래 23%p · 위 35%p).
+ *       문턱이 틀렸던 게 아니라 **표본이 없던 것**입니다.
  * ══════════════════════════════════════════════════════════════ */
 function drawProbe(muts, seeds, per) {
   const KEYS = ["shoot", "pass", "dribble", "defense", "stamina", "speed"];
-  const out = { draws: 0, allSame: 0, mismatch: [], noStrip: 0 };
+  /* 🔒 `builds`는 **표본이 진짜 갈리는지**를 세는 자리예요 — 판 수만 세면
+   *    「같은 판을 40번 센 것」과 「40판을 센 것」이 구분이 안 됩니다 (2026-09-02에 그랬어요). */
+  const out = { draws: 0, allSame: 0, mismatch: [], noStrip: 0, builds: new Set(), noRoll: 0 };
   for (const s of (seeds || [11, 23, 37])) {
     const h = toBench(boot(s, muts));
+    /* 🎲 **재굴림 버튼** — 없으면 표본이 되풀이가 되므로 여기서 던집니다.
+     *    (조용히 넘어가면 «판 240벌»이라고 적힌 초록불이 실은 3벌이 됩니다) */
+    const roll = h.D.getElementById("btn-prospect-reroll");
+    if (!roll) throw new Error("🎲 재굴림 버튼(#btn-prospect-reroll)이 없어요 — 표본이 되풀이가 됩니다");
     for (let i = 0; i < (per || 40); i++) {
       /* 🧬 선수가 **한 명**이에요 — `.prospect-card` 3장도 `state().cards`도 없습니다 */
       const build = h.W.WingerProspect._t.state().build;
       const letters = Array.from(h.D.querySelectorAll("#prospect-body .pc-grades .stat-grade"))
         .map((x) => x.textContent.trim());
       out.draws += 1;
+      out.builds.add(KEYS.map((k) => build.stats[k].toFixed(2)).join("/"));
       if (letters.length !== KEYS.length) { out.noStrip += 1; }
       else {
         const want = KEYS.map((k) => tbl(build.stats[k]));
@@ -523,10 +562,11 @@ function drawProbe(muts, seeds, per) {
         });
         if (new Set(letters).size === 1) out.allSame += 1;
       }
-      /* ↩️ 뒤로 → 🎯 포지션을 다시 골라 **새 선수 한 명**을 뽑습니다
-       * (🎲는 배분만 바꿔요 — 여기서는 🎁까지 새로 굴린 판을 봐야 합니다) */
-      h.press(h.D.getElementById("btn-back-prospect"));
-      h.press(h.D.querySelector("[data-pos]"));
+      /* 🎲 **배분을 다시 굴립니다.**
+       * 🔴 옛 길(↩️ 뒤로 → 🎯 자리 다시 고르기)은 **더 이상 다시 굴리지 않습니다** —
+       *    같은 창에서 여섯 번을 떠도 `build.stats`가 여섯 번 다 같았어요(§E 머리말).
+       *    「도달 경로가 조용히 죽음」이라 **디스크에 결과가 있으니 다들 통과**했습니다. */
+      h.press(roll);
     }
     h.close();
   }
@@ -534,29 +574,50 @@ function drawProbe(muts, seeds, per) {
 }
 const DRAW = drawProbe();
 {
-  check(DRAW.draws >= 100 && DRAW.noStrip === 0,
-    `E-0. 🌱 🧬 조립대를 **${DRAW.draws}판** 실제로 열었고 판마다 등급 여섯 줄이 있다 (없는 판 ${DRAW.noStrip})`);
+  /* 🔒 **표본이 진짜 갈렸는가** — 이게 빨간불이면 아래 E-1·E-2는 **같은 판을 여러 번 센 것**입니다.
+   *    2026-09-02에 정확히 그 상태였어요: 120판이 실은 3판이었습니다(§E 머리말). */
+  const distinct = DRAW.builds.size;
+  check(DRAW.draws >= 100 && DRAW.noStrip === 0 && distinct >= DRAW.draws * 0.9,
+    `E-0. 🌱 🧬 조립대를 **${DRAW.draws}판** 실제로 열었고 판마다 등급 여섯 줄이 있다 (없는 판 ${DRAW.noStrip})`
+    + `\n     🔎 측정 조건 — **서로 다른 배분 ${distinct}벌 / ${DRAW.draws}판** (바닥 ${Math.ceil(DRAW.draws * 0.9)}벌)`
+    + `\n     🔑 판 수만 세면 「같은 판을 40번 센 것」과 「40판을 센 것」이 **구분이 안 됩니다** —`
+    + ` 🎲 재굴림이 죽은 날 120판이 실은 **3판**이었어요`
+    + (distinct >= DRAW.draws * 0.9 ? "" :
+      `\n     🔴 배분이 ${distinct}벌뿐입니다 — 🎲 재굴림 경로가 죽었어요. E-1·E-2는 지금 **되풀이 표본** 위에 서 있습니다`));
   check(DRAW.mismatch.length === 0,
     `E-1. 🌱 조립대에 그린 등급이 **정점 기준값(build.stats)**과 맞는다 — ${DRAW.draws}판 × 6칸`
     + (DRAW.mismatch.length
       ? `\n     🔴 어긋난 것 ${DRAW.mismatch.length}칸 — 예: ${DRAW.mismatch.slice(0, 3).join(" · ")}`
         + `\n     👉 지금 실력(cardShown)으로 매기면 열일곱의 곡선에 눌려 여섯 칸이 전부 F로 깔립니다`
       : ""));
-  /* 🔒 문턱은 여기 박습니다. 실측(27.7%) 옆에 붙이지 않고 **기준선과 변이(95.8%) 사이**에 둬요 */
+  /* 🔒 문턱은 여기 박습니다. 실측(36.7%) 옆에 붙이지 않고 **기준선과 변이(95.0%) 사이**에 둬요 */
   const ALL_SAME_MAX = 60;
   const rate = (DRAW.allSame / DRAW.draws) * 100;
   check(rate < ALL_SAME_MAX,
-    `E-2. 🌱 **여섯 칸이 전부 같은 한 글자로 깔리는 판이 ${ALL_SAME_MAX}% 미만** — 실측 ${rate.toFixed(1)}% (${DRAW.allSame}/${DRAW.draws})`
-    + `\n     👉 전부 같으면 등급으로는 🎲의 결과를 못 읽어요. 지금 실력으로 매기면 96%가 됩니다`);
+    `E-2. 🌱 **여섯 칸이 전부 같은 한 글자로 깔리는 판이 ${ALL_SAME_MAX}% 미만** — 실측 ${rate.toFixed(1)}% (${DRAW.allSame}/${DRAW.draws} · 서로 다른 배분 ${DRAW.builds.size}벌)`
+    + `\n     👉 전부 같으면 등급으로는 🎲의 결과를 못 읽어요. 지금 실력으로 매기면 95%가 됩니다`
+    + `\n     🔎 문턱 60%는 **무변이 36.7% ↔ 변이 95.0%** 사이예요 (아래 23%p · 위 35%p)`
+    + (rate < ALL_SAME_MAX ? "" :
+      `\n     🔴 먼저 **E-0의 「서로 다른 배분」**을 보세요 — 되풀이 표본이면 이 값은 몇 판의 우연입니다`));
 }
 
 /* 🧪 E 변이 — 카드 등급의 자를 지금 실력으로 */
 {
-  const m = mutRun("CARD_SHOWN", () => drawProbe(MUT.CARD_SHOWN, [11], 20));
+  /* 🔒 **기준선과 같은 시드·같은 판 수**로 겁니다 — 짝지어 봐야 «변이가 옮긴 폭»을 말할 수 있어요.
+   * 🔴 옛 술어는 `rate >= 60`(절대값)이었습니다. 기준선이 60% 위로 올라간 날
+   *    **변이가 아무 일도 안 해도 통과**하는 자리였어요 — 그래서 **차이**로 바꿨습니다. */
+  const m = mutRun("CARD_SHOWN", () => drawProbe(MUT.CARD_SHOWN));
   const rate = m ? (m.allSame / m.draws) * 100 : NaN;
-  check(!!m && m.mismatch.length > 0 && rate >= 60,
+  const base = (DRAW.allSame / DRAW.draws) * 100;
+  const MUT_GAIN = 30;                    // 🔒 문턱은 여기 박습니다 (실측 격차 58.3%p)
+  const ok = !!m && m.mismatch.length > 0 && rate >= base + MUT_GAIN;
+  check(ok,
     `E-변이. 조립대 등급을 **지금 실력**으로 매기면 → 빨간불`
-    + (m ? ` (정점 기준값과 어긋난 칸 ${m.mismatch.length} · 여섯 칸이 전부 같은 판 ${rate.toFixed(0)}%)` : MUT_DEAD));
+    + (m
+      ? ` (정점 기준값과 어긋난 칸 **${m.mismatch.length}** · 전부 같은 판 무변이 ${base.toFixed(1)}% → 변이 **${rate.toFixed(1)}%**)`
+        + `\n     🔎 측정 조건 — 기준선과 **같은 시드·같은 판 수**로 짝지었습니다 (계약: 어긋난 칸 > 0 **그리고** 격차 ≥ ${MUT_GAIN}%p)`
+        + (ok ? "" : `\n     🔴 변이가 기준선을 못 밀었어요 — E-0의 「서로 다른 배분」부터 보세요`)
+      : MUT_DEAD));
 }
 
 /* ══════════════════════════════════════════════════════════════

@@ -19,14 +19,15 @@
  *      판정이 뒤집힌 날 검사가 옛 계약 편에 서는 그 형태예요. 지금은 아래처럼 고쳤습니다)
  *   · 🔴 **[다음]이 게이트입니다** — 고르기 전엔 `disabled`, 발을 탭해도 화면은 안 바뀝니다.
  *     그 계약 자체는 이 파일이 아니라 **`foot-next-test.js`**가 지켜요
- *   · 🚨 **2026-09-02 — 🥅 1대1에서 `.w2m-half`는 「장식」이 됐습니다**(113번 격자 개편).
- *     판정은 이제 **`.w2m-cell` 다섯 칸**이 합니다. F절은 여전히 `.w2m-half`만 읽으니,
+ *   · 🚨 **2026-09-02 — 🥅에서 `.w2m-half`는 「장식」입니다**(113번 격자 개편).
+ *     판정은 **`.w2m-cell` 여섯 칸**이 합니다. F절은 `.w2m-half`와 칸의 **클래스**만 읽으니,
  *     🥅에 대해서는 **화면끼리의 대조**예요 — 「판정이 칸 쪽에서 뒤집히는」 결함은
  *     여기서 **안 잡힙니다.** 🔒 그 자리는 **`one-grid-test.js`의 G-1**이 지켜요
  *     (같은 판을 🦶 R·L로 두 번 열어 **밝기 = 판정**을 견줍니다).
- *     ⚠️ 여기를 고쳐서 칸까지 읽게 만들지 마세요 — 같은 문장이 두 파일에 생기면
+ *     ⚠️ 여기를 고쳐서 칸의 **밝기**까지 읽게 만들지 마세요 — 같은 문장이 두 파일에 생기면
  *        한쪽만 고쳐진 채 얼어붙습니다(rAF preamble 네 벌이 그랬어요).
- *     💨 컷인·⚡ 1:1의 `.w2m-gate`는 **여전히 판정 그 자체**라 F절이 계속 유효합니다
+ *   · 🔴 **2026-09-02 — 💨 컷인이 형태째 없어졌습니다**(116번). `.w2m-gate`도 같이요.
+ *     F-1·F-2에서 **컷인 줄을 지웠어요.** 판은 🥅 하나입니다 — 되살리지 마세요
  *   · 🦶 화면의 판정 창 폭 = `winger-moment.js`의 `FOOT_WIN`. **화면이 상수를 따라갑니다**
  *   · 🔑 **오른발잡이면 오른쪽이 넓습니다** — `const right = foot !== "L"`.
  *     화면(intro.js)과 판정(winger-moment.js)이 **같은 모양**으로 씁니다
@@ -280,24 +281,34 @@ function screenLanes(h, foot) {
   if (lanes.length !== 2) return null;
   return lanes[0].side === "left" ? lanes : [lanes[1], lanes[0]];   // 늘 [왼쪽, 오른쪽]
 }
-/* 💨 컷인 · ⚡ 1:1 카드를 **진짜로 그려서** 강한 쪽을 읽습니다.
- * `W2Moment.play`는 준비 화면부터 띄우니 ▶️ 시작을 실제로 눌러요. */
-async function judgeLanes(h, moment, foot) {
+/* 🥅 골문 카드를 **진짜로 그려서** 강한 쪽을 읽습니다.
+ * `W2Moment.play`는 준비 화면부터 띄우니 ▶️ 시작을 실제로 눌러요.
+ * 🔴 2026-09-02 — `moment` 인자를 지웠습니다. 판이 하나라 **고를 게 없어요**
+ *    (소스도 `opts.moment`를 화면 고르기에 안 씁니다). 옛 `"cutin"` 갈래는 죽었어요. */
+async function judgeLanes(h, foot) {
   const div = h.D.createElement("div");
   h.D.body.appendChild(div);
-  h.W.W2Moment.play(div, { moment, foot, condition: 80, kind: "goal" }, () => {});
+  h.W.W2Moment.play(div, { moment: "oneone", foot, condition: 80, kind: "goal" }, () => {});
   for (let i = 0; i < 200 && !div.querySelector(".w2m-go"); i++) await wait(3);
   const go = div.querySelector(".w2m-go");
   if (!go) { div.remove(); return null; }
   h.press(go, "▶️ 시작");
-  for (let i = 0; i < 200 && !div.querySelector(".w2m-gate, .w2m-half"); i++) await wait(3);
-  const sel = moment === "cutin" ? ".w2m-gate" : ".w2m-half";
-  const out = Array.from(div.querySelectorAll(sel)).map((g) => ({
+  for (let i = 0; i < 200 && !div.querySelector(".w2m-half"); i++) await wait(3);
+  const out = Array.from(div.querySelectorAll(".w2m-half")).map((g) => ({
     left: F_NUM(g.style.left), w: F_NUM(g.style.width),
     strong: g.classList.contains("w2m-strong"),
   }));
+  /* 🔲 **칸(`.w2m-cell`)의 강/약 클래스도 같이 읽습니다.** `.w2m-half`(반쪽 색)보다
+   *    한 걸음 판정에 가까운 자리예요 — 소스가 `cellMul`과 **같은 모양의 조건**으로 답니다.
+   * 🔒 6칸은 50에 앉는 칸이 없어 **강 3 : 약 3**으로 정확히 갈립니다. */
+  const cells = Array.from(div.querySelectorAll(".w2m-cell")).map((c, i) => ({
+    i, strong: c.classList.contains("w2m-strong"),
+  }));
   div.remove();
-  return out.length === 2 ? out.sort((a, b) => a.left - b.left) : null;   // 늘 [왼쪽, 오른쪽]
+  if (out.length !== 2) return null;
+  const halves = out.sort((a, b) => a.left - b.left);                 // 늘 [왼쪽, 오른쪽]
+  halves.cells = cells;
+  return halves;
 }
 
 console.log("── 🦶 F. 주발 화면과 판정이 같은 쪽인가 ──");
@@ -310,8 +321,7 @@ async function runF(muts) {
   r.own = Array.from(h.D.querySelectorAll("#screen-foot button")).map((b) => b.id || b.className);
   r.cards = Array.from(h.D.querySelectorAll("#screen-foot .foot-card")).map((c) => c.dataset.foot);
   r.lanes = { L: screenLanes(h, "L"), R: screenLanes(h, "R") };
-  r.cut = { L: await judgeLanes(h, "cutin", "L"), R: await judgeLanes(h, "cutin", "R") };
-  r.one = { L: await judgeLanes(h, "oneone", "L"), R: await judgeLanes(h, "oneone", "R") };
+  r.one = { L: await judgeLanes(h, "L"), R: await judgeLanes(h, "R") };
   h.close();
   return r;
 }
@@ -324,10 +334,22 @@ const F_PRED = {
   sameSide: (r) => {
     const L = (a) => !!(a && a[0].strong && !a[1].strong);      // 왼쪽이 강
     const R = (a) => !!(a && !a[0].strong && a[1].strong);      // 오른쪽이 강
+    /* 🔲 칸 쪽 — 오른쪽 절반(칸 3·4·5)이 강한가. `.w2m-half`보다 판정에 한 걸음 가깝습니다.
+     * 🔒 **강 3 : 약 3**이 아니면 그 자체로 어긋난 거예요(6칸은 50에 앉는 칸이 없습니다). */
+    const cellL = (a) => {
+      const c = a && a.cells;
+      if (!c || c.length !== 6) return false;
+      return c.filter((x) => x.strong).length === 3 && c[0].strong && c[1].strong && c[2].strong;
+    };
+    const cellR = (a) => {
+      const c = a && a.cells;
+      if (!c || c.length !== 6) return false;
+      return c.filter((x) => x.strong).length === 3 && c[3].strong && c[4].strong && c[5].strong;
+    };
     const rows = [
       ["🦶 화면", L(r.lanes.L), R(r.lanes.R)],
-      ["💨 컷인", L(r.cut.L), R(r.cut.R)],
-      ["⚡ 1:1", L(r.one.L), R(r.one.R)],
+      ["🥅 반쪽 색", L(r.one.L), R(r.one.R)],
+      ["🔲 칸(3:3)", cellL(r.one.L), cellR(r.one.R)],
     ];
     return { ok: rows.every(([, a, b]) => a && b), rows };
   },
@@ -343,13 +365,16 @@ const F_PRED = {
   /* F-1. 📐 폭의 비 = (1+FOOT_WIN)/(1−FOOT_WIN). **FOOT_WIN은 소스에서 뜯어옵니다.** */
   ratio: (r, w) => {
     const want = (1 + w) / (1 - w);
+    /* 🔴 2026-09-02 — 💨 컷인의 `.w2m-gate` 두 표본을 지웠습니다(판이 없어졌어요).
+     * 🔒 남은 표본은 🦶 화면 L·R **둘**입니다. `.w2m-half`는 좌우가 늘 50%라 비를 못 냅니다 —
+     *    **폭으로 주발을 말하는 유일한 화면**이 🦶 소개 화면이에요.
+     * 🔒 표본 바닥을 2로 박습니다 — 0개여서 조용히 통과하는 길을 막아요. */
     const got = [];
     for (const f of ["L", "R"]) {
-      for (const src of [r.lanes[f], r.cut[f]]) {
-        if (src) got.push(Math.max(src[0].w, src[1].w) / Math.min(src[0].w, src[1].w));
-      }
+      const src = r.lanes[f];
+      if (src) got.push(Math.max(src[0].w, src[1].w) / Math.min(src[0].w, src[1].w));
     }
-    return { ok: got.length === 4 && got.every((v) => Math.abs(v - want) <= EPS * want), want, got };
+    return { ok: got.length === 2 && got.every((v) => Math.abs(v - want) <= EPS * want), want, got };
   },
 };
 
@@ -358,10 +383,12 @@ async function F() {
   const r = await runF(null);
   base.F = r;
   const W0 = footWinOf(MSRC0);
-  check(r.screen === "screen-foot" && r.cards.join("") === "LR" && !!r.cut.L && !!r.one.L,
+  const cellsL = (r.one.L && r.one.L.cells || []).length;
+  check(r.screen === "screen-foot" && r.cards.join("") === "LR" && !!r.one.L && cellsL === 6,
     `F-0. 🚪 게임 입구 → ✏️ 이름 다음 → **🦶 주발이 자기 화면**으로 뜬다 (${r.screen} · 카드 ${r.cards.join("/")})`
-    + `\n     🔎 측정 조건 — 화면·💨 컷인·⚡ 1:1을 한 창에 다 그렸습니다`
-    + ` (컷인 ${r.cut.L ? "✔" : "🔴 못 그림"} · 1:1 ${r.one.L ? "✔" : "🔴 못 그림"})`);
+    + `\n     🔎 측정 조건 — 🦶 소개 화면과 🥅 골문을 한 창에 다 그렸습니다`
+    + ` (🥅 ${r.one.L ? "✔" : "🔴 못 그림"} · 칸 ${cellsL}개)`
+    + `\n     🔑 칸이 0개면 아래 F-2가 **빈 화면 위에서 조용히 통과**합니다 — 그래서 여기서 셉니다`);
   /* 🚨 **2026-09-02 — 이 문장이 뒤집혔습니다.** 여기 있던 것은
    *      `r.own.length === 3` … 「다음」이 **없다**(탭이 곧 답)
    *    이었어요. 111번에서 [다음]이 붙자 **고친 코드 쪽이 빨간불**이 됐습니다 —
@@ -385,15 +412,16 @@ async function F() {
   check(W0 != null && ra.ok,
     `F-1. 📐 **판정 창 폭의 비 = (1+FOOT_WIN)/(1−FOOT_WIN) = ${ra.want.toFixed(4)}**`
     + ` — FOOT_WIN ${W0}은 winger-moment.js에서 **뜯어온 값**이에요(안 베꼈습니다)`
-    + `\n     🦶 화면 L · 💨 컷인 L · 🦶 화면 R · 💨 컷인 R = ${ra.got.map((v) => v.toFixed(4)).join(" / ") || "(못 쟀어요)"}`
+    + `\n     🦶 화면 L · 🦶 화면 R = ${ra.got.map((v) => v.toFixed(4)).join(" / ") || "(못 쟀어요)"}`
+    + ` (표본 ${ra.got.length} · 바닥 2)`
     + (ra.ok ? "" : `\n     🔴 화면이 상수를 안 따라갑니다 — **화면만 옛말**을 하고 있어요`));
 
   const ss = F_PRED.sameSide(r);
   check(ss.ok,
-    `F-2. 🔑 **오른발이면 오른쪽이 넓다 — 화면·💨 컷인·⚡ 1:1 셋이 같은 쪽**을 가리킨다`
+    `F-2. 🔑 **오른발이면 오른쪽이 넓다 — 🦶 화면 · 🥅 반쪽 색 · 🔲 칸 셋이 같은 쪽**을 가리킨다`
     + `\n     ${ss.rows.map(([n, a, b]) => `${a && b ? "🟢" : "🔴"} ${n}(왼발→왼쪽 ${a ? "✔" : "✘"} · 오른발→오른쪽 ${b ? "✔" : "✘"})`).join(" · ")}`
-    + `\n     🚨 🥅는 2026-09-02부터 \`.w2m-half\`가 **장식**입니다(판정은 칸) —`
-    + ` 「칸 쪽에서 뒤집힘」은 **\`one-grid-test.js\` G-1**이 봅니다`
+    + `\n     🚨 셋 다 **화면**입니다 — 칸의 클래스도 밝기가 아니라 클래스예요.`
+    + ` 「**판정**이 칸 쪽에서 뒤집힘」은 **\`one-grid-test.js\` G-1**이 봅니다`
     + (ss.ok ? "" : `\n     🔴 화면이 판정과 **반대**를 가리키면 🦶는 보이는 게 아니라 거짓말입니다 (2026-08-29 사고)`));
 
   check(F_PRED.colorMatchesWidth(r),

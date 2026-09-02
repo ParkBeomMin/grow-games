@@ -255,6 +255,43 @@ window.WingerProspect = (() => {
     eu: ["defense", "pass"],        // 🇮🇹 전술과 수비 조직
   };
   const FOCUS_W = 1.30;             // 유스가 미는 칸
+
+  /* ══════════════════════════════════════════════════════════════════
+   * 🧒 **초1에 고른 것 — 🎯 트레이드오프 손잡이입니다 (난이도 손잡이가 아니에요)**
+   * ══════════════════════════════════════════════════════════════════
+   * (설계 117번 §3 · §5-1 · 실측 119번 §2)
+   *
+   * 🔴 **「보너스」가 아닙니다 — 총량은 정확히 그대로예요.** `spread`가 `POOL`을 나누는
+   *    가중치에만 들어가서, 미는 칸이 생기면 **나머지 칸이 그만큼 눌립니다.**
+   *    🔑 `overall()`(6칸 평균)은 **`POOL ÷ 6`으로 조합에 무관하게 고정**이라
+   *      `autoP`·`PEER_REF`·편차 밴드에 **정확히 0**입니다 — 실측이 아니라 따름정리예요.
+   *    ⚠️ 다음 사람이 여기를 난이도 손잡이로 만집니다. 「훈련 상승폭」에서 데인 자리예요.
+   *
+   * 🔒 **셋이 여섯 칸을 정확히 2 + 2 + 2로 나눕니다 — 합집합 6칸 · 겹침 0.**
+   *    🔑 **그 성질이 위의 중립을 「구조로」 만듭니다.** 문구를 갈거나 선택지를 늘릴 때
+   *      칸이 겹치는 순간 깨져요 (inspector가 합집합·겹침을 검사로 지킵니다).
+   *
+   * 🔒 **`YOUTH_FOCUS`와 「같은 배열」에 넣습니다** — `spread()`가 `indexOf`로 보니
+   *    같은 칸이 두 번 들어가도 `FOCUS_W`는 **한 번만** 곱해져요(중복 제거가 공짜).
+   * 🔴 **굴림 뒤에 더하는 「고정 이동」으로 만들지 마세요** — 편중원이 넷으로 늘고,
+   *    ♾️ 리롤로 안 씻긴다는 근거는 이미 실측으로 확인했습니다(117번 §5-3).
+   *
+   * ⚠️ **키(`ball`·`body`·`eye`)는 세이브(`S.childPicks`)가 가리키는 값이라 안 바꿉니다.**
+   *    순서가 필요하면 새 필드를 더하세요. */
+  const CHILD_FOCUS = {
+    ball: ["dribble", "shoot"],     // ⚽ 하루 종일 공만 찼어요
+    body: ["defense", "stamina"],   // 🛡️ 형들 틈에 껴서 안 밀렸어요
+    eye:  ["pass", "speed"],        // 👀 빈 곳을 먼저 보고 먼저 뛰었어요
+  };
+  /* 🗂️ **읽는 쪽 기본값 — 마이그레이션하지 않습니다.** 칸이 없으면 빈 배열이고,
+   * 빈 배열이면 기여가 **정확히 0**이라 옛 세이브가 개편 전과 똑같이 굽니다. */
+  const childFocus = (picks) => {
+    const out = [];
+    for (const k of (picks || [])) for (const st of (CHILD_FOCUS[k] || [])) out.push(st);
+    return out;
+  };
+  const childOf = (who) => (who && Array.isArray(who.child) ? who.child : []);
+
   const POS_W = 1.25;               // 내 포지션 주 스탯
   const SHAPE_W = 1.35;             // 그 카드만의 편중 — 세 장이 서로 달라 보이게
 
@@ -525,8 +562,10 @@ window.WingerProspect = (() => {
    *
    * ⚠️ 🎁(🗣️ 코멘트 · 🧬 성장타입 · ⭐ 특능 · 🩹 결함)는 여기 없습니다. 일부러예요 —
    *    🧬를 함께 굴리면 첫 3시즌이 **+19.8%**, 🌳 만성이 36% → 10%로 사라집니다(실측 D-ⓑ). */
-  function rollShape(marketId, pos) {
-    const focus = YOUTH_FOCUS[marketId] || [];
+  function rollShape(marketId, pos, childPicks) {
+    /* 🔒 **한 배열에 담습니다** — 🏫 유스가 미는 칸과 🧒 초1에 고른 칸이 **같은 자격**이에요.
+     * `spread()`가 `indexOf`로 보니 겹쳐도 `FOCUS_W`는 한 번만 곱해집니다. */
+    const focus = (YOUTH_FOCUS[marketId] || []).concat(childFocus(childPicks));
     const posKey = POS_INFO[pos].stat;
     /* 그 굴림만의 편중 — 굴릴 때마다 모양이 달라 보이게 하는 칸이에요 */
     const shapeKey = pick(STAT_DEFS.map((d) => d.key));
@@ -556,13 +595,13 @@ window.WingerProspect = (() => {
    *
    * 🧒 이름은 여기서 안 짓습니다 — **이름 화면이 맨 앞**이라 사람이 이미 정했어요.
    *    (세 장 중복 방지 `cardName`도 같이 사라졌습니다. 한 명이라 겹칠 게 없어요) */
-  function rollBuild(marketId, pos) {
+  function rollBuild(marketId, pos, childPicks) {
     /* 🗣️ 코멘트를 먼저 뽑고 그 가중치로 성장타입을 굴려요 — 화면엔 코멘트만 나갑니다.
      * `HINTS`의 `w`에 있는 **0**은 결함이 아니라 기능입니다(74번 판정 ③-B):
      * 🎲로 못 바꾸니 *"이 코멘트면 만성이 아니다"*가 **회피 수단이 아니라 정보**예요. */
     const hint = pick(HINTS);
     const type = pickW(GROWTH_TYPES, hint.w);
-    const sh = rollShape(marketId, pos);
+    const sh = rollShape(marketId, pos, childPicks);
     return {
       age: CARD_AGE,
       hint,
@@ -1011,9 +1050,9 @@ window.WingerProspect = (() => {
    * 🔴 *"한쪽이 마음에 들면 한 벌만"* 같은 분기를 넣지 마세요. 난수는 **값이 아니라
    *    소비량으로** 뒤쪽 전부와 결합해서, 굴림 횟수가 조건을 타면 같은 시드에서도
    *    이 뒤의 모든 것이 어긋납니다. 두 줄을 나란히 두는 게 그 계약이에요. */
-  function rollPair(marketId, pos) {
-    const a = rollShape(marketId, pos);
-    const b = rollShape(marketId, pos);
+  function rollPair(marketId, pos, childPicks) {
+    const a = rollShape(marketId, pos, childPicks);
+    const b = rollShape(marketId, pos, childPicks);
     return [a, b];
   }
 
@@ -1045,7 +1084,7 @@ window.WingerProspect = (() => {
   function doReroll() {
     if (!draw || leftOf() <= 0) return;
     draw.used += 1;
-    draw.picks = rollPair(draw.market.id, draw.pos);
+    draw.picks = rollPair(draw.market.id, draw.pos, childOf(draw.who));
     usePick(0);
     render();
     /* 🎲 **유니폼은 안 바뀝니다** — 바뀌는 건 🌱 등급 여섯 줄(바로 아래)이에요.
@@ -1057,8 +1096,16 @@ window.WingerProspect = (() => {
   function render() {
     const b = draw.build, who = draw.who;
     const hint = document.getElementById("prospect-hint");
+    /* 🧒 **초1에 고른 것을 여기 다시 적습니다** (설계 117번 §5-2 갚는 법 ②).
+     * 🔑 손잡이를 누른 것은 열 화면 전인데 **모양이 보이는 곳은 여기**예요 —
+     *    적지 않으면 그 선택이 「효과가 안 보이는 결정」이 됩니다(원칙 ③).
+     * 🔴 **숫자를 안 적습니다.** 어느 칸이 밀렸는지는 아래 **바 모양**이 말해요. */
+    const CHILD_SAY = { ball: "⚽ 공을 많이 찬 아이", body: "🛡️ 몸으로 버틴 아이",
+      eye: "👀 빈 곳을 먼저 본 아이" };
+    const say = childOf(who).map((k) => CHILD_SAY[k]).filter(Boolean).join(" · ");
     if (hint) hint.textContent =
-      `🎲가 두 벌을 냅니다 — 하나를 고르세요. 총합은 언제나 ${POOL}라 세지는 게 아니라 모양만 달라져요.`;
+      `🎲가 두 벌을 냅니다 — 하나를 고르세요. 총합은 언제나 ${POOL}라 세지는 게 아니라 모양만 달라져요.`
+      + (say ? ` 🧒 ${say}라 몇 칸이 먼저 자랐어요.` : "");
 
     const body = document.getElementById("prospect-body");
     if (body) {
@@ -1195,12 +1242,13 @@ window.WingerProspect = (() => {
     draw = { market, pos, who: who || {}, used: 0, onPick };
     /* ⭐ 잠재력·🧬 성장타입·⭐ 특능·🩹 결함은 **여기서 한 번**만 굴러요 */
     draw.talents = rollTalents(pos);
-    draw.build = rollBuild(market.id, pos);
+    draw.build = rollBuild(market.id, pos, childOf(draw.who));
     /* 🎲 조립대는 **두 벌을 나란히 내고 하나를 고르는** 화면이에요 (101번 §1-6).
      * `rollBuild`가 이미 한 벌을 굴렸으니 **짝이 될 한 벌만 더** 굴립니다 —
      * 합쳐서 `rollShape` **2회**라 아래 🎲(`rollPair`)와 소비량이 같아요.
      * 🔒 여기를 조건부로 만들지 마세요(§18-5 · `rollPair` 주석). */
-    draw.picks = [{ shapeKey: draw.build.shapeKey, stats: draw.build.stats }, rollShape(market.id, pos)];
+    draw.picks = [{ shapeKey: draw.build.shapeKey, stats: draw.build.stats },
+      rollShape(market.id, pos, childOf(draw.who))];
     draw.pick = 0;
     /* 🔢 포지션 관례 번호로 시작해요 — 🎲로는 **안 바뀝니다**(안 바뀌는 축이에요) */
     draw.build.shirtNo = defaultNo(pos);
@@ -1227,6 +1275,8 @@ window.WingerProspect = (() => {
     POOL, REROLL_MAX, evenStats,
     RETIRE_AGE, RETIRE_CURVE, LOW_APPS, LOW_RUN, CARD_AGE,
     START_AGE, PEAK_SHIFT_MAX, HOT_RUN, HOT_BAR,
-    _t: { spread, pickW, pieceAt, trainStep, TRAIN_NEUTRAL, YOUTH_FOCUS, STAT_LO, STAT_HI, state: () => draw },
+    CHILD_FOCUS, childFocus,
+    _t: { spread, pickW, pieceAt, trainStep, TRAIN_NEUTRAL, YOUTH_FOCUS, CHILD_FOCUS, childFocus,
+      STAT_LO, STAT_HI, state: () => draw },
   };
 })();

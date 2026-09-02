@@ -200,7 +200,7 @@ async function watch(shim, moment, seed, budget) {
     /* 🔑 **주석은 안 셉니다.** `_load.js`는 옛 가짜 줄을 머리말에 「이랬어요」로 적어 두고
      *    있어서, 낱말로 세면 그 설명이 위반으로 잡혀요.
      * 🔑 **`window.`으로 시작하는 것만** 셉니다 — 그게 페이지 앞에 심는 preamble의 모양이에요.
-     *    `block-test.js`처럼 **이미 뜬 창**의 `W.requestAnimationFrame`을 감싸 세는 건
+     *    `one-grid-test.js`처럼 **이미 뜬 창**의 `W.requestAnimationFrame`을 감싸 세는 건
      *    계측이지 시계 정의가 아니라서, 여기 걸리면 안 됩니다. */
     const code = (s) => s.split("\n")
       .filter((l) => !/^\s*(\/\/|\/?\*)/.test(l)).join("\n");

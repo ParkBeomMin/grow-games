@@ -636,8 +636,13 @@ function momentDom(muts) {
     mom = mom.replace(re, rep);
     if (mom === before) throw new Error(`winger-moment.js에 변이가 안 걸렸어요 — ${re}`);
   }
+  /* 🔒 **`url`이 있어야 `localStorage`가 삽니다.** 없으면 origin이 opaque라
+   *    `localStorage.getItem`이 던지고, `wideOn()`의 try/catch가 그걸 삼켜
+   *    ♿ **판정 창 확대(WIDE 1.30)가 검사에서 한 번도 안 걸립니다** —
+   *    「환경이 우연히 막아 줌」의 형태예요(코드가 막은 게 아니라 창이 없던 겁니다).
+   *    🔴 넣기 전에 확인했습니다: 아무도 안 심으면 `getItem`이 null이라 예전과 같아요. */
   const dom = new JSDOM("<!doctype html><body><div id=host></div></body>",
-    { runScripts: "outside-only", pretendToBeVisual: true });
+    { runScripts: "outside-only", pretendToBeVisual: true, url: "https://x.test/winger2/" });
   const W = dom.window;
   W.eval(fs.readFileSync(path.join(PAGE_DIR, "engine.js"), "utf8"));
   W.eval(mom);

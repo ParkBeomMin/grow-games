@@ -52,7 +52,22 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /* 🔒 문턱은 **검사에 박습니다** — 단계별 카드 수는 계약이에요 (초 2 · 중 3 · 고 3). */
 const STAGE_N = { e: 2, m: 3, h: 3 };
-const SEEDS = [7, 42, 1201];
+/* 🎲 **여덟 벌**입니다 (2026-09-02에 셋에서 늘렸어요).
+ * 🔴 늘린 이유 — A-2b가 *"승패 뒤집기가 🏁 스코어를 실제로 갈랐나"*를 재는데,
+ *    **골이 하나도 안 난 아크에서는 뒤집어도 0:0 → 0:0**이라 안 갈립니다.
+ *    시드 셋 중 42번이 그런 판이어서 2/3이 됐어요 — **커버리지가 난수에 걸린** 모양입니다.
+ * 🌍 그리고 지금은 그 판이 **더 흔합니다**: 🧱 수비가 `PLAYABLE`에서 빠지면서
+ *    `GOAL_BY.d.miss = "them"`이 **닿을 수 없게** 됐고, 학교 경기는 늘 `N:0`으로 끝나요.
+ *    즉 «갈린다»는 곧 «N > 0»입니다.
+ * 🔑 **문턱을 내리지 않고 표본을 키웠습니다** — 아래 A-2b는 「골이 난 판은 **전부** 갈렸다」에
+ *    **더해** 「골이 난 판이 최소 `MIN_SCORING`벌」을 같이 봅니다. */
+const SEEDS = [7, 42, 1201, 5, 88, 301, 777, 4242];
+/* 🔒 문턱은 여기 박습니다 — 골이 난 아크가 이만큼은 나와야 A-2가 뜻을 가져요 */
+const MIN_SCORING = 4;
+/* 🎬 B절 전용 — **셋**입니다. B는 시드마다 간격 두 벌씩(120·200ms) 아크를 굴려서
+ * 여기를 늘리면 파일 전체가 곱으로 길어져요. B가 재는 것은 **세대가 갈리는 시점**이지
+ * 판정 분포가 아니라, 표본을 키워도 문장이 안 세집니다 — A절과 갈라 둡니다. */
+const B_SEEDS = [7, 42, 1201];
 
 /* 📐 산식은 **소스에서 뽑습니다.** 값을 베껴 적으면 점수표가 바뀔 때 검사가 거짓말을 해요. */
 const TOWN_SRC = fs.readFileSync(path.join(PAGE_DIR, "town.js"), "utf8");
@@ -236,11 +251,22 @@ const finOf = (txt) => {
         + ` · 🏁 "${(finOf(base[s].stages.h.fin) || []).join(":")}" → "${(finOf(flip[s].stages.h.fin) || []).join(":")}"`).join("")
       + (sameRes ? "" : `\n     🔴 판정 시퀀스까지 갈렸어요 — 변이가 난수를 건드립니다. 이 문장은 지금 무효예요`)
       + (sameDev ? "" : `\n     🔴 **승패가 \`d\`로 샙니다.** 🏟️ 제안 등급(spotMul)이 경기 결과를 타요`));
-    /* 🔑 **변이가 실제로 승패를 갈랐는지** 확인 — 안 갈렸으면 A-2는 아무것도 안 지킵니다 */
-    check(finDiff.length === SEEDS.length,
-      `A-2b. 🔑 그 변이가 **🏁 스코어를 실제로 갈랐다** (${finDiff.length}/${SEEDS.length} 시드)`
-      + (finDiff.length === SEEDS.length ? "" :
-        `\n     🔴 승패가 안 갈렸으면 A-2는 "원래 같은 값"을 재고 있어요 — 껍데기입니다`));
+    /* 🔑 **변이가 실제로 승패를 갈랐는지** 확인 — 안 갈렸으면 A-2는 아무것도 안 지킵니다.
+     * 🔴 **「전부 갈렸다」로는 못 잽니다** — 골이 하나도 안 난 아크는 0:0 → 0:0이라
+     *    뒤집어도 같은 값이에요. 그건 고장이 아니라 **잴 것이 없는 판**입니다.
+     *    그래서 ① **골이 난 판은 전부 갈렸는가** ② **골이 난 판이 충분한가**로 갈랐어요. */
+    const scoring = SEEDS.filter((s) => (finOf(base[s].stages.h.fin) || [0, 0]).some((n) => n > 0));
+    const scoringSplit = scoring.filter((s) => finDiff.includes(s));
+    const b2 = scoringSplit.length === scoring.length && scoring.length >= MIN_SCORING;
+    check(b2,
+      `A-2b. 🔑 그 변이가 **🏁 스코어를 실제로 갈랐다** — 골이 난 판 **${scoring.length}벌**(바닥 ${MIN_SCORING}) 중 갈린 판 **${scoringSplit.length}벌**`
+      + `\n     🔎 측정 조건 — 🏁 0:0인 아크는 뒤집어도 0:0이라 **잴 것이 없어서** 뺐습니다 (시드 ${SEEDS.length}벌 중 ${SEEDS.length - scoring.length}벌)`
+      + `\n     ${SEEDS.map((s) => `${s}:${(finOf(base[s].stages.h.fin) || []).join(":")}→${(finOf(flip[s].stages.h.fin) || []).join(":")}`).join(" · ")}`
+      + `\n     🌍 🧱이 \`PLAYABLE\`에서 빠져 \`GOAL_BY.d.miss\`(상대 골)가 **닿을 수 없습니다** — 학교 경기는 늘 \`N:0\`이에요`
+      + (b2 ? "" :
+        scoring.length < MIN_SCORING
+          ? `\n     🔴 골이 난 판이 ${scoring.length}벌뿐이라 A-2가 "원래 같은 값"을 재고 있을 수 있어요 — **시드를 늘리세요**`
+          : `\n     🔴 골이 났는데 안 갈린 판이 있어요 — 승패 뒤집기가 화면에 안 닿습니다`));
   }
 
   /* ══════════ ⓑ B. 세대가 갈리면 옛 카드가 새 피드에 안 써진다 ══════════
@@ -286,7 +312,7 @@ const finOf = (txt) => {
     };
     const run = async (muts) => {
       const out = [];
-      for (const cad of CAD) for (const sd of SEEDS) {
+      for (const cad of CAD) for (const sd of B_SEEDS) {
         const r = await arc(sd, muts, cad);
         const n = ["e", "m", "h"].reduce((a, id) =>
           a + r.stages[id].seen.reduce((b, snap) => b + snap.length, 0), 0);
@@ -298,7 +324,7 @@ const finOf = (txt) => {
     const good = await run({ "match-scene.js": MUT.SLOW["match-scene.js"] });
     const hit = good.filter((x) => x.leak.length);
     check(hit.length === 0,
-      `B-1. 🎬 세대가 갈려도 **옛 단계 카드가 새 피드에 안 써진다** (${good.length}판 — 시드 ${SEEDS.length} × 간격 ${CAD.join("·")}ms)`
+      `B-1. 🎬 세대가 갈려도 **옛 단계 카드가 새 피드에 안 써진다** (${good.length}판 — 시드 ${B_SEEDS.length} × 간격 ${CAD.join("·")}ms)`
       + (hit.length ? hit.map((x) => `\n     🔴 시드${x.sd}/${x.cad}ms — ${x.leak.join(" · ")}`).join("")
         : ""));
 

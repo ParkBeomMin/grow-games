@@ -171,6 +171,31 @@
            ⚠️ *"되돌리기가 불편하다"*로 여기에 버튼을 되살리면 **입력 잠금이 그대로 뚫립니다.** -->
     </section>
 
+    <!-- 🧒 **초등학교 1학년 — 🗺️ 지도 다음 화면** (설계 117번 §2-3 · 실측 119번 §2)
+         🔴 **초2·초3은 없습니다.** `spread()`가 `focus`를 `indexOf`로 봐서 `⚽×1`과 `⚽×3`이
+            **완전히 같은 stats**입니다(실측 4,000/4,000 일치) — 같은 걸 또 고르면 값이 정확히 0이고,
+            초3의 한계 효과는 12칸 중 8칸에서 잡음에 묻힙니다. 🔒 **화면만 늘리는 자리라 안 짓습니다.**
+
+         🔒 **[다음]이 없습니다** — 탭 하나가 고르기 겸 넘김이에요(설계 §2-1).
+            🔴 **초읽기·움직이는 것을 넣지 마세요** — 「고르는 화면」은 시간이 없습니다.
+         🔴 **효과를 숫자로 적지 않습니다**(원칙 ⑧). 「먼저」가 정확한 말이에요 —
+            **총량은 안 바뀌고 순서·모양만** 바뀝니다(`CHILD_FOCUS` 주석).
+
+         🎨 director께 — 여기 클래스는 전부 **새 이름**이라 `style.css`에 아직 규칙이 없습니다:
+            `.child-place` · `.child-story` · `.child-echo` · `#child-list .card .card-sub`
+            (카드 자체는 기존 `.card-grid`/`.card`라 규칙 없이도 그대로 섭니다) -->
+    <section class="screen" id="screen-child">
+      <div class="step-head"><h2>🧒 여덟 살</h2><span class="step-no" id="step-child"></span></div>
+      <p class="hint child-place" id="child-place"></p>
+      <p class="hint child-story" id="child-story"></p>
+      <div class="card-grid" id="child-list" role="group"
+           aria-label="학교가 끝나면 무엇을 하고 놀았는지 고르기"></div>
+      <!-- ♿ 고른 순간 여기서만 내용이 바뀝니다 — 알림이 없으면 낭독 사용자에게는
+           아무 일도 안 일어난 화면이 돼요. -->
+      <p class="hint child-echo" id="child-echo" aria-live="polite"></p>
+      <button class="btn btn-ghost" id="btn-back-child">← 뒤로</button>
+    </section>
+
     <!-- 포지션 선택 -->
     <section class="screen" id="screen-position">
       <div class="step-head"><h2>🎯 포지션 선택</h2><span class="step-no" id="step-position"></span></div>

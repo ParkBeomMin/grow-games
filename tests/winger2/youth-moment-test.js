@@ -63,8 +63,22 @@ const EPS_RATIO = 0.005;        // 화면 폭이 toFixed(2)라 반올림 여유�
 const STAGE_KIND = { "공격 전개": "g", "중원 장악": "a", "수비 조직": "d", "포지션 자유": null };
 const POS_KIND = { fw: "g", wg: "g", mf: "a", df: "d" };   // "포지션 자유"는 내 포지션이 정해요
 const STAKE_EMOJI = { g: "⚽", a: "🅰️", d: "🧱" };          // `.w2m-stake` 첫 글자
-/* v2 순간 카드 4종의 상자 클래스 — 이 넷이 아니면 v2가 아니에요 */
-const V2_BOX = ["w2m-cutin", "w2m-oneone", "w2m-killpass", "w2m-block"];
+/* v2 순간 카드의 상자 클래스.
+ * 🔴 2026-09-02 — 판이 **하나**가 됐습니다(116번). `w2m-cutin`·`w2m-killpass`·`w2m-block`
+ *    셋을 지웠어요 — 🏃 컷인 · 🎯 킬패스 · 🧱 차단이 **형태째** 없어졌습니다.
+ *    🚨 목록에 남겨 두면 「넷 중 하나면 통과」라서 **판이 셋 죽어도 초록불**이 됩니다. */
+const V2_BOX = ["w2m-oneone"];
+/* 🧱 **수비는 판을 안 엽니다** (designer 117번 §6 c안 · `game.js playYouthMoment`).
+ *    `cardP(autoP, a, 0.5) = autoP`라 결과가 🤖 자동 갈래와 **정의상 같아요** —
+ *    육성은 그대로 살고 조작만 빠집니다.
+ * 🔒 그래서 수비 경기에서는 화면이 **한 조각도** 안 떠야 해요:
+ *    `.w2m-youth`도 `.w2m-ready`도 상자도 `.w2m-stake`도 없습니다.
+ * 🚨 **그런데 v1 상자(timing.js)로 떨어져도 안 됩니다** — 그건 «판이 없다»가 아니라
+ *    «옛 판으로 되돌아갔다»예요. A-4가 그 갈래를 따로 막습니다.
+ * 🌍 이 계약이 서 있는 세계: 「🧱 수비가 **c안**인 세계」. 117번 §6-4가 조건을 못 박아 뒀어요 —
+ *    🥅가 *"바로 알겠다"*를 받으면 **같은 격자를 우리 골문으로** 돌립니다. 그때 이 절을 여세요.
+ *    🚨 그때도 🧱 차단의 **형태**(칩 둘 읽기 · 2단 국면 · 띠)는 되살리지 마세요. */
+const DEFEND_KIND = "d";
 
 const SEEDS = [11, 23, 37];     // 🎲 시드 하나로 안 잽니다
 
@@ -87,7 +101,18 @@ const MUT = {
    *    D-1(화면과 손이 같은 말)은 그대로 초록불이에요 — 나오는 한 종류는 여전히 맞으니까요.
    *    **D-2만** 갈립니다. */
   M4_ONE_TYPE: { "game.js": [[/STAGE_TYPES\[pick\(\[0, 1, 2\]\)\]/, "STAGE_TYPES[pick([0])]"]] },
+  /* 🔴 **M5 — 🧱 수비에도 판을 엽니다** (designer 117번 §6-1 a안으로 되돌리는 형태).
+   *    *"한 명만 지나가면 실점이에요"*인데 화면이 **상대 골문**이 됩니다 —
+   *    화면이 만드는 기대(**골을 넣는다**)와 상황의 핵심(**막는다**)이 정면으로 싸워요.
+   * 🔑 `game.js`의 c안 가드만 빼면 `winger-moment.js`의 **안전망**이 아직 막습니다
+   *    (거기서도 `kind === "defend"`면 화면을 한 조각도 안 그려요). **방어가 겹칩니다** —
+   *    그래서 **둘 다** 빼야 증상이 나옵니다. 🔒 겹친 방어를 하나만 빼면 증상이 0장이에요. */
+  M5_DEFEND_OPENS: { "game.js": [[/if \(autoMiniOn\(\) \|\| kind === "defend"\) \{ cb\(judge\(0\.5\), T\); return; \}/,
+    'if (autoMiniOn()) { cb(judge(0.5), T); return; }']] },
 };
+/* 🧱 안전망 쪽(`winger-moment.js`)도 같이 빼야 해서 파일이 달라 따로 둡니다 */
+const M5_NET = [[/if \(o\.kind === "defend"\) \{ done\(judge\(0\.5\), \{ s: 0\.5, moment: o\.moment \|\| "block", weak: false \}\); return; \}/,
+  ""]];
 
 /* ══════════════════════════════════════════════════════════════
  * 🔎 0. 변이 정규식이 지금 소스에 걸리나 — 다른 무엇보다 먼저
@@ -183,7 +208,7 @@ async function restUntilStage(h) {
 
 /* ⚔️ 평가전 한 번(3경기)을 **손으로 눌러** 끝까지 갑니다.
  * 카드마다 화면이 무엇을 그렸는지 그대로 모아 와요. */
-async function playEval(h) {
+async function playEval(h, pos) {
   const D = h.D;
   const sm = () => D.getElementById("stage-moment");
   const rec = { before: snap(h), cards: [], mid: [] };
@@ -199,6 +224,10 @@ async function playEval(h) {
       v1Boxes: sm() ? Array.from(sm().querySelectorAll(".tm-box"))
         .filter((b) => !/\bw2m-/.test(b.className)).map((b) => b.className) : [],
       ready: !!(sm() && sm().querySelector(".w2m-ready")) };
+    /* ⚔️ 이 경기의 **성격 → 카드 종류**. 표는 검사에 박혀 있어요(`STAGE_KIND`·`POS_KIND`).
+     * 🔑 이걸 알아야 «화면이 안 뜨는 게 맞는 경기인가»를 가릅니다 — 🧱 수비는 안 뜨는 게 계약이에요. */
+    const nm = (c.round.split("·")[1] || "").trim();
+    c.kind = STAGE_KIND[nm] === null ? POS_KIND[pos || "wg"] : STAGE_KIND[nm];
     const goEl = sm() && sm().querySelector(".w2m-go");
     if (goEl) h.press(goEl, "▶️ 시작");
     await wait(5);
@@ -216,8 +245,9 @@ async function playEval(h) {
     const nx = () => D.getElementById("btn-stage-next");
     for (let i = 0; i < 900; i++) {
       if (nx() && !nx().disabled) break;
-      const btn = sm() && sm().querySelector(
-        ".w2m-side:not([disabled]), .w2m-run-btn:not([disabled]), .w2m-dir:not([disabled]), .w2m-goal, .tm-btn:not(.w2m-go)");
+      /* 🔴 2026-09-02 — `.w2m-side`·`.w2m-run-btn`·`.w2m-dir`을 지웠습니다(판이 없어졌어요).
+       * 🔒 남은 것은 `.w2m-goal`(🥅 골문 — 탭을 받는 자리 하나)과 공통 버튼입니다. */
+      const btn = sm() && sm().querySelector(".w2m-goal, .tm-btn:not(.w2m-go)");
       if (btn) h.press(btn, "판 조작");
       await wait(3);
     }
@@ -252,11 +282,19 @@ const base = {};
 /* 🔒 **A절의 계약을 술어로 떼어 둡니다.** 기준선에는 `check()`로 걸고, 변이에는
  *    **같은 술어**를 그대로 다시 걸어요 — "기준선 ✅ / 변이 ❌"가 같은 자를 쓴다는 뜻입니다.
  *    (변이 검사가 기준선과 다른 문장을 지키면, 둘 다 초록불인 상태가 생깁니다) */
+/* 🔒 **kind로 갈라 봅니다.** 공격(⚽🅰️)은 판이 뜨고, 🧱 수비는 **안 뜨는 게 계약**이에요.
+ *    🚨 «전부 뜬다»로 두면 수비가 빨간불이고, «전부 안 떠도 된다»로 두면
+ *       판이 통째로 죽어도 초록불입니다. **둘 다 재야** 문장이 섭니다. */
+const ATK = (r) => r.cards.filter((c) => c.kind !== DEFEND_KIND);
+const DEF = (r) => r.cards.filter((c) => c.kind === DEFEND_KIND);
 const A_PRED = [
-  ["A-2 #stage-moment에 .w2m-youth", (r) => r.cards.every((c) => /\bw2m-youth\b/.test(c.hostCls))],
-  ["A-3 v2 준비 화면 .w2m-ready", (r) => r.cards.every((c) => c.ready)],
+  ["A-2 공격 카드에 .w2m-youth", (r) => ATK(r).every((c) => /\bw2m-youth\b/.test(c.hostCls))],
+  ["A-3 공격 카드에 v2 준비 화면 .w2m-ready", (r) => ATK(r).every((c) => c.ready)],
   ["A-4 v1 timing.js 상자 없음", (r) => r.cards.every((c) => c.v1Boxes.length === 0)],
-  ["A-5 v2 4종 상자", (r) => r.cards.every((c) => V2_BOX.indexOf(c.box) >= 0)],
+  ["A-5 공격 카드가 🥅 상자를 연다", (r) => ATK(r).every((c) => V2_BOX.indexOf(c.box) >= 0)],
+  /* 🧱 수비 — 화면을 **한 조각도** 안 엽니다 */
+  ["A-7 🧱 수비는 판을 안 연다", (r) => DEF(r).every((c) =>
+    !/\bw2m-youth\b/.test(c.hostCls) && !c.ready && !c.box && !c.stake)],
 ];
 
 async function runA() {
@@ -265,15 +303,16 @@ async function runA() {
   check(ok && h.active() === "screen-main",
     `A-1. 🚪 게임 입구 → 🏠 훈련장 6턴 → 🏆 **1년차 6월 평가전 버튼이 열린다** (${h.active()})`
     + (ok ? "" : " — .go-game이 안 떴어요"));
-  const r = await playEval(h);
+  const r = await playEval(h, "wg");
   base.r = r;
   base.errs = h.W.__errs.slice();
 
+  const kinds = r.cards.map((c) => `${c.round.trim()}→${c.kind}`).join(" | ");
   check(A_PRED[0][1](r),
-    `A-2. ⚔️ 세 경기 모두 #stage-moment에 **.w2m-youth**가 붙는다 (유스 맥락 — playYouthMoment만 붙여요)`
-    + `\n     ${r.cards.map((c) => c.hostCls).join(" | ")}`);
+    `A-2. ⚔️ **공격 카드(⚽🅰️)**는 #stage-moment에 **.w2m-youth**가 붙는다 (유스 맥락 — playYouthMoment만 붙여요)`
+    + `\n     ${r.cards.map((c) => `${c.kind}:${c.hostCls || "(빈칸)"}`).join(" | ")}`);
   check(A_PRED[1][1](r),
-    `A-3. ⚔️ 세 경기 모두 v2 **준비 화면(.w2m-ready)**이 뜬다`
+    `A-3. ⚔️ **공격 카드**는 v2 **준비 화면(.w2m-ready)**이 뜬다`
     + `\n     ${r.cards.map((c) => (c.ready ? "✔" : "✘") + " " + c.round).join(" | ")}`);
   const v1 = r.cards.filter((c) => c.v1Boxes.length);
   check(A_PRED[2][1](r),
@@ -283,8 +322,19 @@ async function runA() {
         + `\n     playMoment를 안 넘기면 MatchSim이 playRandomMini로 떨어집니다`
       : ""));
   check(A_PRED[3][1](r),
-    `A-5. ⚔️ ▶️ 시작을 누르면 **v2 4종 중 하나**가 열린다 (${r.cards.map((c) => c.box).join(" · ")})`
-    + `\n     허용: ${V2_BOX.join(" · ")}`);
+    `A-5. ⚔️ **공격 카드**에서 ▶️ 시작을 누르면 **🥅 골문**이 열린다 (${r.cards.map((c) => c.box || "(빈칸)").join(" · ")})`
+    + `\n     허용: ${V2_BOX.join(" · ")} — 🔴 판이 하나예요(옛 4종 목록은 지웠습니다)`);
+  /* 🧱 c안 — 수비는 판을 안 엽니다. **🔎 측정 조건을 같이 찍습니다**:
+   *    이번 판에 수비 경기가 하나도 안 나왔으면 A-7은 «지켜졌다»가 아니라 «안 재졌다»예요. */
+  const nDef = DEF(r).length;
+  check(A_PRED[4][1](r) && nDef > 0,
+    `A-7. 🧱 **수비 경기는 판을 한 조각도 안 연다** (c안 — \`s = 0.5\`로 자동 갈래와 정의상 같아요)`
+    + `\n     🔎 측정 조건 — 이번 평가전의 성격: ${kinds} (수비 ${nDef}경기)`
+    + (nDef > 0 ? "" : `\n     🚧 **수비 경기가 안 나와서 못 쟀습니다** — 시드가 안 뽑았어요.`
+      + ` D절이 시드 셋으로 다시 봅니다`)
+    + (A_PRED[4][1](r) ? "" : `\n     🔴 수비인데 화면이 떴어요: `
+      + DEF(r).map((c) => `${c.round.trim()} → 상자 ${c.box || "없음"} · stake "${c.stake.slice(0, 10)}"`).join(" | ")
+      + `\n     👉 «한 명만 지나가면 실점»인데 화면이 **상대 골문**이면 화면과 상황이 정면으로 싸웁니다`));
   check(base.errs.length === 0,
     `A-6. 평가전 3경기 동안 자바스크립트 오류가 없다${base.errs.length ? ` — ${base.errs[0]}` : ""}`);
   h.close();
@@ -294,16 +344,69 @@ async function runA_M1() {
   if (!mutOK("M1_NO_MOMENT")) { check(false, `A-M1. 🧪 변이(v1 승부처로 복귀)${MUT_DEAD}`); return; }
   const h = await toHome(boot({ seed: SEEDS[0], muts: MUT.M1_NO_MOMENT }), { pos: "wg", foot: "R" });
   await restUntilStage(h);
-  const r = await playEval(h);
-  const flip = A_PRED.map(([n, f]) => [n, f(r)]);
+  const r = await playEval(h, "wg");
+  /* 🔒 **M1이 겨누는 것은 「판이 v1으로 되돌아갔나」**입니다.
+   * 🚨 A-7(🧱 수비는 판을 **안 연다**)은 **음의 문장**이라 M1이 안 겨눠요 —
+   *    v1으로 되돌아가도 `.w2m-*`는 여전히 안 뜨니 A-7은 초록불로 남습니다.
+   *    그건 **A-7이 아무것도 안 지킨다는 뜻이 아니에요**: A-7을 깨는 것은
+   *    「수비에 판을 여는」 변이(M5)이고, 그건 아래에서 따로 겁니다.
+   * 🔴 여기에 A-7까지 넣으면 «변이가 안 잡혔다»는 **틀린 신호**가 떠서,
+   *    다음 사람이 멀쩡한 A-7을 고치러 갑니다. 그래서 **갈라 놓습니다.** */
+  const AIMED = A_PRED.filter(([n]) => !/A-7/.test(n));
+  const flip = AIMED.map(([n, f]) => [n, f(r)]);
   const still = flip.filter(([, v]) => v);
   check(still.length === 0,
-    `A-M1. 🧪 **변이 — playMoment: playYouthMoment 제거(= v1 승부처로 복귀)** → A절 술어 ${flip.length}개가 전부 빨간불`
+    `A-M1. 🧪 **변이 — playMoment: playYouthMoment 제거(= v1 승부처로 복귀)** → M1이 겨누는 술어 ${flip.length}개가 전부 빨간불`
     + `\n     ${flip.map(([n, v]) => `${v ? "🟢" : "🔴"} ${n}`).join(" · ")}`
+    + `\n     🔒 A-7(🧱 수비는 판을 **안 연다**)은 **음의 문장**이라 M1이 안 겨눕니다 — 아래 A-M5가 겨눠요`
     + (still.length
       ? `\n     🔴 되돌렸는데 **아직 초록불인 술어가 ${still.length}개** — 그건 아무것도 안 지키고 있어요`
       : ""));
   h.close();
+}
+
+/* 🧪 **M5 — 🧱 수비에도 판을 엽니다.** A-7이 겨누는 자리예요.
+ *
+ * 🔬 **방어가 둘 있는데 「겹치는 자리」가 다릅니다** — 실측해서 알았어요:
+ *      ① `game.js`의 c안 가드   `if (autoMiniOn() || kind === "defend") { … return; }`
+ *      ② `winger-moment.js`의 안전망  `if (o.kind === "defend") { … return; }`
+ *    ①만 빼면 → `.w2m-youth`가 **붙고** 준비 화면·골문·stake는 ②가 막습니다.
+ *    둘 다 빼면 → 골문이 통째로 뜨고 stake가 *"⚽ 골 찬스"*라고 적혀요.
+ * 🔑 **①만 빼도 A-7이 빨간불입니다** — `container.classList.add("w2m-youth")`가
+ *    `M.play()`보다 **먼저** 실행되거든요. ②는 그걸 되돌릴 수 없어요.
+ *    그래서 「가리는 줄이 남의 변이를 먹는」 상태가 **아닙니다** — 둘 다 증상이 납니다.
+ * 📮 다만 ①이 깨진 채로 나가면 화면에 **빈 유스 상자**가 뜹니다(보고서에 적었어요). */
+async function runA_M5() {
+  if (!mutOK("M5_DEFEND_OPENS")) { check(false, `A-M5. 🧪 변이(수비에 판을 엶)${MUT_DEAD}`); return; }
+  const opened = async (extra) => {
+    const muts = Object.assign({}, MUT.M5_DEFEND_OPENS);
+    if (extra) muts["winger-moment.js"] = extra;
+    const h = await toHome(boot({ seed: SEEDS[0], muts }), { pos: "wg", foot: "R" });
+    await restUntilStage(h);
+    const r = await playEval(h, "wg");
+    h.close();
+    return { r, def: DEF(r) };
+  };
+  const one = await opened(null);                 // game.js만
+  const both = await opened(M5_NET);              // 둘 다
+  const dbg = (x) => x.def.map((c) => `youth ${/\bw2m-youth\b/.test(c.hostCls) ? "붙음" : "없음"}`
+    + ` · ready ${c.ready ? "뜸" : "없음"} · 상자 ${c.box || "없음"} · stake "${c.stake.slice(0, 8)}"`).join(" | ");
+  console.log(`     🔬 ① game.js만: ${dbg(one)}`);
+  console.log(`     🔬 ② 둘 다:     ${dbg(both)}`);
+  /* 🔒 **두 단계 다** A-7을 빨간불로 만들어야 합니다 — 어느 한 줄만 지워도 증상이 나야
+   *    「가리는 줄」이 없는 거예요. 그리고 ②에서는 **골문까지** 떠야 합니다(증상이 더 커짐). */
+  const brokeOne = !A_PRED[4][1](one.r);
+  const brokeBoth = !A_PRED[4][1](both.r);
+  const gridUp = both.def.some((c) => c.box === "w2m-oneone");
+  check(one.def.length > 0 && brokeOne && brokeBoth && gridUp,
+    `A-M5. 🧪 **변이 — 🧱 수비에도 판을 열면 A-7이 빨간불** (수비 ${one.def.length}경기)`
+    + `\n     ① \`game.js\` 가드만 빼면 → ${brokeOne ? "🔴 A-7 빨간불" : "🟢 **안 잡힘**"}`
+    + ` (\`.w2m-youth\`가 붙어요 — 클래스는 \`M.play()\`보다 먼저 달립니다)`
+    + `\n     ② \`winger-moment.js\` 안전망까지 빼면 → ${brokeBoth ? "🔴 A-7 빨간불" : "🟢 **안 잡힘**"}`
+    + ` · 🥅 골문이 뜸 ${gridUp ? "✔" : "✘"} — 수비 상황에 **상대 골문**이에요`
+    + (one.def.length ? "" : `\n     🚧 이 시드가 수비 경기를 안 뽑아서 **못 쟀습니다**`)
+    + (brokeOne && brokeBoth && gridUp ? "" : `\n     🔴 어느 한 줄을 지웠는데 증상이 0장이에요 —`
+      + ` 「가리는 줄」이 있으면 그 줄이 남의 변이를 먹습니다`));
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -313,9 +416,25 @@ async function runA_M1() {
  *    36턴 내내 효과가 0이었습니다(designer 원칙 ③ 위반). 그래서 검사가 아예 없었어요.
  *
  * 🔒 **값이 아니라 관계로 봅니다.**
- *    · B-1 같은 시드에서 🦶만 뒤집으면 `w2m-strong` 레인이 **반대로 간다**
- *    · B-2 강/약 판정 창의 **비**가 1.25 / 0.75  (🫀 컨디션은 양쪽에 똑같이 걸려 약분돼요)
- *    · B-3 ♿를 켜면 창이 **×1.30**  (같은 카드끼리의 비라 다른 게 다 약분됩니다)
+ *    · B-1 같은 시드에서 🦶만 뒤집으면 `w2m-strong` 자리가 **반대로 간다**
+ *    · B-2 🦶·🫀가 **유스 입구를 통해 판에 실제로 넘어간다**
+ *    · B-3 ♿를 켜면 **그 페이지의 판정 창이 ×1.30**이 된다
+ *
+ * ─────────────────────────────────────────────────────────────────────
+ * 🔴 **2026-09-02 — B-2·B-3을 다시 겨눴습니다** (116번)
+ * ─────────────────────────────────────────────────────────────────────
+ * 옛 B-2·B-3은 💨 컷인 카드가 그린 **`.w2m-gate`의 폭**을 읽었어요. 컷인이 형태째
+ * 없어지면서 `.w2m-gate`가 사라졌고, 둘은 *"컷인 카드가 안 나왔어요"*라는
+ * **빈 표본 위에서 빨간불**이 됐습니다.
+ *
+ * 🔑 **폭을 읽을 화면이 이제 없습니다.** 🥅 골문의 `.w2m-half`는 좌우가 늘 50%예요 —
+ *    주발은 **폭이 아니라 밝기**로 나옵니다. 그 밝기 ↔ 판정 대조는
+ *    **`one-grid-test.js` G-1**이 이미 지켜요(같은 판을 R·L로 두 번 열어 견줍니다).
+ *    ⚠️ 여기서 밝기를 또 읽으면 **같은 문장이 두 파일에** 생겨 한쪽만 고쳐진 채 얼어붙습니다.
+ *
+ * ✅ 그래서 이 파일은 **유스 입구만** 지킵니다 — *"`playYouthMoment`가 🦶·🫀·♿를
+ *    판에 넘기나"*. 창이 그 값에 **실제로 반응하는지**는 `moment-test.js` B-3·B-4의 몫이고,
+ *    화면과 판정이 같은 쪽인지는 `one-grid-test.js` G-1의 몫이에요. **셋이 안 겹칩니다.**
  * ══════════════════════════════════════════════════════════════ */
 const footy = (r) => r.cards.filter((c) => c.sides.length || c.halves.length);
 /* 🔒 **B절의 계약을 술어로 떼어 둡니다** — 기준선과 변이가 같은 자를 씁니다.
@@ -338,9 +457,9 @@ function footFlip(R, L) {
 
 async function runB() {
   const R = await (async () => { const h = await toHome(boot({ seed: SEEDS[0] }), { pos: "wg", foot: "R" });
-    await restUntilStage(h); const r = await playEval(h); h.close(); return r; })();
+    await restUntilStage(h); const r = await playEval(h, "wg"); h.close(); return r; })();
   const L = await (async () => { const h = await toHome(boot({ seed: SEEDS[0] }), { pos: "wg", foot: "L" });
-    await restUntilStage(h); const r = await playEval(h); h.close(); return r; })();
+    await restUntilStage(h); const r = await playEval(h, "wg"); h.close(); return r; })();
 
   /* 같은 시드면 **같은 카드가 같은 순서로** 와야 해요 — 안 그러면 A/B가 성립 안 합니다 */
   const sameCards = R.cards.map((c) => c.box).join(",") === L.cards.map((c) => c.box).join(",");
@@ -350,7 +469,8 @@ async function runB() {
 
   const ff = footFlip(R, L);
   check(ff.fr.length > 0,
-    `B-1a. 🦶 주발이 걸리는 카드(💨 컷인 · ⚡ 1:1)가 평가전에 나온다 (${ff.fr.length}/${R.cards.length}장)`);
+    `B-1a. 🦶 주발이 걸리는 카드(🥅 골문)가 평가전에 나온다 (${ff.fr.length}/${R.cards.length}장)`
+    + `\n     🔒 0장이면 아래 B-1이 **빈 표본 위에서 조용히 통과**합니다 — 그래서 여기서 셉니다`);
   /* 🦶 뒤집으면 강한 쪽 레인이 반대로 — `w2m-strong`이 붙은 자리가 정확히 뒤바뀝니다 */
   check(ff.alive,
     `B-1. 🦶 **주발을 뒤집으면 w2m-strong 레인이 반대로 간다** (뒤집힘 ${ff.flipped} · 그대로 ${ff.same})`
@@ -359,35 +479,58 @@ async function runB() {
       + `\n     R: ${ff.fr.map(footKey).join(" | ")}`
       + `\n     L: ${ff.fl.map(footKey).join(" | ")}`));
 
-  /* B-2 — 강/약 판정 창의 비. 🫀 컨디션은 양쪽에 똑같이 곱해져 약분됩니다 */
-  const gated = R.cards.filter((c) => c.gates.length === 2);
-  const ratios = gated.map((c) => {
-    const s = c.gates.find((g) => g.strong), w = c.gates.find((g) => !g.strong);
-    return s && w ? s.w / w.w : NaN;
-  });
-  const WANT = (1 + FOOT_WIN) / (1 - FOOT_WIN);
-  check(ratios.length > 0 && ratios.every((v) => Math.abs(v - WANT) <= EPS_RATIO * WANT),
-    `B-2. 🦶 화면에 그려진 **강/약 판정 창의 비 = ${WANT.toFixed(4)}** (±25%)`
-    + ` — 잰 값 ${ratios.map((v) => v.toFixed(4)).join(", ") || "(컷인 카드가 안 나왔어요)"}`);
+  /* B-2 — 🦶·🫀가 **유스 입구를 통해 판에 실제로 넘어가나.**
+   * 🔒 `W2Moment.play`를 **그 페이지 안에서** 감싸 `opts`를 그대로 받아 적습니다 —
+   *    `playYouthMoment`가 `window.W2Moment`를 부를 때 읽으니 감싼 것이 걸려요.
+   * 🔑 **화면을 안 읽습니다.** 화면 쪽은 B-1이 이미 보고 있고, 여기서 겨누는 것은
+   *    *"입구가 값을 넘기나"*예요 — `foot`을 안 넘기면 판은 늘 "R"로 읽습니다. */
+  const optsOf = async (o) => {
+    const h = await toHome(boot({ seed: SEEDS[0], keys: o.keys }), { pos: "wg", foot: o.foot });
+    await restUntilStage(h);
+    const seenOpts = [];
+    const M = h.W.W2Moment;
+    const orig = M.play;
+    M.play = function (container, opts, cb) { seenOpts.push(opts); return orig.call(M, container, opts, cb); };
+    await playEval(h, "wg");
+    const wide = M._t.wideOn();
+    const mul = { one: M._t.winMul(80, 1), strong: M._t.winMul(80, M._t.K.STRONG) };
+    h.close();
+    return { seenOpts, wide, mul };
+  };
+  const oR = await optsOf({ foot: "R" });
+  const oL = await optsOf({ foot: "L" });
+  const gotFoot = oR.seenOpts.length > 0 && oL.seenOpts.length > 0
+    && oR.seenOpts.every((x) => x.foot === "R") && oL.seenOpts.every((x) => x.foot === "L");
+  const gotCond = oR.seenOpts.length > 0 && oR.seenOpts.every((x) => typeof x.condition === "number");
+  const gotJudge = oR.seenOpts.length > 0 && oR.seenOpts.every((x) => typeof x.judge === "function");
+  check(gotFoot && gotCond && gotJudge,
+    `B-2. 🚪 **유스 입구가 🦶 주발 · 🫀 컨디션 · 판정을 판에 넘긴다** (판이 열린 횟수 R ${oR.seenOpts.length} · L ${oL.seenOpts.length})`
+    + `\n     🦶 ${gotFoot ? "✔" : "✘"} (R판 ${oR.seenOpts.map((x) => x.foot).join(",")} · L판 ${oL.seenOpts.map((x) => x.foot).join(",")})`
+    + ` · 🫀 ${gotCond ? `✔ ${oR.seenOpts.map((x) => x.condition).join(",")}` : "✘"} · ⚖️ judge ${gotJudge ? "✔" : "✘"}`
+    + `\n     🔒 판이 **0번 열렸으면** 이 문장은 아무것도 안 지킵니다 — 그래서 횟수를 같이 찍어요`
+    + `\n     👉 창이 그 값에 **실제로 반응하는지**는 \`moment-test.js\` B-1~B-5가 봅니다`);
 
-  /* B-3 — ♿ 판정 확대. 같은 시드·같은 카드끼리 폭의 비만 봅니다 */
-  const Wd = await (async () => { const h = await toHome(boot({ seed: SEEDS[0], keys: { "grow-wide-judge": "1" } }),
-    { pos: "wg", foot: "R" }); await restUntilStage(h); const r = await playEval(h); h.close(); return r; })();
-  const wg0 = R.cards.filter((c) => c.gates.length === 2);
-  const wg1 = Wd.cards.filter((c) => c.gates.length === 2);
-  const wr = [];
-  for (let i = 0; i < Math.min(wg0.length, wg1.length); i++) {
-    for (let k = 0; k < 2; k++) wr.push(wg1[i].gates[k].w / wg0[i].gates[k].w);
-  }
-  check(wr.length > 0 && wr.every((v) => Math.abs(v - WIDE) <= EPS_RATIO * WIDE),
-    `B-3. ♿ **판정 창 확대를 켜면 유스에서도 ×${WIDE}** — 잰 값 ${wr.map((v) => v.toFixed(4)).join(", ") || "(컷인 카드가 안 나왔어요)"}`);
+  /* B-3 — ♿ 판정 확대가 **그 페이지 안에서** 켜지고 창이 ×1.30이 되나.
+   * 🔒 `localStorage` 열쇠를 심고, 그 페이지가 실은 `W2Moment._t`에게 직접 물어봅니다 —
+   *    다시 `loadMoment`로 부르면 **페이지가 아니라 새 인스턴스**를 재게 돼요. */
+  const oW = await optsOf({ foot: "R", keys: { "grow-wide-judge": "1" } });
+  const wr = oW.mul.one / oR.mul.one;
+  const footRatio = oR.mul.strong / oR.mul.one;
+  const WANT = 1 + FOOT_WIN;
+  check(oR.wide === false && oW.wide === true && Math.abs(wr - WIDE) <= EPS_RATIO * WIDE
+    && Math.abs(footRatio - WANT) <= EPS_RATIO * WANT,
+    `B-3. ♿ **판정 창 확대를 켜면 유스 페이지에서도 ×${WIDE}** — 잰 값 ${wr.toFixed(4)}`
+    + ` (wideOn 꺼짐 ${oR.wide === false ? "✔" : "✘"} · 켜짐 ${oW.wide === true ? "✔" : "✘"})`
+    + `\n     🦶 같은 페이지에서 주발 배수 ×${footRatio.toFixed(4)} (기대 ${WANT})`
+    + `\n     🔎 측정 조건 — **그 페이지의 \`W2Moment._t\`**에게 물었습니다`
+    + ` (다시 불러오면 페이지가 아니라 새 인스턴스를 재게 돼요)`);
   base.B = { R, L };
 }
 
 async function runB_M2() {
   if (!mutOK("M2_NO_FOOT")) { check(false, `B-M2. 🧪 변이(🦶가 유스에 안 닿음)${MUT_DEAD}`); return; }
   const mk = async (foot) => { const h = await toHome(boot({ seed: SEEDS[0], foot, muts: MUT.M2_NO_FOOT }),
-    { pos: "wg", foot }); await restUntilStage(h); const r = await playEval(h); h.close(); return r; };
+    { pos: "wg", foot }); await restUntilStage(h); const r = await playEval(h, "wg"); h.close(); return r; };
   const R = await mk("R"), L = await mk("L");
   const ff = footFlip(R, L);           // 🔒 B-1과 **같은 술어**
   check(!ff.alive && ff.fr.length > 0,
@@ -441,7 +584,7 @@ async function runC_M3() {
   if (!mutOK("M3_EAT_TURN")) { check(false, `C-M3. 🧪 변이(평가전이 턴을 먹음)${MUT_DEAD}`); return; }
   const h = await toHome(boot({ seed: SEEDS[0], muts: MUT.M3_EAT_TURN }), { pos: "wg", foot: "R" });
   await restUntilStage(h);
-  const r = await playEval(h);
+  const r = await playEval(h, "wg");
   /* 🔒 기준선 C-1·C-5와 **같은 술어**를 그대로 다시 겁니다 */
   const frozen = C_FROZEN(r), oneMonth = C_ONE_MONTH(r);
   check(!frozen || !oneMonth,
@@ -467,25 +610,41 @@ async function runD() {
   const seen = new Map();
   const bad = [];
   const recs = [];
+  let atkOK = 0, defOK = 0;      // 🔒 «몇 장을 실제로 쟀나» — 0이면 문장이 안 섭니다
   for (const seed of SEEDS) {
     const pos = { 11: "wg", 23: "mf", 37: "df" }[seed] || "wg";
     const h = await toHome(boot({ seed }), { pos, foot: "R" });
     await restUntilStage(h);
-    const r = await playEval(h);
+    const r = await playEval(h, pos);
     recs.push({ seed, pos, r });
     for (const c of r.cards) {
       const name = (c.round.split("·")[1] || "").trim();
       const want = STAGE_KIND[name] === null ? POS_KIND[pos] : STAGE_KIND[name];
       seen.set(name, (seen.get(name) || 0) + 1);
       if (want == null) { bad.push(`${c.round} — 표에 없는 경기 성격`); continue; }
+      /* 🧱 **수비는 판을 안 엽니다**(c안) — `.w2m-stake`가 **비어 있는 게 계약**이에요.
+       * 🚨 여기를 «모든 경기가 stake를 그린다»로 두면 c안이 빨간불이 됩니다 —
+       *    「설계가 뒤집히면 검사가 옛 계약을 지킨다」의 그 자리예요.
+       * 🔒 그래도 **조용히 넘기지 않습니다**: 비어 있어야 한다고 **단언**해요.
+       *    안 그러면 판이 통째로 안 떠도 D-1이 초록불입니다. */
+      if (want === DEFEND_KIND) {
+        if (c.stake) bad.push(`${c.round} → 🧱 수비인데 화면이 열렸어요 "${c.stake.slice(0, 14)}"`);
+        else defOK += 1;
+        continue;
+      }
       const emo = STAKE_EMOJI[want];
       if (!c.stake.startsWith(emo)) bad.push(`${c.round} → 기대 ${emo}, 화면 "${c.stake.slice(0, 14)}"`);
+      else atkOK += 1;
     }
     h.close();
   }
-  check(bad.length === 0,
+  /* 🔒 **표본 바닥** — 공격 카드도 수비 카드도 **실제로 나와야** 이 문장이 뜻을 가집니다.
+   *    시드 셋 × 3경기 = 9장에서 성격 넷이 다 나오니 각 1장은 넉넉한 바닥이에요. */
+  check(bad.length === 0 && atkOK > 0 && defOK > 0,
     `D-1. 🗣️ 화면의 경기 성격과 .w2m-stake가 **같은 말을 한다** (${recs.length}판 × ${GAMES_PER_EVAL}경기)`
-    + (bad.length ? `\n     🔴 어긋난 것 ${bad.length}건: ${bad.slice(0, 4).join(" | ")}` : ""));
+    + `\n     🔎 측정 조건 — 공격 ${atkOK}장(stake가 그 종류) · 🧱 수비 ${defOK}장(**판이 안 열림**) · 바닥 각 1`
+    + (bad.length ? `\n     🔴 어긋난 것 ${bad.length}건: ${bad.slice(0, 4).join(" | ")}` : "")
+    + (atkOK && defOK ? "" : `\n     🔴 한쪽 종류가 **한 장도 안 나왔습니다** — 그러면 이 문장은 아무것도 안 지켜요`));
   /* 📊 시드가 실제로 뭘 뽑았는지는 **정보로만** 남깁니다 — 판정은 D-2가 합니다.
    *    (여기서 판정하면 난수 흐름이 한 칸만 밀려도 빨간불이 돼요. 아래 D-2 주석 참고) */
   console.log(`     📊 이 시드들이 뽑은 성격: ${Array.from(seen.entries()).map(([k, v]) => `${k}×${v}`).join(" · ")}`);
@@ -642,6 +801,7 @@ async function runF() {
     console.log(`   ✔ 기준선(무변이) 전부 초록불 — 아래 빨간불은 **변이가 만든 것**이 맞습니다.`);
   }
   await runA_M1();
+  await runA_M5();
   await runB_M2();
   await runC_M3();
   await runD_M4();

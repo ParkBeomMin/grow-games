@@ -1,19 +1,23 @@
-/* 🦶 주발 · 🗺️ 동네 — ⚽ 더 윙어 II 생성 흐름 앞단 두 화면 (winger2 전용)
+/* 🦶 주발 · 🗺️ 동네 · 🧒 초1 — ⚽ 더 윙어 II 생성 흐름 앞단 세 화면 (winger2 전용)
  *
  *   WingerIntro.openFoot(cur, done)     🦶 발 두 짝. 탭은 고르기만 하고 [다음]에서 done("L"|"R")
  *   WingerIntro.openOrigin(cur, done)   🗺️ 17개 시·도 지도. [다음]에서 done(originId)
+ *   WingerIntro.openChild(cur, done)    🧒 초1 3택. **[다음]이 없어요** — 탭이 곧 done(key)
  *   WingerIntro.nameOf(id) / lineOf(id) 🗂️ 세이브·기록이 읽는 창구 (없으면 "🌍 미상")
- *   WingerIntro.step(screenId)          🔢 "2 / 5" — 화면 순서가 바뀌면 STEPS 한 줄만 고치세요
+ *   WingerIntro.step(screenId)          🔢 "3 / 6" — 화면 순서가 바뀌면 STEPS 한 줄만 고치세요
  *
  * ── 왜 전용 파일인가 ─────────────────────────────────────────
  * `timing.js`·`base.css`·`match.js`는 **8개 게임이 전부 내려받습니다.** 축구 하나만 쓰는
  * 화면을 거기 넣으면 안 쓰는 게임까지 무게를 집니다 — 🏘️ `town.js`와 같은 이유예요.
  *
- * ✅ **재배치가 끝났습니다** (93번 §5 · 🏫 학교 3단계).
- *    흐름은 `이름 → 🦶 주발 → 🗺️ 동네 → 🏫 초등부 → 🎯 자리`예요 — 초등부에는 포지션이
- *    없어서 🎯 자리 화면이 **첫 순간 카드 뒤**로 갔습니다. **주변과 안 얽히게 짜 둔 덕에**
- *    game.js에서 고친 건 `goOrigin`의 마지막 한 줄뿐이었어요 —
- *    이 파일이 아는 것은 여전히 `openFoot`·`openOrigin` 둘과 `S.origin` 한 칸뿐입니다.
+ * ✅ **재배치가 끝났습니다** (93번 §5 · 117번 §2 · 🏫 학교 3단계).
+ *    흐름은 `이름 → 🦶 주발 → 🗺️ 동네 → 🧒 초1 → 🏫 초등부 → 🎯 자리`예요 — 초등부에는
+ *    포지션이 없어서 🎯 자리 화면이 **첫 순간 카드 뒤**로 갔습니다. **주변과 안 얽히게 짜 둔
+ *    덕에** game.js에서 고친 건 `goOrigin`의 마지막 한 줄과 `goChild` 한 함수뿐이었어요 —
+ *    이 파일이 아는 것은 `openFoot`·`openOrigin`·`openChild` 셋과 `S.origin`·`S.childPicks`뿐입니다.
+ *
+ * 🔴 **`openChild`는 「고른 키」만 돌려줍니다.** 그 키가 무엇을 바꾸는지는
+ *    `prospect.js`의 `CHILD_FOCUS`가 정해요 — **글과 산식을 한 파일에 두지 않습니다.**
  *
  * ══════════════════════════════════════════════════════════════════════
  * 🔒 **지역은 산식에 한 톨도 안 닿습니다 — 텍스트만 바꿉니다** (설계 93번 §4-2)
@@ -46,7 +50,8 @@ window.WingerIntro = (() => {
    * ⚠️ **탭 수는 더 이상 5가 아닙니다** (2026-09-02 · 111번). 🦶 주발에 [다음]이 붙어서
    *    첫 카드 앞의 탭이 **6**이에요 — 93번 §2-2의 「5(여유 0)」는 옛말입니다.
    *    🔑 초1 아크가 새로 설계 중이라 **그 검산은 그쪽에서** 다시 잡습니다. */
-  const STEPS = ["screen-name", "screen-foot", "screen-origin", "screen-position", "screen-prospect"];
+  const STEPS = ["screen-name", "screen-foot", "screen-origin", "screen-child",
+    "screen-position", "screen-prospect"];
   const step = (id) => {
     const i = STEPS.indexOf(id);
     return i < 0 ? "" : `${i + 1} / ${STEPS.length}`;
@@ -351,5 +356,70 @@ window.WingerIntro = (() => {
     paint();
   }
 
-  return { openFoot, openOrigin, nameOf, lineOf, step, topOf, REGIONS, STEPS };
+  /* ══════════════════════════════════════════════════════════════════
+   * 🧒 **초등학교 1학년 — 학교가 끝나면 뭘 하고 놀았나** (설계 117번 §2-3 · §3)
+   * ══════════════════════════════════════════════════════════════════
+   * 🔒 **화면은 셋 중 하나를 고르는 것뿐**이고, 무엇이 바뀌는지는 `prospect.js`의
+   *    `CHILD_FOCUS`가 정합니다. 이 파일은 **글과 탭만** 압니다.
+   * 🔴 **효과를 숫자로 안 적습니다**(원칙 ⑧). 「먼저」가 정확한 말이에요 —
+   *    총량은 안 바뀌고 **어느 칸이 먼저 자라는지**가 바뀝니다.
+   * 🔴 **[다음]이 없습니다** — 탭 하나가 고르기 겸 넘김이에요(§2-2의 [다음] 규칙).
+   *
+   * ⏳ **고른 뒤 잠깐 머물렀다가 넘어갑니다**(`ECHO_MS`). 🔑 손잡이를 누른 **그 자리에서**
+   *    반응이 보여야 하는데(원칙 ③ · §5-2 갚는 법 ①), [다음]이 없으면 반응을 볼
+   *    시간이 0이 됩니다. 🔴 **초읽기가 아닙니다** — 되돌릴 수 있는 시간이 아니라
+   *    「방금 고른 것을 읽는」 시간이에요. 움직이는 것도, 남은 시간 표시도 없습니다. */
+  const ECHO_MS = 620;   // 🔒 미니게임 결과가 머무는 620ms와 **같은 값**입니다 — 관례를 하나로
+  /* 🔒 키는 **세이브(`S.childPicks`)가 가리키는 값**이라 안 바꿉니다 (`CHILD_FOCUS`와 같은 키).
+   * 🔒 `echo`는 **효과가 아니라 그 해의 장면**이에요 — 숫자도 스탯 이름도 안 씁니다. */
+  const CHILD_PICKS = [
+    { key: "ball", emoji: "⚽", title: "하루 종일 공만 찼어요",
+      sub: "발에 붙는 감각이 먼저 자라요", echo: "발이 공에 익숙해졌어요." },
+    { key: "body", emoji: "🛡️", title: "형들 틈에 껴서 안 밀렸어요",
+      sub: "버티는 몸이 먼저 자라요", echo: "부딪혀도 잘 안 넘어지게 됐어요." },
+    { key: "eye", emoji: "👀", title: "빈 곳을 먼저 보고 먼저 뛰었어요",
+      sub: "보는 눈과 첫 발이 먼저 자라요", echo: "빈 곳이 먼저 눈에 들어와요." },
+  ];
+
+  /* `cur`는 이미 고른 것(되돌아왔을 때) · `done(key)`로 넘어갑니다. */
+  function openChild(cur, done) {
+    const place = $("child-place"), story = $("child-story");
+    const list = $("child-list"), echo = $("child-echo");
+    if (!list) { done(cur || CHILD_PICKS[0].key); return; }
+    const r = byId(cur && cur.origin) || null;
+    if (place) place.textContent = `📍 ${(r ? r.name : "🌍 미상")} · 초등학교 1학년 · 여덟 살`;
+    /* 📖 지역 한 줄 + 공통 한 줄 — 🗺️ 지도의 스토리가 여기로 이사했습니다(§2-3) */
+    if (story) story.textContent = `${r ? r.line : COMMON[0]} 학교가 끝나면 갈 곳은 하나였어요.`;
+    if (echo) echo.textContent = "";
+    list.innerHTML = CHILD_PICKS.map((c) =>
+      `<button type="button" class="card" data-child="${c.key}" aria-pressed="false">`
+      + `<span class="card-emoji">${c.emoji}</span>`
+      + `<span class="card-title">${esc(c.title)}</span>`
+      + `<span class="card-desc">${esc(c.sub)}</span></button>`).join("");
+
+    /* 🔒 **`click`에서만 화면을 넘깁니다** — `pointerdown`에서 갈아치우면 손 뗄 때
+     *    브라우저가 **그 자리의 새 요소**로 `click`을 보내 즉시 두 번 먹힙니다
+     *    (미니게임 준비 화면에서 실제로 난 버그예요).
+     * 🔒 `gate`는 머무는 700ms 동안 **두 번째 탭을 삼킵니다** — 없으면 다른 갈래를
+     *    한 번 더 눌러 «고른 것과 넘어간 것이 다른» 상태가 됩니다. */
+    const gate = { shut: false };
+    list.querySelectorAll(".card[data-child]").forEach((b) => {
+      b.addEventListener("click", () => {
+        if (gate.shut) return;
+        gate.shut = true;
+        const c = CHILD_PICKS.find((x) => x.key === b.dataset.child) || CHILD_PICKS[0];
+        list.querySelectorAll(".card[data-child]").forEach((o) => {
+          const on = o === b;
+          o.classList.toggle("on", on);
+          o.setAttribute("aria-pressed", on ? "true" : "false");
+          o.disabled = !on;
+        });
+        if (echo) echo.textContent = c.echo;
+        setTimeout(() => done(c.key), ECHO_MS);
+      });
+    });
+  }
+
+  return { openFoot, openOrigin, openChild, nameOf, lineOf, step, topOf,
+    REGIONS, STEPS, CHILD_PICKS };
 })();
