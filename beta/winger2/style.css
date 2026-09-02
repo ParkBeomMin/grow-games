@@ -1165,68 +1165,82 @@ button.pf-slot { cursor: pointer; font-family: inherit; }
  *    CSS가 덮는 순간 **화면과 판정이 갈라져요.** `!important`도 안 됩니다 —
  *    `one-grid-test.js`의 **G-2a**가 `.w2m-cell*` 선택자 안의 `opacity`를
  *    **소스에서** 잡습니다. 그래서 아래에는 `opacity`가 **한 줄도 없어요.**
- *    (칠은 전부 `color`·`background`·`text-shadow`로 합니다)
+ *    (칠은 전부 `color`·`background`·`box-shadow`로 합니다)
  *
- * ♿ **왜 색으로 안 가르나** — 「곧 나빠짐」을 빨강, 「곧 좋아짐」을 초록으로 칠하는 게
- *    제일 쉬운 길인데, **적록 색약에서 그 둘이 같은 픽셀**이 됩니다. 이 저장소에서
- *    세 번 났어요 (🦶 주발이 판정과 반대색 · 📨 제안 밝기 역순 · 🧱 동네 점이 파랑 ≡ 초록).
+ * ♿ **왜 색으로 안 가르나** — 「들어감」을 초록, 「0점」을 빨강으로 칠하는 게 제일 쉬운
+ *    길인데, **적록 색약에서 그 둘이 같은 픽셀**이 됩니다. 이 저장소에서 세 번 났어요
+ *    (🦶 주발이 판정과 반대색 · 📨 제안 밝기 역순 · 🧱 동네 점이 파랑 ≡ 초록).
  *    그리고 이 화면은 이미 **앰버(주발) ↔ 회색(약발)**로 한 축을 쓰고 있어서,
  *    색을 한 축 더 얹으면 **한 화면에서 색이 두 가지 뜻**을 갖게 돼요 — 둘 다 안 읽힙니다.
  *
- * 🔑 그래서 셋 다 **무채색(`--m-mark`) 한 색**이고, 갈리는 것은 이 셋입니다:
+ * 🔑 그래서 **무채색(`--m-mark`) 한 색**이고, 갈리는 자리는 **칸 한가운데 하나**입니다.
+ *    JS가 켜는 등급 둘은 서로 배타라(`!hot && v > 0`), 가운데가 곧 **상태 칸**이에요:
  *
- *   | 상태                | 모양            | 자리        | 움직임        |
- *   |---------------------|-----------------|-------------|---------------|
- *   | 🔦 `-hot` 지금 최고 | **테두리 링**   | 칸 전체     | 없음(정지)    |
- *   | ⬇️ `-soon` 곧 나빠짐 | **▼ · 점선 바** | 아래 (예고 띠 위) | 아래로 까딱 |
- *   | ⬆️ `-rise` 곧 좋아짐 | **▲ · 실선 바** | 아래 (예고 띠 위) | 위로 까딱   |
+ *   | 상태                        | 가운데   | 칸 테두리 | 뜻                     |
+ *   |-----------------------------|----------|-----------|------------------------|
+ *   | 🔦 `-hot`  지금 누르면 완벽 | ◎ 큰 링  | 2px 링    | s ≥ perfect            |
+ *   | ·  `-in`   들어가긴 함      | ● 5px 점 | 없음      | s > 0                  |
+ *   | (클래스 없음) 0점           | **빈칸** | 없음      | s = 0 · 절대 안 들어감 |
  *
- *   · ▲/▼는 **회전 대칭이 아니라 뒤집힌 모양**이라 흑백으로 인쇄해도 갈립니다
- *   · 점선/실선은 같은 파일의 🧱 `.w2m-tell-hi`/`-lo`가 이미 쓰는 말이에요 — 낱말을 늘리지 않았어요
- *   · 움직임은 **셋째 채널**이라 꺼도 앞의 둘이 남습니다(맨 아래 reduced-motion)
+ *   · 셋이 **한 자리**를 나눠 써서 눈이 한 군데만 봅니다 — ◎ / ● / 빈칸
+ *   · ◎는 **구멍 뚫린 큰 링**, ●는 **꽉 찬 작은 점**이라 **완전 흑백에서도** 갈려요.
+ *     밝기가 아니라 **면적과 구멍**으로 가르니 칸이 밝든 어둡든 그대로입니다
+ *   · 링(칸 전체)은 `hot`에만 있어 **둘째 채널**이 됩니다 — 가운데를 놓쳐도 남아요
+ *   · 🔴 **둘 다 `::after`입니다** — `::before`와 박스 장식(`box-shadow: inset`)은
+ *     `.w2m-cell-lit`(밝기 칠)보다 **아래**로 깔립니다. 그래서 정작 **제일 밝은 `hot` 칸**에서
+ *     ◎와 링이 크림색을 잃고 앰버가 됐어요 — 렌더 실측 rgb(247,224,160) → 옮긴 뒤 rgb(234,240,255).
+ *     🔑 표시가 무채색이 아니게 되면 ♿ 「색은 한 축만」이 그 자리에서 깨집니다.
+ *     `::after`는 마지막 자식이라 칠 **위**로 올라오는데, 칸 자체는 여전히 🧤 키퍼 **아래**예요
  *
- * 🔒 한 칸이 **hot이면서 soon**일 수 있어요 — 「지금 제일 좋은데 곧 닫힌다」, 이 판에서
- *    제일 중요한 상태입니다. 그래서 링(칸 전체)과 바(아래)가 **서로 안 겹치는 자리**를 씁니다.
+ * 🔑 **`in`은 눈에 띄려고 있는 게 아닙니다.** 초보자에게 필요한 건 정답이 아니라
+ *    **「이 칸은 0점」**이고, 그건 **점이 없는 칸**이 말합니다 — 밝기 0.05와 0을
+ *    3.4초 안에 폰에서 못 읽으니까요. 그래서 점은 **작고 조용**해요.
+ *    🔴 **키우지 마세요** — 커지는 순간 `hot`을 가리고, 그러면 「완벽」이 안 읽힙니다.
+ *    ⚽ `perfect`가 판 천장의 종속값이 되면서 ◎가 **두 배로 자주** 떠요(주발·약발 양쪽).
+ *
+ * 🪦 **⬇️ `soon`(▼) · ⬆️ `rise`(▲)는 지웠습니다** (2026-09-02 · designer 125번 · 122번 §4).
+ *    `rise`는 JS에서 먼저 사라졌는데 **CSS만 살아 있었고**(죽은 규칙), `soon`은
+ *    「`in`이 450ms 뒤에 할 말」이라 **같은 판에서 같은 말을 두 번** 했어요(적중 6.6~14.9%).
+ *    🔴 되살리지 마세요 — 되살아나는 건 클래스가 아니라 **가운데를 두고 다투는 셋째 표시**입니다.
+ *    🔑 그래서 이 판에는 **움직이는 표시가 한 개도 없습니다** — 아래 reduced-motion에
+ *       칸 줄이 없는 게 그 뜻이에요(끌 움직임이 없어서 **두 판이 같은 그림**입니다).
  * ⛔ `box-shadow`를 **애니메이션하지 마세요** — 프레임마다 페인트를 다시 돕니다. 정지값이에요. */
 
-/* 🔦 지금 가장 좋은 칸 — 밝기는 이미 JS가 그리고 있어요. 여기는 **경계**를 줍니다.
+/* 🔦 지금 누르면 완벽한 칸 — 밝기는 이미 JS가 그리고 있어요. 여기는 **경계**를 줍니다.
  * (밝은 칸이 둘·셋 붙어 있을 때 «어디까지가 좋은 띠인가»가 안 보였어요) */
 .w2m-cell-hot {
   border-radius: 5px;
-  box-shadow: inset 0 0 0 2px var(--m-mark), inset 0 0 10px rgba(0, 0, 0, .4);
+  /* 🔴 **링을 여기(`box-shadow: inset`)에 두지 마세요.** 박스 장식은 자식보다 **아래**로
+   * 깔려서 `.w2m-cell-lit`(앰버 칠)이 그 위를 덮습니다 — 링이 크림색을 잃고
+   * **앰버가 돼요**(렌더 실측: rgb(244,226,177) · 크림은 rgb(234,240,255)).
+   * 표시가 무채색이 아니게 되는 순간 ♿ 「색은 한 축만」이 깨집니다. 링은 아래 `::after`가 그려요.
+   * 여기 남은 건 **안쪽 그늘**뿐입니다 — 이건 칠 아래에 깔려도 되는 장식이에요. */
+  box-shadow: inset 0 0 10px rgba(0, 0, 0, .4);
 }
-/* ⌖ 조준점은 **칸 한가운데**예요. 위쪽은 🦶 이름표가, 아래쪽은 🔮 예고 띠와 ⚪ 공이 씁니다. */
-.w2m-cell-hot::before {
+/* ⌖ 링과 조준점을 **한 겹**으로 그립니다 — 마지막 자식이라 밝기 칠 **위**로 올라와요.
+ * 조준점은 **칸 한가운데**예요. 위쪽은 🦶 이름표가, 아래쪽은 🔮 예고 띠와 ⚪ 공이 씁니다. */
+.w2m-cell-hot::after {
   content: "◎";
-  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  position: absolute; top: 0; right: 0; bottom: 0; left: 0;
+  display: flex; align-items: center; justify-content: center;
+  border: 2px solid var(--m-mark); border-radius: 5px;
   font-size: .88rem; line-height: 1; color: var(--m-mark);
   text-shadow: 0 1px 3px rgba(0, 0, 0, .85);
   pointer-events: none;
 }
 
-/* ⬇️⬆️ 곧 나빠질 칸 · 곧 좋아질 칸 — 🔮 예고 띠(`.w2m-cell-next`, 아래 5px) **바로 위**에
- * 붙습니다. 「이 띠가 곧 이렇게 돼요」가 한 덩어리로 읽혀야 해요. */
-.w2m-cell-soon::after,
-.w2m-cell-rise::after {
-  position: absolute; left: 3px; right: 3px; bottom: 6px;
-  height: 15px; line-height: 13px; text-align: center;
-  font-size: .7rem; color: var(--m-mark);
-  text-shadow: 0 1px 3px rgba(0, 0, 0, .9);
+/* · 들어가긴 하는 칸 — **가운데 점 하나**. 「여긴 0점이 아니에요」가 전부입니다.
+ * 🔒 점 크기(5px)는 **손잡이가 아니에요** — 위 주석의 이유로 작습니다.
+ * 🕶️ 어두운 칸에도 밝은 칸에도 서야 해서, 점 바깥에 **1px 어두운 테**를 둘렀어요.
+ *    (칸이 밝아지면 크림색 점이 앰버에 붙어 버립니다 — 테가 그걸 떼어 놔요) */
+.w2m-cell-in::after {
+  content: "";
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: 5px; height: 5px; border-radius: 50%;
+  background: var(--m-mark);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, .8);
   pointer-events: none;
 }
-.w2m-cell-soon::after {
-  content: "▼";
-  border-bottom: 2px dashed var(--m-mark);
-  animation: w2mSoon 1.1s ease-in-out infinite;
-}
-.w2m-cell-rise::after {
-  content: "▲";
-  border-bottom: 2px solid var(--m-mark);
-  animation: w2mRise 1.1s ease-in-out infinite;
-}
-/* ⛔ transform만 씁니다 — 3px 까딱이라 레이아웃을 안 건드려요 */
-@keyframes w2mSoon { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(3px); } }
-@keyframes w2mRise { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
 
 /* ---------- 🅰️ **컷백 연결 — 같은 격자, 딴 장면** ----------
  *
@@ -1243,21 +1257,20 @@ button.pf-slot { cursor: pointer; font-family: inherit; }
  *
  * 🧤 키퍼는 그대로 둡니다. 키퍼가 문전을 덮으러 나오는 건 컷백에서도 같은 장면이에요.
  *
- * 🔴 **engineer께 — 이 선택자의 절반은 임시입니다.**
- *    `box(container, "w2m-oneone", …)`이 **종류를 DOM에 안 남깁니다**(goal도 assist도 같은 클래스).
- *    그래서 지금은 `.w2m-goal`의 `aria-label`(«문전 6칸 …»)에 붙어 있어요 — **글자에 붙은 선택자**라
- *    낱말을 다듬는 순간 **소리 없이** 골문 그림으로 되돌아갑니다(「도달 경로가 조용히 죽음」).
- *    👉 `"w2m-oneone w2m-k-" + ctx.kind` 한 줄만 주시면 aria 갈래를 지웁니다.
- *    (`.w2m-k-assist`는 그날을 위해 미리 서 있어요 — 지금은 아무 데도 안 걸립니다) */
-.w2m-k-assist .w2m-goal,
-.w2m-goal[aria-label^="문전"] {
+ * ✅ **임시 갈래를 지웠습니다** (2026-09-02). engineer가 `"w2m-oneone w2m-k-" + ctx.kind`를
+ *    내주면서 종류가 DOM에 남게 됐어요 — 그래서 `.w2m-goal[aria-label^="문전"]` 갈래를
+ *    **셋 다 지웠습니다.** 한국어 낱말에 붙은 선택자였어서, 문구를 다듬는 날
+ *    **소리 없이** 골문 그림으로 되돌아갈 자리였습니다(「도달 경로가 조용히 죽음」).
+ *    🔑 둘을 같이 두는 것도 답이 아니에요 — **같은 결과를 내는 줄이 둘**이면 하나가 죽어도
+ *       증상이 0장이라 아무도 못 봅니다(「방어가 겹침」).
+ *    🔎 렌더로 확인 — ⚡ 컷백 판의 wrap이 `w2m-oneone w2m-k-assist`이고 잔디가 그대로 깔립니다. */
+.w2m-k-assist .w2m-goal {
   background:
     linear-gradient(180deg, var(--m-face), transparent 60%),
     repeating-linear-gradient(90deg, var(--turf) 0 22px, var(--turf2) 22px 44px);
 }
 /* ⚪ 골라인 — 화면에서 제일 단호한 흰 선이에요. «이 앞이 문전»입니다. */
-.w2m-k-assist .w2m-goal::before,
-.w2m-goal[aria-label^="문전"]::before {
+.w2m-k-assist .w2m-goal::before {
   content: ""; position: absolute; left: 0; right: 0; top: 0; height: 4px;
   background: var(--cream);
   /* 상자 테두리(파란 --line)와 **붙어 있으면 같은 선으로** 읽혀요 — 아래에 그늘을 한 줄 깝니다 */
@@ -1265,8 +1278,7 @@ button.pf-slot { cursor: pointer; font-family: inherit; }
   pointer-events: none;
 }
 /* 🥅 문전에는 기둥이 없어요 (ONE.post는 지금 **그림만**이고 판정에 안 걸립니다) */
-.w2m-k-assist .w2m-post,
-.w2m-goal[aria-label^="문전"] .w2m-post { display: none; }
+.w2m-k-assist .w2m-post { display: none; }
 
 /* ═════════ 3. 🎯 킬패스 — 조준 + 타이밍 ═════════ */
 .w2m-pitch {
@@ -1376,14 +1388,12 @@ button.pf-slot { cursor: pointer; font-family: inherit; }
   /* 🦶 칸을 더 진하게 — 폭 차이가 광 없이도 읽혀야 해요 */
   .w2m-gate, .w2m-half.w2m-weak { background: var(--m-weak-2); }
   .w2m-gate.w2m-strong, .w2m-half.w2m-strong { background: var(--m-strong-2); }
-  /* 🔦 칸의 상태 셋 — **까딱임(셋째 채널)만 끕니다.**
-   * ▲/▼(모양)과 실선/점선(테두리)과 링(hot)은 **정지 그림**이라 그대로 남아요 —
-   * 여기서 정보가 한 톨도 안 사라지는 게 그 셋을 겹쳐 둔 이유입니다.
-   * 🔒 `!important`가 없는 건 선택자가 같고 **여기가 더 뒤**라서예요.
-   *    (칸에 `opacity`를 쓸 뻔한 자리도 여기인데, 그건 G-2a가 막습니다) */
-  .w2m-cell-soon::after, .w2m-cell-rise::after { animation: none; }
-  /* 움직임이 빠진 만큼 링을 한 겹 굵게 — 「지금 여기」가 정지 그림만으로 서야 해요 */
-  .w2m-cell-hot { box-shadow: inset 0 0 0 3px var(--m-mark); }
+  /* 🔦 **칸의 상태 표시에는 여기서 끌 게 없습니다.** ◎(hot) · ●(in) · 빈칸 셋 다
+   * **정지 그림**이라, 이 판은 평상시 화면과 **한 픽셀도 다르지 않아요**(렌더로 쟀습니다).
+   * 🪦 예전엔 ▲/▼가 1.1초로 까딱여서 여기서 껐는데 그 둘이 지워졌어요 —
+   *    **끌 애니메이션이 없어졌으니 줄도 같이 지웁니다.** 남겨 두면 «여기서 무언가
+   *    달라진다»는 거짓 기별이 되고, 없어진 클래스가 CSS에만 사는 자리가 돼요.
+   * 🔴 칸의 `opacity`를 제일 쓰고 싶어지는 자리가 여기인데, 그건 G-2a가 막습니다. */
 }
 
 /* ---------- 🧬 선수 만들기 (조립대) ----------
