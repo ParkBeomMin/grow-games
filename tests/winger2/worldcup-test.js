@@ -46,7 +46,7 @@
  * ⏱️ 약 25초 걸려요.
  */
 "use strict";
-const { bootPage, pageMutsOK, townAuto, passTown } = require("./_load.js");
+const { bootPage, pageMutsOK, townAuto, passTown, seedBoth } = require("./_load.js");
 
 let fail = 0;
 const t0 = Date.now();
@@ -97,18 +97,12 @@ const MUT_DEAD = `\n     🔴 **이 변이가 지금 소스에 안 걸립니다 
 /* ══════════════════════════════════════════════════════════════
  * 🕹️ 드라이버 — **게임 입구를 통해** 유스 5곳을 각각 눌러 봅니다
  * ══════════════════════════════════════════════════════════════ */
-function mulberry32(a) {
-  return function () {
-    a |= 0; a = (a + 0x6D2B79F5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
+/* 🎲 시드는 `_load.js`의 `seedBoth`가 **갈라서** 겁니다 — 두 난수원(`Math.random` ·
+ * `WingerEngine._t`)에 같은 시드를 걸면 앞 1,000개가 **1000/1000 일치**해서 보폭이
+ * 맞아 lockstep이 나요 (109번 §4 · `seed-split-test.js`가 지킵니다). */
 function boot(muts, seed) {
   const W = bootPage({ muts });
-  W.Math.random = mulberry32(seed == null ? 5 : seed);
-  if (W.WingerEngine && W.WingerEngine._t) W.WingerEngine._t.seed(seed == null ? 5 : seed);
+  seedBoth(W, seed == null ? 5 : seed);
   const D = W.document;
   /* 🖱️ 실기기 이벤트 순서 그대로 — pointerdown → pointerup → click */
   const press = (el, what) => {

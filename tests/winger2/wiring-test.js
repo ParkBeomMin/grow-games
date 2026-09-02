@@ -16,7 +16,7 @@
 const fs = require("fs");
 const path = require("path");
 const { JSDOM } = require("/workspace/grow-games/tests/cloud/jsdom.js");
-const { load, xiOf, play } = require("./_load.js");
+const { load, xiOf, play, pagePre } = require("./_load.js");
 
 const DIR = "/workspace/grow-games/beta/winger2";
 const BETA = "/workspace/grow-games/beta";
@@ -293,16 +293,13 @@ check(shapeBad.length === 0,
   `winger2 픽스처가 디스크 모양 그대로다 — 키가 winger2-save-v1로 시작하고 phase가 winger2-*`
   + (shapeBad.length ? ` — 어긋난 키: ${shapeBad.join(", ")}` : ` (${Object.keys(keys).join(", ")})`));
 
-const PRE = `window.fetch=()=>Promise.reject(new Error("off"));
-/* 🔴 **rAF에 「0」을 넘기면 안 됩니다.** winger-moment.js의 미니게임들은
-   dt = (t - last)/1000 으로 움직여요. t가 늘 0이면 dt가 음수 한 번 → 그 뒤로 0이라
-   **상대가 제자리에 얼어붙습니다.** 🧱 2단계가 스스로 안 끝나서 pump가 12초를 헛돌고,
-   판정도 늘 s = 0이 됐어요. 진짜 시계를 넘깁니다. */
-window.requestAnimationFrame=(cb)=>setTimeout(()=>cb(typeof performance!=="undefined"&&performance.now?performance.now():Date.now()),0);window.scrollTo=()=>{};
-window.alert=()=>{};window.confirm=()=>false;
-(function(){var st=window.setTimeout;window.setTimeout=function(fn,ms){return st(fn,0);};})();
-window.__errs=[];window.addEventListener("error",function(e){window.__errs.push(String(e.message||e.error));});
-` + Object.entries(keys).map(([k, v]) => `localStorage.setItem(${JSON.stringify(k)},${JSON.stringify(v)});`).join("");
+/* ⏱️ preamble은 `_load.js`의 `pagePre()` **한 벌**입니다 — 여기서 복붙하지 마세요.
+ * 🔴 rAF에 「0」을 넘기면 winger-moment.js의 판 넷이 `dt = (t - last)/1000`으로
+ *    움직이는데 dt가 음수 한 번 → 그 뒤로 0이 되어 **상대가 얼어붙습니다.**
+ *    이 검사만 고쳐 뒀더니 나머지 셋이 얼어붙은 판정 위에서 돌았어요 (109번).
+ * ⏩ `fastTimers`— `ender`의 620ms 같은 **지연만** 0으로 뭉갭니다.
+ *    rAF의 물리는 그대로 실시간이에요. */
+const PRE = pagePre(keys, { fastTimers: true });
 
 let html = fs.readFileSync(path.join(DIR, "index.html"), "utf8")
   .replace(/<script src="([^"]+)"><\/script>/g, (m0, src) => {

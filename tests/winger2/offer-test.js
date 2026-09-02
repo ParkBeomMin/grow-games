@@ -43,7 +43,7 @@
  * 종료 코드: 0 통과 · 1 빨간불 · 2 💥 죽음(안 돌았음) — `_load.js`가 걸어 줍니다.
  */
 "use strict";
-const { bootPage, pageMutsOK, townAuto, passStage, passEarly, tapFoot, pickOrigin }
+const { bootPage, pageMutsOK, townAuto, passStage, passEarly, tapFoot, pickOrigin, seedBoth }
   = require("./_load.js");
 
 let fail = 0;
@@ -161,24 +161,19 @@ const MUT_DEAD = `\n     🔴 **이 변이가 지금 소스에 안 걸립니다 
 /* ══════════════════════════════════════════════════════════════
  * 🕹️ 드라이버 — **게임 입구를 통해서만** 닿습니다
  * ══════════════════════════════════════════════════════════════ */
-function mulberry32(a) {
-  return function () {
-    a |= 0; a = (a + 0x6D2B79F5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
+/* 🎲 시드는 `_load.js`의 `seedBoth`가 **갈라서** 겁니다 — 두 난수원(`Math.random` ·
+ * `WingerEngine._t`)에 같은 시드를 걸면 앞 1,000개가 **1000/1000 일치**해서 보폭이
+ * 맞아 lockstep이 나요 (109번 §4 · `seed-split-test.js`가 지킵니다). */
 
 function boot(o) {
   const opt = o || {};
   const W = bootPage({ muts: opt.muts });
   /* 🎲 시드를 둘 다 박습니다 — 엔진은 로드 시점에 `Math.random`을 잡아 둬요.
    * 🔢 그리고 **몇 번 굴렀는지 셉니다** — O-8이 그걸 봅니다. */
-  const rnd = mulberry32(opt.seed == null ? 7 : opt.seed);
+  const rnd = seedBoth(W, opt.seed == null ? 7 : opt.seed).fn;
   const cnt = { n: 0 };
+  /* 🔢 굴림 수를 세는 겹을 `seedBoth`가 심은 흐름 **위에** 덧씌웁니다 (흐름은 그대로예요) */
   W.Math.random = () => { cnt.n += 1; return rnd(); };
-  if (W.WingerEngine && W.WingerEngine._t) W.WingerEngine._t.seed(opt.seed == null ? 7 : opt.seed);
   const D = W.document;
   const press = (el, what) => {
     if (!el) throw new Error(`누를 버튼이 없어요 (${what}) — 화면이 예상과 달라졌습니다`);

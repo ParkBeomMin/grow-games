@@ -49,7 +49,7 @@
 const fs = require("fs");
 const path = require("path");
 const { JSDOM } = require("/workspace/grow-games/tests/cloud/jsdom.js");
-const { load, mutsOK, xiOf, xiAll } = require("./_load.js");
+const { load, mutsOK, xiOf, xiAll, pagePre } = require("./_load.js");
 
 const DIR = "/workspace/grow-games/beta/winger2";
 const BETA = "/workspace/grow-games/beta";
@@ -377,11 +377,10 @@ const maxCross = (x) => Math.max(...x.cross);
     return F && F.items.find((x) => x.id === "winger2-match");
   })();
   if (!item) { console.log("❌ winger2 확인용 세이브를 못 찾았어요 (beta/_fixtures.js)"); process.exit(1); }
-  const PRE = `window.fetch=()=>Promise.reject(new Error("off"));
-window.requestAnimationFrame=(cb)=>setTimeout(()=>cb(0),0);window.scrollTo=()=>{};
-window.alert=()=>{};window.confirm=()=>false;
-window.__errs=[];window.addEventListener("error",function(e){window.__errs.push(String(e.message||e.error));});
-` + Object.entries(item.keys).map(([k, v]) => `localStorage.setItem(${JSON.stringify(k)},${JSON.stringify(v)});`).join("");
+  /* ⏱️ preamble은 `_load.js`의 `pagePre()` **한 벌**입니다 — 여기서 복붙하지 마세요.
+   * 가짜 rAF(`cb(0)`)가 미니게임 넷을 통째로 얼렸던 자리예요 (109번 §2).
+   * 새 복붙본이 생기면 `raf-test.js`가 빨간불을 냅니다. */
+  const PRE = pagePre(item.keys);
   const html = fs.readFileSync(path.join(DIR, "index.html"), "utf8")
     .replace(/<script src="([^"]+)"><\/script>/g, (m0, src) => {
       const p = path.resolve(DIR, src.split("?")[0]);

@@ -59,8 +59,8 @@
 "use strict";
 const fs = require("fs");
 const path = require("path");
-const { bootPage, pageMutsOK, townAuto, passArc, passStage, passEarly, tapFoot, pickOrigin, PAGE_DIR }
-  = require("./_load.js");
+const { bootPage, pageMutsOK, townAuto, passArc, passStage, passEarly, tapFoot, pickOrigin, PAGE_DIR,
+  seedBoth } = require("./_load.js");
 
 let fail = 0;
 const t0 = Date.now();
@@ -146,24 +146,14 @@ const MUT_DEAD = `\n     🔴 **이 변이가 지금 소스에 안 걸립니다 
 /* ══════════════════════════════════════════════════════════════
  * 🕹️ 드라이버 — **게임 입구를 통해서만** 학교에 닿습니다
  * ══════════════════════════════════════════════════════════════ */
-function mulberry32(a) {
-  return function () {
-    a |= 0; a = (a + 0x6D2B79F5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
 function boot(o) {
   const opt = o || {};
   const W = bootPage({ keys: opt.keys, muts: opt.muts });
   /* 🎲 시드를 둘 다 박습니다 — 엔진은 로드 시점에 `Math.random`을 잡아 두므로
-   *    (`let _rng = Math.random;`) 페이지의 Math만 갈면 **판정에는 안 걸려요.** */
-  if (opt.seed != null) {
-    W.Math.random = mulberry32(opt.seed);
-    if (W.WingerEngine && W.WingerEngine._t) W.WingerEngine._t.seed(opt.seed);
-  }
+   *    (`let _rng = Math.random;`) 페이지의 Math만 갈면 **판정에는 안 걸려요.**
+   * 🔴 다만 **같은 시드를 둘 다에 걸면 안 됩니다** — 앞 1,000개가 완전히 일치해
+   *    보폭이 맞아 lockstep이 나요. `seedBoth`가 갈라서 겁니다 (109번 §4). */
+  if (opt.seed != null) seedBoth(W, opt.seed);
   const D = W.document;
   let taps = 0;
   /* 🖱️ 실기기 이벤트 순서 그대로 — pointerdown → pointerup → click */

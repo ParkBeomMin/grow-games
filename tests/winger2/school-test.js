@@ -44,7 +44,7 @@
  * 종료 코드: 0 통과 · 1 빨간불 · 2 💥 죽음(안 돌았음) — `_load.js`가 걸어 줍니다.
  */
 "use strict";
-const { bootPage, pageMutsOK, townAuto, passStage, passEarly, tapFoot, pickOrigin }
+const { bootPage, pageMutsOK, townAuto, passStage, passEarly, tapFoot, pickOrigin, seedBoth }
   = require("./_load.js");
 
 let fail = 0;
@@ -156,22 +156,14 @@ const MUT = {
 const mutOK = (name) => pageMutsOK({ [name]: MUT[name] }).length === 0;
 const MUT_DEAD = `\n     🔴 **이 변이가 지금 소스에 안 걸립니다 — 이 변이 검사는 "안 돈" 상태예요** (초록불이 아닙니다)`;
 
-function mulberry32(a) {
-  return function () {
-    a |= 0; a = (a + 0x6D2B79F5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
+/* 🎲 시드는 `_load.js`의 `seedBoth`가 **갈라서** 겁니다 — 두 난수원(`Math.random` ·
+ * `WingerEngine._t`)에 같은 시드를 걸면 앞 1,000개가 **1000/1000 일치**해서 보폭이
+ * 맞아 lockstep이 나요 (109번 §4 · `seed-split-test.js`가 지킵니다). */
 
 function boot(o) {
   const opt = o || {};
   const W = bootPage({ keys: opt.keys, muts: opt.muts });
-  if (opt.seed != null) {
-    W.Math.random = mulberry32(opt.seed);
-    if (W.WingerEngine && W.WingerEngine._t) W.WingerEngine._t.seed(opt.seed);
-  }
+  if (opt.seed != null) seedBoth(W, opt.seed);
   const D = W.document;
   const press = (el, what) => {
     if (!el) throw new Error(`누를 버튼이 없어요 (${what}) — 화면이 예상과 달라졌습니다`);
@@ -367,8 +359,7 @@ function probeSeed(muts, seed) {
   const h = boot({ muts, seed });
   const T = h.W.WingerTown;
   const one = (stageId, pos) => {
-    h.W.Math.random = mulberry32(seed);
-    if (h.W.WingerEngine && h.W.WingerEngine._t) h.W.WingerEngine._t.seed(seed);
+    seedBoth(h.W, seed);
     const rec = [];
     h.W.W2Moment = { play: (el, ctx, cb) => { rec.push({ kind: ctx.kind, moment: ctx.moment }); cb(ctx.judge(0.5)); } };
     T.reset();

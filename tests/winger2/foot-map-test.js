@@ -62,7 +62,7 @@
 "use strict";
 const fs = require("fs");
 const path = require("path");
-const { bootPage, PAGE_DIR, passTown } = require("./_load.js");
+const { bootPage, PAGE_DIR, passTown, seedBoth } = require("./_load.js");
 
 let fail = 0;
 const t0 = Date.now();
@@ -178,22 +178,16 @@ function footWinOf(src) {
 /* ══════════════════════════════════════════════════════════════
  * 🕹️ 드라이버 — **게임 입구를 통해서만** 닿습니다
  * ══════════════════════════════════════════════════════════════ */
-function mulberry32(a) {
-  return function () {
-    a |= 0; a = (a + 0x6D2B79F5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
+/* 🎲 시드는 `_load.js`의 `seedBoth`가 **갈라서** 겁니다 — 두 난수원(`Math.random` ·
+ * `WingerEngine._t`)에 같은 시드를 걸면 앞 1,000개가 **1000/1000 일치**해서 보폭이
+ * 맞아 lockstep이 나요 (109번 §4 · `seed-split-test.js`가 지킵니다). */
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 function boot(o) {
   const opt = o || {};
   const W = bootPage({ keys: opt.keys, muts: opt.muts });
   if (opt.seed != null) {
-    W.Math.random = mulberry32(opt.seed);
-    if (W.WingerEngine && W.WingerEngine._t) W.WingerEngine._t.seed(opt.seed);
+    seedBoth(W, opt.seed);
   }
   /* ⏱️ **시계를 멈춥니다** — O-2는 두 판의 궤적을 비트 단위로 견주는데, 세이브에
    * 시각 칸이 하나라도 있으면 그것만으로 갈라져요(고장이 아니라 시계 때문에). */

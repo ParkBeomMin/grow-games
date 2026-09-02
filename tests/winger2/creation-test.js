@@ -66,7 +66,8 @@
  * 종료 코드: 0 통과 · 1 빨간불 · 2 💥 죽음(안 돌았음) — `_load.js`가 걸어 줍니다.
  */
 "use strict";
-const { bootPage, pageMutsOK, townAuto, tapFoot, pickOrigin, passStage, passEarly } = require("./_load.js");
+const { bootPage, pageMutsOK, townAuto, tapFoot, pickOrigin, passStage, passEarly,
+  seedBoth } = require("./_load.js");
 
 let fail = 0;
 const t0 = Date.now();
@@ -142,29 +143,16 @@ const MUT_DEAD = `\n     🔴 **이 변이가 지금 소스에 안 걸립니다 
 /* ══════════════════════════════════════════════════════════════
  * 🕹️ 드라이버 — **게임 입구를 통해서만** 조립대에 닿습니다
  * ══════════════════════════════════════════════════════════════ */
-function mulberry32(a) {
-  return function () {
-    a |= 0; a = (a + 0x6D2B79F5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-/* 🔒 **되감을 수 있는 난수 흐름.** 뽑은 값을 쌓아 두고 `i`만 옮기면 같은 자리로 돌아가요 —
- *    소비량을 「짝지어」 견주려면 두 갈래가 **같은 값을 같은 순서로** 봐야 합니다. */
-function stream(seed) {
-  const base = mulberry32(seed);
-  const buf = [];
-  const s = { i: 0 };
-  s.fn = () => { if (s.i >= buf.length) buf.push(base()); return buf[s.i++]; };
-  return s;
-}
+/* 🔒 **되감을 수 있는 난수 흐름** + 🎲 **갈린 엔진 시드** — 둘 다 `seedBoth`가 합니다.
+ *    뽑은 값을 쌓아 두고 `i`만 옮기면 같은 자리로 돌아가요 — 소비량을 「짝지어」 견주려면
+ *    두 갈래가 **같은 값을 같은 순서로** 봐야 합니다.
+🎲 시드는 `_load.js`의 `seedBoth`가 **갈라서** 겁니다 — 두 난수원(`Math.random` ·
+ * `WingerEngine._t`)에 같은 시드를 걸면 앞 1,000개가 **1000/1000 일치**해서 보폭이
+ * 맞아 lockstep이 나요 (109번 §4 · `seed-split-test.js`가 지킵니다). */
 function boot(seed, muts) {
   const W = bootPage(muts ? { muts } : undefined);
-  const s = stream(seed);
-  W.Math.random = s.fn;
-  /* 🔴 이 한 줄이 빠지면 드라이버가 **결정적이지 않습니다** (위 머리말 · D-0이 확인해요) */
-  if (W.WingerEngine && W.WingerEngine._t) W.WingerEngine._t.seed(seed);
+  /* 🔴 엔진 씨를 안 뿌리면 드라이버가 **결정적이지 않습니다** (위 머리말 · D-0이 확인해요) */
+  const s = seedBoth(W, seed);
   const D = W.document;
   /* 🖱️ 실기기 이벤트 순서 그대로 — pointerdown → pointerup → click. */
   const press = (el, what) => {
@@ -232,9 +220,7 @@ const stateOf = (h) => h.W.WingerProspect._t.state();
  *    ⚠️ 뒤쪽만 보면 "원래 같은 값"이라 초록불인 검사가 됩니다. */
 async function arcOf(seed, engineSeed) {
   const W = bootPage();
-  const s = stream(seed);
-  W.Math.random = s.fn;
-  if (engineSeed && W.WingerEngine && W.WingerEngine._t) W.WingerEngine._t.seed(seed);
+  const s = seedBoth(W, seed, { engine: !!engineSeed });
   const D = W.document;
   const press = (el, what) => {
     if (!el) throw new Error(`누를 버튼이 없어요 (${what})`);

@@ -38,7 +38,8 @@
  * ⏱️ 약 2분.
  */
 "use strict";
-const { bootPage, pageMutsOK, passTown } = require("./_load.js");
+const { bootPage, pageMutsOK, passTown, seedBoth }
+  = require("./_load.js");
 
 let fail = 0;
 const check = (ok, msg) => { console.log(`${ok ? "✅" : "❌"} ${msg}`); if (!ok) fail += 1; };
@@ -109,20 +110,14 @@ const MUT_DEAD = `\n     🔴 **이 변이가 지금 소스에 안 걸립니다 
 /* ══════════════════════════════════════════════════════════════
  * 🕹️ 한 벌 = **게임 입구를 통해** 36턴을 실제 버튼으로 굴립니다
  * ══════════════════════════════════════════════════════════════ */
-function mulberry32(a) {
-  return function () {
-    a |= 0; a = (a + 0x6D2B79F5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
+/* 🎲 시드는 `_load.js`의 `seedBoth`가 **갈라서** 겁니다 — 두 난수원(`Math.random` ·
+ * `WingerEngine._t`)에 같은 시드를 걸면 앞 1,000개가 **1000/1000 일치**해서 보폭이
+ * 맞아 lockstep이 나요 (109번 §4 · `seed-split-test.js`가 지킵니다). */
 function playthrough(seed, muts) {
   const game = PROBE["game.js"].concat(ALLPASS["game.js"], (muts && muts["game.js"]) || []);
   const W = bootPage({ muts: { "game.js": game }, keys: { "grow-auto-mini": "1" } });
   W.__probe = [];
-  W.Math.random = mulberry32(seed);
-  W.WingerEngine._t.seed(seed);      // 🎲 엔진 난수도 따로 박습니다 (_rng는 로드 때 잡혀요)
+  seedBoth(W, seed);               // 🎲 엔진 난수도 **갈린 시드로** 따로 박습니다 (_rng는 로드 때 잡혀요)
   const D = W.document;
   const press = (el, what) => {
     if (!el) throw new Error(`누를 버튼이 없어요 (${what})`);

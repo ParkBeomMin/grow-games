@@ -261,16 +261,62 @@ function momentMutsOK(table) {
  * 🔒 `window.__get(name)`으로 game.js의 최상위 const(전역에 안 붙는 것)를 꺼낼 수 있어요.
  * ═══════════════════════════════════════════════════════════════════════ */
 const PAGE_DIR = "/workspace/grow-games/beta/winger2";
+
+/* ═══════════════════════════════════════════════════════════════════════
+ * ⏱️ **페이지 앞에 심는 preamble — 여기 한 벌만 있습니다** (2026-09-02 · 109번)
+ * ═══════════════════════════════════════════════════════════════════════
+ *
+ * 🔴 **가짜 rAF가 미니게임을 통째로 얼렸습니다.** 이렇게 돼 있었어요:
+ *
+ *     window.requestAnimationFrame = (cb) => setTimeout(() => cb(0), 0);
+ *
+ * `winger-moment.js`의 판 넷은 전부 `last = nowMs()`(= performance.now, 큰 값)로
+ * 시작해서 `dt = Math.min((t - last) / 1000, 0.05)`로 움직입니다. `t`가 늘 **0**이면
+ *   ① 첫 프레임 dt가 **크게 음수** → 위치가 음수로 튀고
+ *   ② 그 뒤로는 `last`도 0이라 dt가 **영원히 0** → **상대가 얼어붙습니다.**
+ *
+ * 그런데 **화면은 멀쩡히 그려져서 아무 검사도 안 울었어요.** 실측(109번 §2):
+ *
+ *   | 판 | 가짜 rAF | 진짜 시계 |
+ *   |---|---|---|
+ *   | 🏃 컷인   | 607ms 만에 **즉시 실패**, 갭이 `translateX(0.00%)`에 고정 (위치 1종) | 3155ms, 위치 396종 |
+ *   | 🥅 1대1   | **안 끝남**, 키퍼가 `scaleX(0.2400)`에 고정 | 4005ms에 스스로 끝남, 412종 |
+ *   | 🎯 킬패스 | **안 끝남**, 동료가 `translateX(7.15%)`에 고정 | 위치 398종 |
+ *   | 🧱 차단   | **안 끝남**, 러너가 **`translateX(-4.13%)`**(음수!) — `.w2m-blk-go`를 904번 보고도 안 끝남 | 2264ms에 스스로 끝남, 282종 |
+ *
+ * `-4.13%`가 ①의 물증이고, 「904번 봤는데 안 끝남」이 *"1.7초 뒤 스스로 끝난다"*가
+ * 거짓이었다는 물증입니다.
+ *
+ * 🔒 **그래서 preamble을 여기 한 벌만 둡니다.** 예전에는 같은 문자열이 **네 벌**
+ *    (`_load.js` · `wiring-test.js` · `league-test.js` · `award-test.js`)이었고,
+ *    `wiring-test.js` 한 벌만 고쳐진 채 **셋이 얼어붙은 판정 위에서 돌았어요.**
+ *    복붙본이 하나라도 남으면 같은 일이 또 납니다 — `tests/winger2/raf-test.js`가
+ *    **새 복붙본이 생기면 빨간불**을 냅니다.
+ *
+ * ⚠️ 시계는 **`performance.now()`**를 그대로 넘깁니다(가상 시계가 아니에요).
+ *    `winger-moment.js`의 `nowMs()`가 같은 창의 `performance.now()`를 쓰니까
+ *    **두 시계가 같은 시간축 위에 섭니다.** 가상 시계를 쓰려면 `performance.now`도
+ *    같이 갈아야 하는데, 그러면 `setTimeout`(실시간)과 어긋나요.
+ *    ⏳ 대가는 **벽시계**입니다 — 판이 진짜로 1.7~4초씩 걸려요. 그게 정상입니다.
+ *
+ *   opt.fastTimers  setTimeout을 0ms로 뭉갭니다 (rAF의 물리는 그대로 실시간이에요 —
+ *                   `ender`의 620ms 같은 **지연만** 없앱니다) */
+const RAF_SHIM = `window.requestAnimationFrame=(cb)=>setTimeout(()=>cb(typeof performance!=="undefined"&&performance.now?performance.now():Date.now()),0);`;
+function pagePre(keys, opt) {
+  const o = opt || {};
+  return `window.fetch=()=>Promise.reject(new Error("off"));
+${RAF_SHIM}window.scrollTo=()=>{};
+window.alert=()=>{};window.confirm=()=>false;
+`   + (o.fastTimers ? `(function(){var st=window.setTimeout;window.setTimeout=function(fn,ms){return st(fn,0);};})();\n` : "")
+    + `window.__errs=[];window.addEventListener("error",function(e){window.__errs.push(String(e.message||e.error));});\n`
+    + Object.entries(keys || {}).map(([k, v]) => `localStorage.setItem(${JSON.stringify(k)},${JSON.stringify(v)});`).join("");
+}
 function bootPage(opts) {
   const o = opts || {};
   const { JSDOM } = require("/workspace/grow-games/tests/cloud/jsdom.js");
   const muts = o.muts || {};
   const applied = {};
-  const PRE = `window.fetch=()=>Promise.reject(new Error("off"));
-window.requestAnimationFrame=(cb)=>setTimeout(()=>cb(0),0);window.scrollTo=()=>{};
-window.alert=()=>{};window.confirm=()=>false;
-window.__errs=[];window.addEventListener("error",function(e){window.__errs.push(String(e.message||e.error));});
-` + Object.entries(o.keys || {}).map(([k, v]) => `localStorage.setItem(${JSON.stringify(k)},${JSON.stringify(v)});`).join("");
+  const PRE = pagePre(o.keys, o);
   /* 🔴 **`index.html` 자신도 변이 대상입니다.** 예전에는 `<script src>`로 실린 .js만
    *    갈아치웠는데, 그러면 `muts["index.html"]`을 넘겨도 **조용히 아무 일도 안 일어나요**
    *    — `pageMutsOK`는 디스크에서 읽어 "걸린다"고 답하니 0번 검사도 초록불입니다.
@@ -348,6 +394,48 @@ function pageMutsOK(table) {
     }
   }
   return bad;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+ * 🎲 **난수원이 둘입니다 — 시드를 「갈라서」 겁니다** (2026-09-02 · 109번 · designer §18-5 ③)
+ * ═══════════════════════════════════════════════════════════════════════
+ *
+ * 이 페이지에는 난수원이 **둘**이에요:
+ *   ① `W.Math.random`      — 화면·동네·학교·제안이 직접 부릅니다
+ *   ② `WingerEngine._t.seed()` — 엔진이 로드 때 `let _rng = Math.random`으로
+ *      **함수를 잡아 두기 때문에** ①만 갈아서는 판정에 안 걸려요. 따로 걸어야 합니다.
+ *
+ * 🔴 **그런데 둘에 같은 시드를 걸면 lockstep이 납니다.**
+ *    `engine.js`의 `mulberry32`와 검사 쪽 `mulberry32`가 **같은 알고리즘**이라,
+ *    같은 시드면 **앞 1,000개가 1000/1000 완전히 일치**합니다 (109번 §4 실측).
+ *    그러면 소비량까지 맞아떨어지는 자리에서 **보폭이 같아져** 두 흐름이 함께 움직여요 —
+ *    balancer 실측에서 그 상태의 첫 측정이 **부호가 뒤집힌 값**을 냈습니다.
+ *
+ * ⚠️ **이건 잡음이 아니라 편향이라 표본을 늘려도 안 없어집니다.** 시드를 갈라야 사라져요.
+ *
+ * 🔒 그래서 시드를 **한 군데서** 가릅니다. 드라이버마다 손으로 두 줄을 적으면
+ *    한 벌만 안 갈린 채로 남아요 — 그게 방금 rAF에서 겪은 일입니다(복붙본 넷 중 하나만 수정).
+ *    `seed-split-test.js`가 **두 스트림 앞 1,000개가 일치하면 빨간불**을 냅니다.
+ *
+ * 🌍 이 계약이 서 있는 세계:
+ *   「난수원이 **둘 이상**인 세계」의 문장입니다. 엔진이 `_rng`를 로드 시점에 안 잡고
+ *   매번 `Math.random`을 부르도록 바뀌면 난수원이 **하나**가 되고, 그때는 가르는 것이
+ *   아니라 **`_t.seed()`를 아예 안 부르는 것**이 맞습니다 — 이 함수부터 다시 보세요.
+ *
+ *   돌려주는 값: 되감을 수 있는 흐름 `{ i, fn }` — `i`를 옮기면 같은 자리로 돌아가요.
+ *   opt.engine === false 면 ②를 안 겁니다 (D-0a처럼 **일부러 빼서** 재는 검사용). */
+const SEED_SPLIT = 0x9E3779B9;                 // 황금비 — 시드를 가르는 데만 씁니다
+function seedBoth(W, seed, opt) {
+  const o = opt || {};
+  const base = mulberry32(seed >>> 0);
+  const buf = [];
+  const s = { i: 0 };
+  s.fn = () => { if (s.i >= buf.length) buf.push(base()); return buf[s.i++]; };
+  W.Math.random = s.fn;
+  if (o.engine !== false && W.WingerEngine && W.WingerEngine._t) {
+    W.WingerEngine._t.seed((seed ^ SEED_SPLIT) >>> 0);
+  }
+  return s;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -560,7 +648,8 @@ function pressRetarget(W, oldEl, root, newSel) {
 }
 
 module.exports = { load, mutsOK, xiOf, xiAll, statsOf, play, spreadFor, SRC, ENGINE,
-  bootPage, pageMutsOK, PAGE_DIR, townAuto, passTown,
+  bootPage, pageMutsOK, PAGE_DIR, pagePre, RAF_SHIM, seedBoth, SEED_SPLIT, mulberry32,
+  townAuto, passTown,
   wait, tapFoot, pickOrigin, passStage, passEarly, passArc,
   loadMoment, momentMutsOK, MSRC, MOMENT,
   momentDom, pressDom, pressRetarget };
