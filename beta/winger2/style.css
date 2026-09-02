@@ -2102,6 +2102,24 @@ button.pf-slot { cursor: pointer; font-family: inherit; }
 .town-line { margin-top: .5rem; font-size: .84rem; color: var(--dim); line-height: 1.6; }
 .town-line b { color: var(--accent); }
 
+/* ---------- 🏟️ 경기 진행 (설계 101번 §3) ----------
+ * 스코어보드·시계·흐름 막대·중계 피드는 `match-scene.js`의 `.w2-*`를 그대로 씁니다 —
+ * 여기서는 **자리와 간격만** 잡아요. 🎬 결이 더 필요하면 director가 이어받습니다.
+ * 🔒 `.town-place`의 **자라는 무대 띠**(`--st-h` 34→48→66px)와 위아래로 떨어져 있어요 —
+ *    둘이 같은 자리를 다투면 단계가 커지는 게 안 보입니다. */
+#town-scene { margin: .2rem 0 .1rem; }
+#town-scene .w2-feed { padding-bottom: 0; }
+
+/* 🏁 단계 끝 스코어 — **여덟 판 뛰고도 누가 이겼는지 모르던 상태**를 끝냅니다.
+ * 🔴 **표시입니다.** 승패는 편차 `d`에도 `spotMul`에도 한 톨도 안 닿아요. */
+.town-final {
+  margin-top: .55rem; padding: .5rem .7rem; border-radius: 10px;
+  font-family: "Jua", sans-serif; font-size: 1.05rem; text-align: center;
+  background: rgba(0, 0, 0, .22); border: 1px solid var(--line); color: var(--text);
+}
+.town-final.win { border-color: var(--good); color: var(--good2); }
+.town-final.lose { border-color: var(--bad); color: var(--bad); }
+
 /* ---------- 🏟️ 제안 등급 색 (CSS가 아직 안 붙어 있던 자리) ----------
  * 🔴 **등급이 오를수록 밝아집니다 — 순서를 뒤집지 마세요.**
  *    `town.js`의 OFFER는 t0 관찰 대상 ×0.90 → t4 특급 영입 ×1.10 순입니다.

@@ -4,33 +4,38 @@
  *    `grep -rln 'winger-moment\|W2Moment' tests/`가 빈 결과였어요 —
  *    **판정 창 산식을 아무렇게나 바꿔도 전 검사가 초록불**이었습니다.
  *
- * 여기서 지키는 것 넷
+ * 여기서 지키는 것 다섯
  *   A. 🎯 `s` 산식의 **모양 계약** — 넷이 같은 자를 쓴다 (`s = 1 − 오차/판정창`)
  *   B. 🎚️ **판정 창은 🫀 컨디션 · 🦶 주발 · ♿ 확대 셋에만 반응한다**
  *      🚨 **능력치는 안 실립니다** — 넣으면 빨간불 (설계 §4-5 · engineer 50번 §3)
  *   C. 🔒 **판정을 이 파일이 만들지 않는다** — `s`를 엔진에 되돌려 묻는다
- *   D. 🔗 판정 창 상수의 **유효 조건** — E[s] ≈ 0.5를 만든 값이 그대로인가
+ *   D. 🔗 판정 창 상수의 **유효 조건** — 그 값을 만든 상수가 그대로인가
+ *   E. 📐 **넷이 같은 `sBar` 형태를 쓴다** — 값이 아니라 **구조**로 재는 형평 (balancer 25)
  *
  * ─────────────────────────────────────────────────────────────────────────
- * ⚪ **E[s] 자체는 여기서 안 잽니다. 왜 안 재는지 적어 둡니다.**
+ * 🔒 **E[s]의 「절대값」은 계약이 아닙니다. 「차이」만 계약입니다.** (2026-09-02 · designer)
  * ─────────────────────────────────────────────────────────────────────────
  *
- * engineer가 잰 E[s]는 **0.522 / 0.522 / 0.521 / 0.537** (폭 0.017 → perfect 폭 0.6%p)이고,
- * 그 값은 **가상 조작자**(시간 오차 σ 70ms · 조준 오차 σ 3.5% · 놓침 3%)로 나온 값입니다.
- * 그 조작자의 **겨냥 전략**(어디를 노리고 언제 누르나)은 저장소에 없어요 — 문서에만 있습니다.
+ * 예전에 이 자리에 이렇게 적어 뒀었어요 —
+ * *"engineer는 0.522/0.522/0.521/**0.537**, 나는 0.558/0.655/0.559/**0.510**.
+ *   겨냥 전략 하나로 0.13이 움직이니 밴드를 못 박는다."*
  *
- * 제가 같은 σ로 조작자를 다시 짜서 재 봤습니다 (`52_inspector_minigame-tests.md` §4):
+ * 🔑 **그 물음이 잘못 세워져 있었습니다.** *"어느 쪽이 맞나"*가 아니라 **셋 다 맞아요** —
+ *    셋 다 **「그 모델」을 잰 값**이고, 그중 무엇도 **이 게임의 난이도가 아닙니다.**
+ *    모델의 치우침은 **절대값에는 그대로 남고, 차이에서는 상쇄됩니다.**
  *
- *     🏃 0.558 · 🥅 **0.655** · 🎯 0.559 · 🧱 0.510   (폭 **0.145**)
+ * 🔒 그래서 계약을 이렇게 바꿉니다:
+ *    **「같은 모델 · 같은 판(CRN)으로 잰 옛 ↔ 새 E[s] 차이」만 계약이 됩니다.**
+ *    🧱 차단의 그 계약은 `block-test.js` C가 잽니다 (`BLK_WIN`이 종속값인 근거예요).
  *
- * 🥅에서 *"빈 곳의 한가운데를 겨냥한다"*로 뒀더니 0.52가 0.66이 됐어요.
- * **σ는 같은데 겨냥 전략 하나로 0.13이 움직입니다.** 이 상태로 밴드를 박으면
- * 검사가 **코드가 아니라 제 조작자 모델**을 재게 됩니다 — 이 저장소가 여러 번 데인
- * *"픽스처가 다른 모양"*의 그 자리예요. 없는 병이 보이거나, 있는 병이 안 보입니다.
+ * 🔴 **딸려서 무너진 것 하나** — designer §4-3의 *"넷의 평균이 폭 0.017이라 원칙 ④를 만든다"*도
+ *    **한 모델의 성질**입니다(제 모델에선 폭 **0.145**). 넷의 형평을 그 값으로 지키면
+ *    **모델을 바꾸는 순간 계약이 뒤집혀요 — 이번이 세 번째입니다.**
+ *    👉 **값이 아니라 구조로 지킵니다**: 「넷이 같은 `sBar` 형태를 쓰고, 창이 `mul`에 같은
+ *       비율로 반응한다」. 그게 아래 **E**예요. 구조는 모델을 안 탑니다.
  *
- * → **E[s] 측정은 engineer/balancer 몫으로 넘깁니다.** 대신 **D**가 그 값을 만든
- *    판정 창·속도 상수를 통째로 묶어 지킵니다 — 하나라도 움직이면
- *    *"E[s]를 다시 재세요"*라고 빨간불이 떠요. 그게 지금 걸 수 있는 실질적 방어선입니다.
+ * ⚠️ 그래도 **D**는 남깁니다 — 측정은 못 해도 **유효 조건**은 지킬 수 있어요.
+ *    상수가 움직이면 *"E[s]를 다시 재세요"*라고 빨간불이 뜹니다.
  *
  * 🎲 시드를 박았으니 결정론적입니다. ⏱️ 1초 안에 끝나요.
  */
@@ -65,9 +70,18 @@ const MUT = {
       "const s = sOne(margin, winMul(ctx.condition, strong ? STRONG : WEAK, ctx.ability));"],
     [/ {4}const mul = winMul\(ctx\.condition, 1\);/,
       "    const mul = winMul(ctx.condition, 1, ctx.ability);"]],
-  /* ⓔ 🧱 차단의 인접 점수를 정타와 같게 — 읽기의 의미가 사라집니다 */
-  BLKFLAT: [[/const sBlk = \(pick, truth\) => \(pick === truth \? 1 : pick === 1 \|\| truth === 1 \? BLK\.part : 0\);/,
-    "const sBlk = (pick, truth) => 1;"]],
+  /* ⓔ 🧱 **읽기가 판정 창을 못 정하게** 합니다 — 셋을 다 1.00으로.
+   *    🔴 옛 변이는 죽은 `sBlk(pick,truth)`(정확 1 · 인접 `BLK.part` · 반대 0)를 겨눴어요.
+   *       그 형태가 통째로 폐기되면서(104번 §1) 정규식이 안 걸렸고, **0번 검사가 잡았습니다.**
+   *       같은 자리를 새 형태로 다시 겨눕니다. */
+  BLKFLAT: [[/const BLK_READ = \{ exact: 1\.00, near: 0\.45, opp: 0\.15 \};/,
+    "const BLK_READ = { exact: 1.00, near: 1.00, opp: 1.00 };"]],
+  /* ⓕ 📐 **한 종만 다른 곡선을 쓰게** 합니다 — 넷의 형평이 값이 아니라 구조라는 걸 재는 자리 */
+  CURVE1: [[/const sKp = \(gap, mul\) => \(gap < 0 \? 0 : sBar\(gap, KP\.win \* mul\)\);/,
+    "const sKp = (gap, mul) => (gap < 0 ? 0 : Math.pow(sBar(gap, KP.win * mul), 2));"]],
+  /* ⓖ 📐 🧱만 **창이 mul에 안 반응**하게 — 차단이 컨디션·♿를 다시 안 타게 됩니다 */
+  BLKNOMUL: [[/const blkWin = \(pick, truth, mul\) => BLK_WIN \* BLK_READ\[blkRead\(pick, truth\)\] \* mul;/,
+    "const blkWin = (pick, truth, mul) => BLK_WIN * BLK_READ[blkRead(pick, truth)];"]],
 };
 
 /* ══════════════════════════════════════════════════════════════
@@ -126,14 +140,46 @@ const K = T.K;
   check(T.sOne(K.ONE.need, 1) === 1 && T.sOne(K.ONE.need * 2, 1) === 1,
     `A-4. 🥅 여유가 ${K.ONE.need}%(ONE.need) 이상이면 s = 1`);
 
-  /* ③ 🧱 차단 — 정타 1 · 인접 part · 정반대 0. 가운데(1)가 인접의 기준이에요 */
-  const pairs = [[0, 0, 1], [1, 1, 1], [2, 2, 1], [0, 1, K.BLK.part], [1, 0, K.BLK.part],
-    [1, 2, K.BLK.part], [2, 1, K.BLK.part], [0, 2, 0], [2, 0, 0]];
-  const bBad = pairs.filter(([p, t, want]) => T.sBlk(p, t) !== want)
-    .map(([p, t, want]) => `(${p}→${t}) ${T.sBlk(p, t)}≠${want}`);
-  check(bBad.length === 0,
-    `A-5. 🧱 정타 1 · 인접 ${K.BLK.part} · 정반대 0 (좌↔우는 몸을 못 걸쳐요)`
-    + (bBad.length ? ` — ${bBad.join(" ")}` : ""));
+  /* ③ 🧱 차단 — **읽기는 이제 `s`가 아니라 「판정 창의 폭」을 정합니다** (104번 §2-2).
+   *
+   * 🔴 **옛 `sBlk(pick,truth)`(정확 1 · 인접 0.24 · 반대 0)는 죽었습니다.** 여기서
+   *    지키던 3단 이산 계약도 같이 죽었어요 — **이름이 아니라 형태를 버린 것**이라
+   *    같은 계단을 다른 이름으로 되살리면 안 됩니다(원칙 ⑧).
+   *
+   * 지금 지키는 건 둘입니다:
+   *   ㉮ `blkRead`의 **분류** — 가운데(1)가 끼면 「인접」, 좌↔우만 「반대」
+   *   ㉯ `blkWin`의 **관계** — 창 = `BLK_WIN × BLK_READ[분류] × mul`. 값이 아니라 **관계**예요 */
+  const cls = [[0, 0, "exact"], [1, 1, "exact"], [2, 2, "exact"],
+    [0, 1, "near"], [1, 0, "near"], [1, 2, "near"], [2, 1, "near"],
+    [0, 2, "opp"], [2, 0, "opp"]];
+  const cBad2 = cls.filter(([p, t, w]) => T.blkRead(p, t) !== w)
+    .map(([p, t, w]) => `(${p}→${t}) ${T.blkRead(p, t)}≠${w}`);
+  check(cBad2.length === 0,
+    `A-5. 🧱 읽기 분류 — 정타 exact · 가운데가 끼면 near · 좌↔우만 opp`
+    + (cBad2.length ? ` — ${cBad2.join(" ")}` : ""));
+
+  /* ㉯ **종속값은 관계로** — `blkWin`을 값으로 안 적고 `BLK_WIN·BLK_READ·mul`의 곱으로 봅니다.
+   *    셋 중 무엇을 바꿔도 창이 **따라 움직여야** 해요. 안 따라가면 빨간불입니다. */
+  const wBad = [];
+  for (const [pk, tr, key] of cls) {
+    for (const mul of [0.8, 1, 1.35]) {
+      const want = K.BLK_WIN * K.BLK_READ[key] * mul;
+      if (!near(T.blkWin(pk, tr, mul), want, 1e-12)) {
+        wBad.push(`(${pk}→${tr}, mul ${mul}) ${T.blkWin(pk, tr, mul)}≠${want}`);
+      }
+    }
+  }
+  check(wBad.length === 0,
+    `A-6. 🧱 판정 창 = BLK_WIN × BLK_READ[읽기] × mul — **관계로** 지킵니다 (27가지)`
+    + (wBad.length ? ` — ${wBad.slice(0, 3).join(" · ")}` : ""));
+
+  /* ㉰ 읽기가 **실제로 차이를 만드나** — 정타 > 인접 > 반대, 그리고 **반대도 0이 아님**.
+   *    🔑 반대가 0이면 *"역동작에 걸렸는데 발을 뻗어 걷어냈어요"*가 사라지고
+   *       손잡이가 아무것도 안 하는 구간이 생깁니다(원칙 ③). */
+  const wE = T.blkWin(0, 0, 1), wN = T.blkWin(0, 1, 1), wO = T.blkWin(0, 2, 1);
+  check(wE > wN && wN > wO && wO > 0,
+    `A-7. 🧱 잘 읽을수록 창이 넓다 — 정타 ${wE.toFixed(2)}% > 인접 ${wN.toFixed(2)}% > 반대 ${wO.toFixed(2)}%`
+    + ` (**반대도 0이 아니에요**)`);
 
   /* 🧪 변이 — 창을 두 배로 흔들면 s가 통째로 올라가야 합니다 */
   const W = loadMoment(MUT.WIN2);
@@ -141,8 +187,10 @@ const K = T.K;
   check(after > before + 0.1,
     `A-변이. 판정 창 산식을 흔들면(창 ×2) s가 바뀐다 — 같은 오차 6에서 ${before.toFixed(3)} → **${after.toFixed(3)}**`);
   const B = loadMoment(MUT.BLKFLAT);
-  check(!(B._t.sBlk(0, 2) === 0),
-    `A-변이. 🧱 인접 점수를 정타와 같게 하면 빨간불이 된다 (정반대 ${B._t.sBlk(0, 2)} ≠ 0 — 읽기의 의미가 사라져요)`);
+  const bE = B._t.blkWin(0, 0, 1), bO = B._t.blkWin(0, 2, 1);
+  check(!(bE > bO),
+    `A-변이. 🧱 BLK_READ를 셋 다 1.00으로 하면 → 빨간불 (정타 ${bE.toFixed(2)}% = 반대 ${bO.toFixed(2)}%`
+    + ` — 읽어도 창이 안 넓어지면 1단계가 통째로 장식이 돼요)`);
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -269,12 +317,20 @@ const K = T.K;
     "CUT.win": 12, "CUT.speed": 118, "CUT.sweeps": 3,
     "ONE.need": 26, "ONE.kw0": 12, "ONE.kw1": 36, "ONE.grow": 2400, "ONE.post": 3.5,
     "KP.win": 8, "KP.line": 92,
-    "BLK.tellHi": 0.58, "BLK.tellLo": 0.24, "BLK.part": 0.24, "BLK.favor": 1.6, "BLK.hiP": 0.5,
+    "BLK.tellHi": 0.58, "BLK.tellLo": 0.24, "BLK.favor": 1.6, "BLK.hiP": 0.5,
+    /* 🧱 2단 국면 (2026-09-01 개편) — `BLK.part`는 **죽었습니다**(3단 이산 매핑 폐기).
+     * ⚠️ `BLK_WIN`은 **종속값**이라 여기서는 「움직였나」만 봅니다. *왜 그 값인가*는
+     *    `block-test.js` C가 **관계로** 재요 (옛↔새 짝지은 E[s] 차이). 둘은 다른 검사예요 —
+     *    여기가 빨간불이면 "재측정하세요", 거기가 빨간불이면 "값이 틀렸습니다"입니다. */
+    "BLK_WIN": 14.2,
+    "BLK_READ.exact": 1.00, "BLK_READ.near": 0.45, "BLK_READ.opp": 0.15,
+    "BLK_RUN.mark": 70,
     "FOOT_WIN": 0.25, "WIDE": 1.30,
   };
   const got = (k) => {
     if (k === "FOOT_WIN") return K.FOOT_WIN;
     if (k === "WIDE") return K.WIDE;
+    if (k === "BLK_WIN") return K.BLK_WIN;
     const [g, f] = k.split(".");
     return K[g][f];
   };
@@ -283,12 +339,15 @@ const K = T.K;
     `D-1. 🔗 E[s] ≈ 0.5를 만든 판정 창·속도 상수 ${Object.keys(WANT).length}개가 그대로다`
     + (off.length
       ? `\n     🔴 움직인 것: ${off.join(" · ")}`
-        + `\n     👉 engineer에게 **E[s] 4종 재측정**을 요청하세요 (지금 0.522/0.522/0.521/0.537은 무효입니다).`
+        + `\n     👉 engineer에게 **E[s] 4종 재측정**을 요청하세요.`
+        + `\n     🔒 재측정은 **절대값이 아니라 「바꾸기 전 ↔ 바꾼 뒤」 짝지은 차이**로 보고하세요 —`
+        + `\n        절대값은 조작자 모델의 치우침을 그대로 물고 옵니다 (파일 머리말 참고).`
         + `\n        설계 §4-4 ①의 ±5%p ⇔ ΔE[s] 0.132 (half(70) = 0.19)`
       : ""));
   /* 속도 폭은 배열이라 따로 */
-  check(K.KP.speed[0] === 22 && K.KP.speed[1] === 34 && K.CUT.lane[0] === 26 && K.CUT.lane[1] === 74,
-    `D-2. 🔗 KP.speed [22,34] · CUT.lane [26,74]도 그대로다`);
+  check(K.KP.speed[0] === 22 && K.KP.speed[1] === 34 && K.CUT.lane[0] === 26 && K.CUT.lane[1] === 74
+    && K.BLK_RUN.speed[0] === 58 && K.BLK_RUN.speed[1] === 74,
+    `D-2. 🔗 KP.speed [22,34] · CUT.lane [26,74] · BLK_RUN.speed [58,74]도 그대로다`);
 
   /* 🧱 차단 — 겹쳐 읽기가 성립하는 **부등호**가 양쪽에서 뒤집히는가.
    * 이건 값이 아니라 **관계**예요 — 계수를 옮겨도 이 부등호가 살아 있으면 판이 성립합니다.
@@ -315,6 +374,135 @@ const K = T.K;
       `D-변이. 🧱 favor를 키워 두 경우의 정답을 한쪽(주발)으로 몰면 → 빨간불`
       + ` (「확실히」 ${h.toFixed(3)} vs ${hf.toFixed(3)} — 몸 방향이 더 이상 정답이 아니에요)`);
   }
+}
+
+
+/* ══════════════════════════════════════════════════════════════
+ * E. 📐 **넷이 같은 `sBar` 형태를 쓴다** — 값이 아니라 **구조**로 재는 형평
+ *
+ * 🔴 **이 자리는 세 번 뒤집혔습니다.** 넷의 형평을 지금까지 *"E[s] 평균이 서로 0.017 안"*
+ *    으로 적어 왔는데, 그 0.017은 **한 조작자 모델의 성질**이에요 — 제 모델로 재면 0.145입니다.
+ *    모델을 바꿀 때마다 계약이 뒤집히니 **값으로는 못 지킵니다.**
+ *
+ * 🔑 **대신 구조로 지킵니다.** 넷이 형평인 이유는 평균이 우연히 가까워서가 아니라,
+ *    **같은 자를 쓰기 때문**이에요:
+ *      ① 넷의 `s`가 전부 **`sBar` 한 함수**를 지난다
+ *      ② 넷의 판정 창이 전부 **`상수 × mul`** 꼴이다 — `mul`에 **같은 비율**로 반응한다
+ *      ③ 그래서 `s`는 넷 다 **`오차 ÷ 창` 하나만의 함수**이고, 그 함수가 서로 같다
+ *    구조는 조작자 모델을 안 탑니다. 곡선을 다시 재도 살아남아요.
+ *
+ * ┌ 「이 계약이 서 있는 세계」 ─────────────────────────────────────────
+ * │ **넷이 「어디를 겨눠 언제」라는 같은 장르를 쓰는 세계**의 계약입니다.
+ * │ 🧱 차단이 2단 국면이 되면서 **드디어 `sBar`에 합류했어요**(2026-09-01) —
+ * │ 그전까지는 3단 이산이라 이 검사에 못 들어왔습니다.
+ * │ 🔴 어느 한 종이 일부러 **다른 장르**(예: 누적·연타·확률 굴림)로 바뀌는 판정이 나오면
+ * │    **이 검사부터 다시 보세요.** 그때는 ③이 성립할 수 없고, ①②만 남습니다.
+ * └────────────────────────────────────────────────────────────────
+ * ══════════════════════════════════════════════════════════════ */
+{
+  /* ① 🔒 **소스에서 정규식으로 뜯습니다** — 값을 베껴 적지 않아요.
+   *    넷의 산식 줄과 🧱 2단계 판정 줄이 전부 `sBar(`를 지나야 합니다. */
+  const LINES = {
+    "🏃 sCut": /const sCut = \(err, mul\) => ([^\n]+);/,
+    "🥅 sOne": /const sOne = \(margin, mul\) => ([^\n]+);/,
+    "🎯 sKp": /const sKp = \(gap, mul\) => ([^\n]+);/,
+    "🧱 blkWin": /const blkWin = \(pick, truth, mul\) => ([^\n]+);/,
+    "🧱 2단계 판정": /const s = (sBar\(Math\.abs\(pos - mark\), half\));/,
+  };
+  const miss = [], noBar = [], noMul = [];
+  const body = {};
+  for (const [name, re] of Object.entries(LINES)) {
+    const m = MSRC.match(re);
+    if (!m) { miss.push(name); continue; }
+    body[name] = m[1].trim();
+    /* 🧱 blkWin은 창을 **만드는** 줄이라 sBar를 안 지납니다 — 그 창을 받아 쓰는
+     *    「2단계 판정」 줄이 지나요. 나머지 셋은 자기 줄에서 지나야 합니다. */
+    if (name !== "🧱 blkWin" && !/\bsBar\(/.test(m[1])) noBar.push(`${name}: ${m[1].trim()}`);
+    /* ② 창이 `… * mul` 꼴인가 — `mul`에 **1차 비례**해야 넷이 같은 비율로 움직입니다 */
+    if (name !== "🧱 2단계 판정" && !/\*\s*mul\b/.test(m[1])) noMul.push(`${name}: ${m[1].trim()}`);
+  }
+  check(miss.length === 0,
+    `E-1. 📐 넷의 산식 줄을 소스에서 전부 뜯었다 (${Object.keys(LINES).length}줄)`
+    + (miss.length ? `\n     🔴 **못 뜯은 줄: ${miss.join(" · ")}** — 정규식이 소스와 안 맞아요.`
+      + ` 이 검사는 지금 "안 도는" 상태입니다` : ""));
+  check(noBar.length === 0,
+    `E-2. 📐 넷의 \`s\`가 전부 **\`sBar\` 한 함수**를 지난다`
+    + (noBar.length ? `\n     🔴 딴 곡선을 쓰는 것: ${noBar.join(" · ")}` : ""));
+  check(noMul.length === 0,
+    `E-3. 📐 넷의 판정 창이 전부 **\`상수 × mul\`** 꼴이다 — 🫀 컨디션·♿가 넷에 **같은 비율**로 걸립니다`
+    + (noMul.length ? `\n     🔴 mul을 안 타는 것: ${noMul.join(" · ")}` : ""));
+
+  /* ③ **`s`가 넷 다 「오차 ÷ 창」 하나만의 함수이고, 그 함수가 서로 같다.**
+   *   같은 비율 r을 넷에 각각 먹여서 **같은 값**이 나오는지 봅니다.
+   *   창 폭도 상수도 서로 다른데 r만 맞추면 값이 같아야 해요 — 그게 "같은 자"의 뜻입니다. */
+  /* ⚠️ `mul`은 **1이 아니어야** ②가 진짜로 걸립니다. 그리고 **1보다 작아야** 넷이 같은
+   *    비율 구간을 나눠 가져요 — 🥅 sOne의 오차는 `ONE.need`에서 멈추므로(그 위는
+   *    *"키퍼 몸 안"* 갈래이고 A-2가 따로 봅니다) 비율이 `1/mul`까지만 성립합니다.
+   *    `mul = 0.85`면 `1/mul = 1.18`이라 **창을 넘는 구간까지** 넷을 나란히 놓을 수 있어요. */
+  const mul = 0.85;
+  const RMAX = 1 / mul - 1e-9;
+  const winOf = {
+    "🏃 sCut": K.CUT.win * mul,
+    "🥅 sOne": K.ONE.need * mul,
+    "🎯 sKp": K.KP.win * mul,
+    "🧱 blk": T.blkWin(0, 1, mul),                     // 인접 읽기 — 정타·반대와 폭이 다릅니다
+  };
+  const sOf = {
+    "🏃 sCut": (r) => T.sCut(r * winOf["🏃 sCut"], mul),
+    "🥅 sOne": (r) => T.sOne(K.ONE.need - r * winOf["🥅 sOne"], mul),
+    "🎯 sKp": (r) => T.sKp(r * winOf["🎯 sKp"], mul),
+    "🧱 blk": (r) => T.sBar(r * winOf["🧱 blk"], winOf["🧱 blk"]),
+  };
+  const shapeBad = [];
+  let pts = 0;
+  for (let r = 0; r <= RMAX; r += 0.05) {
+    pts += 1;
+    const vals = Object.entries(sOf).map(([n, f]) => [n, f(r)]);
+    const ref = vals[0][1];
+    for (const [n, v] of vals.slice(1)) {
+      if (!near(v, ref, 1e-9)) shapeBad.push(`r=${r.toFixed(2)}에서 ${n} ${v.toFixed(4)} ≠ ${vals[0][0]} ${ref.toFixed(4)}`);
+    }
+  }
+  check(shapeBad.length === 0,
+    `E-4. 📐 같은 비율(오차 ÷ 창)을 먹이면 **넷이 같은 값**을 낸다 — 창 폭이 서로 달라도요`
+    + ` (비율 0 ~ ${RMAX.toFixed(2)} · ${pts}점 · **창을 넘는 구간까지**)`
+    + (shapeBad.length ? `\n     🔴 ${shapeBad.slice(0, 3).join(" · ")}` : ""));
+
+  /* ④ **창 비율** — `mul`을 흔들면 넷의 창이 **똑같은 배수**로 움직인다.
+   *    이게 ♿ 확대·🫀 컨디션이 네 종의 형평을 안 깨뜨리는 근거예요. */
+  const widthOf = (m) => ({
+    "🏃 sCut": K.CUT.win * m, "🥅 sOne": K.ONE.need * m,
+    "🎯 sKp": K.KP.win * m, "🧱 blk": T.blkWin(0, 1, m),
+  });
+  const ratioBad = [];
+  for (const m of [0.8, 1.06, 1.3, 1.625]) {
+    const a = widthOf(1), b = widthOf(m);
+    for (const k of Object.keys(a)) {
+      if (!near(b[k] / a[k], m, 1e-9)) ratioBad.push(`mul ${m}에서 ${k}가 ×${(b[k] / a[k]).toFixed(3)}`);
+    }
+  }
+  check(ratioBad.length === 0,
+    `E-5. 📐 mul을 흔들면 넷의 창이 **똑같은 배수**로 움직인다 (0.8 · 1.06 · 1.3 · 1.625)`
+    + (ratioBad.length ? `\n     🔴 ${ratioBad.join(" · ")}` : ""));
+
+  /* 🧪 변이 ⓕ — 🎯 한 종만 제곱 곡선으로. **소스 검사와 값 검사가 둘 다** 걸려야 해요 */
+  const C1 = loadMoment(MUT.CURVE1);
+  const srcHit = !/const sKp = \(gap, mul\) => \(gap < 0 \? 0 : sBar\(gap, KP\.win \* mul\)\);/
+    .test(MSRC.replace(MUT.CURVE1[0][0], MUT.CURVE1[0][1]));
+  const w3 = K.KP.win;
+  const valHit = !near(C1._t.sKp(w3 * 0.5, 1), C1._t.sCut(K.CUT.win * 0.5, 1), 1e-9);
+  check(srcHit && valHit,
+    `E-변이. 🎯 한 종만 다른 곡선(제곱)을 쓰면 → 빨간불`
+    + ` (소스 검사 ${srcHit ? "✓" : "✗"} · 값 검사 ${valHit ? "✓" : "✗"}`
+    + ` — 같은 비율 0.5에서 🎯 ${C1._t.sKp(w3 * 0.5, 1).toFixed(3)} vs 🏃 ${C1._t.sCut(K.CUT.win * 0.5, 1).toFixed(3)})`);
+
+  /* 🧪 변이 ⓖ — 🧱만 창이 mul에 안 반응. 🫀 컨디션·♿가 차단에서만 빠집니다.
+   *    🔑 이게 *"차단이 처음으로 컨디션을 탑니다"*(106번 §3-5)를 지키는 자리예요 —
+   *       옛 3단 이산 시절로 되돌아가는 형태입니다. */
+  const NM = loadMoment(MUT.BLKNOMUL);
+  check(NM._t.blkWin(0, 1, 1.3) === NM._t.blkWin(0, 1, 1),
+    `E-변이. 🧱만 창이 mul에 안 반응하게 하면 → 빨간불`
+    + ` (mul 1과 1.3이 ${NM._t.blkWin(0, 1, 1).toFixed(3)}로 같아져요 — 🫀 컨디션·♿가 차단에서만 빠집니다)`);
 }
 
 console.log(fail ? `\n❌ ${fail}건 실패` : "\n✅ 통과");

@@ -130,6 +130,70 @@ window.WingerTown = (() => {
   const TOWN_CONDITION = 80;
 
   /* ══════════════════════════════════════════════════════════════════
+   * 🏟️ **경기 진행** — 카드만 뜨던 자리에 스코어보드·시계·중계를 답니다 (설계 101번 §3)
+   * ══════════════════════════════════════════════════════════════════
+   * *"「초·중·고 대항전」이라는 이름이 경기를 약속하는데 화면은 카드만 줍니다"* —
+   * 화면은 `match-scene.js`(`W2Scene`)를 그대로 씁니다. 🔑 **점수의 소유가 바깥**이에요:
+   * `W2Scene`은 `card.score`를 **그대로 비추고 절대 누적하지 않습니다.**
+   * 그래서 학교는 **판정에서 스코어를 만들어 넘기기만** 하면 됩니다.
+   *
+   * 🔒 **새 굴림이 0입니다.** 아래 두 표는 **이미 나온 판정을 읽기만** 해요 —
+   *    상대 팀이 따로 굴리지 않고, 실점은 **내 🧱 카드의 `miss`**뿐입니다.
+   *    ⏱️ 시계도 🏟️ 상대 이름도 난수가 아니라 **단계·카드 번호·🗺️ 지역에서 결정적으로** 나와요.
+   *    🔴 **여기에 `Math.random()`을 한 번이라도 쓰면** 난수를 몇 번 쓰는지가
+   *       **카드 성적에 따라 달라져** 뒤 카드의 굴림이 통째로 밀립니다
+   *       (설계 §18-5 · 🦶 주발만 뒤집어 견주는 검사 youth-moment B-0이 그 자리를 지켜요).
+   *       연출용 굴림이 필요하면 `match-scene.js`의 `fxRnd`처럼 **판정 난수원 밖**에 두세요.
+   *
+   * 🔴 **`PTS`와 같은 표에 합치지 마세요** (원칙 ⑨). `PTS`는 편차 `d`(밴드)로 가고
+   *    이건 **화면에만** 갑니다 — 성격이 다릅니다.
+   * 🔴🔴 **스코어와 승패는 `spotMul`에 한 톨도 안 닿습니다** (설계 101번 §3-3).
+   *    `d`가 이미 그 일을 하고 있어요 — 승패를 걸면 **한 성적을 두 번 세는 것**입니다.
+   *    ⚠️ *"이겼는데 아무 일도 없다"*는 압박이 **반드시** 옵니다.
+   *    **그때 손대야 하는 곳도 여기가 아닙니다.**
+   * 🔴 등급(D~S)도 안 붙입니다 — 같은 이유로 `d`와 두 번 세는 것이에요.
+   *
+   *   ⚽ 결정 perfect → 내 골 (우리 +1)   ·   🅰️ 전개 perfect → 동료 골 (우리 +1 · 내 도움)
+   *   🧱 수비 miss    → 실점 (상대 +1)    ·   그 밖은 스코어가 안 움직여요 */
+  const GOAL_BY = { g: { perfect: "us" }, a: { perfect: "us" }, d: { miss: "them" } };
+  /* 판정 → [`W2Scene`이 읽는 `result`, 중계 줄]. `{me}`는 내 이름 자리예요.
+   * 🔒 `result`는 화면의 **색과 연출**만 고릅니다(good/bad·플래시·흔들림).
+   *    🧱 수비에는 `ok`가 없지만(읽기 게임 · 이분) 칸은 채워 둡니다 — 판정이 늘어도 안 비어요. */
+  const CALL = {
+    g: { perfect: ["goal", "⚽ 골!! {me}, 그물을 흔듭니다!"],
+      ok: ["shot", "🎯 슛! 골키퍼 정면… 아쉽습니다"],
+      miss: [null, "😖 발 끝에 안 걸렸어요"] },
+    a: { perfect: ["assist", "🅰️ {me}의 패스! 친구가 그대로 밀어 넣습니다!"],
+      ok: ["shot", "🅰️ 패스는 갔는데 마무리가 안 됐어요"],
+      miss: [null, "😖 패스가 끊겼어요"] },
+    d: { perfect: ["save", "🧱 막아냅니다! 위기를 지웠어요"],
+      ok: ["save", "🧱 걷어냈어요"],
+      miss: ["concede", "😣 뚫렸어요… 실점"] },
+  };
+  /* 🏟️ 상대 이름 — 🔒 **텍스트만입니다. 산식에 한 톨도 안 닿아요** (설계 93번 §4-2).
+   * 🔴 실제 학교·구단 이름을 쓰지 않습니다. **전부 가상**이에요.
+   * 🎲 난수가 아니라 **🗺️ 지역 문자열 + 단계 번호**에서 결정적으로 고릅니다 (위 🔴 참고). */
+  const OPP = ["푸른솔", "한빛", "새터", "가온누리", "돌개바람", "너울", "미르내", "아라"];
+  const OPP_SUF = { e: "초등부", m: "중등부", h: "고등부" };
+  const HOME_NAME = { e: "우리 동네", m: "우리 학교", h: "우리 학교" };
+  function oppName(origin, at, stageId) {
+    const s = String(origin || "");
+    let h = 0;
+    for (let k = 0; k < s.length; k++) h = (h * 31 + s.charCodeAt(k)) | 0;
+    return `${OPP[Math.abs(h + at * 3) % OPP.length]} ${OPP_SUF[stageId] || "대표"}`;
+  }
+  /* 🗣️ 「무엇이 걸렸나」 — `W2Scene`의 `STAKE_TAIL` **코드**를 넘깁니다.
+   * 🔒 화면이 한국어 문자열을 비교하지 않게 하려고 만든 창구라, 여기서도 코드로 줘요.
+   *    🧱 수비는 안 줍니다 — 화면의 `fallbackTail`이 스코어차로 이미 정확히 갈라요. */
+  const stakeOf = (kind, d) => (kind === "defend" ? undefined
+    : d >= 1 ? "clincher" : d === 0 ? "lead" : d === -1 ? "equalize" : "comeback");
+  /* ⏱️ 카드가 놓이는 분 — n장을 90분에 고르게 (2장이면 30·60, 3장이면 23·45·68).
+   * 🔒 결정적입니다. 🔴 여기에 흔들림을 주고 싶어지면 위 🔴 주석을 다시 읽으세요. */
+  const minAt = (i, n) => Math.round((90 * (i + 1)) / (n + 1));
+  /* 🎬 단계가 바뀌면 앞 단계의 남은 연출을 버립니다 — 피드가 새 무대에 섞이면 안 돼요. */
+  let sceneGen = 0;
+
+  /* ══════════════════════════════════════════════════════════════════
    * 📣 **제안 등급 표 — `spot`에 곱하는 한 겹입니다** (설계 85번 §5-1)
    * ══════════════════════════════════════════════════════════════════
    * 🔴 **난이도 손잡이가 아닙니다.** 세기를 여기서 잡지 마세요 —
@@ -498,6 +562,47 @@ window.WingerTown = (() => {
     const card = $("town-card"), res = $("town-result"), btn = $("btn-town-next");
     const hint = $("town-hint"), prog = $("town-prog"), title = $("town-title");
     const place = $("town-place"), screen = $("screen-town");
+    const sIdx = STAGES.findIndex((x) => x.id === stage.id);
+
+    /* 🏟️ 경기 화면 — 스크립트가 안 왔으면 **조용히 옛 모습(카드만)으로** 돕니다.
+     * 🔑 `lite`는 학교 모드예요: 🅶🅾🅰🅻 배너·🏆 축포·🎉 Fx·⌨️ 타이핑이 안 붙습니다.
+     *    🔴 Fx를 끄는 건 취향이 아니라 **난수** 때문입니다 — `Fx.burst`가 입자마다
+     *    `Math.random()`을 써서, 골이 났을 때만 부르면 소비량이 성적을 탑니다. */
+    const sceneHost = $("town-scene");
+    const Scene = (window.W2Scene && sceneHost && window.W2Scene.mount) ? window.W2Scene : null;
+    const myName = String((o && o.name) || "나");
+    /* 🏟️ 이 단계의 스코어. 🔒 **단계마다 0에서 시작합니다** — 초·중·고는 각각 다른 경기예요.
+     *    🔒 세이브에 안 넣습니다. 화면에만 사는 값이고, 안 넣으니 마이그레이션도 없습니다. */
+    let hg = 0, ag = 0;
+    sceneGen += 1;
+    const myGen = sceneGen;
+    if (Scene) {
+      Scene.mount(sceneHost, {
+        home: HOME_NAME[stage.id] || "우리 학교",
+        away: oppName(o.origin, sIdx, stage.id),
+        myName, lite: true,
+      });
+      /* 🤖 자동 진행이면 판정이 **즉시** 나와요 — 연출만 짧게 해서 피드가 안 밀리게 합니다.
+       *    (⏩와 같은 자리예요: 개입이 아니라 연출만 짧아집니다) */
+      if (autoMiniOn()) Scene.fast();
+    }
+    /* 🎬 카드 그리기를 **줄 세웁니다.**
+     * 🔴 `W2Scene.push`는 async라, 🤖 자동 진행처럼 판정이 즉시 나면 「무엇이 걸렸나」와
+     *    「결과」가 겹쳐 **같은 카드가 두 번 열립니다.** 큐가 그걸 막아요.
+     * 🔑 그리고 **판정값을 큐 안에서** 붙입니다 — 밖에서 미리 붙이면 첫 task가 돌 때
+     *    이미 `judge != null`이라 `push`가 열기+닫기를 **한 번에** 해버리고,
+     *    두 번째 task가 **같은 줄을 또** 그려요.
+     * ♻️ 단계가 바뀌면(`sceneGen`) 남은 것은 버립니다. */
+    let queue = Promise.resolve();
+    const draw = (c, done) => {
+      if (!Scene) return;
+      queue = queue.then(() => {
+        if (myGen !== sceneGen) return null;
+        if (done) { c.judge = done.judge; c.result = done.result; c.text = done.text; c.score = done.score; }
+        return Scene.push(c);
+      }).catch(() => { /* 화면이 이미 닫혔어요 */ });
+    };
+    let live = null;
 
     /* 🎬 무대가 커지는 게 보여야 합니다 — **능력치가 안 자라므로 여기가 성장의 유일한
      * 시각 증거**예요(설계 93번 §13). director가 `data-stage`(e/m/h)와
@@ -516,13 +621,21 @@ window.WingerTown = (() => {
     let i = 0;
     function playCard() {
       const c = deck[i];
-      if (hint) hint.innerHTML = `<b>${c.emoji} ${c.name}</b> — ${c.line}`;
+      /* 🏟️ 경기 화면이 있으면 **상황 설명은 피드가 합니다**(`stakeLine`) — 여기서 또 적으면
+       * *"골문 앞에서 공이 발에 걸렸어요"* 바로 밑에 *"🔥 골문 앞!"*이 붙어요.
+       * 화면이 없을 때만 `c.line`을 씁니다. */
+      if (hint) hint.innerHTML = `<b>${c.emoji} ${c.name}</b>` + (Scene ? "" : ` — ${c.line}`);
       if (prog) prog.innerHTML = progHTML(deck, i);
       if (res) res.innerHTML = "";
       if (btn) { btn.classList.add("hidden"); btn.disabled = true; }
       if (card) { card.innerHTML = ""; card.className = "w2m-town"; }
 
       const J = judgeFor(c.key, { pos });
+      /* 🏟️ 이 카드가 경기의 몇 분인지 · 지금 스코어가 몇 대 몇인지.
+       * 🔒 `mine: true`가 「🔥 내 순간」 갈래를 엽니다 — 학교는 **카드 전부가 내 순간**이에요. */
+      live = { min: minAt(i, deck.length), kind: J.kind, mine: true, by: myName,
+        score: [hg, ag], stakeKey: stakeOf(J.kind, hg - ag) };
+      draw(live);
       const E = window.WingerEngine, M = window.W2Moment;
       /* ⚠️ 엔진이나 미니게임이 아직 안 실렸으면 **중립 판정으로 조용히 넘어갑니다** —
        *    스크립트 하나가 안 왔다고 선수 만들기가 통째로 멈추면 안 돼요. */
@@ -548,6 +661,16 @@ window.WingerTown = (() => {
       state.rows.push({ stage: stage.id, key: c.key, res: r, pts: p });
       state.score += p;
       state.cards += 1;
+      /* 🏟️ 스코어 — 🔒 **이미 나온 판정 `r`을 읽기만 합니다. 새 굴림이 0이에요.**
+       * 🔴 여기서 상대 팀을 따로 굴리지 마세요 — 실점은 내 🧱 카드의 `miss`뿐입니다. */
+      const side = (GOAL_BY[c.key] || {})[r];
+      if (side === "us") hg += 1;
+      else if (side === "them") ag += 1;
+      if (live) {
+        const call = ((CALL[c.key] || CALL.g)[r]) || [null, ""];
+        draw(live, { judge: r, result: call[0] || undefined,
+          text: call[1].replace("{me}", myName), score: [hg, ag] });
+      }
       i += 1;
       if (prog) prog.innerHTML = progHTML(deck, i);
       const last = i >= deck.length;
@@ -556,6 +679,10 @@ window.WingerTown = (() => {
         res.innerHTML = `<div class="town-res ${r === "perfect" ? "good" : r === "ok" ? "mid" : "bad"}">`
           + `${r === "perfect" ? "🔥 완벽했어요!" : r === "ok" ? "🙂 나쁘지 않았어요" : "😵 아쉬웠어요"}`
           + ` <b>+${p}</b></div>`
+          /* 🏁 단계 끝 스코어 — **여덟 판을 뛰고도 누가 이겼는지 모르던 상태**를 끝냅니다.
+           * 🔒 표시입니다. 승패는 `d`에도 `spotMul`에도 한 톨도 안 닿아요 (위 🔴🔴). */
+          + (last && Scene ? `<div class="town-final ${hg > ag ? "win" : hg === ag ? "draw" : "lose"}">`
+              + `🏁 ${hg} : ${ag} — ${hg > ag ? "이겼어요!" : hg === ag ? "비겼어요" : "졌어요"}</div>` : "")
           /* 🔑 **단계 판수와 누적 점수를 섞어 적지 마세요** — "고등부 3판 — 7점"으로 붙으면
            *    3판에 7점을 낸 것처럼 읽힙니다. 지금까지의 누적을 따로 적습니다. */
           + (last ? `<div class="town-line">${stage.title} ${deck.length}판을 마쳤어요 —`

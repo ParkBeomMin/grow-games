@@ -294,7 +294,11 @@ check(shapeBad.length === 0,
   + (shapeBad.length ? ` — 어긋난 키: ${shapeBad.join(", ")}` : ` (${Object.keys(keys).join(", ")})`));
 
 const PRE = `window.fetch=()=>Promise.reject(new Error("off"));
-window.requestAnimationFrame=(cb)=>setTimeout(()=>cb(0),0);window.scrollTo=()=>{};
+/* 🔴 **rAF에 「0」을 넘기면 안 됩니다.** winger-moment.js의 미니게임들은
+   dt = (t - last)/1000 으로 움직여요. t가 늘 0이면 dt가 음수 한 번 → 그 뒤로 0이라
+   **상대가 제자리에 얼어붙습니다.** 🧱 2단계가 스스로 안 끝나서 pump가 12초를 헛돌고,
+   판정도 늘 s = 0이 됐어요. 진짜 시계를 넘깁니다. */
+window.requestAnimationFrame=(cb)=>setTimeout(()=>cb(typeof performance!=="undefined"&&performance.now?performance.now():Date.now()),0);window.scrollTo=()=>{};
 window.alert=()=>{};window.confirm=()=>false;
 (function(){var st=window.setTimeout;window.setTimeout=function(fn,ms){return st(fn,0);};})();
 window.__errs=[];window.addEventListener("error",function(e){window.__errs.push(String(e.message||e.error));});
@@ -452,31 +456,86 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
    *   **자동 진행 토글로 우회하지 않습니다** — 그러면 미니게임이 아예 안 열려도
    *   초록불이라, 지금 메우려는 구멍(①)을 그대로 남겨 두게 돼요.
    *   네 판의 누르는 자리: `.w2m-side`(🏃) · `.w2m-goal`(🥅) · `.w2m-run-btn`(🎯) · `.w2m-dir`(🧱) */
-  const MOMENT_SEL = ".w2m-go, .w2m-side, .w2m-run-btn, .w2m-dir, .w2m-goal";
+  /* ─────────────────────────────────────────────────────────────────────
+   * 🚨 **「자가 복구가 실패를 삼키는」 자리** (2026-09-01 · engineer 106번 §6)
+   * ─────────────────────────────────────────────────────────────────────
+   * 🧱 차단이 2단 국면이 되면서 `.w2m-blk-go`(2단계 🛡️ 막기)가 생겼는데,
+   * 이 목록에 **없었습니다.** 그런데도 검사는 **초록불이었어요** —
+   * 2단계는 안 누르면 **~1.7초 뒤 상대가 지나가며 스스로 끝나고**(s = 0),
+   * 경기는 그대로 흘러갑니다. 🔴 **2단계를 한 번도 안 누르면서 통과**한 거예요.
+   *
+   * 🔴 **셀렉터에 더하기만 하면 또 타임아웃이 삼킵니다.** 그래서 두 가지를 같이 합니다:
+   *   ① 화면에 **떴는지**(`seen`)와 **눌렀는지**(`tapped`)를 **따로** 셉니다
+   *   ② 🔒 **떴는데 한 번도 안 눌린 셀렉터가 있으면 빨간불** — 아래 `SEL_COVER`
+   * `seen`은 pump가 아니라 **독립된 훑기**가 셉니다. 그래야 목록에서 빠진 셀렉터가
+   * "안 뜬 것"으로 둔갑하지 않아요 — 그게 정확히 이번에 놓쳤던 경로입니다.
+   * ───────────────────────────────────────────────────────────────────── */
+  const SELS = [".w2m-go", ".w2m-side", ".w2m-run-btn", ".w2m-dir", ".w2m-goal", ".w2m-blk-go"];
+  const MOMENT_SEL = SELS.join(", ");
+
+  /* 🔒 **이 목록이 소스와 안 맞으면 검사가 통째로 눈이 멉니다.**
+   *    `.w2m-blk-go`가 빠져 있던 게 정확히 그 상태였어요 — 안 눌러도 타임아웃이 끝내 주니까요.
+   *    그래서 목록을 소스와 **두 갈래로** 맞춰 봅니다:
+   *      ① `onTap(...querySelector("<선택자>"))`로 **직접 적힌** 자리는 전부 SELS에 있어야 한다
+   *      ② 🔑 `onTap(` **호출 자리의 개수**가 그대로여야 한다 — 변수로 넘기는 두 자리
+   *         (`.w2m-goal` · `.w2m-run-btn`)는 ①로 못 뜯으니, **새 탭 자리가 생기면 여기서 걸립니다**
+   *    🚨 개수는 **검사에 박습니다**(소스에서 세어 오면 늘어나도 따라가서 안 잡혀요). */
+  const MOM_SRC = fs.readFileSync(path.join(BETA, "winger-moment.js"), "utf8");
+  const litSels = Array.from(new Set(
+    Array.from(MOM_SRC.matchAll(/onTap\(\s*(?:\w+\.)?querySelector\(\s*[`"'](\.[\w-]+)/g)).map((m) => m[1])));
+  const notReg = litSels.filter((x) => SELS.indexOf(x) < 0);
+  check(litSels.length > 0 && notReg.length === 0,
+    `🔒 소스에 직접 적힌 탭 자리가 전부 SELS에 등록돼 있다 (${litSels.join(" · ") || "**한 개도 못 뜯었어요**"})`
+    + (notReg.length ? `\n     🔴 **SELS에 없는 것: ${notReg.join(" · ")}** — 그 자리는 안 눌려도 검사가 통과합니다` : ""));
+  const TAP_SITES = 6;                     // 🚨 문턱은 박습니다 (정의 줄 제외한 onTap 호출 자리)
+  const nSites = (MOM_SRC.match(/\bonTap\(\s*(?!el, fn, gate)/g) || []).length;
+  check(nSites === TAP_SITES,
+    `🔒 winger-moment.js의 탭 자리가 ${TAP_SITES}군데 그대로다 (지금 ${nSites}군데)`
+    + (nSites === TAP_SITES ? ""
+      : `\n     🔴 **탭 자리가 늘거나 줄었어요.** 새 자리가 생겼다면 SELS에 등록하고 이 숫자를 고치세요 —`
+        + `\n        등록 안 하면 그 자리는 **안 눌러도 타임아웃·폴백이 흐름을 밀어서 초록불**이 됩니다`));
+  const seen = {}, tapped = {};
+  for (const s of SELS) { seen[s] = 0; tapped[s] = 0; }
   let momentSeen = 0;
+  /* 👁️ 독립 훑기 — pump가 무엇을 누르든 상관없이 "화면에 떴다"만 셉니다 */
+  const scanMoment = () => {
+    for (const s of SELS) if (w.document.querySelector(s)) seen[s] += 1;
+  };
   const pumpMoment = () => {
     const el = w.document.querySelector(MOMENT_SEL);
     if (!el || el.disabled) return false;
     if (el.classList.contains("w2m-go")) momentSeen += 1;
+    for (const s of SELS) if (el.matches(s)) { tapped[s] += 1; break; }
     press(el);
     return true;
   };
 
-  const MAX_ROUNDS = 8;
+  /* 🔴 **라운드를 몇 번 굴리나** — 예전에는 *"카드도 그려졌고 미니게임도 한 번 봤으면 끝"*
+   *    이었어요. 그런데 🧱 차단(=`defend` 카드)은 **여섯 판에 한 번쯤** 나옵니다 —
+   *    실측했더니 한 라운드로 끊으면 `.w2m-blk-go`에 **6번 중 1번**만 닿았어요.
+   *    그 상태로 커버리지를 단언하면 **6번 중 5번은 아무것도 안 지키는 초록불**입니다.
+   * 🔑 그래서 **2단계 버튼에 닿을 때까지** 더 굴립니다. 못 닿으면 빨간불이 아니라
+   *    🚧로 적어요 — 난수 탓에 빨간불이 뜨는 검사는 아무도 안 보게 됩니다. */
+  const MAX_ROUNDS = 10;
+  const covered = () => momentSeen > 0 && seen[".w2m-blk-go"] > 0;
   let week0 = 0, benched = 0, opened = false, rounds = 0;
   /* 🔥 **미니게임을 한 번도 못 봤으면 라운드를 더 굴립니다.**
    *   한 경기에 내 카드가 하나도 없을 수 있어요(장면이 전부 중립이거나 동료가 다 가져감).
    *   그걸 "미니게임이 안 열렸다"로 읽으면 열 번에 서너 번 헛빨간불이 뜹니다 — 실제로 그랬어요. */
-  for (; rounds < MAX_ROUNDS && !(opened && momentSeen > 0); rounds++) {
+  for (; rounds < MAX_ROUNDS && !(opened && covered()); rounds++) {
     if (!goBtn()) break;
     week0 = S().activity.week;
     press(goBtn());
     for (let i = 0; i < 200 && active() !== "screen-stage"; i++) await wait(10);
-    for (let i = 0; i < 1200 && S().activity.week === week0; i++) { pumpMoment(); await wait(10); }
+    for (let i = 0; i < 1200 && S().activity.week === week0; i++) { scanMoment(); pumpMoment(); await wait(10); }
     if (w.document.querySelectorAll(".w2-card").length >= 6) {
       opened = true;
-      if (momentSeen > 0) break;              // 카드도 그려졌고 미니게임도 봤어요
+      if (covered()) break;                   // 카드도 그려졌고 🧱 2단계까지 닿았어요
     } else { benched += 1; }
+    /* 🔒 **마지막 라운드에서는 뒷정리를 하지 않습니다.** 여기서 다음 주로 넘겨 버리면
+     *    아래의 경기 화면 검사들이 **줄줄이 빨간불**이 돼요 — 원인은 하나인데 신호가 일곱 개면
+     *    사람이 "저건 원래 빨간불"로 배웁니다. 커버리지를 못 채워도 **경기 화면은 남겨 둡니다.** */
+    if (rounds + 1 >= MAX_ROUNDS) break;
     const nx = $("btn-stage-next");
     if (nx) press(nx);
     for (let i = 0; i < 300 && active() !== "screen-pro"; i++) await wait(10);
@@ -499,6 +558,25 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   check(momentSeen > 0,
     `🔥 순간 카드에서 미니게임이 실제로 열렸다 (▶️ 시작 화면 ${momentSeen}번)`
     + `${momentSeen ? "" : " — getMini()가 null이면 오류 없이 자동 판정으로 흘러요 (index.html의 script 태그를 보세요)"}`);
+  /* 🔒 **떴는데 한 번도 안 눌린 셀렉터가 있으면 빨간불.**
+   *    타임아웃·기본값·폴백이 흐름을 끝까지 미는 자리라, **도달만 재면 아무것도 안 눌러도 통과**해요. */
+  const SEL_COVER = SELS.filter((s) => seen[s] > 0 && tapped[s] === 0);
+  check(SEL_COVER.length === 0,
+    `🖱️ **화면에 뜬 셀렉터를 전부 눌렀다** — `
+    + SELS.map((s) => `${s} ${seen[s] ? `뜸/눌림 ${seen[s]}/${tapped[s]}` : "안 뜸"}`).join(" · ")
+    + (SEL_COVER.length
+      ? `\n     🔴 **떴는데 한 번도 안 눌린 것: ${SEL_COVER.join(" · ")}**`
+        + `\n        이 자리는 안 눌러도 타임아웃·폴백이 흐름을 끝까지 밀어서 **초록불이 됩니다.**`
+        + `\n        MOMENT_SEL에 빠졌거나, 눌렀는데 disabled였어요`
+      : ""));
+  /* 🚧 **안 뜬 종은 「통과」가 아니라 「이번 판에 안 나왔다」입니다.** 조용히 넘기지 않아요 —
+   *    포지션·난수에 따라 네 종이 다 나오지는 않습니다. 🧱은 defend 카드에만 붙어요. */
+  const NEVER = SELS.filter((s) => seen[s] === 0);
+  if (NEVER.length) {
+    console.log(`🚧 이번 판에 안 나온 미니게임 자리: ${NEVER.join(" · ")}`
+      + ` — **검증됨이 아니라 미도달**입니다 (포지션·난수 탓이에요).`
+      + ` 그 자리는 \`minigame-tap-test.js\`·\`block-test.js\`가 따로 지킵니다`);
+  }
   check(opened,
     `⚽ 경기하러 가기 → 순간 카드 경기에 도달했다 (🪑 벤치인 주 ${benched}회 건너뜀 · ${rounds + 1}라운드째`
     + `${opened ? "" : ` · 마지막 화면 ${active()} · 버튼 ${goBtn() ? "있음" : "없음"}`})`);

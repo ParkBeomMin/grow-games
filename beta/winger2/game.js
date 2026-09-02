@@ -1662,7 +1662,9 @@ function goSchool(id, after) {
   if (!window.WingerTown) { after(); return; }   // 스크립트가 안 왔으면 조용히 넘어가요
   if (WingerTown.playedStage(id)) { after(); return; }
   show("screen-town");
-  WingerTown.openStage(id, { pos: chosenPos, foot: chosenFoot, origin: chosenOrigin }, after);
+  /* 🏟️ `name`은 **경기 중계 줄에만** 씁니다 (*"⚽ 골!! ○○, 그물을 흔듭니다!"*).
+   * 🔒 판정에도 편차 `d`에도 안 닿아요 — 화면이 그릴 때 이스케이프됩니다(`W2Scene.esc`). */
+  WingerTown.openStage(id, { pos: chosenPos, foot: chosenFoot, origin: chosenOrigin, name: chosenName }, after);
 }
 /* 🔴 초등부에는 `chosenPos`가 아직 없습니다 — **그게 맞아요.**
  *    *"어릴 땐 다 같이 공만 쫓아다녔어요."* town.js가 미니게임 대표 3종으로 돕니다.

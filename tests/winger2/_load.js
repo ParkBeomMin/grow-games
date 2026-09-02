@@ -508,7 +508,59 @@ async function passArc(W, press, opt) {
   return { stages, cards: stages.length, screens, early };
 }
 
+
+/* ═══════════════════════════════════════════════════════════════════════
+ * 🖥️ **진짜 DOM 위의 `W2Moment`** — 미니게임 넷을 실기기 순서로 눌러 보는 자리
+ *
+ * `loadMoment()`는 `document.getElementById → null`만 있는 가짜 창이라 화면을 못 그려요.
+ * 여기서는 jsdom을 띄우고 `engine.js` → `winger-moment.js`를 **디스크 그대로** 싣습니다.
+ *
+ * 🔴 **`press()`가 세 이벤트를 같은 요소에 보내면 이중 탭이 재현이 안 됩니다.**
+ *    실제 브라우저는 손 뗄 때 `click`을 **「그 지점에 지금 있는 요소」**에게 보냅니다 —
+ *    `pointerdown`이 화면을 갈아치웠으면 click은 **새로 생긴 버튼**에게 가요.
+ *    그 경로를 재현하는 것이 `pressRetarget(oldEl, newSel)`입니다.
+ * ═══════════════════════════════════════════════════════════════════════ */
+function momentDom(muts) {
+  const { JSDOM } = require("/workspace/grow-games/tests/cloud/jsdom.js");
+  let mom = MSRC;
+  for (const [re, rep] of muts || []) {
+    const before = mom;
+    mom = mom.replace(re, rep);
+    if (mom === before) throw new Error(`winger-moment.js에 변이가 안 걸렸어요 — ${re}`);
+  }
+  const dom = new JSDOM("<!doctype html><body><div id=host></div></body>",
+    { runScripts: "outside-only", pretendToBeVisual: true });
+  const W = dom.window;
+  W.eval(fs.readFileSync(path.join(PAGE_DIR, "engine.js"), "utf8"));
+  W.eval(mom);
+  return W;
+}
+
+/* 🖱️ 실기기 순서 그대로 — pointerdown → pointerup → click 셋 다.
+ *    하나만 보내던 검사가 24개 케이스를 놓친 전례가 있어요. */
+function pressDom(W, el) {
+  for (const t of ["pointerdown", "pointerup", "click"]) {
+    const e = new W.Event(t, { bubbles: true, cancelable: true });
+    e.clientX = 10; e.clientY = 10;
+    el.dispatchEvent(e);
+  }
+}
+
+/* 🖱️🖱️ **브라우저의 click 재타겟** — 이중 탭이 진짜로 나는 경로예요.
+ *    `pointerdown`/`pointerup`은 **옛 요소**에, `click`은 **그 자리에 새로 생긴 요소**에.
+ *    `newSel`을 못 찾으면 던집니다 — 조용히 아무 일도 안 일어나면 초록불이 되니까요. */
+function pressRetarget(W, oldEl, root, newSel) {
+  for (const t of ["pointerdown", "pointerup"]) {
+    oldEl.dispatchEvent(new W.Event(t, { bubbles: true, cancelable: true }));
+  }
+  const fresh = root.querySelector(newSel);
+  if (!fresh) throw new Error(`재타겟할 새 요소를 못 찾았어요 — ${newSel}`);
+  fresh.dispatchEvent(new W.Event("click", { bubbles: true, cancelable: true }));
+  return fresh;
+}
+
 module.exports = { load, mutsOK, xiOf, xiAll, statsOf, play, spreadFor, SRC, ENGINE,
   bootPage, pageMutsOK, PAGE_DIR, townAuto, passTown,
   wait, tapFoot, pickOrigin, passStage, passEarly, passArc,
-  loadMoment, momentMutsOK, MSRC, MOMENT };
+  loadMoment, momentMutsOK, MSRC, MOMENT,
+  momentDom, pressDom, pressRetarget };

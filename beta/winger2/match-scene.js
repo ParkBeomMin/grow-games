@@ -1,7 +1,10 @@
 /* 🎬 ⚽ 더 윙어 II — 순간 카드 경기 화면 (연출 전용)
  *
  *   window.W2Scene — career.js의 runV2Match가 부르는 이름 그대로예요
- *     mount(host, { home, away, myName })   상단 고정 스코어보드 + 아래 피드를 깝니다
+ *     mount(host, { home, away, myName, lite })   상단 고정 스코어보드 + 아래 피드를 깝니다
+ *       lite  🏫 학교 대항전용 — 90분 경기가 아니라 **한 단계짜리 대항전**이라
+ *             🅶🅾🅰🅻 배너 · 🏆 결승골 축포 · 🎉 Fx · ⌨️ 타이핑을 안 붙입니다.
+ *             스코어보드 · 시계 · 피드 · 플래시 · 흔들림은 그대로예요.
  *     momentSlot()        → HTMLElement     🔥 내 순간의 미니게임이 들어갈 자리
  *     push(card)          → Promise         카드 1장. 딜레이·타이핑·골 연출이 다 여기 있어요
  *     summary(result)                       사후 집계 ("이 경기의 내 순간 N회")
@@ -42,10 +45,33 @@ window.W2Scene = (() => {
     try { return window.matchMedia("(prefers-reduced-motion: reduce)").matches; } catch { return false; }
   };
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  /* ---------- 🎲 연출 전용 난수 ----------
+   * 🔒 **보여주기만 하는 굴림은 판정 난수원을 쓰지 않습니다** (설계 101번 §3-4).
+   *    값이 아무 데도 안 가도 **소비량으로 판정에 결합**해요 — `Math.random()`을 쓰면
+   *    타이핑 글자 수(=카드 성적에 따라 달라짐)만큼 뒤 카드의 굴림이 밀립니다.
+   *    🦶 주발만 뒤집어 견주는 검사(youth-moment B-0)가 실제로 그렇게 갈렸어요.
+   * 🔑 그래서 여기서는 **자기 상태만 돌리는 32bit 카운터**를 씁니다 — Math.random도,
+   *    엔진의 `_rng`도 한 번도 안 부릅니다. 보이는 것(40~60ms 흔들림)은 그대로예요. */
+  let _fx = 0x9e3779b9;
+  function fxRnd() {
+    _fx = (_fx + 0x6d2b79f5) | 0;
+    let t = Math.imul(_fx ^ (_fx >>> 15), 1 | _fx);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  }
   const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) =>
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
   let S = null;   // 지금 경기의 상태. mount()가 새로 만듭니다
+
+  /* 🔁 **화면이 갈린 뒤에는 이어서 그리지 않습니다.**
+   * 딜레이·타이핑을 기다리는 사이에 다음 경기가 `mount()`를 부르면 `S`가 새로 만들어져요.
+   * 그때 옛 카드가 이어 그리면 **지난 경기의 줄이 새 피드에 섞입니다.**
+   * 🚨 🏫 학교 아크(초→중→고)에서 실제로 났어요 — **초등 마지막 카드가 중등 피드 맨 위에**
+   *    떴고, 시계도 60'으로 되돌아갔습니다. 프로 경기에서도 다음 경기가 바로 이어지면
+   *    같은 자리예요. **await 뒤에는 반드시 `alive(my)`를 확인하세요.** */
+  const alive = (my) => S === my;
 
   /* ---------- 무엇이 걸렸는지 (설계 §5-1) ----------
    * 같은 미니게임이 결정으로도 전개로도 열려요. 결과가 다른 건 괜찮지만
@@ -151,13 +177,15 @@ window.W2Scene = (() => {
 
   /* ---------- 타이핑 (순간 카드만) ---------- */
   async function type(body, text) {
-    if (S.fast || reduced()) { body.textContent = text; return; }
+    /* 🏫 lite(학교)는 타이핑을 안 붙입니다 — 카드가 여덟 장이라 단계마다 몇 초씩 붙어요.
+     * 밀도의 차이(②)는 프로 경기의 것이고, 학교는 카드 **전부가** 🔥 내 순간입니다. */
+    if (S.fast || S.lite || reduced()) { body.textContent = text; return; }
     const card = body.parentNode;
     card.classList.add("w2-typing");
     body.textContent = "";
     for (let i = 0; i < text.length; i++) {
       body.textContent += text[i];
-      await wait(40 + Math.random() * 20);         // 40~60ms/자
+      await wait(40 + fxRnd() * 20);               // 40~60ms/자 — 🔒 연출 전용 난수원
     }
     card.classList.remove("w2-typing");
   }
@@ -178,8 +206,11 @@ window.W2Scene = (() => {
         setTimeout(() => S.root.classList.remove(shake), 400);
       }
     }
-    // Fx는 **장식만** 맡깁니다 — reduced에서 통째로 안 떠도 정보가 안 사라지게요
-    if (window.Fx) {
+    /* Fx는 **장식만** 맡깁니다 — reduced에서 통째로 안 떠도 정보가 안 사라지게요.
+     * 🏫 lite에서는 통째로 안 부릅니다. 축포가 학교에 안 어울리기도 하지만,
+     * 🔴 **`Fx.burst`가 입자마다 `Math.random()`을 씁니다** — 골이 들어갔을 때만 부르면
+     *    난수 소비량이 카드 성적을 타서 뒤 카드 순서가 어긋나요(위 fxRnd 주석). */
+    if (window.Fx && !S.lite) {
       if (kind === "mine" || kind === "decisive") Fx.burst(S.topEl, "⚽", 14);
       if (kind === "decisive") Fx.confetti({ level: "big", emojis: ["🏆", "⚽", "✨"] });
     }
@@ -204,7 +235,7 @@ window.W2Scene = (() => {
    * 알 수 있어요 — 드라이버가 따로 뭘 넘기지 않아도 됩니다.
    * 카드가 열리는 순간에 터뜨리면 안 돼요: 1-0 뒤에 2-2가 되면 결승골이 아니거든요. */
   function celebrateDecisive() {
-    if (S.decisiveDone) return;
+    if (S.lite || S.decisiveDone) return;   // 🏫 학교엔 결승골이 없어요 (단계 하나짜리 대항전)
     const hit = S.myGoals.some((c) => c.decisive);
     if (!hit) return;
     S.decisiveDone = true;
@@ -262,7 +293,7 @@ window.W2Scene = (() => {
       root: q(".w2-scene"), topEl: q(".w2-top"), scoreEl: q(".w2-score"),
       clockEl: q(".w2-clock"), mineEl: q(".w2-mine-count"),
       flowEl: q(".w2-flow-mark"), feed: q(".w2-feed"),
-      h: 0, a: 0, mine: 0, fast: false, myName: c.myName || "나",
+      h: 0, a: 0, mine: 0, fast: false, lite: !!c.lite, myName: c.myName || "나",
       slot: null, pending: null, myGoals: [],
     };
     /* 킥오프 줄을 여기서 만들지 않습니다 — 엔진이 `kind: "kick"` 카드로 줘요.
@@ -273,6 +304,7 @@ window.W2Scene = (() => {
   /* 카드 1장. mine 카드는 push()로 열지 않고 openMoment()/closeMoment()를 씁니다. */
   async function push(card) {
     if (!S || !card) return;
+    const my = S;
     /* 🔥 내 순간 카드는 드라이버가 두 번 부릅니다 (위 머리말).
      *   1) 판정 전 — 무엇이 걸렸는지 + 미니게임 자리
      *   2) 판정 뒤 — 결과 줄 + 골 연출
@@ -281,9 +313,11 @@ window.W2Scene = (() => {
       if (S.pending === card) return closeMoment(card);
       if (card.judge == null) return openMoment(card);
       await openMoment(card);
+      if (!alive(my)) return;
       return closeMoment(card);
     }
     await wait(delayOf());
+    if (!alive(my)) return;
     setClock(card.min);
     setFlow(card);
 
@@ -309,7 +343,7 @@ window.W2Scene = (() => {
       `<span class="w2-min">${esc(min)}</span><span class="w2-body">${esc(card.text || resultLine(card))}</span>`));
 
     if (fx) {
-      if (fx === "mine" || fx === "decisive") banner(bannerText(card));
+      if (!S.lite && (fx === "mine" || fx === "decisive")) banner(bannerText(card));
       goalFx(fx);
       if (!S.fast && !reduced()) await wait(320);
     } else if (card.kind === "end") {
@@ -331,18 +365,25 @@ window.W2Scene = (() => {
    * 미니게임은 엔진이 그 자리에 띄우고, 판정을 **엔진에** 넘깁니다. */
   async function openMoment(card) {
     if (!S) return null;
+    const my = S;
     await wait(delayOf());
+    if (!alive(my)) return null;
     setClock(card.min);
     setFlow(card);
     setScore(card.score);
     S.pending = card;
     S.mine += 1;
-    S.mineEl.hidden = false;
-    S.mineEl.textContent = `🔥 내 순간 ${S.mine}회`;
+    /* 🏫 lite(학교)에서는 안 셉니다 — **카드가 전부 내 순간**이라 "2판 중 내 순간 2회"가
+     * 아무 말도 안 해요. 프로 경기에서만 뜻이 있는 숫자입니다(설계 §5-2). */
+    if (!S.lite) {
+      S.mineEl.hidden = false;
+      S.mineEl.textContent = `🔥 내 순간 ${S.mine}회`;
+    }
 
     const c = add(el("w2-card mine",
       `<span class="w2-min">${esc(card.min > 90 ? `90+${card.min - 90}'` : card.min + "'")}</span><span class="w2-body"></span>`));
     await type(c.querySelector(".w2-body"), stakeLine(card));
+    if (!alive(my)) return null;
 
     return momentSlot();
   }
@@ -350,6 +391,7 @@ window.W2Scene = (() => {
   /* 판정 뒤. **card.result는 엔진이 이미 채워 둔 값**이어야 합니다. */
   async function closeMoment(card) {
     if (!S) return;
+    const my = S;
     S.pending = null;
     if (S.slot) { S.slot.remove(); S.slot = null; }
     setScore(card.score);
@@ -359,9 +401,10 @@ window.W2Scene = (() => {
       `<span class="w2-min">${esc(card.min > 90 ? `90+${card.min - 90}'` : card.min + "'")}</span><span class="w2-body">${esc(card.text || resultLine(card))}</span>`));
     const fx = fxOf(card);
     if (fx) {
-      if (fx === "mine" || fx === "decisive") banner(bannerText(card));
+      if (!S.lite && (fx === "mine" || fx === "decisive")) banner(bannerText(card));
       goalFx(fx);
       if (!S.fast && !reduced()) await wait(320);
+      if (!alive(my)) return;
     }
   }
 
