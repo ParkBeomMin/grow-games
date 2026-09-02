@@ -72,8 +72,10 @@ const MUT = {
     '      state.score += p + ((GOAL_BY[c.key] || {})[r] === "us" ? 1 : 0);']] },
   /* ⓑ 🎬 **끄는 줄** — 세대가 갈린 쓰기를 막는 자리. 소유자는 `match-scene.js`예요.
    *    🔴 engineer가 110번에서 `town.js`의 겹치는 확인을 **지우고** 여기 한 줄로 모았습니다
-   *       (같은 결과를 내는 줄이 둘이면 하나를 지워도 증상이 0장 — CLAUDE.md 「방어가 겹침」). */
-  "M-F": { "match-scene.js": [[/    if \(g != null && g !== _gen\) return;\n/, ""]] },
+   *       (같은 결과를 내는 줄이 둘이면 하나를 지워도 증상이 0장 — CLAUDE.md 「방어가 겹침」).
+   *    🔬 111번에서 **세는 자리를 그 갈래 안**에 넣었어요 — 밖에 조건을 한 줄 더 쓰면
+   *       끄는 줄을 지워도 `drops`가 계속 올라가서 **「>0 ↔ 0」 방향이 사라집니다.** */
+  "M-F": { "match-scene.js": [[/    if \(g != null && g !== _gen\) \{ _drops \+= 1; return; \}\n/, ""]] },
   /* 🐢 **계측 도구입니다 — 변이가 아니에요.** 그리기를 늦춰 「단계가 갈릴 때 아직 안 그려진
    *    카드」를 확실히 만듭니다. 🔑 **양쪽 팔에 똑같이** 걸어서 비교를 안 기울입니다.
    *    ⚠️ 지연을 **끄는 줄보다 앞**에 넣습니다 — 그래야 가드가 「쓰기 직전」의 세대를 보고,
@@ -166,7 +168,11 @@ async function arc(seed, muts, cadence) {
   await stage("h");
   if (back) back();
   const T = W.WingerTown;
-  const out = { stages, rows: T.rows().map((r) => ({ stage: r.stage, key: r.key, res: r.res })),
+  /* 🔬 **끄는 줄이 몇 장을 껐는가** — 창을 닫기 전에 읽습니다.
+   *    누적이고 `mount()`·`destroy()`가 0으로 안 되돌려요(111번 engineer 결정).
+   *    창마다 새로 뜨니 여기서는 **이 아크의 총합**입니다. */
+  const drops = (W.W2Scene && W.W2Scene._t && W.W2Scene._t.drops) ? W.W2Scene._t.drops() : null;
+  const out = { stages, drops, rows: T.rows().map((r) => ({ stage: r.stage, key: r.key, res: r.res })),
     score: T.score(), cards: T.cards(), dev: T.deviation() };
   W.close();
   return out;
@@ -284,7 +290,7 @@ const finOf = (txt) => {
         const r = await arc(sd, muts, cad);
         const n = ["e", "m", "h"].reduce((a, id) =>
           a + r.stages[id].seen.reduce((b, snap) => b + snap.length, 0), 0);
-        out.push({ sd, cad, leak: leaks(r), n });
+        out.push({ sd, cad, leak: leaks(r), n, drops: r.drops });
       }
       return out;
     };
@@ -297,24 +303,42 @@ const finOf = (txt) => {
         : ""));
 
     /* 🔑 **「아무 일도 안 일어났다」를 통과로 세지 않습니다.** B-1은 *"남의 분이 없다"*를
-     *    재는 문장이라 **피드가 통째로 비어 있어도 참**이에요.
-     * 🔴 처음엔 **마지막 스냅만** 셌다가 걸렸습니다 — 60ms에서는 마지막 스냅이 0줄이거든요
-     *    (그리기 +260ms라 아크가 먼저 끝나요). 그런데 B-1은 **스냅 전부**를 훑습니다.
-     *    🔑 그래서 **B-1이 실제로 들여다본 분의 개수**를 셉니다 — 재는 것과 세는 것을 맞춰요. */
-    const scanned = good.map((x) => x.n);
-    check(scanned.every((n) => n > 0),
-      `B-2. 🔑 B-1이 **실제로 분을 들여다봤다** — 판마다 훑은 분 개수 ${scanned.join(" · ")}`
-      + (scanned.every((n) => n > 0) ? "" :
-        `\n     🔴 0인 판이 있어요 — 그 판에서 B-1은 **아무것도 안 지킵니다**`));
+     *    재는 문장이라 **경합이 아예 안 일어나도 참**이에요.
+     *
+     * 🔬 111번부터 그걸 **추측이 아니라 수로** 봅니다 — `W2Scene._t.drops()`는
+     *    `push`가 세대 불일치로 되돌아간 횟수예요. **끄는 줄 안에서** 세니까
+     *    끄는 줄을 지우면 0이 됩니다(방향이 반대라 변이 검증이 저절로 따라옵니다).
+     *
+     * 🔒 **문턱은 `> 0`입니다. 값을 박지 마세요** — 기계마다 다릅니다
+     *    (engineer 실측 4 · 여기 실측 5~6). 박으면 그 순간 헛빨간불이 나요.
+     *
+     * 🔑 예전엔 「B-1이 훑은 분의 개수」로 갈음했는데, 그건 **지연·간격·분 집합** 셋에
+     *    기대는 대리값이었어요. `drops`는 셋 다 안 탑니다. 분 개수는 참고로만 찍어요. */
+    const dr = good.map((x) => x.drops);
+    const noCount = dr.some((d) => d == null);
+    check(!noCount && dr.every((d) => d > 0),
+      `B-2. 🔬 그 판들에서 **끄는 줄이 실제로 껐다** — 판마다 \`drops\` ${dr.join(" · ")} (문턱 > 0)`
+      + `\n     참고: B-1이 훑은 분 ${good.map((x) => x.n).join(" · ")}`
+      + (noCount ? `\n     🔴 \`W2Scene._t.drops\`가 없어요 — 계수기가 빠졌는지 보세요` : "")
+      + (!noCount && dr.some((d) => d === 0)
+        ? `\n     🔴 0인 판은 **경합이 안 일어난** 겁니다 — 그 판에서 B-1은 아무것도 안 지켜요` : ""));
 
     /* 🔴 변이 — 끄는 줄만 되돌리면 빨간불인가 */
     const mut = await run({ "match-scene.js": [...MUT.SLOW["match-scene.js"], ...MUT["M-F"]["match-scene.js"]] });
     const caught = mut.filter((x) => x.leak.length);
+    const zeroed = mut.filter((x) => x.drops === 0);
     check(caught.length === mut.length,
       `변이-F. 🔴 \`match-scene.js\`의 **끄는 줄**을 되돌리면 → B-1이 빨간불 (${caught.length}/${mut.length}판)`
       + `\n     ${caught.slice(0, 3).map((x) => `시드${x.sd}/${x.cad}ms ${x.leak.join(",")}`).join(" · ")}`
       + (caught.length === mut.length ? "" :
         `\n     🔴 다 안 잡혔어요 — 간격이 이 판에서 안 맞습니다. B-1은 지금 **믿을 수 없어요**`));
+    /* 🔬 계수기의 **방향**도 같이 뒤집혀야 합니다 — 세는 자리가 끄는 갈래 **안**이라
+     *    줄을 지우면 0이 돼요. 밖으로 새어 나가 있으면 여기서 걸립니다. */
+    check(zeroed.length === mut.length,
+      `변이-Fb. 🔬 그때 \`drops\`가 **0으로 뒤집힌다** → B-2도 빨간불 (${zeroed.length}/${mut.length}판 · ${mut.map((x) => x.drops).join(" ")})`
+      + (zeroed.length === mut.length ? "" :
+        `\n     🔴 끄는 줄을 지웠는데도 \`drops\`가 올라갑니다 — **세는 자리가 그 갈래 밖**이에요.`
+        + ` 그러면 B-2의 「>0 ↔ 0」 방향이 사라져 아무것도 안 지킵니다`));
   }
 
   /* ══════════ 🚧 B-3. `career.js`의 프로 경기 루프는 **아직 세대를 안 넘깁니다** ══════════
