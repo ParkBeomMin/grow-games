@@ -190,8 +190,6 @@ window.WingerTown = (() => {
   /* ⏱️ 카드가 놓이는 분 — n장을 90분에 고르게 (2장이면 30·60, 3장이면 23·45·68).
    * 🔒 결정적입니다. 🔴 여기에 흔들림을 주고 싶어지면 위 🔴 주석을 다시 읽으세요. */
   const minAt = (i, n) => Math.round((90 * (i + 1)) / (n + 1));
-  /* 🎬 단계가 바뀌면 앞 단계의 남은 연출을 버립니다 — 피드가 새 무대에 섞이면 안 돼요. */
-  let sceneGen = 0;
 
   /* ══════════════════════════════════════════════════════════════════
    * 📣 **제안 등급 표 — `spot`에 곱하는 한 겹입니다** (설계 85번 §5-1)
@@ -574,14 +572,19 @@ window.WingerTown = (() => {
     /* 🏟️ 이 단계의 스코어. 🔒 **단계마다 0에서 시작합니다** — 초·중·고는 각각 다른 경기예요.
      *    🔒 세이브에 안 넣습니다. 화면에만 사는 값이고, 안 넣으니 마이그레이션도 없습니다. */
     let hg = 0, ag = 0;
-    sceneGen += 1;
-    const myGen = sceneGen;
+    /* 🎬 이 단계가 그리는 **세대**. 🔒 소유자는 `match-scene.js`예요 —
+     *    `mount()`가 올리고, 세대가 갈렸는지는 `push`가 **쓰기 직전에** 봅니다.
+     *    ⚠️ 여기서 또 확인하지 마세요: 같은 결과를 내는 줄이 둘이면 한쪽을 지워도
+     *    증상이 0장이라 변이가 아무것도 안 잡습니다 (match-scene.js의 그 표 참고).
+     *    🔴 화면이 낡아 `gen()`이 없으면 `null`이라 **옛 동작 그대로** 돕니다. */
+    let myGen = null;
     if (Scene) {
       Scene.mount(sceneHost, {
         home: HOME_NAME[stage.id] || "우리 학교",
         away: oppName(o.origin, sIdx, stage.id),
         myName, lite: true,
       });
+      myGen = Scene.gen ? Scene.gen() : null;
       /* 🤖 자동 진행이면 판정이 **즉시** 나와요 — 연출만 짧게 해서 피드가 안 밀리게 합니다.
        *    (⏩와 같은 자리예요: 개입이 아니라 연출만 짧아집니다) */
       if (autoMiniOn()) Scene.fast();
@@ -592,14 +595,17 @@ window.WingerTown = (() => {
      * 🔑 그리고 **판정값을 큐 안에서** 붙입니다 — 밖에서 미리 붙이면 첫 task가 돌 때
      *    이미 `judge != null`이라 `push`가 열기+닫기를 **한 번에** 해버리고,
      *    두 번째 task가 **같은 줄을 또** 그려요.
-     * ♻️ 단계가 바뀌면(`sceneGen`) 남은 것은 버립니다. */
+     * ♻️ 단계가 바뀌면 남은 것은 **화면이** 버립니다 — 세대(`myGen`)를 같이 넘겨요.
+     *    🔴 큐가 도는 사이에 다음 단계가 `mount()`를 부를 수 있는데, 그때 남은 카드가
+     *    새 피드에 그려지면 **초등의 `30'`이 중등 피드 맨 위에** 뜹니다.
+     *    🔒 그 확인을 여기서 하면 늦어요 — 확인과 그리기 사이가 벌어지면 그대로 샙니다.
+     *    **쓰기 직전에** 보는 `push(c, myGen)`이 그 자리예요. */
     let queue = Promise.resolve();
     const draw = (c, done) => {
       if (!Scene) return;
       queue = queue.then(() => {
-        if (myGen !== sceneGen) return null;
         if (done) { c.judge = done.judge; c.result = done.result; c.text = done.text; c.score = done.score; }
-        return Scene.push(c);
+        return Scene.push(c, myGen);
       }).catch(() => { /* 화면이 이미 닫혔어요 */ });
     };
     let live = null;

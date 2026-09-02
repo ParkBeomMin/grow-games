@@ -70,8 +70,16 @@ const MUT = {
   /* ⓐ 🏟️ 스코어가 편차 d로 샙니다 */
   "M-D": { "town.js": [[/      state\.score \+= p;/,
     '      state.score += p + ((GOAL_BY[c.key] || {})[r] === "us" ? 1 : 0);']] },
-  /* ⓑ 화면이 갈린 뒤에도 옛 단계의 카드가 피드로 들어옵니다 */
-  "M-F": { "town.js": [[/        if \(myGen !== sceneGen\) return null;\n/, ""]] },
+  /* ⓑ 🎬 **끄는 줄** — 세대가 갈린 쓰기를 막는 자리. 소유자는 `match-scene.js`예요.
+   *    🔴 engineer가 110번에서 `town.js`의 겹치는 확인을 **지우고** 여기 한 줄로 모았습니다
+   *       (같은 결과를 내는 줄이 둘이면 하나를 지워도 증상이 0장 — CLAUDE.md 「방어가 겹침」). */
+  "M-F": { "match-scene.js": [[/    if \(g != null && g !== _gen\) return;\n/, ""]] },
+  /* 🐢 **계측 도구입니다 — 변이가 아니에요.** 그리기를 늦춰 「단계가 갈릴 때 아직 안 그려진
+   *    카드」를 확실히 만듭니다. 🔑 **양쪽 팔에 똑같이** 걸어서 비교를 안 기울입니다.
+   *    ⚠️ 지연을 **끄는 줄보다 앞**에 넣습니다 — 그래야 가드가 「쓰기 직전」의 세대를 보고,
+   *       가드를 약하게 만드는 게 아니라 **가장 불리한 조건**에서 시험하는 게 됩니다. */
+  "SLOW": { "match-scene.js": [[/  async function push\(card, g\) \{/,
+    "  async function push(card, g) {\n    await new Promise((r) => setTimeout(r, 260));"]] },
   /* ⓒ 단계 스코어가 0으로 안 돌아갑니다 */
   "M-G": { "town.js": [[/    let hg = 0, ag = 0;/, "    let hg = state.cards, ag = 0;"]] },
   /* 🔩 A-2 전용 — **판정은 그대로 두고 승패만 뒤집습니다.** 못을 정면으로 재는 자리예요 */
@@ -104,7 +112,12 @@ async function settle(D) {
   return prev;
 }
 
-async function arc(seed, muts) {
+/* 🔑 `cadence`를 주면 **고정 간격**으로 누릅니다 (정착을 안 기다려요).
+ * 🔴 **경합을 재려면 반드시 고정 간격이어야 합니다** — `settle()`로 큐를 다 비우면
+ *    경합 자체가 안 일어나서 끄는 줄을 지워도 **0/5로 아무것도 안 잡혀요**
+ *    (engineer 110번이 같은 자리를 짚었습니다. 스킬의 「settle()을 두 번 같으면
+ *    안정으로 재지 마세요」와 같은 계열이에요). */
+async function arc(seed, muts, cadence) {
   const W = bootPage(muts ? { muts } : undefined);
   seedBoth(W, seed);
   const D = W.document;
@@ -121,19 +134,21 @@ async function arc(seed, muts) {
   const cur = () => (D.querySelector(".screen.active") || {}).id;
   const stages = {};
   async function stage(id) {
-    const rec = { start: null, mins: [], fin: "" };
-    await settle(D);
+    const rec = { start: null, mins: [], seen: [], fin: "" };
+    if (cadence == null) await settle(D); else await wait(cadence);
     rec.start = mins().length;                        // 🔑 단계가 열릴 때 피드는 비어 있어야 해요
     for (let g = 0; g < 12; g++) {
       if (cur() !== "screen-town") break;
       const b = D.getElementById("btn-town-next");
       if (!b || b.disabled || b.classList.contains("hidden")) break;
-      await settle(D);
+      if (cadence == null) await settle(D); else await wait(cadence);
       rec.mins = mins();
+      rec.seen.push(mins());
       press(b, "🏫 다음");
     }
-    await settle(D);
+    if (cadence == null) await settle(D); else await wait(cadence);
     rec.mins = mins();
+    rec.seen.push(mins());
     const f = D.querySelector(".town-final");
     rec.fin = f ? String(f.textContent) : "";
     stages[id] = rec;
@@ -222,45 +237,110 @@ const finOf = (txt) => {
         `\n     🔴 승패가 안 갈렸으면 A-2는 "원래 같은 값"을 재고 있어요 — 껍데기입니다`));
   }
 
-  /* ══════════ 🚧 ⓑ B. 피드 섞임 — **지금 형태로는 검증 불가입니다** ══════════
+  /* ══════════ ⓑ B. 세대가 갈리면 옛 카드가 새 피드에 안 써진다 ══════════
    *
-   * 🔴 **초록불로 넣지 않았습니다.** 재 봤더니 이 자리는 *"검사를 쓰면 되는 문제"*가
-   *    아니라 **경합(race)**이라, 어떤 문턱을 골라도 둘 중 하나가 됩니다:
+   * 🔄 **이 자리는 한 번 「검증 불가」로 접었다가 다시 폈습니다.** 109번에서는 잡히는 창이
+   *    60ms 하나뿐이었고, 창을 넓히면 **정상 코드도 샜어요**(가드가 안 닿는 둘째 경로).
+   *    engineer가 110번에서 소유자를 `match-scene.js`의 `push` 맨 앞 **한 줄**로 모으고
+   *    `town.js`의 겹치는 확인을 지운 뒤, **다시 재 보니 갈립니다:**
    *
-   *   | 누르는 간격 | 정상 | M-F(가드 제거) |
-   *   |---|---|---|
-   *   | 40ms  | ✔ | **✔ (안 잡힘)** |
-   *   | 60ms  | ✔ | ❌ 잡힘 |
-   *   | 90ms  | ✔ | **✔ (안 잡힘)** |
-   *   | 120ms | ✔ | **✔ (안 잡힘)** |
+   *   | 그리기 +260ms · 시드 5벌 | 누수(고침) | 누수(되돌림) | 기준선이 훑은 분 |
+   *   |---|---|---|---|
+   *   | 120ms | **0/5** | **5/5** | 5개 |
+   *   | 150ms | **0/5** | **5/5** | 7개 |
+   *   | 200ms | **0/5** | **5/5** | 10~12개 |
    *
-   *   🔑 **잡히는 창이 60ms 하나뿐이고 앞뒤로 30ms면 사라집니다.** 이걸 그대로 넣으면
-   *      느린 판에서는 아무것도 안 지키고(초록불), 빠른 판에서는 우연히 빨간불이 떠요 —
-   *      이 저장소가 「가끔 빨간불 뜨는 검사」로 배워 안 보게 되는 바로 그 형태입니다.
+   *   겹치는 구간이 **없습니다.** 그래서 이제 초록/빨강으로 넣습니다.
+   *   ⚠️ **40ms·60ms는 뺐습니다** — 40ms는 양쪽 다 0/5(경합이 아예 안 남),
+   *      60ms는 고친 코드가 **분을 한 톨도 안 그려서**(0줄) 기준선이 공짜로 참이 돼요.
+   *      **변이가 잡히는 것만으로는 부족합니다 — 기준선도 뭔가를 봐야 합니다.**
    *
-   * 🔬 창을 넓히려고 그리기를 260ms 늦춰 봤더니(`Scene.push` 앞에 지연) **정상 코드도
-   *    샙니다** — 시드 5벌 전부, 두 간격 전부:
+   * 📏 **재는 법: 「남의 분」이 섞였는가.** 🏫 초등부(n=2)의 분은 **30·60**,
+   *    중·고등부(n=3)는 **23·45·68**이에요. 중등 피드의 `30'`은 **초등 카드**입니다.
+   *    🔒 단조 증가로 안 재는 이유: m→h 누수는 분 집합이 같아 **순서로는 안 보입니다.**
    *
-   *     정상(느림 없음)   e[30 30 60 60] m[23 23 45 45 68 68] h[23 23 45 45 68 68]  ✔
-   *     정상 + 느린 그리기 e[30]          m[**30 30** 23]        h[23 23 23]          ❌
-   *     M-F + 느린 그리기 e[30]          m[**30 30** 23]        h[**60** 23 23 23]   ❌
-   *
-   *   🏫 초등부(n=2)의 분은 30·60, 중·고등(n=3)은 23·45·68이에요. **중등 피드의 30'은
-   *      초등 카드입니다.** `town.js`의 `if (myGen !== sceneGen) return null;`은
-   *      **아직 시작 안 한** 그리기만 버려요 — 이미 `Scene.push` 안으로 들어간 것은
-   *      `mount()`가 새로 깐 피드에 그대로 씁니다. **가드가 닿지 않는 두 번째 경로**예요.
-   *
-   * 📮 그래서 **engineer에게 넘깁니다** — 검사가 아니라 이음매가 필요합니다:
-   *    `W2Scene.push`가 **쓰기 직전에** 세대를 다시 보게 하면(또는 `mount()`가 옛 세대의
-   *    남은 그리기를 무효로 만들면) 경합이 사라지고, 그때 이 자리는 **결정적으로**
-   *    검사할 수 있습니다.
-   * 📌 그 이음매가 생기면 **여기에 B를 채우고 이 🚧를 지우세요.**
-   *    (재현 스크립트: `scratchpad/insp-raf/probe-slow.js` — 느림 지연 + 가드 제거를 켜고 끕니다)
-   *
-   * ⚠️ **「검증 불가」를 「통과」에 섞지 않습니다.** 아래 한 줄은 종료 코드를 안 바꿔요. */
+   * 🌍 이 계약이 서 있는 세계: 「단계마다 분이 **다르게** 배치되는 세계」예요
+   *    (`minAt(i,n) = round(90(i+1)/(n+1))`). 초·중·고의 카드 수가 **같아지면**
+   *    분 집합이 겹쳐 이 검사가 눈이 멉니다 — 그때는 세대 카운터로 갈아타세요(§B-3). */
   {
-    console.log("🚧 B. 🎬 피드 섞임(ⓑ)은 **경합이라 검증 불가**입니다 — 잡히는 창이 60ms 하나뿐이고,");
-    console.log("     창을 넓히면 정상 코드도 샙니다(가드가 안 닿는 둘째 경로). engineer에게 넘겼어요.");
+    /* 🔒 검사에 박은 간격입니다. **60ms는 뺐어요** — 거기서는 고친 코드가
+     *    분을 **한 톨도 안 그려서**(0줄) B-1이 「남의 분이 없다」를 공짜로 참으로 만듭니다.
+     *    변이는 60ms에서도 잡히지만, **기준선이 공짜면 그 판은 아무것도 안 지켜요.**
+     *    120·200ms는 기준선이 5~12개를 실제로 훑고도 누수 0입니다 (B-2가 매번 확인). */
+    const CAD = [120, 200];
+    const OWN = { e: [30, 60], m: [23, 45, 68], h: [23, 45, 68] };
+    const leaks = (r) => {
+      const bad = [];
+      for (const id of ["e", "m", "h"]) {
+        for (const snap of r.stages[id].seen) {
+          for (const v of snap) if (OWN[id].indexOf(v) < 0) bad.push(`${id}피드에 ${v}'`);
+        }
+      }
+      return [...new Set(bad)];
+    };
+    const run = async (muts) => {
+      const out = [];
+      for (const cad of CAD) for (const sd of SEEDS) {
+        const r = await arc(sd, muts, cad);
+        const n = ["e", "m", "h"].reduce((a, id) =>
+          a + r.stages[id].seen.reduce((b, snap) => b + snap.length, 0), 0);
+        out.push({ sd, cad, leak: leaks(r), n });
+      }
+      return out;
+    };
+    /* 🐢 계측 지연은 **양쪽에 똑같이** — 비교를 기울이지 않습니다 */
+    const good = await run({ "match-scene.js": MUT.SLOW["match-scene.js"] });
+    const hit = good.filter((x) => x.leak.length);
+    check(hit.length === 0,
+      `B-1. 🎬 세대가 갈려도 **옛 단계 카드가 새 피드에 안 써진다** (${good.length}판 — 시드 ${SEEDS.length} × 간격 ${CAD.join("·")}ms)`
+      + (hit.length ? hit.map((x) => `\n     🔴 시드${x.sd}/${x.cad}ms — ${x.leak.join(" · ")}`).join("")
+        : ""));
+
+    /* 🔑 **「아무 일도 안 일어났다」를 통과로 세지 않습니다.** B-1은 *"남의 분이 없다"*를
+     *    재는 문장이라 **피드가 통째로 비어 있어도 참**이에요.
+     * 🔴 처음엔 **마지막 스냅만** 셌다가 걸렸습니다 — 60ms에서는 마지막 스냅이 0줄이거든요
+     *    (그리기 +260ms라 아크가 먼저 끝나요). 그런데 B-1은 **스냅 전부**를 훑습니다.
+     *    🔑 그래서 **B-1이 실제로 들여다본 분의 개수**를 셉니다 — 재는 것과 세는 것을 맞춰요. */
+    const scanned = good.map((x) => x.n);
+    check(scanned.every((n) => n > 0),
+      `B-2. 🔑 B-1이 **실제로 분을 들여다봤다** — 판마다 훑은 분 개수 ${scanned.join(" · ")}`
+      + (scanned.every((n) => n > 0) ? "" :
+        `\n     🔴 0인 판이 있어요 — 그 판에서 B-1은 **아무것도 안 지킵니다**`));
+
+    /* 🔴 변이 — 끄는 줄만 되돌리면 빨간불인가 */
+    const mut = await run({ "match-scene.js": [...MUT.SLOW["match-scene.js"], ...MUT["M-F"]["match-scene.js"]] });
+    const caught = mut.filter((x) => x.leak.length);
+    check(caught.length === mut.length,
+      `변이-F. 🔴 \`match-scene.js\`의 **끄는 줄**을 되돌리면 → B-1이 빨간불 (${caught.length}/${mut.length}판)`
+      + `\n     ${caught.slice(0, 3).map((x) => `시드${x.sd}/${x.cad}ms ${x.leak.join(",")}`).join(" · ")}`
+      + (caught.length === mut.length ? "" :
+        `\n     🔴 다 안 잡혔어요 — 간격이 이 판에서 안 맞습니다. B-1은 지금 **믿을 수 없어요**`));
+  }
+
+  /* ══════════ 🚧 B-3. `career.js`의 프로 경기 루프는 **아직 세대를 안 넘깁니다** ══════════
+   *
+   * engineer가 110번에서 **셋째 자리**로 넘긴 것입니다 — `push`는 이제 세대를 받는데
+   * **부르는 쪽이 안 줍니다.** 안 주면 `g == null`이라 끄는 줄이 **그냥 통과**해요
+   * (읽는 쪽 기본값이라 옛 갈래가 안 깨지는 대신, 그 갈래는 보호를 못 받습니다).
+   *
+   * 🔴 **이 검사는 그 자리를 못 봅니다** — 위 B는 🏫 학교 아크(`town.js`)를 몰고 가고
+   *    프로 경기(`runV2Match`)는 안 지나거든요. 그래서 **호출부의 인자 수**로 봅니다.
+   *
+   * 🚧 지금 크기를 **상한으로 박고, 더 나빠지면 빨간불**입니다. 여기서 소리내어 빨간불을
+   *    내면 "저건 원래 빨간불이야"가 되어 이 파일 전체가 신호를 잃어요.
+   * 📌 **`career.js`가 `gen()`을 넘기게 되면 상한을 0으로 내리고 이 🚧를 지우세요.** */
+  {
+    const CAP = 2;                                   // 🚧 2026-09-02 실측 (career.js:1787 · 1802)
+    const CAR = fs.readFileSync(path.join(PAGE_DIR, "career.js"), "utf8");
+    const bare = (CAR.match(/scene\.push\(\s*card\s*\)/g) || []).length;
+    if (bare > CAP) {
+      check(false, `B-3. 🔴 세대를 **안 넘기는** \`scene.push\` 호출이 늘었습니다 — ${bare}곳 > 상한 ${CAP}`);
+    } else if (bare === 0) {
+      check(false, `B-3. 🎉 \`career.js\`도 세대를 넘깁니다 — **이 🚧를 지우고 B에 프로 경기 갈래를 더하세요**`);
+    } else {
+      console.log(`🚧 B-3. \`career.js\`의 \`scene.push(card)\` ${bare}곳이 아직 세대를 안 넘깁니다 (상한 ${CAP} — 늘면 빨간불)`);
+      console.log(`     그 갈래는 끄는 줄이 \`g == null\`로 그냥 통과해요. 위 B는 🏫 학교 아크라 **그 자리를 못 봅니다.**`);
+    }
   }
 
   /* ══════════ ⓒ C. 단계 스코어가 단계마다 0에서 시작한다 ══════════ */
@@ -302,8 +382,7 @@ const finOf = (txt) => {
     check(!d.devOK && d.finOK,
       `변이-D. 🔴 \`state.score += p\`에 골을 더하면 → **A-1만** 빨간불`
       + `\n     d=${d.r.dev} 재구성=${devOf(d.r.rows)} · A-1 ${d.devOK ? "초록(🔴 안 잡힘)" : "빨간불 ✔"}`);
-    /* 🚧 변이-F는 없습니다 — 위 B가 검증 불가라 **지킬 문장이 없어요.**
-     *    변이만 남기면 "빨간불인데 아무도 안 보는 검사"가 됩니다. */
+    /* 🔑 변이-F는 **위 B 블록 안**에 있습니다 — 고정 간격 드라이버가 필요해서요. */
     const g = await probe("M-G");
     check(g.devOK && !g.finOK,
       `변이-G. 🔴 \`let hg = 0\`을 누적으로 바꾸면 → **C-1만** 빨간불`
