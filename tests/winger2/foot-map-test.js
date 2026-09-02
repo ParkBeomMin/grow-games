@@ -13,7 +13,20 @@
  * ═════════════════════════════════════════════════════════════════════════
  * (2026-09-01 · designer 93번 §3·§4 · director 94번 §2·§3-4·§5-2)
  *
- *   · 🦶 주발은 **자기 화면(`#screen-foot`)**을 가지고, 탭이 곧 답입니다(다음 버튼 없음)
+ *   · 🦶 주발은 **자기 화면(`#screen-foot`)**을 가지고, **고르기 + [다음] 두 걸음**입니다
+ *     (2026-09-02 · 111번 — 그전에는 *"탭이 곧 답, 다음 버튼 없음"*이었어요.
+ *      🔴 그 옛 계약을 F-0a가 `r.own.length === 3`으로 **지키고 있었습니다** —
+ *      판정이 뒤집힌 날 검사가 옛 계약 편에 서는 그 형태예요. 지금은 아래처럼 고쳤습니다)
+ *   · 🔴 **[다음]이 게이트입니다** — 고르기 전엔 `disabled`, 발을 탭해도 화면은 안 바뀝니다.
+ *     그 계약 자체는 이 파일이 아니라 **`foot-next-test.js`**가 지켜요
+ *   · 🚨 **2026-09-02 — 🥅 1대1에서 `.w2m-half`는 「장식」이 됐습니다**(113번 격자 개편).
+ *     판정은 이제 **`.w2m-cell` 다섯 칸**이 합니다. F절은 여전히 `.w2m-half`만 읽으니,
+ *     🥅에 대해서는 **화면끼리의 대조**예요 — 「판정이 칸 쪽에서 뒤집히는」 결함은
+ *     여기서 **안 잡힙니다.** 🔒 그 자리는 **`one-grid-test.js`의 G-1**이 지켜요
+ *     (같은 판을 🦶 R·L로 두 번 열어 **밝기 = 판정**을 견줍니다).
+ *     ⚠️ 여기를 고쳐서 칸까지 읽게 만들지 마세요 — 같은 문장이 두 파일에 생기면
+ *        한쪽만 고쳐진 채 얼어붙습니다(rAF preamble 네 벌이 그랬어요).
+ *     💨 컷인·⚡ 1:1의 `.w2m-gate`는 **여전히 판정 그 자체**라 F절이 계속 유효합니다
  *   · 🦶 화면의 판정 창 폭 = `winger-moment.js`의 `FOOT_WIN`. **화면이 상수를 따라갑니다**
  *   · 🔑 **오른발잡이면 오른쪽이 넓습니다** — `const right = foot !== "L"`.
  *     화면(intro.js)과 판정(winger-moment.js)이 **같은 모양**으로 씁니다
@@ -62,7 +75,7 @@
 "use strict";
 const fs = require("fs");
 const path = require("path");
-const { bootPage, PAGE_DIR, passTown, seedBoth } = require("./_load.js");
+const { bootPage, PAGE_DIR, passTown, seedBoth, tapFoot: tapFootShared } = require("./_load.js");
 
 let fail = 0;
 const t0 = Date.now();
@@ -227,15 +240,11 @@ function toFoot(h) {
   h.press(h.D.getElementById("btn-name-next"), "btn-name-next");
   return h;
 }
-/* ⏳ 발을 누르면 ⚽ 공이 굴러들고 **그 뒤에** 넘어갑니다.
- * ⚠️ **320ms를 안 박습니다** — 「화면이 바뀔 때까지」를 기다려요(♿ reduce면 즉시입니다). */
-async function tapFoot(h, foot) {
-  h.press(h.D.querySelector(`#screen-foot .foot-card[data-foot="${foot}"]`),
-    `🦶 ${foot === "L" ? "왼발" : "오른발"}`);
-  for (let i = 0; i < 400 && h.active() === "screen-foot"; i++) await wait(3);
-  if (h.active() === "screen-foot")
-    throw new Error("🦶 발을 눌렀는데 화면이 안 넘어가요 — openFoot의 done 배선을 보세요");
-}
+/* 🦶 발을 고르고 [다음]. **여기 사본을 두지 않습니다** — `_load.js`의 `tapFoot` 한 벌이에요.
+ * 🔴 예전에는 이 자리에 복붙본이 있었고, 주발 화면에 [다음]이 붙던 날
+ *    사본 **셋이 한꺼번에** 죽어 검사 7종이 종료 코드 2가 됐습니다 (2026-09-02 · 111번).
+ *    `foot-next-test.js`의 N-9가 새 복붙본을 잡아요. */
+const tapFoot = (h, foot) => tapFootShared(h.W, h.press, foot);
 /* 🗺️ 지역 하나를 골라 다음으로. 🏞️ 도는 지도 폴리곤 · 🏙️ 광역시는 옆 목록입니다. */
 function pickOrigin(h, id) {
   const el = h.D.querySelector(`#origin-map .om-do[data-id="${id}"]`)
@@ -297,7 +306,7 @@ async function runF(muts) {
   const h = boot({ seed: SEEDS[0], muts });
   toFoot(h);
   const r = { screen: h.active(), taps: h.taps() };
-  /* 🔒 🦶 화면 **직속** 조작 — 발 두 짝 + ← 뒤로. 「다음」이 붙으면 탭이 하나 늘어요 */
+  /* 🔒 🦶 화면 **직속** 조작 — 발 두 짝 + ← 뒤로 + 🆕 [다음] (2026-09-02 · 111번) */
   r.own = Array.from(h.D.querySelectorAll("#screen-foot button")).map((b) => b.id || b.className);
   r.cards = Array.from(h.D.querySelectorAll("#screen-foot .foot-card")).map((c) => c.dataset.foot);
   r.lanes = { L: screenLanes(h, "L"), R: screenLanes(h, "R") };
@@ -353,11 +362,24 @@ async function F() {
     `F-0. 🚪 게임 입구 → ✏️ 이름 다음 → **🦶 주발이 자기 화면**으로 뜬다 (${r.screen} · 카드 ${r.cards.join("/")})`
     + `\n     🔎 측정 조건 — 화면·💨 컷인·⚡ 1:1을 한 창에 다 그렸습니다`
     + ` (컷인 ${r.cut.L ? "✔" : "🔴 못 그림"} · 1:1 ${r.one.L ? "✔" : "🔴 못 그림"})`);
-  check(r.own.length === 3 && r.own.filter((x) => /foot-card/.test(x)).length === 2
-    && r.own.indexOf("btn-back-foot") >= 0,
-    `F-0a. 🔒 🦶 화면의 조작은 **발 두 짝 + ← 뒤로**뿐이다 — 「다음」이 없다(탭이 곧 답)`
+  /* 🚨 **2026-09-02 — 이 문장이 뒤집혔습니다.** 여기 있던 것은
+   *      `r.own.length === 3` … 「다음」이 **없다**(탭이 곧 답)
+   *    이었어요. 111번에서 [다음]이 붙자 **고친 코드 쪽이 빨간불**이 됐습니다 —
+   *    *"폐기한 것을 되살리면 검사가 오히려 초록불"*이 되는 그 형태입니다.
+   * 🔑 그래서 **개수만 세지 않습니다.** 셋을 이름으로 확인해요(발 2 · 뒤로 · 다음).
+   *    개수만 세면 [다음]이 다른 이름으로 바뀌어도 4라서 그대로 초록불이에요.
+   * 🌍 이 문장이 서 있는 세계: 「🦶가 **고르기 + [다음]** 두 걸음인 세계」.
+   *    탭이 곧 답으로 되돌리는 판정이 나오면 **여기와 `foot-next-test.js`를 같이** 보세요. */
+  const ownCards = r.own.filter((x) => /foot-card/.test(x)).length;
+  const ownBack = r.own.indexOf("btn-back-foot") >= 0;
+  const ownNext = r.own.indexOf("btn-foot-next") >= 0;
+  check(r.own.length === 4 && ownCards === 2 && ownBack && ownNext,
+    `F-0a. 🔒 🦶 화면의 조작은 **발 두 짝 + ← 뒤로 + [다음]** 넷이다`
+    + ` (발 ${ownCards} · 뒤로 ${ownBack ? "✔" : "✘"} · 다음 ${ownNext ? "✔" : "✘"})`
     + `\n     화면 직속 버튼: ${r.own.join(" · ")}`
-    + (r.own.length === 3 ? "" : `\n     🔴 버튼이 늘었어요 — 「다음」을 붙이면 탭이 2회가 되고 첫 순간 카드가 그만큼 밀립니다`));
+    + (r.own.length === 4 && ownCards === 2 && ownBack && ownNext ? ""
+      : `\n     🔴 조작이 계약과 다릅니다 — 탭 수가 바뀌면 첫 순간 카드까지의 걸음이 밀려요`
+        + ` (지금 계약은 **6걸음**: 새로 시작 · 이름 다음 · 발 · 🆕 다음 · 지역 · 다음)`));
 
   const ra = F_PRED.ratio(r, W0);
   check(W0 != null && ra.ok,
@@ -370,6 +392,8 @@ async function F() {
   check(ss.ok,
     `F-2. 🔑 **오른발이면 오른쪽이 넓다 — 화면·💨 컷인·⚡ 1:1 셋이 같은 쪽**을 가리킨다`
     + `\n     ${ss.rows.map(([n, a, b]) => `${a && b ? "🟢" : "🔴"} ${n}(왼발→왼쪽 ${a ? "✔" : "✘"} · 오른발→오른쪽 ${b ? "✔" : "✘"})`).join(" · ")}`
+    + `\n     🚨 🥅는 2026-09-02부터 \`.w2m-half\`가 **장식**입니다(판정은 칸) —`
+    + ` 「칸 쪽에서 뒤집힘」은 **\`one-grid-test.js\` G-1**이 봅니다`
     + (ss.ok ? "" : `\n     🔴 화면이 판정과 **반대**를 가리키면 🦶는 보이는 게 아니라 거짓말입니다 (2026-08-29 사고)`));
 
   check(F_PRED.colorMatchesWidth(r),

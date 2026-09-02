@@ -16,6 +16,28 @@
  *   타이밍 화면 = 움직이는 표적 + 누르기. **판단으로 이기는 요소가 없어야 해요.**
  * 🧊 볼카운트는 *"타이밍처럼 생겼는데 핵심이 안 누르기"*라 세 번 고치고 버렸습니다.
  *
+ * ── 🖼️ 세 줄 위계와 낱말 (112번 §11-8) ─────────────────────
+ * 넷의 머리는 **늘 세 줄**이에요 — 준비 화면에도, 본 게임 상자에도 같은 세 줄이 섭니다.
+ *
+ *     [상황 분류]  작게   `.w2m-stake`   ⚽ 골 찬스 — 넣으면 골이에요
+ *     [무엇을]     크게   `.tm-label`    🥅 1대1 마무리
+ *     [왜/어떻게]  한 줄  `.w2m-why`     키퍼가 지운 반대쪽, 밝은 칸을 노려요
+ *
+ * 🔴 **화면의 낱말이 아니라 축구의 낱말을 씁니다.** *"초록 존"*·*"갭"*·*"코스 칸"*은
+ *    우리 화면의 이름이지 축구의 이름이 아니에요 — 도형이 무엇인지 모르면 규칙 설명이
+ *    붙을 자리가 없습니다(112번 §11-1). 표는 이렇습니다:
+ *      초록 존 → **빈 곳**   ·   갭 → **수비 사이**
+ *      코스 칸 → **파고들 길**   ·   게이트·판정 창 → **밝은 칸**
+ *    ⚠️ **클래스 이름은 그대로**예요(`.w2m-gate` 등). 바뀌는 것은 **사람이 읽는 문구**뿐입니다.
+ *
+ * ── 🖼️ 🥅 1대1의 화면 문법 — 장면 + 격자 + 칸 탭 (112번 §11-4) ──
+ *   **축구 장면 하나 · 그 위에 격자 · 방해하는 것이 시간에 따라 움직임 ·
+ *   한 번 탭이 「어디 + 언제」를 동시에.** 버튼이 없어요 — **장면이 곧 버튼**입니다.
+ * 🔴 옛 🥅는 **자유 좌표**였습니다("골문 아무 데나 누르기"). 공간이 문제가 아니라
+ *    **경계가 없는 게** 문제였어요 — *"아무 데나 눌러도 되나?"*가 남았습니다.
+ *    격자는 **고를 것을 눈에 보이게** 합니다. 🔒 **칸 수는 「읽힘」의 손잡이이지
+ *    난이도 손잡이가 아니에요**(112번 §11-5) — 난이도는 `ONE.win`이 잡습니다.
+ *
  * 🔴 **🧱 차단은 그 둘을 「한 화면에」가 아니라 「두 화면으로 나눠」 씁니다** (104번 §2).
  *   1단계 읽기   — 정지 · 무제한 · 재촉 연출 금지.  `beta/soccer/cup.js`의 승부차기 문법
  *                  그대로예요. 이 저장소에서 유일하게 성공한 축구 조작입니다.
@@ -75,12 +97,71 @@ window.W2Moment = (() => {
   /* 판정 창 배수 하나로 모읍니다 — 네 종이 같은 자를 써야 난이도가 같이 움직여요. */
   const winMul = (cond, foot) => condOf(cond) * (wideOn() ? WIDE : 1) * (foot || 1);
 
+  /* ---------- 🏔️ `CELL_FLOOR` — **격자가 낼 수 있는 `s`의 천장** ----------
+   *
+   * 🔑 **「칸을 눌렀다」는 「이 칸 어딘가」이지 「정확히 칸 한가운데」가 아닙니다.**
+   * 그래서 오차에 **바닥**을 깝니다 — `err = max(|칸 중심 − 좋은 지점|, 칸폭 × CELL_FLOOR)`.
+   *
+   * 🚨 **왜 필요한가** (112번 §12 · 실측 40)
+   *   자유 좌표에서는 **손이 바닥을 만들었습니다** — 노린 곳에 못 맞으니까요.
+   *   격자는 탭을 **칸 중심으로 스냅**해서 그 바닥을 지웠고, 오차가 **0을 지나갈 수** 있게 됐어요.
+   *   `sBar(0, 창) = 1`이라 **창을 아무리 좁혀도 잘하는 사람은 만점**을 굽니다
+   *   (실측: 능숙 `E[s]`가 0.702 → **0.903**).
+   *
+   * 🔴 **바닥은 「몫 나누기」로 만들면 안 됩니다.** 한 번 그렇게 풀었다가 되돌렸어요 —
+   *   「좋은 지점」을 거의 안 움직이게 하면 천장은 생기지만 **어느 칸을 누를지가 고정**되고,
+   *   **격자가 버튼 하나가 됩니다**(112번 §11-4에서 폐기한 「띠 + 버튼」으로 되돌아가요).
+   *   🔑 **바닥은 속도와 무관해야** 몫을 자유롭게 나눌 수 있습니다.
+   *
+   * 🔒 **손잡이 셋을 같은 표에 두지 마세요** — `BLK_WIN` ↔ `BLK_READ`와 같은 구조예요:
+   *      `속도 ÷ 창`   난이도 (중립화 비)      → `ONE_WIN`
+   *      몫 나누기      공간 ↔ 시간 지분        → `ONE_CLOSE`
+   *      `CELL_FLOOR`  `s`의 **천장**          → 여기
+   *
+   * 🔒 **값은 넷이 공유하고 「거는 방식」만 다릅니다.** 🏃 컷인·🧱 차단은 이대로,
+   *   🎯 킬패스는 **라인 쪽에만** 깝니다 — 라인 너머는 0 그대로예요(«아슬아슬함»이 그 판의 전부라
+   *   양쪽에 깔면 절벽이 죽습니다). 지금은 🥅만 격자라 🥅만 겁니다.
+   * ⚠️ **칸 폭에 비례합니다** — 칸이 좁으면 바닥도 낮아져요. 그래서 **읽힘(3~5칸)으로 칸 수를
+   *   먼저 정하고, 그 칸 폭 위에서 비(`ONE_WIN`)로 난이도를 맞추는** 순서입니다(112번 §11-5 정정). */
+  const CELL_FLOOR = 0.30;
+  const cellFloorErr = (err, cellW) => Math.max(err, cellW * CELL_FLOOR);
+
   /* ---------- 📐 계수 ----------
    * 조작이 정하는 것은 `s`뿐이고, **평균적인 조작이 s ≈ 0.5**에 오도록 잡았습니다.
    * 그래야 `s = 0.5`가 중립인 §2-6의 정의 위에서 balancer의 곡선이 안 흔들려요.
    * 실측 절차와 결과는 `docs/superpowers/_workspace/50_engineer_minigames.md`에 있어요. */
   const CUT = { speed: 118, win: 12, lane: [26, 74], sweeps: 3 };
-  const ONE = { need: 26, kw0: 12, kw1: 36, grow: 2400, life: 3400, post: 3.5 };
+  /* 🥅 1대1 — **골문 격자의 무대** (112번 §11-4에서 자유 좌표를 대체했어요)
+   *
+   * 🧤 키퍼가 `kc`에 서서 **달려나오며 각을 지웁니다.** 덮는 반폭이 `cov0 → cov1`로
+   * 벌어지고, 「좋은 지점」은 **넓은 쪽 빈 곳의 한가운데**예요 —
+   * `cov`가 벌어지는 만큼의 **절반**씩 바깥으로 밀립니다.
+   *
+   * 🔒 `cells`는 **「읽힘」의 손잡이**입니다. 한눈에 세어지는 수(3~5)라 5로 뒀어요.
+   *    ⚠️ 다만 **난이도와 무관하지는 않습니다**(112번 §11-5 정정) — 칸이 좁으면
+   *    `CELL_FLOOR`가 만드는 바닥도 같이 낮아져요. **읽힘으로 먼저 정하고, 그 칸 폭에서
+   *    `ONE_WIN`으로 난이도를 맞추는** 순서입니다. 🔴 칸 수를 바꾸면 `ONE_WIN`을 다시 재세요.
+   * 🔒 `look`은 **화면이 미리 보여 주는 시간**이에요 — `s`에 안 들어갑니다(§아래 「미래 흘리기」).
+   *
+   * 🔴 **`need`는 죽었습니다.** *"키퍼 몸에서 남은 여유가 클수록 좋다"*는 옛 형태예요 —
+   *    넷 중 혼자 *"오차가 작을수록"*이 아니라 *"여유가 클수록"*이었고, 그 반대 방향이
+   *    112번 §1-3이 짚은 «오차의 뜻이 넷 다 다르다»의 한 자리였습니다.
+   *    🚨 **같은 계단을 다른 이름으로 되살리지 마세요** — 폐기된 건 이름이 아니라 형태예요.
+   *    (`kw0`·`kw1`은 `cov0`·`cov1`로 이름만 바꿨어요. **키퍼가 덮는 반폭**이라는 뜻은 그대로입니다.)
+   * 🔒 `post`는 **그림만** 남습니다(골대 기둥). 판정에서는 빠졌어요 — 격자의 바깥 칸이
+   *    곧 골문 구석이라 기둥까지 오차에 넣으면 규칙이 둘이 됩니다. */
+  const ONE = { cells: 5, kc: [18, 82], cov0: 10, cov1: 34, grow: 2400, life: 3400, look: 450, post: 3.5 };
+
+  /* 🎚️ **난이도 손잡이 — 「속도 ÷ 창」의 창 쪽.** 여기 하나만 만지세요.
+   * 「속도」는 좋은 지점이 밀리는 빠르기(`(cov1−cov0)/2 ÷ grow`)이고, 그 둘의 **비**가 난이도예요.
+   * 🔴 `ONE_CLOSE`나 `CELL_FLOOR`로 난이도를 맞추지 마세요 — 그 둘은 다른 축입니다. */
+  const ONE_WIN = 23;
+
+  /* ⚖️ **몫 나누기 — 공간 ↔ 시간 지분.** 난이도가 아니라 **무엇으로 이기는가**를 정합니다.
+   * 0에 가까우면 «어느 칸인가»(공간)만 남고, 크면 «언제 누르는가»(시간)가 무거워져요.
+   * 🔒 `CELL_FLOOR`가 천장을 따로 잡고 있어서 **여기를 자유롭게 나눌 수 있습니다** —
+   *    옛날에는 이 값으로 천장까지 만들려다 격자를 버튼 하나로 만들 뻔했어요. */
+  const ONE_CLOSE = 0.45;
   const KP = { win: 8, line: 92, speed: [22, 34], start: [6, 34], life: 6000 };
   /* 🧱 차단 **1단계(읽기)의 신호 계수**입니다 — 읽을 것이 **둘**이에요(주발 · 몸 방향).
    * (2단계의 무대·판정 창은 아래 `BLK_RUN`·`BLK_WIN`·`BLK_READ`가 따로 들고 있어요)
@@ -134,10 +215,17 @@ window.W2Moment = (() => {
    * 네 종이 **같은 모양**을 씁니다: s = 1 − 오차 / 판정창.
    * 모양이 같아야 난이도를 한자리에서 견줄 수 있어요 (설계 §4-4 ①). */
   const sBar = (err, win) => clamp(1 - err / Math.max(win, 1e-6), 0, 1);
-  /* 🏃 갭 중심에서 벗어난 거리(%) */
+  /* 🏃 수비 사이의 한가운데에서 벗어난 거리(%) */
   const sCut = (err, mul) => sBar(err, CUT.win * mul);
-  /* 🥅 빈 곳의 여유(%). 키퍼 몸 안이면 0 — 막힌 거예요 */
-  const sOne = (margin, mul) => (margin < 0 ? 0 : sBar(Math.max(0, ONE.need - margin), ONE.need * mul));
+  /* 🥅 **누른 칸의 중심**이 그 순간의 **빈 곳 한가운데**에서 벗어난 거리(골문 폭 %).
+   * 🔴 옛 `sOne(margin, mul)`은 *"여유가 클수록 좋다 · 키퍼 몸 안이면 0"*이었습니다 —
+   *    **넷 중 혼자 반대 방향**이었고, 그 형태를 버렸어요(112번 §1-3 · §11-10).
+   *    이름은 같지만 **받는 것이 「여유」에서 「오차」로 바뀌었습니다.** 🏃와 같은 자예요.
+   * ⚠️ 창을 좁히는 것(키퍼가 지운 각)은 `mul`에 들어옵니다 — `상수 × mul` 꼴을 지켜야
+   *    🫀 컨디션·♿ 확대가 넷에 **같은 비율**로 걸려요.
+   * 🏔️ 넣는 `err`에는 **`CELL_FLOOR` 바닥이 이미 깔려 있어야** 합니다(`oneErr`) —
+   *    바닥이 `s`의 천장을 만드는 자리예요. `sOne` 자신은 넷과 똑같은 자로 남습니다. */
+  const sOne = (err, mul) => sBar(err, ONE_WIN * mul);
   /* 🎯 오프사이드 라인까지 남은 거리(%). 0에 가까울수록 좋고, 넘었으면 0 */
   const sKp = (gap, mul) => (gap < 0 ? 0 : sBar(gap, KP.win * mul));
   /* 🧱 1단계 읽기의 결과 — **판정 창의 폭**이 됩니다(104번 §2-2).
@@ -204,25 +292,34 @@ window.W2Moment = (() => {
     return n;
   };
 
-  /* 카드가 무엇으로 열렸는지 — 같은 미니게임이 두 종류로 열려요(🏃 돌파는 결정에도
-   * 전개에도). **무엇이 걸렸는지 모르는 것이 문제**라 준비 화면 첫 줄에 밝힙니다. */
+  /* 🖼️ **상황 분류** — 세 줄 위계의 첫 줄이에요(112번 §11-8).
+   * 같은 미니게임이 두 종류로 열려요(🏃 돌파는 결정에도 전개에도). **무엇이 걸렸는지
+   * 모르는 것이 문제**라 맨 위에 작게 밝힙니다.
+   * ⚠️ 첫 글자의 이모지(⚽·🅰️·🧱)가 카드 성격과 짝이에요 — 화면이 말하는 성격과
+   *    이 줄이 어긋나면 안 됩니다(youth-moment-test D-1이 그 자리를 봅니다). */
   const STAKE = {
-    goal: "⚽ 결정적인 순간 — 넣으면 골이에요",
-    assist: "🅰️ 찬스를 만드는 순간 — 성공하면 도움이에요",
-    defend: "🧱 막아야 하는 순간 — 놓치면 실점이에요",
+    goal: "⚽ 골 찬스 — 넣으면 골이에요",
+    assist: "🅰️ 찬스 메이킹 — 성공하면 도움이에요",
+    defend: "🧱 실점 위기 — 놓치면 실점이에요",
   };
+
+  /* 🖼️ **세 줄 위계** — 준비 화면과 본 게임 상자가 **같은 세 줄**을 씁니다.
+   * 한 자리에서만 만들어야 둘이 안 갈라져요(옛 상자는 `tm-label` 한 줄에 규칙을 욱여넣어서
+   * *"무슨 상황인지"*가 아니라 *"뭘 누르는지"*만 있었습니다). */
+  const head = (stake, what, why) => `<p class="w2m-stake">${esc(stake)}</p>`
+    + `<p class="tm-label w2m-what">${what}</p>`
+    + `<p class="w2m-why">${why}</p>`;
 
   function ready(container, info, start) {
     const full = bumpSeen(info.key) < FULL_SHOWS;
     const body = full
       ? `<ul class="w2m-ready-lines">${info.lines.map((t) => `<li>${t}</li>`).join("")}</ul>`
-      : `<p class="w2m-ready-short">${info.short}</p>`;
+      : "";
     const keys = (info.keys || [])
       .map((k) => `<span class="w2m-ready-key"><b>${esc(k.name)}</b><span>${esc(k.desc)}</span></span>`).join("");
     const wrap = document.createElement("div");
     wrap.className = "tm-box w2m-ready";
-    wrap.innerHTML = `<p class="w2m-stake">${esc(info.stake)}</p>`
-      + `<p class="tm-label">${info.title}</p>${body}`
+    wrap.innerHTML = head(info.stake, info.title, info.why) + body
       + (keys ? `<div class="w2m-ready-keys">${keys}</div>` : "")
       + `<button type="button" class="btn btn-primary tm-btn w2m-go">▶️ 시작</button>`;
     container.appendChild(wrap);
@@ -331,12 +428,12 @@ window.W2Moment = (() => {
     const btnHTML = lanes.map((l, i) => `<button type="button" class="btn w2m-side ${l.strong ? "w2m-strong" : "w2m-weak"}" data-i="${i}">`
       + `<span class="w2m-side-arrow">${i === 0 ? "⬅️" : "➡️"}</span>`
       + `<span class="w2m-side-lab">${l.strong ? "🦶 주발 쪽" : "약발 쪽"}</span>`
-      + `<span class="w2m-side-win">판정 창 ${l.strong ? "＋" : "－"}${Math.round(FOOT_WIN * 100)}%</span></button>`).join("");
+      + `<span class="w2m-side-win">${l.strong ? "＋" : "－"}${Math.round(FOOT_WIN * 100)}% ${l.strong ? "넓어요" : "좁아요"}</span></button>`).join("");
     /* ●●● — 남은 왕복. 갭은 CUT.sweeps번 오가고 닫혀요(그때 s=0). 안 그리면
      * "갑자기 닫혔다"가 되는데, 이미 걸려 있는 효과를 화면에 안 보여주는 건
      * 통제할 수 없는 노이즈예요(원칙 ③). */
     const wrap = box(container, "w2m-cutin",
-      `<p class="tm-label">🏃 갭이 코스 칸에 오는 순간 통과!</p>`
+      head(ctx.stake, ctx.title, "수비 사이가 파고들 길 위에 온 순간 그 길을 누르세요")
       + `<div class="tm-bar w2m-lane">${gateHTML}`
       /* 갭은 **폭 100%짜리 트랙**을 translateX(%)로 밀어요 — %가 부모(레인) 폭 기준이라
        * left를 쓸 때와 위치가 같고, 프레임마다 레이아웃을 다시 안 돌립니다.
@@ -385,87 +482,223 @@ window.W2Moment = (() => {
   }
 
   /* ================================================================
-   * 2. 🥅 1대1 마무리 — 조준 (fw · wg)
+   * 2. 🥅 1대1 마무리 — **장면 + 격자 + 칸 탭** (fw · wg)
    *
-   * 키퍼가 달려나와 각을 좁혀 와요. **골문에서 넣고 싶은 지점을 직접 누릅니다.**
-   * 기다릴수록 남는 틈이 줄어드니, "틈이 남아 있을 때 코스를 정하는" 판이에요.
+   * 🖼️ **장면**은 골문 앞이에요. 그 위에 **골문 칸(격자)**이 서 있고,
+   * 🧤 **키퍼가 달려나오며 각을 지웁니다** — **밝은 칸이 좁아져요.**
+   * **가장 밝은 칸**을 한 번 누르면 「어디 + 언제」가 동시에 정해집니다.
    *
-   * 🦶 골문의 절반(주발 쪽)은 판정 창이 넓고 반대쪽은 좁아요 — **화면에 색으로 나뉩니다.**
-   * 숨은 정보가 없어요. 키퍼 위치도 폭도 다 보이니 수싸움이 아니라 조준입니다.
+   * 🔴 **버튼이 따로 없습니다 — 장면이 곧 버튼**이에요(112번 §11-4).
+   *
+   * 🔑 **밝기가 곧 판정입니다.** 칸의 밝기 = 지금 그 칸을 누르면 나올 `s`예요.
+   *    그려진 것과 판정하는 것이 **같은 값**이라 «보이는 폭이 그대로 판정»이 됩니다(원칙 ③).
+   *    ⛔ 밝기에 보정 곡선을 얹지 마세요 — 그 순간 화면이 거짓말을 시작합니다.
+   *
+   * 🔴 **옛 판은 자유 좌표였습니다** — *"골문 아무 데나 누르세요"*. 공간이 문제가 아니라
+   *    **경계가 없는 게** 문제였어요(112번 §11-2). 격자는 **고를 것을 눈에 보이게** 합니다.
+   *    🔴 같이 죽은 것 둘: `ONE.need`(*"여유가 클수록 좋다"*는 오차의 반대 방향) ·
+   *    골대 기둥까지 오차에 넣던 `margin`의 3항 `Math.min`(규칙이 둘이었어요).
+   *    ✅ 산 것: **골문이라는 공간** · 키퍼가 각을 좁힌다는 장면 · `grow`(다 나오기까지의 시간).
+   *
+   * 🦶 주발 — **주발 쪽 절반의 칸이 더 넓게 밝습니다**(판정 창 ±25%가 그대로 밝기예요).
+   *    한가운데 칸은 딱 절반 경계에 서니 **어느 쪽도 아닌 중립**으로 둡니다.
+   *    ⚠️ `.w2m-half`(색으로 갈린 절반)와 `cellMul`(판정)이 **같은 조건**을 써야 해요 —
+   *       한쪽만 고치면 화면이 판정과 반대를 가리킵니다(2026-08-29에 실제로 났던 버그).
    * ================================================================ */
+
+  /* 🎲 판 하나의 무대 — **키퍼가 어디에 서 있나** 하나뿐이에요.
+   * 🔒 그 값이 화면에 그대로 보입니다(🧤가 선 자리). 숨은 정보가 없어요.
+   * 🔴 가운데(50)를 피해 뽑습니다 — 딱 가운데면 좌우 빈 곳이 같아서 「넓은 쪽」이 안 정해져요. */
+  const oneRoll = () => {
+    let kc = randIn(ONE.kc[0], ONE.kc[1]);
+    if (Math.abs(kc - 50) < 4) kc += kc < 50 ? -4 : 4;
+    return { kc };
+  };
+
+  /* ⏱️ **닫힌 식이에요 — 프레임을 누적하지 않습니다.** 그래야 60fps든 30fps든,
+   * 검사의 가상 시계든 판정이 똑같아요(rAF가 가짜였을 때 넷이 통째로 얼어붙은 자리입니다).
+   *
+   *   cov   키퍼가 덮은 반폭 (몸이 벌어져요)
+   *   near  넓은 쪽을 향한 몸 끝 — 여기서부터가 빈 곳이에요
+   *   best  🔑 **넓은 쪽 빈 곳의 한가운데.** cov의 절반만 밀리니 거의 안 움직입니다
+   *   openW 남은 빈 곳의 폭 (화면에 그대로 보여요)
+   *   tight 🔑 **각이 좁아진 정도** — 판정 창에 곱해집니다. 기다리면 창만 좁아져요 */
+  const oneAt = (b, sec) => {
+    const p = clamp(sec * 1000 / ONE.grow, 0, 1);
+    const cov = ONE.cov0 + (ONE.cov1 - ONE.cov0) * p;
+    const left = b.kc < 50;                            // 키퍼가 왼쪽이면 빈 곳은 오른쪽
+    const near = left ? b.kc + cov : b.kc - cov;
+    return { p, cov, near, left,
+      best: left ? (near + 100) / 2 : near / 2,
+      openW: left ? 100 - near : near,
+      tight: 1 - ONE_CLOSE * p };
+  };
+  /* 칸의 중심(골문 폭 %)과 칸 폭 */
+  const oneCellX = (i) => (i + 0.5) * (100 / ONE.cells);
+  /* 🏔️ 오차 — **바닥이 여기서 깔립니다.** *"이 칸 어딘가"*이지 *"정확히 중심"*이 아니에요. */
+  const oneErr = (cx, best) => cellFloorErr(Math.abs(cx - best), 100 / ONE.cells);
+
   function runOneone(container, ctx, gate) {
     const right = ctx.foot !== "L";                 // 오른발잡이면 골문 오른쪽 절반이 주발 쪽
-    const kc = randIn(28, 72);                      // 키퍼가 늘 가운데 있으면 조준이 없어져요
+    const board = oneRoll();
+    /* 🦶 칸마다 창 배수를 **한 번만** 잽니다 — 칸 중심은 안 움직이니까요.
+     * 한가운데 칸(중심 = 50)은 절반 경계에 딱 서서 어느 쪽도 아니에요 → 중립(1). */
+    const cellMul = (cx) => winMul(ctx.condition, cx === 50 ? 1 : ((cx > 50) === right ? STRONG : WEAK));
+    const cells = [];
+    for (let i = 0; i < ONE.cells; i++) {
+      const cx = oneCellX(i);
+      cells.push({ i, x: cx, mul: cellMul(cx), strong: cx !== 50 && (cx > 50) === right });
+    }
+
+    /* 🎨 격자는 **뼈대만 인라인**으로 박습니다(자리·크기). 색과 빛은 style.css 몫이에요 —
+     * `--m-cell-line`·`--m-lit`을 정의하면 그대로 갈아입습니다(!important가 필요 없어요).
+     * 🔒 밝기(opacity)만 JS가 매 프레임 씁니다. 그게 곧 `s`니까 CSS가 정할 수 없어요. */
+    const cw = (100 / ONE.cells).toFixed(4);
+    const cellHTML = cells.map((c) => `<button type="button" class="w2m-cell${c.strong ? " w2m-strong" : ""}"`
+      + ` data-i="${c.i}" aria-label="골문 ${c.i + 1}번 칸"`
+      + ` style="position:absolute;top:0;bottom:0;left:${(c.i * (100 / ONE.cells)).toFixed(4)}%;width:${cw}%;`
+      + `padding:0;background:transparent;border:0;`
+      + (c.i ? `border-left:1px solid var(--m-cell-line, rgba(255,255,255,.26));` : "")
+      + `cursor:pointer">`
+      + `<i class="w2m-cell-lit" style="position:absolute;top:0;right:0;bottom:0;left:0;opacity:0;`
+      + `background:var(--m-lit, rgba(255,214,102,.78));pointer-events:none"></i>`
+      /* 🔮 **미래 예고 띠** — `ONE.look`(0.45초) 뒤의 밝기예요. 아래쪽에 얇게 깝니다. */
+      + `<i class="w2m-cell-next" style="position:absolute;right:0;bottom:0;left:0;height:5px;opacity:0;`
+      + `background:var(--m-lit-next, rgba(255,214,102,.5));pointer-events:none"></i></button>`).join("");
+
     /* 🦶 **양쪽에 다 이름표를 답니다.** 주발 쪽에만 달면 반대편이 "그냥 골문"으로
      * 보여서 좁아진 줄을 몰라요 — 좌우가 다르다는 게 안 읽히면 통제할 수 없는
      * 노이즈가 됩니다(원칙 ③). 색도 앰버 ↔ 회색으로 갈라 둡니다.
-     * 🥅 골대 기둥(ONE.post)도 그려요 — 거기 붙으면 여유가 깎이는데(sOne의 margin)
-     * 화면에 없으면 "왜 구석인데 안 들어갔지"가 됩니다. 폭은 상수에서 읽어 와요. */
+     * 🔴 판정 줄(`cellMul`)과 **같은 모양**의 조건을 씁니다 — 한쪽만 고치면
+     *    화면이 판정과 반대를 가리켜요(2026-08-29에 실제로 났던 버그입니다). */
     const wrap = box(container, "w2m-oneone",
-      `<p class="tm-label">🥅 빈 곳을 눌러 코스를 정하세요</p>`
-      + `<div class="w2m-goal" role="group" aria-label="골문 — 넣고 싶은 지점을 누르세요">`
-      /* 🔴 좌우가 뒤집혀 있었어요 (헤드리스 크로미움으로 그려 보고 잡았습니다).
-       * 판정은 `strong = right ? x >= 50 : x < 50` — 오른발잡이면 **오른쪽 절반**이
-       * 주발 쪽이고, 이름표도 오른쪽에 붙습니다. 그런데 색은 왼쪽 절반에 칠해져 있었어요.
-       * 화면이 판정과 반대를 가리키면 🦶는 보이는 게 아니라 **거짓말**이 됩니다(원칙 ③).
-       * 조건을 판정 줄과 **같은 모양**으로 맞춰 뒀어요 — 한쪽만 고치면 또 갈라져요. */
+      head(ctx.stake, ctx.title, "키퍼가 지운 반대쪽 — 가장 밝은 칸을 누르세요")
+      + `<div class="w2m-goal" role="group" aria-label="골문 ${ONE.cells}칸 — 가장 밝은 칸을 누르세요">`
       + `<div class="w2m-half ${right ? "w2m-weak" : "w2m-strong"}" style="left:0;width:50%"></div>`
       + `<div class="w2m-half ${right ? "w2m-strong" : "w2m-weak"}" style="left:50%;width:50%"></div>`
       + `<i class="w2m-post" style="left:0;width:${ONE.post}%"></i>`
       + `<i class="w2m-post" style="right:0;width:${ONE.post}%"></i>`
-      /* 키퍼도 컷인의 갭과 같은 방식이에요 — 폭 100% 트랙을 kc%로 **한 번만** 밀고
-       * (kc는 안 바뀝니다), 몸통만 scaleX로 벌립니다. left·width를 프레임마다 쓰면
-       * 그때마다 레이아웃이 다시 돌아요. 장갑은 안 늘어나게 몸통 밖에 둡니다. */
-      + `<div class="w2m-keeper"><i class="w2m-keeper-body"></i><b class="w2m-keeper-face">🧤</b></div>`
+      + cellHTML
+      /* 🧤 키퍼 — 트랙은 kc%로 **한 번만** 밀고(kc는 안 바뀝니다), 몸통만 scaleX로 벌립니다.
+       * 몸통은 폭 100%(골문 폭)를 kc에 중심 두고 있어서 scaleX(cov/50) = 폭 2·cov% 예요.
+       * left·width를 프레임마다 쓰면 그때마다 레이아웃이 다시 돕니다.
+       * 🔒 **칸보다 뒤에 그립니다** — 밝은 칸이 키퍼를 덮으면 «어디가 막혔는지»가 사라져요.
+       *    `.w2m-keeper`는 pointer-events: none이라 위에 있어도 탭을 안 가로챕니다. */
+      + `<div class="w2m-keeper"><i class="w2m-keeper-ghost" style="position:absolute;left:-50%;top:12%;`
+      + `width:100%;height:76%;border-radius:10px;pointer-events:none;`
+      + `border:1px dashed var(--m-ghost, rgba(233,238,255,.5))"></i>`
+      + `<i class="w2m-keeper-body"></i><b class="w2m-keeper-face">🧤</b></div>`
+      + `<b class="w2m-ball" aria-hidden="true" style="position:absolute;left:50%;bottom:2px;`
+      + `transform:translateX(-50%);pointer-events:none;font-size:.9rem;line-height:1">⚪</b>`
       + `<span class="w2m-foot-tag strong" style="${right ? "right:4px" : "left:4px"}">🦶 ＋${Math.round(FOOT_WIN * 100)}%</span>`
       + `<span class="w2m-foot-tag weak" style="${right ? "left:4px" : "right:4px"}">약발 －${Math.round(FOOT_WIN * 100)}%</span>`
       + `</div>`
-      + `<p class="w2m-tip">키퍼가 각을 좁히기 전에요!</p>`);
+      + `<p class="w2m-tip">키퍼가 각을 다 지우기 전에요!</p>`);
 
     const goal = wrap.querySelector(".w2m-goal");
     const keeper = wrap.querySelector(".w2m-keeper");
     const kbody = wrap.querySelector(".w2m-keeper-body");
     const tip = wrap.querySelector(".w2m-tip");
+    keeper.style.transform = `translateX(${board.kc.toFixed(2)}%)`;
+    const ghost = wrap.querySelector(".w2m-keeper-ghost");
+    cells.forEach((c) => {
+      c.el = wrap.querySelector(`.w2m-cell[data-i="${c.i}"]`);
+      c.lit = c.el.querySelector(".w2m-cell-lit");
+      c.next = c.el.querySelector(".w2m-cell-next");
+    });
     /* 🔒 min-height라 style.css가 더 키울 수 있어요(폰에서 손가락으로 누를 칸이라
-     * 96px은 빠듯합니다). inline height였다면 CSS가 절대 못 이깁니다.
-     * style.css를 못 읽는 자리(확인용 칸·오프라인 실패)에서도 이 바닥이 남아요. */
+     * 96px은 빠듯합니다). inline height였다면 CSS가 절대 못 이깁니다. */
     if (!goal.style.minHeight) goal.style.minHeight = "96px";
-    keeper.style.transform = `translateX(${kc.toFixed(2)}%)`;
     const end = ender(wrap, ctx);
     const t0 = nowMs();
-    let kw = ONE.kw0, maxed = false;
+    let urgent = false;
+
+    /* 🎯 그 순간 그 칸의 `s`. **판정도 그림도 이 한 줄을 지납니다** — 둘이 갈라질 자리가 없어요.
+     * 🔒 창을 좁히는 것(`tight`)과 🦶·🫀·♿(`c.mul`)이 **곱해져서 하나의 mul**로 들어갑니다 —
+     *    `상수 × mul` 꼴이라야 넷이 같은 비율로 움직여요.
+     * 🏔️ 오차는 `oneErr`가 **바닥을 깔아** 줍니다 — 그게 `s`의 천장이에요. */
+    const cellS = (c, a) => sOne(oneErr(c.x, a.best), a.tight * c.mul);
+
+    /* ---------- 🔮 **화면이 미래를 흘립니다** (112번 §12) ----------
+     *
+     * 🚨 **왜 넣나** — 격자가 「내다보기」라는 축을 드러냈습니다. 손의 정확도는 완만히 늘지만
+     *    내다보기는 *"아, 미리 눌러야 하는구나"* **한 번이면 끝**이라, 숙련도 폭이 아니라
+     *    **「안다 / 모른다」 계단**이 돼요. 🔑 그건 범민 님이 말씀하신 *"이해하기 어렵다"*와
+     *    **정확히 같은 축**입니다. 그래서 **숨기지 않고 화면에 답니다.**
+     *
+     *   🧤 **키퍼의 자취** — `look` 뒤에 몸이 어디까지 벌어질지 점선으로
+     *   🔮 **예고 띠**     — `look` 뒤 그 칸의 밝기. **곧 어두워질 칸 · 곧 밝아질 칸**이 보여요
+     *
+     * 🔒 **`s`에는 한 톨도 안 들어갑니다.** 판정은 그대로이고, 바뀌는 건 «미리 알 수 있느냐»뿐이에요.
+     *    그래서 곡선이 아니라 **읽기 축**으로 흡수됩니다.
+     * ⛔ 예고 띠를 판정에 쓰지 마세요 — 그 순간 규칙이 둘이 되고, 화면이 결과를 만드는 자리가 됩니다. */
+    const paint = (t) => {
+      const sec = (t - t0) / 1000;
+      const a = oneAt(board, sec);
+      const nx = oneAt(board, sec + ONE.look / 1000);
+      kbody.style.transform = `scaleX(${(a.cov / 50).toFixed(4)})`;
+      ghost.style.transform = `scaleX(${(nx.cov / 50).toFixed(4)})`;
+      for (const c of cells) {
+        const v = cellS(c, a), v2 = cellS(c, nx);
+        c.lit.style.opacity = v.toFixed(3);
+        c.next.style.opacity = v2.toFixed(3);
+        c.el.classList.toggle("w2m-cell-hot", v >= 0.75);
+        /* 「곧 어두워짐 / 곧 밝아짐」을 클래스로도 — 색으로만 알리면 색약에서 안 읽혀요 */
+        c.el.classList.toggle("w2m-cell-soon", v2 < v - 0.08);
+        c.el.classList.toggle("w2m-cell-rise", v2 > v + 0.08);
+      }
+      return a;
+    };
 
     const tick = (t) => {
       if (ctx.done) return;
-      const p = clamp((t - t0) / ONE.grow, 0, 1);
-      kw = ONE.kw0 + (ONE.kw1 - ONE.kw0) * p;
-      /* 몸통은 폭 100%(골문 폭)를 기준으로 kc에 중심을 두고 있어요 —
-       * 2·kw%가 되려면 scaleX(kw/50)입니다. 좌우 클램프는 골문의 overflow가 잘라 줘요. */
-      kbody.style.transform = `scaleX(${(kw / 50).toFixed(4)})`;
-      /* ONE.grow에서 다 벌어진 뒤 ONE.life까지 약 1초는 **화면이 안 변합니다.**
-       * 그 사이에 놓치면 "아무 일도 없었는데 실패"가 돼요 — 한 줄로 알려요.
-       * 움직이는 재촉 막대를 넣지 않는 건 조준 판이라 표적이 하나여야 하기 때문이에요. */
-      if (p >= 1 && !maxed) { maxed = true; tip.textContent = "🧤 각이 거의 없어요! 지금 안 차면 놓쳐요"; tip.classList.add("urgent"); }
-      if (t - t0 >= ONE.life) { end(0, "🧤 키퍼가 각을 다 지웠어요 — 슛 타이밍을 놓쳤어요"); return; }
+      const a = paint(t);
+      /* 다 나온 뒤 `life`까지 약 1초는 **화면이 거의 안 변합니다.** 그 사이에 놓치면
+       * "아무 일도 없었는데 실패"가 돼요 — 한 줄로 알려요. 움직이는 재촉 막대를 넣지 않는 건
+       * 조준 판이라 **표적이 하나여야** 하기 때문이에요. */
+      if (!urgent && a.p >= 1) {
+        urgent = true;
+        tip.textContent = "🧤 각이 거의 없어요! 지금 안 차면 놓쳐요";
+        tip.classList.add("urgent");
+      }
+      if (t - t0 >= ONE.life) {
+        end(0, "🧤 키퍼가 각을 다 지웠어요 — 슛 타이밍을 놓쳤어요");
+        return;
+      }
       RAF(tick);
+    };
+
+    /* 👆 **칸 하나 탭.** 손가락이 어느 칸에 닿았는지는 세 갈래로 찾아요 —
+     *   ① 누른 요소가 칸이면 그 칸 (키보드 Enter도 여기로 옵니다)
+     *   ② 좌표가 있으면 좌표가 든 칸
+     *   ③ 둘 다 없으면(폭을 못 재는 환경) 한가운데 칸
+     * 🔒 `onTap`을 **골문 하나**에만 답니다 — 칸마다 달면 탭 자리가 다섯 군데로 늘어나고,
+     *    `wiring-test.js`가 세는 탭 자리 수가 통째로 흔들려요. */
+    const cellFrom = (e) => {
+      const t = e && e.target;
+      const hit = t && t.closest ? t.closest(".w2m-cell") : null;
+      if (hit && hit.dataset && hit.dataset.i != null) return clamp(Number(hit.dataset.i), 0, ONE.cells - 1);
+      const r = goal.getBoundingClientRect();
+      const w = r.width || 300;
+      if (!e || e.clientX == null) return Math.floor(ONE.cells / 2);
+      const x = clamp((e.clientX - r.left) / w * 100, 0, 99.9999);
+      return Math.floor(x / (100 / ONE.cells));
     };
 
     onTap(goal, (e) => {
       if (ctx.done) return;
-      const r = goal.getBoundingClientRect();
-      const w = r.width || 300;                     // 폭을 못 재는 환경(검사)에서도 안 깨져요
-      const x = clamp(((e && e.clientX != null ? e.clientX : r.left + w / 2) - r.left) / w * 100, 0, 100);
-      const strong = right ? x >= 50 : x < 50;
-      ctx.weak = !strong;
-      /* 여유 = 키퍼 몸과 골대 기둥 중 **가까운 쪽**까지의 거리예요.
-       * 키퍼 몸 안이면 음수 — 막힌 거예요. */
-      const inKeeper = x > kc - kw && x < kc + kw;
-      const margin = inKeeper ? -1
-        : Math.min(Math.abs(x - (x < kc ? kc - kw : kc + kw)), x - ONE.post, 100 - ONE.post - x);
-      const s = sOne(margin, winMul(ctx.condition, strong ? STRONG : WEAK));
-      end(s, s >= 0.75 ? `🥅 골문 구석에 정확히!${strong ? "" : " 🦶 약발로 마무리!"}`
-        : s > 0 ? "🥅 키퍼 옆을 아슬아슬하게 스쳤어요" : inKeeper ? "🧤 키퍼 정면이었어요" : "😖 골대를 벗어났어요");
+      const c = cells[cellFrom(e)];
+      ctx.weak = !c.strong && c.x !== 50;
+      const a = oneAt(board, (nowMs() - t0) / 1000);   // 🔒 판정은 그 순간의 값 — 그림이 아니에요
+      const s = cellS(c, a);
+      /* 🗣️ 실패 문구만 «키퍼 몸에 걸친 칸인가»로 갈라요 — **판정이 아니라 말**입니다.
+       *    (판정은 위 한 줄이 전부예요. 여기에 갈래를 더하면 규칙이 둘이 됩니다) */
+      const onKeeper = Math.abs(c.x - board.kc) < a.cov;
+      end(s, s >= 0.75 ? `🥅 빈 곳 한가운데를 정확히!${ctx.weak ? " 🦶 약발로 마무리!" : ""}`
+        : s > 0 ? "🥅 키퍼 손끝을 스치고 들어갔어요"
+          : onKeeper ? "🧤 키퍼 정면이었어요" : "😖 빈 곳에서 너무 멀었어요");
     }, gate);
+    paint(t0);
     RAF(tick);
   }
 
@@ -498,7 +731,7 @@ window.W2Moment = (() => {
     const btnHTML = runs.map((r, i) => `<button type="button" class="btn w2m-run-btn" data-i="${i}">`
       + `<span class="w2m-run-no">${"①②③"[i]}</span> 찔러주기</button>`).join("");
     const wrap = box(container, "w2m-killpass",
-      `<p class="tm-label">🎯 라인을 넘기 직전에 찔러 주세요</p>`
+      head(ctx.stake, ctx.title, "오프사이드 라인을 넘기 직전인 동료를 누르세요")
       + `<div class="w2m-pitch">${laneHTML}<div class="w2m-offside" style="left:${KP.line}%"><b>오프사이드</b></div>${runHTML}</div>`
       + `<div class="w2m-btns">${btnHTML}</div>`);
 
@@ -634,7 +867,7 @@ window.W2Moment = (() => {
     const btnHTML = DIRS.map((d) => `<button type="button" class="btn w2m-dir" data-i="${d.key}">`
       + `<span class="w2m-dir-arrow">${d.arrow}</span><span class="w2m-dir-lab">${d.label}</span></button>`).join("");
     const wrap = box(container, "w2m-block",
-      `<p class="tm-label">🧱 어디로 파고들까요?</p>`
+      head(ctx.stake, ctx.title, "상대가 어디로 파고들지 먼저 읽으세요 — 시간은 무제한이에요")
       + `<div class="w2m-read">`
       + `<span class="w2m-sig"><b>🦶 주발</b><span>${footR ? "오른발" : "왼발"}잡이</span></span>`
       + `<span class="w2m-sig ${hi ? "w2m-tell-hi" : "w2m-tell-lo"}">`
@@ -681,11 +914,11 @@ window.W2Moment = (() => {
 
     wrap.classList.remove("w2m-block");
     wrap.classList.add("w2m-block2");
-    wrap.innerHTML = `<p class="tm-label">🧱 지금이에요! 몸을 던지세요</p>`
+    wrap.innerHTML = head(ctx.stake, ctx.title, "상대가 밝은 칸 한가운데에 왔을 때 몸을 던지세요")
       + `<p class="w2m-blk-pick">${me.arrow} ${esc(me.label)}을 막으러 들어갔어요</p>`
       + `<div class="tm-bar w2m-lane w2m-blk-lane" role="img"`
-      + ` aria-label="상대가 지나갑니다 — 판정 창 폭 ${(half * 2).toFixed(0)}%, 잘 읽었을수록 넓어요">`
-      /* 판정 창 — 중심이 차단 지점이에요. 가운데 눈금이 없으면 넓은 창일수록
+      + ` aria-label="상대가 지나갑니다 — 밝은 칸 폭 ${(half * 2).toFixed(0)}%, 잘 읽었을수록 넓어요">`
+      /* 밝은 칸 — 중심이 차단 지점이에요. 가운데 눈금이 없으면 넓을수록
        * "어디가 한가운데인지"가 안 보여서 넓은 게 오히려 헷갈립니다(🏃와 같은 이유). */
       + `<div class="w2m-gate w2m-strong w2m-blk-win" style="left:${(mark - half).toFixed(2)}%;`
       + `width:${(half * 2).toFixed(2)}%"><i class="w2m-gate-mid"></i></div>`
@@ -724,32 +957,32 @@ window.W2Moment = (() => {
   const GAMES = {
     cutin: {
       run: runCutin, key: "w2-cutin", title: "🏃 컷인 돌파",
+      why: "수비 사이가 벌어질 때 파고들 길로 뚫어요",
       lines: [
-        "수비수 둘 사이의 <b>갭</b>이 좌우로 열렸다 닫혀요.",
-        "갭이 <b>코스 칸 위에 왔을 때</b> 그 코스 버튼을 누르세요.",
-        "🦶 <b>주발 쪽 칸이 더 넓어요</b> — 화면에 보이는 폭이 그대로 판정 창이에요.",
+        "수비수 둘 <b>사이</b>가 좌우로 열렸다 닫혀요.",
+        "<b>수비 사이</b>가 <b>파고들 길</b> 위에 왔을 때 그 길을 누르세요.",
+        "🦶 <b>주발 쪽 길이 더 넓어요</b> — 화면에 보이는 폭이 그대로 성공 폭이에요.",
       ],
-      short: "갭이 코스 칸에 왔을 때 그 코스를 누르세요 — 주발 쪽이 더 넓어요.",
-      keys: [{ name: "⬅️ / ➡️", desc: "돌파할 코스예요. 갭이 그 칸 위일 때 누르세요" }],
+      keys: [{ name: "⬅️ / ➡️", desc: "파고들 길이에요. 수비 사이가 그 길 위일 때 누르세요" }],
     },
     oneone: {
       run: runOneone, key: "w2-oneone", title: "🥅 1대1 마무리",
+      why: "키퍼가 지운 반대쪽, 가장 밝은 칸을 노려요",
       lines: [
-        "키퍼가 <b>달려나와 각을 좁혀요</b> — 기다릴수록 빈 곳이 줄어요.",
-        "골문에서 <b>넣고 싶은 지점을 직접 누르세요.</b>",
-        "🦶 주발 쪽 절반은 판정이 <b>넓고</b>, 약발 쪽 절반은 좁아요.",
+        "🧤 키퍼가 나오면서 <b>한쪽 각을 지워요</b> — 기다릴수록 <b>빈 곳</b>이 줄어요.",
+        "<b>빈 곳 한가운데</b>에 가까운 칸일수록 <b>밝아요.</b> 그 칸을 누르세요.",
+        "🦶 주발 쪽 절반은 <b>더 넓게</b> 밝고, 약발 쪽 절반은 좁게 밝아요.",
       ],
-      short: "빈 곳이 남아 있을 때 골문을 눌러 코스를 정하세요.",
-      keys: [{ name: "골문", desc: "누른 지점이 슛 코스예요. 키퍼와 골대에서 멀수록 좋아요" }],
+      keys: [{ name: "골문 칸", desc: "밝을수록 좋은 칸이에요. 키퍼가 지울수록 밝은 칸이 줄어요" }],
     },
     killpass: {
       run: runKillpass, key: "w2-killpass", title: "🎯 킬패스",
+      why: "오프사이드 라인을 넘기 직전인 동료에게 찔러 줘요",
       lines: [
         "동료 셋이 <b>오프사이드 라인</b>을 향해 서로 다른 속도로 뛰어요.",
         "라인을 <b>넘기 직전</b>에 그 동료 버튼을 누르면 최고예요.",
         "이미 넘은 동료는 <b>오프사이드</b>라 버튼이 잠겨요.",
       ],
-      short: "라인을 넘기 직전인 동료를 골라 찔러 주세요.",
       keys: [{ name: "① ② ③", desc: "찔러 줄 동료예요. 라인에 가까울수록 좋아요" }],
     },
     block: {
@@ -757,16 +990,16 @@ window.W2Moment = (() => {
        * 2단계만 적으면 읽기가 왜 중요한지가 안 보여요. `short`도 마찬가지입니다
        * (넷째 판부터는 이 한 줄만 보입니다). */
       run: runBlock, key: "w2-block", title: "🧱 차단",
+      why: "먼저 방향을 읽고, 상대가 지나갈 때 몸을 던져요",
       lines: [
         "① <b>먼저 읽습니다</b> — 이 화면은 <b>움직이는 것이 하나도 없어요.</b> 천천히 고르세요.",
         "<b>확실히 틀었으면</b> 몸 방향이 대체로 진짜예요. <b>살짝 흔들었으면</b> 페인트일 때가 많아 상대의 <b>주발 쪽</b>이 유력해요.",
         "② <b>그 다음이 손입니다</b> — 상대가 지나갈 때 <b>🛡️ 막기</b>를 눌러 몸을 던지세요.",
-        "🔑 <b>잘 읽었을수록 판정 창이 넓어요</b> — 화면에 보이는 띠의 폭이 그대로 판정 창이에요.",
+        "🔑 <b>잘 읽었을수록 밝은 칸이 넓어요</b> — 화면에 보이는 폭이 그대로 성공 폭이에요.",
       ],
-      short: "먼저 방향을 읽고(무제한), 상대가 지나갈 때 🛡️ 막기를 누르세요 — 잘 읽으면 창이 넓어요.",
       keys: [
         { name: "⬅️ ⬆️ ➡️", desc: "읽은 방향이에요. 가운데는 좌우로 나가도 몸을 걸칠 수 있어요" },
-        { name: "🛡️ 막기", desc: "상대가 띠 한가운데에 왔을 때 누르세요. 늦으면 지나가 버려요" },
+        { name: "🛡️ 막기", desc: "상대가 밝은 칸 한가운데에 왔을 때 누르세요. 늦으면 지나가 버려요" },
       ],
     },
   };
@@ -780,13 +1013,15 @@ window.W2Moment = (() => {
     const ctx = {
       done: false, weak: false, moment: o.moment || "oneone",
       condition: o.condition, foot: o.foot === "L" ? "L" : "R",
+      /* 🖼️ 세 줄 위계의 첫 두 줄 — 본 게임 상자가 준비 화면과 **같은 줄**을 씁니다 */
+      stake: STAKE[o.kind] || STAKE.goal, title: g.title,
       cb: typeof cb === "function" ? cb : () => {},
       toJudge: typeof o.judge === "function" ? o.judge : loneJudge,
     };
     if (!container) { ctx.cb(ctx.toJudge(0.5), { s: 0.5, moment: ctx.moment, weak: false }); return; }
     ready(container, {
-      key: g.key, title: g.title, lines: g.lines, short: g.short, keys: g.keys,
-      stake: STAKE[o.kind] || STAKE.goal,
+      key: g.key, title: g.title, why: g.why, lines: g.lines, keys: g.keys,
+      stake: ctx.stake,
     }, (gate) => g.run(container, ctx, gate));
   }
 
@@ -813,6 +1048,12 @@ window.W2Moment = (() => {
     /* 🧪 실측·검사 창구. **판정 산식이 아니라 조작 성공도만** 여기 있어요 —
      * 검사가 여기서 문턱을 읽어 가면 상수를 바꿔도 안 잡힙니다(기준값은 검사에 직접 적으세요). */
     _t: { sCut, sOne, sKp, sBar, blkRead, blkWin, winMul, wideOn, rollBlock, loneJudge,
-      K: { CUT, ONE, KP, BLK, BLK_RUN, BLK_WIN, BLK_READ, STRONG, WEAK, WIDE, FOOT_WIN } },
+      /* 🥅 무대와 좌표 — **실측·검사가 산식을 베껴 적지 않게** 내보냅니다.
+       * `oneAt`은 닫힌 식이라 화면 없이도 판을 그대로 굴릴 수 있어요. */
+      oneRoll, oneAt, oneCellX, oneErr, cellFloorErr,
+      /* 🔒 손잡이 셋을 **따로** 내보냅니다 — 같은 표에 두면 무엇을 고쳤는지 못 가려요
+       *    (`ONE_WIN` 난이도 · `ONE_CLOSE` 지분 · `CELL_FLOOR` 천장) */
+      K: { CUT, ONE, ONE_WIN, ONE_CLOSE, CELL_FLOOR, KP, BLK, BLK_RUN, BLK_WIN, BLK_READ,
+        STRONG, WEAK, WIDE, FOOT_WIN } },
   };
 })();

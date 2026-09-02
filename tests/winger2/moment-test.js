@@ -66,8 +66,14 @@ const MUT = {
     + " * (1 + (((ab == null ? 70 : ab) - 70) / 300));"],
     [/ {6}const mul = winMul\(ctx\.condition, l\.strong \? STRONG : WEAK\);/,
       "      const mul = winMul(ctx.condition, l.strong ? STRONG : WEAK, ctx.ability);"],
-    [/const s = sOne\(margin, winMul\(ctx\.condition, strong \? STRONG : WEAK\)\);/,
-      "const s = sOne(margin, winMul(ctx.condition, strong ? STRONG : WEAK, ctx.ability));"],
+    /* 🥅 2026-09-02 — **자유 좌표가 격자가 되면서 이 줄이 통째로 없어졌습니다**(113번).
+     *    옛 겨냥: `const s = sOne(margin, winMul(ctx.condition, strong ? STRONG : WEAK));`
+     *    🔴 그 줄이 사라진 것을 **0번이 잡았고, 이 파일은 `loadMoment`에서 죽었습니다**(exit 2) —
+     *       빨간불이 아니라 죽음이라 C·D·E가 통째로 안 돌았어요. 정규식을 새 자리로 옮깁니다.
+     *    🔑 옮긴 자리는 **창 배수를 만드는 줄**이에요. 겨누는 것은 그대로
+     *       *"능력치가 판정 창에 실리나"*입니다 — 이름이 아니라 **형태**를 따라갔습니다. */
+    [/ {4}const cellMul = \(cx\) => winMul\(ctx\.condition, cx === 50 \? 1 : \(\(cx > 50\) === right \? STRONG : WEAK\)\);/,
+      "    const cellMul = (cx) => winMul(ctx.condition, cx === 50 ? 1 : ((cx > 50) === right ? STRONG : WEAK), ctx.ability);"],
     [/ {4}const mul = winMul\(ctx\.condition, 1\);/,
       "    const mul = winMul(ctx.condition, 1, ctx.ability);"]],
   /* ⓔ 🧱 **읽기가 판정 창을 못 정하게** 합니다 — 셋을 다 1.00으로.
@@ -112,6 +118,10 @@ const K = T.K;
   const shape = [
     ["sBar", (e, w) => T.sBar(e, w), 10],
     ["🏃 sCut", (e) => T.sCut(e, 1), K.CUT.win],
+    /* 🥅 2026-09-02 — **드디어 여기 합류했습니다**(113번 격자 개편).
+     *    그전에는 `sOne(margin, mul)`이 *"여유가 클수록 좋다 · need 이상이면 1 · 몸 안이면 0"*
+     *    이라 **오차 기준의 이 모양이 아니었어요.** 지금은 `sOne(err, mul)`로 🏃와 같은 꼴입니다. */
+    ["🥅 sOne", (e) => T.sOne(e, 1), K.ONE_WIN],
     ["🎯 sKp", (e) => T.sKp(e, 1), K.KP.win],
   ];
   const bad = [];
@@ -131,14 +141,21 @@ const K = T.K;
     `A-1. 넷이 같은 모양 **s = 1 − 오차 ÷ 판정창** — 0에서 1 · 창에서 0 · 단조감소 · [0,1] 안`
     + (bad.length ? ` — ${bad.slice(0, 3).join(" · ")}` : ""));
 
-  /* ② 🥅 키퍼 몸 안이면 0 · 🎯 라인을 넘었으면 0 — "실패는 0"이 넷의 공통 규칙이에요 */
-  check(T.sOne(-1, 1) === 0 && T.sOne(-0.001, 1) === 0,
-    `A-2. 🥅 키퍼 몸 안(여유 < 0)이면 s = 0 — 막힌 거예요`);
+  /* ② 🎯 라인을 넘었으면 0 — "실패는 0"이 공통 규칙이에요 */
   check(T.sKp(-0.001, 1) === 0 && T.sKp(-50, 1) === 0,
     `A-3. 🎯 오프사이드 라인을 넘었으면 s = 0`);
-  /* 🥅는 여유가 need 이상이면 만점 — 창을 넓히면 만점 문턱이 같이 넓어져야 해요 */
-  check(T.sOne(K.ONE.need, 1) === 1 && T.sOne(K.ONE.need * 2, 1) === 1,
-    `A-4. 🥅 여유가 ${K.ONE.need}%(ONE.need) 이상이면 s = 1`);
+
+  /* 🚨 **A-2 · A-4는 2026-09-02에 지웠습니다 — 되살리지 마세요**(113번 §8-1).
+   *    · A-2 *"🥅 키퍼 몸 안(여유 < 0)이면 s = 0"*
+   *    · A-4 *"🥅 여유가 `ONE.need` 이상이면 s = 1"*
+   *    둘 다 **자유 좌표 시절 `sOne(margin, mul)`의 갈래**였고, 격자 개편에서 그 형태가
+   *    통째로 폐기됐어요(`ONE.need`도 같이 죽었습니다). 지금 `sOne`은 **오차 하나만 보는**
+   *    🏃와 같은 꼴이라, 그 갈래를 다시 단언하면 **폐기한 형태를 검사가 지키게** 됩니다
+   *    — 「폐기는 이름이 아니라 형태」의 그 자리예요.
+   * ✅ **대신 A-1이 🥅를 넷째로 받았습니다.** 지키는 문장이 줄지 않았습니다:
+   *    「오차 0에서 1 · 창에서 0 · 그 사이 단조감소 · [0,1] 안」을 🥅도 이제 통과해야 해요.
+   * 🌍 이 판단이 서 있는 세계: 「🥅가 **오차 기준 격자**인 세계」.
+   *    자유 좌표로 되돌리는 판정이 나오면 A-1의 🥅 줄부터 다시 보세요. */
 
   /* ③ 🧱 차단 — **읽기는 이제 `s`가 아니라 「판정 창의 폭」을 정합니다** (104번 §2-2).
    *
@@ -315,7 +332,32 @@ const K = T.K;
 {
   const WANT = {
     "CUT.win": 12, "CUT.speed": 118, "CUT.sweeps": 3,
-    "ONE.need": 26, "ONE.kw0": 12, "ONE.kw1": 36, "ONE.grow": 2400, "ONE.post": 3.5,
+    /* 🥅 2026-09-02 격자 개편 — `need`·`kw0`·`kw1`은 **죽었습니다**.
+     *    새 값을 여기 **박습니다**(소스에서 읽어 오지 않아요). `kc`는 배열이라 D-2에 있어요.
+     * 🚨 **이 자리는 하루에 두 번 움직였습니다.** 113번 §8-1이 알려 준
+     *    `ONE.win 17 · cov1 17 · close 0.62`는 **몇 분 뒤 옛말**이 됐어요 —
+     *    engineer가 「오차의 바닥」을 **몫 나누기에서 `CELL_FLOOR`로 옮겼거든요**
+     *    (`cov1`이 17 → 34로 돌아오고 `ONE_CLOSE`가 0.62 → 0.45).
+     *    🔑 **문서에서 베끼지 말고 그때의 소스에서 확인하세요.** 여기 값은 소스를 보고 적었습니다.
+     * 🔒 손잡이 셋은 **따로** 씁니다 — 같은 표에 두면 무엇이 움직였는지 못 가려요:
+     *    `ONE_WIN` 난이도 · `ONE_CLOSE` 공간↔시간 지분 · `CELL_FLOOR` s의 천장 */
+    /* ═══ 🥅 2026-09-02 재측정 완료 — **한 벌로** 넣었습니다 (113번 §14) ═══
+     * 🔴 **`ONE_WIN` 하나만 23으로 고치면 안 됐습니다.** 넷이 한 벌로 움직였어요:
+     *      `CELL_FLOOR` (없음)→0.30 · `ONE.cov1` 17→34 · `ONE_CLOSE` 0.62→0.45 · `ONE_WIN` 17→23
+     *    🔑 `ONE_WIN`이 커진 건 **「쉬워졌다」가 아닙니다** — `CELL_FLOOR`가 오차에 바닥
+     *       (칸폭 20 × 0.30 = **6**)을 깔아서, **같은 난이도를 내려면 창이 그만큼 넓어야** 해요.
+     *       바닥 없이 23이면 훨씬 쉬워집니다. **둘은 한 벌입니다.**
+     * 📏 다시 잰 곡선(판 400 × 시드 3벌 · 옛 판과 **짝지은 차이**):
+     *      서툰 +0.007 · **보통 ±0.000** · 능숙 −0.029   (계약 ① 「보통 ≤ 0.005」 충족)
+     *      세 시드 −0.005 / +0.008 / −0.002
+     * ⚠️ `ONE_WIN`은 `CELL_FLOOR`·`ONE.cells`에 **매달린 종속값**이에요. 셋 중 하나가 움직이면
+     *    **표 한 줄을 통째로** 가져오세요 (기울기: d(보통)/d(ONE_WIN) ≈ +0.016 ·
+     *    d(보통)/d(CELL_FLOOR) ≈ −0.9).
+     * 🔴 **죽은 이름**: `ONE.need` · `ONE.kw0` · `ONE.kw1` · `ONE.win` · `ONE.close`
+     *    (`win`·`close`는 **`ONE` 밖으로 나갔습니다** — 손잡이 셋을 같은 표에 안 두려고요) */
+    "ONE.cells": 5, "ONE.cov0": 10, "ONE.cov1": 34,
+    "ONE.grow": 2400, "ONE.life": 3400, "ONE.post": 3.5,
+    "ONE_WIN": 23, "ONE_CLOSE": 0.45, "CELL_FLOOR": 0.30,
     "KP.win": 8, "KP.line": 92,
     "BLK.tellHi": 0.58, "BLK.tellLo": 0.24, "BLK.favor": 1.6, "BLK.hiP": 0.5,
     /* 🧱 2단 국면 (2026-09-01 개편) — `BLK.part`는 **죽었습니다**(3단 이산 매핑 폐기).
@@ -328,26 +370,94 @@ const K = T.K;
     "FOOT_WIN": 0.25, "WIDE": 1.30,
   };
   const got = (k) => {
-    if (k === "FOOT_WIN") return K.FOOT_WIN;
-    if (k === "WIDE") return K.WIDE;
-    if (k === "BLK_WIN") return K.BLK_WIN;
+    if (k.indexOf(".") < 0) return K[k];              // 최상위 손잡이 (ONE_WIN · CELL_FLOOR · …)
     const [g, f] = k.split(".");
     return K[g][f];
   };
+  /* 🔒 **어느 축이 움직였는지를 말해 줍니다** (113번 §14-3).
+   *    셋을 한 줄로 묶어 «움직였다»고만 하면, 다음 사람이 **무엇을 다시 재야 할지** 몰라요 —
+   *    난이도(속도÷창) · 지분(공간↔시간) · 천장(바닥)은 **서로 다른 재측정**을 부릅니다. */
+  const AXIS = {
+    ONE_WIN: "🎚️ 난이도(속도 ÷ 창) — 곡선 전체를 다시 재세요",
+    ONE_CLOSE: "⚖️ 공간 ↔ 시간 지분 — 「무엇으로 이기나」가 바뀝니다(난이도가 아니에요)",
+    CELL_FLOOR: "🏔️ s의 천장 — **`ONE_WIN`이 여기 매달린 종속값**이라 표 한 줄을 통째로 가져오세요",
+    "ONE.cells": "🔲 읽힘(칸 수) — 칸 폭이 바뀌면 🏔️ 바닥도 같이 움직입니다",
+    "ONE.cov1": "🧤 좋은 지점이 움직이는 폭 — 너무 작으면 격자가 **버튼 하나**가 돼요",
+  };
   const off = Object.entries(WANT).filter(([k, v]) => got(k) !== v).map(([k, v]) => `${k} ${got(k)}≠${v}`);
+  const axes = Object.keys(AXIS).filter((k) => got(k) !== WANT[k]);
   check(off.length === 0,
     `D-1. 🔗 E[s] ≈ 0.5를 만든 판정 창·속도 상수 ${Object.keys(WANT).length}개가 그대로다`
     + (off.length
       ? `\n     🔴 움직인 것: ${off.join(" · ")}`
+        + (axes.length ? `\n     🧭 **어느 축인가** — ${axes.map((k) => `${k}: ${AXIS[k]}`).join("\n        ")}` : "")
         + `\n     👉 engineer에게 **E[s] 4종 재측정**을 요청하세요.`
+        + `\n     🔴 **한 손잡이만 되돌리지 마세요.** 2026-09-02에 넷이 한 벌로 움직였습니다 —`
+        + ` \`ONE_WIN\`만 고쳤으면 \`CELL_FLOOR\`가 깐 바닥과 어긋나 곡선이 무너져요.`
         + `\n     🔒 재측정은 **절대값이 아니라 「바꾸기 전 ↔ 바꾼 뒤」 짝지은 차이**로 보고하세요 —`
         + `\n        절대값은 조작자 모델의 치우침을 그대로 물고 옵니다 (파일 머리말 참고).`
         + `\n        설계 §4-4 ①의 ±5%p ⇔ ΔE[s] 0.132 (half(70) = 0.19)`
       : ""));
   /* 속도 폭은 배열이라 따로 */
   check(K.KP.speed[0] === 22 && K.KP.speed[1] === 34 && K.CUT.lane[0] === 26 && K.CUT.lane[1] === 74
-    && K.BLK_RUN.speed[0] === 58 && K.BLK_RUN.speed[1] === 74,
-    `D-2. 🔗 KP.speed [22,34] · CUT.lane [26,74] · BLK_RUN.speed [58,74]도 그대로다`);
+    && K.BLK_RUN.speed[0] === 58 && K.BLK_RUN.speed[1] === 74
+    && K.ONE.kc[0] === 18 && K.ONE.kc[1] === 82
+    && K.ONE.look === 450,
+    `D-2. 🔗 KP.speed [22,34] · CUT.lane [26,74] · BLK_RUN.speed [58,74] · 🥅 ONE.kc [18,82] · 🔮 ONE.look 450도 그대로다`
+    + `\n     🔑 **\`ONE.look\`은 D-1에 안 넣었습니다.** 🔮 미래 흘리기는 **화면 전용**이라`
+    + ` \`s\`에 한 톨도 안 들어가요 — 움직여도 **곡선 재측정이 아닙니다**(113번 §14-3).`
+    + `\n     D-1에 뒀다면 이 값이 바뀔 때 «E[s]를 다시 재세요»라는 **틀린 안내**가 떴을 거예요.`
+    + ` 「s에 안 들어간다」 자체는 **\`one-grid-test.js\` G-7**이 관계로 지킵니다`);
+
+  /* ══════ D-2a. 🏔️ **격자에는 「`s`의 천장」이 있어야 한다** ══════
+   * (2026-09-02 · engineer 112번 §12 · 113번)
+   *
+   * 🔴 자유 좌표에서는 **손이 바닥을 만들었습니다** — 노린 곳에 정확히 못 맞으니까요.
+   *    격자는 탭을 **칸 중심으로 스냅**해서 그 바닥을 지웠고, 오차가 **0을 지나갈 수** 있게 됐어요.
+   *    `sBar(0, 창) = 1`이라 **창을 아무리 좁혀도 잘하는 사람은 만점**을 굽니다
+   *    (실측: 능숙 E[s] 0.702 → **0.903**).
+   *
+   * 🚨 **이 문장은 하루에 한 번 갈아엎혔습니다 — 그게 이 주석의 요점이에요.**
+   *    처음엔 「좋은 지점」을 거의 안 움직이게 해서(`cov1`을 17로 낮춰) 천장을 만들었고,
+   *    113번 §8-1은 저에게 그 상태를 **부등호로 지켜 달라**고 했습니다:
+   *        `(cov1 − cov0) / 2 < (100 / cells) / 4`
+   *    🔴 그런데 engineer가 몇 분 뒤 **그 풀이를 되돌렸습니다** — 「좋은 지점」이 안 움직이면
+   *       **어느 칸을 누를지가 고정**되어 격자가 버튼 하나가 되거든요.
+   *       바닥은 이제 **`CELL_FLOOR`**가 따로 만듭니다(`cov1`은 34로 복귀).
+   *    ⚠️ 그 부등호를 그대로 굳혔다면 **고친 코드 쪽이 빨간불**이 났을 겁니다
+   *       (실제로 잠깐 그 상태였어요: 12.00 < 5.00 위반).
+   *
+   * ✅ 그래서 **값이 아니라 관계**로 씁니다 — 「천장이 있다」는 두 풀이 **어느 쪽에서도** 참이에요.
+   *    · 칸 중심을 **정확히** 노려도(오차 0) `s`가 1이 아니다
+   *    · 그 천장은 판정 창(`mul`)이 넓어지면 **같이 올라간다**
+   * 🔑 산식은 **소스가 내보낸 `oneErr`**를 그대로 부릅니다(베껴 적지 않았어요).
+   * 🌍 이 문장이 서 있는 세계: 「🥅가 **칸으로 스냅되는** 세계」. 자유 좌표로 되돌아가면
+   *    손이 다시 바닥을 만드니 이 천장은 필요 없어집니다 — 그때 여기부터 다시 보세요. */
+  const cellW = 100 / K.ONE.cells;
+  const ceil1 = T.sOne(T.oneErr(cellW * 1.5, cellW * 1.5), 1);      // 오차 0을 노려도
+  const ceil2 = T.sOne(T.oneErr(cellW * 1.5, cellW * 1.5), 1.3);    // 창이 넓어지면
+  check(ceil1 < 1 - 1e-9 && ceil2 > ceil1 + 1e-9 && ceil1 > 0,
+    `D-2a. 🏔️ **격자에는 \`s\`의 천장이 있다** — 칸 중심을 정확히 노려도 ${ceil1.toFixed(3)} (< 1)`
+    + ` · 창을 1.3배로 넓히면 ${ceil2.toFixed(3)}로 **같이 올라간다**`
+    + `\n     🔑 값이 아니라 **관계**입니다 — 「몫 나누기」로 풀든 \`CELL_FLOOR\`로 풀든 살아남아요`
+    + `\n     ⚠️ 천장이 1이 되면 **능숙 E[s]가 0.90으로 되돌아갑니다**(실측). 0이면 격자가 아무것도 못 내요`
+    + (ceil1 < 1 - 1e-9 && ceil2 > ceil1 + 1e-9 && ceil1 > 0 ? ""
+      : `\n     🔴 천장 ${ceil1.toFixed(3)} → engineer에게 **E[s] 4종 재측정**을 요청하세요`));
+
+  /* 🧪 변이 — 🏔️ 바닥을 0으로 지우면 천장이 1이 되어 빨간불 */
+  {
+    const MFL = [[/const CELL_FLOOR = 0\.30;/, "const CELL_FLOOR = 0;"]];
+    const bad2 = momentMutsOK({ FLOOR0: MFL });
+    if (bad2.length) {
+      check(false, `D-2a변이가 **안 돌았습니다** — 정규식이 소스와 안 맞아요: ${bad2.join(", ")}`);
+    } else {
+      const F = loadMoment(MFL)._t;
+      const c0 = F.sOne(F.oneErr(cellW * 1.5, cellW * 1.5), 1);
+      check(!(c0 < 1 - 1e-9),
+        `D-2a변이. 🏔️ \`CELL_FLOOR\`를 0으로 지우면 → 빨간불 (천장 ${c0.toFixed(3)} — 칸 중심을 노리면 **만점**이에요)`
+        + `\n     🔑 이게 능숙 E[s]를 0.702 → 0.903으로 올렸던 그 자리입니다`);
+    }
+  }
 
   /* 🧱 차단 — 겹쳐 읽기가 성립하는 **부등호**가 양쪽에서 뒤집히는가.
    * 이건 값이 아니라 **관계**예요 — 계수를 옮겨도 이 부등호가 살아 있으면 판이 성립합니다.
@@ -404,10 +514,14 @@ const K = T.K;
    *    넷의 산식 줄과 🧱 2단계 판정 줄이 전부 `sBar(`를 지나야 합니다. */
   const LINES = {
     "🏃 sCut": /const sCut = \(err, mul\) => ([^\n]+);/,
-    "🥅 sOne": /const sOne = \(margin, mul\) => ([^\n]+);/,
+    "🥅 sOne": /const sOne = \(err, mul\) => ([^\n]+);/,
     "🎯 sKp": /const sKp = \(gap, mul\) => ([^\n]+);/,
     "🧱 blkWin": /const blkWin = \(pick, truth, mul\) => ([^\n]+);/,
     "🧱 2단계 판정": /const s = (sBar\(Math\.abs\(pos - mark\), half\));/,
+    /* 🥅 2026-09-02 — 격자의 판정 한 줄. **판정도 그림도 이 줄을 지납니다**(113번).
+     *    창을 좁히는 `tight`와 🦶·🫀·♿의 `c.mul`이 **곱해져 하나의 mul**로 들어가야
+     *    넷이 같은 비율로 움직여요 — 그걸 E-3의 `* mul` 검사가 봅니다. */
+    "🥅 격자 판정": /const cellS = \(c, a\) => (sOne\(oneErr\(c\.x, a\.best\), a\.tight \* c\.mul\));/,
   };
   const miss = [], noBar = [], noMul = [];
   const body = {};
@@ -417,9 +531,12 @@ const K = T.K;
     body[name] = m[1].trim();
     /* 🧱 blkWin은 창을 **만드는** 줄이라 sBar를 안 지납니다 — 그 창을 받아 쓰는
      *    「2단계 판정」 줄이 지나요. 나머지 셋은 자기 줄에서 지나야 합니다. */
-    if (name !== "🧱 blkWin" && !/\bsBar\(/.test(m[1])) noBar.push(`${name}: ${m[1].trim()}`);
-    /* ② 창이 `… * mul` 꼴인가 — `mul`에 **1차 비례**해야 넷이 같은 비율로 움직입니다 */
-    if (name !== "🧱 2단계 판정" && !/\*\s*mul\b/.test(m[1])) noMul.push(`${name}: ${m[1].trim()}`);
+    if (name !== "🧱 blkWin" && !/\b(sBar|sOne)\(/.test(m[1])) noBar.push(`${name}: ${m[1].trim()}`);
+    /* ② 창이 `… * mul` 꼴인가 — `mul`에 **1차 비례**해야 넷이 같은 비율로 움직입니다.
+     * 🥅 2026-09-02 — 격자 판정 줄은 `a.tight * c.mul`로 **점 찍힌 이름**을 곱합니다.
+     *    그래서 `x.mul` 꼴도 받아요. 🔑 **받아 주는 것이 느슨해진 게 아닙니다** —
+     *    `c.mul`(🦶·🫀·♿)을 그 줄에서 빼면 여기서 바로 빨간불이 나요(그게 이 줄의 계약이에요). */
+    if (name !== "🧱 2단계 판정" && !/\*\s*(?:[\w.$]+\.)?mul\b/.test(m[1])) noMul.push(`${name}: ${m[1].trim()}`);
   }
   check(miss.length === 0,
     `E-1. 📐 넷의 산식 줄을 소스에서 전부 뜯었다 (${Object.keys(LINES).length}줄)`
@@ -435,21 +552,21 @@ const K = T.K;
   /* ③ **`s`가 넷 다 「오차 ÷ 창」 하나만의 함수이고, 그 함수가 서로 같다.**
    *   같은 비율 r을 넷에 각각 먹여서 **같은 값**이 나오는지 봅니다.
    *   창 폭도 상수도 서로 다른데 r만 맞추면 값이 같아야 해요 — 그게 "같은 자"의 뜻입니다. */
-  /* ⚠️ `mul`은 **1이 아니어야** ②가 진짜로 걸립니다. 그리고 **1보다 작아야** 넷이 같은
-   *    비율 구간을 나눠 가져요 — 🥅 sOne의 오차는 `ONE.need`에서 멈추므로(그 위는
-   *    *"키퍼 몸 안"* 갈래이고 A-2가 따로 봅니다) 비율이 `1/mul`까지만 성립합니다.
-   *    `mul = 0.85`면 `1/mul = 1.18`이라 **창을 넘는 구간까지** 넷을 나란히 놓을 수 있어요. */
+  /* ⚠️ `mul`은 **1이 아니어야** ②가 진짜로 걸립니다.
+   * 🥅 2026-09-02 — **여기가 깨끗해졌습니다.** 그전에는 sOne만 「여유」 기준이라
+   *    `ONE.need - r * 창`으로 **뒤집어서** 먹여야 했고, 비율도 `1/mul`까지만 성립했어요.
+   *    격자가 되면서 🥅가 🏃와 **완전히 같은 꼴**이라 이제 넷을 똑같이 먹입니다. */
   const mul = 0.85;
   const RMAX = 1 / mul - 1e-9;
   const winOf = {
     "🏃 sCut": K.CUT.win * mul,
-    "🥅 sOne": K.ONE.need * mul,
+    "🥅 sOne": K.ONE_WIN * mul,
     "🎯 sKp": K.KP.win * mul,
     "🧱 blk": T.blkWin(0, 1, mul),                     // 인접 읽기 — 정타·반대와 폭이 다릅니다
   };
   const sOf = {
     "🏃 sCut": (r) => T.sCut(r * winOf["🏃 sCut"], mul),
-    "🥅 sOne": (r) => T.sOne(K.ONE.need - r * winOf["🥅 sOne"], mul),
+    "🥅 sOne": (r) => T.sOne(r * winOf["🥅 sOne"], mul),
     "🎯 sKp": (r) => T.sKp(r * winOf["🎯 sKp"], mul),
     "🧱 blk": (r) => T.sBar(r * winOf["🧱 blk"], winOf["🧱 blk"]),
   };
@@ -471,7 +588,7 @@ const K = T.K;
   /* ④ **창 비율** — `mul`을 흔들면 넷의 창이 **똑같은 배수**로 움직인다.
    *    이게 ♿ 확대·🫀 컨디션이 네 종의 형평을 안 깨뜨리는 근거예요. */
   const widthOf = (m) => ({
-    "🏃 sCut": K.CUT.win * m, "🥅 sOne": K.ONE.need * m,
+    "🏃 sCut": K.CUT.win * m, "🥅 sOne": K.ONE_WIN * m,
     "🎯 sKp": K.KP.win * m, "🧱 blk": T.blkWin(0, 1, m),
   });
   const ratioBad = [];

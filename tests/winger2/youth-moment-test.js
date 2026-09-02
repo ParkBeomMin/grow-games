@@ -45,7 +45,7 @@
  * ⏱️ 약 60초.
  */
 "use strict";
-const { bootPage, pageMutsOK, townAuto, passTown } = require("./_load.js");
+const { bootPage, pageMutsOK, townAuto, passTown, tapFoot } = require("./_load.js");
 
 let fail = 0;
 const check = (ok, msg) => { console.log(`${ok ? "✅" : "❌"} ${msg}`); if (!ok) fail += 1; };
@@ -148,27 +148,21 @@ function boot(o) {
  *    유스가 「고르는 화면」에서 「제안받는 화면」이 되어 **자리 뒤로** 갔어요.
  *    `#agency-list`는 동네를 지나야 채워집니다(`showOffers` → `renderMarkets`).
  * ⚠️ 2026-09-01에 **🦶 주발이 `#screen-name`에서 나가 자기 화면이 됐습니다** (94번 §6-1).
- *    이 드라이버가 그때 죽었어요 — 종료 코드 2였습니다. 아래 세 줄이 그 수리예요. */
+ *    이 드라이버가 그때 죽었어요 — 종료 코드 2였습니다.
+ * ⚠️ 2026-09-02에 **그 화면에 [다음]이 붙어 또 죽었습니다** (111번). 같은 자리에서 두 번이에요.
+ *    🔒 그래서 🦶는 이제 **`_load.js`의 `tapFoot` 한 벌**을 부릅니다 — 여기서 손으로 안 눌러요. */
 async function toHome(h, o) {
   h.press(h.D.getElementById("btn-new"), "btn-new");
   h.press(h.D.getElementById("btn-name-next"), "btn-name-next");
-  /* 🦶 **주발이 자기 화면으로 나갔습니다** (2026-09-01 · director 94번 §2·§6-1).
-   *    ① 선택자가 `#screen-name .foot-opt` → **`#screen-foot .foot-card`**
-   *    ② 누르는 차례가 `btn-name-next` **뒤**로 밀렸고
-   *    ③ 탭이 곧 답이라 **오른발도 눌러야** 합니다 (예전에는 토글 기본값이라 그냥 넘어갔어요)
-   * ⏳ 발을 누르면 ⚽ 공이 굴러들어오고 **그 뒤에** 다음 화면으로 갑니다.
-   *    안 기다리고 `#position-list`를 누르면 그 사이에 `goOrigin()`이 떨어져 화면이 어긋나요.
-   *    ⚠️ **320ms라는 값은 안 박습니다 — 「화면이 바뀔 때까지」를 기다려요.**
-   *    연출 길이가 바뀌어도(♿ reduce면 즉시) 드라이버는 그대로 살아야 하니까요.
+  /* 🦶 **주발 화면을 지납니다 — `_load.js`의 `tapFoot` 한 벌을 씁니다.**
+   * 🔴 **여기 인라인 사본이 있었습니다.** 2026-09-02에 주발 화면에 [다음]이 붙자
+   *    이 사본이 그대로 죽어 이 파일이 종료 코드 2가 됐어요(사본이 셋이었습니다 —
+   *    `_load.js` · `foot-map-test.js` · 여기). rAF preamble 네 벌과 **같은 형태**입니다.
+   *    ⚠️ 다시 인라인으로 풀지 마세요 — `foot-next-test.js`의 N-9가 빨간불을 냅니다.
    * 🗺️ 동네 화면(`#screen-origin`)은 **지나갑니다** — 자리 카드 핸들러가 살아 있어서
    *    `S.origin`은 설계 93번 §4-3이 뚫어 둔 기본값 `""`(🌍 미상)으로 삽니다.
    *    ⚠️ 이 파일은 🦶만 봐요. 🗺️ 지역 계약은 `foot-map-test.js`가 맡습니다. */
-  const want = o.foot === "L" ? "L" : "R";
-  h.press(h.D.querySelector(`#screen-foot .foot-card[data-foot="${want}"]`),
-    `🦶 ${want === "L" ? "왼발" : "오른발"}`);
-  for (let i = 0; i < 400 && h.active() === "screen-foot"; i++) await wait(3);
-  if (h.active() === "screen-foot")
-    throw new Error("🦶 발을 눌렀는데 화면이 안 넘어가요 — openFoot의 done 배선을 보세요");
+  await tapFoot(h.W, h.press, o.foot === "L" ? "L" : "R");
   const back = townAuto(h.W);
   h.press(h.D.querySelector(`#position-list .card[data-pos="${o.pos}"]`), `📍 ${o.pos}`);
   passTown(h.W, h.press, back);      // ♻️ 되돌립니다 — 이 파일은 진짜 미니게임을 잽니다

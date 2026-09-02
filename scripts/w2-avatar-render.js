@@ -84,9 +84,10 @@ async function walk(p, { foot = "R", name = KO3, origin = "seoul", pos = "wg", s
   await go("#btn-new");
   await p.fill("#input-name", name);
   await go("#btn-name-next");
-  /* 🦶 주발 — **320ms 뒤에 넘어갑니다.** 숫자를 박지 않고 「화면이 바뀔 때까지」를 기다려요
-   *    (♿ reduce에서는 즉시입니다 — 연출이 진행을 붙잡으면 안 돼요). */
+  /* 🦶 주발 — **고른 뒤 [다음]을 눌러야 넘어갑니다** (범민 님 요청으로 자동 전환을 걷어냈어요).
+   *    숫자를 박지 않고 「화면이 바뀔 때까지」를 기다립니다. */
   await go(`#screen-foot .foot-card[data-foot="${foot === "L" ? "L" : "R"}"]`);
+  await go("#btn-foot-next");
   await leave("screen-foot");
   /* 🤖 🏫 카드를 자동으로 — 🗺️ [다음] 앞에 켜야 합니다. 초등 첫 카드는
    *    `openStage`가 불리는 순간 바로 열려서, 그 뒤에 켜면 이미 진짜 미니게임이 떠 있어요. */

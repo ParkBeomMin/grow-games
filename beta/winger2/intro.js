@@ -1,6 +1,6 @@
 /* 🦶 주발 · 🗺️ 동네 — ⚽ 더 윙어 II 생성 흐름 앞단 두 화면 (winger2 전용)
  *
- *   WingerIntro.openFoot(cur, done)     🦶 발 두 짝을 그리고, 탭하면 done("L"|"R")
+ *   WingerIntro.openFoot(cur, done)     🦶 발 두 짝. 탭은 고르기만 하고 [다음]에서 done("L"|"R")
  *   WingerIntro.openOrigin(cur, done)   🗺️ 17개 시·도 지도. [다음]에서 done(originId)
  *   WingerIntro.nameOf(id) / lineOf(id) 🗂️ 세이브·기록이 읽는 창구 (없으면 "🌍 미상")
  *   WingerIntro.step(screenId)          🔢 "2 / 5" — 화면 순서가 바뀌면 STEPS 한 줄만 고치세요
@@ -42,7 +42,10 @@ window.WingerIntro = (() => {
    *    **뛰면서 남은 둘이 채워집니다.**
    *
    * 🔒 **화면을 늘리는 자리가 아닙니다.** `STEPS`는 **세는 것**이지 만드는 게 아니에요 —
-   *    🔒 첫 카드 앞의 탭 5(여유 0)는 그대로입니다(93번 §2-2). 앞의 셋 뒤에 바로 카드가 와요. */
+   *    앞의 셋 뒤에 바로 카드가 옵니다.
+   * ⚠️ **탭 수는 더 이상 5가 아닙니다** (2026-09-02 · 111번). 🦶 주발에 [다음]이 붙어서
+   *    첫 카드 앞의 탭이 **6**이에요 — 93번 §2-2의 「5(여유 0)」는 옛말입니다.
+   *    🔑 초1 아크가 새로 설계 중이라 **그 검산은 그쪽에서** 다시 잡습니다. */
   const STEPS = ["screen-name", "screen-foot", "screen-origin", "screen-position", "screen-prospect"];
   const step = (id) => {
     const i = STEPS.indexOf(id);
@@ -92,21 +95,40 @@ window.WingerIntro = (() => {
    * ⚽ 공은 **고른 쪽 발 앞**에만 붙습니다 — 탭한 순간 `.on`이 붙으면서 굴러들어와요. */
   function cardHTML(foot) {
     const nm = foot === "L" ? "왼발" : "오른발";
+    /* ♿ `aria-pressed`가 **고른 상태를 말해 줍니다.** 이제 탭해도 화면이 안 바뀌니,
+     *    이게 없으면 낭독 사용자에게는 **아무 일도 안 일어난 화면**이 돼요
+     *    (🗺️ 동네의 `.om-city`와 같은 문법입니다). */
     return `<button type="button" class="foot-card" data-foot="${foot}"`
-      + ` aria-label="${nm}잡이로 시작해요">`
+      + ` aria-pressed="false" aria-label="${nm}잡이로 시작해요">`
       + `<span class="foot-art" aria-hidden="true">`
       + `<i class="foot-shoe">👟</i><i class="foot-ball">⚽</i></span>`
       + `<span class="foot-name">${nm}</span>`
+      + `<span class="foot-pick" aria-hidden="true">✓ 이 발</span>`
       + gateHTML(foot)
       + `<span class="foot-gate-cap">판정 창</span>`
       + `</button>`;
   }
 
-  /* 탭 = 답입니다. 🔴 **「다음」 버튼을 두지 마세요** — 붙이면 탭이 2회가 되고
-   * 첫 순간 카드가 그만큼 밀립니다(93번 §3-3). 되돌리기는 **뒤로**가 맡아요. */
+  /* 🆕 **탭은 「고르기」까지입니다. 넘기는 건 [다음]이에요** (2026-09-02 · 111번).
+   *
+   * 🚨 여기 있던 옛 규칙은 *"탭 = 답입니다. 「다음」 버튼을 두지 마세요"*였습니다.
+   *    **탭이 2회가 된다는 근거 자체는 지금도 맞아요** — 바뀐 건 사실이 아니라 판단입니다.
+   *    🦶 주발은 되돌릴 수 없는 **판정** 결정인데 탭 한 번에 확정되고 320ms 뒤 화면까지
+   *    바뀌어서, 잘못 짚은 사람에게 남는 길이 **뒤로**뿐이었어요.
+   *    🔒 대신 **첫 순간 카드 앞의 탭이 5 → 6**이 됩니다(93번 §2-2는 여유 0이었어요).
+   *       초1 아크를 새로 설계 중이라 **그 검산은 그쪽에서** 다시 잡습니다.
+   *
+   * 🔴 **320ms 자동 전환이 사라졌습니다.** `prefers-reduced-motion` 갈래도 같이 없어졌어요 —
+   *    기다릴 것이 없으니 기다림을 끄는 갈래도 필요 없습니다.
+   *
+   * 🔑 **들어올 때는 늘 「안 고름」에서 시작합니다.** `cur`은 안 씁니다 —
+   *    game.js의 `chosenFoot` 기본값이 `"R"`이라, 그대로 쓰면 **아무것도 안 골랐는데
+   *    오른발이 켜진 채 [다음]이 열려** 있어요. *"고르기 전엔 비활성"*이 깨집니다.
+   *    ⚠️ 대신 **뒤로 갔다 돌아오면 다시 골라야 해요.** 판정 결정이라 그 편이 맞습니다. */
   function openFoot(cur, done) {
     const box = $("foot-pair");
     if (!box) return;
+    const next = $("btn-foot-next");
     box.innerHTML = cardHTML("L") + cardHTML("R");
     const pct = Math.round(footWin() * 100);
     const eff = $("foot-eff");
@@ -114,18 +136,30 @@ window.WingerIntro = (() => {
       eff.innerHTML = `<li>🎯 주발 쪽에서 오는 공은 판정 창이 <b>${pct}% 넓어져요</b>.</li>`
         + `<li>🦵 약발 쪽은 <b>${pct}% 좁아요</b>. 반대발은 커리어 중에 붙습니다.</li>`;
     }
-    box.querySelectorAll(".foot-card").forEach((b) => {
-      b.classList.toggle("on", b.dataset.foot === (cur === "L" ? "L" : "R"));
-      b.addEventListener("click", () => {
-        box.querySelectorAll(".foot-card").forEach((x) => x.classList.toggle("on", x === b));
-        b.classList.add("picked");
-        /* ♿ 움직임을 줄이는 설정이면 **기다리지 않고 바로** 넘어가요.
-         * 연출이 진행을 붙잡으면 그건 연출이 아니라 지연입니다. */
-        const calm = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
-        const go = () => done(b.dataset.foot);
-        if (calm) go(); else setTimeout(go, 320);
+
+    let pick = null;
+    function paint() {
+      box.classList.toggle("chosen", !!pick);           // 🎨 안 고른 쪽을 흐리게 (style.css)
+      box.querySelectorAll(".foot-card").forEach((x) => {
+        const on = x.dataset.foot === pick;
+        x.classList.toggle("on", on);
+        /* 🔴 `.picked`(살짝 떠오르는 연출)는 **한 장에만** 남아야 해요.
+         *    add만 하면 두 장을 번갈아 눌렀을 때 **둘 다 떠 있는** 채로 굳습니다. */
+        x.classList.toggle("picked", on);
+        x.setAttribute("aria-pressed", on ? "true" : "false");
       });
-    });
+      if (next) {
+        next.disabled = !pick;
+        next.textContent = pick ? `${pick === "L" ? "왼발" : "오른발"}로 갈게요` : "발을 골라 주세요";
+      }
+    }
+
+    /* ⚠️ `pointerdown`이 아니라 `click`입니다 — 손을 뗄 때 브라우저가 그 지점의 요소로
+     *    `click`을 또 보내서 **즉시 두 번 먹는** 사고가 미니게임 준비 화면에서 났어요. */
+    box.querySelectorAll(".foot-card").forEach((b) =>
+      b.addEventListener("click", () => { pick = b.dataset.foot; paint(); }));
+    if (next) next.onclick = () => { if (pick) done(pick); };
+    paint();
   }
 
   /* ══════════════════════════════════════════════════════════════════
