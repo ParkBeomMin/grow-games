@@ -2644,13 +2644,18 @@ function youthAutoP(kind, x, ref) {
   return base * clamp(x / r, YOUTH_SPAN[0], YOUTH_SPAN[1]);
 }
 /* 결과 대사 — MatchSim이 { ok, great, bad }를 그대로 중계에 씁니다.
- * 🧱 차단은 판정에 `ok`가 없지만(읽기 게임) 대사는 채워 둬요 — 비워 두면
- * 나중에 표가 바뀌었을 때 중계가 `undefined`를 뱉습니다. */
+ *
+ * 🔴 **카드 종류(g/a/d)로 뽑습니다 — moment 이름이 아니에요.**
+ *    미니게임이 🥅 골문 6칸 하나로 줄면서 `MINI` 표의 `cutin`·`killpass`가 **화면에 안 뜹니다.**
+ *    그런데 표를 moment로 두면 윙어의 결정 카드가 *"완벽한 컷인!"*이라고 중계하면서
+ *    화면은 골문 격자를 보여 줘요 — **화면과 말이 어긋나는 자리**입니다.
+ *    🔒 `MINI`(engine.js)는 한 줄도 안 건드렸어요. 바뀐 건 **대사를 무엇으로 고르느냐**뿐입니다.
+ * 🧱 수비는 판을 안 열지만(117번 §6) **중계 한 줄은 그대로 나갑니다** — 그게 c안의 화면이에요.
+ *    판정에 `ok`가 없어도 칸은 채워 둡니다 — 비워 두면 표가 바뀐 날 `undefined`를 뱉어요. */
 const YOUTH_CARD_TXT = {
-  cutin: { ok: "✨ 안쪽으로 파고들어 슛까지 갔어요", great: "💫 완벽한 컷인! 각을 열고 그대로 꽂았다!!", bad: "😱 컷인이 읽혀 각이 막혔어요" },
-  oneone: { ok: "⚡ 키퍼와 맞섰지만 각이 조금 좁았어요", great: "⚡ 1:1을 완벽하게 넘겼다! 골망이 흔들려요!!", bad: "😵 1:1에서 서두르다 키퍼에 막혔어요" },
-  killpass: { ok: "🎯 패스는 갔지만 한 박자 늦었어요", great: "✨ 수비 라인을 통째로 가르는 킬패스!!", bad: "🙈 패스 길이 막혀 끊겼어요" },
-  block: { ok: "🛡️ 몸을 걸쳐 슛을 흘려냈어요", great: "🛡️ 방향을 완벽하게 읽어 지워냈다!!", bad: "😵 반대로 읽혀 그대로 내줬어요" },
+  goal: { ok: "⚡ 키퍼와 맞섰지만 각이 조금 좁았어요", great: "⚡ 1:1을 완벽하게 넘겼다! 골망이 흔들려요!!", bad: "😵 1:1에서 서두르다 키퍼에 막혔어요" },
+  assist: { ok: "🅰️ 연결은 갔지만 한 박자 늦었어요", great: "✨ 키퍼가 비운 쪽으로 완벽한 컷백!!", bad: "🙈 패스 길이 막혀 끊겼어요" },
+  defend: { ok: "🛡️ 몸을 걸쳐 슛을 흘려냈어요", great: "🛡️ 코스를 지워 냈다! 위기를 넘깁니다!!", bad: "😵 코스가 열려 그대로 내줬어요" },
 };
 
 /* 평가전 한 경기의 순간 카드를 엽니다. `cb(판정, 대사)` — MatchSim의 계약 그대로예요.
@@ -2663,7 +2668,7 @@ function playYouthMoment(container, cb, kindKey) {
   const kind = YOUTH_CARD_KIND[kindKey] || "goal";
   const pool = ((E.MINI || {})[kind] || {})[S.pos] || ["oneone"];
   const moment = pick(pool);
-  const T = YOUTH_CARD_TXT[moment] || YOUTH_CARD_TXT.oneone;
+  const T = YOUTH_CARD_TXT[kind] || YOUTH_CARD_TXT.goal;
   /* 능력치는 프로와 **같은 자로** 잽니다 — 포지션별 혼합(BLEND)이라, 미드필더가
    * 패스를 올리면 그만큼 흔들 수 있는 폭이 넓어져요.
    *
@@ -2675,7 +2680,9 @@ function playYouthMoment(container, cb, kindKey) {
    * `ev`는 지금 진행 중인 대회예요. 없거나 모르는 값이면 🏆 평가전 기준으로 둡니다. */
   const autoP = youthAutoP(kind, overall(), ev && ev.kind === "survival" ? PEER_REF.survival : PEER_REF.eval);
   const judge = (s) => E.judgeAtP(kind, autoP, ability, s);
-  if (autoMiniOn()) { cb(judge(0.5), T); return; }
+  /* 🧱 **수비는 판을 안 엽니다** (117번 §6 · c안) — 🤖 자동 진행과 **같은 갈래**로 흘려요.
+   * `cardP(autoP, a, 0.5) = autoP`라 결과가 자동 갈래와 정의상 같고, 중계 한 줄은 그대로 나갑니다. */
+  if (autoMiniOn() || kind === "defend") { cb(judge(0.5), T); return; }
   if (container) {
     container.innerHTML = "";           // 앞 카드의 잔해 위에 쌓이지 않게
     container.classList.add("w2m-youth");   // 🎨 유스 맥락 — 연출은 director가 이어받아요

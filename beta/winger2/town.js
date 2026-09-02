@@ -122,8 +122,16 @@ window.WingerTown = (() => {
    *    → 초등에서 `mf`를 읽는 것은 **미니게임 배정에만** 닿고 곡선에는 안 닿습니다. */
   const ELEM_POS = "mf";
 
-  /* 판정 → 점수. `perfect 2 · ok 1 · miss 0`.
-   * 🧱 수비는 판정에 `ok`가 없어요(읽기 게임 · 이분) — 2점 아니면 0점입니다. */
+  /* 🎮 **화면을 여는 종류** — 🧱 수비는 판이 없어서(117번 §6) 학교 덱에서 뺍니다.
+   * 🔑 학교 아크의 몸은 전원 `evenStats()`라 자동 수비가 **능력치도 조작도 안 타는
+   *    순수 동전 던지기**예요. 그게 편차 밴드에 섞이면 진짜 노이즈입니다.
+   * 🔴 **`CARDS`를 줄이지 않습니다.** 옛 `deal()`이 `Math.min(CARDS.length, stage.n)`을
+   *    걸고 있어서, 3종 → 2종으로 줄이면 중등·고등이 `n:3`인데 **터지지 않고 조용히
+   *    2장**이 됩니다 — 검사도 화면도 정상으로 보여요.
+   * 🔓 수비용 격자가 생기면 이 줄만 지우면 됩니다(`PLAYABLE` → `CARDS`). */
+  const PLAYABLE = CARDS.filter((c) => c.key !== "d");
+
+  /* 판정 → 점수. `perfect 2 · ok 1 · miss 0`. */
   const PTS = { perfect: 2, ok: 1, miss: 0 };
   /* 🫀 학교 대항전에서의 컨디션 — `newState`의 시작값과 같은 80이에요.
    * 판정 창(`condMul`)에 걸리는 값이라 아무 값이나 두면 안 됩니다. */
@@ -154,7 +162,9 @@ window.WingerTown = (() => {
    * 🔴 등급(D~S)도 안 붙입니다 — 같은 이유로 `d`와 두 번 세는 것이에요.
    *
    *   ⚽ 결정 perfect → 내 골 (우리 +1)   ·   🅰️ 전개 perfect → 동료 골 (우리 +1 · 내 도움)
-   *   🧱 수비 miss    → 실점 (상대 +1)    ·   그 밖은 스코어가 안 움직여요 */
+   *   🧱 수비 miss    → 실점 (상대 +1)    ·   그 밖은 스코어가 안 움직여요
+   * ⚠️ `d` 칸은 **지금 안 쓰입니다**(🧱이 `PLAYABLE`에서 빠졌어요). 지우지 않는 건
+   *    수비용 격자가 돌아오는 날 이 표가 그대로 서야 하기 때문이에요(117번 §6-4). */
   const GOAL_BY = { g: { perfect: "us" }, a: { perfect: "us" }, d: { miss: "them" } };
   /* 판정 → [`W2Scene`이 읽는 `result`, 중계 줄]. `{me}`는 내 이름 자리예요.
    * 🔒 `result`는 화면의 **색과 연출**만 고릅니다(good/bad·플래시·흔들림).
@@ -419,25 +429,26 @@ window.WingerTown = (() => {
     return { kind, ability, autoP, judge: (s) => E.judgeAtP(kind, autoP, ability, s) };
   }
 
-  /* 🃏 그 단계가 뽑는 카드 — **`stage.n`장**입니다.
-   *
-   *   n === 3 (종류 수)  → ⚽🅰️🧱 **한 장씩 고정 순서.** 종류가 한쪽에 몰리는 운이 없어요
-   *   n <  3            → **균등하게** n종류를 뽑습니다 (부분 Fisher-Yates)
+  /* 🃏 그 단계가 뽑는 카드 — **`stage.n`장**을 `PLAYABLE`(지금은 ⚽🅰️ 둘)에서 뽑습니다.
    *
    * 🔴 **뽑기가 균등해야 합니다.** 한 종류가 자주 나오면 §7의 `fit`에서
-   *    **그 나라만 자주 오게** 됩니다(설계 93번 §8-2 ⚠️). 부분 셔플은 앞 n칸이
-   *    **균등한 n-순열**이라 종류마다 `n/3`로 같아요 — 초등(n=2)이면 ⅔씩입니다.
-   * ⚠️ `n`이 종류 수를 넘으면 종류가 겹쳐야 하는데, 겹치면 위의 균등성이 깨집니다.
-   *    지금은 **3으로 자릅니다** — 늘려야 하면 그때 균등성을 다시 재세요. */
+   *    **그 나라만 자주 오게** 됩니다(설계 93번 §8-2 ⚠️).
+   * 🔑 이제 **뽑을 장수가 종류 수보다 많아서**(n=3 · 종류 2) 중복이 필요해요.
+   *    그런데 칸마다 독립으로 뽑으면 **세 장이 다 ⚽인 판**이 나옵니다.
+   *    그래서 **종류를 필요한 만큼 되풀이해 깔고 섞어서** 앞 n장을 씁니다 —
+   *    n=3·종류 2면 늘 (2,1)이고 **어느 쪽이 2인지만 반반**이에요.
+   *    ✅ 종류마다 기대 장수가 `n ÷ 종류 수`로 **같습니다.**
+   * 🔒 `Math.min(CARDS.length, …)`를 **일부러 뺐습니다** — 그게 있으면 종류가 줄어든 날
+   *    `n`이 **터지지 않고 조용히 깎입니다**(위 `PLAYABLE`의 🔴). */
   function deal(stage) {
-    const n = Math.max(1, Math.min(CARDS.length, stage.n));
-    if (n === CARDS.length) return CARDS.slice();
-    const idx = CARDS.map((c, i) => i);
+    const n = Math.max(1, stage.n);
+    const bag = [];
+    while (bag.length < n) for (const c of PLAYABLE) bag.push(c);
     for (let i = 0; i < n; i++) {
-      const j = i + Math.floor(Math.random() * (idx.length - i));
-      const t = idx[i]; idx[i] = idx[j]; idx[j] = t;
+      const j = i + Math.floor(Math.random() * (bag.length - i));
+      const t = bag[i]; bag[i] = bag[j]; bag[j] = t;
     }
-    return idx.slice(0, n).map((i) => CARDS[i]);
+    return bag.slice(0, n);
   }
 
   /* 🎲 5곳의 제안을 **한 번만** 굴립니다 — 화면을 다시 열어도 다시 안 굴러요.

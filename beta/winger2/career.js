@@ -1783,7 +1783,12 @@ window.WingerCareer = (() => {
       if (m.pending) {
         const mini = WingerEngine.getMini();
         const slot = (scene && scene.momentSlot && scene.momentSlot()) || $("stage-moment");
-        if (mini && slot && !autoMiniOn()) {
+        /* 🧱 **수비는 미니게임을 안 엽니다** (117번 §6 · c안). 아래 `m.autoJudge()`가
+         * `judgeAt(kind, 0.5)`이고 `cardP(autoP, a, 0.5) = autoP`라, **결과가 자동 갈래와
+         * 정의상 같아요** — 육성(`autoP`가 내 수비 능력치를 탑니다)은 그대로 살고 조작만 빠집니다.
+         * 🔒 **「카드」로 부르지 않습니다** — 손잡이처럼 보이는데 아무것도 안 하면 노이즈예요.
+         * 🔓 수비용 격자가 생기면 이 한 줄에서 `&& m.pendingKind !== "defend"`만 빼면 됩니다. */
+        if (mini && slot && !autoMiniOn() && m.pendingKind !== "defend") {
           if (scene && scene.push) scene.push(card);
           mini(slot, {
             kind: m.pendingKind, moment: card.moment, condition: S.condition,
