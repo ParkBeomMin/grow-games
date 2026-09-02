@@ -896,76 +896,144 @@ async function main() {
   }
 
   /* ══════════════════════════════════════════════════════════════════════
-   * 🚧 G-6. **알려진 미달** — JS가 켜는 상태 클래스에 CSS 규칙이 없습니다
+   * 🎨 G-6 · G-6b · G-6c. **JS와 `style.css`의 경계면** — 이름과 **쌓이는 순서**
    * ══════════════════════════════════════════════════════════════════════
-   * 🔑 **CSS는 기계가 못 봅니다 — 하지만 「이름이 맞는지」는 볼 수 있어요.**
+   * 🔑 **CSS는 기계가 못 봅니다 — 하지만 「이름이 맞는지」와 「어느 겹에 그리는지」는 볼 수 있어요.**
    *    색·레이아웃은 사람 몫이고, **한쪽이 켜는 이름을 다른 쪽이 아는가**는 경계면입니다.
    *
-   * 🔴 `winger-moment.js`가 `classList.toggle(...)`로 켜는 클래스 중 **`style.css`에
-   *    규칙이 하나도 없는 것**들이에요. 인라인으로는 못 쓰는 것들입니다 —
-   *    상태 클래스는 켜지고 꺼지는 게 전부라 **CSS가 없으면 아무 일도 안 일어나요.**
-   *    특히 `w2m-cell-soon` · `w2m-cell-in`은 소스 주석이
-   *    *"「곧 어두워짐」을 클래스로도 — 색으로만 알리면 색약에서 안 읽혀요"* ·
-   *    *"초보자에게 필요한 건 정답이 아니라 「이 칸은 0점」"* 이라고 적어 둔 ♿ 자리예요.
+   * 🎉 **2026-09-02 — 승격했습니다.** 여기는 오래 🚧 「알려진 미달」이었어요:
+   *      · JS가 켜는 `w2m-cell-in`에 `style.css` 규칙이 **없었고**(G-6)
+   *      · `style.css`의 `.w2m-cell-rise`를 JS가 **안 켰습니다**(G-6b · 죽은 규칙)
+   *    director가 `.w2m-cell-in::after`를 넣고 engineer가 `soon`을 지우면서 **양쪽이 같이 0**이
+   *    됐습니다. 🚧 상한을 지우고 **`=== 0`을 그냥 단언**합니다.
+   *    🔴 director 경고 그대로예요 — **상한을 남겨 두면 CSS가 다시 빠져도 조용히 통과합니다.**
    *
-   * 🔄 **2026-09-02 갱신 — 이름이 갈렸는데 CSS가 안 따라왔습니다.** 📈 `rise` → `in` 개편(122번)
-   *    뒤에 재 보니 **양쪽에 고아가 하나씩** 남았어요:
-   *      · JS가 켜는 `w2m-cell-in` → `style.css`에 **규칙 없음**  (G-6)  → 화면에 `·` 표시가 **안 뜹니다**
-   *      · `style.css`의 `.w2m-cell-rise` → JS가 **안 켬**        (G-6b) → 죽은 규칙(▲·`w2mRise`)
-   *    🔑 **한 결함의 두 얼굴**이라 director가 이름을 갈아 주면 **둘이 같이 0**이 됩니다.
-   *
-   * 🚧 **지금 크기를 상한으로 박고, 늘면 빨간불**로 둡니다. 여기서 소리내어 빨간불을 내면
-   *    "저건 원래 빨간불이야"가 되어 이 파일 전체가 신호를 잃어요.
-   *    🔴 **상한은 실측치까지 조입니다** — 4로 남겨 두면 새 고아가 셋 더 들어와도 조용해요.
-   * 📌 **CSS가 붙어 0이 되면 ❌ 종료 1로 「승격하세요」가 뜹니다** — 그때 상한을 지우고
-   *    이 문장을 평범한 검사로 올리세요(`tests/soccer/curve-test.js`와 같은 방식이에요). */
+   * 🔒 **소스를 읽는 문장이라 「감도」를 따로 잽니다**(아래 G-6d). 파일을 읽어 세는 검사는
+   *    정규식이 조용히 안 걸리면 **0개라서 초록불**이 나요 — 그게 이 저장소의 단골 함정입니다.
+   *    그래서 **일부러 흠집 낸 사본**으로 같은 계산을 돌려 «1개»가 나오는지 확인합니다.
+   */
   {
-    const CAP = 1;                                    // 🚧 2026-09-02 실측치 (4 → 1로 조였습니다)
-    const CAP_B = 1;                                  // 🚧 반대 방향 실측치
     const fs2 = require("fs");
     const js = fs2.readFileSync("/workspace/grow-games/beta/winger-moment.js", "utf8");
     const css = fs2.readFileSync("/workspace/grow-games/beta/winger2/style.css", "utf8");
-    const names = Array.from(new Set(
-      (js.match(/classList\.(?:toggle|add)\("([^"]+)"/g) || [])
+
+    /* JS가 `classList`로 켜는 `w2m-` 클래스들 */
+    const jsNames = (src) => Array.from(new Set(
+      (src.match(/classList\.(?:toggle|add)\("([^"]+)"/g) || [])
         .map((m) => m.replace(/.*\("/, "").replace(/"$/, ""))
-        .filter((n) => n.indexOf("w2m-") === 0)));       // 🔒 w2m 것만 봅니다
-    const orphan = names.filter((n) => !new RegExp(`\\.${n}(?![\\w-])`).test(css));
-    if (orphan.length > CAP) {
-      check(false, `G-6. 🔴 CSS 규칙 없는 상태 클래스가 **늘었습니다** — ${orphan.length}개 > 상한 ${CAP}`
-        + `\n     ${orphan.join(", ")}`);
-    } else if (orphan.length === 0) {
-      check(false, `G-6. 🎉 상태 클래스에 CSS가 다 붙었어요 — **이 🚧 문장을 평범한 검사로 승격하세요**`
-        + `\n     (상한을 지우고 \`orphan.length === 0\`을 그냥 단언하면 됩니다)`);
-    } else {
-      console.log(`🚧 G-6. JS가 켜는데 \`style.css\`에 규칙이 없는 상태 클래스 ${orphan.length}개 (상한 ${CAP} — 늘면 빨간불)`);
-      console.log(`     ${orphan.join(", ")}`);
-      console.log(`     🔴 \`w2m-cell-in\`은 «이 칸은 0점이 아니에요»를 말하는 **테두리**예요 —`);
-      console.log(`        규칙이 없으면 화면에 아무것도 안 뜹니다(판정은 멀쩡한데 **표시만** 조용히 없어요).`);
-    }
-    /* 🔁 **반대 방향 — CSS가 꾸미는데 JS가 안 켜는 것.**
-     * 🔑 이 방향이 없으면 «이름이 갈렸다»를 **한쪽에서만** 봅니다. 📈 `rise` → `in` 개편에서
-     *    실제로 그랬어요 — G-6은 `in`이 고아라고 말했지만, `.w2m-cell-rise` 규칙이
-     *    ▲와 `w2mRise` 애니메이션까지 통째로 남아 있는 건 **아무도 안 봤습니다.**
-     * 🔒 `.w2m-cell` 같은 뼈대 클래스는 JS가 인라인으로 심으니 여기서 뺍니다 —
-     *    보는 것은 **상태 클래스**(`-hot`·`-in`·`-soon`·`-rise` 꼴)뿐이에요.
-     * 📮 **⬇️ `soon`을 지우는 판정이 나와 있습니다**(2026-09-02 · designer 125번 §2).
-     *    🔴 **JS에서만 빼면 여기가 1 → 2가 되어 빨간불**입니다 — `style.css`의
-     *    `.w2m-cell-soon::after` · `@keyframes w2mSoon` · reduced-motion 줄도 **같이** 지우세요.
-     *    🔑 그게 이 문장이 있는 이유예요: 한쪽만 지우는 것을 **여기서** 잡습니다. */
-    const cssState = Array.from(new Set(
-      (css.match(/\.w2m-cell-[a-z]+/g) || []).map((m) => m.slice(1))))
+        .filter((n) => n.indexOf("w2m-") === 0)));
+    /* `style.css`가 꾸미는 **상태 클래스**(`-hot`·`-in`·… 꼴)만 봅니다 —
+     * `.w2m-cell` 같은 뼈대는 JS가 인라인으로 심으니 뺍니다. */
+    const cssStates = (src) => Array.from(new Set(
+      (src.match(/\.w2m-cell-[a-z]+/g) || []).map((m) => m.slice(1))))
       .filter((n) => n !== "w2m-cell-lit" && n !== "w2m-cell-next");
-    const dead = cssState.filter((n) => names.indexOf(n) < 0);
-    if (dead.length > CAP_B) {
-      check(false, `G-6b. 🔴 JS가 안 켜는데 \`style.css\`가 꾸미는 상태 클래스가 **늘었습니다** — ${dead.length}개 > 상한 ${CAP_B}`
-        + `\n     ${dead.join(", ")}`);
-    } else if (dead.length === 0) {
-      check(false, `G-6b. 🎉 죽은 규칙이 없어요 — **이 🚧 문장을 평범한 검사로 승격하세요**`
-        + `\n     (상한을 지우고 \`dead.length === 0\`을 그냥 단언하면 됩니다)`);
-    } else {
-      console.log(`🚧 G-6b. \`style.css\`가 꾸미는데 JS가 안 켜는 상태 클래스 ${dead.length}개 (상한 ${CAP_B} — 늘면 빨간불)`);
-      console.log(`     ${dead.join(", ")}`);
-      console.log(`     🔑 G-6과 **한 결함의 두 얼굴**입니다 — 이름을 갈아 주면 둘이 같이 0이 돼요.`);
+    const orphansOf = (j2, c2) => jsNames(j2).filter((n) => !new RegExp(`\\.${n}(?![\\w-])`).test(c2));
+    const deadOf = (j2, c2) => cssStates(c2).filter((n) => jsNames(j2).indexOf(n) < 0);
+
+    /* 🔒 **주석을 먼저 벗깁니다.** 이 파일의 주석은 클래스 이름을 잔뜩 인용해서,
+     *    안 벗기면 규칙 하나가 주석을 타고 **다음 `{`까지 늘어나** 엉뚱한 걸 셉니다
+     *    (실제로 `::before`를 인용한 주석 한 줄이 「순서 어긋남」으로 잡혔어요). */
+    const bare = (c2) => c2.replace(/\/\*[\s\S]*?\*\//g, "");
+
+    const orphan = orphansOf(js, css);
+    const dead = deadOf(js, css);
+
+    check(orphan.length === 0,
+      `G-6. 🎨 **JS가 켜는 상태 클래스가 \`style.css\`에 전부 있다** — 고아 ${orphan.length}개`
+      + `\n     🔎 JS가 켜는 것 ${jsNames(js).length}개: ${jsNames(js).join(", ")}`
+      + `\n     🔑 상태 클래스는 **켜지고 꺼지는 게 전부**라, CSS가 없으면 판정은 멀쩡한데`
+      + ` **표시만 조용히 없습니다** — 빨간불이 안 뜨고 그냥 안 보여요`
+      + (orphan.length ? `\n     🔴 **${orphan.join(", ")}** — 화면에 아무것도 안 뜹니다` : ""));
+
+    check(dead.length === 0,
+      `G-6b. 🪦 **\`style.css\`가 꾸미는 상태 클래스를 JS가 전부 켠다** — 죽은 규칙 ${dead.length}개`
+      + `\n     🔎 CSS가 꾸미는 것 ${cssStates(css).length}개: ${cssStates(css).join(", ") || "(없음)"}`
+      + `\n     🔑 G-6과 **한 결함의 두 얼굴**이에요 — 이름이 갈리면 한쪽엔 고아가, 다른 쪽엔`
+      + ` 죽은 규칙이 남습니다. 📈 \`rise\` → \`in\` 개편에서 실제로 그랬어요`
+      + (dead.length ? `\n     🔴 **${dead.join(", ")}** — 아무도 안 켜는 규칙입니다` : ""));
+
+    /* ══════════════════════════════════════════════════════════════════
+     * 🔦 G-6c. **쌓이는 순서** — 표시가 밝기 칠 **위**에 오는가
+     * ══════════════════════════════════════════════════════════════════
+     * 🐛 2026-09-02 director가 잡은 흠입니다. ◎ 링을 `box-shadow: inset`으로 그렸더니
+     *    **제일 밝은 `hot` 칸에서 링이 앰버로** 나왔어요 — 렌더 실측 rgb(247,224,160) 🟠.
+     *    `::after`로 옮긴 뒤 rgb(234,240,255) ⚪.
+     *
+     * 🎨 **왜 그런가 — 칸 안의 페인트 순서**(칸은 `position:absolute`인 `<button>`):
+     *      ① 배경·테두리 · `box-shadow: inset`   ← 제일 아래
+     *      ② `::before`
+     *      ③ **진짜 자식** — `.w2m-cell-lit`(밝기 칠) · `.w2m-cell-next`  ← JS가 심습니다
+     *      ④ `::after`                             ← 제일 위
+     *    🔑 그래서 ①②에 그린 것은 **앰버 칠에 덮이고**, ④만 그 위로 올라옵니다.
+     *
+     * ♿ **왜 이게 접근성 문제인가** — 이 화면은 색을 **한 축**(🦶 앰버 주발 ↔ 회색 약발)에만
+     *    쓰기로 했습니다. 표시(◎·●)가 앰버에 물들면 **색이 두 가지 뜻**을 갖게 되고,
+     *    그러면 둘 다 안 읽혀요. 🚨 **판정색이 이 저장소에서 거짓말한 네 번째 자리**입니다.
+     *
+     * 🔒 **여기서 색을 보지 않습니다** — 픽셀은 기계가 못 봐요(보고서 §검증 불가).
+     *    보는 것은 **「표시를 어느 겹에 그렸는가」**뿐이고, 그건 소스에 그대로 적혀 있습니다.
+     * 🌍 뒤집히는 자리 — `.w2m-cell-lit`을 **JS가 안 심게** 되면(예: 밝기를 칸 자체의
+     *    `background`로 옮기면) 자식이 사라져 이 순서가 통째로 바뀝니다. 그날 여기부터 여세요.
+     *    🔑 그래서 **「자식이 실제로 있는가」를 먼저 확인**합니다 — 없으면 이 문장은 무의미해요. */
+    {
+      const litIsChild = /class="w2m-cell-lit"/.test(js);
+      /* `.w2m-cell*`에 걸린 규칙을 셀렉터 단위로 훑습니다 */
+      const rules = bare(css).match(/\.w2m-cell[^{}]*\{[^}]*\}/g) || [];
+      const marks = rules.filter((r) => /content\s*:/.test(r) || /var\(--m-mark\)/.test(r));
+      const bad = marks.filter((r) => !/::after\s*\{/.test(r.replace(/\s*\{/, " {")));
+      const befores = rules.filter((r) => /::before/.test(r));
+      const ok = litIsChild && marks.length >= 2 && bad.length === 0 && befores.length === 0;
+      check(ok,
+        `G-6c. 🔦 **표시가 밝기 칠 위에 그려진다** — 표시를 그리는 규칙 ${marks.length}개가 전부 \`::after\``
+        + `\n     🔎 측정 조건 — \`.w2m-cell*\` 규칙 ${rules.length}개 중 \`content:\` 또는 \`var(--m-mark)\`를`
+        + ` 쓰는 것 ${marks.length}개 · \`::after\`가 아닌 것 **${bad.length}개** · \`::before\` **${befores.length}개**`
+        + `\n     🔒 \`.w2m-cell-lit\`이 JS가 심는 **진짜 자식**인가 — ${litIsChild ? "🟢 예" : "🔴 아니오"}`
+        + ` (아니면 이 문장이 무의미해집니다)`
+        + `\n     🎨 칸 안의 페인트 순서: 배경·\`inset\` 그늘 → \`::before\` → **밝기 칠** → \`::after\``
+        + `\n     ♿ 표시가 앰버에 물들면 **색이 두 가지 뜻**을 갖습니다 — 이 화면은 색을 🦶 한 축에만 써요`
+        + (bad.length ? `\n     🔴 **${bad.map((r) => r.split("{")[0].trim()).join(" · ")}** — 밝기 칠 아래에 깔립니다` : "")
+        + (befores.length ? `\n     🔴 \`::before\`가 있습니다 — 밝기 칠 **아래**예요` : "")
+        + (marks.length < 2 ? `\n     🔴 표시를 그리는 규칙이 ${marks.length}개뿐입니다 — ◎와 ● 둘 다 있어야 해요` : "")
+        + (litIsChild ? "" : `\n     🔴 \`.w2m-cell-lit\`을 JS가 안 심습니다 — 순서 계약이 통째로 바뀌었어요`));
+    }
+
+    /* ══════════════════════════════════════════════════════════════════
+     * 🧪 G-6d. **감도** — 위 셋이 정말 뭔가를 세고 있는가
+     * ══════════════════════════════════════════════════════════════════
+     * 🔴 파일을 읽어 세는 검사는 **정규식이 조용히 안 걸리면 0개라서 초록불**이 납니다.
+     *    이 저장소가 세 번 데인 형태예요. 그래서 **일부러 흠집 낸 사본**으로 같은 계산을
+     *    돌려 「1개」가 나오는지 봅니다 — 안 나오면 위 셋은 아무것도 안 지키고 있어요. */
+    {
+      /* ① CSS에서 `.w2m-cell-in` 규칙을 지우면 → 고아 1개 */
+      const cssNoIn = css.replace(/\.w2m-cell-in::after\s*\{[^}]*\}/, "");
+      /* ② CSS에 아무도 안 켜는 규칙을 넣으면 → 죽은 규칙 1개 */
+      const cssGhost = css + "\n.w2m-cell-zzz::after { content: \"\"; }\n";
+      /* ③ 표시를 `::before`로 옮기면 → 쌓이는 순서 어긋남 */
+      const cssBefore = css.replace(".w2m-cell-in::after {", ".w2m-cell-in::before {");
+      const markBad = (c2) => {
+        const rules = bare(c2).match(/\.w2m-cell[^{}]*\{[^}]*\}/g) || [];
+        const marks = rules.filter((r) => /content\s*:/.test(r) || /var\(--m-mark\)/.test(r));
+        return marks.filter((r) => !/::after\s*\{/.test(r.replace(/\s*\{/, " {"))).length;
+      };
+      /* ④ **주석을 안 벗기면** 규칙 하나가 주석을 타고 늘어나 «`::before`가 있다»고 오진합니다.
+       *    실제로 한 번 그랬어요 — 벗기기가 살아 있는지 여기서 봅니다. */
+      const beforesIn = (c2) => (c2.match(/\.w2m-cell[^{}]*\{[^}]*\}/g) || [])
+        .filter((r) => /::before/.test(r)).length;
+      const s4 = beforesIn(css) - beforesIn(bare(css));
+      const s1 = orphansOf(js, cssNoIn).length;
+      const s2 = deadOf(js, cssGhost).length;
+      const s3 = markBad(cssBefore);
+      check(s1 === 1 && s2 === 1 && s3 === 1 && s4 > 0,
+        `G-6d. 🧪 **감도** — 흠집 낸 사본에서 넷이 각각 제 몫을 집는다 (${s1} · ${s2} · ${s3} · ${s4})`
+        + `\n     ① \`.w2m-cell-in::after\` 규칙을 지움 → G-6의 고아 **${s1}개**`
+        + `\n     ② 아무도 안 켜는 \`.w2m-cell-zzz\` 규칙을 넣음 → G-6b의 죽은 규칙 **${s2}개**`
+        + `\n     ③ 표시를 \`::before\`로 옮김 → G-6c의 순서 어긋남 **${s3}개**`
+        + `\n     ④ 주석을 **안 벗기면** \`::before\` 오진이 ${s4}개 늘어납니다 — 주석이 \`::before\`를`
+        + ` 인용해서 규칙 하나가 주석을 타고 늘어나거든요. 벗기기가 살아 있는지 여기서 봅니다`
+        + `\n     🔑 소스를 읽어 세는 문장은 **정규식이 안 걸려도 0개라 초록불**이에요 —`
+        + ` 그래서 «세고 있는가»를 따로 잽니다`
+        + (s1 === 1 && s2 === 1 && s3 === 1 && s4 > 0 ? ""
+          : `\n     🔴 **위 셋 중 하나가 아무것도 안 세고 있습니다** — 정규식이 소스 모양을 놓쳤어요`));
     }
   }
 
