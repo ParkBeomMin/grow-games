@@ -589,6 +589,122 @@ function raceValueFrom(src) {
   wm.close();
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+ * C-9. 🏆 **기록이 하나도 없는데 부문상을 받는가** — 🔴 balancer가 넘긴 자리
+ * ══════════════════════════════════════════════════════════════════════
+ * 🔑 **모델이 못 가는 자리를 검사가 막습니다** (135번 · balancer):
+ *    > 부문상(골든부츠·플레이메이커·철벽상·공격포인트왕)을 **못 쟀습니다** —
+ *    > `raceTop`이 **리그 88명 기록**을 요구해 몬테카를로 모델에 안 넣었습니다.
+ *    > 🔴 **43% → 60% 사고가 났던 바로 그 상**이라, 거기서 막아야 합니다.
+ *
+ * 🌍 **이 문장이 서 있는 세계**: 「부문상은 **그 시즌 경쟁의 결과**」인 세계입니다.
+ *    `career.js:2455`가 그렇게 적어 뒀어요 — *"시즌 내내 보던 그 경쟁의 결과가 그대로 상이 된다"*.
+ *    🔑 그러면 **경쟁이 없었을 때 상이 나가면 안 됩니다.** 지금 가드는
+ *    `(act.apps || 0) > 0` 하나이고, 그건 **내 출전 수**만 봅니다 — 리그의 기록은 안 봐요.
+ *
+ * 🔴 **동점 규칙이 「나」를 앞에 둡니다** (`raceRank`의 `(x.me ? -1 : 1)`).
+ *    「공동 득점왕은 둘 다 받는다」를 위한 줄인데, **전부 0일 때도 동점**이라
+ *    0골 0도움 0무실점으로 **네 상을 전부** 받습니다.
+ * ══════════════════════════════════════════════════════════════════════ */
+{
+  const KEYS = [["g", "골든부츠"], ["a", "플레이메이커"], ["d", "철벽상"], ["p", "공격포인트왕"]];
+  const W9 = boot();
+  const CT = W9.WingerCareer._t;
+  const S = CT.state();
+  const sq = W9.WingerSquad.ensureSquads();
+  const all = [];
+  for (const club of Object.keys(sq)) for (const x of sq[club]) if (!x.me) all.push(x);
+  const zero = () => {
+    for (const x of all) { x.apps = 10; x.cs = 0; x.d = 0; x.g = 0; x.a = 0; x.rate = 60; x.mom = 0; }
+    S.activity.apps = 10; S.activity.cs = 0; S.activity.defense = 0;
+    S.activity.goals = 0; S.activity.assists = 0; S.activity.wins = 0; S.activity.ratingSum = 600;
+  };
+
+  /* ── ① 🔒 **회귀 상한 — 남이 하나라도 앞서면 안 받는다.** 이건 절대 안 무너져야 합니다. */
+  zero();
+  for (const x of all) { x.g = 1; x.a = 1; x.cs = 1; }
+  const stolen = KEYS.filter(([k]) => CT.raceTop(k));
+  check(stolen.length === 0,
+    `C-9. 🏆 **남이 앞선 부문은 하나도 안 받는다** — 리그 ${all.length}명이 전부 1을 기록하고 나만 0`
+    + `\n     받은 상: ${stolen.length ? stolen.map(([, n]) => n).join(" · ") : "없음 ✔"}`
+    + `\n     🔑 **이게 43% → 60% 사고의 회귀 상한**입니다 — 여기가 무너지면 수상률이 통째로 뜁니다`
+    + (stolen.length ? `\n     🔴 기록이 뒤진 부문의 상을 받았어요` : ""));
+
+  /* ── ② 🔒 **공동 1위는 둘 다 받는다** — 설계가 그렇게 적어 뒀어요(옛 계약이 아닙니다) */
+  zero();
+  for (const x of all) { x.g = 1; }
+  S.activity.goals = 1;
+  check(CT.raceTop("g") === true,
+    `C-9a. 🤝 **공동 1위는 받는다** — 리그 전체 1골 · 나도 1골 → 골든부츠 ${CT.raceTop("g") ? "받음 ✔" : "🔴 못 받음"}`
+    + `\n     🔒 \`career.js\`가 *"실제로도 공동 득점왕은 둘 다 받아요"*라고 적어 뒀습니다 —`
+    + ` 아래 ③을 고칠 때 **이 문장을 같이 깨지 마세요**`);
+
+  /* ── ③ 🔒 **경쟁이 없었으면 상도 없다.**
+   * ═════════════════════════════════════════════════════════════════════════
+   * 🎉 **2026-09-03에 승격했습니다.** 며칠 전까지 이 자리는 🚧(종료 0)였어요 —
+   *    리그 96명이 전부 0인데 **네 상을 전부** 받고 있었습니다.
+   *    까닭: 가드가 `(act.apps || 0) > 0` 하나뿐이라 **내 출전 수**만 봤고,
+   *    전부 동점이면 `raceRank`의 `(x.me ? -1 : 1)`이 **나를 앞에** 뒀거든요.
+   * ✅ 고친 곳 — `career.js`의 `raceTop`에 **`&& r.v > 0`**.
+   *    🔑 **①(회귀 상한)과 ②(공동 1위)를 한 톨도 안 건드리고** 이 문장만 세웁니다.
+   *
+   * 🌍 **이 문장이 서 있는 세계**: 「부문상은 **그 시즌 경쟁의 결과**」인 세계.
+   *    🔴 *"0골 공동 1위도 1위니까 준다"*는 판정이 나오면 여기가 먼저 뒤집힙니다 —
+   *      그때는 ②(C-9a)와 이 줄이 **같은 문장**이 되니, 둘 중 하나를 지우세요. */
+  zero();
+  const free = KEYS.filter(([k]) => CT.raceTop(k));
+  const rows = CT.raceRank("g");
+  check(free.length === 0,
+    `C-9b. 🔒 **리그 전체 기록이 0이면 부문상이 하나도 안 나간다** — 받은 상 ${free.length}종`
+    + `\n     ${free.length ? `🔴 ${free.map(([, n]) => n).join(" · ")}` : "없음 ✔"}`
+    + `\n     1~3위: ${rows.slice(0, 3).map((x) => `${x.name}${x.me ? "(나)" : ""} v=${x.v}`).join(" | ")} (명단 ${rows.length}명)`
+    + `\n     🔑 **경쟁이 없었으면 상도 없습니다** — 출전 가드(\`act.apps > 0\`)는 **제 출전만** 봐서 이걸 못 막아요`
+    + `\n     🔴 balancer 모델은 여기까지 못 옵니다(리그 88명 기록이 필요해요) — **막는 건 이 검사뿐이에요**`
+    + (free.length ? `\n     🔴 43% → 60% 사고와 **같은 형태**입니다 — 수상률이 조용히 뜁니다` : ""));
+
+  /* ══════════════════════════════════════════════════════════════════════
+   * 🧪 **변이 — `&& r.v > 0`을 되돌리면 C-9b가 빨간불이어야** 합니다
+   * ══════════════════════════════════════════════════════════════════════
+   * 🔴 승격한 문장은 **반드시 변이로 확인합니다.** 🚧였을 때는 「지금 이렇다」를 적는
+   *    자리라 변이가 없어도 됐지만, 계약이 된 순간 «되돌려도 초록불»이면 아무것도 안 지켜요. */
+  const RV_MUT = [[/const raceTop = \(key\) => \{ const r = raceRank\(key\)\[0\]; return !!\(r && r\.me && r\.v > 0\); \};/,
+    "const raceTop = (key) => { const r = raceRank(key)[0]; return !!(r && r.me); };"]];
+  if (!CAREER_SRC.match(RV_MUT[0][0])) {
+    check(false, `C-9-변이. 🧪 **\`raceTop\`의 \`&& r.v > 0\`을 되돌리는 변이가 지금 소스에 안 걸립니다**`
+      + `\n     🔴 그러면 C-9b는 **"안 도는"** 상태예요 — \`career.js\`의 \`raceTop\` 모양을 보세요`);
+  } else {
+    const WM = boot(RV_MUT);
+    const CM = WM.WingerCareer._t;
+    const SM = CM.state();
+    const sqM = WM.WingerSquad.ensureSquads();
+    const allM = [];
+    for (const club of Object.keys(sqM)) for (const x of sqM[club]) if (!x.me) allM.push(x);
+    const zeroM = () => {
+      for (const x of allM) { x.apps = 10; x.cs = 0; x.d = 0; x.g = 0; x.a = 0; x.rate = 60; x.mom = 0; }
+      SM.activity.apps = 10; SM.activity.cs = 0; SM.activity.defense = 0;
+      SM.activity.goals = 0; SM.activity.assists = 0; SM.activity.wins = 0; SM.activity.ratingSum = 600;
+    };
+    zeroM();
+    const freeM = KEYS.filter(([k]) => CM.raceTop(k));
+    /* 🔒 **반대 방향도 같이** — ①(회귀 상한)과 ②(공동 1위)는 **안 물어야** 합니다.
+     *    성질이 다른 것을 한 문장에 안 묶었다는 증거예요. */
+    zeroM(); for (const x of allM) { x.g = 1; x.a = 1; x.cs = 1; }
+    const stolenM = KEYS.filter(([k]) => CM.raceTop(k));
+    zeroM(); for (const x of allM) { x.g = 1; } SM.activity.goals = 1;
+    const tieM = CM.raceTop("g");
+    WM.close();
+    check(freeM.length === KEYS.length && stolenM.length === 0 && tieM === true,
+      `C-9-변이. 🧪 **\`raceTop\`에서 \`&& r.v > 0\`을 빼면 → C-9b가 빨간불**`
+      + `\n     기록 0인데 받는 상 **${freeM.length}종** (${freeM.map(([, n]) => n).join(" · ") || "없음"})`
+      + `\n     🔒 그런데 **C-9(회귀 상한)는 초록불로 남아야** 합니다 — 뺏은 상 ${stolenM.length}종`
+      + ` · **C-9a(공동 1위)도** 그대로 ${tieM ? "받음 ✔" : "🔴 못 받음"}`
+      + (freeM.length === KEYS.length && stolenM.length === 0 && tieM
+        ? `\n     🔑 세 문장이 **각자 다른 것**을 지킵니다 — 묶었으면 이 변이가 셋을 한꺼번에 물었을 거예요`
+        : `\n     🔴 변이가 안 잡혔거나, 남의 문장까지 물었습니다`));
+  }
+  W9.close();
+}
+
 W0.close();
 console.log(fail ? `\n❌ ${fail}건 실패` : "\n✅ 통과");
 process.exit(fail ? 1 : 0);

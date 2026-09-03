@@ -66,7 +66,7 @@
  * 종료 코드: 0 통과 · 1 빨간불 · 2 💥 죽음(안 돌았음) — `_load.js`가 걸어 줍니다.
  */
 "use strict";
-const { bootPage, pageMutsOK, townAuto, tapFoot, tapChild, pickOrigin, passStage, passEarly,
+const { bootPage, pageMutsOK, townAuto, tapFoot, tapChild, tapChildArc, pickOrigin, passStage, passEarly,
   seedBoth } = require("./_load.js");
 
 let fail = 0;
@@ -80,16 +80,21 @@ const check = (ok, msg) => { console.log(`${ok ? "✅" : "❌"} ${msg}`); if (!o
  *    🔴 `WingerIntro.STEPS`에서 읽어 오면 **5칸을 3칸으로 줄여도 검사가 따라갑니다** —
  *       그게 이 파일이 생긴 이유입니다. */
 /* 🧒 2026-09-02: 🗺️ 동네와 🎯 자리 **사이**에 `screen-child`(초1)가 들어왔습니다 (117번 §2-3).
- *    🔴 화면이 하나 늘면 **분모도 같이** 늘어야 해요 — 안 그러면 «끝났다»는 거짓말이 다시 납니다. */
+ * 🧒 **2026-09-03: 한 해가 네 해가 됐습니다** (커밋 fde6688) — 화면이 **셋 더** 늘어
+ *    분모가 **6 → 9**입니다. 🔴 화면이 늘면 분모도 같이 늘어야 해요 —
+ *    안 그러면 «끝났다»는 거짓말이 다시 납니다(이 파일이 생긴 이유). */
 const SCREENS = [
   { id: "screen-name", what: "✏️ 이름" },
   { id: "screen-foot", what: "🦶 주발" },
   { id: "screen-origin", what: "🗺️ 동네" },
-  { id: "screen-child", what: "🧒 초1" },
+  { id: "screen-child", what: "🧸 초1" },
+  { id: "screen-child2", what: "👦 초2" },
+  { id: "screen-child3", what: "🌙 초3" },
+  { id: "screen-child4", what: "🔑 초4" },
   { id: "screen-position", what: "🎯 자리" },
   { id: "screen-prospect", what: "🧬 조립대" },
 ];
-const N_STEP = 6;           // 🔢 차례 수 (= SCREENS.length). 분모로도 씁니다
+const N_STEP = 9;           // 🔢 차례 수 (= SCREENS.length). 분모로도 씁니다
 const OPTS = 2;             // 🧬 2택 — 🔒 3택은 74번이 폐기했어요
 const POOL_WANT = 194;      // 📊 한 벌의 총합. **양쪽 다** 정확히 이 값
 const SLOTS = 6;            // 🌱 등급 줄 수 (조립대 아래 여섯 줄)
@@ -200,12 +205,18 @@ async function toBench(h, opt) {
   stamp();                                                  // 🗺️ 동네
   const back = townAuto(h.W);
   pickOrigin(h.W, h.press, o.origin || "seoul");
-  stamp();                                                  // 🧒 초1
-  await tapChild(h.W, h.press, o.child || "ball");
-  passStage(h.W, h.press);                                  // 🏫 초등부
-  passEarly(h.W, h.press);                                  // 📨 조기 제안 — **거절**
-  stamp();                                                  // 🎯 자리
+  /* 🧒 **네 해** — 🔴 해마다 `stamp()`를 찍어야 합니다. 다 걷고 한 번에 찍으면
+   *    셋이 통째로 안 보여서 C-1·C-2가 **없는 화면을 못 본 채** 초록불이 돼요. */
+  const kid = ["ball", "fin", "gn", "h1"];
+  const want = Array.isArray(o.child) ? o.child : (o.child ? [o.child] : []);
+  for (let y = 1; y <= 4; y++) {
+    stamp();                                                // 🧒 초1~초4
+    await tapChild(h.W, h.press, want[y - 1] || kid[y - 1], y);
+  }
+  stamp();                                                  // 🎯 자리 — 🆕 **초4 바로 뒤**
   h.press(D.querySelector(`#position-list .card[data-pos="${o.pos || "wg"}"]`), `🎯 ${o.pos || "wg"}`);
+  passStage(h.W, h.press);                                  // 🏫 초5 대항전
+  passEarly(h.W, h.press);                                  // 📨 조기 제안 — **거절**
   passStage(h.W, h.press);                                  // 🏫 중등부
   passEarly(h.W, h.press);                                  // 📨 — **거절**
   passStage(h.W, h.press);                                  // 🏫 고등부
@@ -243,9 +254,9 @@ async function arcOf(seed, engineSeed) {
   await tapFoot(W, press, "R");
   const back = townAuto(W);
   pickOrigin(W, press, "seoul");
-  await tapChild(W, press, "ball");                         // 🧒 초1
-  passStage(W, press); passEarly(W, press);
-  press(D.querySelector('#position-list .card[data-pos="wg"]'), "🎯 wg");
+  await tapChildArc(W, press, ["ball", "fin", "gn", "h1"]);  // 🧒 초1~초4
+  press(D.querySelector('#position-list .card[data-pos="wg"]'), "🎯 wg");   // 🆕 초4 뒤
+  passStage(W, press); passEarly(W, press);                 // 🏫 초5 → 📨
   passStage(W, press); passEarly(W, press); passStage(W, press);
   if (back) back();
   const T = W.WingerTown;

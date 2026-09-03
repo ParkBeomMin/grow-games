@@ -1095,8 +1095,11 @@ window.WingerCareer = (() => {
     return rows.sort((x, y) => y.v - x.v || tie(y) - tie(x) || (x.me ? -1 : 1));
   }
 
-  // 내가 그 부문 1위인가 — 부문상 판정이 이걸 봐요
-  const raceTop = (key) => { const r = raceRank(key)[0]; return !!(r && r.me); };
+  /* 내가 그 부문 1위인가 — 부문상 판정이 이걸 봐요.
+   * 🔴 `r.v > 0`이 없으면 **리그 전체가 0일 때 부문상 넷을 한꺼번에 받습니다** —
+   *    `raceRank`의 `(x.me ? -1 : 1)`이 동점에서 저를 앞에 두거든요.
+   *    출전 가드(`act.apps > 0`)는 **제 출전만** 봐서 이걸 못 막아요 (136번 C-9). */
+  const raceTop = (key) => { const r = raceRank(key)[0]; return !!(r && r.me && r.v > 0); };
 
   /* 🥇 개인 순위표 — 부문 탭 하나에 그 부문 숫자 하나.
    *

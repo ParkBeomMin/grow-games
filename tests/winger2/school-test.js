@@ -49,7 +49,7 @@
  * 종료 코드: 0 통과 · 1 빨간불 · 2 💥 죽음(안 돌았음) — `_load.js`가 걸어 줍니다.
  */
 "use strict";
-const { bootPage, pageMutsOK, townAuto, passStage, passEarly, tapFoot, tapChild, pickOrigin, seedBoth }
+const { bootPage, pageMutsOK, townAuto, passStage, passEarly, passArc, tapFoot, tapChild, pickOrigin, seedBoth }
   = require("./_load.js");
 
 let fail = 0;
@@ -73,12 +73,27 @@ const ARC_CARDS_B = 6;
  *    전부 `showOffers`를 지난다"*를 한 군데에서 지키려고). 그래서 이 배열에
  *    `screen-agency`가 **세 번** 나옵니다: 조기(e) · 조기(m) · 최종. */
 /* 🧒 2026-09-02: 🗺️ 지도와 🏫 초등부 **사이**에 `screen-child`(초1)가 들어왔습니다 (117번 §2-3).
- *    🔑 자리(`screen-position`)는 **한 칸도 안 옮겼어요** — 여전히 초등부 「뒤」·중등 「앞」입니다.
- *    🔴 초1이 자리 **뒤**로 가면 「무엇을 하고 놀았나」가 이미 정해진 자리를 못 바꿔서
- *       그 화면이 장식이 됩니다. 그래서 순서를 여기서 못 박아요. */
-const SCREEN_SEQ = ["screen-title", "screen-name", "screen-foot", "screen-origin", "screen-child",
-  "screen-town", "screen-agency", "screen-position",
-  "screen-town", "screen-agency", "screen-town", "screen-agency"];
+ *
+ * ═════════════════════════════════════════════════════════════════════════
+ * 🚨 **2026-09-03 — 이 계약이 뒤집혔습니다** (설계 133번 · 커밋 fde6688)
+ * ═════════════════════════════════════════════════════════════════════════
+ * 🔴 옛 문장은 *"🎯 자리는 한 칸도 안 옮겼다 — 여전히 초등부 「뒤」"*였어요.
+ *    **그 문장이 이제 틀립니다.** 어린 시절이 네 해가 되면서 🎯 자리가
+ *    🧒 초4 **뒤**·🏫 초5 **앞**으로 왔습니다 (`game.js`의 `goElementary` 주석).
+ *    🔑 그때 이 배열은 **문법적으로 멀쩡하고 변이도 걸리는데, 지키는 문장이 틀린** 상태가 됐어요.
+ *
+ * 🌍 **이 배열이 지키는 것은 「자리가 초등부 앞이다」가 아닙니다.** 그건 값이었어요.
+ *    지키려는 관계는 이것입니다 —
+ *      🔒 **어린 시절 네 해가 전부 🎯 자리 「앞」에 온다.**
+ *      🔴 한 해라도 자리 뒤로 가면 「무엇을 하고 놀았나」가 **이미 정해진 자리를 못 바꿔**
+ *         그 화면이 장식이 됩니다. 그게 이 순서가 존재하는 이유예요.
+ *    아래 S-6a가 배열 전체를 대조하고, **S-6d가 그 관계만** 따로 봅니다 —
+ *    화면이 또 늘면 배열은 고쳐야 하지만 관계는 그대로 살아요. */
+const CHILD_SCREEN_IDS = ["screen-child", "screen-child2", "screen-child3", "screen-child4"];
+const CHILD_YEARS = 4;                  // 🧒 어린 시절의 해 수 — 🔒 여기 박습니다(소스에서 안 읽어요)
+const SCREEN_SEQ = ["screen-title", "screen-name", "screen-foot", "screen-origin",
+  ...CHILD_SCREEN_IDS, "screen-position",
+  "screen-town", "screen-agency", "screen-town", "screen-agency", "screen-town", "screen-agency"];
 const EARLY_STAGES = ["e", "m"];        // 📨 조기 제안이 서는 단계 (고등 뒤는 최종입니다)
 const KINDS = ["g", "a", "d"];       // ⚽ 결정 · 🅰️ 전개 · 🧱 수비 — `CARDS`의 3종
 /* 🃏 **학교 덱에 실제로 서는 종류** (2026-09-02 · 117번 §6 c안 · 116번 §2).
@@ -161,11 +176,20 @@ const MUT = {
     "const PLAYABLE = CARDS;"]] },
   M_DECK_WIRE: { "town.js": [[/const n = Math\.max\(1, stage\.n\);/,
     "const n = PLAYABLE.length;"]] },
-  /* 🔴 **M-NOPOS — 🎯 자리 화면을 건너뜁니다.** 초등 다음이 바로 중등이 되고,
+  /* 🔴 **M-NOPOS — 🎯 자리 화면을 건너뜁니다.** 🧒 초4 다음이 바로 🏫 초5가 되고,
    *    자리를 한 번도 안 고른 채 여덟 판이 끝나요. **오류는 하나도 안 납니다**
-   *    (`o.pos`가 없으면 `ELEM_POS`로 조용히 떨어지거든요). */
-  M_NOPOS_SKIP: { "game.js": [[/goSchool\("e", \(\) => goEarly\("e", goPosition\)\)/,
-    'goSchool("e", () => goEarly("e", goMiddle))']] },
+   *    (`o.pos`가 없으면 `ELEM_POS`로 조용히 떨어지거든요).
+   * 🚨 2026-09-03 — 옛 정규식은 `goSchool("e", () => goEarly("e", goPosition))`을 찾았는데
+   *    🎯 자리가 🏫 초등부 뒤에서 🧒 초4 뒤로 옮겨지면서 **그 줄이 사라져 변이가 죽었습니다.**
+   *    이제 자리를 여는 곳은 `goChildYear`의 마지막 `else`예요. */
+  M_NOPOS_SKIP: { "game.js": [[/if \(yr < CHILD_SCREENS\.length\) goChildYear\(yr \+ 1\); else goPosition\(\);/,
+    "if (yr < CHILD_SCREENS.length) goChildYear(yr + 1); else goElementary();"]] },
+  /* 🔴 **M-POSMID — 🎯 자리가 🧒 초2 「뒤」에 낍니다.** 초3·초4가 통째로 사라지는데
+   *    흐름은 끝까지 밀려요 — 화면 순서 배열(S-6a)뿐 아니라 **관계**(S-6d: 네 해가 전부
+   *    자리 앞)도 이걸 물어야 합니다. 🔑 배열은 화면이 늘 때마다 고쳐야 하지만
+   *    관계는 그대로 사니, **둘이 각자 물어야** 「옛 계약을 지키는 검사」가 안 생겨요. */
+  M_POSMID: { "game.js": [[/if \(yr < CHILD_SCREENS\.length\) goChildYear\(yr \+ 1\); else goPosition\(\);/,
+    "if (yr === 2) { goPosition(); return; }\n    if (yr < CHILD_SCREENS.length) goChildYear(yr + 1); else goPosition();"]] },
   /* 🔴 **M-DEAL — 섞기를 없앱니다.** 가방에 깐 순서가 그대로 나와요.
    *    🆕 2026-09-02 — 종류가 둘이 되면서 증상이 **첫 장**으로 옮겨 갔습니다:
    *       초등은 여전히 «각 1장»이지만 **첫 장이 늘 ⚽(100%)**이고,
@@ -220,45 +244,24 @@ function boot(o) {
     close: () => W.close() };
 }
 
-/* 🚪 **게임 입구를 통해** 아크 전체를 지나며, 카드마다 단계와 화면을 기록합니다. */
+/* 🚪 **게임 입구를 통해** 아크 전체를 지나며, 카드마다 단계와 화면을 기록합니다.
+ *
+ * 🔴 **2026-09-03 — 이 함수는 `passArc`의 「복붙본」이었습니다.** 🧒 어린 시절이 네 해가 되고
+ *    🎯 자리가 🏫 초등부 뒤에서 🧒 초4 뒤로 옮겨진 날, `_load.js`만 고쳐진 채
+ *    이 사본이 **옛 순서 그대로** 남아 S-6·S-6a·S-6c가 한꺼번에 죽었어요
+ *    (`tapFoot` 사본 셋 · rAF preamble 네 벌과 **같은 형태**입니다).
+ * 🔒 그래서 **지금은 `_load.js`의 한 벌을 그대로 부릅니다.** 여기에 걸음을 다시 적지 마세요 —
+ *    이 파일이 더 재는 것은 `WingerTown`의 상태(점수·편차·등급)뿐입니다. */
 async function runArc(muts, seed, pos) {
   const h = boot({ muts, seed });
-  const seen = [];
-  const mark = () => { const id = h.active(); if (seen[seen.length - 1] !== id) seen.push(id); };
-  mark();
-  h.press(h.D.getElementById("btn-new"), "btn-new");
-  mark();
-  h.press(h.D.getElementById("btn-name-next"), "btn-name-next");
-  mark();
-  await tapFoot(h.W, h.press, "R");
-  mark();
-  const back = townAuto(h.W);
-  pickOrigin(h.W, h.press, "seoul");
-  mark();
-  /* 🧒 초1 — 🔒 **`_load.js`의 한 벌을 부릅니다**(복붙본을 만들지 않아요).
-   *    🔴 돌려받은 값이 `null`이면 **화면을 못 만난 것**이라 S-6b가 그걸 봅니다. */
-  const child = await tapChild(h.W, h.press, "ball");
-  mark();
-  const stages = passStage(h.W, h.press);                    // 🏫 초등부
-  mark();
-  const early = [];
-  /* 📨 조기 제안은 **늘 거절**합니다 — 승낙하면 최종에 한 곳만 와서 아크 계약이 어긋나요.
-   *    🤝 승낙 갈래는 `offer-test.js`가 따로 몰고 갑니다. */
-  if (passEarly(h.W, h.press)) early.push("e");
-  mark();
-  if (h.active() === "screen-position")
-    h.press(h.D.querySelector(`#position-list .card[data-pos="${pos || "wg"}"]`), `🎯 ${pos || "wg"}`);
-  mark();
-  stages.push(...passStage(h.W, h.press));                   // 🏫 중등부
-  mark();
-  if (passEarly(h.W, h.press)) early.push("m");
-  mark();
-  stages.push(...passStage(h.W, h.press));                   // 🏫 고등부
-  mark();
-  back();
+  const r0 = await passArc(h.W, h.press, { pos: pos || "wg", origin: "seoul", foot: "R" });
   const T = h.W.WingerTown;
   const r = {
-    seed, seen, stages, early, child, cards: stages.length, screen: h.active(),
+    seed, seen: r0.screens, stages: r0.stages, early: r0.early,
+    /* 🧒 **「눌렀는가」입니다** — `passArc`가 해마다 `null`(못 만남) 또는 키를 돌려줘요.
+     *    🔴 `child`는 **배열**이라 `!= null`이 언제나 참입니다. `childTaps`를 보세요. */
+    child: r0.child, childTaps: r0.childTaps,
+    cards: r0.stages.length, screen: h.active(),
     score: T.score(), n: T.cards(), dev: T.deviation(),
     base: T._t.tierOfD(T.deviation()),
     tiers: h.W.__get("MARKETS").map((m) => T.offerFor(m.id).tier),
@@ -297,9 +300,10 @@ async function s6(muts) {
    *    `screen-child`가 목록에 없으니 빨간불이 나지만, **화면이 있는데 안 누른** 길은
    *    (예: 카드 선택자가 바뀜) `press`가 던져 💥가 됩니다. 여기서 **눌린 키**를 확인해
    *    「도달 = 조작」이 아니라는 걸 못 박습니다. */
-  const tapped = rows.filter((r) => r.child != null).length;
+  const tapped = rows.filter((r) => r.childTaps === CHILD_YEARS).length;
   check(tapped === rows.length,
-    `S-6c. 🧒 **초1 카드를 실제로 눌렀다** — ${tapped} / ${rows.length}판`
+    `S-6c. 🧒 **어린 시절 ${CHILD_YEARS}해를 해마다 실제로 눌렀다** — ${tapped} / ${rows.length}판`
+    + `\n     해마다 누른 것: ${rows.map((r) => `[${r.child.map((k) => k == null ? "🔴안누름" : k).join(" ")}]`).join(" · ")}`
     + `\n     🔑 「도달했는가」가 아니라 「눌렀는가」예요 — 안 누르고도 지나가면 그게`
     + ` **자가 복구가 실패를 삼킴**입니다`
     + (tapped === rows.length ? "" : `\n     🔴 초1 화면을 한 번도 안 지났어요 — 흐름이 바뀌었는지 보세요`));
@@ -314,6 +318,27 @@ async function s6(muts) {
       ? `\n     🔑 초등부가 자리보다 앞이라 **초등에는 자리가 없습니다** — S-8이 그걸 지켜요`
         + `\n     📨 조기 제안이 단계마다 한 번씩 낍니다 — 지난 단계 [${rows[0].early.join(" · ")}] (계약 ${EARLY_STAGES.join(" · ")})`
       : `\n     🔴 순서가 달라요 — 자리가 앞으로 가면 「추천」의 뒷문이 열리고, 뒤로 가면 자리를 못 고릅니다`));
+
+  /* ══════════════════════════════════════════════════════════════════
+   * 🔑 S-6d. **값이 아니라 관계** — 「어린 시절 네 해가 전부 🎯 자리 앞」
+   * ══════════════════════════════════════════════════════════════════
+   * 🌍 **이 문장이 서 있는 세계**: 「어린 시절에 고른 것이 🎯 자리를 고를 때 이미 정해져
+   *    있는 세계」입니다. 🔴 한 해라도 자리 **뒤**로 가면 그 화면은 이미 정해진 자리를
+   *    못 바꿔서 **장식**이 됩니다 — 그게 이 순서가 존재하는 유일한 이유예요.
+   *
+   * 🔑 **S-6a와 성질이 다릅니다.** S-6a는 배열 전체를 대조해서, 화면이 하나 늘면
+   *    **고쳐야 하는** 문장이에요. 여기는 화면이 늘어도 **그대로 사는** 문장입니다.
+   *    2026-09-03에 S-6a가 옛 계약을 지키다 죽은 자리라, 둘을 갈라 둡니다. */
+  const posAt = rows.map((r) => r.seen.indexOf("screen-position"));
+  const kidAt = rows.map((r) => CHILD_SCREEN_IDS.map((id) => r.seen.indexOf(id)));
+  const relOK = rows.every((r, i) =>
+    posAt[i] >= 0 && kidAt[i].every((v) => v >= 0 && v < posAt[i]));
+  check(relOK,
+    `S-6d. 🔑 **어린 시절 ${CHILD_YEARS}해가 「전부」 🎯 자리 앞에 온다** (값이 아니라 관계)`
+    + `\n     ${rows.map((r, i) => `시드 ${r.seed}: 어린 시절 [${kidAt[i].join(" ")}] · 자리 ${posAt[i]}`).join("\n     ")}`
+    + (relOK
+      ? `\n     ✔ 화면이 또 늘어도 이 문장은 그대로 삽니다 — 배열을 고칠 곳은 S-6a예요`
+      : `\n     🔴 어린 시절 한 해가 자리 뒤이거나 아예 안 섰습니다 — 그 화면은 **장식**입니다`));
 
   /* ══════════════════════════════════════════════════════════════════
    * 🔑 S-6b. **`n`을 바꾸면 덱이 따라 움직인다** (종속값을 관계로)
@@ -620,6 +645,19 @@ else {
       : !kindBroke
         ? `\n     🔴 종류가 늘었는데 S-7b가 조용합니다 — **옛 계약이 그대로 서 있어요**`
         : `\n     🔴 종류가 늘자 장수까지 흔들렸어요 — S-7a를 보세요`));
+}
+
+/* 🧪 M-POSMID — 🎯 자리가 🧒 초2 뒤에 낌. **S-6d(관계)**가 갈려야 합니다. */
+if (!mutOK("M_POSMID")) check(false, `🧪 **변이 M-POSMID — 🎯 자리가 🧒 초2 뒤에 낌**${MUT_DEAD}`);
+else {
+  const rows = await s6(MUT.M_POSMID);
+  const pAt = rows.map((r) => r.seen.indexOf("screen-position"));
+  const kAt = rows.map((r) => CHILD_SCREEN_IDS.map((id) => r.seen.indexOf(id)));
+  const broke = rows.some((r, i) => !(pAt[i] >= 0 && kAt[i].every((v) => v >= 0 && v < pAt[i])));
+  check(broke,
+    `🧪 **변이 M-POSMID — 🎯 자리가 🧒 초2 뒤에 낌** → S-6d(관계)가 빨간불`
+    + `\n     ${rows.map((r, i) => `시드 ${r.seed}: 어린 시절 [${kAt[i].join(" ")}] · 자리 ${pAt[i]}`).join("\n     ")}`
+    + (broke ? "" : `\n     🔴 안 잡혔어요 — S-6d가 **관계를 안 보고 있습니다**`));
 }
 
 /* 🧪 M-NOPOS — 🎯 자리 화면을 건너뜀. S-6a가 갈려야 합니다. */

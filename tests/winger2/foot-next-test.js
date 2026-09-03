@@ -67,7 +67,7 @@
 "use strict";
 const fs = require("fs");
 const path = require("path");
-const { bootPage, pageMutsOK, seedBoth, townAuto, tapFoot, tapChild } = require("./_load.js");
+const { bootPage, pageMutsOK, seedBoth, townAuto, tapFoot, tapChild, tapChildArc } = require("./_load.js");
 
 let fail = 0;
 const t0 = Date.now();
@@ -89,10 +89,12 @@ const HOLD_MS = 600;
  *   · 2026-09-02(111번 §2) 🦶 주발에 [다음]이 붙어 **5 → 6**
  *   · 2026-09-02(117번 §2-3) 🧒 초1이 🗺️ 지도와 🏫 사이에 들어와 **6 → 7**
  *     🔑 초1은 **[다음]이 없어서 탭이 하나**예요 — 두 걸음이었다면 8이 됐을 자리입니다.
+ *   · 2026-09-03(133번 · 커밋 fde6688) 🧒 어린 시절이 **네 해**가 되고 🎯 자리가
+ *     🏫 초등부 뒤에서 🧒 초4 **뒤**로 와서 **7 → 11** (초2·초3·초4 셋 + 🎯 자리 하나).
  * ⚠️ **여기서 조용히 되돌리지 마세요** — 값을 바꿔야 하면 근거를 남기고 바꾸라는 뜻이지,
  *    지우라는 뜻이 아니에요. 이 값이 움직이면 `town-test.js`의 `DECISIONS_BEFORE_CARD`와
  *    `school-test.js`의 `SCREEN_SEQ`도 **같이** 움직여야 합니다(셋이 한 흐름을 봅니다). */
-const TAPS_TO_TOWN = 7;
+const TAPS_TO_TOWN = 11;
 
 /* ══════════════════════════════════════════════════════════════
  * 🧪 이 파일이 쓰는 변이 전부 — **0번이 먼저 소스와 대조합니다**
@@ -360,16 +362,26 @@ async function main() {
     /* 🧒 초1 — 탭 하나가 고르기 겸 넘김입니다. 🔒 `_load.js`의 한 벌을 부릅니다.
      * 🔴 **돌려받은 값을 봅니다** — 화면을 못 만나면 `null`이라, 「도달만 재고 아무것도
      *    안 눌렀는데 통과」가 안 됩니다(자가 복구가 실패를 삼키는 자리). */
-    const kid = await tapChild(h.W, h.press, "ball");
+    /* 🧒 **네 해** — 2026-09-03에 한 해가 네 해가 됐고(커밋 fde6688),
+     *    🎯 자리가 🏫 초등부 뒤에서 🧒 초4 **뒤**로 왔습니다. 걸음이 **넷 늘었어요**
+     *    (초2 · 초3 · 초4 · 🎯 자리). */
+    const kid = await tapChildArc(h.W, h.press, ["ball", "fin", "gn", "h1"]);
+    h.press(h.D.querySelector('#position-list .card[data-pos="wg"]'), "🎯 자리");
     const n = h.taps();
     const at = h.active();
     back();
     h.close();
-    check(n === TAPS_TO_TOWN && at === "screen-town" && kid != null,
-      `N-8. 🔢 첫 순간 카드까지 **탭 ${TAPS_TO_TOWN}번** — 새로 시작 · 이름 다음 · 🦶 발 · 🆕 🦶 다음 · 🗺️ 지역 · 🗺️ 다음 · 🧒 초1`
-      + `\n     쟀더니 ${n}번 · 도착 ${at} · 🧒 초1에서 누른 것 ${kid || "🔴 안 눌렀어요"}`
-      + `\n     🔒 111번에서 5 → 6(🦶 [다음]) · 117번에서 6 → **7**(🧒 초1). 초1은 [다음]이 없어 탭이 하나예요`
-      + `\n     ⚠️ 여기서 조용히 되돌리지 마세요 — \`town-test\`의 \`DECISIONS_BEFORE_CARD\`(4)와 한 흐름입니다`);
+    const tapped = kid.filter((k) => k != null).length;
+    check(n === TAPS_TO_TOWN && at === "screen-town" && tapped === 4,
+      `N-8. 🔢 첫 순간 카드까지 **탭 ${TAPS_TO_TOWN}번** — 새로 시작 · 이름 다음 · 🦶 발 · 🦶 다음`
+      + ` · 🗺️ 지역 · 🗺️ 다음 · 🧒 초1~초4(넷) · 🎯 자리`
+      + `\n     쟀더니 ${n}번 · 도착 ${at} · 🧒 해마다 누른 것 [${kid.map((k) => k == null ? "🔴안누름" : k).join(" ")}]`
+      + `\n     🔒 111번에서 5 → 6(🦶 [다음]) · 117번에서 6 → 7(🧒 초1) ·`
+      + ` **133번에서 7 → ${TAPS_TO_TOWN}** (🧒 초2·초3·초4 + 🎯 자리가 초등부 앞으로)`
+      + `\n     🔴 「도달했는가」가 아니라 **「해마다 눌렀는가」**를 봅니다 — 안 누르고 지나가면`
+      + ` 흐름이 끝까지 밀려 **아무것도 안 지키는 초록불**이 나요`
+      + `\n     ⚠️ 여기서 조용히 되돌리지 마세요 — \`town-test\`의 \`DECISIONS_BEFORE_CARD\`(8)와`
+      + ` \`school-test\`의 \`SCREEN_SEQ\`가 **한 흐름**입니다`);
   }
 
   /* ── N-9. 🔒 `tapFoot` 복붙본이 없는가 ── */

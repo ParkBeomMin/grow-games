@@ -79,6 +79,20 @@ const V2_BOX = ["w2m-oneone"];
  *    🥅가 *"바로 알겠다"*를 받으면 **같은 격자를 우리 골문으로** 돌립니다. 그때 이 절을 여세요.
  *    🚨 그때도 🧱 차단의 **형태**(칩 둘 읽기 · 2단 국면 · 띠)는 되살리지 마세요. */
 const DEFEND_KIND = "d";
+/* 🎲 **🧱 수비를 「강제로」 뽑는 칸** — `pick([0,1,2])`의 2번(수비 조직)입니다.
+ * 🔴 **커버리지를 운에 안 맡깁니다.** 2026-09-03까지 A-7·A-M5는 시드가 수비 경기를
+ *    뽑아 주기를 **기다리고** 있었고, `SEEDS[0] = 11`이 안 뽑아서 **둘 다 빨간불**이었어요
+ *    (「커버리지가 난수에 걸림」 — CLAUDE.md 실패 유형표). 그런데 그건 계약이 깨진 게
+ *    아니라 **못 잰 것**이라, 그 빨간불이 옆의 진짜 실패까지 먹습니다.
+ * 🔧 D-2가 이미 쓰는 방법을 그대로 씁니다 — `btn-stage-next`를 누르는 **그 순간에만**
+ *    `Math.random`을 상수로 고정해요. 🔒 난수 소비량에 안 흔들립니다. */
+const DEFEND_C = 0.90;
+/* 📍 **강제 판에서 쓰는 자리는 `df`입니다.** 🔑 마지막 경기는 늘 **「포지션 자유」**라
+ *    `POS_KIND`가 종류를 정해요 — `wg`로 재면 그 한 경기가 ⚽ 공격이 되어
+ *    **세 경기 중 둘만** 🧱 수비가 됩니다(실측 2/3). `df`면 셋 다 수비예요.
+ * 🔒 A-7의 계약은 **자리와 무관**합니다(「🧱 수비 경기는 판을 안 연다») — 자리는
+ *    **커버리지를 채우는 손잡이**일 뿐이에요. */
+const DEFEND_POS = "df";
 
 const SEEDS = [11, 23, 37];     // 🎲 시드 하나로 안 잽니다
 
@@ -215,13 +229,23 @@ async function restUntilStage(h) {
 
 /* ⚔️ 평가전 한 번(3경기)을 **손으로 눌러** 끝까지 갑니다.
  * 카드마다 화면이 무엇을 그렸는지 그대로 모아 와요. */
-async function playEval(h, pos) {
+async function playEval(h, pos, opt) {
   const D = h.D;
+  const o = opt || {};
   const sm = () => D.getElementById("stage-moment");
   const rec = { before: snap(h), cards: [], mid: [] };
+  /* 🎲 **경기 성격을 뽑는 그 클릭 동안에만** 난수를 고정합니다 (D-2와 같은 방법).
+   *    🔒 판 안의 굴림은 그대로 진짜 난수예요 — 성격만 겨눕니다. */
+  const nextPress = (el, what) => {
+    if (o.forceC == null) { h.press(el, what); return; }
+    const real = h.W.Math.random;
+    h.W.Math.random = () => o.forceC;
+    h.press(el, what);
+    h.W.Math.random = real;
+  };
   h.press(D.querySelector(".go-game"), "🏆 대회 출전");
   await wait(5);
-  h.press(D.getElementById("btn-stage-next"), "첫 경기 출전");
+  nextPress(D.getElementById("btn-stage-next"), "첫 경기 출전");
   for (let g = 0; g < GAMES_PER_EVAL; g++) {
     // 승부처가 열릴 때까지 (v1이든 v2든 상자가 하나 뜹니다)
     for (let i = 0; i < 900 && !(sm() && sm().querySelector(".tm-box")); i++) await wait(3);
@@ -259,7 +283,7 @@ async function playEval(h, pos) {
       await wait(3);
     }
     rec.mid.push(snap(h));
-    h.press(nx(), "다음");
+    nextPress(nx(), "다음");
     await wait(5);
   }
   rec.afterGames = snap(h);
@@ -331,16 +355,29 @@ async function runA() {
   check(A_PRED[3][1](r),
     `A-5. ⚔️ **공격 카드**에서 ▶️ 시작을 누르면 **🥅 골문**이 열린다 (${r.cards.map((c) => c.box || "(빈칸)").join(" · ")})`
     + `\n     허용: ${V2_BOX.join(" · ")} — 🔴 판이 하나예요(옛 4종 목록은 지웠습니다)`);
-  /* 🧱 c안 — 수비는 판을 안 엽니다. **🔎 측정 조건을 같이 찍습니다**:
-   *    이번 판에 수비 경기가 하나도 안 나왔으면 A-7은 «지켜졌다»가 아니라 «안 재졌다»예요. */
-  const nDef = DEF(r).length;
-  check(A_PRED[4][1](r) && nDef > 0,
+  /* 🧱 c안 — 수비는 판을 안 엽니다.
+   * 🔴 **여기서는 「강제로」 수비만 뽑습니다** — 시드가 뽑아 주기를 기다리면
+   *    그 시드가 안 뽑는 날 «지켜졌다»가 아니라 **«안 재졌다»**가 되고,
+   *    그 빨간불이 옆의 진짜 실패를 먹습니다(실제로 그 상태였어요). */
+  const rd = await (async () => {
+    const h2 = await toHome(boot({ seed: SEEDS[0] }), { pos: DEFEND_POS, foot: "R" });
+    await restUntilStage(h2);
+    const out = await playEval(h2, DEFEND_POS, { forceC: DEFEND_C });
+    h2.close();
+    return out;
+  })();
+  base.rd = rd;
+  const nDef = DEF(rd).length;
+  const dKinds = rd.cards.map((c) => `${c.round.trim()}→${c.kind}`).join(" | ");
+  check(A_PRED[4][1](rd) && nDef === GAMES_PER_EVAL,
     `A-7. 🧱 **수비 경기는 판을 한 조각도 안 연다** (c안 — \`s = 0.5\`로 자동 갈래와 정의상 같아요)`
-    + `\n     🔎 측정 조건 — 이번 평가전의 성격: ${kinds} (수비 ${nDef}경기)`
-    + (nDef > 0 ? "" : `\n     🚧 **수비 경기가 안 나와서 못 쟀습니다** — 시드가 안 뽑았어요.`
-      + ` D절이 시드 셋으로 다시 봅니다`)
-    + (A_PRED[4][1](r) ? "" : `\n     🔴 수비인데 화면이 떴어요: `
-      + DEF(r).map((c) => `${c.round.trim()} → 상자 ${c.box || "없음"} · stake "${c.stake.slice(0, 10)}"`).join(" | ")
+    + `\n     🔎 측정 조건 — 🎲 뽑기를 **c=${DEFEND_C}로 강제**하고 자리를 **\`${DEFEND_POS}\`**로 잡아 세 경기를 전부 🧱 수비로 만들었습니다`
+    + ` (운으로 안 잽니다 — D-2와 같은 방법 · 🔑 마지막 경기는 늘 「포지션 자유」라 자리가 종류를 정해요). 성격: ${dKinds} · 수비 ${nDef}/${GAMES_PER_EVAL}경기`
+    + `\n     🔎 참고 — 강제 안 한 판(A-2~A-5가 쓰는 그 판)의 성격: ${kinds}`
+    + (nDef === GAMES_PER_EVAL ? "" : `\n     🔴 **강제했는데 수비가 ${nDef}경기뿐입니다** —`
+      + ` 뽑기가 \`pick([0,1,2])\` 모양이 아니게 됐나요? D-2부터 보세요`)
+    + (A_PRED[4][1](rd) ? "" : `\n     🔴 수비인데 화면이 떴어요: `
+      + DEF(rd).map((c) => `${c.round.trim()} → 상자 ${c.box || "없음"} · stake "${c.stake.slice(0, 10)}"`).join(" | ")
       + `\n     👉 «한 명만 지나가면 실점»인데 화면이 **상대 골문**이면 화면과 상황이 정면으로 싸웁니다`));
   check(base.errs.length === 0,
     `A-6. 평가전 3경기 동안 자바스크립트 오류가 없다${base.errs.length ? ` — ${base.errs[0]}` : ""}`);
@@ -388,9 +425,11 @@ async function runA_M5() {
   const opened = async (extra) => {
     const muts = Object.assign({}, MUT.M5_DEFEND_OPENS);
     if (extra) muts["winger-moment.js"] = extra;
-    const h = await toHome(boot({ seed: SEEDS[0], muts }), { pos: "wg", foot: "R" });
+    const h = await toHome(boot({ seed: SEEDS[0], muts }), { pos: DEFEND_POS, foot: "R" });
     await restUntilStage(h);
-    const r = await playEval(h, "wg");
+    /* 🔴 **여기도 「강제로」 수비만 뽑습니다** — 시드가 안 뽑으면 변이를 걸어도
+     *    잴 것이 없어서 «안 잡힘»이 뜹니다. 그건 변이가 안 물린 게 아니라 **안 잰 것**이에요. */
+    const r = await playEval(h, DEFEND_POS, { forceC: DEFEND_C });
     h.close();
     return { r, def: DEF(r) };
   };
@@ -405,13 +444,15 @@ async function runA_M5() {
   const brokeOne = !A_PRED[4][1](one.r);
   const brokeBoth = !A_PRED[4][1](both.r);
   const gridUp = both.def.some((c) => c.box === "w2m-oneone");
-  check(one.def.length > 0 && brokeOne && brokeBoth && gridUp,
+  check(one.def.length === GAMES_PER_EVAL && brokeOne && brokeBoth && gridUp,
     `A-M5. 🧪 **변이 — 🧱 수비에도 판을 열면 A-7이 빨간불** (수비 ${one.def.length}경기)`
     + `\n     ① \`game.js\` 가드만 빼면 → ${brokeOne ? "🔴 A-7 빨간불" : "🟢 **안 잡힘**"}`
     + ` (\`.w2m-youth\`가 붙어요 — 클래스는 \`M.play()\`보다 먼저 달립니다)`
     + `\n     ② \`winger-moment.js\` 안전망까지 빼면 → ${brokeBoth ? "🔴 A-7 빨간불" : "🟢 **안 잡힘**"}`
     + ` · 🥅 골문이 뜸 ${gridUp ? "✔" : "✘"} — 수비 상황에 **상대 골문**이에요`
-    + (one.def.length ? "" : `\n     🚧 이 시드가 수비 경기를 안 뽑아서 **못 쟀습니다**`)
+    + `\n     🔎 측정 조건 — 🎲 뽑기 c=${DEFEND_C} + 자리 \`${DEFEND_POS}\`로 세 경기를 전부 🧱 수비로 만들었습니다`
+    + ` (운으로 안 잽니다 — A-7과 같은 자)`
+    + (one.def.length === GAMES_PER_EVAL ? "" : `\n     🔴 **강제했는데 수비가 ${one.def.length}경기뿐입니다** — D-2부터 보세요`)
     + (brokeOne && brokeBoth && gridUp ? "" : `\n     🔴 어느 한 줄을 지웠는데 증상이 0장이에요 —`
       + ` 「가리는 줄」이 있으면 그 줄이 남의 변이를 먹습니다`));
 }

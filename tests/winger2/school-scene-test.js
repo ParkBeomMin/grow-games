@@ -43,7 +43,7 @@
 "use strict";
 const fs = require("fs");
 const path = require("path");
-const { bootPage, pageMutsOK, townAuto, tapFoot, tapChild, pickOrigin, passEarly, seedBoth, PAGE_DIR }
+const { bootPage, pageMutsOK, townAuto, tapFoot, tapChild, tapChildArc, pickOrigin, passEarly, seedBoth, PAGE_DIR }
   = require("./_load.js");
 
 let fail = 0;
@@ -192,10 +192,14 @@ async function arc(seed, muts, cadence) {
   await tapFoot(W, press, "R");
   const back = townAuto(W);
   pickOrigin(W, press, "seoul");
-  await tapChild(W, press, "ball");                   // 🧒 초1 — `_load.js`의 한 벌
+  /* 🧒 **어린 시절 네 해** — `_load.js`의 한 벌(2026-09-03 · 커밋 fde6688).
+   * 🔴 그리고 🎯 자리가 🏫 초등부 **뒤**에서 🧒 초4 **뒤**로 왔습니다 —
+   *    옛 순서로 몰면 `screen-child2`에서 멈춘 채 `stage("e")`가 **한 판도 안 굴려요**
+   *    (그래도 흐름은 안 던져서, 아래 A·B·C가 통째로 빈 값을 재게 됩니다). */
+  await tapChildArc(W, press, ["ball", "fin", "gn", "h1"]);
+  press(D.querySelector('#position-list .card[data-pos="wg"]'), "🎯 wg");
   await stage("e");
   passEarly(W, press);
-  press(D.querySelector('#position-list .card[data-pos="wg"]'), "🎯 wg");
   await stage("m");
   passEarly(W, press);
   await stage("h");

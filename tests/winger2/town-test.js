@@ -59,7 +59,7 @@
 "use strict";
 const fs = require("fs");
 const path = require("path");
-const { bootPage, pageMutsOK, townAuto, passArc, passStage, passEarly, tapFoot, tapChild, pickOrigin, PAGE_DIR,
+const { bootPage, pageMutsOK, townAuto, passArc, passStage, passEarly, tapFoot, tapChild, tapChildArc, pickOrigin, PAGE_DIR,
   seedBoth } = require("./_load.js");
 
 let fail = 0;
@@ -69,14 +69,25 @@ const check = (ok, msg) => { console.log(`${ok ? "✅" : "❌"} ${msg}`); if (!o
 /* ══════════════════════════════════════════════════════════════
  * 🔒 문턱 — **전부 여기 박습니다.** 소스에서 읽어 오지 않아요.
  * ══════════════════════════════════════════════════════════════ */
-/* ⏱️ ✏️ 이름 · 🦶 주발 · 🗺️ 동네 · 🧒 초1 (설계 93번 §2-2 → 117번 §2-3)
- * 🔄 **2026-09-02: 3 → 4.** 🧒 초1이 🗺️ 지도와 🏫 초등부 **사이**에 들어왔습니다.
- * 🔑 **이 문장이 지키는 건 「몇 개냐」가 아니라 「무엇이 오냐」예요** — 🎯 자리가 여기로
- *    앞당겨지면(M-H) 「추천」의 뒷문이 열립니다. 그래서 **목록까지** 못 박습니다.
- * 🔴 초1을 여기서 빼는 판정이 나오면 그때 3으로 되돌리세요 — 값만 고치지 말고
- *    `_load.js`의 `tapChild`와 `school-test.js`의 `SCREEN_SEQ`를 **같이** 보세요. */
-const DECISIONS_BEFORE_CARD = 4;
-const PRE_CARD_SCREENS = ["screen-name", "screen-foot", "screen-origin", "screen-child"];
+/* ⏱️ ✏️ 이름 · 🦶 주발 · 🗺️ 동네 · 🧒 초1~초4 · 🎯 자리 (설계 93번 §2-2 → 117번 → 133번)
+ * 🔄 **2026-09-02: 3 → 4** (🧒 초1이 🗺️ 지도와 🏫 초등부 사이에 들어옴).
+ * 🔄 **2026-09-03: 4 → 8** (커밋 fde6688). 둘이 한꺼번에 바뀌었습니다 —
+ *    ① 🧒 어린 시절이 **한 해 → 네 해** ② 🎯 자리가 🏫 초등부 뒤 → 🧒 초4 **뒤**.
+ *
+ * 🔑 **이 문장이 지키는 건 「몇 개냐」가 아니라 「무엇이 오냐」예요.**
+ *    🚨 2026-09-03에 **옛 목록이 이 검사를 옛 계약으로 만들었습니다** — 🎯 자리가
+ *      카드 앞으로 「진짜로」 왔는데, 옛 주석은 *"자리가 여기로 앞당겨지면 「추천」의
+ *      뒷문이 열립니다"*라고 적혀 있었어요.
+ *    🔴 **뒷문의 정체는 「자리가 카드 앞이냐」가 아니었습니다.** 그건 값이었어요.
+ *      진짜 계약은 **「초등부 미니게임 결과가 🎯 자리를 추천하지 않는다」**이고,
+ *      그건 `school-test`의 **S-8**(초등부가 `opts.pos`를 안 본다)이 지킵니다.
+ *      🔑 자리가 카드 앞으로 온 지금, S-8이 **더 중요해졌습니다** — 거기부터 보세요.
+ *
+ * 🔴 화면이 또 늘면 값만 고치지 말고 `_load.js`의 `CHILD_SCREENS`와
+ *    `school-test.js`의 `SCREEN_SEQ`·S-6d를 **같이** 보세요. */
+const DECISIONS_BEFORE_CARD = 8;
+const PRE_CARD_SCREENS = ["screen-name", "screen-foot", "screen-origin",
+  "screen-child", "screen-child2", "screen-child3", "screen-child4", "screen-position"];
 const ARC_CARDS = 8;               // 🏫 초등 2 + 중등 3 + 고등 3
 const OFFER_COUNT = 5;             // 🏟️ 유스 5곳이 **전부** 옵니다 (줄이면 축이 뒤집혀요)
 const OLD_SAVE_SCORE = 3;          // 📀 옛 세이브의 중립 점수
@@ -193,12 +204,13 @@ async function toOffers(h, pos) {
 async function main() {
 
 /* ══════════════════════════════════════════════════════════════
- * T-7. ⏱️ **첫 순간 카드 앞의 결정이 3을 안 넘는다** · 🏫 화면에 버튼이 하나뿐
+ * T-7. ⏱️ **첫 순간 카드 앞에 무엇이 오는가** · 🏫 화면에 버튼이 하나뿐
  * ══════════════════════════════════════════════════════════════ */
 console.log("── ⏱️ T-7. 첫 카드 앞의 결정과 버튼 ──");
 /* 🚪 첫 순간 카드가 열릴 때까지 **실제 버튼으로** 갑니다.
  *    ⚠️ 🤖 자동 진행을 **안 켭니다** — 진짜 순간 카드가 떠야 T-7이 잴 게 있어요.
  *    🔑 화면을 지나가며 전부 기록합니다. 🎯 자리가 카드 앞으로 오면 여기 찍혀요. */
+const CHILD_PICKS_T7 = ["ball", "fin", "gn", "h1"];
 async function runT7(muts) {
   const h = boot({ seed: SEEDS[0], muts });
   const seen = [];
@@ -212,8 +224,14 @@ async function runT7(muts) {
   mark();
   pickOrigin(h.W, h.press, "seoul");
   mark();
-  await tapChild(h.W, h.press, "ball");               // 🧒 초1 — `_load.js`의 한 벌
-  mark();
+  /* 🧒 **네 해** — `_load.js`의 한 벌(`tapChildArc`)입니다. 🔴 초1만 누르면 여기서
+   *    `screen-child2`에 멈추는데 흐름은 안 던지고, 아래 셈이 통째로 **덜 센 값**이 돼요. */
+  const kid = [];
+  for (let y = 1; y <= 4; y++) {
+    kid.push(await tapChild(h.W, h.press, CHILD_PICKS_T7[y - 1], y));
+    mark();   /* 🔒 **해마다** 찍습니다 — 다 걷고 나서 한 번에 찍으면 연달아 같은 화면으로
+               *    보여 네 해가 **한 칸으로 뭉갭니다**(자국이 3개 사라져요) */
+  }
   /* 🔴 여기서 🏫이 아니라 🎯 자리가 서 있으면 **그게 결정 하나가 더 낀 것**입니다.
    *    검사가 멈추지 않고 지나가서, 카드 앞에 뭐가 몇 개 왔는지 그대로 셉니다. */
   for (let g = 0; g < 3 && h.active() !== "screen-town"; g++) {
@@ -227,7 +245,7 @@ async function runT7(muts) {
   const pre = seen.slice(0, seen.indexOf("screen-town") < 0 ? seen.length : seen.indexOf("screen-town"))
     .filter((id) => id !== "screen-title");
   const r = {
-    seen, pre, taps: h.taps(), screen: h.active(),
+    seen, pre, kid, taps: h.taps(), screen: h.active(),
     stage: (h.D.getElementById("screen-town") || { dataset: {} }).dataset.stage,
     hasMoment: !!(cardBox && cardBox.querySelector('[class*="w2m-"]')),
     own: own.map((el) => el.id || el.className),
@@ -245,9 +263,13 @@ async function runT7(muts) {
     + `\n     지나온 화면: ${r.seen.join(" → ")}`
     + `\n     카드 앞의 결정 ${r.pre.length}개 (${r.pre.join(" · ")}) · 탭 ${r.taps}회`
     + `\n     도착 화면 ${r.screen}[data-stage="${r.stage}"] · 순간 카드 ${r.hasMoment ? "떴어요" : "🔴 안 떴어요"}`
-    + (sameList ? `\n     🔑 🎯 자리가 목록에 **없습니다** — 카드와 카드 사이라 첫 카드를 안 밀어요`
+    + `\n     🧒 해마다 누른 것 [${r.kid.map((k) => k == null ? "🔴안누름" : k).join(" ")}]`
+    + (sameList
+      ? `\n     🔑 목록에 🎯 자리가 **있습니다** — 2026-09-03에 자리가 🧒 초4 뒤로 왔거든요.`
+        + ` 🔴 그게 「추천」의 뒷문은 **아닙니다** — 초등부가 \`opts.pos\`를 안 보는지는`
+        + ` \`school-test\`의 **S-8**이 지켜요. 자리가 앞으로 온 지금 그 문장이 더 중요합니다`
       : `\n     🔴 목록이 계약과 달라요 (계약: ${PRE_CARD_SCREENS.join(" · ")})`
-        + `\n        🎯 자리가 카드 앞으로 오면 결정이 4가 되어 검산이 무너집니다`));
+        + `\n        🔒 값만 고치지 마세요 — \`_load.js\`의 \`CHILD_SCREENS\`와 \`school-test\`의 S-6a·S-6d를 같이 보세요`));
   check(r.own.length === 1 && r.own[0] === "btn-town-next",
     `T-7a. 🔒 🏫 학교 화면의 조작은 **진행 버튼 하나뿐**이다 — 건너뛰기·난이도·재도전이 없다`
     + `\n     화면 직속 조작: ${r.own.length ? r.own.join(" · ") : "(없음)"}`
@@ -278,12 +300,29 @@ async function runOffers(muts) {
  * ♻️ **되감는 길 — 🎯 자리 화면의 `btn-back-position` 하나뿐입니다**
  * ══════════════════════════════════════════════════════════════
  * ✅ 2026-09-01에 🏟️ 제안 화면의 「← 자리 다시 고르기」가 **삭제**됐습니다(designer §19 ⒝).
- *    그래서 옛 T-6의 길(제안 → 뒤로 → 자리 다시 고르기)은 **없어졌고**, 그 검사도 지웠어요.
- * 🔑 **남은 길은 아크 「중간」에 있습니다** — 🏫 초등 + 📨 조기 제안을 지난 🎯 자리 화면에서
- *    `btn-back-position` → 🗺️ 동네 → 지역 다시 고르고 [다음] → `goElementary()`가 **다시 불립니다.**
- *    거기서 `goSchool`의 `playedStage` 한 줄이 막아야 해요 — 그게 T-6a입니다.
- * 🔴 되감기를 아크 「끝」에서 재던 옛 판보다 **오히려 낫습니다** — 그때는 `playedStage`가
- *    셋 다 true였는데, 지금은 `e`만 true인 **진짜 경계**에서 재거든요. */
+ *
+ * ═════════════════════════════════════════════════════════════════════════
+ * 🚨 **2026-09-03 — 이 검사의 세계가 바뀌었습니다** (설계 133번 · 커밋 fde6688)
+ * ═════════════════════════════════════════════════════════════════════════
+ * 🌍 옛 문장은 **「🎯 자리 화면이 🏫 초등부 「뒤」인 세계」**의 것이었어요:
+ *      🏫 초등 2장 + 📨 조기 제안을 지나면 **🎯 자리 화면에 서 있었고**, 거기 `btn-back-position`이
+ *      있어서 🗺️ 동네까지 되감아 `goElementary()`를 **다시 부를 수 있었습니다.**
+ * 🔴 **그 세계가 끝났습니다.** 🎯 자리가 🧒 초4 **뒤**로 오면서, 🏫 카드를 한 장이라도 뛴 뒤에
+ *    `btn-back-position`이 「보이는」 화면에 설 길이 **하나도 안 남았어요**:
+ *      · 🏫 `screen-town`은 `BACK_SAFE`가 아니라 브라우저 뒤로 가기가 막힙니다
+ *      · 📨/🏟️ `screen-agency`에서 뒤로 가면 **바로 앞이 `screen-town`**이라 거기서 막혀요
+ *      · 🧒 `screen-child2·3·4`도 일부러 `BACK_SAFE`에서 뺐습니다 (`game.js:844`)
+ *    ✅ **되감기 뒷문이 구조로 닫혔습니다.** 설계가 원한 상태예요.
+ *
+ * 🔑 **그래서 문장을 둘로 가릅니다** — 성질이 달라졌거든요:
+ *   · **T-6a** — 사람이 실제로 갈 수 있는 길. 🎯 자리에서 되감아 돌아와도 🏫이 **한 번만** 굴러요.
+ *   · **T-6a-가드** — `playedStage` 한 줄의 회귀. 🔴 지금은 그 줄을 빼도 **사람이 갈 수 있는 길에서는
+ *     증상이 0장**이라(「방어의 유일한 호출자가 사라진」 자리), **화면에 안 보이는 버튼**을 눌러
+ *     탐침합니다. ⚠️ 그건 사람의 길이 **아닙니다** — 「`goElementary`를 두 번 부르는 길이 다시
+ *     생기는 날」을 위한 회귀 그물이에요. 보고서 §검증 불가가 아니라 **§알려진 상태**입니다.
+ *   🔒 두 문장을 **묶지 마세요** — 묶으면 뒷문이 닫힌 지금도 빨간불이라 아무도 안 봅니다. */
+
+/* ♻️ 사람이 갈 수 있는 길 — 🎯 자리에서 **누르기 전에** 되감습니다. */
 async function runRewind(muts) {
   const h = boot({ seed: SEEDS[0], muts });
   const T = h.W.WingerTown;
@@ -292,20 +331,52 @@ async function runRewind(muts) {
   await tapFoot(h.W, h.press, "R");
   const back = townAuto(h.W);
   pickOrigin(h.W, h.press, "seoul");
-  await tapChild(h.W, h.press, "ball");       // 🧒 초1
-  passStage(h.W, h.press);                    // 🏫 초등부
-  passEarly(h.W, h.press);                    // 📨 조기 제안 — 🙅 거절
+  await tapChildArc(h.W, h.press, ["ball", "fin", "gn", "h1"]);
   const r = { atPos: h.active(), cards: T.cards(), score: T.score() };
   h.press(h.D.getElementById("btn-back-position"), "← 뒤로");
   r.originScreen = h.active();
   pickOrigin(h.W, h.press, "busan");
   r.afterOrigin = h.active();
-  /* 🧒 **되감은 뒤에도 초1을 다시 지납니다** — 2026-09-02에 🗺️ 지도와 🏫 사이에 화면이
-   *    하나 끼면서, 되감기 경로도 **한 칸 길어졌어요.** 🔴 여기서 안 누르면 화면이
-   *    `screen-child`에 멈추고 `afterOrigin !== "screen-town"`이 **공짜로 참**이 됩니다 —
-   *    뒷문이 열려 있어도 초록불이 나는 자리예요(실제로 그렇게 됐습니다). */
-  r.afterChild = await tapChild(h.W, h.press, "eye") ? h.active() : r.afterOrigin;
-  r.extra = passStage(h.W, h.press);          // 🏫 다시 열렸다면 여기서 카드가 더 굴러요
+  /* 🧒 **되감은 뒤에도 네 해를 다시 지납니다** — 🔴 여기서 안 누르면 화면이
+   *    `screen-child2`에 멈추고 뒤 문장이 **공짜로 참**이 됩니다(자가 복구가 실패를 삼킴). */
+  const again = await tapChildArc(h.W, h.press, ["eye", "steal", "gl", "h3"]);
+  r.childTaps2 = again.filter((k) => k != null).length;
+  r.afterChild = h.active();
+  /* 🎯 자리를 다시 눌러야 `goElementary()`가 불립니다 — 🔴 안 누르면 카드가 0장이라
+   *    「🏫이 두 번 안 굴렀다」가 **아무것도 안 눌러서** 참이 돼요. */
+  r.posTapped = r.afterChild === "screen-position";
+  if (r.posTapped) h.press(h.D.querySelector('#position-list .card[data-pos="wg"]'), "🎯 wg");
+  r.stages = passStage(h.W, h.press);
+  back();
+  r.cards2 = T.cards(); r.score2 = T.score();
+  h.close();
+  return r;
+}
+
+/* 🧪 **탐침 — 사람의 길이 아닙니다.** 🏫 초5를 뛴 뒤에 **화면에 안 보이는**
+ * `btn-back-position`을 눌러 `goElementary()`를 두 번 부릅니다.
+ * 🔴 이걸 T-6a에 섞지 마세요 — 섞으면 「사람이 못 가는 길」의 판정이 사람의 길 판정을 덮습니다. */
+async function runGuardProbe(muts) {
+  const h = boot({ seed: SEEDS[0], muts });
+  const T = h.W.WingerTown;
+  h.press(h.D.getElementById("btn-new"), "btn-new");
+  h.press(h.D.getElementById("btn-name-next"), "btn-name-next");
+  await tapFoot(h.W, h.press, "R");
+  const back = townAuto(h.W);
+  pickOrigin(h.W, h.press, "seoul");
+  await tapChildArc(h.W, h.press, ["ball", "fin", "gn", "h1"]);
+  h.press(h.D.querySelector('#position-list .card[data-pos="wg"]'), "🎯 wg");
+  const first = passStage(h.W, h.press);          // 🏫 초5 — 여기서 `e`가 굴렀습니다
+  passEarly(h.W, h.press);                        // 📨 조기 제안 — 🙅 거절
+  const r = { first, cards: T.cards(), score: T.score(), at: h.active() };
+  /* 🙈 **안 보이는 버튼** — 실기기라면 여기 없습니다. 가드의 회귀만 봅니다. */
+  h.press(h.D.getElementById("btn-back-position"), "🙈 (안 보이는) ← 뒤로");
+  pickOrigin(h.W, h.press, "busan");
+  await tapChildArc(h.W, h.press, ["eye", "steal", "gl", "h3"]);
+  r.afterChild = h.active();
+  if (r.afterChild === "screen-position")
+    h.press(h.D.querySelector('#position-list .card[data-pos="wg"]'), "🎯 wg 다시");
+  r.extra = passStage(h.W, h.press);
   back();
   r.cards2 = T.cards(); r.score2 = T.score();
   h.close();
@@ -328,18 +399,40 @@ check(O.spots.every((s) => /×[\d.]+ → ×[\d.]+/.test(s)),
   + `\n     ${O.spots.map((s) => s.replace(/📣 주목 /, "")).join(" · ")}`);
 {
   const R = await runRewind(null);
-  /* 🔴 **끝까지 걸어서 봅니다.** 되감기 뒤 화면이 `screen-child`에 멈춰 있으면
-   *    `afterOrigin !== "screen-town"`은 **공짜로 참**이에요 — 초1을 다시 지난 뒤의
-   *    `afterChild`가 진짜로 물어야 하는 자리입니다(「도달 경로가 조용히 죽음」의 형태). */
-  const ok = R.atPos === "screen-position" && R.originScreen === "screen-origin"
-    && R.afterOrigin !== "screen-town" && R.afterChild !== "screen-town" && R.extra.length === 0
-    && R.cards === R.cards2 && R.score === R.score2;
+  /* 🔒 **「눌렀는가」를 먼저 봅니다** — 되감은 뒤 화면이 🧒 어느 해에 멈춰 있으면
+   *    「🏫이 두 번 안 굴렀다」가 **공짜로 참**이에요(자가 복구가 실패를 삼키는 자리). */
+  const walked = R.childTaps2 === 4 && R.posTapped;
+  const ok = walked && R.atPos === "screen-position" && R.originScreen === "screen-origin"
+    && R.cards === 0 && R.stages.join("") === "ee" && R.cards2 === 2;
   check(ok,
-    `T-6a. ♻️🔑 **🗺️ 동네까지 되감아 지역을 다시 골라도 🏫이 다시 안 굴러요** — 여기가 진짜 뒷문입니다`
-    + `\n     🎯 자리(${R.atPos}) 카드 ${R.cards}장 → 뒤로(${R.originScreen}) → 지역 다시 → ${R.afterOrigin} → 🧒 초1 다시 → **${R.afterChild}**`
-    + `\n     그 뒤 더 지나간 카드 ${R.extra.length}장 · 카드 ${R.cards} → ${R.cards2} · 점수 ${R.score} → ${R.score2}`
-    + (ok ? `\n     🔑 \`goSchool\`의 \`playedStage\` **한 줄**이 유일한 가드예요 — 늘리면 변이가 또 죽습니다`
-      : `\n     🔴 🏫이 다시 열렸어요 — **되돌아가기가 곧 재도전 버튼**이 됐습니다`));
+    `T-6a. ♻️ **🎯 자리에서 되감아 다시 골라도 🏫 초5는 「한 번만」 굴러요**`
+    + `\n     🎯 자리(${R.atPos}) 카드 ${R.cards}장 → 뒤로(${R.originScreen}) → 지역 다시 → ${R.afterOrigin}`
+    + ` → 🧒 네 해 다시(${R.childTaps2}/4) → ${R.afterChild} → 🎯 다시 누름 ${R.posTapped ? "✔" : "🔴"}`
+    + `\n     그 뒤 굴린 카드 [${R.stages.join("")}] · 카드 ${R.cards} → ${R.cards2} · 점수 ${R.score} → ${R.score2}`
+    + (ok
+      ? `\n     🔑 🎯 자리가 🧒 초4 뒤로 오면서 **되감기가 아직 아무것도 안 굴린 지점**이 됐어요 —`
+        + ` 되감아도 잃을 게 없고, 그래서 이건 재도전 버튼이 아닙니다`
+      : !walked
+        ? `\n     🔴 되감은 뒤 흐름을 **끝까지 안 걸었습니다** — 이 상태의 초록불은 아무것도 안 지켜요`
+        : `\n     🔴 🏫이 두 번 굴렀거나 한 번도 안 굴렀어요`));
+}
+
+/* 🚧 **T-6a-가드 — 알려진 상태입니다** (빨간불 아님 · 종료 코드에 안 셉니다)
+ * `playedStage` 한 줄은 아직 소스에 있는데, **사람이 갈 수 있는 길에서는 두 번 불릴 수가
+ * 없습니다.** 위 주석의 세 갈래가 전부 막혀서예요. 그래서 여기서는 **안 보이는 버튼**으로
+ * 탐침만 합니다 — 🔴 이 줄이 초록불이라고 「뒷문이 막혔다」가 되는 게 아니라,
+ * **「막는 줄이 아직 살아 있다」**는 뜻입니다.
+ * 🔑 `goElementary`를 두 번 부르는 길이 다시 생기는 날, 이 줄이 먼저 말을 겁니다. */
+{
+  const G = await runGuardProbe(null);
+  /* 🔑 **「카드가 늘었나」가 아니라 「`e`가 다시 굴렀나」를 봅니다.** 되감고 돌아오면
+   *    흐름은 **앞으로** 갑니다(🏫 중등부 `m`이 열려요) — 그건 뒷문이 아니라 정상 진행이에요.
+   *    🔴 카드 수만 세면 정상 진행이 뒷문으로 읽혀 이 줄이 늘 🚧가 됩니다. */
+  const held = G.first.join("") === "ee" && G.extra.indexOf("e") < 0;
+  console.log(`${held ? "✅" : "🚧"} T-6a-가드(탐침). ♻️ **안 보이는 \`btn-back-position\`으로 \`goElementary\`를 두 번 불러도 🏫 초5가 다시 안 굴러요**`
+    + `\n     처음 [${G.first.join("")}] → 🙈 되감기 → ${G.afterChild} → 다시 [${G.extra.join("")}] (🔎 여기 \`e\`가 또 있으면 뒷문) · 카드 ${G.cards} → ${G.cards2}`
+    + `\n     ⚠️ **사람의 길이 아닙니다** — 🏫 카드를 뛴 뒤에 이 버튼이 「보이는」 화면에 설 길은 지금 없습니다`
+    + (held ? `\n     ✔ \`playedStage\` 한 줄이 아직 살아 있습니다` : `\n     🚧 가드가 안 걸립니다 — 길이 다시 생기면 그날 이게 뒷문이에요`));
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -543,19 +636,26 @@ else {
     + `\n     화면: ${r.titles.join(" · ")}`);
 }
 
-/* 🧪🔑 M-R — 재도전 뒷문. T-6a가 갈려야 합니다. */
+/* 🧪🔑 M-R — `goSchool`의 가드 한 줄 제거. **T-6a-가드(탐침)**가 갈려야 합니다.
+ * 🔴 **T-6a(사람의 길)는 안 갈립니다** — 그 길에서는 🏫이 되감기 전에 한 장도 안 굴렀거든요.
+ *    성질이 다른 둘을 갈라 뒀기 때문에 여기서 그게 **눈에 보입니다.** */
 if (!mutOK("M_R_GUARD")) check(false, `🧪 **변이 M-R — \`goSchool\`의 가드 한 줄 제거**${MUT_DEAD}`);
 else {
-  const R = await runRewind(MUT.M_R_GUARD);
-  const caught = R.afterOrigin === "screen-town" || R.afterChild === "screen-town"
-    || R.extra.length > 0 || R.cards2 !== R.cards;
+  const G = await runGuardProbe(MUT.M_R_GUARD);
+  const caught = G.extra.indexOf("e") >= 0;
   check(caught,
-    `🧪🔑 **변이 M-R — ♻️ \`goSchool\`의 가드 한 줄을 빼서 재도전 뒷문을 엶** → T-6a가 빨간불`
-    + `\n     지역 다시 → ${R.afterOrigin} → 🧒 초1 다시 → **${R.afterChild}** · 더 지나간 카드 ${R.extra.length}장(${R.extra.join("")})`
-    + `\n     카드 ${R.cards} → ${R.cards2} · 점수 ${R.score} → ${R.score2}`
-    + (caught ? `\n     ✔ 🏫 초등이 다시 굴렀어요 — 이게 곧 재도전 버튼입니다`
-      : `\n     🔴 가드를 뺐는데 초록불이에요 — T-6a가 아무것도 안 지킵니다`)
+    `🧪🔑 **변이 M-R — ♻️ \`goSchool\`의 가드 한 줄을 뺌** → T-6a-가드(탐침)가 빨간불`
+    + `\n     처음 [${G.first.join("")}] → 🙈 되감기 → ${G.afterChild} → 다시 [${G.extra.join("")}] (🔎 \`e\`가 또 있으면 뒷문) · 카드 ${G.cards} → ${G.cards2}`
+    + (caught ? `\n     ✔ 🏫 초5가 다시 굴렀어요 — 가드가 **아직 무언가를 막고 있습니다**`
+      : `\n     🔴 가드를 뺐는데 초록불이에요 — 탐침이 아무것도 안 지킵니다`)
     + `\n     ✅ **한 줄로 잡힙니다.** 가드가 셋이던 때는 하나를 빼도 증상이 0장이었어요 (96번 ⓔ)`);
+  /* 🔒 **반대 방향** — 성질이 다른 것을 안 묶었다는 증거입니다. */
+  const R = await runRewind(MUT.M_R_GUARD);
+  const stillOK = R.childTaps2 === 4 && R.posTapped && R.stages.join("") === "ee" && R.cards2 === 2;
+  check(stillOK,
+    `🧪 **변이 M-R → T-6a(사람의 길)는 초록불로 남아야** 한다 — 그 길에는 되감기 전에 굴린 카드가 없어요`
+    + `\n     되감은 뒤 [${R.stages.join("")}] · 카드 ${R.cards} → ${R.cards2}`
+    + (stillOK ? `\n     🔑 이게 둘을 안 묶은 값어치예요 — 묶었으면 «가드가 죽었다»가 «사람 길이 깨졌다»로 읽힙니다` : ""));
 }
 
 /* 🧪 M-B — 옛 세이브 점수 기본값 0. T-3b가 갈려야 합니다. */

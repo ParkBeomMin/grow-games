@@ -43,7 +43,7 @@
  * 종료 코드: 0 통과 · 1 빨간불 · 2 💥 죽음(안 돌았음) — `_load.js`가 걸어 줍니다.
  */
 "use strict";
-const { bootPage, pageMutsOK, townAuto, passStage, passEarly, tapFoot, tapChild, pickOrigin, seedBoth }
+const { bootPage, pageMutsOK, townAuto, passStage, passEarly, tapFoot, tapChild, tapChildArc, pickOrigin, seedBoth }
   = require("./_load.js");
 
 let fail = 0;
@@ -125,7 +125,7 @@ const MUT = {
   /* ⚠️ 이 변이를 넣으면 화면에 `rollTalents` 스택이 몇 줄 찍힙니다 — `finishArc`가
    *    🎯 자리를 고르기도 전에 불려서요. **그건 변이가 부순 상태의 증상**이지
    *    검사가 죽은 게 아니에요(`window.onerror`가 삼키고 판정은 그대로 돕니다). */
-  M_SKIPCARD: { "game.js": [[/ {2}\(after \|\| \(id === "e" \? goPosition : goHigh\)\)\(\);/,
+  M_SKIPCARD: { "game.js": [[/ {2}\(after \|\| \(id === "e" \? goMiddle : goHigh\)\)\(\);/,
     '  (marketId ? finishArc : (after || (id === "e" ? goPosition : goHigh)))();']] },
   /* 🔴 **M-SWITCH — 계약해 놓고 다음 단계에서 갈아탑니다.** 계약이 계약이 아니게 돼요. */
   M_SWITCH: { "game.js": [[/ {2}if \(WingerTown\.signed\(\)\) \{ after\(\); return; \}\n/, ""]] },
@@ -219,9 +219,15 @@ async function runArc(o) {
   const back = townAuto(h.W);
   pickOrigin(h.W, h.press, opt.origin || "seoul");
   mark();
-  await tapChild(h.W, h.press, opt.child || "ball");         // 🧒 초1 — `_load.js`의 한 벌
+  /* 🧒 **어린 시절 네 해** (2026-09-03 · 커밋 fde6688) — `_load.js`의 한 벌.
+   * 🔴 그리고 🎯 자리가 🏫 초등부 **뒤**에서 🧒 초4 **뒤**로 왔습니다. */
+  const kid = Array.isArray(opt.child) ? opt.child : (opt.child ? [opt.child] : []);
+  for (let y = 1; y <= 4; y++) { await tapChild(h.W, h.press, kid[y - 1], y); mark(); }
+  /* 🎯 자리 — 🆕 **초4 바로 뒤**입니다. 여기서 🏫 초5가 열려요. */
+  if (h.active() === "screen-position")
+    h.press(h.D.querySelector(`#position-list .card[data-pos="${opt.pos || "wg"}"]`), `🎯 ${opt.pos || "wg"}`);
   mark();
-  const stages = passStage(h.W, h.press);                    // 🏫 초등부
+  const stages = passStage(h.W, h.press);                    // 🏫 초5 대항전
   mark();
   /* 📨 조기 화면에 선 그 자리에서 잽니다 — 화면이 바뀌기 **전**에요. */
   const grab = (id) => {
@@ -240,8 +246,6 @@ async function runArc(o) {
   };
   if (h.active() === "screen-agency") decide("e");
   mark();
-  if (h.active() === "screen-position")
-    h.press(h.D.querySelector(`#position-list .card[data-pos="${opt.pos || "wg"}"]`), `🎯 ${opt.pos || "wg"}`);
   stages.push(...passStage(h.W, h.press));                   // 🏫 중등부
   mark();
   if (h.active() === "screen-agency") decide("m");
@@ -452,18 +456,28 @@ async function rewind(muts) {
   await tapFoot(h.W, h.press, "R");
   const back = townAuto(h.W);
   pickOrigin(h.W, h.press, "seoul");
-  await tapChild(h.W, h.press, "ball");       // 🧒 초1
-  passStage(h.W, h.press);                    // 🏫 초등부
+  /* 🧒 **네 해** → 🎯 자리 (🆕 초4 뒤) → 🏫 초5 → 📨 조기 제안 */
+  await tapChildArc(h.W, h.press, ["ball", "fin", "gn", "h1"]);
+  h.press(h.D.querySelector('#position-list .card[data-pos="wg"]'), "🎯 wg");
+  passStage(h.W, h.press);                    // 🏫 초5 대항전
   passEarly(h.W, h.press);                    // 📨 조기 제안 — 🙅 거절
   const atPos = h.active(), cards0 = T.cards();
-  h.press(h.D.getElementById("btn-back-position"), "← 뒤로");
+  /* ⬅️ 🔴 **되감기 지점이 바뀌었습니다.** 예전엔 📨 조기 제안을 지나면 🎯 자리 화면에
+   *    서 있었는데, 이제 그 자리는 🏫 중등부(`screen-town`)예요.
+   *    🔒 `btn-back-position`은 `#screen-position` 안에 있어 **화면에는 안 보입니다** —
+   *      여기서 누르는 건 「그 길이 다시 생기는 날」을 위한 **탐침**입니다
+   *      (같은 자리를 `town-test`의 T-6a-가드가 자세히 적어 뒀어요). */
+  h.press(h.D.getElementById("btn-back-position"), "🙈 (안 보이는) ← 뒤로");
   const originScreen = h.active();
   pickOrigin(h.W, h.press, "busan");
-  /* 🧒 **되감은 뒤에도 초1을 다시 지납니다** — 안 누르면 화면이 `screen-child`에 멈춰
-   *    `screen === "screen-position"`이 빨간불이 되고, 진짜 뒷문은 못 보게 돼요. */
-  await tapChild(h.W, h.press, "eye");
-  const out = { atPos, originScreen, screen: h.active(), earlyOn: h.earlyOn(),
-    takes: h.takes().length, extra: passStage(h.W, h.press).length,
+  /* 🧒 **되감은 뒤에도 네 해를 다시 지납니다** — 🔴 안 누르면 화면이 🧒 어느 해에 멈춰
+   *    뒤 문장이 **공짜로 참**이 되고, 진짜 뒷문은 못 보게 돼요. */
+  const again = await tapChildArc(h.W, h.press, ["eye", "steal", "gl", "h3"]);
+  const childTaps = again.filter((k) => k != null).length;
+  if (h.active() === "screen-position")
+    h.press(h.D.querySelector('#position-list .card[data-pos="wg"]'), "🎯 wg 다시");
+  const out = { atPos, originScreen, screen: h.active(), earlyOn: h.earlyOn(), childTaps,
+    takes: h.takes().length, extra: passStage(h.W, h.press).filter((x) => x === "e").length,
     cards0, cards: T.cards() };
   back();
   h.close();
@@ -471,14 +485,29 @@ async function rewind(muts) {
 }
 {
   const r = await rewind(null);
-  const ok = r.atPos === "screen-position" && r.screen === "screen-position"
-    && r.extra === 0 && r.cards === r.cards0;
+  /* 🔒 **「눌렀는가」를 먼저 봅니다** — 되감은 뒤 🧒 어느 해에 멈춰 있으면
+   *    아래가 전부 **공짜로 참**이에요(자가 복구가 실패를 삼키는 자리). */
+  const walked = r.childTaps === 4;
+  /* 🔒 **「📨가 다시 떴는가」는 화면으로 봅니다** — `#btn-early-next`의 `hidden`은
+   *    마지막 조기 화면이 남긴 **묵은 DOM 상태**라, 화면이 바뀐 뒤엔 거짓 신호예요.
+   * 🔒 그리고 **「카드가 늘었는가」가 아니라 「`e`가 다시 굴렀는가」**를 봅니다 —
+   *    되감고 돌아오면 흐름은 **앞으로** 갑니다(🏫 중등부 `m`이 열려요). 그건 정상 진행이에요. */
+  const earlyShown = r.screen === "screen-agency" && r.earlyOn;
+  const ok = walked && r.atPos === "screen-town" && r.originScreen === "screen-origin"
+    && !earlyShown && r.extra === 0;
   check(ok,
-    `O-5. ♻️ 🗺️ 동네까지 되감아 지역을 다시 골라도 **📨 조기 제안이 다시 안 뜬다**`
-    + `\n     🎯 자리(${r.atPos}) → 뒤로(${r.originScreen}) → 지역 다시 → **${r.screen}**`
-    + `\n     그 뒤 더 지나간 카드 ${r.extra}장 · 카드 ${r.cards0} → ${r.cards}`
+    `O-5. ♻️ 되감아 🎯 자리로 돌아와도 **📨 조기 제안이 다시 안 뜨고 🏫 초5도 다시 안 굴러요**`
+    + `\n     📨 지난 뒤(${r.atPos}) 카드 ${r.cards0}장 → 🙈 뒤로(${r.originScreen}) → 지역 다시`
+    + ` → 🧒 네 해 다시(${r.childTaps}/4) → 🎯 다시 누름 → **${r.screen}** (📨 조기 화면 ${earlyShown ? "🔴 다시 떴어요" : "안 떴어요"})`
+    + `\n     그 뒤 **다시 굴린 🏫 초5(\`e\`) 카드 ${r.extra}장** · 카드 ${r.cards0} → ${r.cards}`
+    + ` (🔎 늘어난 몫은 🏫 중등부 \`m\` — 되감기가 아니라 **앞으로 간 것**입니다)`
+    + `\n     ⚠️ **사람의 길이 아닙니다** — 🏫 카드를 뛴 뒤에 \`btn-back-position\`이 「보이는」 화면에`
+    + ` 설 길은 지금 없습니다(🎯 자리가 🧒 초4 뒤로 오면서 구조로 닫혔어요).`
+    + ` 「\`goElementary\`를 두 번 부르는 길이 다시 생기는 날」을 위한 **탐침**이에요 —`
+    + ` 같은 자리를 \`town-test\`의 **T-6a-가드**가 자세히 적어 뒀습니다`
     + (ok ? `\n     🔑 뒤 판 결과를 보고 앞 판 결정을 바꾸는 건 **「이미 나온 걸 다시 고르기」**예요`
-      : `\n     🔴 \`screen-agency\`로 돌아갔어요 — 이미 정한 판을 다시 묻습니다`));
+      : !walked ? `\n     🔴 되감은 뒤 흐름을 **끝까지 안 걸었습니다** — 이 상태의 초록불은 아무것도 안 지켜요`
+        : `\n     🔴 이미 정한 판을 다시 묻거나 🏫이 다시 굴렀어요`));
 }
 
 /* ══════════════════════════════════════════════════════════════════════

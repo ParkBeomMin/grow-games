@@ -574,49 +574,82 @@ function passStage(W, press, max) {
   return seen;
 }
 /* ═══════════════════════════════════════════════════════════════════════
- * 🧒 **초1 — 탭 하나가 고르기 겸 넘김입니다** (2026-09-02 · 117번 §2-3)
+ * 🧒 **어린 시절 — 이제 「네 해」입니다** (2026-09-03 · 설계 133번 · 커밋 fde6688)
  * ═══════════════════════════════════════════════════════════════════════
- * 🔴 **복붙본을 만들지 마세요.** 🦶 주발이 [다음]을 갖게 된 날 `tapFoot`의 사본 **셋**이
- *    한꺼번에 죽어 검사 7종이 종료 코드 2가 됐습니다 — 여기도 같은 자리예요.
- *    지금 이 함수를 부르는 곳은 `passArc`와 `school-test.js`의 `runArc` **둘**입니다.
+ * 🔴 **이 드라이버는 「자리 뒤가 중등부」인 세계에 살았습니다.** 그 세계가 끝났어요:
+ *      옛: 🗺️ 지역 → 🧒 초1 → 🏫 초등부 → 📨 → 🎯 자리 → 🏫 중등부 → …
+ *      🆕: 🗺️ 지역 → 🧒 초1 → 초2 → 초3 → 초4 → 🎯 자리 → 🏫 초5 → 📨 → 🏫 중등부 → …
+ *    🔑 **바뀐 것이 둘입니다** — 어린 시절이 한 해에서 **네 해**로,
+ *      🎯 자리가 초등부 **뒤**에서 초4 **뒤**로. 하나만 고치면 여기서 또 멈춥니다.
  *
- * 🔒 **시간을 박지 않습니다** — 「화면이 바뀔 때까지」 기다려요. `ECHO_MS`(620ms)를 박으면
- *    연출이 사라지는 날 이 줄이 **의미 없이 620ms를 버리는 줄**이 됩니다.
+ * 🔒 **탭 하나가 고르기 겸 넘김입니다** — [다음]이 없어요(🦶 주발과 다른 점).
+ * 🔒 **시간을 박지 않습니다** — 「화면이 바뀔 때까지」 기다립니다. `ECHO_MS`(620ms)를
+ *    박으면 연출이 사라지는 날 이 줄이 **의미 없이 620ms를 버리는 줄**이 됩니다.
  * 🔴 **돌려주는 값은 「눌렀는가」입니다** — 화면을 못 만나면 `null`이에요. 「도달했는가」만
  *    재면 화면이 사라져도 흐름이 끝까지 밀려 **아무것도 안 누르고 초록불**이 납니다.
  *
  * 🌍 이 드라이버가 서 있는 세계:
- *   「🧒 초1이 **[다음] 없이 탭 하나**인 세계」입니다. [다음]이 붙으면 여기서 화면이
- *   안 넘어가 던지므로 **이 함수부터 다시 보세요**(`tapFoot`처럼 두 걸음이 됩니다). */
-async function tapChild(W, press, want) {
+ *   「🧒 어린 시절이 **네 화면**이고, 해마다 **[다음] 없이 탭 하나**인 세계」입니다.
+ *   해가 늘거나 줄면 `CHILD_SCREENS`가, [다음]이 붙으면 `tapChild`가 먼저 뒤집힙니다. */
+const CHILD_SCREENS = ["screen-child", "screen-child2", "screen-child3", "screen-child4"];
+/* 🔒 **기본 선택은 여기 한 벌뿐입니다.** 검사마다 손으로 적으면 해가 늘어난 날
+ *    한 벌만 안 고쳐진 채 남아요 — rAF preamble 네 벌과 같은 형태예요.
+ *    (🧸 공 · 🎯 골문 · 🌿 고르게 · 🔑 초1 굳히기 — 특별한 뜻은 없고 **고정**이라는 것만 계약입니다) */
+const CHILD_DEFAULT = ["ball", "fin", "gn", "h1"];
+
+/* 🧒 **그 해 하나**를 누릅니다. `yr`은 1~4 (안 주면 1).
+ * 🔴 복붙본을 만들지 마세요 — `tapFoot`의 사본 셋이 한꺼번에 죽은 자리와 같습니다. */
+async function tapChild(W, press, want, yr) {
+  const y = yr || 1;
+  const sid = CHILD_SCREENS[y - 1];
+  if (!sid) throw new Error(`🧒 초${y} 화면이 CHILD_SCREENS에 없어요`);
   const D = W.document;
   const cur = () => (D.querySelector(".screen.active") || {}).id;
-  if (cur() !== "screen-child") return null;
-  const key = want || "ball";
-  press(D.querySelector(`#child-list .card[data-child="${key}"]`), `🧒 초1 ${key}`);
-  for (let i = 0; i < 600 && cur() === "screen-child"; i++) await wait(3);
-  if (cur() === "screen-child")
-    throw new Error("🧒 초1 카드를 눌렀는데 화면이 안 넘어가요 — openChild의 done 배선을 보세요");
+  if (cur() !== sid) return null;
+  const key = want || CHILD_DEFAULT[y - 1];
+  /* 🔒 **화면으로 범위를 좁혀 찾습니다** — 네 화면의 `.card[data-child]`가 한 문서에 같이
+   *    살아서, `#child-list`처럼 목록 id에 기대면 화면이 늘어난 날 엉뚱한 걸 누릅니다. */
+  press(D.querySelector(`#${sid} .card[data-child="${key}"]`), `🧒 초${y} ${key}`);
+  for (let i = 0; i < 600 && cur() === sid; i++) await wait(3);
+  if (cur() === sid)
+    throw new Error(`🧒 초${y} 카드를 눌렀는데 화면이 안 넘어가요 — openChild의 done 배선을 보세요`);
   return key;
+}
+/* 🧒 **네 해를 차례로.** 돌려주는 값은 **해마다 「실제로 누른」 키**의 배열(길이 4)이에요.
+ *    화면을 못 만난 해는 `null`입니다 — 🔴 **길이가 아니라 `null`의 유무를 보세요.**
+ *    `picks`를 주면 그 해의 기본값 대신 씁니다(짧으면 나머지는 기본값). */
+async function tapChildArc(W, press, picks) {
+  const p = Array.isArray(picks) ? picks : [];
+  const out = [];
+  for (let y = 1; y <= CHILD_SCREENS.length; y++) out.push(await tapChild(W, press, p[y - 1], y));
+  return out;
 }
 
 /* 🏫 **아크 전체**를 지나 🏟️ 제안 화면까지. 게임 입구(타이틀)에서 출발합니다.
  *
- *   돌려주는 것: { stages, cards, screens, early, child }
- *     stages   카드마다 읽은 `data-stage` — 계약은 `e e m m m h h h`
- *     screens  지나온 화면들 (연달아 같은 화면은 한 번만)
- *     early    📨 조기 제안을 **거절로** 지난 단계들 — 계약은 `["e", "m"]`
- *     child    🧒 초1에서 **실제로 누른** 카드의 키 · 화면을 못 만났으면 `null`
+ * 🆕 **2026-09-03 — 흐름이 또 바뀌었습니다** (설계 133번 · 커밋 fde6688):
+ *   `타이틀 → ✏️ 이름 → 🦶 주발 → 🗺️ 지역 → 🧒 초1·초2·초3·초4 → 🎯 자리`
+ *   `→ 🏫 초5(2) → 📨 → 🏫 중등부(3) → 📨 → 🏫 고등부(3) → 🏟️ 제안`
+ *   🔴 **🎯 자리가 🏫 초등부 「뒤」에서 🧒 초4 「뒤」로 왔습니다.** 옛 드라이버는
+ *     초등부를 먼저 지나고 자리를 눌렀는데, 그 순서로는 지금 🧒 초2에서 멈춥니다.
+ *
+ *   돌려주는 것: { stages, cards, screens, early, child, childTaps }
+ *     stages     카드마다 읽은 `data-stage` — 계약은 `e e m m m h h h`
+ *     screens    지나온 화면들 (연달아 같은 화면은 한 번만)
+ *     early      📨 조기 제안을 **거절로** 지난 단계들 — 계약은 `["e", "m"]`
+ *     child      🧒 **해마다 실제로 누른** 키의 배열(길이 4) · 못 만난 해는 `null`
+ *     childTaps  그중 실제로 누른 해의 수 — 계약은 **4**
  *              🔴 **「도달했다」가 아니라 「눌렀다」를 셉니다** — 화면이 사라지거나 순서가
- *              바뀌면 아래 `if`가 **조용히 건너뛰고** 흐름은 끝까지 갑니다(자가 복구가
- *              실패를 삼키는 자리예요). 이 값을 안 보는 검사는 그 상태에서 초록불이 나요.
+ *              바뀌면 `tapChild`가 **조용히 `null`을 돌려주고** 흐름은 끝까지 갑니다
+ *              (자가 복구가 실패를 삼키는 자리예요). 🔴 `child`가 **배열**이라
+ *              `!= null`로 보면 언제나 참입니다 — **`childTaps`를 보세요.**
  *
  * 🔴 **조기 제안은 늘 「거절」입니다.** 승낙하면 최종 제안에 한 곳만 와서 그 위에 선
  *    검사들이 통째로 어긋나요 (`passEarly` 주석 참고). 🤝 승낙 갈래를 재는 검사는
  *    `offer-test.js`가 **따로** 몰고 갑니다.
  *
- * ⚠️ `townAuto`는 **🗺️ 지역 [다음]을 누르기 전**에 켜세요 — 초등 첫 카드는
- *    `openStage`가 불리는 순간 바로 열립니다. */
+ * ⚠️ `townAuto`는 **🗺️ 지역 [다음]을 누르기 전**에 켜세요 — 🏫 초5 첫 카드는
+ *    🎯 자리를 누르는 순간 바로 열립니다. */
 async function passArc(W, press, opt) {
   const o = opt || {};
   const D = W.document;
@@ -633,20 +666,35 @@ async function passArc(W, press, opt) {
   const back = o.auto === false ? null : townAuto(W);
   pickOrigin(W, press, o.origin || "seoul");
   mark();
-  const child = await tapChild(W, press, o.child);
-  mark();
-  const stages = passStage(W, press);                       // 🏫 초등부
-  const early = [];
-  if (passEarly(W, press)) early.push("e");                 // 📨 초등 뒤 — **거절**
-  mark();
+  /* 🧒 네 해 — `o.child`는 배열입니다. 옛 검사가 문자열 하나를 주던 자리는
+   *    **초1의 값**으로 받아 줍니다(나머지 해는 기본값). */
+  const wantArr = Array.isArray(o.child) ? o.child : (o.child ? [o.child] : []);
+  const child = [];
+  for (let y = 1; y <= CHILD_SCREENS.length; y++) {
+    child.push(await tapChild(W, press, wantArr[y - 1], y));
+    mark();
+  }
+  /* 🎯 자리 — 🆕 **초4 바로 뒤**입니다 */
   if (cur() === "screen-position")
     press(D.querySelector(`#position-list .card[data-pos="${o.pos || "wg"}"]`), `🎯 ${o.pos || "wg"}`);
-  stages.push(...passStage(W, press));                      // 🏫 중등부
-  if (passEarly(W, press)) early.push("m");                 // 📨 중등 뒤 — **거절**
   mark();
+  /* 🔒 **단계마다 자국을 남깁니다** — 📨 조기 제안(`screen-agency`)은 **지나가면서만**
+   *    보이는 화면이라, 거절을 누른 「뒤」에만 자국을 찍으면 목록에서 통째로 사라져요.
+   *    (`school-test`의 S-6a가 그 목록으로 화면 순서를 지킵니다) */
+  const stages = passStage(W, press);                       // 🏫 초5 대항전
+  mark();                                                   // 📨 조기(e)
+  const early = [];
+  if (passEarly(W, press)) early.push("e");                 // 📨 초등 뒤 — **거절**
+  mark();                                                   // 🏫 중등부
+  stages.push(...passStage(W, press));                      // 🏫 중등부
+  mark();                                                   // 📨 조기(m)
+  if (passEarly(W, press)) early.push("m");                 // 📨 중등 뒤 — **거절**
+  mark();                                                   // 🏫 고등부
   stages.push(...passStage(W, press));                      // 🏫 고등부
+  mark();                                                   // 🏟️ 최종 제안
   if (back) back();
-  return { stages, cards: stages.length, screens, early, child };
+  return { stages, cards: stages.length, screens, early, child,
+    childTaps: child.filter((k) => k != null).length };
 }
 
 
@@ -708,6 +756,6 @@ function pressRetarget(W, oldEl, root, newSel) {
 module.exports = { load, mutsOK, xiOf, xiAll, statsOf, play, spreadFor, SRC, ENGINE,
   bootPage, pageMutsOK, PAGE_DIR, pagePre, RAF_SHIM, seedBoth, SEED_SPLIT, mulberry32,
   townAuto, passTown,
-  wait, tapFoot, tapChild, pickOrigin, passStage, passEarly, passArc,
+  wait, tapFoot, tapChild, tapChildArc, CHILD_SCREENS, CHILD_DEFAULT, pickOrigin, passStage, passEarly, passArc,
   loadMoment, momentMutsOK, MSRC, MOMENT,
   momentDom, pressDom, pressRetarget };

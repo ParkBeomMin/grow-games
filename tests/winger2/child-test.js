@@ -104,8 +104,8 @@ const MUT = {
     "setTimeout(() => done(CHILD_PICKS[0].key), ECHO_MS);"]] },
   /* 🔴 C-M5 — 🖥️ **카드를 두 장만 그립니다.** 갈래는 셋인데 화면은 둘이라
    *    한 갈래에 **닿을 길이 없어집니다**(값 쪽 검사는 전부 초록불). */
-  TWO_CARDS: { "intro.js": [[/list\.innerHTML = CHILD_PICKS\.map\(\(c\) =>/,
-    "list.innerHTML = CHILD_PICKS.slice(0, 2).map((c) =>"]] },
+  TWO_CARDS: { "intro.js": [[/list\.innerHTML = a\.picks\.map\(\(c\) => \{/,
+    "list.innerHTML = a.picks.slice(0, 2).map((c) => {"]] },
 };
 
 /* ══════════════════════════════════════════════════════════════

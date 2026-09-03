@@ -81,8 +81,11 @@ const DISTINCT_MIN = 0.90;
 const MUT = {
   /* 🔴 **M1 — engineer가 넣었을 때 검사 9개가 전부 초록불이었던 그 변이입니다.**
    * 총합이 굴림마다 흔들려요. 무제한 리롤에서는 이게 곧 `max of N` → `sup`입니다. */
-  POOL_LOOSE: { "prospect.js": [[/ {6}stats: spread\(POOL, posKey, focus, shapeKey\),/,
-    "      stats: spread(POOL + randInt(-18, 18), posKey, focus, shapeKey),"]] },
+  /* 🔒 **인자 목록을 안 베낍니다 — `spread(POOL,` 앞머리만 봅니다.** 2026-09-03에
+   *    🔑초4 굳히기가 `focusW`를 다섯째 인자로 붙이면서 옛 정규식이 죽었어요
+   *    (커밋 fde6688). 🔴 인자가 또 늘어도 이 모양이면 안 죽습니다. */
+  POOL_LOOSE: { "prospect.js": [[/ {6}stats: spread\(POOL, /,
+    "      stats: spread(POOL + randInt(-18, 18), "]] },
   /* 🔴 **총합 자체를 옮김** — 굴림 사이에는 고정인데 값이 다릅니다.
    * `P.POOL`을 읽는 검사는 이걸 **절대 못 잡아요**(따라가니까요). 그래서 194를 박았습니다. */
   POOL_200: { "prospect.js": [[/^ {2}const POOL = 194;/m, "  const POOL = 200;"]] },
@@ -520,12 +523,24 @@ const BASE = benchProbe(null, SEEDS, ROLLS_UI);
       `\n     🔴 **\`beta/_fixtures.js\`의 winger2 시나리오 3종을 다시 만들 수 없습니다**`
       + `\n        (\`winger2-match\` · \`winger2-def\` · \`winger2-bench\`)`
       + `\n     🔴 지금 화면에 없어서 건너뛴 것: ${skipped.length ? skipped.join(" · ") : "없음"}`
-      + `\n     👉 \`scripts/make-fixtures.js\`의 \`newPlayer()\` — 지금 ⚽ 더 윙어 II의 순서는`
-      + ` **\`btn-new\` → \`btn-name-next\` → 📍 자리 → 🏘️ \`btn-town-next\` ×3 → 🏟️ 유스 카드`
-      + ` → \`btn-prospect-start\`**입니다`
+      + `\n     👉 \`scripts/make-fixtures.js\`의 \`newPlayer()\` — **2026-09-03 기준 실제 순서**는 이렇습니다:`
+      + `\n        \`btn-new\` → \`btn-name-next\` → 🦶 \`#screen-foot .foot-card[data-foot="R"]\` → \`btn-foot-next\``
+      + `\n        → 🗺️ \`#origin-map .om-do[data-id="seoul"]\`(또는 \`#origin-cities .om-city\`) → \`btn-origin-next\``
+      + `\n        → 🧒 \`#screen-child .card[data-child="ball"]\` → \`#screen-child2 …[data-child="fin"]\``
+      + `\n          → \`#screen-child3 …[data-child="gn"]\` → \`#screen-child4 …[data-child="h1"]\``
+      + `\n        → 🎯 \`#position-list .card[data-pos="wg"]\` → 🏫 \`btn-town-next\` ×2 → 📨 \`btn-early-next\``
+      + `\n        → ×3 → 📨 \`btn-early-next\` → ×3 → 🏟️ \`#agency-list .card\` → \`btn-prospect-start\``
+      + `\n     🚨 **그런데 줄만 더해서는 안 됩니다 — 🧒 어린 시절 네 화면이 \`setTimeout(…, 620)\`으로 넘어갑니다.**`
+      + ` \`make-fixtures.js\`는 **통째로 동기**(\`.click()\`을 줄줄이)라 그 620ms를 못 기다려요.`
+      + `\n        👉 \`newPlayer()\`와 그 호출자들을 **async/await**로 바꾸거나,`
+      + ` 페이지 preamble에서 어린 시절 구간만 타이머를 즉시 실행으로 바꿔야 합니다`
+      + `\n        ⚠️ 후자는 🏟️ 경기 연출까지 같이 즉시 실행이 되니 **범위를 반드시 좁히세요**`
       + `\n     👉 ⚠️ soccer도 같은 함수를 씁니다 — **게임별로 갈라 주세요**`
+      + `\n        (🦶·🗺️·🧒 화면은 soccer에 없어서 \`querySelector\`가 null이라 자동으로 건너뜁니다)`
       + `\n     👉 이건 **조용히 실패하는 자리**예요: 디스크의 픽스처가 남아 있어서`
-      + ` \`check-page-test\`도 \`_check.html\`도 통과합니다`));
+      + ` \`check-page-test\`도 \`_check.html\`도 통과합니다`
+      + `\n     🔒 그래서 이 줄은 **❌(종료 1)로 둡니다** — 🚧로 낮추면 픽스처가 낡아 가는 걸`
+      + ` 아무도 안 보게 돼요. 고치면 그날 초록불이 됩니다`));
   h.close();
 }
 
