@@ -1909,6 +1909,15 @@ function goChild() { goChildYear(1); }
 function goPosition() {
   show("screen-position");
   stampStep("screen-position");
+  /* 🗣️ **이 한 줄의 주인은 여기 하나입니다** — 화면을 여는 자리에서 적어요.
+   *    예전에는 ✏️ 이름 화면의 [다음] 핸들러가 네 화면 앞에서 미리 적었는데,
+   *    그러면 흐름이 바뀔 때 **문구만 옛 순서에 남습니다**(실제로 그렇게 됐어요).
+   * 🚨 옛 문구는 *"중학교에 갑니다"*였습니다. 🎯 자리가 🧒 초4(열한 살) **뒤**로 오면서
+   *    **사실이 틀렸어요** — 다음은 중학교가 아니라 🏫 초5 대항전입니다.
+   * 🔴 **초등 결과를 여기에 넣지 마세요.** 점수도, 잘한 종류도, 추천도 안 됩니다
+   *    (70번 §8 (a) — *"조작 실력은 선수의 것이 아니다"*). 순서만 바뀐 것이지 추천은 없어요. */
+  $("position-hint").textContent =
+    `${chosenName}, 열한 살이에요. 5학년이 되면 첫 학교 대항전에 나가요 — 어느 자리에서 뛸까요?`;
 }
 
 /* 🎲 랜덤 이름 — 유스를 아직 안 골랐으니 지역 편향 없이 뽑아요(15%가 유럽 이름).
@@ -1920,9 +1929,8 @@ $("btn-random-name").addEventListener("click", () => {
 $("btn-name-next").addEventListener("click", () => {
   chosenName = $("input-name").value.trim() || randomPlayerName(null);
   $("input-name").value = chosenName;
-  /* 🔴 **초등부 결과를 여기에 넣지 마세요.** 점수도, 잘한 종류도, 추천도 안 됩니다
-   *    (70번 §8 (a) — *"조작 실력은 선수의 것이 아니다"*). 순서만 바뀐 것이지 추천은 없어요. */
-  $("position-hint").textContent = `${chosenName}, 중학교에 갑니다. 이제 어느 자리에서 뛸까요?`;
+  /* 🔒 🎯 자리 화면의 문구는 **`goPosition()`이 적습니다** — 여기서 미리 적으면
+   *    네 화면 뒤의 사실(나이·다음 무대)을 여기서 약속하는 셈이 돼요. */
   goFoot();
 });
 

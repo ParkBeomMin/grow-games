@@ -166,16 +166,19 @@ function snapshot(P) {
 }
 
 // ---------- 공통 조작 (전부 실제 클릭이에요) ----------
-/* ⚠️ 게임마다 화면 순서가 달라요 — **게임 이름이 아니라 버튼의 있고 없음으로** 가릅니다.
+/* ⚠️ 게임마다 화면 순서가 달라요 — **게임 이름이 아니라 화면의 있고 없음으로** 가릅니다.
  * 이름으로 가르면 게임이 늘 때마다 여기를 고쳐야 하고, 안 고치면 조용히 실패해요.
  *
- * ⚽ 더 윙어 II는 이름을 맨 앞에서 받고, 📍 자리 **뒤**에 🏫 학교 대항전이 끼어요
- * (2026-09-01 · 93번 §5 — 🏘️ 동네 3장이 🏫 초·중·고 8장으로 늘었습니다):
- *     btn-new → (이름) btn-name-next → 📍 자리 → 🏫 중·고등부 ×6 → 🏟️ 제안 → btn-prospect-start
- * ⚠️ 🦶 주발·🗺️ 동네 화면은 **여기서 지나가지 않습니다.** 🦶 주발 탭이 320ms 뒤에 넘어가는데
- *    이 생성기는 손이 없어 타이머를 못 기다려요. 📍 자리 카드를 바로 눌러 넘어갑니다 —
- *    그래서 픽스처는 🏫 **초등부 2장을 건너뛴 6판(`schoolN` 6)**짜리 커리어예요.
- *    편차 밴드는 카드 수에 무관하게 중립이라 이 차이가 곡선을 안 움직입니다.
+ * ⚽ 더 윙어 II (2026-09-03 · 설계 130번 §2 · 133번 — 🧒 어린 시절이 네 해가 됐어요):
+ *     btn-new → (이름) btn-name-next → 🦶 주발 → 🗺️ 동네 → 🧒 초1·초2·초3·초4
+ *     → 🎯 자리 → 🏫 초5 2장 → 📨 조기 제안 → 🏫 중등부 3장 → 📨 조기 제안
+ *     → 🏫 고등부 3장 → 🏟️ 제안 → btn-prospect-start
+ *
+ * 🚨 **옛 주석을 지웠습니다 — 이제 틀립니다.** 예전에는 *"🦶 주발·🗺️ 동네 화면은 여기서
+ *    지나가지 않습니다 · 📍 자리 카드를 바로 눌러 넘어갑니다 · 그래서 픽스처는 초등부
+ *    2장을 건너뛴 6판(`schoolN` 6)짜리 커리어"*라고 적혀 있었어요. 타이머를 못 기다려서
+ *    낸 우회였는데, 지금은 아래 `fastEcho`로 기다립니다 — **여덟 판을 다 뜁니다(`schoolN` 8).**
+ *
  * 나머지 게임은:
  *     btn-new → 소속 → 포지션 → (이름) btn-start
  *
@@ -183,6 +186,26 @@ function snapshot(P) {
  *    누르고 있었어요. 디스크에 픽스처가 남아 있어서 검사는 전부 초록불이었고,
  *    makeWinger2가 시드 30개를 통째로 삼키며 한 줄만 찍었습니다.
  *    **그래서 이제 못 닿으면 던집니다.** 조용히 넘어가지 않아요. */
+
+/* 🧒 **어린 시절 네 화면은 `setTimeout(…, 620)`으로 넘어갑니다** (`intro.js`의 `ECHO_MS` —
+ * 방금 고른 것을 읽을 시간이에요). 이 스크립트는 통째로 동기라 그 620ms를 못 기다려요.
+ *
+ * 🔧 그래서 **그 네 번의 탭 동안만** 타이머를 즉시 실행으로 바꿉니다.
+ * 🔴 **범위를 반드시 좁힙니다 — 돌려받은 함수를 꼭 부르세요.** 안 되돌리면 🏟️ 경기 연출
+ *    (카드가 한 장씩 밀려 올라오는 `setTimeout`)까지 한 프레임에 다 지나가서,
+ *    픽스처가 「경기 직전」이 아니게 됩니다.
+ * 🔒 이 구간에 걸리는 타이머는 `intro.js`의 620ms **하나뿐**이에요 —
+ *    `show()`가 부르는 🎉 피버는 `setInterval`이라 여기 안 걸립니다.
+ * ⚠️ **파일 전체의 async 전환은 일부러 안 했습니다.** 이건 8개 게임의 픽스처를 한 흐름으로
+ *    뽑는 2,400줄짜리 동기 스크립트라, 통째로 async로 바꾸면 winger2 한 게임 때문에
+ *    나머지 일곱의 생성 경로를 전부 흔듭니다. 기다려야 하는 곳이 **여기 하나**예요. */
+function fastEcho(P) {
+  const w = P.w;
+  const real = w.setTimeout;
+  w.setTimeout = function (fn) { if (typeof fn === "function") fn(); return 0; };
+  return () => { w.setTimeout = real; };
+}
+
 function newPlayer(P, agencyIdx, pos, name) {
   const { w, $ } = P;
   /* 🤖 순간 카드를 **자동 진행(중립 s = 0.5)**으로 지나갑니다 — 픽스처 생성기에는 손이 없어요.
@@ -191,14 +214,51 @@ function newPlayer(P, agencyIdx, pos, name) {
   $("btn-new").click();
 
   /* ⚠️ 버튼을 변수에 담아 누르지 마세요 — 이 함수를 **소스에서 읽어** 그대로 눌러 보는
-   * 검사가 있어요(`bench-test` G-1). `x.click()`으로 쓰면 어느 버튼인지 안 보입니다. */
+   * 검사가 있어요(`bench-test` G-1). `x.click()`으로 쓰면 어느 버튼인지 안 보입니다.
+   * 🔑 선택자에 따옴표(`[data-foot="R"]`)가 들어가면 **백틱**으로 적습니다 — 그 검사의
+   *    정규식이 큰따옴표 갈래에서는 **선택자 안의 첫 `"`에서 잘라** 엉뚱한 걸 뜯어가요.
+   * ⚠️ 그리고 **주석에 「누르는 줄」의 모양을 그대로 적지 마세요** — 그 검사는 주석과 코드를
+   *    안 가려서, 예시로 적은 것이 **없는 버튼**으로 순서에 끼어듭니다(방금 실제로 그랬어요). */
   const nameFirst = !!$("btn-name-next");      // 이름을 맨 앞에서 받는 흐름인가
   if (nameFirst) {
     $("input-name").value = name;
     $("btn-name-next").click();
   }
 
-  /* 🏘️ 동네가 있는 흐름(⚽ 더 윙어 II)은 **📍 자리가 먼저**고, 유스는 그 뒤에 제안으로 옵니다.
+  /* 🦶 주발 · 🗺️ 동네 — ⚽ 더 윙어 II에만 있는 화면이에요. 다른 게임에서는 `querySelector`가
+   * null이라 통째로 건너뜁니다(**게임 이름으로 가르지 않습니다**).
+   * 🔒 오른발·서울은 **고정값**이에요 — 시드가 같아도 여기가 흔들리면 픽스처가 안 재현됩니다.
+   *    🦶 주발은 판정 창의 넓이를, 🗺️ 지역은 📖 텍스트와 🏛️ 지역 기록만 바꿉니다
+   *    (`autoP`·`fit`·`spotMul`·`growth`·`debut` 어디에도 안 닿아요 — `intro.js` §🗺️). */
+  const footCard = w.document.querySelector(`#screen-foot .foot-card[data-foot="R"]`);
+  if (footCard) {
+    footCard.click();
+    $("btn-foot-next").click();
+  }
+  /* 🏙️ 광역시는 **지도 폴리곤이 아니라 옆 목록의 버튼**이에요 (`intro.js` §🗺️ —
+   * 서울 ↔ 인천이 16단위라 폴리곤으로는 못 누릅니다). `<path>`가 아니라 `<button>`이라
+   * jsdom에서도 `.click()`이 그대로 먹습니다. */
+  const cityBtn = w.document.querySelector(`#origin-cities .om-city[data-id="seoul"]`);
+  if (cityBtn) {
+    cityBtn.click();
+    $("btn-origin-next").click();
+  }
+
+  /* 🧒 어린 시절 네 해 — 탭이 곧 다음 화면이라 [다음] 버튼이 없어요.
+   * 🔑 `fastEcho`가 켜져 있는 동안은 620ms 타이머가 **탭 그 자리에서** 돌아서,
+   *    다음 줄에 닿기 전에 이미 다음 해 화면이 그려져 있습니다. */
+  const slowEcho = fastEcho(P);
+  const kid1 = w.document.querySelector(`#screen-child .card[data-child="ball"]`);
+  if (kid1) kid1.click();
+  const kid2 = w.document.querySelector(`#screen-child2 .card[data-child="fin"]`);
+  if (kid2) kid2.click();
+  const kid3 = w.document.querySelector(`#screen-child3 .card[data-child="gn"]`);
+  if (kid3) kid3.click();
+  const kid4 = w.document.querySelector(`#screen-child4 .card[data-child="h1"]`);
+  if (kid4) kid4.click();
+  slowEcho();
+
+  /* 🏫 학교가 있는 흐름(⚽ 더 윙어 II)은 **🎯 자리가 먼저**고, 유스는 그 뒤에 제안으로 옵니다.
    * 게임 이름이 아니라 **화면의 있고 없음**으로 가려요 — 이름으로 가르면 게임이 늘 때마다
    * 여기를 고쳐야 하고, 안 고치면 조용히 실패합니다.
    * ⚠️ 두 갈래를 **한 줄기로** 적습니다 — G-1이 이 함수를 소스에서 읽어 `.click()` 줄을
@@ -213,16 +273,20 @@ function newPlayer(P, agencyIdx, pos, name) {
   if (!posCard) throw new Error(`포지션 카드 ${pos}가 없어요`);
   posCard.click();
   if (townFirst) {
-    /* 🏫 중등부 3장 + 📨 조기 제안 + 고등부 3장 — 카드마다 [다음]이 한 번씩이에요.
+    /* 🏫 초5 2장 + 📨 조기 제안 + 중등부 3장 + 📨 조기 제안 + 고등부 3장 —
+     * 카드마다 [다음]이 한 번씩이에요.
      * 🔴 **줄을 그대로 적습니다.** 반복문으로 쓰면 G-1이 `.click()` 줄을 한 번만
      *    뜯어가서 한 판만 지나간 채로 판정합니다. */
     $("btn-town-next").click();
     $("btn-town-next").click();
-    $("btn-town-next").click();
-    /* 📨 중등부 뒤의 조기 제안 — 픽스처는 **늘 거절합니다.** 예비 계약을 하면 🏟️ 최종
+    /* 📨 초등부 뒤의 조기 제안 — 픽스처는 **늘 거절합니다.** 예비 계약을 하면 🏟️ 최종
      * 제안이 안 오고(그 팀으로 갑니다) 아래 `유스 카드 ${agencyIdx}번`이 사라져요.
      * 🔒 편차 밴드는 카드 수·계약 여부에 무관하게 중립이라 이 선택이 곡선을 안 움직입니다. */
     $("btn-early-next").click();
+    $("btn-town-next").click();
+    $("btn-town-next").click();
+    $("btn-town-next").click();
+    $("btn-early-next").click();       // 📨 중등부 뒤의 조기 제안 — 역시 거절이에요
     $("btn-town-next").click();
     $("btn-town-next").click();
     $("btn-town-next").click();
