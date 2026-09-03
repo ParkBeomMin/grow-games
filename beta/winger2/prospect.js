@@ -292,6 +292,96 @@ window.WingerProspect = (() => {
   };
   const childOf = (who) => (who && Array.isArray(who.child) ? who.child : []);
 
+  /* ══════════════════════════════════════════════════════════════════
+   * 👦 **초2에 고른 것 — ⭐ 잠재력(재능) 전이** (설계 133번 §2-1 · 실측 132번 §7)
+   * ══════════════════════════════════════════════════════════════════
+   * 🔑 **초1과 같은 층이 아닙니다.** 초1은 카드의 6칸 배분(**모양**)을 바꾸고, 여기는
+   *    ⭐ 재능(**훈련이 붙는 속도**)을 바꿔요. 네 해가 **네 개의 다른 표**를 보는 게
+   *    이 개편의 전부입니다 — 그래서 `⚽×1 ≡ ⚽×3` 문제가 구조적으로 재발할 수 없어요.
+   *
+   * 🔒 **짝은 balancer의 제3안입니다** (132번 §7-2 · 2,000커리어 × 4포지션 실측).
+   *    🔴 **designer 본안(`fin`[슛,패스] · `run`[스피드,체력] · `steal`[수비,드리블])은 폐기**예요.
+   *      🏃`run`이 **네 포지션 전부에서 최선이 아니었고**, df가 `fin`을 고르면 −2.52%였습니다.
+   *      그리고 본안 짝에 `TAL_SHIFT_HELD`만 얹으면 🔑초4 `h2`가 「주스탯부터 훈련」 정책에서
+   *      **정확히 0**(fw −0.01% · mf −0.00%)이 됩니다. 제3안이라야 +1.61% / +0.71%예요.
+   *    🚨 **짝 · `TAL_SHIFT` · `TAL_SHIFT_HELD`가 한 벌입니다.** 하나만 되돌리지 마세요.
+   *
+   * 🔒 **합집합 6칸 · 짝끼리 겹침 0 · `CHILD_FOCUS`의 어느 짝과도 같은 짝이 없습니다**(직교 매칭).
+   *    🔑 같은 짝이 하나라도 생기면 초1·초2를 둘 다 몰아 **「완전 정렬 몰빵」**이 열려요.
+   *      직교면 둘 다 잘 골라도 미는 칸이 **최대 3칸**이라 나머지 셋이 반대 압력을 계속 겁니다.
+   *
+   * ⚠️ **키(`fin`·`run`·`steal`)는 세이브(`S.childPicks`)가 가리키는 값이라 안 바꿉니다.**
+   *    이번에 간 것은 **짝뿐**이에요 — 그래서 `intro.js`의 `CHILD_PICKS2` 문구도 함께 갈았습니다.
+   *    🔴 다음에 짝을 또 갈면 **문구가 조용히 어긋납니다.** 두 곳을 같이 보세요. */
+  const CHILD_TALENT = {
+    fin:   ["shoot", "speed"],      // 🎯 골문 앞까지 뛰어가 찼어요
+    run:   ["pass", "stamina"],     // 🔁 해 질 때까지 주고받았어요
+    steal: ["dribble", "defense"],  // 🥷 붙으면 뺏고 몰고 나갔어요
+  };
+  /* 🗂️ **읽는 쪽 기본값** — 자기 표에 없는 키는 그냥 안 읽습니다(옛 세이브가 그대로 돌아요).
+   * 🔒 **중복은 지웁니다** — 아래 중립화가 「미는 칸 수」에 매여 있어서, 같은 칸이 두 번
+   *    들어오면 Σ가 샙니다. (`childFocus`는 `indexOf`로 읽혀서 중복이 공짜였어요) */
+  const childTalent = (picks) => {
+    const out = [];
+    for (const k of (picks || [])) for (const st of (CHILD_TALENT[k] || []))
+      if (out.indexOf(st) < 0) out.push(st);
+    return out;
+  };
+
+  /* 🔑 **초4 굳히기** — `picks`에 그 키가 있는지만 봅니다.
+   * 🔒 **자리(index)로 읽지 않습니다.** 네 기관의 키가 하나도 안 겹치니, 표로 읽으면
+   *    길이 1인 옛 세이브와 모르는 키가 **자동으로 무시**돼요 (`childFocus`와 같은 규약). */
+  const heldIs = (picks, key) => (picks || []).indexOf(key) >= 0;
+
+  /* 🎯 **손잡이 — 「굳히기」는 방향이 아니라 세기만 바꿉니다.**
+   * 🔴 **「×2」라고 부르지 마세요** — 기관마다 뜻이 달라집니다(`FOCUS_W`는 전이가 아니라 가중치예요).
+   *    이름은 「굳히기」 하나이고, **값은 기관마다 자기 표에 따로** 적습니다. */
+  const FOCUS_W_HELD = 1.60;        // 🧸 초1을 굳히면 그 두 칸의 배분 가중 (FOCUS_W 1.30 → )
+  const TAL_SHIFT = 0.10;           // 👦 초2가 미는 두 칸의 ⭐ 재능
+  const TAL_SHIFT_HELD = 0.20;      // 👦 초2를 굳히면
+  const TAL_LO = 0.80;              // ⭐ 재능 하한 — 굴림의 아래끝이자 game.js의 각성 실패 바닥과 같은 수
+
+  /* ══════════════════════════════════════════════════════════════════
+   * 🌙 **초3에 고른 것 — 🧬 성장타입 기울임** (설계 133번 §2-3 · §3)
+   * ══════════════════════════════════════════════════════════════════
+   * 🔑 **`hint.w`에 「곱합니다」.** 그래서 스카우트가 이미 확신하면(`w`에 0이 있으면)
+   *    그 타입은 **0으로 남습니다** — *"이 코멘트면 만성이 아니다"*가 회피 수단이 아니라
+   *    정보로 사는 자리예요(74번 판정 ③-B). 🔴 **0을 없애려고 더하기로 바꾸지 마세요.**
+   *
+   * 🔴 **「작동률」이라는 이름을 쓰지 마세요** (133번 §3-3). 두 가지가 서로 다른 값입니다:
+   *    · `기울기 적용률` — `w`에 0이 없어 분포가 실제로 기운 굴림의 비율. **66~100%** (구조값)
+   *    · `고른 대로 될 확률` — 고른 성장타입이 실제로 뽑힌 비율. **31% → 47% → (굳히면) 64%** (사람이 받는 값)
+   *    🚨 예전 이름(「작동률 16%」)은 **둘째 값의 「증가분」을 두 번 센 수**였고,
+   *      *"84%는 아무 일도 안 한다"*로 읽혀 다음 사람이 `GROW_TILT`를 올리게 만듭니다.
+   *      🔴 47%는 모자란 값이 아니라 **굳히기(`h3`)에 남겨 둔 여유**예요 — 둘이 한 벌입니다. */
+  const GROW_TILT_MAP = { ge: "early", gn: "normal", gl: "late" };
+  const GROW_TILT = 2.0;
+  const GROW_TILT_HELD = 4.0;
+
+  /* `GROWTH_TYPES` 순서대로의 가중 배열. 고른 게 없으면 전부 1이라 **기여가 정확히 0**이에요.
+   * 🔒 **id로 자리를 찾습니다** — `GROWTH_TYPES`의 순서가 바뀌어도 따라갑니다. */
+  function growTilt(picks) {
+    const w = GROWTH_TYPES.map(() => 1);
+    for (const k of (picks || [])) {
+      const want = GROW_TILT_MAP[k];
+      if (!want) continue;
+      const i = GROWTH_TYPES.findIndex((g) => g.id === want);
+      if (i >= 0) w[i] *= heldIs(picks, "h3") ? GROW_TILT_HELD : GROW_TILT;
+    }
+    return w;
+  }
+  const mulW = (a, b) => a.map((v, i) => v * b[i]);
+
+  /* 🧮 **천장이 세는 몫** — `game.js`의 `childCap`이 이 배열의 **등장 횟수**를 `q`로 씁니다
+   * (설계 133번 §4-3). 🔑 `h3`는 곡선 축이라 여기에 아무것도 안 더해요 — 대신 `GROW_TILT_HELD`를 받습니다.
+   * 🔒 **표를 game.js로 복사하지 마세요** — 글과 산식이 갈라지는 자리입니다. */
+  function childPush(picks) {
+    const out = childFocus(picks).concat(childTalent(picks));
+    if (heldIs(picks, "h1")) for (const k of childFocus(picks)) out.push(k);
+    else if (heldIs(picks, "h2")) for (const k of childTalent(picks)) out.push(k);
+    return out;
+  }
+
   const POS_W = 1.25;               // 내 포지션 주 스탯
   const SHAPE_W = 1.35;             // 그 카드만의 편중 — 세 장이 서로 달라 보이게
 
@@ -511,12 +601,20 @@ window.WingerProspect = (() => {
    * 🚨 세 장의 총합이 같아야 합니다 (§6-2 · 원칙 ④). 한 장이 그냥 좋으면
    * 그건 선택이 아니라 정답이에요. 그래서 반올림 뒤에 남는 우수리까지 되돌려 놓아요 —
    * 한 장만 1 높아도 "총합이 같다"는 약속이 깨집니다. */
-  function spread(total, posKey, focus, shapeKey) {
+  /* 🔒 **`indexOf` 그대로입니다 — 센 횟수로 바꾸지 마세요.** 같은 칸이 두 번 들어와도
+   *    가중은 **한 번만** 곱해져요. 그걸 횟수로 바꾸는 (a)안은 실측으로 기각됐습니다:
+   *    ⚽×4면 두 칸이 `1.30⁴ = 2.86`이라 `STAT_HI 54`에 붙고 나머지 넷이 `STAT_LO` 코앞으로
+   *    떨어져 **선택이 아니라 코너로 무너집니다.** 🔴 몰빵이 정답이 되는 형태예요.
+   *
+   * 🔑 `focusW`는 **칸마다 다른 가중**입니다 — 🔑초4 `h1`(초1 굳히기)이 🧸초1의 **그 두 칸만**
+   *    `FOCUS_W_HELD`로 올려요. 🔴 스칼라 하나로 두면 🏫유스가 미는 칸까지 같이 올라가서
+   *    **굳힌 것이 어린 시절이 아니게 됩니다.** 안 넘기면 기존 그대로 `FOCUS_W`입니다. */
+  function spread(total, posKey, focus, shapeKey, focusW) {
     const keys = STAT_DEFS.map((d) => d.key);
     const w = {};
     for (const k of keys) {
       w[k] = rand(0.85, 1.15);
-      if (focus.indexOf(k) >= 0) w[k] *= FOCUS_W;
+      if (focus.indexOf(k) >= 0) w[k] *= (focusW ? focusW(k) : FOCUS_W);
       if (k === posKey) w[k] *= POS_W;
       if (k === shapeKey) w[k] *= SHAPE_W;
     }
@@ -546,12 +644,44 @@ window.WingerProspect = (() => {
    *    *"타고난 것"이 굴려서 피할 수 있는 값*이 되어 버린 자리예요(74번 판정 ①-2).
    *    ⚠️ **다시 `rollBuild` 안으로 옮기지 마세요.** 그게 새던 자리입니다.
    *    (5번 작업에서 📏 키 화면이 들어오면 호출 위치가 그쪽으로 옮겨갑니다 — 잠금은 그대로예요) */
-  function rollTalents(pos) {
+  /* 🔒 **①②③④ 순서를 뒤집지 마세요** (설계 130번 §4-1 · 실측 132번 §10-2).
+   *    🚨 ②(주스탯 바닥 1.05)를 ③ 뒤로 옮기면 **잘못 고른 사람의 손해가 주스탯에서만
+   *      지워집니다** — 손해가 반쪽이 되어 ④의 중립이 조용히 깨져요. */
+  function rollTalents(pos, childPicks) {
     const bonus = legacyTalentBonus(loadLegacy().pts);
     const t = {};
-    for (const d of STAT_DEFS) t[d.key] = Math.min(rand(0.8, 1.45) + bonus, TALENT_MAX);
+    const keys = STAT_DEFS.map((d) => d.key);
+    // ① 6칸 굴림
+    for (const k of keys) t[k] = Math.min(rand(0.8, 1.45) + bonus, TALENT_MAX);
+    // ② 포지션 주스탯 바닥
     const ps = POS_INFO[pos].stat;
     t[ps] = Math.max(t[ps], 1.05);
+    // ③ 👦 초2 / 🔑 초4(h2) 전이 — 미는 칸은 올리고 나머지는 그만큼 내립니다
+    const push = childTalent(childPicks);
+    if (push.length && push.length < keys.length) {
+      const shift = heldIs(childPicks, "h2") ? TAL_SHIFT_HELD : TAL_SHIFT;
+      const before = keys.reduce((a, k) => a + t[k], 0);
+      /* 🧮 **내려가는 몫은 종속값입니다 — 상수로 두지 마세요.**
+       *    `shift × (미는 칸 수) ÷ (나머지 칸 수)`라 Σ변화가 **구조로 0**이에요.
+       *    🔴 0.05를 박아 두면 칸 수가 바뀐 날 조용히 총합이 새어 나갑니다. */
+      const down = shift * push.length / (keys.length - push.length);
+      for (const k of keys) t[k] += (push.indexOf(k) >= 0 ? shift : -down);
+      for (const k of keys) t[k] = clamp(t[k], TAL_LO, TALENT_MAX);
+      /* ④ 🔒 **우수리 되돌리기 — 잠금장치입니다.** clamp가 먹은 만큼을 여유 있는 칸에
+       *    나눠 되돌려 `Σtalents`를 복원해요 (`spread()`의 400회 guard와 **같은 형태**).
+       *    🔴 지우면 clamp가 먹는 양(0.10에서 0.094% · 0.20에서 0.380%)이 그대로 총합의
+       *      오차가 됩니다 — 그리고 그건 **단독으로는 증상이 안 보이는** 새어 나감이에요. */
+      for (let guard = 0; guard < 400; guard++) {
+        let sum = 0;
+        for (const k of keys) sum += t[k];
+        const diff = before - sum;
+        if (Math.abs(diff) < 1e-12) break;
+        const room = keys.filter((k) => (diff > 0 ? t[k] < TALENT_MAX - 1e-12 : t[k] > TAL_LO + 1e-12));
+        if (!room.length) break;
+        const per = diff / room.length;
+        for (const k of room) t[k] = clamp(t[k] + per, TAL_LO, TALENT_MAX);
+      }
+    }
     return t;
   }
 
@@ -566,12 +696,17 @@ window.WingerProspect = (() => {
     /* 🔒 **한 배열에 담습니다** — 🏫 유스가 미는 칸과 🧒 초1에 고른 칸이 **같은 자격**이에요.
      * `spread()`가 `indexOf`로 보니 겹쳐도 `FOCUS_W`는 한 번만 곱해집니다. */
     const focus = (YOUTH_FOCUS[marketId] || []).concat(childFocus(childPicks));
+    /* 🔑 🔑초4에서 `h1`(초1 굳히기)을 고르면 **🧸초1의 그 두 칸만** 세기가 올라갑니다.
+     * 🔴 유스가 미는 칸은 그대로 `FOCUS_W`예요 — 굳힌 것은 어린 시절이지 유스가 아닙니다. */
+    const held = heldIs(childPicks, "h1") ? childFocus(childPicks) : null;
+    const focusW = (held && held.length)
+      ? (k) => (held.indexOf(k) >= 0 ? FOCUS_W_HELD : FOCUS_W) : null;
     const posKey = POS_INFO[pos].stat;
     /* 그 굴림만의 편중 — 굴릴 때마다 모양이 달라 보이게 하는 칸이에요 */
     const shapeKey = pick(STAT_DEFS.map((d) => d.key));
     const out = {
       shapeKey,
-      stats: spread(POOL, posKey, focus, shapeKey),
+      stats: spread(POOL, posKey, focus, shapeKey, focusW),
     };
     return out;
   }
@@ -600,7 +735,9 @@ window.WingerProspect = (() => {
      * `HINTS`의 `w`에 있는 **0**은 결함이 아니라 기능입니다(74번 판정 ③-B):
      * 🎲로 못 바꾸니 *"이 코멘트면 만성이 아니다"*가 **회피 수단이 아니라 정보**예요. */
     const hint = pick(HINTS);
-    const type = pickW(GROWTH_TYPES, hint.w);
+    /* 🌙 **초3이 여기 한 줄로 삽니다.** `hint.w`에 **곱하므로** 0은 그대로 0으로 남아요 —
+     * 그게 정보 장치가 한 톨도 안 상하는 자리입니다(위 `growTilt` 주석). */
+    const type = pickW(GROWTH_TYPES, mulW(hint.w, growTilt(childPicks)));
     const sh = rollShape(marketId, pos, childPicks);
     return {
       age: CARD_AGE,
@@ -1241,7 +1378,7 @@ window.WingerProspect = (() => {
   function open(market, pos, who, onPick, onBack) {
     draw = { market, pos, who: who || {}, used: 0, onPick };
     /* ⭐ 잠재력·🧬 성장타입·⭐ 특능·🩹 결함은 **여기서 한 번**만 굴러요 */
-    draw.talents = rollTalents(pos);
+    draw.talents = rollTalents(pos, childOf(draw.who));
     draw.build = rollBuild(market.id, pos, childOf(draw.who));
     /* 🎲 조립대는 **두 벌을 나란히 내고 하나를 고르는** 화면이에요 (101번 §1-6).
      * `rollBuild`가 이미 한 벌을 굴렸으니 **짝이 될 한 벌만 더** 굴립니다 —
@@ -1269,6 +1406,8 @@ window.WingerProspect = (() => {
      * · `rollBuild` = 선수 한 명 (조립대에 들어올 때 한 번)
      * · `rollTalents` = ⭐ 잠재력 (**따로** 부릅니다 — 🎲가 못 건드리게 뺀 자리) */
     rollShape, rollBuild, rollTalents, applyCard, open,
+    /* 🧮 `game.js`의 `childCap`이 부릅니다 — 어린 시절 표의 **유일한 출처**예요 */
+    childPush,
     SHIRT_NOS, shirtNosOf, defaultShirtNo: defaultNo, shirtNoOf,
     /* 👕 HUD가 같은 유니폼을 그리려고 씁니다 — **마크업의 유일한 출처**예요 */
     jerseyHTML, paintJersey,

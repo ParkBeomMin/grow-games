@@ -838,6 +838,14 @@ $("btn-back-origin")?.addEventListener("click", () => show("screen-foot"));
 /* 🧒 초1에서 뒤로 — 🗺️ 지도로. 🔒 **아직 아무것도 안 굴렸습니다**(굴림은 🧬 조립대에서
  * 한 번뿐이에요). 그래서 이건 재도전 뒷문이 아니라 그냥 되돌리기입니다. */
 $("btn-back-child")?.addEventListener("click", () => show("screen-origin"));
+/* 🧒 초2·초3·초4에서 뒤로 — **앞 해를 다시 엽니다.**
+ * 🔒 `show()`가 아니라 `goChildYear()`인 이유: `show()`만 하면 그 화면의 버튼이 이미
+ *    눌려 **잠긴 채**(`disabled`) 서 있어서 아무것도 못 고릅니다.
+ * 🔒 그리고 이 셋은 **`BACK_SAFE`에 안 넣습니다** — 브라우저 뒤로 가기로 들어오면
+ *    `openChild`를 안 지나 그 잠긴 화면에 그대로 서게 돼요. */
+$("btn-back-child2")?.addEventListener("click", () => goChildYear(1));
+$("btn-back-child3")?.addEventListener("click", () => goChildYear(2));
+$("btn-back-child4")?.addEventListener("click", () => goChildYear(3));
 $("btn-back-foot")?.addEventListener("click", () => show("screen-name"));
 $("btn-back-name")?.addEventListener("click", () => show("screen-title"));
 const goHome = () => { if (S) save(); location.reload(); };
@@ -856,7 +864,84 @@ const TRANS_CAP_STEP = 6;   // 단계당 스탯 상한 증가
 const TRANS_P0 = 0.45, TRANS_PDEC = 0.03, TRANS_PMIN = 0.15;
 const transLv = (key) => (S.trans && S.trans[key]) || 0;
 const transTotal = () => Object.values((S && S.trans) || {}).reduce((a, b) => a + b, 0);
-const statCap = (key) => STAT_CAP + transLv(key) * TRANS_CAP_STEP;
+/* ══════════════════════════════════════════════════════════════════
+ * 🧒 **어린 시절이 그리는 천장** — `childCap` (설계 133번 §4 · 범민 님 결정 「최대치를 올린다」)
+ * ══════════════════════════════════════════════════════════════════
+ * 🔴 **`STAT_CAP = 130`은 한 글자도 안 건드립니다.** 130은 **성장 곡선의 손잡이**예요 —
+ *    어린 시절이 그 수를 밀면 **모두의** 천장이 같이 올라가서 「어린 시절이 갈랐다」가 아니라
+ *    **「게임이 쉬워졌다」**가 됩니다. 그래서 옆에 **항을 하나 더합니다.**
+ *
+ * 🔒 **여섯 칸이 각각 다르고, Σ가 구조로 0입니다.** 평균 천장은 여전히 **정확히 130**이고,
+ *    바뀌는 것은 *"이 선수는 슛이 136까지, 수비는 127까지"* 뿐이에요.
+ *    🔴 한 선수에 천장 **하나**로 만들면 그건 트레이드오프가 아니라 **순수 난이도 손잡이**가 되고,
+ *      몰빵에 반대 압력을 걸 자리가 아예 없어집니다.
+ *
+ * 🧮 **`q̄`는 칸 수에 매인 중립화 종속값이지 손잡이가 아닙니다.**
+ *    🔴 **여기를 만져서 밸런스를 잡지 마세요.** 숫자(6)를 박아 두면 칸이 바뀐 날
+ *      조용히 총합이 새어 나갑니다 — 「훈련 계단 보정」에서 데인 자리와 같은 형태예요.
+ *
+ * 🗄️ **마이그레이션하지 않습니다.** `childPicks`가 없거나 `[]`이면 Σq = 0 → q̄ = 0이라
+ *    여섯 칸이 **전부 정확히 0**입니다 — 옛 세이브는 개편 전과 같은 130이에요.
+ *    🔒 **저장하지 않습니다.** 저장하면 `CHILD_CAP_STEP`을 바꾼 날 옛 세이브만 옛 천장을 씁니다.
+ *
+ * 🔴 **이 두 이름(`CHILD_CAP_STEP`·`childCap`)은 ⚽ 더 윙어 II 전용입니다.**
+ *    나머지 7종에는 어린 시절이 없어요 — 저쪽 `game.js`에 복사하지 마세요. */
+
+/* 🚧 **임시값입니다 — balancer의 재측정(133번 §9 R-1 「정렬 폭」)이 오면 이 한 줄만 갈면 됩니다.**
+ * designer의 제안값(133번 §5-1 K-9)을 그대로 두었어요. designer가 손계산으로
+ * *"3.0이면 fw 「포지션 정렬」이 만 30세에 `blendOf` 폭 5.5%p로 굳어 🌙초3의 3.4배"*라고 적었고,
+ * 예측은 **3.0은 밴드 위(4~6%p) · 1.5는 들어옴(2~3%p)**입니다.
+ * 🔴 밴드를 넘으면 **여기만** 내리세요 — `TAL_SHIFT`·`GROW_TILT`·`FOCUS_W_HELD`는
+ *    전부 **다른 축의 손잡이**입니다. */
+const CHILD_CAP_STEP = 3.0;   // 🚧 임시 (balancer 확정 전)
+
+/* ⚡ `statCap()`은 렌더마다 불려요. `S.childPicks` **배열 하나로** 메모이즈합니다.
+ * 🔒 캐시의 열쇠가 **배열 그 자체**라, 세이브를 갈아 끼우면(새 배열) 그 자리에서 무효가 돼요.
+ * 🔴 `S`에 캐시를 달지 마세요 — 그 칸이 **세이브에 실려 나갑니다.** */
+let childCapMemo = { picks: undefined, val: null };
+function childCapAll() {
+  const picks = (S && S.childPicks) || null;
+  if (childCapMemo.picks === picks && childCapMemo.val) return childCapMemo.val;
+  const keys = STAT_DEFS.map((d) => d.key);
+  const q = {};
+  for (const k of keys) q[k] = 0;
+  /* 🔒 표는 `prospect.js`에 있습니다 — 여기서는 **몫만** 셉니다(글과 산식을 한 파일에 안 둡니다).
+   * 스크립트가 안 왔으면 전부 0이라 개편 전과 같아요. */
+  const push = (window.WingerProspect && WingerProspect.childPush)
+    ? WingerProspect.childPush(picks) : [];
+  for (const k of push) if (q[k] != null) q[k] += 1;
+  let sq = 0;
+  for (const k of keys) sq += q[k];
+  const qbar = sq / keys.length;                       // 🧮 종속값 — 6을 박지 않습니다
+  const raw = {}, out = {};
+  let sum = 0;
+  for (const k of keys) {
+    raw[k] = CHILD_CAP_STEP * (q[k] - qbar);           // 🔒 Σ raw = 0 (구조로)
+    out[k] = Math.round(raw[k]);
+    sum += out[k];
+  }
+  /* 🔒 **우수리 되돌리기 — 잠금장치입니다.** `CHILD_CAP_STEP`이 3의 배수면 반올림이
+   *    아무 일도 안 하지만 **지우지 마세요**: 3의 배수가 아닌 값이 오는 순간 Σ가 샙니다.
+   *    (그래서 이 루프는 **단독으로는 증상이 0장**이에요 — 감도 검사는 3의 배수가
+   *     아닌 값으로 굴려야 잡습니다.)
+   * 🔴 **무작위로 고르지 않습니다** — 렌더마다 불리는 함수라 같은 세이브가 늘 같은 천장을
+   *    내야 해요. 반올림에서 가장 많이 깎인 칸부터 되돌립니다. */
+  let diff = -sum;
+  if (diff !== 0) {
+    const step = diff > 0 ? 1 : -1;
+    const order = keys.slice().sort((a, b) => (step > 0
+      ? (raw[b] - out[b]) - (raw[a] - out[a])
+      : (raw[a] - out[a]) - (raw[b] - out[b])));
+    for (let guard = 0; guard < 400 && diff !== 0; guard++) {
+      out[order[guard % order.length]] += step;
+      diff -= step;
+    }
+  }
+  childCapMemo = { picks, val: out };
+  return out;
+}
+const childCap = (key) => childCapAll()[key] || 0;
+const statCap = (key) => STAT_CAP + transLv(key) * TRANS_CAP_STEP + childCap(key);
 const transP = (lv) => Math.max(TRANS_P0 - lv * TRANS_PDEC, TRANS_PMIN);
 // 상한에 닿은 능력치는 더 훈련해도 오르지 않아요(턴만 소모).
 // 그래서 그 능력치의 행동 버튼은 각성/초월로 바뀝니다.
@@ -1489,14 +1574,21 @@ function renderMarkets() {
   }
 }
 
-/* 🖼️ 생성 흐름 — **🧒 초1이 🗺️ 지도와 첫 카드 사이에 들어왔습니다** (설계 117번 §2).
+/* 🖼️ 생성 흐름 — **🧒 어린 시절이 네 해가 됐습니다** (설계 130번 §2-1 · 133번 · 범민 님 지시)
  *
- *   ✏️ 이름 → 🦶 주발 → 🗺️ 동네 → 🧒 초1 → 🏫 초등부(2장) → 📨 조기 제안 → 🎯 자리
- *                     → 🏫 중등부(3장) → 📨 조기 제안 → 🏫 고등부(3장) → 🏟️ 제안 → 🧬 조립대
+ *   ✏️ 이름 → 🦶 주발 → 🗺️ 동네 → 🧸 초1 → 👦 초2 → 🌙 초3 → 🔑 초4 → 🎯 자리
+ *          → 🏫 초5 대항전(2장) → 📨 조기 제안 → 🏫 중등부(3장) → 📨 조기 제안
+ *          → 🏫 고등부(3장) → 🏟️ 제안 → 🧬 조립대
  *
- * 🔴 **초2·초3은 없습니다** (실측 119번 §2) — `spread()`가 `focus`를 `indexOf`로 봐서
- *    `⚽×1`과 `⚽×3`이 **완전히 같은 stats**입니다. 같은 걸 또 고르면 값이 정확히 0이라
- *    화면만 늘고 축은 안 늘어요. 🔒 **되살리려면 「같은 걸 두 번 고르면 달라지는」 구조가 먼저**입니다.
+ * 🔴 **초4까지는 경기가 없습니다** (범민 님 지시) — 초등부 카드 2장이 **초5로** 갔고,
+ *    그래서 🎯 자리가 **초4 뒤**로 왔습니다. 옛 자리(초등부 뒤)의 근거는
+ *    *"첫 카드를 한 화면 앞당긴다"*였는데 **경기가 초5로 밀리면서 그 근거가 죽었어요.**
+ *
+ * 🔒 **「같은 `focus` 배열에 또 넣기」는 여전히 폐기입니다** (실측 119번 §2 —
+ *    `spread()`가 `indexOf`로 봐서 `⚽×1`과 `⚽×3`이 **완전히 같은 stats**였어요).
+ *    🔑 **이번 네 해가 다른 이유는 「네 개의 다른 표」를 보기 때문**입니다 —
+ *      🧸모양(`CHILD_FOCUS`) · 👦가속(`CHILD_TALENT`) · 🌙시점(`GROW_TILT`) · 🔑세기(굳히기).
+ *      같은 층에 네 번 붓는 게 아니라 **네 개의 층에 한 번씩** 붓습니다.
  *
  * 🤝 **예비 계약을 하면 🏟️ 최종 제안이 안 오고 곧장 🧬 조립대**입니다 — 남은 대항전은
  *    그대로 다 뛰고요(§6-2). 🔴 승낙이 카드를 건너뛰게 하면 그게 「콘텐츠 건너뛰기 버튼」이에요.
@@ -1517,10 +1609,11 @@ let chosenFoot = "R";
 /* 🗺️ 자란 곳. 🔒 **산식에 안 닿습니다** — 📖 스토리와 🏛️ 지역 기록만 바꿔요.
  * 빈 값이면 🌍 미상으로 삽니다(지도를 안 거치고 온 옛 경로도 그대로 돌아요). */
 let chosenOrigin = "";
-/* 🧒 초1에 고른 것 — `["ball"|"body"|"eye"]`. **배열입니다.**
- * 🔑 설계가 초2·초3을 열어 둔 자리라(117번 §9-1) 칸 모양을 바꾸지 않으려고 배열로 둡니다 —
- *    나중에 해가 늘어도 **세이브 스키마가 안 바뀝니다.**
- * 🔒 읽는 쪽 기본값은 `[]`이고, 빈 배열이면 `CHILD_FOCUS` 기여가 **정확히 0**이에요. */
+/* 🧒 어린 시절 네 해에 고른 것 — `["ball", "run", "gl", "h2"]`. **길이 4의 배열입니다.**
+ * 🔑 예전 주석이 *"나중에 해가 늘어도 세이브 스키마가 안 바뀝니다"*라고 적어 둔 그 날이
+ *    이 날이에요 — **새 필드가 0개**이고 길이만 1 → 4가 됐습니다.
+ * 🔒 읽는 쪽 기본값은 `[]`이고, 네 기관이 **자기 표에 있는 키만** 읽어요 —
+ *    빈 배열이든 모르는 키든 기여가 **정확히 0**이라 옛 세이브가 개편 전과 똑같이 굽니다. */
 let chosenChild = [];
 let chosenOffer = null;      // 🏟️ 그 유스가 내민 제안 { tier, mul, star, label, word }
 let chosenCard = null;
@@ -1660,7 +1753,7 @@ function showOffers(stage) {
 
 /* 🏫 **학교 대항전 한 단계**를 엽니다 — 끝나면 `after()`로 갑니다 (설계 93번 §5).
  *
- *   🗺️ 동네 → 🏫 초등부(2) → 🎯 자리 → 🏫 중등부(3) → 🏫 고등부(3) → 🏟️ 제안
+ *   🧒 어린 시절 네 해 → 🎯 자리 → 🏫 초5(2) → 🏫 중등부(3) → 🏫 고등부(3) → 🏟️ 제안
  *
  * 🔴 **한 번 구른 단계는 다시 안 굴러요 — 이건 재도전 경로가 아닙니다.** 여기에 다시
  *    굴리는 길을 열면 그 순간 **학교가 「최고가 나올 때까지 돌리는 화면」**이 되고,
@@ -1679,8 +1772,12 @@ function goSchool(id, after) {
    * 🔒 판정에도 편차 `d`에도 안 닿아요 — 화면이 그릴 때 이스케이프됩니다(`W2Scene.esc`). */
   WingerTown.openStage(id, { pos: chosenPos, foot: chosenFoot, origin: chosenOrigin, name: chosenName }, after);
 }
-/* 🔴 초등부에는 `chosenPos`가 아직 없습니다 — **그게 맞아요.**
- *    *"어릴 땐 다 같이 공만 쫓아다녔어요."* town.js가 미니게임 대표 3종으로 돕니다.
+/* 🚨 **이제 초5에는 `chosenPos`가 「있습니다」** — 🎯 자리가 초4 뒤로 왔거든요.
+ *    🔒 **그래도 초등 단계는 자리를 안 봅니다.** `town.js:583`이 `stage.id === "e"`면
+ *      `ELEM_POS`("mf")를 강제해요 — *"골랐더라도 초등 화면이 자리를 아는 순간
+ *      「추천」의 뒷문이 열린다"*고 거기 이미 적혀 있습니다.
+ *    🔴 **그 강제를 지우지 마세요.** 지우면 초등 미니게임 분포가 갈려
+ *      `PEER_REF.town`과 편차 밴드를 **통째로 다시 재야** 합니다 (설계 130번 §2-1).
  *    🔴 그리고 **초등 결과가 🎯 자리를 「추천」하면 안 됩니다** (70번 §8 (a) —
  *       *"조작 실력은 선수의 것이 아니다"*). 점수는 자리 화면에 한 글자도 안 넘깁니다. */
 /* 📨 **조기 제안 한 판** — 그 단계가 끝나면 손을 든 유스를 보여주고, 정하면 `after()`.
@@ -1711,10 +1808,14 @@ function decideEarly(id, marketId) {
    *    `BACK_SAFE`라 🎯 자리에서 브라우저 뒤로 가기로 이 화면에 다시 설 수 있어요.
    *    🔒 판정은 `WingerTown.decideEarly`가 이미 막았습니다(한 번만) — 여기서는
    *    **앞으로 보내기만** 합니다. 아무것도 안 하면 *"눌러도 안 되는 버튼"*이 돼요. */
-  (after || (id === "e" ? goPosition : goHigh))();
+  /* ⚠️ `after`는 `goEarly`가 늘 채워 줍니다 — 아래는 그게 비었을 때의 되돌림이에요.
+   *    🔴 초등(`"e"`) 뒤는 이제 🎯 자리가 아니라 **🏫 중등부**입니다(자리는 초4 뒤로 갔어요). */
+  (after || (id === "e" ? goMiddle : goHigh))();
 }
 
-function goElementary() { goSchool("e", () => goEarly("e", goPosition)); }
+/* 🏫 **초5 대항전** — 🎯 자리를 고른 **뒤**입니다 (설계 130번 §2-1).
+ * ⚠️ 함수 이름은 그대로 둡니다 — 부르는 곳이 바뀐 것이지 여는 단계(`"e"`)는 같아요. */
+function goElementary() { goSchool("e", () => goEarly("e", goMiddle)); }
 function goMiddle() { goSchool("m", () => goEarly("m", goHigh)); }
 function goHigh() { goSchool("h", finishArc); }
 
@@ -1731,7 +1832,7 @@ function finishArc() {
   openBench();
 }
 
-/* 📍 자리를 고르면 🏫 중등부로 갑니다.
+/* 📍 자리를 고르면 🏫 초5 대항전으로 갑니다 (예전엔 중등부였어요 — 자리가 앞으로 왔습니다).
  * ⚠️ 예전에 여기 있던 `if (WingerTown.played()) { showOffers(); return; }`는
  *    **한 번도 안 걸리는 죽은 줄**이었습니다 — `goMiddle` → `goHigh`가 각자
  *    `playedStage`로 넘어가 어차피 제안 화면에 서거든요. 지웠습니다(inspector ⑤). */
@@ -1739,7 +1840,7 @@ document.querySelectorAll("#position-list .card").forEach((btn) => {
   btn.addEventListener("click", () => {
     chosenPos = btn.dataset.pos;
     if (!window.WingerTown) { showOffers(); return; }   // 스크립트가 안 왔으면 조용히 넘어가요
-    goMiddle();
+    goElementary();                                     // 🏫 초5 → 중등 → 고등
   });
 });
 
@@ -1771,20 +1872,35 @@ function goOrigin() {
   if (!window.WingerIntro) { goChild(); return; }
   WingerIntro.openOrigin(chosenOrigin, (id) => { chosenOrigin = id; goChild(); });
 }
-/* 🧒 **초1** — 🗺️ 지도와 🏫 초등부 카드 **사이**입니다 (설계 117번 §2).
+/* 🧒 **어린 시절 네 해** — 🗺️ 지도와 🎯 자리 **사이**입니다 (설계 130번 §2 · 133번).
  * 🔑 game.js가 아는 것은 `openChild` 하나와 `chosenChild` 한 칸뿐이에요 —
- *    무엇이 바뀌는지는 `prospect.js`의 `CHILD_FOCUS`가 정합니다.
- * 🔴 **초2·초3은 없습니다** (실측 119번 §2) — `spread()`가 `focus`를 `indexOf`로 봐서
- *    같은 걸 또 고르면 값이 **정확히 0**이라, 화면만 늘고 축은 안 늘어요. */
-function goChild() {
-  show("screen-child");
-  stampStep("screen-child");
-  if (!window.WingerIntro || !WingerIntro.openChild) { goElementary(); return; }
-  WingerIntro.openChild({ origin: chosenOrigin, key: chosenChild[0] }, (key) => {
-    chosenChild = key ? [key] : [];
-    goElementary();
+ *    무엇이 바뀌는지는 `prospect.js`의 네 표가 정합니다.
+ *
+ * 🔴 **「같은 `focus` 배열에 또 넣기」는 여전히 폐기입니다** (실측 119번 §2 — `spread()`가
+ *    `indexOf`로 봐서 `⚽×1`과 `⚽×3`이 **완전히 같은 stats**였어요).
+ *    🔑 **이번 네 해가 다른 이유는 네 개의 「다른 표」를 보기 때문**입니다:
+ *      🧸`CHILD_FOCUS`(모양) · 👦`CHILD_TALENT`(가속) · 🌙`GROW_TILT`(시점) · 🔑굳히기(세기).
+ *      같은 층에 네 번 붓는 게 아니라 **네 개의 층에 한 번씩** 붓습니다.
+ *
+ * 🚨 **그리고 천장이 갈리기 전에는 초1·초2가 `STAT_CAP 130` 때문에 만 22~25세에 값이
+ *    「정확히 0」이었습니다** (실측 132번 §3). 🔴 **「효과가 작다」고 계수를 키우지 마세요** —
+ *    `TAL_SHIFT`를 0.60(6배)까지 올려도 커리어 폭이 0.33~1.26%에서 멈추고 clamp가 2.9%를
+ *    먹습니다. **막고 있던 건 계수가 아니라 상한이었어요.** 그래서 `childCap`을 지었습니다. */
+const CHILD_SCREENS = ["screen-child", "screen-child2", "screen-child3", "screen-child4"];
+function goChildYear(yr) {
+  const id = CHILD_SCREENS[yr - 1];
+  show(id);
+  stampStep(id);
+  if (!window.WingerIntro || !WingerIntro.openChild) { goPosition(); return; }
+  WingerIntro.openChild(yr, { origin: chosenOrigin, picks: chosenChild }, (key) => {
+    /* 🔒 **앞 해로 돌아와 다시 고르면 뒤의 해는 버립니다.** 남겨 두면 「🌙초3을 다시 골랐는데
+     *    🔑초4가 옛 해를 굳히고 있는」 상태가 돼요 — 화면과 값이 갈라지는 자리입니다. */
+    chosenChild = chosenChild.slice(0, yr - 1);
+    chosenChild[yr - 1] = key;
+    if (yr < CHILD_SCREENS.length) goChildYear(yr + 1); else goPosition();
   });
 }
+function goChild() { goChildYear(1); }
 function goPosition() {
   show("screen-position");
   stampStep("screen-position");
@@ -1824,9 +1940,14 @@ function startCareer() {
   /* 🗺️ 자란 곳. ⚠️ **마이그레이션은 안 합니다** — 옛 세이브는 읽는 쪽에서 🌍 미상이에요.
    * 🔒 여기서 갈라지는 것은 📖 텍스트와 🏛️ 지역 기록뿐입니다. */
   S.origin = chosenOrigin || "";
-  /* 🧒 초1에 고른 것. ⚠️ **마이그레이션은 안 합니다** — 칸이 없는 옛 세이브는 읽는 쪽에서
-   * `[]`이고, 빈 배열이면 기여가 **정확히 0**이라 개편 전과 똑같이 굽니다.
-   * 🔒 굴림은 이미 끝났으니 여기 남는 값은 **기록·화면용**이에요 (산식에 다시 안 들어갑니다). */
+  /* 🧒 어린 시절 네 해에 고른 것. ⚠️ **마이그레이션은 안 합니다** — 칸이 없는 옛 세이브는
+   * 읽는 쪽에서 `[]`이고, 빈 배열이면 기여가 **정확히 0**이라 개편 전과 똑같이 굽니다.
+   *
+   * 🚨 **옛 주석이 여기서 틀렸습니다 — *"기록·화면용이고 산식에 다시 안 들어갑니다"*는 옛말이에요.**
+   *    🧸모양·👦가속·🌙시점은 조립대에서 한 번 굴리고 끝이지만, 🆕 **천장(`childCap`)은
+   *    이 칸을 은퇴할 때까지 매 렌더 읽습니다.** 그게 범민 님 결정(「최대치를 올린다」)이 사는 자리예요.
+   * 🔒 **천장 값 자체는 저장하지 않습니다** — 저장하면 `CHILD_CAP_STEP`을 바꾼 날
+   *    옛 세이브만 옛 천장을 씁니다. 종속값은 관계로 삽니다. */
   S.childPicks = chosenChild.slice();
   /* 🏫 학교 점수와 **뛴 카드 수**, 📣 그 제안이 준 주목 배수를 심어요.
    * 🔑 **두 칸은 반드시 짝으로 갑니다** — 등급을 정하는 건 점수가 아니라
