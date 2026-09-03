@@ -1017,6 +1017,28 @@ button.pf-slot { cursor: pointer; font-family: inherit; }
 .w2m-res.w2m-good { color: var(--good); font-family: "Jua", sans-serif; font-size: 1rem; }
 .w2m-res.w2m-mid { color: var(--cream); }
 .w2m-res.w2m-bad { color: var(--accent2); }
+/* 🎖️ **「🦶 약발로!」는 훈장입니다** — 🚧 **engineer의 한 줄이 오면 켜집니다**
+ * ══════════════════════════════════════════════════════════════════════
+ * 🐛 지금 이 줄은 `W.great + " 🦶 약발로!"`라 **텍스트 노드 하나**예요. 같은 화면에
+ *    「약발 －25%」 벌점표가 떠 있어서, 붙어 있는 한 문장이 ***"약발로밖에"***로 읽힙니다.
+ *    성취를 그린 화면이 **조건을 단 변명**처럼 읽히는 자리예요. CSS로는 못 밉니다 —
+ *    감쌀 요소가 없으니까요.
+ *
+ * 🔧 **`beta/winger-moment.js` 709줄 한 곳**만 바뀝니다 (131_director_childbtn.md §5):
+ *      - W.great + (ctx.weak ? " 🦶 약발로!" : "")
+ *      + W.great + (ctx.weak ? ' <b class="w2m-win-weak">🦶 약발로!</b>' : "")
+ *    `ender`가 `p.innerHTML = line + ...`으로 넣으니 `<b>`가 그대로 삽니다.
+ *
+ * 🎨 **새 색을 안 만듭니다.** 이 화면의 색은 🦶 한 축(앰버 주발 ↔ 회색 약발)이고
+ *    성패는 `--good`/`--accent2` 축이에요. 여기에 세 번째 색을 넣으면 셋 다 안 읽힙니다.
+ *    그래서 **색은 그대로 두고 「모양」만 바꿉니다** — 테두리를 두른 알약이 훈장이 돼요.
+ *    적록 색약·흑백에서도 테두리는 남습니다.
+ * 🚧 지금은 아무도 안 켭니다. 위 한 줄이 들어오면 그날 바로 뜹니다. */
+.w2m-win-weak {
+  display: inline-block; margin-left: .15rem; padding: 1px 8px;
+  border: 1px solid currentColor; border-radius: 999px;
+  font-size: .82rem; font-weight: 400; white-space: nowrap;
+}
 /* 🎚️ 조작 정확도 — **결과가 아니라 손**이에요. 골이 됐는지는 이 줄의 문구와
  * 뒤이어 오는 경기 카드가 말합니다. scaleX라 폭이 변해도 레이아웃을 안 건드려요. */
 .w2m-acc {
@@ -2533,6 +2555,212 @@ button.pf-slot { cursor: pointer; font-family: inherit; }
   color: var(--text); font-size: .82rem; line-height: 1.5;
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+ * 🧒 어린 시절 한 해 고르기 — **가로 긴 박스 버튼** (`.arc-list`)
+ * ══════════════════════════════════════════════════════════════════════
+ * 📱 범민 님 요청 (2026-09-03): *"초1 뭘하고 놀았나는 가로 긴 박스형 버튼으로."*
+ *
+ * 🔴 **네 번 쓰입니다.** 초1 · 초2 · 초3 · 초4가 같은 모양으로 이어져요
+ *    (designer가 네 해 아크를 설계 중). 그래서 이 절은 **초1을 그리지 않고
+ *    「한 해를 고르는 화면」을 그립니다** — `#screen-child` 같은 id에 안 기댑니다.
+ *    새 해 화면은 `<div class="arc-list">` 하나만 두면 그대로 같은 모양이 돼요.
+ *
+ * 🏷️ **접두사는 `.arc-`입니다** (designer의 「어린 시절 네 해」 = arc4).
+ *    🔴 `.yr-`을 쓰지 마세요 — 이미 **연도별 기록 표**가 그 이름을 씁니다
+ *    (`.yr-club`·`.yr-lg`·`.yr-rank`·`.yr-stat`·`.yr-avg` — career.js의 `<td>`들).
+ *    선택자는 안 부딪히지만 **이름이 두 가지 뜻**을 갖는 순간 다음 사람이 헷갈립니다.
+ * 🔒 **`.w2m-` 접두사도 빌려 쓰지 않습니다** — 그건 미니게임 칸의 이름이에요
+ *    (`one-grid-test.js`의 G-6·G-6b·G-6c가 그 이름들을 양방향으로 셉니다).
+ *
+ * 🔒 **마크업을 안 바꿉니다.** 버튼은 `.card` + `.card-emoji`/`.card-title`/`.card-desc`
+ *    그대로예요 — `tests/winger2/child-test.js`와 `_load.js`가 `#child-list .card[data-child]`로
+ *    찾습니다. 여기서 클래스를 갈면 **검사가 버튼을 못 찾아 조용히 0개**가 돼요.
+ *    바뀐 것은 **부모의 클래스 한 낱말**(`card-grid` → `arc-list`)뿐입니다.
+ *
+ * 🔴 **왜 격자를 버렸나** — `.card-grid`는 2열이라 **3장이면 한 장이 홀로 남습니다.**
+ *    ①②
+ *    ③  ← 이 자리가 「덜 중요한 것」처럼 읽혀요. 세 선택지는 **대등**해야 합니다.
+ *    게다가 해마다 선택지가 2개나 4개가 될 수 있는데, 2열은 그때마다 다른 사고를 냅니다.
+ *    세로 한 줄은 **몇 개든 대등**하고 낱말이 길어져도 안 깨져요.
+ *
+ * ♿ **가로 긴 박스의 값어치는 손가락입니다.** 세로 68px을 **바닥으로** 깔았어요
+ *    (권장 44px보다 큽니다 — 줄이 두 줄로 늘면 더 커집니다). 320 · 360 · 390 · 430
+ *    네 폭에서 재서 §「폭별 세로 크기 표」에 적었습니다.
+ *
+ * 🎨 **고른 표시는 색만으로 하지 않습니다** — 적록 색약·흑백에서 앰버 테두리는
+ *    회색 테두리와 거의 같은 밝기예요. 그래서 넷을 겹칩니다 (🦶 주발 화면과 같은 문법):
+ *      ① 앰버 테두리 + 글로우   ② ✓ 배지 (`::after` — **모양**)
+ *      ③ 고른 줄의 제목이 앰버  ④ **안 고른 줄을 흐리게** (`:disabled`)
+ *    ②④는 색을 못 가려도 읽힙니다 — 있고 없음, 진하고 흐림이에요. */
+
+/* 한 해 = 세로로 쌓인 가로 긴 박스들 */
+.arc-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; }
+/* 📏 위 세 줄(🔢 띠 · 📍 자리 · 📖 이야기)이 `.hint`의 18px 여백을 **각각** 쓰면
+ * 320px에서 세 번째 박스가 화면 밖으로 밀립니다 — 여백은 덩어리 끝에서 한 번만 줍니다.
+ * 📍와 📖는 **한 덩어리**로 읽혀야 해요(같은 해의 같은 장면). */
+.child-place { margin-bottom: 2px; }
+.child-story { margin-bottom: 12px; }
+
+/* 🔴 `.card`를 **덮어씁니다** — base.css의 `.card`는 가운데 정렬 세로 카드예요.
+ * base.css는 8종 공유라 손대지 않고, 여기서 `.arc-list` 안쪽만 갈아입힙니다. */
+.arc-list .card {
+  /* 🔴 `flex-direction: row`을 **반드시 적습니다** — base.css의 `.card`가 `column`이에요.
+   *    안 적으면 셋이 세로로 쌓여 **가운데 정렬 카드 그대로**입니다(렌더로 잡았습니다:
+   *    이모지 y14 · 제목 y51 · 설명 y75.6 · 높이 107px). 「가로 긴 박스」의 핵심 한 줄이에요. */
+  display: flex; flex-direction: row; flex-wrap: wrap;
+  align-items: center; justify-content: flex-start;
+  column-gap: 12px; row-gap: 3px;
+  /* 📱 68px — 손가락 바닥. 오른쪽 34px은 ✓ 배지 자리라 글자가 안 깔립니다 */
+  min-height: 68px;
+  padding: 12px 34px 12px 10px;
+  border-radius: 14px;
+  text-align: left;
+  position: relative;
+  /* 🔴 base.css의 `translateY(-2px)` 들림을 끕니다 — 세로로 쌓인 긴 박스가
+   *    하나만 들리면 줄이 어긋나 보여요. 강조는 테두리와 바탕으로 합니다. */
+  transition: border-color .14s ease, background-color .14s ease, box-shadow .14s ease;
+}
+.arc-list .card:hover, .arc-list .card:focus-visible { transform: none; }
+/* ⌨️ 키보드 초점 — 테두리 색만으로는 「고른 것」과 구분이 안 갑니다 */
+.arc-list .card:focus-visible { outline: 2px solid var(--sky); outline-offset: 2px; }
+
+.arc-list .card-emoji {
+  flex: 0 0 34px; font-size: 1.7rem; line-height: 1.15; text-align: center;
+}
+/* 🔤 **낱말 길이가 해마다 달라집니다** — `keep-all`이 없으면 한국어가 글자 단위로
+ *    쪼개져 *"빈 곳을 먼저 보고 먼/저 뛰었어요"*가 됩니다. `anywhere`는 띄어쓰기가
+ *    아예 없는 긴 낱말이 왔을 때만 마지막 수단으로 끊어요. */
+/* 🔴 **`flex: 1 1 0`입니다 — `auto`가 아니에요.** `auto`면 기준 크기가 「글자를 한 줄로
+ *    폈을 때의 폭」이라, 긴 낱말이 오면 **제목이 통째로 다음 줄로 밀려나** 이모지가 혼자
+ *    한 줄을 차지합니다 (긴 낱말 판에서 렌더로 잡았습니다 — 이모지 y13 · 제목 y52).
+ *    `0`이면 기준이 0이라 **항상 이모지 옆에 앉고**, 남는 폭을 채운 뒤 안에서 줄을 접어요. */
+.arc-list .card-title {
+  flex: 1 1 0; min-width: 0;
+  font-size: 1rem; line-height: 1.35; color: var(--text);
+  word-break: keep-all; overflow-wrap: anywhere;
+}
+/* 두 번째 줄 — 이모지 칸(34) + 사이(12)만큼 들여써서 제목 아래에 맞춥니다 */
+.arc-list .card-desc {
+  flex: 1 1 100%; min-width: 0; padding-left: 46px;
+  font-size: .76rem; line-height: 1.45; color: var(--dim);
+  word-break: keep-all; overflow-wrap: anywhere;
+}
+
+/* ✅ 고른 줄 */
+.arc-list .card.on {
+  border-color: var(--accent);
+  background: linear-gradient(180deg, rgba(255, 159, 69, .14), var(--field));
+  box-shadow: 0 0 0 3px rgba(255, 209, 102, .26);
+}
+.arc-list .card.on .card-title { color: var(--accent); }
+/* ✓ 배지 — **`::after`입니다**(표시는 맨 위 겹에). `opacity`로만 숨겨요 —
+ * `display:none`으로 두면 켜지는 순간 칸이 흔들립니다. */
+.arc-list .card::after {
+  content: "✓"; position: absolute; right: 9px; top: 50%;
+  width: 22px; height: 22px; margin-top: -11px; border-radius: 999px;
+  background: var(--accent); color: var(--ink);
+  font-size: .78rem; font-weight: 700; line-height: 22px; text-align: center;
+  opacity: 0; transform: scale(.7);
+  transition: opacity .14s ease, transform .14s ease;
+}
+.arc-list .card.on::after { opacity: 1; transform: none; }
+/* 🌫️ 안 고른 줄 — `intro.js`가 고른 뒤 나머지를 `disabled`로 잠급니다.
+ *    고르기 **전에는 안 걸려요**: 셋 다 멀쩡해야 「아직 안 골랐다」가 읽힙니다. */
+.arc-list .card:disabled { opacity: .42; filter: saturate(.45); cursor: default; }
+.arc-list .card:disabled:hover { border-color: var(--line); }
+
+/* ══════════════════════════════════════════════════════════════════════
+ * 🔢 몇 학년인가 — 네 해 진행 띠 (`.arc-steps`)
+ * ══════════════════════════════════════════════════════════════════════
+ * 🔴 **같은 화면이 네 번 오는 것에 대한 답입니다.** 선택지 글만 바뀌면
+ *    *"아까 그 화면 아닌가"*가 돼요. 띠가 한 칸씩 차오르면 **같은 화면이 아니라
+ *    이어지는 화면**으로 읽힙니다 — 남은 횟수도 같이 보이고요.
+ *
+ * 🔑 **글자 넷은 늘 초1·초2·초3·초4로 고정**이라 마크업에 그대로 적어 둡니다.
+ *    해가 바뀔 때 engineer가 갈 것은 **부모의 `data-yr` 한 글자**뿐이에요
+ *    (`data-yr="1"` → `"2"`). JS가 칸을 다시 그리지 않습니다.
+ *
+ * ♿ `aria-hidden`입니다 — 같은 말을 `.child-place`가 이미 글로 합니다
+ *    (*"📍 서울 · 초등학교 1학년 · 여덟 살"*). 낭독으로 「초1 초2 초3 초4」를
+ *    해마다 네 번 듣는 건 정보가 아니라 소음이에요. */
+.arc-steps { display: flex; gap: 6px; list-style: none; margin: 0 0 10px; padding: 0; }
+.arc-steps:empty { display: none; }
+.arc-step {
+  flex: 1 1 0; min-width: 0; text-align: center;
+  font-size: .68rem; line-height: 1; letter-spacing: .02em;
+  color: var(--dim); padding: 5px 0 6px;
+  border-top: 3px solid var(--line); border-radius: 2px;
+}
+/* 🎨 **색 말고 굵기와 글자로** 셋을 가릅니다 — 지난 해는 흰 띠, 올해는 앰버 **굵은** 띠(5px),
+ *    올 해는 흐린 띠. 흑백으로 찍어도 굵기 차이가 남습니다(렌더 실측: 131번 §4). */
+.arc-scene[data-yr="2"] .arc-step:nth-child(-n + 1),
+.arc-scene[data-yr="3"] .arc-step:nth-child(-n + 2),
+.arc-scene[data-yr="4"] .arc-step:nth-child(-n + 3) {
+  color: var(--text); border-top-color: var(--text);
+}
+.arc-scene[data-yr="1"] .arc-step:nth-child(1),
+.arc-scene[data-yr="2"] .arc-step:nth-child(2),
+.arc-scene[data-yr="3"] .arc-step:nth-child(3),
+.arc-scene[data-yr="4"] .arc-step:nth-child(4) {
+  color: var(--accent); border-top: 5px solid var(--accent);
+  font-family: "Jua", sans-serif; padding-top: 3px;
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+ * 🌤️🌇🌙🌌 네 해의 **시간대 톤 4단** (`.arc-scene[data-yr]`)
+ * ══════════════════════════════════════════════════════════════════════
+ * 📮 designer 요청입니다 (130_designer_arc4.md §2-3 · 위험 3):
+ *    *"같은 컴포넌트를 네 번 쓰면 사람은 같은 질문으로 읽습니다."*
+ *
+ * 🔑 **한 화면에 손잡이가 `data-yr` 하나뿐입니다.** 섹션에 `data-yr="2"`만 적으면
+ *    진행 띠·바탕 톤·카드 표면이 **같이** 2번째 해로 갑니다. 두 군데 적으면 갈라져요
+ *    (🦶 주발 색이 판정과 갈라졌던 것과 같은 형태의 사고입니다).
+ *
+ * 🕰️ 여덟 살 낮 → 아홉 살 노을 → 열 살 저녁 → 열한 살 밤.
+ *    **네 해가 흐른다**는 것을 색이 말합니다 — 초3의 이름이 🌙인 것과 맞췄어요.
+ *
+ * ♿ **톤은 정보가 아니라 공기입니다.** 알파가 .06~.10이라 흑백에서는 거의 사라지고,
+ *    그래도 되게 만들었어요 — 몇 학년인지는 **진행 띠와 `.child-place` 글자**가 말합니다.
+ *    🔴 여기에 「고른 것」이나 「좋고 나쁨」을 실으면 안 됩니다. 색이 두 가지 뜻을 갖게 돼요.
+ * 🔒 절대색을 안 씁니다 — 톤은 전부 `--sky`/`--accent`/`--bg2` 계열의 옅은 겹입니다. */
+.arc-scene { --arc-tone: rgba(111, 201, 255, .07); }              /* 🌤️ 기본 = 낮 */
+.arc-scene[data-yr="2"] { --arc-tone: rgba(255, 159, 69, .07); }  /* 🌇 노을 */
+.arc-scene[data-yr="3"] { --arc-tone: rgba(150, 130, 255, .08); } /* 🌙 저녁 */
+.arc-scene[data-yr="4"] { --arc-tone: rgba(20, 32, 92, .30); }    /* 🌌 밤 */
+/* 화면 위쪽에 얇게 깔리는 하늘 — `#app`의 좌우 여백을 넘어가지 않습니다(가로 넘침 0). */
+.arc-scene.active {
+  background: radial-gradient(ellipse 130% 40% at 50% 0%, var(--arc-tone) 0%, transparent 70%);
+}
+/* 카드 표면에도 같은 톤을 한 겹 — 바탕만 갈면 박스가 그 위에 떠 보여요 */
+.arc-scene .arc-list .card {
+  background: linear-gradient(180deg, var(--arc-tone), transparent),
+    linear-gradient(180deg, var(--bg2), var(--field));
+}
+/* 🔴 고른 줄은 **톤보다 앰버가 이깁니다** — 톤이 「고른 것」을 흐리면 안 돼요 */
+.arc-scene .arc-list .card.on {
+  background: linear-gradient(180deg, rgba(255, 159, 69, .14), var(--field));
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+ * 🧺 지금까지 고른 것 (`.arc-tally`) — 🚧 **초2부터 켜집니다**
+ * ══════════════════════════════════════════════════════════════════════
+ * 🚧 **오늘은 아무도 안 켭니다.** 초1에는 쌓인 게 없어서 빈 채로 있고
+ *    (`:empty { display: none }`), 초2부터 engineer가 칩을 채웁니다.
+ *    죽은 규칙이 아니라 **비워 둔 자리**예요 — designer의 네 해 설계가 오면
+ *    무엇을 담을지가 정해집니다 (131_director_childbtn.md §engineer에게 넘길 것).
+ *
+ * 🔴 **여기가 왜 필요한가** — 네 번 고르는데 앞의 셋이 화면에서 사라지면
+ *    *"내가 뭘 골랐더라"*가 되고, 그러면 네 번째 선택이 **아무 맥락 없는 3택**이 됩니다.
+ *    쌓인 게 보여야 네 해가 **한 사람의 이야기**로 읽혀요. */
+.arc-tally { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; margin: 0 0 10px; }
+.arc-tally:empty { display: none; }
+.arc-chip {
+  font-size: .7rem; line-height: 1.5; color: var(--dim);
+  padding: 3px 9px; border-radius: 999px;
+  background: var(--bg2); border: 1px solid var(--line);
+  word-break: keep-all;
+}
+
 /* ♿ 움직임을 줄이는 설정 — **정보는 하나도 안 줄입니다.**
  * 흔들림·떠오름만 끄고 색·테두리·판정 창 폭 차이는 그대로 남아요.
  * 🦶 발을 고른 뒤의 320ms 대기도 `intro.js`가 건너뜁니다(연출이 진행을 붙잡으면 안 돼요).
@@ -2547,6 +2775,10 @@ button.pf-slot { cursor: pointer; font-family: inherit; }
   .foot-card.picked { transform: none; }
   .foot-card.on .foot-ball { opacity: 1; transform: none; }
   .foot-pick { transform: none; }
+  /* 🧒 한 해 고르기 — **정보는 하나도 안 줄입니다.** ✓ 배지가 커지는 것만 끄고
+   * 앰버 테두리·글로우·흐림·진행 띠 굵기는 그대로 남아요 (렌더로 확인: 131번 §4). */
+  .arc-list .card, .arc-list .card::after { transition: none !important; }
+  .arc-list .card.on::after { opacity: 1; transform: none; }
 }
 
 /* ══════════════════════════════════════════════════════════════
