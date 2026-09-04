@@ -146,6 +146,11 @@ const MUT = {
    *    🧒 초1로 바뀌자 `goElementary\(\)`가 **안 걸려 M-H가 「안 도는」 상태**가 됐어요. */
   M_H_POSFIRST: { "game.js": [[/WingerIntro\.openOrigin\(chosenOrigin, \(id\) => \{ chosenOrigin = id; \w+\(\); \}\);/,
     "WingerIntro.openOrigin(chosenOrigin, (id) => { chosenOrigin = id; goPosition(); });"]] },
+  /* 🔴🏁 **M-K — 🏁 경기 시작을 없앱니다.** 단계를 열자마자 `playCard()`를 바로 불러
+   *    **들어서는 순간 카드가 굴러가는** 옛 동작으로 되돌려요. T-7b가 갈려야 합니다.
+   *    🔒 **호출 자리 한 곳만** 갈아요 — `function kickoff()` 정의는 그대로 둡니다
+   *    (정의까지 지우면 다른 이유로 던져서 «빨간불»이 아니라 «💥 죽음»이 됩니다). */
+  M_K_NOKICK: { "town.js": [[/\n {4}kickoff\(\);\n {2}\}/, "\n    playCard();\n  }"]] },
 };
 
 {
@@ -244,10 +249,27 @@ async function runT7(muts) {
     .filter((el) => !cardBox || !cardBox.contains(el));
   const pre = seen.slice(0, seen.indexOf("screen-town") < 0 ? seen.length : seen.indexOf("screen-town"))
     .filter((id) => id !== "screen-title");
+  /* 🏁 **「카드가 떠 있는가」를 두 번 봅니다 — 들어선 직후와, 한 번 누른 뒤.**
+   *    한쪽만 보면 둘 다 거짓말이 됩니다: 도착만 보면 **미니게임이 안 실려도** 초록불이고
+   *    (「환경이 우연히 막아 줌」), 누른 뒤만 보면 **들어서자마자 굴러도** 초록불이에요. */
+  const momentUp = () => !!(cardBox && cardBox.querySelector('[class*="w2m-"]'));
+  const nextBtn = () => h.D.getElementById("btn-town-next");
+  const btnLive = () => {
+    const b = nextBtn();
+    return !!b && !b.disabled && !b.classList.contains("hidden");
+  };
+  /* 🔒 탭 수는 **도착 시점**으로 셉니다 — 아래 킥오프 누름까지 세면 «첫 카드까지 탭 12»가
+   *    조용히 13이 돼요. T-7이 지키는 것은 **카드 「앞」**의 조작량입니다. */
+  const arrive = { hasMoment: momentUp(), btnLive: btnLive(), screen: h.active(), taps: h.taps() };
+  /* 🔴 **버튼이 살아 있을 때만 누릅니다** — 없는 버튼을 `press`가 던지면 이 검사가
+   *    빨간불이 아니라 **💥 죽음**이 되어 «안 돈 것»과 구분이 안 돼요. */
+  const pressed = arrive.btnLive;
+  if (pressed) h.press(nextBtn(), "🏁 경기 시작");
+  const after = { hasMoment: momentUp(), screen: h.active(), pressed };
   const r = {
-    seen, pre, kid, taps: h.taps(), screen: h.active(),
+    seen, pre, kid, taps: arrive.taps, screen: arrive.screen,
     stage: (h.D.getElementById("screen-town") || { dataset: {} }).dataset.stage,
-    hasMoment: !!(cardBox && cardBox.querySelector('[class*="w2m-"]')),
+    arrive, after,
     own: own.map((el) => el.id || el.className),
   };
   h.close();
@@ -258,11 +280,12 @@ async function runT7(muts) {
   const sameList = r.pre.length === PRE_CARD_SCREENS.length
     && r.pre.every((id, i) => id === PRE_CARD_SCREENS[i]);
   check(r.pre.length === DECISIONS_BEFORE_CARD && sameList
-    && r.screen === "screen-town" && r.stage === "e" && r.hasMoment,
+    && r.screen === "screen-town" && r.stage === "e",
     `T-7. ⏱️ **첫 순간 카드 「앞」의 결정이 ${DECISIONS_BEFORE_CARD}개다** — ✏️ 이름 · 🦶 주발 · 🗺️ 동네`
     + `\n     지나온 화면: ${r.seen.join(" → ")}`
     + `\n     카드 앞의 결정 ${r.pre.length}개 (${r.pre.join(" · ")}) · 탭 ${r.taps}회`
-    + `\n     도착 화면 ${r.screen}[data-stage="${r.stage}"] · 순간 카드 ${r.hasMoment ? "떴어요" : "🔴 안 떴어요"}`
+    + `\n     도착 화면 ${r.screen}[data-stage="${r.stage}"]`
+    + `\n     🔑 「카드가 언제 뜨는가」는 **T-7b**가 봅니다 — 성질이 달라 안 묶었어요`
     + `\n     🧒 해마다 누른 것 [${r.kid.map((k) => k == null ? "🔴안누름" : k).join(" ")}]`
     + (sameList
       ? `\n     🔑 목록에 🎯 자리가 **있습니다** — 2026-09-03에 자리가 🧒 초4 뒤로 왔거든요.`
@@ -274,6 +297,38 @@ async function runT7(muts) {
     `T-7a. 🔒 🏫 학교 화면의 조작은 **진행 버튼 하나뿐**이다 — 건너뛰기·난이도·재도전이 없다`
     + `\n     화면 직속 조작: ${r.own.length ? r.own.join(" · ") : "(없음)"}`
     + (r.own.length === 1 ? "" : `\n     🔴 결정을 늘리는 버튼이 붙었어요 — v2의 정체(내가 개입하는 순간)를 건너뛰는 버튼입니다`));
+  /* ══════════════════════════════════════════════════════════════
+   * 🏁 T-7b. **들어서면 카드가 없고, 눌러야 뜬다** (2026-09-04 · 범민 님 · 142번)
+   * ══════════════════════════════════════════════════════════════
+   * 🔴 **이 자리에 있던 문장이 정확히 뒤집혔습니다.** 어제까지 T-7은
+   *    *"도착 직후에 순간 카드가 **떠 있다**"*(`hasMoment`)를 지켰는데, 그게 바로
+   *    범민 님이 없애 달라신 동작이에요 — *"초5되자마자 바로 시작되네"*.
+   *    🔑 그러니 **지우는 게 아니라 뒤집습니다.** 그리고 뒤집는 김에 **더 세게** —
+   *    「없다」만 재면 **미니게임이 안 실려도 초록불**이라(「환경이 우연히 막아 줌」),
+   *    **눌렀더니 떴다**까지 한 문장 안에서 같이 봅니다.
+   *
+   * 🔴 **버튼 글자를 안 봅니다.** *"🏁 경기 시작"*이라고 적혀 있는지로 가르면
+   *    문구가 바뀌는 날 조용히 죽어요. 보는 것은 **누르기 전 0장 · 누른 뒤 1장**입니다.
+   * 🔒 **자동 진행을 안 켠 채로 잽니다** — 진짜 미니게임이 떠야 잴 게 있어요.
+   *
+   * 🌍 이 문장이 서 있는 세계:
+   *   「🏫 학교 화면의 조작이 **진행 버튼 하나뿐**이고(T-7a), 그 하나가 **카드 0번까지**
+   *   맡는 세계」입니다. 🔴 별도 id로 [경기 시작]을 따로 만들면 T-7a가 먼저 뒤집히고,
+   *   그때는 이 검사도 «어느 버튼을 눌러야 하는가»부터 다시 정해야 합니다.
+   *   반대로 「들어서자마자 굴러도 된다」는 판정이 다시 나오면 **이 줄이 옛 계약**이에요. */
+  const kickOK = r.after.pressed && r.arrive.hasMoment === false && r.after.hasMoment === true;
+  check(kickOK,
+    `T-7b. 🏁 **들어서면 순간 카드가 없고, 진행 버튼을 눌러야 뜬다** — 초5가 되자마자 굴러가지 않아요`
+    + `\n     도착 ${r.arrive.screen}: 카드 ${r.arrive.hasMoment ? "🔴 이미 떠 있어요" : "없어요 ✔"}`
+    + ` · 진행 버튼 ${r.arrive.btnLive ? "눌릴 수 있어요 ✔" : "🔴 안 눌려요"}`
+    + `\n     한 번 누른 뒤 ${r.after.screen}: 카드 ${r.after.hasMoment ? "떴어요 ✔" : "🔴 안 떴어요"}`
+    + (kickOK
+      ? `\n     🔑 **두 쪽을 같이 봅니다** — 「도착에 없다」만 재면 미니게임이 안 실려도 초록불이에요`
+      : !r.arrive.btnLive
+        ? `\n     🔴 도착했는데 누를 버튼이 없습니다 — 카드가 이미 굴러 버튼이 감춰졌거나 마크업이 낡았어요`
+        : r.arrive.hasMoment
+          ? `\n     🔴 **들어서자마자 굴렀습니다** — \`town.js\`의 \`kickoff()\`가 \`playCard()\`를 바로 부르고 있는지 보세요`
+          : `\n     🔴 눌렀는데 카드가 안 떠요 — 진행 버튼이 카드 0번을 안 맡고 있습니다`));
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -415,6 +470,33 @@ check(O.spots.every((s) => /×[\d.]+ → ×[\d.]+/.test(s)),
       : !walked
         ? `\n     🔴 되감은 뒤 흐름을 **끝까지 안 걸었습니다** — 이 상태의 초록불은 아무것도 안 지켜요`
         : `\n     🔴 🏫이 두 번 굴렀거나 한 번도 안 굴렀어요`));
+  /* ══════════════════════════════════════════════════════════════
+   * 🏁 T-7c. **한 단계의 누름 = 굴러간 카드 + 1** (드라이버가 정직한지 보는 자리)
+   * ══════════════════════════════════════════════════════════════
+   * 🔑 T-7b가 «사람이 보는 화면»을 본다면, 이 줄은 **드라이버의 셈**을 봅니다.
+   *    2026-09-04에 `_load.js`의 `passStage`가 **누름을 카드로 세서** T-5·T-6a·S-6·
+   *    S-6b·O-3·M-R **여섯이 한꺼번에** 빨간불이었어요. 덱은 한 장도 안 늘었는데요.
+   *    🔒 그래서 이제 `passStage`는 `#town-prog`의 「끝난 점」이 늘었는지로 셉니다.
+   *
+   * 🔴 **이 관계가 두 방향을 다 막습니다:**
+   *    · 🏁 킥오프가 사라지면 → 누름이 카드와 **같아져** 빨간불
+   *    · `passStage`가 다시 「누름 = 카드」로 돌아가면 → 카드가 3장으로 **불어나** 빨간불
+   *    한쪽만 재면 다른 쪽이 조용히 지나갑니다.
+   *
+   * 🌍 이 문장이 서 있는 세계:
+   *   「한 단계가 **[🏁 시작] → 카드 → … → [다음 단계]**로 굴러가고, 마지막 누름은
+   *   카드를 안 굴리는 세계」예요. 🔴 카드 「사이」에도 화면이 끼거나(하프타임 등)
+   *   마지막 누름이 카드를 하나 더 굴리게 되면 **이 +1이 옛말**입니다. */
+  const pressOK = R.stages.presses === R.stages.length + 1 && R.stages.kick === 1;
+  check(pressOK,
+    `T-7c. 🏁 **한 단계의 누름이 「굴러간 카드 + 1」이다** — 첫 누름이 카드 0번(🏁 경기 시작)이에요`
+    + `\n     🏫 초5: 누름 ${R.stages.presses}회 → 굴러간 카드 ${R.stages.length}장 [${R.stages.join("")}]`
+    + ` · 첫 누름이 킥오프였나 ${R.stages.kick === 1 ? "✔" : "🔴"}`
+    + (pressOK
+      ? `\n     🔑 \`passStage\`는 **버튼 글자를 안 봅니다** — \`#town-prog\`의 끝난 점이 늘었는지로 세요`
+      : R.stages.presses === R.stages.length
+        ? `\n     🔴 누름과 카드가 같아졌어요 — 🏁 킥오프가 사라졌거나, 마지막 누름이 카드를 굴립니다`
+        : `\n     🔴 셈이 안 맞아요 — \`_load.js\`의 \`passStage\`가 누름을 카드로 세고 있는지 보세요`));
 }
 
 /* 🚧 **T-6a-가드 — 알려진 상태입니다** (빨간불 아님 · 종료 코드에 안 셉니다)
@@ -765,6 +847,30 @@ else {
     + (r.pre.length > DECISIONS_BEFORE_CARD || r.pre.includes("screen-position")
       ? `\n     ✔ 결정이 ${DECISIONS_BEFORE_CARD}을 넘었어요 — 첫 카드가 그만큼 밀립니다`
       : `\n     🔴 자리를 앞으로 옮겼는데 초록불이에요 — T-7이 아무것도 안 지킵니다`));
+}
+
+/* 🧪🏁 M-K — 🏁 경기 시작을 없앰. **T-7b가 갈려야** 합니다.
+ * 🔑 그리고 **T-7·T-7a는 초록불로 남아야** 해요 — 결정 개수도, 버튼 개수도 안 건드리는
+ *    변이거든요. 셋이 같이 갈리면 T-7b가 「무엇을 지키는지」가 흐려집니다. */
+if (!mutOK("M_K_NOKICK")) check(false, `🧪 **변이 M-K — 🏁 경기 시작을 없앰**${MUT_DEAD}`);
+else {
+  const r = await runT7(MUT.M_K_NOKICK);
+  const broke = r.arrive.hasMoment === true;
+  const sameList = r.pre.length === PRE_CARD_SCREENS.length
+    && r.pre.every((id, i) => id === PRE_CARD_SCREENS[i]);
+  const t7Still = r.pre.length === DECISIONS_BEFORE_CARD && sameList && r.stage === "e";
+  check(broke,
+    `🧪🏁 **변이 M-K — 🏁 경기 시작을 빼고 들어서자마자 굴림** → T-7b가 빨간불`
+    + `\n     도착 ${r.arrive.screen}: 카드 ${r.arrive.hasMoment ? "🔴 이미 떠 있어요" : "없어요"}`
+    + ` · 진행 버튼 ${r.arrive.btnLive ? "눌려요" : "감춰졌어요(미니게임이 도는 중)"}`
+    + (broke
+      ? `\n     ✔ 범민 님이 없애 달라신 그 동작이 그대로 돌아왔어요`
+      : `\n     🔴 킥오프를 뺐는데 초록불이에요 — T-7b가 아무것도 안 지킵니다`));
+  check(t7Still,
+    `🧪 **변이 M-K → T-7(결정 ${DECISIONS_BEFORE_CARD}개)은 초록불로 남아야** 한다 — 킥오프는 결정이 아니에요`
+    + `\n     카드 앞의 결정 ${r.pre.length}개 (${r.pre.join(" · ")})`
+    + (t7Still ? `\n     🔑 성질이 다른 둘을 안 묶은 값어치예요 — 묶었으면 «킥오프가 죽었다»가 «탭 예산이 깨졌다»로 읽힙니다`
+      : `\n     🔴 T-7까지 같이 갈렸어요 — 둘이 섞여 있습니다`));
 }
 
 /* ---------- 마무리 ---------- */

@@ -558,19 +558,62 @@ function pickOrigin(W, press, id) {
   press(el, `🗺️ ${id}`);
   press(D.getElementById("btn-origin-next"), "🏫 초등부로");
 }
-/* 🏫 **지금 서 있는 그 단계**의 카드를 끝까지 누릅니다. 단계가 끝나면 화면이 바뀌므로
- * 저절로 멈춰요. 돌려주는 값: 지나간 카드 수와 카드마다 읽은 `data-stage`. */
+/* ═══════════════════════════════════════════════════════════════════════
+ * 🏫 **지금 서 있는 그 단계**를 끝까지 지나갑니다.
+ * ═══════════════════════════════════════════════════════════════════════
+ * 🔴 **돌려주는 것은 「누른 횟수」가 아니라 「굴러간 카드」입니다** (2026-09-04 · 142번).
+ *
+ * 🏁 [경기 시작]이 붙으면서 **누름 = 카드**가 깨졌어요. 이제 한 단계는
+ *      🏁 시작 → 카드 0 · [다음 판] → 카드 1 · … · [다음 단계] → **카드 없음**
+ *    이라 누름이 `deck.length + 1`이고, 옛 드라이버는 그걸 전부 카드로 세서
+ *    T-5 · T-6a · M-R · S-6 · S-6b · O-3 **여섯이 한꺼번에** 빨간불이 됐습니다.
+ *    🟢 덱은 한 장도 안 늘었어요 — 언제나 정확히 **선언 + 1**이었고,
+ *    `deal()`을 60,000판 굴리는 `school-test` S-7a는 그 내내 초록불이었습니다.
+ *
+ * 🔴 **버튼 글자로 가르지 않습니다.** *"🏁 경기 시작이면 세지 마라"*로 적으면
+ *    문구가 바뀌는 날 **조용히 죽습니다** — 이 저장소의 「문자열 매칭」 그 자리예요.
+ *    대신 **판이 실제로 움직였는지**를 봅니다: `#town-prog`의 「끝난 점」
+ *    (`.town-dot.hit`/`.mid`/`.bad`)이 그 누름으로 **늘었는가**.
+ *    🔑 이 점은 `progHTML(deck, i)`가 그리는 것이라 `state.cards`와 **다른 계수기**입니다 —
+ *      `T.cards()`로 세면 T-6a의 *"`stages`가 `ee`이고 `cards2`가 2"*가 **자기 자신과 비교**가 돼요.
+ *
+ * 🔒 **한 누름이 두 장을 굴리면 두 칸이 들어갑니다** (늘어난 만큼 넣어요).
+ *    이중 탭이 실제로 두 장을 태우는 날 「8장」이 그대로라 안 잡히면 안 되니까,
+ *    누름 수도 같이 돌려줍니다 — 배열에 얹은 `presses`·`kick`이 그거예요
+ *    (`join`·전개·`filter`는 그대로 도니 기존 호출부는 한 줄도 안 바뀝니다).
+ *
+ * 🌍 이 드라이버가 서 있는 세계:
+ *   「한 단계의 진행이 **버튼 하나**(`#btn-town-next`)로만 나아가고, 진행 상황이
+ *   `#town-prog`의 점으로 그려지는 세계」입니다. 점이 사라지거나 진행 버튼이
+ *   둘로 갈리면 **여기부터 다시 보세요** — 그때 `seen`은 조용히 빈 배열이 되고,
+ *   그건 T-5·S-6이 곧바로 빨간불로 알려 줍니다(조용히 통과하지 않아요).
+ *
+ * 돌려주는 값: 굴러간 카드마다 읽은 `data-stage`의 배열 (+ `presses` · `kick`) */
+const DONE_DOTS = "#town-prog .town-dot.hit, #town-prog .town-dot.mid, #town-prog .town-dot.bad";
 function passStage(W, press, max) {
   const D = W.document;
   const seen = [];
-  for (let g = 0; g < (max || 12); g++) {
+  const dots = () => D.querySelectorAll(DONE_DOTS).length;
+  let presses = 0, kick = 0;
+  for (let g = 0; g < (max || 16); g++) {
     const cur = D.querySelector(".screen.active");
     if (!cur || cur.id !== "screen-town") break;
     const b = D.getElementById("btn-town-next");
     if (!b || b.disabled || b.classList.contains("hidden")) break;
-    seen.push(cur.dataset.stage || "?");
+    const stage = cur.dataset.stage || "?";
+    const before = dots();
     press(b, "🏫 다음");
+    presses += 1;
+    const gained = dots() - before;
+    /* 🏁 첫 누름이 **카드 0번을 실제로 굴렸는가.** 「들어서자마자 굴러가지 않는다」의 증거예요.
+     * 🔴 **`gained > 0`을 반드시 같이 봅니다** — 굴린 게 없어도 킥오프로 세면
+     *    `presses 1 · 카드 0`인 죽은 흐름이 «누름 = 카드 + 1»을 **공짜로** 만족합니다
+     *    (자가 복구가 실패를 삼키는 자리). */
+    if (before === 0 && presses === 1 && gained > 0) kick = 1;
+    for (let k = gained; k > 0; k--) seen.push(stage);
   }
+  seen.presses = presses;
+  seen.kick = kick;
   return seen;
 }
 /* ═══════════════════════════════════════════════════════════════════════

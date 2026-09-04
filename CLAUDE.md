@@ -80,7 +80,7 @@ node tests/check-page-test.js    # 확인 페이지 시나리오 도달
 for t in tests/rookie/*.js; do node "$t"; done
 ```
 
-`tests/rookie/`(8) · `tests/soccer/`(63) · `tests/idol/`(16) · `tests/cloud/`(12) · `tests/winger2/`(31)
+`tests/rookie/`(8) · `tests/soccer/`(63) · `tests/idol/`(16) · `tests/cloud/`(12) · `tests/winger2/`(35)
 
 ### 초록불인데 아무것도 안 지키는 검사 — 열네 가지 모양이 나왔습니다
 
