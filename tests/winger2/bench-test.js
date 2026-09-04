@@ -509,14 +509,35 @@ const BASE = benchProbe(null, SEEDS, ROLLS_UI);
     + `\n     먼저 심는 것: ${Object.keys(pre).length ? Object.entries(pre).map(([k, v]) => `${k}=${v}`).join(" · ") : "없음"}`
     + (body ? "" : `\n     🔴 함수를 못 찾았어요 — 정규식을 고치세요 (이 검사는 지금 "안 돈" 상태입니다)`));
 
-  const h = boot(11, null, pre);
-  const skipped = [];
-  for (const sel of steps) {
-    const el = h.D.querySelector(sel);
-    if (!el) { skipped.push(sel); continue; }
-    el.click();                                   // make-fixtures는 click 한 번만 씁니다
+  /* ⏱️ 🧒 **어린 시절 네 화면은 `setTimeout(…, 620)`으로 넘어갑니다.**
+   *    `make-fixtures.js`는 통째로 동기라 `fastEcho()`로 **그동안만 타이머를 즉시 실행**으로
+   *    바꿔요. 🔒 **그 사실도 소스에서 읽습니다** — 여기 손으로 적으면 make-fixtures가
+   *    방식을 바꾼 날 이 재현본만 옛 길에 남아요(「도달 경로가 조용히 죽음」). */
+  const usesFastEcho = /fastEcho\(/.test(body ? body[1] : "");
+
+  /* 🔴 **`bootPage`의 `fastTimers`로는 안 됩니다** — 그건 `setTimeout(fn, 0)`이라 여전히
+   *    **비동기**예요. 이 재현본은 통째로 동기라 한 틱도 안 넘깁니다(실측: 그래도 `childPicks`가
+   *    `[]`). `fastEcho`처럼 **그 자리에서 부르는** 것만 통합니다. */
+  function replay(sync) {
+    const h = boot(11, null, pre);
+    const realST = h.W.setTimeout;
+    if (sync) h.W.setTimeout = function (fn) { if (typeof fn === "function") fn(); return 0; };
+    const skipped = [];
+    for (const sel of steps) {
+      const el = h.D.querySelector(sel);
+      if (!el) { skipped.push(sel); continue; }
+      el.click();                                   // make-fixtures는 click 한 번만 씁니다
+    }
+    if (sync) h.W.setTimeout = realST;
+    const St = (h.W.WingerCareer && h.W.WingerCareer._t) ? h.W.WingerCareer._t.state() : null;
+    const out = { landed: h.active(), skipped,
+      picks: (St && St.childPicks) || null, schoolN: St ? St.schoolN : null };
+    h.close();
+    return out;
   }
-  const landed = h.active();
+  const G = replay(usesFastEcho);
+  const skipped = G.skipped;
+  const landed = G.landed;
   check(landed === "screen-main",
     `G-1. 🧰 그 순서를 그대로 눌러 **육성 화면에 닿는다** (닿은 곳: ${landed})`
     + (landed === "screen-main" ? "" :
@@ -541,7 +562,53 @@ const BASE = benchProbe(null, SEEDS, ROLLS_UI);
       + ` \`check-page-test\`도 \`_check.html\`도 통과합니다`
       + `\n     🔒 그래서 이 줄은 **❌(종료 1)로 둡니다** — 🚧로 낮추면 픽스처가 낡아 가는 걸`
       + ` 아무도 안 보게 돼요. 고치면 그날 초록불이 됩니다`));
-  h.close();
+
+  /* ══════════════════════════════════════════════════════════════
+   * G-2. 🧒 **「닿았는가」가 아니라 「지나왔는가」** (2026-09-04 · 139번)
+   *
+   * 🔴 **G-1만으로는 🧒 어린 시절을 통째로 건너뛰고도 초록불입니다.** 실측:
+   *      childPicks=[] · schoolN=8 · 닿은 곳=screen-main · 건너뛴 선택자 5개
+   *    초1을 누르면 620ms 뒤에야 초2 화면이 생기는데, 동기로 줄줄이 누르면 초2~초4가
+   *    **DOM에 아예 없어서** `querySelector`가 null → 조용히 건너뜁니다. 그런데
+   *    `#position-list`는 정적 마크업이라 **그다음 줄이 흐름을 끝까지 밀어요.**
+   *    👉 **「자가 복구가 실패를 삼킴」**입니다 — 도달만 재면 아무것도 안 눌러도 통과예요.
+   *
+   * 🔒 **`schoolN`은 이 사고의 감지기가 아닙니다** — 어린 시절을 통째로 건너뛴 위 실측에서도
+   *    **8이었어요.** 감지기는 `childPicks`입니다. `schoolN`은 「학교 카드를 실제로 굴렸나」만
+   *    봐요(옛 세이브 중립값 3보다 크다). 🔴 **정확한 8은 `town-test.js` T-5가 정본**이라
+   *    여기 두 번째로 박지 않습니다 — designer가 카드 수(2/3/3)를 만지는 날 두 곳이 갈라져요.
+   * ══════════════════════════════════════════════════════════════ */
+  const CHILD_YEARS = 4;          // 🔒 문턱은 여기 박습니다 (`_load.js`의 CHILD_SCREENS와 같은 수)
+  const OLD_SAVE_CARDS_NEUTRAL = 3;   // 📀 옛 세이브의 중립 카드 수 — 이보다 커야 학교를 굴린 거예요
+  const walked = Array.isArray(G.picks) && G.picks.length === CHILD_YEARS;
+  const schooled = typeof G.schoolN === "number" && G.schoolN > OLD_SAVE_CARDS_NEUTRAL;
+  check(walked && schooled,
+    `G-2. 🧒 그 순서가 **어린 시절 ${CHILD_YEARS}해를 실제로 지나온다**`
+    + ` — \`childPicks\` [${(G.picks || []).join(", ") || "(빈 배열)"}] · \`schoolN\` ${G.schoolN}`
+    + (walked && schooled ? "" :
+      (!walked
+        ? `\n     🔴 **어린 시절을 안 지났습니다** — 만들어지는 픽스처의 🔑 초1~초4 선택이 통째로 빠져요.`
+          + ` 🧬 잠재력(\`TAL_SHIFT\`)·🎯 집중(\`FOCUS_W_HELD\`)·📐 천장(\`CHILD_CAP_STEP\`)이 전부 그 값을 봅니다`
+        : "")
+      + (!schooled ? `\n     🔴 **학교 카드를 안 굴렸습니다** — \`schoolN\`이 ${G.schoolN}이에요` : "")
+      + `\n     👉 \`make-fixtures.js\`의 \`fastEcho()\`(620ms 타이머를 **그 자리에서** 실행) 배선을 보세요`));
+
+  /* 🧪 **G-2가 공짜 초록불이 아니라는 증거** — 같은 순서를 **동기 타이머 없이** 누르면
+   *    닿는 곳은 그대로 `screen-main`인데 어린 시절은 통째로 빠집니다.
+   * 🔒 `fastEcho`를 안 쓰는 흐름으로 바뀌면 이 대조가 뜻을 잃으므로 그때는 안 돌립니다. */
+  if (!usesFastEcho) {
+    console.log(`🔎 G-2-대조. \`newPlayer()\`가 이제 \`fastEcho\`를 안 씁니다 — 이 대조는 뜻이 없어 건너뜁니다`);
+  } else {
+    const N = replay(false);
+    const bit = !(Array.isArray(N.picks) && N.picks.length === CHILD_YEARS);
+    check(bit,
+      `G-2-대조. 🧪 **동기 타이머 없이** 같은 순서를 누르면 → G-2가 빨간불`
+      + ` (닿은 곳 **${N.landed}** · \`childPicks\` [${(N.picks || []).join(", ") || "(빈 배열)"}]`
+      + ` · \`schoolN\` ${N.schoolN} · 건너뛴 선택자 ${N.skipped.length}개)`
+      + (bit
+        ? `\n     🔑 **닿는 곳은 똑같이 \`${N.landed}\`입니다** — 그래서 G-1만으로는 아무것도 안 지켰어요`
+        : `\n     🔴 타이머를 안 뭉갰는데도 ${CHILD_YEARS}해가 다 눌렸어요 — G-2가 아무것도 안 지킵니다`));
+  }
 }
 
 W0.close();

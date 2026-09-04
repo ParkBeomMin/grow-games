@@ -449,10 +449,46 @@ const FX = (() => {
   return (win.CHECK_FIXTURES || { items: [] }).items.filter((x) => x.game === "winger2");
 })();
 
+/* ═══════════════════════════════════════════════════════════════════════
+ * 📀 **옛 세이브 표본은 이 검사가 스스로 만듭니다** (2026-09-04 · 139번 판정)
+ * ═══════════════════════════════════════════════════════════════════════
+ * 🔴 **그전에는 `beta/_fixtures.js`를 그대로 「옛 세이브」로 썼습니다** — 그 파일이
+ *    지금 디스크에 **우연히 낡아 있어서** 통했던 거예요. 픽스처를 다시 뽑는 날
+ *    T-3a가 빨간불이 되고 T-3b·T-3c·T-3d는 **최신 세이브를 재게** 됩니다.
+ *    👉 **「낡아야 초록불」인 검사는 언젠가 반드시 깨집니다.**
+ *
+ * ⚠️ 게다가 그 파일의 계약은 「**최신**」이에요 — `_check.html`과 `check-page-test`가
+ *    **지금 화면을 그리는 데** 씁니다. 한 파일이 「최신」과 「낡음」을 동시에 질 수 없습니다.
+ *
+ * 🔧 그래서 **읽어 온 세이브에서 새 칸 셋을 지워** 표본을 만듭니다. 「무엇이 없으면
+ *    옛 세이브인가」가 이 파일에 적히고, 픽스처가 최신이 돼도 안 죽어요.
+ *    🔒 세이브는 `{ 슬롯id: 상태 }` 모양이라 **슬롯 안쪽까지** 들어가서 지웁니다.
+ * 🔒 **이름이 소스와 맞는지 T-3-0이 먼저 봅니다** — 칸 이름이 바뀌면 지울 게 없어져서
+ *    이 검사가 조용히 「최신 세이브를 옛 세이브라고 부르는」 상태가 되거든요. */
+const OLD_FIELDS = ["townScore", "schoolN", "spotMul"];   // 🔒 문턱은 여기 박습니다
+
+/* 세이브 문자열에서 위 칸들을 지운 사본을 돌려줘요. 지운 개수도 같이 셉니다. */
+function stripNew(keys) {
+  const out = {};
+  let removed = 0;
+  for (const [k, v] of Object.entries(keys || {})) {
+    let o = null;
+    try { o = JSON.parse(v); } catch (e) { o = null; }
+    if (!o || typeof o !== "object") { out[k] = v; continue; }
+    /* 슬롯 컨테이너({ 슬롯id: 상태 })든 상태 하나든 **양쪽 다** 훑습니다 */
+    const targets = [o].concat(Object.values(o).filter((x) => x && typeof x === "object" && !Array.isArray(x)));
+    for (const t of targets) {
+      for (const f of OLD_FIELDS) if (t[f] !== undefined) { delete t[f]; removed += 1; }
+    }
+    out[k] = JSON.stringify(o);
+  }
+  return { keys: out, removed };
+}
+
 function runT3(muts) {
   const rows = [];
   for (const it of FX) {
-    const h = boot({ keys: it.keys, muts, seed: SEEDS[0] });
+    const h = boot({ keys: stripNew(it.keys).keys, muts, seed: SEEDS[0] });
     h.press(h.D.getElementById("btn-continue"), "이어하기");
     const go = h.D.querySelector(".slot-modal .slot-go");
     h.press(go, "슬롯 열기");
@@ -475,13 +511,26 @@ function runT3(muts) {
   return rows;
 }
 {
+  /* 🔒 **T-3-0 — 지우는 칸 이름이 지금 소스에 실제로 있나.** 이름이 바뀌면 `stripNew`가
+   *    아무것도 안 지워서, 이 절이 **최신 세이브를 옛 세이브라고 부르게** 됩니다. */
+  const GSRC = fs.readFileSync(path.join(PAGE_DIR, "game.js"), "utf8");
+  const missing = OLD_FIELDS.filter((f) => !new RegExp(`S\\.${f}\\s*=`).test(GSRC));
+  check(missing.length === 0,
+    `T-3-0. 🔒 지우는 칸 ${OLD_FIELDS.length}개가 \`game.js\`에 **쓰는 줄로 실제 있다** (${OLD_FIELDS.join(" · ")})`
+    + (missing.length ? `\n     🔴 소스에 없는 칸: ${missing.join(" · ")} — 이름이 바뀌었어요.`
+      + ` \`OLD_FIELDS\`를 고치기 전까지 T-3a~d는 **아무것도 안 지킵니다**` : ""));
+
   const rows = runT3(null);
+  const strip = FX.map((it) => stripNew(it.keys).removed);
   check(rows.length > 0 && rows.every((r) => r.ok),
-    `T-3. 📀 옛 세이브 ${rows.length}종을 **이어하기 버튼으로** 열었다 (${rows.map((r) => r.id).join(" · ")})`);
+    `T-3. 📀 옛 세이브 ${rows.length}종을 **이어하기 버튼으로** 열었다 (${rows.map((r) => r.id).join(" · ")})`
+    + `\n     🔧 표본은 **이 검사가 만듭니다** — 픽스처에서 지운 칸 ${strip.join("+")}개`
+    + ` (${strip.every((n) => n === 0) ? "0이면 픽스처가 아직 낡은 상태예요 — 그래도 계약은 그대로 섭니다" : "픽스처가 이미 최신이라 지워서 옛 세이브를 만들었어요"})`);
   const noField = rows.every((r) => r.hadTown === false && r.hadN === false && r.hadMul === false);
   check(noField,
-    `T-3a. 📀 그 세이브들에 \`townScore\`·\`schoolN\`·\`spotMul\` 칸이 **없다** (= 진짜 옛 세이브다)`
-    + (noField ? "" : `\n     🔴 픽스처가 이미 새 칸을 갖고 있어요 — T-3b·T-3c가 아무것도 안 지킵니다`));
+    `T-3a. 📀 표본에 \`townScore\`·\`schoolN\`·\`spotMul\` 칸이 **없다** (= 옛 세이브 모양이다)`
+    + (noField ? "" : `\n     🔴 지웠는데도 칸이 남아 있어요 — \`stripNew\`가 세이브 모양을 못 따라갑니다`
+      + `\n     👉 세이브가 \`{ 슬롯id: 상태 }\`가 아닌 모양으로 바뀌었는지 보세요. T-3b·T-3c가 아무것도 안 지킵니다`));
   check(rows.every((r) => r.score === OLD_SAVE_SCORE),
     `T-3b. 📀 칸이 없는 세이브가 \`scoreOf\` **${OLD_SAVE_SCORE}점**으로 읽힌다`
     + `\n     ${rows.map((r) => `${r.id}:${r.score}점`).join(" · ")}`);
