@@ -2343,7 +2343,9 @@ function makeWinger2(kind) {
         st.condition = 34;
         P.get("save")();
         const L = Sq.myLine();
-        if (L.odds < 0.15 || L.odds > 0.45) throw new Error(`선발 확률이 구간 밖이에요 (${Math.round(L.odds * 100)}%)`);
+        /* 🔒 밴드가 넓은 건 헐거워서가 아니라 **`DEBUT_POOL = 3`이라 base가 52·57·62 셋**이라서예요.
+         * 옛 밴드(0.15~0.45)는 종합 70에서 **30시드 중 62%가 빗나갔습니다** — 이건 0.0%. */
+        if (L.odds < 0.10 || L.odds > 0.80) throw new Error(`선발 확률이 구간 밖이에요 (${Math.round(L.odds * 100)}%)`);
       } else if (!Sq.isStarter()) {
         throw new Error("이번 주가 벤치라 경기 화면을 못 봐요");
       }

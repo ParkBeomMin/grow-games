@@ -635,9 +635,13 @@ window.WingerSquad = (() => {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 
+  /* 🔴 **`pickWeight`로 봅니다 — `str`이 아니에요.** `rollLineup`·`startingXIOf`가 그걸 보는데
+   * 여기만 `str`이면 🌱 `YOUTH_BONUS`(18세 +18% … 21세 +5%)가 **화면 확률에서 통째로 빠집니다**.
+   * 실측: fw/62/Δ0 화면 52.4% ↔ 실제 71.8%, 최대차 **87.2%p**에 **부호까지 뒤집혀요**
+   * (20~21세는 낮게, 22+는 높게). `rank`도 같이 틀려 **감독 대사 갈래까지** 갈립니다 (138번). */
   function myLine() {
     const sq = ensureSquad();
-    const line = sq.filter((x) => x.pos === S.pos).sort((a, b) => b.str - a.str);
+    const line = sq.filter((x) => x.pos === S.pos).sort((a, b) => pickWeight(b) - pickWeight(a));
     const rank = line.findIndex((x) => x.me) + 1;
     const bonus = myBonus();
     const nextU = rngFrom(seedOf(line, bonus.total));
@@ -645,7 +649,7 @@ window.WingerSquad = (() => {
     const N = 1200;   // 씨앗이 고정이라 늘려도 공짜예요 — 1%p 안쪽으로 잡힙니다
     for (let i = 0; i < N; i++) {
       const roll = line
-        .map((x) => ({ x, v: x.str + (nextU() * 2 - 1) * FORM_SWING + (x.me ? bonus.total : 0) }))
+        .map((x) => ({ x, v: pickWeight(x) + (nextU() * 2 - 1) * FORM_SWING + (x.me ? bonus.total : 0) }))
         .sort((a, b) => b.v - a.v);
       if (roll.slice(0, FORMATION[S.pos]).some((e) => e.x.me)) hit++;
     }
