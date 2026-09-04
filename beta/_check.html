@@ -752,6 +752,9 @@
       { id: "decisive", emoji: "🏆", name: "후반 결승골", desc: "추가시간 · 색종이까지 터지는 최대 연출" },
       { id: "concede", emoji: "😣", name: "실점 · 수비 순간", desc: "회색 플래시 + 좌우 흔들림 · 🧱 수비 카드" },
       { id: "quiet", emoji: "😶", name: "내 순간 0회", desc: "능력치 70이면 실제로 일어나요 — 그때 뭐라고 적히는지" },
+      /* 🟩 축구판이 카드를 따라가는지 보는 칸이에요 — 골 · 실점 · 빗나감이 한 판에 다 옵니다.
+       * 🏫 `lite: true`는 학교 모드(배너·축포·타이핑 없음)라 **판과 피드만** 남습니다. */
+      { id: "school", emoji: "🟩", name: "🏫 학교 · 축구판", desc: "공이 골문 앞 → 골망 → 우리 진영으로 오갑니다 · 🧡 나는 큰 원 + 링" },
     ];
     const W2_DECK = {
       tight: {
@@ -809,6 +812,19 @@
           { min: 91, kind: "end", score: [0, 1], text: "삐— 경기 종료 휘슬" },
         ],
         tally: { mineCards: 2, mineSuccess: 1 },
+      },
+      /* 🟩 축구판 확인용 — 🏫 학교 대항전과 **같은 모양**입니다(카드 전부가 🔥 내 순간).
+       * 🔑 공이 가는 자리는 `match-scene.js`의 `BALL_RESULT`/`BALL_OPEN`/`BALL_LOST` 표가
+       *    정해요. 여기 세 카드가 그 표의 **세 갈래**를 다 지납니다:
+       *      골(97%) · 실점(3%) · `result` 없는 빗나감(64% — 공이 박스를 떠나요) */
+      school: {
+        cfg: { home: "우리 학교", away: "아라 중등부", myName: "김윙어", lite: true },
+        cards: [
+          { min: 23, kind: "goal", mine: true, moment: "oneone", stakeKey: "lead", by: "김윙어", goalBy: "김윙어", result: "goal", score: [1, 0], text: "⚽ 골!! 김윙어, 그물을 흔듭니다!" },
+          { min: 45, kind: "assist", mine: true, moment: "cutback", stakeKey: "clincher", by: "김윙어", score: [1, 0], text: "😖 패스는 갔는데 마무리가 안 됐어요" },
+          { min: 68, kind: "defend", mine: true, moment: "oneone", stakeKey: "holdLead", by: "김윙어", result: "concede", score: [1, 1], text: "😣 뚫렸어요… 실점" },
+        ],
+        tally: { mineCards: 3, mineSuccess: 1 },
       },
       quiet: {
         cfg: { home: "청록 유나이티드", away: "잿빛 시티", myName: "김윙어" },

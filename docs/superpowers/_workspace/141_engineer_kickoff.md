@@ -250,20 +250,29 @@ D는 **첫** 순간 카드까지만 잽니다. 🏫 중등·고등의 킥오프�
 `award` · `ceil-perfect` · `check-w2m` · `child-cap` · `child` · `engine` · `grade` · `league` ·
 `minigame-tap` · `moment` · `mutation` · `neutral` · `odds` · `one-grid` · `prospect` · `raf` ·
 `seed-split` · `tier-in` · **`town-neutral`** · **`wiring`** · `worldcup` ·
-`youth-ability` · `youth-card` · `youth-clamp` ✅ (**34종 중 34종**)
+`youth-ability` · `youth-card` · `youth-clamp` · **`youth-moment`** ✅
+
+### ✅ **winger2 검사 35종을 「전부」 돌렸습니다 — 32 초록불 · 3 빨간불(§5의 7항목)**
 
 🔑 `passArc`·`passStage`·`screen-town`을 **한 곳도 안 부르는** 파일들이라 원래 안 걸립니다
 (전 저장소 grep으로 확인 — §5의 7건이 **어긋난 것의 전부**예요).
 
-⚠️ **`youth-moment` 하나만 못 끝냈습니다 — 코드 때문이 아닙니다.**
-이 컨테이너의 메모리를 **다른 세션의 5일 된 node 프로세스들**(`apps-final.js`·`ybcost.js`·
-`apps-run.js`)이 잡고 있어서 (가용 300~600MB) `odds-test`가 한 번 **OOM으로 137**을
-받았고(혼자 다시 돌리니 **✅ 0**), 이것도 같은 이유로 계속 밀렸어요.
-🔒 **일괄 종료는 안 했습니다** (`grow-repo-ops` — `pgrep -x node`로 정리하다 세션의 MCP를
-죽인 전례). 남의 프로세스라 손 안 댔습니다.
-🔑 **`screen-town`을 안 부릅니다.** 그리고 `youth-moment`의 **B-0·B-2**(🦶 주발만
-뒤집어 난수 흐름을 견주는 검사)가 지키는 그 성질은 **§3에서 직접 쟀습니다** —
-시드 4개에서 난수 소비가 **바이트 단위로 동일**했어요. inspector가 한 번 돌려 확인해 주세요.
+🔑🔑 **`youth-moment`의 B-0·B-2가 초록불입니다** — §3의 난수 검증을 **검사가 독립으로
+확인해 준 자리**예요:
+```
+✅ B-0. 🎲 같은 시드에서 🦶만 뒤집으면 **카드 순서가 같다** (A/B가 성립하는 조건)
+✅ B-2. 🚪 유스 입구가 🦶 주발 · 🫀 컨디션 · 판정을 판에 넘긴다 (판이 열린 횟수 R 3 · L 3)
+```
+🔒 설계 §18-5가 콕 집어 경고한 *"난수를 몇 번 쓰는지가 카드 성적에 따라 달라지는"* 자리가
+**안 흔들렸습니다.**
+
+> ⚠️ 돌리는 동안 겪은 것 하나 — 이 컨테이너의 메모리를 **다른 세션의 5일 된 node
+> 프로세스들**(`apps-final.js`·`ybcost.js`·`apps-run.js`)이 잡고 있어서 가용이 300MB까지
+> 내려갔고, `odds-test`가 한 번 **OOM으로 137**을 받았습니다. **혼자 다시 돌리니 ✅ 0**이에요.
+> 🔴 **137은 빨간불이 아니라 「안 돌았음」입니다** — `_load.js`가 종료 코드를 셋으로 가른
+> 그 이유 그대로예요. 모아 돌릴 때 `❌ 실패 1건`으로 읽으면 안 됩니다.
+> 🔒 **일괄 종료는 안 했습니다** (`grow-repo-ops` — `pgrep -x node`로 정리하다 세션의 MCP를
+> 죽인 전례). 남의 프로세스라 손 안 댔어요.
 
 🔑 **`bench-test`가 §7의 `make-fixtures` 갱신을 그대로 확인해 줬습니다:**
 ```

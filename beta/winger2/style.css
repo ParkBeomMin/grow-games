@@ -799,19 +799,107 @@ button.pf-slot { cursor: pointer; font-family: inherit; }
 .w2-mine-count { color: var(--accent); }
 .w2-mine-count[hidden] { display: none; }
 
-/* 흐름 막대 — 옛 미니 필드(공이 무작위로 튀던 자리)를 대신해요.
- * 카드의 주인(우리 공격/상대 공격/중립)만 보여주는 정직한 한 줄입니다. */
-.w2-flow {
-  position: relative; height: 6px; margin-top: 6px; border-radius: 3px; overflow: hidden;
-  background: repeating-linear-gradient(90deg, var(--turf) 0 14px, var(--turf2) 14px 28px);
+/* ═══════════════════════════════════════════════════════════════════
+ * 🟩 축구판 — **카드를 따라가는 그림**입니다 (match-scene.js의 `setPitch`)
+ *
+ * 🕰️ 여기 있던 것은 6px짜리 「흐름 막대」였고, 그 앞에는 **공이 무작위로 튀던
+ *    미니 필드**였습니다. 막대는 정직했지만 «경기를 보고 있다»는 느낌이 안 났고,
+ *    옛 미니 필드는 느낌은 났지만 **거짓말**이었어요(카드와 아무 상관없이 튐).
+ * 🔑 이 판은 **둘 다** 합니다 — 자리는 전부 `card.kind`/`card.result`가 정하고,
+ *    화면은 그리로 **미끄러지기만** 해요.
+ *
+ * ⏱️ **`dt`도 rAF도 안 씁니다.** 움직임은 전부 `transition`이에요 — 검사 하네스의
+ *    가짜 시계(`cb(0)`)에서도 얼어붙을 게 없고, 자리는 언제나 인라인 `transform`에
+ *    적혀 있어 기계가 그대로 읽습니다.
+ *
+ * ① `transform`/`opacity`만 움직입니다 — 점 22개의 `left`를 애니메이션하면
+ *    저사양 폰에서 매 프레임 레이아웃이 다시 돕니다. 좌표는 **한 번 심고 끝**이에요.
+ * ② ♿ **색으로만 가르지 않습니다.** 완전 흑백에서도 갈려야 해요:
+ *      · 우리 편 = **꽉 찬** 작은 원        · 상대 = **속 빈** 원(테두리만)
+ *      · 나 = **가장 큰 원 + 바깥 링**      · 공 = 유일한 **흰 핵** + 혼자 움직임
+ *    🔴 색을 지워도(흑백) 채움·크기·링·움직임 넷이 남습니다.
+ * ③ ♿ 판은 `aria-hidden`이에요 — **같은 정보를 피드가 글로 이미 말합니다.**
+ * ═══════════════════════════════════════════════════════════════════ */
+.w2-pitch {
+  position: relative; margin-top: 7px; overflow: hidden;
+  height: clamp(76px, 25vw, 104px);
+  border-radius: 8px; border: 1px solid var(--line);
+  /* 🌱 잔디 줄무늬 + 중앙선 + 센터서클 — 배경 하나로 그려요(요소를 안 늘립니다) */
+  background:
+    radial-gradient(circle at 50% 50%, transparent calc(13% - 1px), rgba(255, 255, 255, .16) 13%, transparent calc(13% + 1px)),
+    linear-gradient(90deg, transparent calc(50% - .5px), rgba(255, 255, 255, .16) calc(50% - .5px), rgba(255, 255, 255, .16) calc(50% + .5px), transparent calc(50% + .5px)),
+    repeating-linear-gradient(90deg, var(--turf) 0 9%, var(--turf2) 9% 18%);
 }
-.w2-flow-mark {
-  position: absolute; left: 0; top: 0; bottom: 0; width: 34%;
-  border-radius: 3px; background: var(--accent); opacity: .8;
-  transform: translateX(97%);
-  transition: transform .45s cubic-bezier(.3, .8, .4, 1), background-color .3s;
+/* 🥅 골문 — 좌(우리) · 우(상대). 세로 막대 하나면 «저기가 골대»가 읽혀요 */
+.w2-mouth {
+  position: absolute; top: 30%; bottom: 30%; width: 5px;
+  border: 1px solid var(--cream); opacity: .55; border-radius: 2px;
 }
-.w2-flow-mark.def { background: var(--bad); }
+.w2-mouth.h { left: 1px; border-right: 0; }
+.w2-mouth.a { right: 1px; border-left: 0; }
+
+/* 🧍 한 팀 = 판과 같은 크기의 겹 하나. 전진·후퇴는 **겹 전체를 미는 것**이라
+ * 카드마다 바뀌는 `transform`이 **팀당 하나**입니다 (점마다가 아니라). */
+.w2-side {
+  position: absolute; inset: 0;
+  transition: transform .7s cubic-bezier(.3, .8, .4, 1);
+}
+.w2-dot {
+  position: absolute; width: 9px; height: 9px; margin: -4.5px 0 0 -4.5px;
+  border-radius: 50%; box-sizing: border-box;
+}
+/* 우리 편 — **꽉 찬** 원 */
+.w2-side.home .w2-dot { background: var(--good); }
+/* 상대 — **속 빈** 원. 흑백에서도 채움 여부로 갈립니다 */
+.w2-side.away .w2-dot { background: transparent; border: 2px solid var(--dim); }
+/* 🧤 골키퍼 — 둘 다 모서리를 죽여 둡니다(자리로도 읽히지만 모양을 하나 더 줍니다) */
+.w2-dot.gk { border-radius: 3px; }
+/* 🧡 나 — **가장 크고, 혼자 바깥 링을 두릅니다**
+ * 🐛 `.w2-dot.me`로만 적었더니 바로 위 `.w2-side.home .w2-dot`(특이도 0,2,1)에
+ *    **배경이 먹혀** 나도 우리 편과 같은 초록으로 렌더됐습니다. 렌더로만 보이는 흠이라
+ *    **겹 이름을 같이 적습니다.** ⚠️ `!important`로 이기지 마세요 — 다음 사람이 못 덮어요. */
+.w2-side.home .w2-dot.me {
+  width: 14px; height: 14px; margin: -7px 0 0 -7px;
+  background: var(--accent);
+  border: 2px solid var(--cream);
+  transition: transform .3s cubic-bezier(.2, 1.4, .4, 1);
+}
+/* 🔥 내 순간 — "지금 나한테 왔다"가 판에서도 읽혀야 해요 */
+.w2-pitch.mine .w2-dot.me { transform: scale(1.35); }
+
+/* ⚽ 공 — 겹이 판과 같은 크기라 `translate(84%, 40%)`가 곧 **판의 84% · 40%** 자리예요.
+ * (퍼센트가 자기 크기 기준이라는 함정을 이 겹 하나로 지웁니다.) */
+.w2-ball {
+  position: absolute; left: 0; top: 0; width: 100%; height: 100%;
+  pointer-events: none;
+  transition: transform .75s cubic-bezier(.25, .85, .35, 1);
+}
+.w2-ball b {
+  position: absolute; left: 0; top: 0;
+  width: 11px; height: 11px; margin: -5.5px 0 0 -5.5px;
+  border-radius: 50%; background: var(--cream);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, .55), 0 2px 4px rgba(0, 0, 0, .5);
+}
+
+/* 🕸️ 골망 — **골 카드가 왔을 때만** 흔듭니다. 여기서 골을 만들지 않아요 */
+.w2-pitch.net-a .w2-mouth.a, .w2-pitch.net-h .w2-mouth.h {
+  animation: w2Net .5s ease-out; opacity: 1;
+}
+@keyframes w2Net {
+  0% { transform: scaleX(1); } 35% { transform: scaleX(2.6); } 100% { transform: scaleX(1); }
+}
+.w2-pitch.net-a .w2-ball b, .w2-pitch.net-h .w2-ball b { animation: w2BallPop .5s ease-out; }
+@keyframes w2BallPop { 0% { transform: scale(1); } 40% { transform: scale(1.6); } 100% { transform: scale(1); } }
+
+/* 전진·후퇴 — 우리가 밀어붙이면 두 줄이 같이 상대 진영으로 갑니다.
+ * 🔒 숫자는 **CSS가 갖습니다**. JS는 「어느 쪽인가」만 켜요(클래스 둘).
+ * 🔴 **밀림폭과 `match-scene.js`의 골키퍼 x는 한 쌍입니다** — 밀림이 키퍼 자리보다
+ *    크면 `overflow:hidden`이 키퍼를 **통째로 잘라 먹습니다**(390px에서 실제로 났어요).
+ *    지금은 키퍼 10% > 밀림 7%라 최악이 3%(≈10px)로 판 안에 남습니다. */
+.w2-pitch.push-a .w2-side.home { transform: translateX(7%); }
+.w2-pitch.push-a .w2-side.away { transform: translateX(4%); }
+.w2-pitch.push-h .w2-side.home { transform: translateX(-7%); }
+.w2-pitch.push-h .w2-side.away { transform: translateX(-4%); }
 
 /* ---------- 아래 피드 ---------- */
 .w2-feed { padding: 10px 0 4px; display: flex; flex-direction: column; gap: 6px; }
@@ -898,10 +986,15 @@ button.pf-slot { cursor: pointer; font-family: inherit; }
  * 골 배너·스코어·중계 문구는 DOM에 있고 움직임만 사라집니다. */
 @media (prefers-reduced-motion: reduce) {
   .w2-card, .w2-half, .w2-goal, .w2-score.bump,
-  .w2-scene.shake, .w2-scene.shake-x, .pitch.goal-h::after, .pitch.goal-a::after {
+  .w2-scene.shake, .w2-scene.shake-x, .pitch.goal-h::after, .pitch.goal-a::after,
+  .w2-pitch.net-a .w2-mouth.a, .w2-pitch.net-h .w2-mouth.h,
+  .w2-pitch.net-a .w2-ball b, .w2-pitch.net-h .w2-ball b {
     animation: none !important;
   }
-  .w2-flow-mark { transition: none !important; }
+  /* 🟩 축구판 — **미끄러지는 것만** 끕니다. 자리는 그대로 «그 자리»로 갑니다:
+   *    공이 상대 골망에 있고 우리 줄이 밀고 올라간 그림이 **한 프레임에** 서요.
+   *    🔴 판을 통째로 숨기지 않습니다 — 움직임이 정보를 갖고 나가면 안 돼요. */
+  .w2-side, .w2-ball, .w2-dot.me { transition: none !important; }
   .w2-flash { display: none !important; }
   .w2-typing .w2-body::after { display: none; }
 }

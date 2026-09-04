@@ -205,12 +205,88 @@ window.W2Scene = (() => {
     if (min == null) return;
     S.clockEl.textContent = min > 90 ? `⏱ 90+${min - 90}'` : `⏱ ${min}'`;
   }
-  const SIDE = { goal: "atk", assist: "atk", defend: "def", filler: "mid" };
-  function setFlow(card) {
-    const side = card.result === "concede" ? "def" : (SIDE[card.kind] || "mid");
-    // transform만 움직여요 — left를 애니메이션하면 매 프레임 레이아웃을 다시 돌립니다
-    S.flowEl.style.transform = `translateX(${side === "atk" ? 194 : side === "def" ? 0 : 97}%)`;
-    S.flowEl.classList.toggle("def", side === "def");
+  /* ══════════════════════════════════════════════════════════════════
+   * 🟩 **축구판** — 카드를 **따라가는 그림**입니다 (경기를 만들지 않아요)
+   * ══════════════════════════════════════════════════════════════════
+   * 🔴 원칙 ①의 자리입니다. 동그라미와 공은 **`card.kind`/`card.result`가 정한 자리로
+   *    갑니다.** 공이 우리 골대로 갔으니 실점이 아니라, **실점 카드가 왔으니 공이
+   *    거기 있는** 거예요. 여기서 굴리는 것도, 세는 것도, 뒤집는 것도 없습니다.
+   *
+   * ⏱️ **`dt`도 `requestAnimationFrame`도 안 씁니다.** 움직임은 전부 CSS `transition`이라
+   *    하네스의 가짜 시계(`cb(0)`)에서도 **얼어붙을 게 없어요** — 자리는 언제나 인라인
+   *    `transform`에 적혀 있고, 검사는 그 값을 그대로 읽습니다.
+   *    (CLAUDE.md 열두째 유형 — `raf-test.js`가 지키는 그 함정입니다.)
+   *
+   * 🖼️ **판은 `mount()`에서 한 번만 그립니다.** 카드마다 다시 그리면 피드가 길어질수록
+   *    느려져요. 카드마다 바뀌는 건 **클래스 두 개와 `transform` 하나**뿐입니다.
+   *
+   * ♿ **색으로만 가르지 않습니다** — 완전 흑백에서도 갈려야 해요:
+   *      우리 편 = 꽉 찬 작은 원 · 상대 = **속 빈** 원(테두리만) · 나 = **가장 큰 원 + 바깥 링**
+   *    공은 유일하게 **흰 핵**을 갖고 **혼자 움직입니다.**
+   * ♿ 판은 `aria-hidden`이에요 — **같은 정보를 피드가 글로 이미 말합니다.**
+   *    낭독에 두 번 읽히면 중계가 두 겹으로 들려요. */
+
+  /* 🧍 포메이션 — 판 **폭·높이의 %**. x 0 = 우리 골라인 · 100 = 상대 골라인.
+   * 🔒 4-4-2를 다 그리지 않습니다. 320px에서 22개가 서면 점이 서로 붙어 죽이 돼요.
+   *    한 줄에 하나씩만 세워 **누가 앞이고 누가 뒤인지**만 읽히게 했습니다. */
+  /* 🐛 **골키퍼가 판 밖으로 나갔습니다** — 렌더로만 보인 흠이에요(390·320 실측).
+   *    처음엔 `gk`가 x 7%였는데 `push-h`(우리 진영으로 밀림)가 −9%라 **−2%**가 되어,
+   *    390px에서 왼쪽 −10.3 ~ −1.3px — **통째로 잘렸습니다**. 하필 실점 카드마다요:
+   *    🔴 **키퍼가 가장 필요한 순간에만 사라지는** 그림이었어요.
+   *    🔒 그래서 골키퍼는 **밀림폭보다 안쪽**에 세웁니다 (10% > 7%). 밀림을 키우려면
+   *       `style.css`의 `push-*`와 여기를 **같이** 보세요 — 둘이 한 쌍입니다. */
+  const FORM_H = [[10, 50, " gk"], [24, 25, ""], [24, 75, ""], [42, 50, ""], [63, 27, ""]];
+  const FORM_A = [[90, 50, " gk"], [77, 27, ""], [77, 73, ""], [58, 50, ""], [37, 67, ""]];
+  const ME_AT = [64, 76];      // 🧡 나 — 윙어라 측면 깊은 자리
+
+  /* ⚽ **공이 어디로 가는가 — 표 하나가 전부입니다.** [x, y, 어느 진영으로 밀리나]
+   * 🔒 `card.result`(엔진이 채운 값)를 그대로 읽습니다. `y`가 `null`이면 아래에서 흔들어요. */
+  /* 🐛 y를 **골키퍼와 갈라 둡니다** — 처음엔 골·실점 둘 다 y 46%였는데, 키퍼도 50%라
+   *    공이 **키퍼 위에 정확히 포개져** «키퍼가 잡았다»처럼 보였어요(390px 흑백 실측).
+   *    골은 **위 구석**(28%)으로 넣습니다 — 골문 안이고, 키퍼와 20px 떨어져요. */
+  const BALL_RESULT = {
+    goal:    [97, 28, "a"],    // 🥅 상대 골망 — 위 구석
+    assist:  [97, 28, "a"],
+    shot:    [86, 50, "a"],    // 키퍼 정면 — 골문 앞에서 막혔어요
+    save:    [18, 50, "h"],    // 🧱 걷어냈어요
+    concede: [3, 28, "h"],     // 😣 우리 골망 — 위 구석
+  };
+  /* 판정 **전**(무엇이 걸렸나) — 아직 결과가 없으니 「걸린 자리」에 공을 둡니다 */
+  const BALL_OPEN = { goal: [79, null, "a"], assist: [71, null, "a"], defend: [21, null, "h"] };
+  /* 판정 **뒤인데 `result`가 없는 카드** — 😖 «발 끝에 안 걸렸어요» / 🧱 «걷어냅니다»예요.
+   * 🐛 이게 없으면 `BALL_OPEN`으로 떨어져 **공이 골문 앞에 그대로 서 있습니다** —
+   *    390px 실측에서 «발 끝에 안 걸렸어요»인데 공이 79%(상대 박스)였어요.
+   *    기회가 **끝났다**는 것이 판에서도 보여야 합니다: 공이 박스를 떠나 중앙으로 돌아와요.
+   * 🔒 그래도 **결과를 만들지 않습니다** — 「무슨 일이 있었나」는 여전히 `card.result`가 정하고,
+   *    없다는 사실 자체를 그리는 것뿐이에요. */
+  /* 🔒 x는 **우리 편 점 사이의 빈자리**로 골랐어요 — 63%(공격수)·42%(중원)에 겹치면
+   *    공이 점 뒤로 숨습니다(390px 실측에서 64%가 공격수와 포개졌어요). */
+  const BALL_LOST = { goal: [56, null, ""], assist: [52, null, ""], defend: [40, null, ""] };
+
+  function setPitch(card, phase) {
+    if (!S || !S.pitchEl) return;
+    const r = card.result;
+    let at = (phase !== "open" && r && BALL_RESULT[r])
+      || (phase === "close" && BALL_LOST[card.kind])
+      || BALL_OPEN[card.kind] || null;
+    /* 🥅 킥오프·하프타임·휘슬은 **센터서클**이에요 — 아무 데도 안 걸려 있습니다 */
+    if (!at && (card.kind === "kick" || card.kind === "half" || card.kind === "end")) at = [50, 50, ""];
+    /* 🌫️ 그 밖(전개 카드)은 가운데 언저리에서 흔들립니다. 🔒 굴림은 **연출 전용 난수원**이에요 */
+    if (!at) at = [38 + fxRnd() * 24, null, ""];
+    const y = at[1] == null ? 26 + fxRnd() * 48 : at[1];
+    S.ballEl.style.transform = `translate(${at[0].toFixed(1)}%, ${y.toFixed(1)}%)`;
+    S.pitchEl.classList.toggle("push-a", at[2] === "a");
+    S.pitchEl.classList.toggle("push-h", at[2] === "h");
+    /* 🧡 **내 순간에는 내 동그라미가 커집니다** — "지금 나한테 왔다"가 판에서도 읽혀야 해요 */
+    S.pitchEl.classList.toggle("mine", !!card.mine && phase !== "close");
+    /* 🕸️ 골망 흔들림 — **골 카드가 왔을 때만.** 여기서 골을 만들지 않습니다 */
+    const net = phase === "open" ? null : r === "goal" || r === "assist" ? "net-a" : r === "concede" ? "net-h" : null;
+    S.pitchEl.classList.remove("net-a", "net-h");
+    if (net && !reduced()) {
+      void S.pitchEl.offsetWidth;
+      S.pitchEl.classList.add(net);
+      setTimeout(() => { if (S && S.pitchEl) S.pitchEl.classList.remove(net); }, 700);
+    }
   }
 
   /* ---------- 타이핑 (순간 카드만) ---------- */
@@ -307,6 +383,22 @@ window.W2Scene = (() => {
     return card.mine ? "mine" : "mate";
   }
 
+  /* 🟩 판을 **한 번만** 짓습니다 (위 setPitch 머리말).
+   * 🔒 좌표는 인라인 `left`/`top`이지만 **다시는 안 건드립니다** — 움직이는 건 그 위의
+   *    `transform`뿐이라 레이아웃이 다시 안 돌아요. */
+  function dotsHTML(form, extra) {
+    return form.map(([x, y, k]) => `<i class="w2-dot${k}${extra || ""}" style="left:${x}%;top:${y}%"></i>`).join("");
+  }
+  function pitchHTML() {
+    return `<div class="w2-pitch" aria-hidden="true">`
+      + `<span class="w2-mouth h"></span><span class="w2-mouth a"></span>`
+      + `<span class="w2-side away">${dotsHTML(FORM_A)}</span>`
+      + `<span class="w2-side home">${dotsHTML(FORM_H)}`
+      + `<i class="w2-dot me" style="left:${ME_AT[0]}%;top:${ME_AT[1]}%"></i></span>`
+      + `<span class="w2-ball" style="transform:translate(50%,50%)"><b></b></span>`
+      + `</div>`;
+  }
+
   /* ---------- 공개 API ---------- */
   function mount(host, cfg) {
     const c = cfg || {};
@@ -325,7 +417,7 @@ window.W2Scene = (() => {
             <span class="w2-clock">⏱ 0'</span>
             <span class="w2-mine-count" hidden></span>
           </div>
-          <div class="w2-flow"><span class="w2-flow-mark"></span></div>
+          ${pitchHTML()}
         </div>
         <div class="w2-feed"></div>
       </div>`;
@@ -333,7 +425,7 @@ window.W2Scene = (() => {
     S = {
       root: q(".w2-scene"), topEl: q(".w2-top"), scoreEl: q(".w2-score"),
       clockEl: q(".w2-clock"), mineEl: q(".w2-mine-count"),
-      flowEl: q(".w2-flow-mark"), feed: q(".w2-feed"),
+      pitchEl: q(".w2-pitch"), ballEl: q(".w2-ball"), feed: q(".w2-feed"),
       h: 0, a: 0, mine: 0, fast: false, lite: !!c.lite, myName: c.myName || "나",
       slot: null, pending: null, myGoals: [],
     };
@@ -366,7 +458,7 @@ window.W2Scene = (() => {
     await wait(delayOf());
     if (!alive(my)) return;
     setClock(card.min);
-    setFlow(card);
+    setPitch(card, "plain");
 
     if (card.kind === "half") {
       /* 세 값이 다 없으면 "점유 —% · 슛 —"처럼 빈 칸을 늘어놓지 않아요.
@@ -416,7 +508,7 @@ window.W2Scene = (() => {
     await wait(delayOf());
     if (!alive(my)) return null;
     setClock(card.min);
-    setFlow(card);
+    setPitch(card, "open");
     setScore(card.score);
     S.pending = card;
     S.mine += 1;
@@ -441,6 +533,11 @@ window.W2Scene = (() => {
     const my = S;
     S.pending = null;
     if (S.slot) { S.slot.remove(); S.slot = null; }
+    /* 🟩 🐛 여기가 빠져 있었습니다 — 판정이 끝났는데 **공이 「걸린 자리」에 그대로** 있었어요.
+     *    실점 카드가 왔는데 공은 상대 진영 71%에 서 있었습니다(390px 실측).
+     *    🔑 `push`(그 밖의 카드) · `openMoment`(무엇이 걸렸나) · `closeMoment`(결과)
+     *    **셋 다** `setPitch`를 지나야 판이 카드를 따라갑니다. */
+    setPitch(card, "close");
     setScore(card.score);
     const cls = card.result === "goal" || card.result === "assist" || card.result === "save" ? "good"
       : card.result === "concede" ? "bad" : "";
