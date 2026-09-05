@@ -3,7 +3,7 @@
  * 몬테카를로로 세 가지를 재요:
  *   ① 득점 환경 — 팀·경기당 평균 ~4.6점
  *   ② 팀 승률 ↔ 전력 — 강팀이 더 이기고 30~70% 범위
- *   ③ 개인 시즌 1위권 수치가 현재 눈금(RACE_ANCHOR)에 맞는지
+ *   ③ 개인 시즌 1위권 수치가 아케이드 눈금에 맞는지 (이 파일 ③이 그 눈금의 정본이에요)
  *      (타율 ~.335 · 홈런 ~48 · 도루 ~70 · 안타 ~185 / 다승 ~15 · 탈삼진 ~415 · 자책 ~2.5 · 세이브 ~42)
  *
  * 전역 Math.random을 쓰면 안 돼요(자체 시드). 산식은 sim.js에서 직접 불러 굴려요.
@@ -70,7 +70,7 @@ check(avg(topWin) >= 0.58 && avg(topWin) <= 0.75, `1위 팀 승률이 58~75%다 
 check(avg(botWin) >= 0.25 && avg(botWin) <= 0.42, `꼴찌 팀 승률이 25~42%다 (${(avg(botWin) * 100).toFixed(0)}%)`);
 check(avg(strongWinAll) >= 0.55, `전력 1위 팀이 상위권 승률을 낸다 (${(avg(strongWinAll) * 100).toFixed(0)}%)`);
 
-// ③ 개인 시즌 1위권이 현재 눈금(RACE_ANCHOR)에 맞는지 (±20% 정도 허용 — 눈금만 맞으면 돼요)
+// ③ 개인 시즌 1위권이 아케이드 눈금에 맞는지 (±20% 정도 허용 — 눈금만 맞으면 돼요)
 const near = (v, target, tolLo, tolHi) => v >= target * tolLo && v <= target * tolHi;
 check(near(mean.hits, 185, 0.82, 1.18), `안타 1위권이 ~185 눈금이다 (${mean.hits.toFixed(0)})`);
 check(near(mean.hr, 48, 0.78, 1.25), `홈런 1위권이 ~48 눈금이다 (${mean.hr.toFixed(0)})`);
