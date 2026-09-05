@@ -41,11 +41,16 @@ Agent(subagent_type: "general-purpose", model: "opus", prompt: `
 
 | 에이전트 | subagent_type | 역할 | 주 스킬 | 출력 |
 |---|---|---|---|---|
-| grow-designer | `grow-designer` | 시스템 설계, 설계 문서 | — | `docs/superpowers/_workspace/1N_designer_*.md` |
-| grow-balancer | `grow-balancer` | 몬테카를로 실측, 계수 확정 | `grow-balance-sim` | `docs/superpowers/_workspace/2N_balancer_*.md` |
-| grow-engineer | `grow-engineer` | 게임 로직 구현, 등록 지점 | `grow-new-game`·`grow-repo-ops` | `beta/{slug}/` + `docs/superpowers/_workspace/3N_engineer_*.md` |
-| grow-director | `grow-director` | 경기 연출, 아바타, CSS | `grow-match-feel` | `beta/{slug}/style.css` 등 + `docs/superpowers/_workspace/3N_director_*.md` |
-| grow-inspector | `grow-inspector` | 테스트, 경계면 교차 비교 | `grow-test-writing` | `tests/{slug}/` + `docs/superpowers/_workspace/4N_inspector_*.md` |
+| grow-designer | `grow-designer` | 시스템 설계, 설계 문서 | — | `docs/superpowers/_workspace/{slug}/1N_designer_*.md` |
+| grow-balancer | `grow-balancer` | 몬테카를로 실측, 계수 확정 | `grow-balance-sim` | `docs/superpowers/_workspace/{slug}/2N_balancer_*.md` |
+| grow-engineer | `grow-engineer` | 게임 로직 구현, 등록 지점 | `grow-new-game`·`grow-repo-ops` | `beta/{slug}/` + `docs/superpowers/_workspace/{slug}/3N_engineer_*.md` |
+| grow-director | `grow-director` | 경기 연출, 아바타, CSS | `grow-match-feel` | `beta/{slug}/style.css` 등 + `docs/superpowers/_workspace/{slug}/3N_director_*.md` |
+| grow-inspector | `grow-inspector` | 테스트, 경계면 교차 비교 | `grow-test-writing` | `tests/{slug}/` + `docs/superpowers/_workspace/{slug}/4N_inspector_*.md` |
+
+**게임 고유 지식은 도메인 스킬에 있습니다.** 슬러그가 `rookie`(⚾ 더 드래프트)면
+**모든 역할이 `.claude/skills/grow-baseball/SKILL.md`를 먼저 읽습니다** — 판정 모델,
+눈금, 난이도 두 통로, 폐기한 미니게임이 거기 있어요. 에이전트 프롬프트에 그 줄을 넣으세요.
+축구의 사례를 야구에 그대로 유추하면 틀립니다.
 
 ## 산출물이 놓이는 자리
 
@@ -53,7 +58,7 @@ Agent(subagent_type: "general-purpose", model: "opus", prompt: `
 
 | 무엇 | 어디 |
 |---|---|
-| 중간 산출물 (설계 초안·실측 로그·검증 보고) | `docs/superpowers/_workspace/` |
+| 중간 산출물 (설계 초안·실측 로그·검증 보고) | `docs/superpowers/_workspace/{slug}/` |
 | 확정 스펙 | `docs/superpowers/specs/{YYYY-MM-DD}-{주제}-design.md` |
 | 구현 계획 | `docs/superpowers/plans/{YYYY-MM-DD}-{주제}.md` |
 | 판단 기록 (왜 이렇게 했나) | 옵시디언 `Grow Games/설계/` · `분석/` |
@@ -62,17 +67,23 @@ Agent(subagent_type: "general-purpose", model: "opus", prompt: `
 `docs/superpowers/_workspace/`는 밑줄로 시작해 기존 `plans/`·`specs/`와 섞이지 않습니다.
 게임 코드 폴더 밖이라 **다른 세션의 `git status`를 어지럽히지도 않아요.**
 
+🔴 **반드시 게임 슬러그로 한 칸 더 내려가세요** (`_workspace/rookie/`·`_workspace/winger2/`).
+한 칸을 같이 쓰면 아래 Phase 0의 "새 주제 → 통째로 옮김" 규칙이
+**다른 게임에서 진행 중인 작업을 밀어냅니다.** 실제로 ⚽ 윙어 II 문서 146개가
+`_workspace/` 바로 아래에 평평하게 있고, 그 작업은 아직 진행 중이에요 —
+**옮기지 말고 그대로 두세요.** 윙어 II의 자리로 봅니다.
+
 ## Phase 0: 컨텍스트 확인
 
 ```bash
-ls docs/superpowers/_workspace/ 2>/dev/null
+ls docs/superpowers/_workspace/{slug}/ 2>/dev/null   # slug = rookie · winger2 · soccer …
 ```
 
 | 상태 | 실행 모드 |
 |---|---|
-| `docs/superpowers/_workspace/` 없음 | **초기 실행** — Phase 1로 |
+| `docs/superpowers/_workspace/{slug}/` 없음 | **초기 실행** — Phase 1로 |
 | 있음 + 부분 수정 요청 | **부분 재실행** — 해당 에이전트만 재호출. 프롬프트에 이전 산출물 경로를 넣어 "읽고 그 부분만 고치라"고 지시 |
-| 있음 + 새 주제 | **새 실행** — `docs/superpowers/_workspace/`를 `docs/superpowers/_workspace_{YYYYMMDD_HHMMSS}/`로 옮기고 Phase 1 |
+| 있음 + 새 주제 | **새 실행** — `docs/superpowers/_workspace/{slug}/`를 `docs/superpowers/_workspace/{slug}_{YYYYMMDD_HHMMSS}/`로 옮기고 Phase 1. **다른 슬러그 폴더는 건드리지 않습니다** |
 
 부분 재실행에서는 **이미 합의된 결정을 다시 열지 마세요.** 전체를 다시 쓰면
 사용자가 확정한 것이 조용히 뒤집힙니다.
@@ -92,7 +103,9 @@ ls docs/superpowers/_workspace/ 2>/dev/null
    - `받은 것/기능 아이디어.md` — 범민 님이 새로 적은 것이 있는지
    - `개념집/개념집 — {게임}.md` · 관련 `설계/`·`분석/`
 
-3. `docs/superpowers/_workspace/` 생성, 입력 자료를 `docs/superpowers/_workspace/00_input/`에
+3. `docs/superpowers/_workspace/{slug}/` 생성, 입력 자료를 `docs/superpowers/_workspace/{slug}/00_input/`에
+
+   야구(`rookie`)면 `.claude/skills/grow-baseball/SKILL.md`도 여기서 읽습니다.
 
 4. **결정이 갈리는 지점은 이 단계에서 사용자에게 묻습니다.**
    게임 설계는 되돌리는 비용이 커서, 중간에 방향이 바뀌면 실측부터 다시 해야 해요.
@@ -214,7 +227,7 @@ grep -rn "{slug}" beta/index.html stats/index.html cloud.js \
 2. **커밋** — 경로 명시. `git add -A`·`git commit -a` 금지
 3. **볼트 기록** (`grow-repo-ops` 9절) — 설계/분석/백로그/기능 아이디어 갱신 후
    **마지막에 한 번만** 동기화 (on → 60초 → off)
-4. `docs/superpowers/_workspace/`는 **보존합니다** (사후 검증·감사 추적용)
+4. `docs/superpowers/_workspace/{slug}/`는 **보존합니다** (사후 검증·감사 추적용)
 
 ## 상용 배포는 이 스킬이 하지 않습니다
 
@@ -238,7 +251,7 @@ CSS를 기계가 못 보는 저장소에서 검증 없이 승격하면 안 돼�
 
 **정상 흐름**
 1. 사용자가 "더 윙어 v2에 성장타입을 넣자"고 요청
-2. Phase 1 — 볼트에서 백로그·성장 곡선 분석을 읽고, `docs/superpowers/_workspace/` 생성
+2. Phase 1 — 볼트에서 백로그·성장 곡선 분석을 읽고, `docs/superpowers/_workspace/winger2/` 생성
 3. Phase 2 — designer가 성장타입 3종 설계 → balancer가 20,000 표본으로 곡선 측정 →
    "조숙 타입이 목표보다 12%p 후함" 판정 → 계수 조정 → 통과
 4. Phase 3 — engineer가 `beta/winger2/career.js`에 구현, director가 승급 카드 연출 (병렬)

@@ -168,8 +168,12 @@ S.career.mvpW = (S.career.mvpW != null ? S.career.mvpW : S.career.mvp) + prestig
 **트리거:** 게임을 새로 만들거나 시스템을 개편·확장하는 요청에는
 `grow-game-build` 스킬을 사용하세요. 단순 버그 수정이나 한 줄 질문은 직접 처리해도 됩니다.
 
-에이전트 5종은 `.claude/agents/`, 스킬 6종은 `.claude/skills/`에 있어요.
+에이전트 5종은 `.claude/agents/`, 스킬 7종은 `.claude/skills/`에 있어요.
 `grow-game-build`가 나머지를 조율합니다.
+
+**게임 고유 지식은 도메인 스킬에 둡니다.** ⚾ 더 드래프트(`rookie`)는 `grow-baseball`이에요 —
+판정 모델·눈금·난이도 두 통로가 거기 있습니다. 다른 게임도 고유 계약이 쌓이면 같은 자리에 만드세요.
+중간 산출물은 **게임별로** `docs/superpowers/_workspace/{slug}/`에 놓습니다.
 
 **⚠️ 이 환경에는 `TeamCreate`/`TaskCreate`가 없습니다.** `Agent`(백그라운드 병렬)와
 `SendMessage`/`ListAgents`만 있어서, 하네스는 **서브 에이전트 + 파일 기반 전달**로 돕니다.
@@ -205,3 +209,5 @@ S.career.mvpW = (S.career.mvpW != null ? S.career.mvpW : S.career.mvp) + prestig
 | 2026-09-01 | 감도 검사 절 추가 | skills/grow-test-writing | 방어가 겹치면 가리는 줄이 남의 변이를 먹는데, 그 줄은 단독으로는 증상이 0장이라 보통 검사로는 존재가 안 보임 |
 | 2026-09-02 | "자가 복구가 실패를 삼킴" 절 추가 | skills/grow-test-writing | 셀렉터 목록에서 빠진 버튼을 한 번도 안 눌렀는데 타임아웃이 흐름을 밀어 초록불 |
 | 2026-09-02 | 실패 유형 표 7 → 14줄 | CLAUDE.md | 한 세션에 새 모양 일곱 (빨간불이 신호를 먹음 · 환경이 우연히 막아 줌 · 방어 겹침 · 자가 복구 · 가짜 rAF · 커버리지가 난수에 걸림 · 도달 경로 사멸) |
+| 2026-09-05 | 야구 도메인 스킬 `grow-baseball` 신설 (에이전트 5종에 포인터 병기) | skills/grow-baseball · agents/* | 하네스 사례가 축구 35 : 야구 2였음 — 판정 모델·눈금·난이도 두 통로가 코드와 커밋에만 있어 다음 세션이 못 읽음 |
+| 2026-09-05 | 중간 산출물을 `_workspace/{slug}/`로 분리 | skills/grow-game-build | 한 칸을 같이 써서, 야구를 시작하면 "새 주제 → 통째로 옮김" 규칙이 진행 중인 윙어 II 문서 146개를 밀어냄 |
