@@ -42,10 +42,15 @@
   const WIN_SPREAD = 1.35;     // 팀 전력 → 팀 레이팅 폭 (승률 ~32~68% 목표)
   const SKILL_SD = 0.24;       // 한 팀 안 선수 편차 (스타 ↔ 백업)
   const SKILL_MIN = 0.5, SKILL_MAX = 1.7;
-  // 타자 — 한 경기 성적 라인
-  const BAT = { ab: 4.0, abSd: 0.9, avgBase: 0.238, avgSlope: 0.14, hrBase: 0.023, hrPow: 3.2, sbBase: 0.285 };
-  // 투수 — 한 등판 성적 라인 (선발은 5경기당 1번). winGate·saveGate = 팀 승리가 개인 승/세이브로 붙는 비율
-  const PIT = { rot: 5, ip: 6.0, ipSd: 1.1, kBase: 8.6, kSlope: 20, eraBase: 4.6, eraSlope: 4.0, closeMargin: 3, winGate: 0.72, saveGate: 0.62 };
+  /* 🪦 2026-09-05 — 타자·투수 성적을 '한 경기 라인'으로 굴리던 시절의 상수 열둘을 지웠어요.
+   * 타석 단위 재현(playInning/creditPAs)으로 갈아탄 뒤 accrueBatting·accruePitching이
+   * 아무 데서도 안 불렸는데, 이 위 주석은 "몬테카를로로 맞춘 값"이라고 말하고 있었습니다.
+   * BAT.avgBase를 0.238 → 0.05로 반토막 내도 검사가 13/13 초록불이었어요 (변이로 확인).
+   * 🔒 지금 타격 눈금의 손잡이는 아래 PA_BASE·K_SHARE 하나뿐입니다.
+   * 측정 기록: docs/superpowers/_workspace/rookie/20_balancer_hits-anchor.md */
+  const BAT = { sbBase: 0.285 };   // 도루만 타석 밖 사건이라 여기 남았어요
+  // 투수 — rot = 선발 로테이션, winGate·saveGate = 팀 승리가 개인 승/세이브로 붙는 비율
+  const PIT = { rot: 5, closeMargin: 3, winGate: 0.72, saveGate: 0.62 };
 
   const teamRating = (str) => 1 + (str - 0.49) * WIN_SPREAD;
   const nm = (arr, i, fb) => (arr && arr[i]) || fb;
@@ -85,32 +90,6 @@
       return { name, str, off, def, batters, pitchers, w: 0, l: 0, gi: 0 };
     });
     return { teams };
-  }
-
-  // 타자 9명의 그 경기 성적 라인을 쌓아요 (능력치대로 — 팀 득점과 산술로 안 맞아도 시즌 단위로 코히어런트).
-  function accrueBatting(team, rng) {
-    for (const b of team.batters) {
-      const ab = Math.max(0, Math.round(gauss(rng, BAT.ab, BAT.abSd)));
-      if (!ab) continue;
-      const avg = clamp(BAT.avgBase + (b.skill - 1) * BAT.avgSlope, 0.18, 0.38);
-      const hits = Math.min(ab, poisson(rng, ab * avg));
-      const hr = Math.min(hits, poisson(rng, ab * BAT.hrBase * Math.pow(b.skill, BAT.hrPow)));
-      const sb = poisson(rng, BAT.sbBase * b.skill);
-      b.ab += ab; b.hits += hits; b.hr += hr; b.sb += sb;
-    }
-  }
-  // 그날 선발(로테이션)의 성적 라인. 승리는 팀이 이긴 경기의 선발에게 (근사).
-  function accruePitching(team, won, close, rng) {
-    const sp = team.pitchers[team.gi % PIT.rot];
-    team.gi++;
-    sp.gs++;
-    const ip = clamp(gauss(rng, PIT.ip, PIT.ipSd), 2, 9);
-    sp.ip += ip;
-    sp.k += poisson(rng, (PIT.kBase + (sp.skill - 1) * PIT.kSlope) / 9 * ip);
-    const eraTrue = clamp(PIT.eraBase - (sp.skill - 1) * PIT.eraSlope, 1.3, 7);
-    sp.er += poisson(rng, eraTrue / 9 * ip);
-    if (won && rng() < PIT.winGate) sp.wins++;                          // 팀 승리의 일부만 선발 승으로
-    if (won && close && rng() < PIT.saveGate) team.pitchers[PIT.rot].saves++;   // 마무리 세이브
   }
 
   /* forced — 'A'/'B'면 그 팀이 이긴 걸로 못 박아요. 내가 뛴 경기는 실제 결과(미니게임)가
