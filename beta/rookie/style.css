@@ -415,3 +415,30 @@
   .dia-ball { transition: none; }
   .dia-score, .dia-out { animation: none; }
 }
+
+/* 🎯 타격 구역 선택 (bat-zone.js) — 야구 전용. 공유 timing.js는 한 줄도 안 건드려요.
+ * 화면만 스트라이크 존 모양으로 바꿔요. 판정·추첨은 timing.js의 duel 그대로입니다. */
+.rookie-bat-zone .tm-duel {
+  gap: 0; margin-top: 4px;
+  border: 2px solid var(--line); border-radius: 6px; overflow: hidden;
+  background: rgba(127, 127, 127, .07);
+}
+.rookie-bat-zone .bz-cell {
+  /* 🖐️ 구역 하나가 손가락보다 커야 해요 — 72px는 설계에서 정한 값이에요 */
+  min-height: 72px; margin: 0; border-radius: 0; padding: 8px 4px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  border: 0; border-right: 1px dashed var(--line);
+  white-space: normal; word-break: keep-all;
+}
+.rookie-bat-zone .bz-cell:last-child { border-right: 0; }
+/* 🔒 색만으로 구분하지 않아요 — 테두리와 글자가 함께 바뀝니다 */
+.rookie-bat-zone .bz-cell:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; }
+.rookie-bat-zone .bz-cell:active { background: rgba(127, 127, 127, .18); }
+/* ⚾ 홈플레이트 — 존 아래에 놓아 "여기가 타석"이라는 걸 보여줘요 (장식) */
+.bz-plate {
+  width: 54px; height: 16px; margin: 6px auto 0;
+  background: var(--line);
+  clip-path: polygon(0 0, 100% 0, 100% 55%, 50% 100%, 0 55%);
+}
+.bz-cap { font-size: .68rem; color: var(--muted); margin: 6px 0 0; text-align: center; }
+@media (prefers-reduced-motion: reduce) { .rookie-bat-zone .bz-cell { transition: none; } }

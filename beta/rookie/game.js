@@ -1829,7 +1829,10 @@ function playRandomMini(container, cb) {
   } else {
     const stat = isBat ? S.stats.contact : S.stats.control;
     if (autoMiniOn()) { cb(autoRes(stat), isBat ? DUEL_BAT : DUEL_PIT); return; }
-    window.Timing.duel(container, {
+    /* 🎯 타자는 스트라이크 존 화면으로 골라요 (bat-zone.js). 추첨·판정은 timing.js 그대로예요.
+     * 스크립트가 없으면 예전 글자 버튼으로 떨어져요 — 판정이 같으니 판이 죽지 않습니다. */
+    const zone = isBat && window.RookieBatZone ? window.RookieBatZone.play : window.Timing.duel;
+    zone(container, {
       /* 🏷️ 예전 이름은 "수 싸움"이었어요. 가을야구 전용으로 🎯 수싸움이 새로 생기면서
        * 이름이 겹쳤어요 — 5월에 본 것과 10월에 보는 것이 같은 게임처럼 읽히면
        * 가을야구를 특별하게 만든 뜻이 사라져요. 여기(timing.js의 duel)는 힌트 한 줄을
