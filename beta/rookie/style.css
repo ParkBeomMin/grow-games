@@ -294,7 +294,9 @@
 /* 🏅 개인 기록 순위 — 프로 화면 순위표 아래 탭 + 라이벌 순위표 (더 윙어처럼) */
 .race-tabs { display: flex; flex-wrap: wrap; gap: 4px; margin: 10px 0 6px; }
 .race-tab {
-  flex: 1 1 auto; min-width: 0; padding: 5px 6px; font-size: .72rem; white-space: nowrap;
+  /* 🖐️ 손가락으로 누르는 자리예요 — 44px는 터치 타깃 권장 최소치입니다 (WCAG 2.5.5) */
+  flex: 1 1 auto; min-width: 0; min-height: 44px; padding: 5px 6px; font-size: .72rem; white-space: nowrap;
+  display: flex; align-items: center; justify-content: center;
   border: 1px solid var(--line); border-radius: 8px; background: transparent; color: var(--muted); cursor: pointer;
 }
 .race-tab.on { border-color: var(--accent); color: var(--accent); background: rgba(127, 127, 127, .08); font-weight: 700; }
