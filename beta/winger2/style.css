@@ -838,11 +838,30 @@ button.pf-slot { cursor: pointer; font-family: inherit; }
 .w2-mouth.h { left: 1px; border-right: 0; }
 .w2-mouth.a { right: 1px; border-left: 0; }
 
-/* 🧍 한 팀 = 판과 같은 크기의 겹 하나. 전진·후퇴는 **겹 전체를 미는 것**이라
- * 카드마다 바뀌는 `transform`이 **팀당 하나**입니다 (점마다가 아니라). */
-.w2-side {
+/* 🧍 한 팀 = 판과 같은 크기의 겹 하나. **이 겹은 이제 안 움직입니다** — 묶는 역할만 해요
+ * (`.w2-side.home .w2-dot`처럼 「어느 편인가」로 색을 가르는 자리입니다).
+ * 🔒 움직이는 것은 **그 안의 `.w2-slot` 열한 개**뿐이에요. 아래 「전진·후퇴」 자리 참고. */
+.w2-side { position: absolute; inset: 0; }
+/* 🏃 **점 하나의 겹** — 판과 같은 크기라 `translate(3%, -2%)`가 곧 **판의 3% · −2%**예요.
+ * (⚽ 공이 쓰는 것과 같은 수법입니다 — 퍼센트가 자기 크기 기준이라는 함정을 겹 하나로 지웁니다.)
+ *
+ * 🔑 **자리를 왜 점이 아니라 겹에 두나** — `.w2-pitch.mine .w2-dot.me`의 `scale(1.35)`와
+ *    같은 요소에서 부딪히기 때문입니다. 인라인 `transform`이 이기면 「내 순간에 커지는」
+ *    연출이 **조용히 죽어요**. 겹이 옮기고, 점이 커집니다. ⚠️ `!important`는 안 씁니다.
+ * ⏳ `transition-delay`는 match-scene.js가 겹마다 인라인으로 심어요(0·34·68·102ms) —
+ *    열한 개가 동시에 출발하면 그것도 «대형이 미끄러진다»로 보입니다.
+ * 🔴 한 점의 진짜 자리는 **셋의 합**이에요:
+ *      점의 `left`(집 자리) + `.w2-side`의 밀림(아래) + 이 겹의 어긋남(인라인) */
+/* ⏱️ **시간 예산** — 카드 간 딜레이(`delayOf`)보다 **짧아야** 합니다.
+ *    점이 아직 가는 중에 다음 카드가 오면 두 흐름이 겹쳐 보여요.
+ *      · 점이 다 서기까지 **최대 498ms** = .42s + 시차 최대 78ms
+ *      · ⚽ 공 500ms (`.w2-ball`) — 점과 거의 같이 도착합니다
+ *      · 카드 간 딜레이: 1점 차 이내 **900ms**(🏫 학교가 쓰는 값) · 2점 600ms · 3점 이상 350ms
+ *    🟢 900·600에서는 다 서고 나서 다음 카드가 옵니다.
+ *    🟡 350ms(3점 이상 벌어진 경기)에서만 겹쳐요 — 이미 기운 경기라 «몰아친다»로 읽힙니다. */
+.w2-slot {
   position: absolute; inset: 0;
-  transition: transform .7s cubic-bezier(.3, .8, .4, 1);
+  transition: transform .42s cubic-bezier(.3, .85, .35, 1);
 }
 .w2-dot {
   position: absolute; width: 9px; height: 9px; margin: -4.5px 0 0 -4.5px;
@@ -872,7 +891,7 @@ button.pf-slot { cursor: pointer; font-family: inherit; }
 .w2-ball {
   position: absolute; left: 0; top: 0; width: 100%; height: 100%;
   pointer-events: none;
-  transition: transform .75s cubic-bezier(.25, .85, .35, 1);
+  transition: transform .5s cubic-bezier(.25, .85, .35, 1);   /* ⏱️ 점(최대 498ms)과 같이 도착 */
 }
 .w2-ball b {
   position: absolute; left: 0; top: 0;
@@ -891,15 +910,18 @@ button.pf-slot { cursor: pointer; font-family: inherit; }
 .w2-pitch.net-a .w2-ball b, .w2-pitch.net-h .w2-ball b { animation: w2BallPop .5s ease-out; }
 @keyframes w2BallPop { 0% { transform: scale(1); } 40% { transform: scale(1.6); } 100% { transform: scale(1); } }
 
-/* 전진·후퇴 — 우리가 밀어붙이면 두 줄이 같이 상대 진영으로 갑니다.
- * 🔒 숫자는 **CSS가 갖습니다**. JS는 「어느 쪽인가」만 켜요(클래스 둘).
- * 🔴 **밀림폭과 `match-scene.js`의 골키퍼 x는 한 쌍입니다** — 밀림이 키퍼 자리보다
- *    크면 `overflow:hidden`이 키퍼를 **통째로 잘라 먹습니다**(390px에서 실제로 났어요).
- *    지금은 키퍼 10% > 밀림 7%라 최악이 3%(≈10px)로 판 안에 남습니다. */
-.w2-pitch.push-a .w2-side.home { transform: translateX(7%); }
-.w2-pitch.push-a .w2-side.away { transform: translateX(4%); }
-.w2-pitch.push-h .w2-side.home { transform: translateX(-7%); }
-.w2-pitch.push-h .w2-side.away { transform: translateX(-4%); }
+/* 🕰️ **전진·후퇴(`translateX(±7%/±4%)`)가 여기 있었습니다. 지금은 없어요.**
+ *
+ * 🐛 ⚽ 공은 `.w2-side` **밖**이라 그 밀림을 안 탔습니다. 그런데 점을 공 쪽으로 붙이는
+ *    산수(`match-scene.js`의 `dotShift`)는 그 밀림을 모릅니다 — **두 좌표계가 7%씩
+ *    어긋나 있었어요.** 320px 렌더에서 **우리 중원이 공 위에 정확히 포개졌습니다**(−7.3px).
+ * 🔒 그래서 **밀림도 `dotShift`가 냅니다**(`PUSH = { home: 7, away: 4 }`).
+ *    ⚠️ **여기에 `.w2-side` 미는 규칙을 되살리지 마세요 — 두 번 밀립니다.**
+ *    🧤 그러면 우리 키퍼가 10 − 7 − 7 = **−4%**로 판 밖에 나갑니다(실점 카드마다요).
+ *
+ * 🏷️ `.push-a`/`.push-h` 클래스는 **남겨 뒀습니다** — 이제 「어느 쪽 흐름인가」를 DOM에
+ *    적어 두는 **상태 표시**예요(움직임이 아니라). 나중에 잔디 색을 흐름 쪽으로 기울이는 것
+ *    같은 걸 여기 걸 수 있고, 검사가 「`card.flow`가 판에 닿았나」를 이걸로 읽습니다. */
 
 /* ---------- 아래 피드 ---------- */
 .w2-feed { padding: 10px 0 4px; display: flex; flex-direction: column; gap: 6px; }
@@ -915,6 +937,18 @@ button.pf-slot { cursor: pointer; font-family: inherit; }
 .w2-card.good { border-left-color: var(--good); color: var(--good2); }
 .w2-card.bad { border-left-color: var(--bad); color: var(--bad); }
 .w2-card.filler { color: var(--dim); }
+/* 🏁 킥오프(0') · 종료 휘슬(90') — **경기의 괄호**입니다.
+ * 🐛 셋(`filler`/`kick`/`end`)이 한 클래스였는데, 90분 대본이 들어오면서 0'과 90'이
+ *    **매 경기 반드시** 뜨게 됐어요. *"삐— 경기 종료"*가 *"측면에서 두드립니다"*와
+ *    **같은 흐릿한 옷**을 입으면 경기가 어디서 시작하고 끝나는지가 안 읽힙니다.
+ * 🔒 흐름 줄은 흐릿하게(`filler`), 괄호는 **또렷하게**. 색이 아니라 **밝기와 글꼴**로 갈라요 —
+ *    흑백에서도 갈립니다. */
+.w2-card.whistle {
+  color: var(--cream);
+  background: rgba(255, 255, 255, .05);
+  border-left-color: var(--dim);
+  font-family: "Jua", sans-serif;
+}
 /* 🔥 내 순간 — 여기만 타이핑이 붙어요. 전부 타이핑하면 밀도 차이가 사라집니다 */
 .w2-card.mine { border-left-color: var(--accent); background: rgba(255, 159, 69, .1); }
 .w2-card.mine .w2-body { color: var(--cream); }
@@ -994,7 +1028,7 @@ button.pf-slot { cursor: pointer; font-family: inherit; }
   /* 🟩 축구판 — **미끄러지는 것만** 끕니다. 자리는 그대로 «그 자리»로 갑니다:
    *    공이 상대 골망에 있고 우리 줄이 밀고 올라간 그림이 **한 프레임에** 서요.
    *    🔴 판을 통째로 숨기지 않습니다 — 움직임이 정보를 갖고 나가면 안 돼요. */
-  .w2-side, .w2-ball, .w2-dot.me { transition: none !important; }
+  .w2-slot, .w2-ball, .w2-dot.me { transition: none !important; }
   .w2-flash { display: none !important; }
   .w2-typing .w2-body::after { display: none; }
 }

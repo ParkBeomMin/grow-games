@@ -86,6 +86,17 @@ const GOAL_BY = (() => {
   const m = TOWN_SRC.match(/const GOAL_BY = (\{.*\});/);
   return m ? new Function(`return ${m[1]};`)() : null;
 })();
+/* 🗣️ 🆕 **90분 대본의 문구 표** — B-1b가 「그 단계의 말인가」로 누수를 잡습니다 (아래 B절).
+ * 🔑 `{opp}` 자리표가 안에 있어 `[^}]*`로는 못 잡아요 — 한 줄이라 `.*`로 돕니다. */
+const KICK_LINE = (() => {
+  const m = TOWN_SRC.match(/const KICK_LINE = (\{.*\});/);
+  return m ? new Function(`return ${m[1]};`)() : null;
+})();
+const FLOW_LINE = (() => {
+  const m = TOWN_SRC.match(/const FLOW_LINE = (\{[\s\S]*?\n  \});/);
+  return m ? new Function(`return ${m[1]};`)() : null;
+})();
+
 /* 🔄 **승패를 뒤집은 표를 소스에서 만듭니다** — 표를 베껴 적으면 칸이 하나 늘 때
  *    정규식이 조용히 안 걸려요(2026-09-02에 실제로 났습니다). */
 const GOAL_RE = /const GOAL_BY = \{.*\};/;
@@ -131,6 +142,19 @@ const MUT = {
  * 🔴 **「두 번 같으면 안정」으로 재면 안 됩니다** — 큐가 아직 시작도 안 한 0줄에서
  *    곧바로 0 === 0이 되어 **늘 빈 화면을 보고 통과**합니다.
  *    ⏳ 먼저 **뜸을 들이고**, 그 다음 세 번 연속 같을 때만 안정으로 봅니다. */
+/* 🚧 **2026-09-05 — 이 정착 창은 카드 간격보다 「짧습니다」** (engineer 146번 §4-4 · inspector 실측)
+ *   `hold >= 3`은 15ms × 3 ≈ **45ms**인데, `delayOf()`는 🤖 자동 진행에서도 **90ms**예요.
+ *   👉 **큐 한가운데서 돌아옵니다.** 🧪 실측(아크 1벌): `hold 3`이면 ⏱️ 필러 0장 · 🥅 하프타임
+ *      0장 · 🔚 90' 종료 휘슬 0/3. `hold 8`(120ms)부터 전부 잡힙니다.
+ *
+ * 🟢 **그래도 이 파일의 A·B·C는 안 흔들립니다** — 그 문장들이 읽는 것은
+ *    `T.rows()`·`T.score()`·`T.deviation()`과 DOM의 `.town-final`(전부 **동기** 상태)이고,
+ *    B는 정착이 아니라 **고정 간격**(`cadence`)으로 몰거든요. 그래서 창을 안 늘렸습니다 —
+ *    늘리면 아크 26벌 × 정착 18회만큼 실행 시간이 늘고, 지키는 문장은 하나도 안 늘어요.
+ *
+ * 🔴 **여기에 「피드가 다 그려졌나」를 재는 문장을 새로 붙이려면 창부터 늘리세요.**
+ *    안 그러면 *"90' 종료 휘슬이 없다"*가 **코드가 아니라 이 함수 때문에** 나옵니다.
+ *    그 자리는 `flow90-test.js`가 맡고 있고, 거기 창은 **240ms**(90ms의 2.7배)입니다. */
 const GRACE = 120;                     // 🔒 검사에 박은 값 — 큐가 첫 줄을 그릴 틈
 async function settle(D) {
   const n = () => D.querySelectorAll("#town-scene .w2-feed .w2-min").length;
@@ -163,8 +187,15 @@ async function arc(seed, muts, cadence) {
       el.dispatchEvent(new Ev(t, { bubbles: true, cancelable: true }));
     }
   };
-  const mins = () => Array.from(D.querySelectorAll("#town-scene .w2-feed .w2-min"))
-    .map((x) => parseInt(String(x.textContent).replace(/\D/g, ""), 10));
+  /* 🆕 **분만이 아니라 문구도** 읽습니다 — 90분 대본이 들어오면서 `0'`과 `90'`이 세 단계에
+   *    다 생겨 분만으로는 판별력이 얇아졌어요(설계 144번 §11-2). 문구는 단계마다 다릅니다. */
+  const mins = () => Array.from(D.querySelectorAll("#town-scene .w2-feed .w2-min")).map((x) => {
+    const row = x.parentNode;
+    const b = row && row.querySelector ? row.querySelector(".w2-body") : null;
+    const o = { min: parseInt(String(x.textContent).replace(/\D/g, ""), 10),
+      text: String(b ? b.textContent : "") };
+    return o;
+  });
   const cur = () => (D.querySelector(".screen.active") || {}).id;
   const stages = {};
   async function stage(id) {
@@ -235,16 +266,18 @@ const finOf = (txt) => {
 (async () => {
   /* ══════════ 0. 산식과 변이 정규식이 지금 소스에 걸리는가 ══════════ */
   {
-    check(!!PTS && !!GOAL_BY,
-      `0-1. 📐 \`town.js\`에서 산식을 뽑았다 — PTS ${JSON.stringify(PTS)} · GOAL_BY ${JSON.stringify(GOAL_BY)}`
-      + (PTS && GOAL_BY ? "" : `\n     🔴 정규식이 안 걸려요 — 아래는 전부 "안 도는" 상태입니다`));
+    const tabOK = !!PTS && !!GOAL_BY && !!KICK_LINE && !!FLOW_LINE;
+    check(tabOK,
+      `0-1. 📐 \`town.js\`에서 산식·문구를 뽑았다 — PTS ${JSON.stringify(PTS)} · GOAL_BY ${JSON.stringify(GOAL_BY)}`
+      + `\n     🗣️ KICK_LINE ${KICK_LINE ? "✔" : "🔴"} · FLOW_LINE ${FLOW_LINE ? "✔" : "🔴"} (B-1b가 씁니다)`
+      + (tabOK ? "" : `\n     🔴 정규식이 안 걸려요 — 아래는 전부 "안 도는" 상태입니다`));
     const bad = pageMutsOK(MUT);
     const n = Object.values(MUT).reduce((a, t) => a + Object.values(t).reduce((b, m) => b + m.length, 0), 0);
     check(bad.length === 0,
       `0-2. 🔴 변이 정규식 ${n}개가 지금 \`beta/winger2/town.js\`에 전부 걸린다`
       + (bad.length ? `\n     🔴 **안 걸린 것 ${bad.length}개 — 그 변이 검사는 "안 도는" 상태예요**`
         + bad.map((b) => `\n       · ${b}`).join("") : ""));
-    if (!PTS || !GOAL_BY || bad.length) { console.log(`\n❌ ${fail}건 실패`); process.exit(1); }
+    if (!tabOK || bad.length) { console.log(`\n❌ ${fail}건 실패`); process.exit(1); }
   }
 
   const base = {};
@@ -371,12 +404,43 @@ const finOf = (txt) => {
      *    변이는 60ms에서도 잡히지만, **기준선이 공짜면 그 판은 아무것도 안 지켜요.**
      *    120·200ms는 기준선이 5~12개를 실제로 훑고도 누수 0입니다 (B-2가 매번 확인). */
     const CAD = [120, 200];
-    const OWN = { e: [30, 60], m: [23, 45, 68], h: [23, 45, 68] };
+    /* 🆕 **2026-09-05 — 90분 대본이 들어와 표를 갈았습니다** (설계 144번 §11-1).
+     * 🔴 옛 표는 `{ e: [30, 60], m: [23, 45, 68], h: [23, 45, 68] }`였어요. 🏁 `0'` 킥오프 ·
+     *    ⏱️ 필러 · 🔚 `90'` 종료가 분을 더하면서 **정상적으로 그려진 줄이 「남의 분」으로**
+     *    잡혀 B-1이 즉시 빨간불이었습니다 — 「설계가 뒤집혔는데 검사가 옛 계약을 지키는」 자리.
+     * 🔑 🥅 하프타임은 `add(el("w2-half", …))`라 **`.w2-min` span이 없어서** 이 표에 안 들어와요. */
+    const OWN = {
+      e: [0, 30, 60, 75, 90],
+      m: [0, 23, 34, 45, 57, 68, 79, 90],
+      h: [0, 23, 34, 45, 57, 68, 79, 90],
+    };
+    /* 🟡 **분만으로는 판별력이 얇아졌습니다** — `0'`과 `90'`이 이제 **세 단계에 다** 있어요
+     *    (설계 144번 §11-2). 그래서 **문구**라는 자를 하나 더 댑니다:
+     *      🏁 `0'` 대진 줄과 ⏱️ 필러 문구는 **단계마다 다릅니다**(`KICK_LINE` · `FLOW_LINE`).
+     *      초등의 `0'`이 중등 피드에 새면 분으로는 안 보여도 **문구로는 보입니다.**
+     * 🔒 표를 베껴 적지 않고 **소스에서 뽑습니다** — 문구가 다듬어져도 검사가 안 죽어요.
+     * 🔴 🔚 `90'` 종료 휘슬은 세 단계가 **같은 말**이라 이 자로도 안 갈립니다 — 그 자리는
+     *    `B-2`의 `drops`와 `flow90-test` F-1(분 순서)이 겹쳐 봅니다. */
+    const OWN_TEXT = (id, t) => {
+      if (!t) return true;
+      const kick = String(KICK_LINE[id] || "").replace(/\{opp\}/, "");
+      const isKick = Object.values(KICK_LINE).some((k) => t.indexOf(String(k).replace(/\{opp\}/, "")) >= 0);
+      if (isKick) return t.indexOf(kick) >= 0;
+      const all = [];
+      for (const st of Object.keys(FLOW_LINE)) for (const fl of Object.keys(FLOW_LINE[st])) all.push(...FLOW_LINE[st][fl]);
+      if (all.indexOf(t) < 0) return true;                 // 🔥 순간 카드 등 — 이 자의 대상이 아니에요
+      const mine = [];
+      for (const fl of Object.keys(FLOW_LINE[id] || {})) mine.push(...FLOW_LINE[id][fl]);
+      return mine.indexOf(t) >= 0;
+    };
     const leaks = (r) => {
       const bad = [];
       for (const id of ["e", "m", "h"]) {
         for (const snap of r.stages[id].seen) {
-          for (const v of snap) if (OWN[id].indexOf(v) < 0) bad.push(`${id}피드에 ${v}'`);
+          for (const v of snap) {
+            if (OWN[id].indexOf(v.min) < 0) bad.push(`${id}피드에 ${v.min}'`);
+            else if (!OWN_TEXT(id, v.text)) bad.push(`${id}피드에 남의 문구 "${v.text}"`);
+          }
         }
       }
       return [...new Set(bad)];

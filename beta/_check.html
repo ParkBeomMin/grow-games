@@ -755,6 +755,10 @@
       /* 🟩 축구판이 카드를 따라가는지 보는 칸이에요 — 골 · 실점 · 빗나감이 한 판에 다 옵니다.
        * 🏫 `lite: true`는 학교 모드(배너·축포·타이핑 없음)라 **판과 피드만** 남습니다. */
       { id: "school", emoji: "🟩", name: "🏫 학교 · 축구판", desc: "공이 골문 앞 → 골망 → 우리 진영으로 오갑니다 · 🧡 나는 큰 원 + 링" },
+      /* 🌊 `card.flow`가 실제로 화면에 보이는지 — 밀어붙일 때 줄이 올라가고, 밀릴 때 내려앉나.
+       * 🔑 **연달아 눌러 보세요**: a → h → a → mid로 오가는 동안 점들이 서로 **다르게** 움직여야
+       *    합니다. 다 같이 미끄러지면 그건 옛 그림이에요. */
+      { id: "flow", emoji: "🌊", name: "🌊 90분 흐름", desc: "밀어붙임 ↔ 밀림이 오갑니다 · 수비 라인이 오르내리고 공 근처 점이 붙어요" },
     ];
     const W2_DECK = {
       tight: {
@@ -820,11 +824,66 @@
       school: {
         cfg: { home: "우리 학교", away: "아라 중등부", myName: "김윙어", lite: true },
         cards: [
-          { min: 23, kind: "goal", mine: true, moment: "oneone", stakeKey: "lead", by: "김윙어", goalBy: "김윙어", result: "goal", score: [1, 0], text: "⚽ 골!! 김윙어, 그물을 흔듭니다!" },
-          { min: 45, kind: "assist", mine: true, moment: "cutback", stakeKey: "clincher", by: "김윙어", score: [1, 0], text: "😖 패스는 갔는데 마무리가 안 됐어요" },
-          { min: 68, kind: "defend", mine: true, moment: "oneone", stakeKey: "holdLead", by: "김윙어", result: "concede", score: [1, 1], text: "😣 뚫렸어요… 실점" },
+          { min: 23, kind: "goal", mine: true, moment: "oneone", stakeKey: "lead", flow: "a", by: "김윙어", goalBy: "김윙어", result: "goal", score: [1, 0], text: "⚽ 골!! 김윙어, 그물을 흔듭니다!" },
+          { min: 45, kind: "assist", mine: true, moment: "cutback", stakeKey: "clincher", flow: "a", by: "김윙어", score: [1, 0], text: "😖 패스는 갔는데 마무리가 안 됐어요" },
+          { min: 68, kind: "defend", mine: true, moment: "oneone", stakeKey: "holdLead", flow: "h", by: "김윙어", result: "concede", score: [1, 1], text: "😣 뚫렸어요… 실점" },
         ],
         tally: { mineCards: 3, mineSuccess: 1 },
+      },
+      /* 🌊 흐름 확인용 — 🏫 학교(`town.js`)가 `card.flow`를 실어 보내는 그 모양입니다.
+       * 🔒 **결과가 없는 전개 카드가 대부분**이에요. 그래야 「공이 어디로 갔나」가 아니라
+       *    **흐름 하나만으로** 판이 움직이는지 보입니다.
+       *   · `flow: "a"`  공이 상대 진영 — 우리 줄이 올라가고 공이 62~86%에서 흔들려요
+       *   · `flow: "h"`  공이 우리 진영 — 수비가 내려앉고 공이 16~40%로
+       *   · `flow: "mid"` 중원 — 라인이 안 움직이고 공만 38~62%에서
+       * 🔒 **`flow`는 🌫️ 필러에만 답니다.** `town.js`가 다는 자리가 `draw({ kind: "filler", …, flow })`
+       *    **하나뿐**이에요 — 🏁 킥오프 · 🥅 하프타임 · 🔚 종료 휘슬 · 🔥 내 순간에는 안 보냅니다
+       *    (designer 144번 §5도 `flowOf(j, …)`를 **필러 슬롯**에만 정의합니다).
+       * 🔴 **없는 필드를 픽스처가 들고 있으면, 그게 안 읽히는 동안엔 아무 증상이 없습니다** —
+       *    그리고 증상이 0장인 어긋남이 제일 오래 살아요. 여기서 실제로 깨지는 조건은 둘입니다:
+       *      · 🏁🥅🔚 — `setPitch`가 그 셋을 `BALL_FLOW`보다 **먼저** 센터서클로 잡는 **순서가 바뀌면**
+       *      · 🔥 내 순간 — **`result`가 없는 카드**(«발 끝에 안 걸렸어요» · ⚽ 결정 `miss`)면
+       *        `BALL_LOST`가 `at[2]`를 `""`로 둬서 **`flow`가 밀림을 정합니다.** 실제 게임은
+       *        안 밀리는데 **확인 화면만 밀려요** — 그 카드를 이 덱에 한 장 더하는 순간 어긋납니다.
+       * 👁️ **눈으로 볼 것**: 점들이 *서로 다른 만큼* 움직이는가(다 같이 미끄러지면 옛 그림),
+       *    🧤 키퍼가 골문을 안 떠나는가, 공 근처 점이 실제로 붙는가.
+       *
+       * 🔒 **덱 카드는 전부 `mine: true`입니다** — 🏫 학교는 **카드 전부가 🔥 내 순간**이에요
+       *    (`town.js`의 `live = { …, mine: true, … }`). `mine` 없는 `defend` 카드는 학교에서
+       *    **나올 수 없는 모양**이라, 그걸 픽스처에 두면 미니게임을 안 여는 **다른 흐름**을
+       *    보게 됩니다. 🌫️ 필러만 `mine` 없이 옵니다.
+       * 🔴 **`judge`는 일부러 안 답니다.** `town.js`는 큐 안에서 채우지만(그쪽 드라이버는
+       *    `push`를 상태마다 **한 번** 부릅니다), 이 칸은 `career.js`처럼 **같은 카드로 두 번**
+       *    불러요. `judge`가 있으면 첫 `push`가 열기+닫기를 한 번에 해버려 **같은 줄이 두 번**
+       *    뜹니다(`match-scene.js`의 `push` 안 `card.judge == null` 갈래). 다른 덱 다섯도 같습니다. */
+      flow: {
+        cfg: { home: "우리 학교", away: "아라 중등부", myName: "김윙어", lite: true },
+        cards: [
+          /* 🏁 **「시작」이 아니라 「대진」을 말합니다** — 버튼이 이미 「🏁 경기 시작」이라
+           *    누른 뒤에 *"경기가 시작됩니다"*를 또 쓰면 같은 말이 두 번이에요(설계 §3-4).
+           * 🔒 `town.js`의 `KICK_LINE.m`("{opp}와 마주 섰어요")과 **같은 문구**입니다 —
+           *    갈라 두면 확인 화면만 실제 게임과 다른 말을 합니다. */
+          { min: 0, kind: "kick", score: [0, 0], text: "아라 중등부와 마주 섰어요" },
+          { min: 8, kind: "filler", flow: "a", score: [0, 0], text: "🟩 우리가 상대 진영에 자리를 잡았어요" },
+          { min: 15, kind: "filler", flow: "a", score: [0, 0], text: "측면에서 계속 두드립니다" },
+          { min: 21, kind: "filler", flow: "mid", score: [0, 0], text: "중원에서 공이 오갑니다" },
+          { min: 29, kind: "filler", flow: "h", score: [0, 0], text: "🟥 역습! 우리 진영까지 내려왔어요" },
+          { min: 34, kind: "defend", mine: true, moment: "oneone", stakeKey: "holdDraw", by: "김윙어", result: "save", score: [0, 0], text: "🧱 막아냅니다! 위기를 지웠어요" },
+          /* 🔴 `poss`·`shots`·`rating`을 **하나도 안 넘깁니다** — 🏫 학교(`lite`)의 실제 모습이에요
+           *    (designer 144번 §6·⑤ · `town.js`의 half 갈래도 `score`만 넘깁니다).
+           *    학교는 상대를 안 굴려서 점유율을 **지어내야** 하고, 슛은 한쪽만 세며,
+           *    평점은 밴드 `d`를 **두 번 세는 것**입니다.
+           * 🔴 여기에 숫자를 적으면 확인 화면이 **실제 게임엔 없는 줄**을 보여줘요 —
+           *    픽스처가 소스보다 후하면 사람이 있지도 않은 그림을 보고 판단합니다. */
+          { min: 45, kind: "half", score: [0, 0] },
+          { min: 52, kind: "filler", flow: "h", score: [0, 0], text: "상대가 계속 밀어붙입니다" },
+          { min: 58, kind: "defend", mine: true, moment: "oneone", stakeKey: "holdDraw", by: "김윙어", result: "concede", score: [0, 1], text: "😣 뚫렸어요… 실점" },
+          { min: 66, kind: "filler", flow: "mid", score: [0, 1], text: "다시 중원 싸움" },
+          { min: 73, kind: "filler", flow: "a", score: [0, 1], text: "🟩 이번엔 우리가 밀어붙여요" },
+          { min: 81, kind: "goal", mine: true, moment: "oneone", stakeKey: "equalize", by: "김윙어", goalBy: "김윙어", result: "goal", score: [1, 1], text: "⚽ 골!! 김윙어, 그물을 흔듭니다!" },
+          { min: 90, kind: "end", score: [1, 1], text: "삐— 경기 종료 휘슬" },
+        ],
+        tally: { mineCards: 3, mineSuccess: 2 },
       },
       quiet: {
         cfg: { home: "청록 유나이티드", away: "잿빛 시티", myName: "김윙어" },

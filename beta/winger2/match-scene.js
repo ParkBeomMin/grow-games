@@ -239,6 +239,114 @@ window.W2Scene = (() => {
   const FORM_A = [[90, 50, " gk"], [77, 27, ""], [77, 73, ""], [58, 50, ""], [37, 67, ""]];
   const ME_AT = [64, 76];      // 🧡 나 — 윙어라 측면 깊은 자리
 
+  /* ══════════════════════════════════════════════════════════════════
+   * 🏃 **점마다 다른 자리로 갑니다** — 대형이 통째로 미끄러지면 «뛴다»로 안 보여요
+   * ══════════════════════════════════════════════════════════════════
+   * 🕰️ 여기 있던 것은 **겹 하나를 `translateX(±7%)`로 통째로 미는 것**이었습니다.
+   *    정직했지만 *"대형이 미끄러진다"*로 보이지 *"선수들이 뛴다"*로는 안 보였어요.
+   * 🔑 그래서 한 점의 자리를 **둘의 합**으로 다시 짰습니다:
+   *
+   *      인라인 `left`/`top`(집 자리)  +  `.w2-slot`의 인라인 `transform`(어긋남 — 여기)
+   *
+   *    🔒 둘 다 **숫자로 적혀 있습니다** — 검사가 `left`와 인라인 `transform`을 더하면
+   *       그 점이 판 안에 있는지 산수로 나옵니다.
+   *
+   * 🐛 **팀 밀림(±7%/±4%)이 예전엔 `.w2-side`의 CSS `translateX`였는데, 여기로 옮겼습니다.**
+   *    ⚽ **공은 `.w2-side` 밖**이라 그 밀림을 안 탔어요. 그래서 「점이 공에서 얼마나 먼가」를
+   *    재는 이 함수와 실제 화면이 **7%씩 어긋난 다른 좌표계**였습니다 —
+   *    320px 렌더에서 **우리 중원이 공 위에 정확히 포개졌어요**(−7.3px).
+   *    🔒 **두 좌표계를 하나로 합칩니다.** 밀림도 어긋남도 전부 이 함수가 냅니다.
+   *    ⚠️ 그래서 `style.css`에는 `.w2-side`를 미는 규칙이 **없습니다.** 되살리면 두 번 밀려요.
+   *
+   * ⏱️ **`dt`도 `requestAnimationFrame`도 안 씁니다.** 어긋남은 카드 한 장에 **한 번**
+   *    계산해서 인라인 `transform`에 적고, 미끄러지는 일은 CSS `transition`이 합니다.
+   *    가짜 시계(`cb(0)`)에서도 얼어붙을 게 없어요.
+   *
+   * 🔴 **여전히 결과를 만들지 않습니다.** 점이 어디 서든 골이 되지 않아요 —
+   *    입력은 «공이 어디 있나»(위 표가 정한 값)와 «흐름이 어느 쪽인가»뿐입니다.
+   *
+   * 🎲 굴림은 **`fxRnd`만** 씁니다(판정 난수원도 `Math.random()`도 아니에요).
+   *    개수는 **역할만 보고 정해집니다** — 🧤 키퍼 1번 · 필드 2번. `if` 안에서 부르는 굴림이
+   *    하나도 없어요. 그래서 `setPitch` 한 번이 언제나 **정확히 22번**입니다(아래 그 자리). */
+
+  /* 🧍 역할 — `FORM_H`/`FORM_A`와 **자리가 같은** 배열이에요.
+   * 🔒 표 안에 넣지 않은 이유: `FORM_H`의 **글자 그대로**를 검사(pitch-test M-GK)가 물고 있어요. */
+  const ROLE = ["gk", "def", "def", "mid", "fwd"];
+  /* 팀 전체가 미는 폭 — 우리가 더 크게 움직입니다(우리 이야기라서요).
+   * 🕰️ 예전 `style.css`의 `.w2-pitch.push-* .w2-side.*`와 **같은 값**이에요 (7 · 4). */
+  const PUSH = { home: 7, away: 4 };
+  /* 라인 계수 — 흐름이 갈릴 때 **수비가 제일 크게 오르내립니다**(공격수는 이미 높아요).
+   * 이 차이가 «라인이 내려앉는다»를 만듭니다 — 다 같은 값이면 또 미끄러져요. */
+  const LINE = { gk: 0, def: 1, mid: 0.68, fwd: 0.38, wing: 0.24 };
+  const LINE_STEP = 7;                 // 흐름 한 칸 = 판 폭의 7%
+  /* 공에 붙는 힘 — **가까운 점만** 붙습니다. `RANGE` 밖은 0이에요.
+   * 🔑 전원이 같은 거리를 붙으면 그것도 미끄러지는 그림이 됩니다. */
+  const PULL = { gk: 0, def: 5.5, mid: 7, fwd: 6.2, wing: 7.6 };
+  const RANGE = 46;
+  const CLOSE = 0.6;                   // 아무리 가까워도 틈의 60%까지만 좁힙니다
+  /* 🐛 **공을 덮으면 안 됩니다** — 320px 렌더에서 🧡 나(반지름 7px)가 ⚽ 공(5.5px) **뒤로
+   *    숨었어요.** 하필 「내 순간」 카드라, 내가 관여한 그 순간에만 내가 안 보이는 그림입니다
+   *    (🧤 키퍼가 실점 카드마다 사라지던 것과 **같은 모양의 흠**이에요).
+   * 🔒 그래서 점은 공 둘레 **8칸을 비워 둡니다** — 320px에서 ≈21.6px이에요.
+   *    🔑 가장 큰 반지름 합은 **🧡 커진 나(9.45px) + 공(5.5px) = 14.95px**이라 6.6px 남고,
+   *       그 뒤에 붙는 흔들림(±1.7%·±2.2%)을 빼도 3px 넘게 떨어져요 (렌더 실측 최악 **+3.4px**).
+   *    붙을 때는 여덟 칸 앞에서 멈추고, **이미 그 안에 있으면 물러섭니다**(집 자리가 공 밑일 때).
+   * 🔒 물러서다 판 위아래로 나가지 않게 y는 [18, 82]에 가둡니다.
+   *    🔑 기준은 **가장 큰 점**이에요 — 🧡 커진 나는 지름 18.9px이고, 판이 가장 낮을 때
+   *       (`clamp(76px, …)`) 그 절반이 **높이의 12.45%**입니다. 82 + 12.45 = 94.5%라 4px 남아요.
+   *    ⚠️ 처음엔 [14, 86]으로 뒀는데 그 절반을 14%로 잘못 봐서 **여유가 1.2px**이었습니다. */
+  const STANDOFF = 8;
+  const Y_MIN = 18, Y_MAX = 82;
+  const YW = 0.35;                     // 판이 가로로 길어요 — y 1%는 x 0.35% 값어치
+  const JX = 1.7, JY = 2.2;            // 🎲 점마다 조금씩 다른 자리
+  /* 🧤 **골키퍼는 자기 골문을 안 떠납니다.**
+   * 🔴 x 어긋남은 **판 가운데 쪽으로만** 갑니다 — 골라인 쪽은 **언제나 0**이에요.
+   *    여기가 판 밖으로 나가는 **유일한 길**이라서요: 우리 키퍼는 집이 x 10%인데
+   *    팀 밀림 −7%가 붙어 3%까지 내려오고, 남은 여유가 **3.4px**뿐입니다(판 264px 기준).
+   *    ⚠️ 여기에 ±흔들림을 붙이면 **실점 카드마다 키퍼가 잘립니다**(140번에 실제로 났어요).
+   *    🔬 변이 M-DEV가 정확히 그 상태를 만들어 P-1을 빨간불로 만듭니다. */
+  const GK_OUT = 2;                    // 우리 팀이 밀어붙일 때만, 가운데로 두 칸
+  /* 🐛 **키퍼를 공 쪽으로 너무 붙이면 안 됩니다.** 0.5로 뒀더니 실점 카드(공 y 28%)에서
+   *    키퍼가 39%까지 올라와 **공과 겹쳤어요** — 320px 렌더에서 둘 사이가 8.5px인데
+   *    반지름 합이 10px입니다. «키퍼가 잡았다»처럼 보이는 그 그림이에요(위 BALL_RESULT 주석).
+   * 🔒 0.25면 공 y 26~74%에 대해 키퍼는 44~56%에만 있습니다 — 좌우로 지키는 건 읽히고,
+   *    골라인 카드에서 공과는 **12px 넘게** 떨어져요. */
+  const GK_TRACK = 0.25, GK_SPAN = 24, GK_JY = 0.8;
+  const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
+
+  /* 한 점의 **어긋남** [dx, dy] (판 폭·높이의 %).
+   *   hx, hy  집 자리   ·  role  역할  ·  home  우리 편인가
+   *   bx, by  공        ·  dir   흐름 (+1 상대 진영 · −1 우리 진영 · 0 중원) */
+  function dotShift(hx, hy, role, home, bx, by, dir) {
+    const push = PUSH[home ? "home" : "away"] * dir;
+    if (role === "gk") {
+      /* 🧤 좌우로 골문을 지키고(y), 우리 팀이 밀어붙일 때만 한 칸 **더** 나옵니다(x).
+       *    🔒 `dir`이 내 골대 쪽을 가리키면 `out`은 **0**입니다 — 팀 밀림만 타요.
+       *    🔴 그래서 우리 키퍼의 가장 왼쪽은 `10 − 7 = 3%` — **밀림이 CSS에 있던 시절과 같은 값**입니다. */
+      const out = home ? (dir > 0 ? GK_OUT : 0) : (dir < 0 ? -GK_OUT : 0);
+      return [push + out, clamp(by - hy, -GK_SPAN, GK_SPAN) * GK_TRACK + (fxRnd() * 2 - 1) * GK_JY];
+    }
+    let dx = push + LINE[role] * LINE_STEP * dir, dy = 0;
+    const ux = bx - (hx + dx), uy = (by - hy) * YW;
+    const d = Math.sqrt(ux * ux + uy * uy);
+    if (d > 0.01) {
+      /* 🔴 `d - STANDOFF`가 **음수면 물러섭니다** — 공을 덮고 선 자리에서 한 걸음 비켜요 */
+      const move = d <= STANDOFF ? d - STANDOFF
+        : Math.min(PULL[role] * Math.max(0, 1 - d / RANGE), d * CLOSE, d - STANDOFF);
+      dx += (ux / d) * move;
+      dy += ((uy / d) * move) / YW;
+    }
+    dx += (fxRnd() * 2 - 1) * JX;
+    dy += (fxRnd() * 2 - 1) * JY;
+    return [dx, clamp(hy + dy, Y_MIN, Y_MAX) - hy];
+  }
+  /* 판에 실제로 서는 줄 — `FORM_*`에서 **만들어 씁니다.** 베껴 적으면 표가 갈라져요
+   * (골키퍼 자리를 고쳤는데 움직임만 옛 자리를 보는 날이 그 날입니다). */
+  /* 🧡 **나는 `wing`이에요 — 우리 편 공격수와 같은 값을 쓰면 둘이 늘 붙어 다닙니다.**
+   *    윙어라 라인을 덜 타고(0.24), 공은 더 쫓아요(7.6) — 그게 이 게임의 자리이기도 합니다. */
+  const HOME_ROWS = FORM_H.map((f, i) => [f[0], f[1], ROLE[i] || "mid"]).concat([[ME_AT[0], ME_AT[1], "wing"]]);
+  const AWAY_ROWS = FORM_A.map((f, i) => [f[0], f[1], ROLE[i] || "mid"]);
+
   /* ⚽ **공이 어디로 가는가 — 표 하나가 전부입니다.** [x, y, 어느 진영으로 밀리나]
    * 🔒 `card.result`(엔진이 채운 값)를 그대로 읽습니다. `y`가 `null`이면 아래에서 흔들어요. */
   /* 🐛 y를 **골키퍼와 갈라 둡니다** — 처음엔 골·실점 둘 다 y 46%였는데, 키퍼도 50%라
@@ -262,21 +370,68 @@ window.W2Scene = (() => {
   /* 🔒 x는 **우리 편 점 사이의 빈자리**로 골랐어요 — 63%(공격수)·42%(중원)에 겹치면
    *    공이 점 뒤로 숨습니다(390px 실측에서 64%가 공격수와 포개졌어요). */
   const BALL_LOST = { goal: [56, null, ""], assist: [52, null, ""], defend: [40, null, ""] };
+  /* 🌊 **흐름이 가리키는 무게중심** — [가운데 x, 흔들 폭]. 결과가 아니라 «지금 공이 어느 쪽에»예요.
+   *    (designer 144번 §5-3의 그 자리입니다. 좌표는 제안이었고 아래가 director 판정이에요.)
+   * 🔒 **골문까지는 안 갑니다**: 🥅 골 97% · 🎯 슛 86%. 그 자리를 침범하면 «골인 줄 알았다»가 돼요 —
+   *    그래서 `a`는 **78%에서 멈춥니다**(슛과 8% 떨어져요). `h`도 대칭으로 22%까지만.
+   * 🔒 **`mid`는 흐름 없는 갈래와 같은 띠(38~62%)**입니다 — 🏟️ 프로 경기가 오늘 그리는 그 자리예요.
+   * 🔴 **세 번째 칸(밀림)을 여기 두지 않습니다.** 밀림은 아래 `side`의 `card.flow` 줄이 맡아요 —
+   *    양쪽에 다 적으면 **같은 답을 내는 줄이 둘**이 되어 한쪽을 지워도 증상이 0장입니다
+   *    (CLAUDE.md 「방어가 겹침」 · designer 144번 §5-3이 콕 집어 경고한 자리). */
+  const BALL_FLOW = { a: [70, 8], h: [30, 8], mid: [50, 12] };
 
   function setPitch(card, phase) {
     if (!S || !S.pitchEl) return;
+    /* ══════════════════════════════════════════════════════════════
+     * 🎲 **굴림 개수는 분기 밖에서 정합니다** — `setPitch` 한 번 = **언제나 정확히 22번**
+     * ══════════════════════════════════════════════════════════════
+     *   여기 **2** (`rx`·`ry`) + 점 **20**
+     *   점 20 = 🧤 키퍼 2명 × 1 + 필드 9명 × 2. `dotShift`의 굴림은 **`if` 바깥**에 있고
+     *   개수는 **역할만** 보므로, 카드 내용이 뭐든 20입니다 (`HOME_ROWS` 6 + `AWAY_ROWS` 5).
+     *
+     * 🔴 **예전엔 이 두 줄이 `if` 안에 있었습니다.** 골 카드는 0번, 놓친 카드는 1번이라
+     *    **소비량이 판정 결과를 탔어요.** 값이 아무 데도 안 가도 그건 결합입니다 —
+     *    `youth-moment B-0`이 지키는 자리가 그 모양으로 갈렸던 적이 있어요.
+     * ⚠️ **`if`·`?:` 안에서 `fxRnd()`를 부르지 마세요.** 여기서 뽑아 내려보내세요.
+     *
+     * 🔒 카드 한 장이 지나는 `setPitch` 횟수도 고정입니다 — `card.mine`이면 2번
+     *    (`openMoment` + `closeMoment`), 아니면 1번. **`mine`은 판정 전에 정해지는 값**이고,
+     *    두 갈래 어디에도 `setPitch`를 건너뛰는 길이 없습니다(세대 가드만 있어요).
+     * 🔒 ⌨️ 타이핑(`type`)의 굴림은 **글자 수**인데, 그 문장(`stakeLine`)은 `stakeKey`·`kind`·
+     *    **카드 「전」 스코어**로만 만들어집니다 — 판정 결과를 안 탑니다. 🏫 학교는 아예 안 칩니다. */
+    const rx = fxRnd(), ry = fxRnd();
     const r = card.result;
     let at = (phase !== "open" && r && BALL_RESULT[r])
       || (phase === "close" && BALL_LOST[card.kind])
       || BALL_OPEN[card.kind] || null;
     /* 🥅 킥오프·하프타임·휘슬은 **센터서클**이에요 — 아무 데도 안 걸려 있습니다 */
     if (!at && (card.kind === "kick" || card.kind === "half" || card.kind === "end")) at = [50, 50, ""];
-    /* 🌫️ 그 밖(전개 카드)은 가운데 언저리에서 흔들립니다. 🔒 굴림은 **연출 전용 난수원**이에요 */
-    if (!at) at = [38 + fxRnd() * 24, null, ""];
-    const y = at[1] == null ? 26 + fxRnd() * 48 : at[1];
+    /* 🌫️ 그 밖(전개 카드)은 **흐름이 가리키는 진영**에서 흔들립니다.
+     * 🐛 렌더로 본 흠이에요 — 흐름이 «우리가 밀어붙인다»인데 **공은 중원에** 있었습니다.
+     *    줄은 올라갔는데 공만 가운데라 «흐름»이 화면에서 거짓말을 했어요(320px 실측).
+     * 🔒 `flow`가 없으면(🏟️ 프로 경기) `38 + …*24` — **예전 그대로**입니다. */
+    if (!at) {
+      const f = BALL_FLOW[card.flow];
+      /* 🔒 굴림은 **어느 갈래든 정확히 한 번**입니다 — 흐름이 있고 없고로 소비량이 안 갈려요 */
+      at = f ? [f[0] + (rx * 2 - 1) * f[1], null, ""] : [38 + rx * 24, null, ""];
+    }
+    const y = at[1] == null ? 26 + ry * 48 : at[1];
     S.ballEl.style.transform = `translate(${at[0].toFixed(1)}%, ${y.toFixed(1)}%)`;
-    S.pitchEl.classList.toggle("push-a", at[2] === "a");
-    S.pitchEl.classList.toggle("push-h", at[2] === "h");
+    /* 🌊 **흐름** — 공이 어느 진영에 있나(`at[2]`)가 먼저고, 그게 비어 있을 때만
+     *    `card.flow`가 정합니다(🌫️ 전개 카드가 그 자리예요 — 결과가 없으니까요).
+     * 🔴 `card.flow`를 **안 주는 갈래**(🏟️ 프로 경기 `engine.js`)에서는 `at[2] || ""`이라
+     *    **예전과 한 글자도 다르지 않습니다** — 밀림 클래스가 그때 그대로 걸려요. */
+    const side = at[2] || (card.flow === "a" ? "a" : card.flow === "h" ? "h" : "");
+    S.pitchEl.classList.toggle("push-a", side === "a");
+    S.pitchEl.classList.toggle("push-h", side === "h");
+    /* 🏃 점마다 **다른 자리**로 보냅니다. 카드 한 장에 한 번, 인라인 `transform` 하나씩이에요.
+     * 🔒 여기서 굴리는 것도(fxRnd만) 세는 것도 뒤집는 것도 없습니다 — 공이 간 자리를 보고
+     *    «누가 그 근처인가»를 산수로 옮길 뿐이에요. */
+    const dir = side === "a" ? 1 : side === "h" ? -1 : 0;
+    for (const sl of (S.slots || [])) {
+      const [dx, dy] = dotShift(sl.x, sl.y, sl.role, sl.home, at[0], y, dir);
+      sl.el.style.transform = `translate(${dx.toFixed(2)}%, ${dy.toFixed(2)}%)`;
+    }
     /* 🧡 **내 순간에는 내 동그라미가 커집니다** — "지금 나한테 왔다"가 판에서도 읽혀야 해요 */
     S.pitchEl.classList.toggle("mine", !!card.mine && phase !== "close");
     /* 🕸️ 골망 흔들림 — **골 카드가 왔을 때만.** 여기서 골을 만들지 않습니다 */
@@ -384,19 +539,41 @@ window.W2Scene = (() => {
   }
 
   /* 🟩 판을 **한 번만** 짓습니다 (위 setPitch 머리말).
-   * 🔒 좌표는 인라인 `left`/`top`이지만 **다시는 안 건드립니다** — 움직이는 건 그 위의
-   *    `transform`뿐이라 레이아웃이 다시 안 돌아요. */
-  function dotsHTML(form, extra) {
-    return form.map(([x, y, k]) => `<i class="w2-dot${k}${extra || ""}" style="left:${x}%;top:${y}%"></i>`).join("");
+   * 🔒 집 자리는 인라인 `left`/`top`이고 **다시는 안 건드립니다** — 움직이는 건 그 점을
+   *    감싼 겹(`.w2-slot`)의 `transform`뿐이라 레이아웃이 다시 안 돌아요.
+   * 🧡 **겹을 하나 더 두는 이유** — `.w2-pitch.mine .w2-dot.me { transform: scale(1.35) }`와
+   *    자리 `transform`이 **같은 요소에서 부딪히기** 때문입니다. 인라인이 이기면
+   *    「내 순간에 커지는」 연출이 조용히 죽어요. 그래서 **겹이 옮기고, 점이 커집니다** —
+   *    ⚠️ `!important`로 이기지 않았습니다(다음 사람이 못 덮어요).
+   * ⏳ `transition-delay`를 점마다 조금씩 달리 줍니다(0·26·52·78ms · 🧡 나 13ms) — 열한 개가
+   *    동시에 출발하면 그것도 «대형이 미끄러진다»로 보여요. 집 지을 때 한 번 심고 안 건드립니다.
+   * 🔒 **시차 최댓값이 시간 예산에 들어갑니다** — `.42s + 78ms = 498ms`.
+   *    카드 간 딜레이(`delayOf`: 900·600·350ms)보다 짧아야 해요 (`style.css`의 `.w2-slot`). */
+  function dotsHTML(form) {
+    return form.map(([x, y, k], i) =>
+      `<i class="w2-slot" style="transition-delay:${(i % 4) * 26}ms">`
+      + `<i class="w2-dot${k}" style="left:${x}%;top:${y}%"></i></i>`).join("");
   }
   function pitchHTML() {
     return `<div class="w2-pitch" aria-hidden="true">`
       + `<span class="w2-mouth h"></span><span class="w2-mouth a"></span>`
       + `<span class="w2-side away">${dotsHTML(FORM_A)}</span>`
       + `<span class="w2-side home">${dotsHTML(FORM_H)}`
-      + `<i class="w2-dot me" style="left:${ME_AT[0]}%;top:${ME_AT[1]}%"></i></span>`
+      + `<i class="w2-slot" style="transition-delay:13ms">`
+      + `<i class="w2-dot me" style="left:${ME_AT[0]}%;top:${ME_AT[1]}%"></i></i></span>`
       + `<span class="w2-ball" style="transform:translate(50%,50%)"><b></b></span>`
       + `</div>`;
+  }
+  /* 🧍 겹과 「집 자리·역할」을 짝지어 둡니다 — `setPitch`가 카드마다 이 목록만 돕니다.
+   * 🔒 겹이 하나라도 안 잡히면 **그 점은 그냥 안 움직입니다**(집 자리에 서 있어요).
+   *    화면이 통째로 죽는 것보다 낫고, 판정에는 아무 영향이 없습니다. */
+  function slotsOf(host) {
+    const out = [];
+    const hs = host.querySelectorAll(".w2-side.home .w2-slot");
+    const as = host.querySelectorAll(".w2-side.away .w2-slot");
+    HOME_ROWS.forEach((r, i) => { if (hs[i]) out.push({ el: hs[i], x: r[0], y: r[1], role: r[2], home: true }); });
+    AWAY_ROWS.forEach((r, i) => { if (as[i]) out.push({ el: as[i], x: r[0], y: r[1], role: r[2], home: false }); });
+    return out;
   }
 
   /* ---------- 공개 API ---------- */
@@ -427,7 +604,7 @@ window.W2Scene = (() => {
       clockEl: q(".w2-clock"), mineEl: q(".w2-mine-count"),
       pitchEl: q(".w2-pitch"), ballEl: q(".w2-ball"), feed: q(".w2-feed"),
       h: 0, a: 0, mine: 0, fast: false, lite: !!c.lite, myName: c.myName || "나",
-      slot: null, pending: null, myGoals: [],
+      slot: null, pending: null, myGoals: [], slots: slotsOf(host),
     };
     /* 킥오프 줄을 여기서 만들지 않습니다 — 엔진이 `kind: "kick"` 카드로 줘요.
      * 양쪽이 다 만들었더니 "킥오프!" 다음 줄에 "경기가 시작됩니다"가 또 떴습니다. */
@@ -474,9 +651,13 @@ window.W2Scene = (() => {
 
     const changed = setScore(card.score);
     const fx = fxOf(card);
+    /* 🏁 **킥오프·종료 휘슬은 흐름 줄과 다른 옷**입니다 — 90분 대본이 들어오면서 0'과 90'이
+     *    매 경기 반드시 뜨게 됐어요. 셋을 한 클래스로 묶으면 *"삐— 경기 종료"*가
+     *    *"측면에서 두드립니다"*와 구분이 안 됩니다 (`style.css`의 `.w2-card.whistle`). */
     const cls = card.result === "goal" || card.result === "assist" || card.result === "save" ? "good"
       : card.result === "concede" ? "bad"
-        : (card.kind === "filler" || card.kind === "kick" || card.kind === "end") ? "filler" : "";
+        : card.kind === "kick" || card.kind === "end" ? "whistle"
+          : card.kind === "filler" ? "filler" : "";
     const min = card.min > 90 ? `90+${card.min - 90}'` : `${card.min == null ? "" : card.min}'`;
     add(el("w2-card " + cls,
       `<span class="w2-min">${esc(min)}</span><span class="w2-body">${esc(card.text || resultLine(card))}</span>`));

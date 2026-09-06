@@ -74,6 +74,40 @@ for (const it of FIXTURES.items) {
   check(GAMES.includes(it.game), `${it.id} — 게임이 ${GAMES.join("/")} 중 하나다 (${it.game})`);
 }
 
+/* ══════════════════════════════════════════════════════════════
+ * 🟩 **경기 화면 시나리오 칸** — 목록과 덱이 짝이 맞는가 (2026-09-05)
+ * ══════════════════════════════════════════════════════════════
+ * 🔴 **조용히 실패하는 자리입니다.** `w2Play(id)`가 `W2_DECK[id]`를 못 찾으면 그냥
+ *    `return`이에요 — 오류도 안 나고 칸도 안 열립니다. 목록에는 버튼이 그대로 보여서
+ *    누르기 전까지 **아무도 모릅니다.** (`GAME_ORDER` ↔ `_fixtures.js`와 같은 형태예요.)
+ * 🔒 문자열을 세지 않고 **표를 그대로 읽어** 짝을 맞춥니다. */
+console.log("=== 🟩 경기 화면 시나리오 ===");
+guard("🟩 W2 시나리오 표", () => {
+  const grabW2 = (re) => {
+    const m = CHECK_SRC.match(re);
+    if (!m) throw new Error(`_check.html에서 표를 못 찾았어요 — ${re}`);
+    return new Function(`return ${m[1]};`)();
+  };
+  const scenes = grabW2(/const W2_SCENES = (\[[\s\S]*?\n    \]);/);
+  const deck = grabW2(/const W2_DECK = (\{[\s\S]*?\n    \});/);
+  const ids = scenes.map((x) => x.id);
+  const noDeck = ids.filter((id) => !deck[id] || !Array.isArray(deck[id].cards) || !deck[id].cards.length);
+  const orphan = Object.keys(deck).filter((id) => ids.indexOf(id) < 0);
+  check(noDeck.length === 0,
+    `🟩 목록의 시나리오 ${ids.length}개가 전부 덱을 갖는다 (${ids.join(" · ")})`
+    + (noDeck.length ? `\n     🔴 덱이 없는 칸: ${noDeck.join(" · ")} — 버튼은 보이는데 **눌러도 아무 일도 안 납니다**` : ""));
+  check(orphan.length === 0,
+    `🟩 덱만 있고 목록에 없는 시나리오가 없다`
+    + (orphan.length ? `\n     🔴 목록에 안 올라온 덱: ${orphan.join(" · ")} — 화면에 **버튼이 한 개도 안 그려집니다**` : ""));
+  /* 🔒 카드가 화면 계약(`min`·`kind`)을 지키는가 — `match-scene.js`의 `push`가 읽는 이름이에요 */
+  const bad = [];
+  for (const id of ids) for (const c of deck[id].cards) {
+    if (typeof c.min !== "number" || !c.kind) bad.push(`${id}: ${JSON.stringify(c).slice(0, 48)}…`);
+  }
+  check(bad.length === 0, `🟩 모든 카드가 \`min\`(숫자)과 \`kind\`를 갖는다`
+    + (bad.length ? bad.map((b) => `\n     🔴 ${b}`).join("") : ""));
+});
+
 // ---------- 확인 페이지 부트스트랩 ----------
 /* <script src>를 인라인해서 로드 순서를 살려요. env.js가 반드시 _fixtures.js보다 먼저예요. */
 function makeCheckPage(preSeed, hash) {
