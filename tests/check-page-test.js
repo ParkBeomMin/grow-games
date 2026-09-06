@@ -106,6 +106,83 @@ guard("🟩 W2 시나리오 표", () => {
   }
   check(bad.length === 0, `🟩 모든 카드가 \`min\`(숫자)과 \`kind\`를 갖는다`
     + (bad.length ? bad.map((b) => `\n     🔴 ${b}`).join("") : ""));
+
+  /* ══════════════════════════════════════════════════════════════
+   * 🔬 **덱의 카드가 「소스가 만들 수 있는 모양」인가** (2026-09-06)
+   * ══════════════════════════════════════════════════════════════
+   * 🔴 여기까지는 「덱이 있나 · 필드가 있나」만 봤습니다. 그런데 픽스처는 **실제와 다른 모양**이
+   *    되어도 빨간불이 안 떠요 — 사람이 눌러 보는 화면만 조용히 어긋납니다.
+   *    실제로 두 번 났습니다:
+   *      · 2026-09-05 — 🥅 하프타임에 `poss`·`shots`·`rating`(학교에선 안 나오는 값)
+   *      · 2026-09-06 — 🏫 학교 덱에 🧱 `defend`(뽑힐 수 없는 종류) · 🔥 카드에 `flow`
+   * 🔒 **목록을 베껴 적지 않고 소스에서 읽습니다** — `PLAYABLE`이 바뀌면 검사가 따라갑니다. */
+  const TOWN = fs.readFileSync(path.join(BETA, "winger2/town.js"), "utf8");
+  const GAME = fs.readFileSync(path.join(BETA, "winger2/game.js"), "utf8");
+  const grabSrc = (src, re, wrap) => {
+    const m = src.match(re);
+    if (!m) throw new Error(`소스에서 표를 못 찾았어요 — ${re}`);
+    return new Function(`return ${wrap ? wrap(m[1]) : m[1]};`)();
+  };
+  const CARDS = grabSrc(TOWN, /const CARDS = (\[[\s\S]*?\n  \]);/);
+  const dropKey = (TOWN.match(/const PLAYABLE = CARDS\.filter\(\(c\) => c\.key !== "(\w)"\);/) || [])[1];
+  const KIND_OF = grabSrc(GAME, /const YOUTH_CARD_KIND = (\{.*\});/);
+  if (!dropKey || !CARDS.length) throw new Error("`PLAYABLE` 정규식이 안 걸려요 — 이 검사는 «안 돈» 겁니다");
+  /* 🏫 학교가 실제로 뽑을 수 있는 🔥 순간 카드 종류 */
+  const SCHOOL_KINDS = CARDS.filter((c) => c.key !== dropKey).map((c) => KIND_OF[c.key]);
+  /* 🏫 학교 모드는 `cfg.lite`로 갈립니다 — `mount`가 읽는 그 값이에요 */
+  const isSchool = (id) => !!(deck[id].cfg && deck[id].cfg.lite);
+
+  /* 🔬 판정 셋 — 「깨진 덱을 주면 실제로 잡는가」를 아래에서 되짚습니다(감도) */
+  const strayFlow = (d) => d.cards.filter((c) => c.kind !== "filler" && c.flow != null)
+    .map((c) => `${c.min}' \`${c.kind}\` flow=${JSON.stringify(c.flow)}`);
+  const badKind = (d) => d.cards.filter((c) => c.mine && SCHOOL_KINDS.indexOf(c.kind) < 0)
+    .map((c) => `${c.min}' \`${c.kind}\``);
+  const fatHalf = (d) => d.cards.filter((c) => c.kind === "half"
+    && (c.poss != null || c.shots != null || c.rating != null)).map((c) => `${c.min}'`);
+
+  {
+    const hit = [];
+    for (const id of ids) strayFlow(deck[id]).forEach((x) => hit.push(`${id}: ${x}`));
+    check(hit.length === 0,
+      `🟩 🌊 **\`flow\`가 흐름 줄에만 실린다** — 🔥 결정·🏁 괄호 카드엔 없다`
+      + `\n     🔑 \`match-scene.js\`의 \`const side = at[2] || (card.flow === …)\`에서 \`BALL_LOST\`의 셋째 칸이 \`""\`(falsy)라 **\`card.flow\`로 넘어갑니다** — 붙는 순간 판이 밀려요`
+      + `\n     🔒 \`town.js\`가 \`flow\`를 다는 자리는 \`filler\` 한 곳뿐입니다 (\`flow90-test\` F-9b와 한 쌍)`
+      + (hit.length ? hit.map((b) => `\n     🔴 ${b}`).join("") : ""));
+  }
+  {
+    const school = ids.filter(isSchool);
+    const hit = [];
+    for (const id of school) badKind(deck[id]).forEach((x) => hit.push(`${id}: ${x}`));
+    check(hit.length === 0 && school.length > 0,
+      `🟩 🏫 **학교 덱의 🔥 순간 카드가 \`PLAYABLE\`에서 나올 수 있는 종류다** — ${SCHOOL_KINDS.join(" · ")}`
+      + `\n     🔎 측정 조건 — \`cfg.lite\`인 시나리오 **${school.length}개**(${school.join(" · ")}). 종류 목록은 \`town.js\`의 \`PLAYABLE\`에서 읽습니다`
+      + (school.length ? "" : `\n     🔴 \`lite\` 시나리오가 0개예요 — 이 문장이 **아무것도 안 지킵니다**`)
+      + (hit.length ? hit.map((b) => `\n     🔴 ${b} — 학교에선 안 뽑히는 카드입니다`).join("") : ""));
+  }
+  {
+    const school = ids.filter(isSchool);
+    const hit = [];
+    for (const id of school) fatHalf(deck[id]).forEach((x) => hit.push(`${id}: ${x}`));
+    check(hit.length === 0,
+      `🟩 🏫 **학교 덱의 🥅 하프타임에 \`poss\`·\`shots\`·\`rating\`이 없다** (설계 144번 §6)`
+      + `\n     🔑 학교는 상대를 **안 굴려서** 점유율을 적으려면 없는 값을 지어내야 합니다 — 실제 게임엔 안 뜨는 줄이에요`
+      + (hit.length ? hit.map((b) => `\n     🔴 ${b}`).join("") : ""));
+  }
+  /* 🔬 **감도** — 위 셋이 「깨진 덱을 주면 실제로 잡는가」. 파일이 아니라 **읽어 온 표**를
+   *    일부러 망가뜨려 되짚습니다. 안 잡히면 세 문장이 「0건 위반」으로 공짜 초록불이에요. */
+  {
+    const one = ids.find(isSchool) || ids[0];
+    const clone = (extra) => ({ cfg: deck[one].cfg, cards: deck[one].cards.concat([extra]) });
+    const caught = {
+      flow: strayFlow(clone({ min: 70, kind: "goal", mine: true, flow: "h" })).length > 0,
+      kind: badKind(clone({ min: 70, kind: "defend", mine: true })).length > 0,
+      half: fatHalf(clone({ min: 45, kind: "half", poss: 55 })).length > 0,
+    };
+    const dead = Object.keys(caught).filter((k) => !caught[k]);
+    check(dead.length === 0,
+      `🟩 🔬 **세 자가 실제로 거른다** — 깨뜨린 덱을 넣어 되짚었습니다 (flow ${caught.flow ? "✔" : "🔴"} · kind ${caught.kind ? "✔" : "🔴"} · half ${caught.half ? "✔" : "🔴"})`
+      + (dead.length ? `\n     🔴 **안 걸린 자: ${dead.join(" · ")}** — 그 문장은 지금 아무것도 안 지킵니다` : ""));
+  }
 });
 
 // ---------- 확인 페이지 부트스트랩 ----------

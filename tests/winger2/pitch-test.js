@@ -171,6 +171,14 @@ const MUT = {
   /* 🔴🥅 **M-ATTACK — 공을 가진 쪽의 공격수를 골망 옆까지 데려옵니다** (`PULL` ↑ · `RANGE` ↑).
    *    🔑 designer 148번이 **안 하기로 판정한 바로 그 변경**의 모양이에요 —
    *       *"공을 가진 팀의 최전방 한 명은 공 옆에 세운다"*. 하면 P-11이 빨간불입니다. */
+  /* 🔴⏱️ **M-SLOTSLOW — 점이 미끄러지는 시간을 `.42s` → `1.4s`로.** 「아래」가 깨져서
+   *    점이 다 서기 전에 다음 줄이 옵니다. 🔒 `FLOW_MS`가 **종속값**이라는 것을 지키는 자리예요
+   *    (설계 149번 §8-3 I-D · 145번 §13 ③을 계약으로 승격). */
+  M_SLOTSLOW: { "style.css": [[/(\.w2-slot \{[^}]*transition:\s*transform\s+)[\d.]+s/, "$1" + "1.4s"]] },
+  /* 🔴⏱️ **M-FLOWMS — `FLOW_MS`를 620 → 900으로.** 「위」가 깨집니다 — 🌊 읽는 줄이
+   *    🔥 결정 줄과 **같은 속도**가 되어 149번이 만든 갈래가 뜻이 없어져요.
+   *    🔑 「점이 다 서기 전에 오는가」로만 재면 **900은 더 여유로워서 조용히 통과**합니다. */
+  M_FLOWMS: { "match-scene.js": [[/const FLOW_MS = 620;/, "const FLOW_MS = 900;"]] },
   M_ATTACK: { "match-scene.js": [
     [/const PULL = \{ gk: 0, def: 5\.5, mid: 7, fwd: 6\.2, wing: 7\.6 \};/,
       "const PULL = { gk: 0, def: 5.5, mid: 7, fwd: 40, wing: 40 };"],
@@ -740,26 +748,50 @@ const OVERLAP_PX_CAP = -2.0;
         ? `\n     🔑 「0이 아닌가」로 재면 안 됩니다 — 🧡 나는 따로 걸려 있어서 **뭉개도 2종은 남아요**`
         : `\n     🔴 열한 개가 거의 동시에 떠납니다 — 그것도 «대형이 미끄러지는» 그림이에요`));
 
-    /* 🚧 §13 ③ — 점이 다 서는 시간 vs 카드 간 딜레이. **산식은 소스에서** 뜯습니다. */
+    /* ⏱️ **P-10b — `FLOW_MS`가 「점이 다 서는 시간」과 「결정 줄」 사이에 서 있는가** (설계 149번 I-D).
+     * 🌍 **이 문장이 서 있는 세계** (2026-09-06에 갈렸습니다):
+     *    「🌊 읽는 줄(흐름·킥오프·종료)과 🔥 결정 줄이 **다른 딜레이**를 쓰는 세계」예요.
+     *    🔴 그 전에는 모든 줄이 `delayOf()` 하나였고, 이 문장은 **900ms와 견줬습니다.**
+     *       이제 화면에서 가장 짧은 줄은 `FLOW_MS`(620)이라, 900과 견주면 **틀린 값으로 초록불**이에요.
+     * 🔒 **`FLOW_MS`는 손잡이가 아니라 종속값**입니다 — 그래서 문턱이 아니라 **관계**로 봅니다.
+     *    양쪽 다 소스에서 뜯어요:
+     *      아래 = `style.css`의 `.w2-slot transition` + 이 파일이 인라인으로 거는 최대 `transition-delay`
+     *      위   = `delayOf`의 `d <= 1` 값 (🔥 결정 줄) — 🌊 읽는 줄은 그보다 **짧아야** 갈래가 뜻이 있어요
+     * 📏 재는 칸: 🏫 **학교 피드가 늘 쓰는 칸(점수 차 ≤ 1)**. 3점 차는 `Math.min` 때문에 흐름 줄도
+     *    350ms로 내려가는데, 그건 아래 P-10c(알려진 미달)가 따로 적습니다. */
     const css = readSrc("style.css", null);
     const dur = parseFloat((css.match(/\.w2-slot \{[^}]*transition:\s*transform\s+([\d.]+)s/) || [])[1]);
     const maxDelay = Math.max(...delays.map((d) => parseFloat(d) || 0));
     const settleMs = Math.round(dur * 1000) + maxDelay;
     const src = readSrc("match-scene.js", null);
-    const dm = src.match(/return d <= 1 \? (\d+) : d === 2 \? (\d+) : (\d+);/);
-    const school = dm ? parseInt(dm[1], 10) : NaN;      // 🏫 학교가 늘 쓰는 값 (1점 차 이내)
+    const fm = src.match(/const FLOW_MS = (\d+);/);
+    const dm = src.match(/const base = d <= 1 \? (\d+) : d === 2 \? (\d+) : (\d+);/);
+    const flowMs = fm ? parseInt(fm[1], 10) : NaN;      // 🌊 읽는 줄 — 화면에서 가장 짧은 줄
+    const decide = dm ? parseInt(dm[1], 10) : NaN;      // 🔥 결정 줄 (1점 차 이내 — 🏫 학교가 늘 쓰는 값)
     const rout = dm ? parseInt(dm[3], 10) : NaN;        // 3점 차 이상
-    const okSchool = Number.isFinite(settleMs) && Number.isFinite(school) && settleMs < school;
-    check(okSchool,
-      `P-10b. ⏱️ **점이 다 서기 전에 다음 카드가 오지 않는다** (🏫 학교가 쓰는 ${school}ms) —`
-      + ` 다 서기까지 **${settleMs}ms** (\`.w2-slot\` ${dur}s + 최대 시차 ${maxDelay}ms)`
-      + (okSchool ? `\n     🔒 산식은 소스에서 뜯습니다 — \`style.css\`의 \`transition\`과 \`delayOf()\`의 상수를 견줘요`
-        : `\n     🔴 흐름이 겹쳐 보입니다 — \`.w2-slot\`의 \`transition\`을 줄이거나 시차를 좁히세요`));
-    if (Number.isFinite(rout) && settleMs >= rout) {
+    /* 💥 **못 뜯으면 초록불도 빨간불도 아닙니다** — `NaN < NaN`은 `false`라 「빨간불」로 보이지만,
+     *    그건 «겹친다»가 아니라 «잴 값을 못 찾았다»예요. 둘을 섞으면 다음 사람이 엉뚱한 데를 고칩니다. */
+    if (!Number.isFinite(flowMs) || !Number.isFinite(decide) || !Number.isFinite(settleMs)) {
+      console.log(`\n💥 **P-10b의 계측 정규식이 소스에 안 걸립니다 — 초록불도 빨간불도 아니에요**`);
+      console.log(`   · FLOW_MS ${fm ? "✔" : "🔴 /const FLOW_MS = (\\d+);/"} · base 계단 ${dm ? "✔" : "🔴 /const base = d <= 1 \\? …/"} · .w2-slot transition ${Number.isFinite(dur) ? "✔" : "🔴"}`);
+      console.log(`   🔑 «겹친다»가 아니라 «잴 값을 못 찾았다»입니다. \`delayOf\`나 \`.w2-slot\`이 갈렸어요.`);
+      process.exit(2);
+    }
+    const okFloor = settleMs <= flowMs;                 // 🔒 아래 — 점이 다 서기 전에 다음 줄이 오면 안 돼요
+    const okGap = flowMs < decide;                      // 🔒 위 — 읽는 줄은 결정 줄보다 짧아야 갈래가 뜻이 있어요
+    check(okFloor && okGap,
+      `P-10b. ⏱️ **🌊 흐름 줄이 「점이 다 서는 시간」과 「🔥 결정 줄」 사이에 선다** —`
+      + ` 다 서기까지 **${settleMs}ms** ≤ \`FLOW_MS\` **${flowMs}ms** < 결정 줄 **${decide}ms**`
+      + `\n     🔒 셋 다 소스에서 뜯습니다 (\`.w2-slot\` ${dur}s + 최대 시차 ${maxDelay}ms · \`FLOW_MS\` · \`delayOf\`의 base 계단)`
+      + `\n     🌍 \`FLOW_MS\`는 **손잡이가 아니라 ${settleMs}ms에 종속된 값**이에요 — \`.w2-slot\`을 늘리면 여기도 따라 올려야 합니다`
+      + (okFloor ? "" : `\n     🔴 **아래가 깨졌어요** — 점이 다 서기 전에 다음 줄이 옵니다. \`.w2-slot\`의 \`transition\`을 줄이거나 \`FLOW_MS\`를 올리세요`)
+      + (okGap ? "" : `\n     🔴 **위가 깨졌어요** — 🌊 읽는 줄이 🔥 결정 줄과 같거나 느려서 **갈래가 뜻이 없습니다.** 620ms 언저리로 되돌리세요`));
+    if (settleMs >= rout) {
       console.log(`🚧 P-10c. ⏱️ **3점 차 이상(${rout}ms)에서는 겹칩니다** — ${settleMs} − ${rout} = ${settleMs - rout}ms 모자라요`);
-      console.log(`     🔑 **알려진 상태입니다**(director 145번 §11) — 이미 기운 경기라 «몰아친다»로 읽힐 자리이고,`);
-      console.log(`        설계 ②(밀도의 차이가 긴장을 만든다)가 노리는 그림이기도 해요.`);
+      console.log(`     🔑 **알려진 상태입니다**(director 145번 §11). 🆕 149번의 \`Math.min(FLOW_MS, base)\`로`);
+      console.log(`        🌊 흐름 줄도 3점 차에서는 ${rout}ms로 **같이 내려갑니다** — 그래서 이 미달은 그대로 남아요.`);
       console.log(`     👁️ «몰아친다»로 보이는지 «고장»으로 보이는지는 **폰으로만** 압니다 — 실기기 목록 ①입니다.`);
+      console.log(`     📌 이게 해소되면(= \`.w2-slot\`이 짧아지거나 3점 차 딜레이가 길어지면) 이 🚧를 지우고 P-10b에 합치세요.`);
     }
   }
 
@@ -1029,6 +1061,26 @@ else {
     + (delays.length < 3
       ? `\n     ✔ **0이 안 됩니다 — 2종이 남아요.** 「0이 아닌가」로 재는 검사는 여기서 조용히 통과합니다`
       : `\n     🔴 시차가 그대로예요 — 변이가 마크업을 못 갈았습니다`));
+}
+
+/* 🧪⏱️ M-SLOTSLOW · M-FLOWMS — P-10b의 **양쪽 벽**을 각각 깹니다.
+ * 🔑 둘을 한 변이로 묶으면 「아래가 깨졌나 위가 깨졌나」가 안 갈려요 — 고칠 곳이 정반대입니다. */
+for (const [name, side, what] of [
+  ["M_SLOTSLOW", "아래", "`.w2-slot` `transition` `.42s` → `1.4s` (점이 다 서기 전에 다음 줄)"],
+  ["M_FLOWMS", "위", "`FLOW_MS` 620 → 900 (🌊 읽는 줄이 🔥 결정 줄과 같은 속도)"],
+]) {
+  if (!mutOK(name)) { check(false, `🧪 **변이 ${name.replace(/_/g, "-")}**${MUT_DEAD}`); continue; }
+  const css = readSrc("style.css", MUT[name]["style.css"] ? MUT[name] : null);
+  const src = readSrc("match-scene.js", MUT[name]["match-scene.js"] ? MUT[name] : null);
+  const dur = parseFloat((css.match(/\.w2-slot \{[^}]*transition:\s*transform\s+([\d.]+)s/) || [])[1]);
+  const flowMs = parseInt((src.match(/const FLOW_MS = (\d+);/) || [])[1], 10);
+  const decide = parseInt((src.match(/const base = d <= 1 \? (\d+) :/) || [])[1], 10);
+  const settleMs = Math.round(dur * 1000) + 78;          // 🔒 최대 시차는 마크업 상수(0·26·52·78)
+  const red = !(settleMs <= flowMs) || !(flowMs < decide);
+  check(red,
+    `🧪⏱️ **변이 ${name.replace(/_/g, "-")} — ${what}** → P-10b의 **「${side}」**가 빨간불`
+    + `\n     ${settleMs}ms ≤ FLOW_MS ${flowMs}ms < 결정 줄 ${decide}ms — ${red ? "✔ 깨집니다" : "🔴 그대로 성립해요"}`
+    + (red ? "" : `\n     🔴 이 변이가 P-10b에 안 걸립니다 — 「${side}」를 재는 문장이 지금 아무것도 안 지켜요`));
 }
 
 /* 🧪🥅 M-ATTACK — designer 148번이 **안 하기로 한 그 변경**의 모양. **P-11만** 갈려야 합니다. */

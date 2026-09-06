@@ -92,6 +92,10 @@ const KICK_LINE = (() => {
   const m = TOWN_SRC.match(/const KICK_LINE = (\{.*\});/);
   return m ? new Function(`return ${m[1]};`)() : null;
 })();
+const KICK2_LINE = (() => {
+  const m = TOWN_SRC.match(/const KICK2_LINE = (\{.*\});/);
+  try { return m ? new Function(`return ${m[1]};`)() : null; } catch (e) { return null; }
+})();
 const FLOW_LINE = (() => {
   const m = TOWN_SRC.match(/const FLOW_LINE = (\{[\s\S]*?\n  \});/);
   return m ? new Function(`return ${m[1]};`)() : null;
@@ -160,7 +164,11 @@ async function settle(D) {
   const n = () => D.querySelectorAll("#town-scene .w2-feed .w2-min").length;
   await wait(GRACE);
   let prev = -1, hold = 0;
-  for (let i = 0; i < 200; i++) {
+  /* 🔒 상한 400회 × 15ms = **6초**. 🟡 설계 149번 §7 ⑨의 권고(200 → 400)입니다 —
+   *    🔴 **이건 「고침」이 아니라 여유**예요: 정상 경로는 `hold >= 3`에서 곧바로 돌아와서
+   *    200에도 안 닿습니다(🤖 자동 진행 90ms × 13줄 ≈ 1.2초). 느린 기기에서 우연히 상한에
+   *    부딪혀 **코드가 아니라 이 함수 때문에** 빨간불이 나는 것만 막아요. */
+  for (let i = 0; i < 400; i++) {
     const c = n();
     hold = c === prev ? hold + 1 : 0;
     if (hold >= 3) return c;
@@ -266,10 +274,10 @@ const finOf = (txt) => {
 (async () => {
   /* ══════════ 0. 산식과 변이 정규식이 지금 소스에 걸리는가 ══════════ */
   {
-    const tabOK = !!PTS && !!GOAL_BY && !!KICK_LINE && !!FLOW_LINE;
+    const tabOK = !!PTS && !!GOAL_BY && !!KICK_LINE && !!KICK2_LINE && !!FLOW_LINE;
     check(tabOK,
       `0-1. 📐 \`town.js\`에서 산식·문구를 뽑았다 — PTS ${JSON.stringify(PTS)} · GOAL_BY ${JSON.stringify(GOAL_BY)}`
-      + `\n     🗣️ KICK_LINE ${KICK_LINE ? "✔" : "🔴"} · FLOW_LINE ${FLOW_LINE ? "✔" : "🔴"} (B-1b가 씁니다)`
+      + `\n     🗣️ KICK_LINE ${KICK_LINE ? "✔" : "🔴"} · KICK2_LINE ${KICK2_LINE ? "✔" : "🔴"} · FLOW_LINE ${FLOW_LINE ? "✔" : "🔴"} (B-1의 문구 자가 씁니다)`
       + (tabOK ? "" : `\n     🔴 정규식이 안 걸려요 — 아래는 전부 "안 도는" 상태입니다`));
     const bad = pageMutsOK(MUT);
     const n = Object.values(MUT).reduce((a, t) => a + Object.values(t).reduce((b, m) => b + m.length, 0), 0);
@@ -404,35 +412,73 @@ const finOf = (txt) => {
      *    변이는 60ms에서도 잡히지만, **기준선이 공짜면 그 판은 아무것도 안 지켜요.**
      *    120·200ms는 기준선이 5~12개를 실제로 훑고도 누수 0입니다 (B-2가 매번 확인). */
     const CAD = [120, 200];
-    /* 🆕 **2026-09-05 — 90분 대본이 들어와 표를 갈았습니다** (설계 144번 §11-1).
-     * 🔴 옛 표는 `{ e: [30, 60], m: [23, 45, 68], h: [23, 45, 68] }`였어요. 🏁 `0'` 킥오프 ·
-     *    ⏱️ 필러 · 🔚 `90'` 종료가 분을 더하면서 **정상적으로 그려진 줄이 「남의 분」으로**
-     *    잡혀 B-1이 즉시 빨간불이었습니다 — 「설계가 뒤집혔는데 검사가 옛 계약을 지키는」 자리.
-     * 🔑 🥅 하프타임은 `add(el("w2-half", …))`라 **`.w2-min` span이 없어서** 이 표에 안 들어와요. */
+    /* 🆕 **2026-09-06 — 흐름 밀도 개편으로 표를 다시 갈았습니다** (설계 149번 §3-6·§8-1).
+     * 🔴 이 표가 갈린 것은 **두 번째**예요:
+     *      · 옛옛 표 `{ e: [30, 60], m/h: [23, 45, 68] }` — 90분 대본 이전
+     *      · 옛 표   `{ e: [0, 30, 60, 75, 90], m/h: [0, 23, 34, 45, 57, 68, 79, 90] }` — 144번(중점 필러)
+     *    🌊 흐름 줄이 **12분 격자**에서 나오게 되면서 필러 분이 통째로 바뀌었습니다.
+     * 🔑 🥅 하프타임은 `add(el("w2-half", …))`라 **`.w2-min` span이 없어서** 이 표에 안 들어와요.
+     * 🌍 이 표가 서 있는 세계: 「🔥 카드는 `minAt`, 🌊 흐름은 `GRID = 12` 격자」입니다 —
+     *    둘 중 하나가 움직이면 **여기가 먼저 빨간불**이고, 그건 정상 신호예요. */
     const OWN = {
-      e: [0, 30, 60, 75, 90],
-      m: [0, 23, 34, 45, 57, 68, 79, 90],
-      h: [0, 23, 34, 45, 57, 68, 79, 90],
+      e: [0, 12, 30, 36, 60, 72, 84, 90],
+      m: [0, 12, 23, 36, 45, 60, 68, 84, 90],
+      h: [0, 12, 23, 36, 45, 60, 68, 84, 90],
     };
-    /* 🟡 **분만으로는 판별력이 얇아졌습니다** — `0'`과 `90'`이 이제 **세 단계에 다** 있어요
-     *    (설계 144번 §11-2). 그래서 **문구**라는 자를 하나 더 댑니다:
-     *      🏁 `0'` 대진 줄과 ⏱️ 필러 문구는 **단계마다 다릅니다**(`KICK_LINE` · `FLOW_LINE`).
-     *      초등의 `0'`이 중등 피드에 새면 분으로는 안 보여도 **문구로는 보입니다.**
+    /* 🟡 **분만으로는 판별력이 얇습니다** — `0·12·36·84·90`이 이제 **세 단계에 다** 있어요
+     *    (설계 149번 §8-1). 그래서 **문구**라는 자를 하나 더 댑니다:
+     *      🏁 `0'` 두 줄과 🌊 흐름 줄은 **단계마다 다릅니다**(`KICK_LINE`·`KICK2_LINE`·`FLOW_LINE`).
+     *      초등의 `12'`가 중등 피드에 새면 분으로는 안 보여도 **문구로는 보입니다.**
      * 🔒 표를 베껴 적지 않고 **소스에서 뽑습니다** — 문구가 다듬어져도 검사가 안 죽어요.
+     *
+     * 🔴🔴 **2026-09-06 — 이 자가 조용히 눈이 멀어 있었습니다.**
+     *    표의 줄에는 `{me}`·`{opp}` 자리표가 있고 화면에는 **이름이 박혀** 있어서 완전일치가
+     *    아닌데, 옛 코드는 `if (all.indexOf(t) < 0) return true;`로 **«이 자의 대상 아님»으로
+     *    흘려보냈어요.** 🧡 `{me}`가 든 줄은 셋 중 하나라 **판별력이 1/3 줄어든 채**였습니다
+     *    (engineer 150번 §4-② — 설계는 *"즉시 빨간불"*이라 했지만 실제로는 «조용히 안 거름»).
+     *    👉 자리표로 쪼갠 뒤 **가장 긴 조각**이 그려진 줄에 들어 있는가로 봅니다.
      * 🔴 🔚 `90'` 종료 휘슬은 세 단계가 **같은 말**이라 이 자로도 안 갈립니다 — 그 자리는
      *    `B-2`의 `drops`와 `flow90-test` F-1(분 순서)이 겹쳐 봅니다. */
+    const TPL = {};
+    for (const st of Object.keys(FLOW_LINE)) {
+      const rows = [];
+      if (KICK_LINE[st]) rows.push(String(KICK_LINE[st]));
+      if (KICK2_LINE[st]) rows.push(String(KICK2_LINE[st]));
+      for (const fl of Object.keys(FLOW_LINE[st])) rows.push(...FLOW_LINE[st][fl]);
+      TPL[st] = rows;
+    }
+    const frag = (tpl) => tpl.split(/\{me\}|\{opp\}/).reduce((a, b) => (b.length > a.length ? b : a), "");
+    const ownersOf = (t) => Object.keys(TPL).filter((st) => TPL[st].some((tpl) => t.indexOf(frag(tpl)) >= 0));
     const OWN_TEXT = (id, t) => {
       if (!t) return true;
-      const kick = String(KICK_LINE[id] || "").replace(/\{opp\}/, "");
-      const isKick = Object.values(KICK_LINE).some((k) => t.indexOf(String(k).replace(/\{opp\}/, "")) >= 0);
-      if (isKick) return t.indexOf(kick) >= 0;
-      const all = [];
-      for (const st of Object.keys(FLOW_LINE)) for (const fl of Object.keys(FLOW_LINE[st])) all.push(...FLOW_LINE[st][fl]);
-      if (all.indexOf(t) < 0) return true;                 // 🔥 순간 카드 등 — 이 자의 대상이 아니에요
-      const mine = [];
-      for (const fl of Object.keys(FLOW_LINE[id] || {})) mine.push(...FLOW_LINE[id][fl]);
-      return mine.indexOf(t) >= 0;
+      const own = ownersOf(t);
+      if (!own.length) return true;            // 🔥 순간 카드·🔚 종료 휘슬 — 이 자의 대상이 아니에요
+      return own.indexOf(id) >= 0;
     };
+    /* 🔬 **자가 실제로 가르는가** — 조각이 짧아지거나 문구가 겹치면 이 자는 아무도 안 거르면서
+     *    초록불이 됩니다(「방어가 겹침」의 사촌). 표의 줄마다 **주인이 정확히 하나**인지 봅니다. */
+    {
+      /* 🔒 **`OWN_TEXT`를 그대로 굴립니다** — 도우미(`ownersOf`)가 아니라 **B-1이 실제로 쓰는 자**를
+       *    재요. 그래야 자를 옛 「완전일치」로 되돌리는 순간 여기가 빨간불이 됩니다:
+       *    옛 코드에서 🧡 `{me}` 줄은 `OWN_TEXT(남의 단계, 그 줄) === true`(«대상 아님»)였어요. */
+      const blur = [], N = "테스트이름", O = "테스트상대";
+      let withMe = 0;
+      for (const st of Object.keys(TPL)) for (const tpl of TPL[st]) {
+        const drawn = String(tpl).replace("{me}", N).replace("{opp}", O);
+        if (String(tpl).indexOf("{me}") >= 0) withMe += 1;
+        if (!OWN_TEXT(st, drawn)) blur.push(`${st} "${tpl}" — 제 단계에서 남의 문구로 잡혀요`);
+        for (const other of Object.keys(TPL)) {
+          if (other === st) continue;
+          if (OWN_TEXT(other, drawn)) blur.push(`${st} "${tpl}" — ${other}피드에 떠도 **안 걸립니다**`);
+        }
+      }
+      const total = Object.values(TPL).reduce((a, r) => a + r.length, 0);
+      check(blur.length === 0,
+        `B-1a. 🔬 **문구 자가 실제로 단계를 가른다** — 표의 줄 ${total}개(🧡 \`{me}\`가 든 것 ${withMe}개)를 이름 박은 꼴로 넣어 봅니다`
+        + `\n     🔒 제 단계에서는 통과 · **다른 두 단계에서는 걸림**을 둘 다 봅니다`
+        + `\n     🔑 자를 옛 「완전일치」로 되돌리면 🧡 \`{me}\` 줄 ${withMe}개가 «이 자의 대상 아님»으로 흘러나가 **여기가 빨간불**이에요`
+        + (blur.length ? blur.slice(0, 6).map((b) => `\n     🔴 ${b}`).join("") : ""));
+    }
     const leaks = (r) => {
       const bad = [];
       for (const id of ["e", "m", "h"]) {
