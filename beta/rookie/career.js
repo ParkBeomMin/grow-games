@@ -473,6 +473,31 @@ window.Career = (() => {
     sn.lg = buildLeagueState();
   }
 
+  /* 🏅 내 규정 자격 — **화면과 수상이 같은 잣대를 쓰게** 한 군데로 뽑았어요.
+   * 예전에는 raceRank의 myOk와 titlesWon의 세 줄에 같은 조건이 따로 적혀 있었어요.
+   * 둘이 갈라지면 "화면에서 1위인데 상은 안 옴"이 됩니다 — 이 게임에서 가장 신뢰를 깎는 버그예요.
+   * 🔒 상태도 난수도 건드리지 않아요. */
+  function raceMyEligibility(stats, metric, total) {
+    const st = stats || {};
+    const tot = total || 144;
+    const ok = { eligible: true, reason: null, current: null, required: null, missing: 0, unit: null };
+    if (metric === "avg") {
+      const ab = st.ab || 0, need = tot * 2;
+      if (ab >= need) return ok;
+      return { eligible: false, reason: "ab", current: ab, required: need, missing: need - ab, unit: "타수" };
+    }
+    if (metric === "era") {
+      const ip = st.ip || 0, need = tot * 0.9;
+      if (ip < need) return { eligible: false, reason: "ip", current: ip, required: need, missing: need - ip, unit: "이닝" };
+      // 자책 0은 지금 수상 집계에서 빠져요 (야구 규칙과는 다르지만 기존 동작이라 여기서 안 고칩니다)
+      if (titleMetric(st, "era") <= 0) {
+        return { eligible: false, reason: "zero-era", current: 0, required: null, missing: 0, unit: null };
+      }
+      return ok;
+    }
+    return ok;
+  }
+
   /* 나 + 리그 전체 선수를 한 종목으로 줄세워요. era만 낮은 게 위. 동률은 내가 위(공동 수상).
    * 규정 타석·이닝을 못 채운 선수는 비율 부문(타율·자책)에서 빠져요. */
   function raceRank(metric) {
@@ -496,8 +521,7 @@ window.Career = (() => {
       }
     }
     // 내 줄 — 실제 플레이로 쌓인 성적이 정본이에요
-    const myOk = metric === "avg" ? (sn.stats.ab || 0) >= tot * 2
-      : metric === "era" ? (sn.stats.ip || 0) >= tot * 0.9 && titleMetric(sn.stats, "era") > 0 : true;
+    const myOk = raceMyEligibility(sn.stats, metric, tot).eligible;
     if (myOk) pool.push({ name: S.name, team: S.team, me: true, v: titleMetric(sn.stats, metric) });
     const higher = !(metric === "era");
     pool.sort((a, b) => (higher ? b.v - a.v : a.v - b.v) || (a.me ? -1 : b.me ? 1 : 0));
@@ -506,6 +530,83 @@ window.Career = (() => {
   const raceTop = (metric) => { const r = raceRank(metric); return r.length && r[0].me; };
   const raceFmt = (m, x) => (m === "avg" ? x.toFixed(3) : m === "era" ? x.toFixed(2) : Math.round(x));
   const RACE_UNIT = { hits: "안타", hr: "홈런", sb: "도루", avg: "타율", wins: "승", k: "탈삼진", era: "자책", saves: "세이브" };
+
+  /* 🔒 남이 올린 이름을 그리는 자리 — 라이벌 이름은 유저 풀(rookie-rival-pool-v1)에서 와요.
+   * 남의 기기에서 온 문자열이라 그대로 innerHTML에 넣으면 안 됩니다. */
+  const raceEscape = (v) => String(v == null ? "" : v).replace(/[&<>"']/g,
+    (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+  /* 🏅 지금 내가 어디쯤인가 — **순위를 새로 만들지 않아요.** raceRank가 준 줄을 읽기만 해요.
+   * 화면이 제 순위를 따로 계산하면 수상 판정과 갈라집니다. */
+  function raceProgressOf(metric, ranked, eligibility, game, total) {
+    const tot = total || 144;
+    const done = game || 0;
+    const remaining = Math.max(0, tot - done);
+    const base = { remaining, myIndex: -1, leader: null, ahead: null, leaderGap: 0, aheadGap: 0, tiedFirst: false, soleEntrant: false };
+    if (done === 0) return Object.assign(base, { mode: "preseason" });          // 0안타 공동 선두를 축하하지 않아요
+    if (!eligibility || !eligibility.eligible) return Object.assign(base, { mode: "unqualified" });
+    const rows = ranked || [];
+    const myIndex = rows.findIndex((x) => x && x.me);
+    if (!rows.length || myIndex < 0) return Object.assign(base, { mode: "empty" });
+    const lower = metric === "era";                                             // 자책만 낮은 게 위
+    const gapTo = (other) => (lower ? rows[myIndex].v - other.v : other.v - rows[myIndex].v);
+    const leader = rows[0];
+    const ahead = myIndex >= 1 ? rows[myIndex - 1] : null;
+    return {
+      mode: "ranked",
+      remaining,
+      myIndex,
+      leader,
+      ahead,
+      leaderGap: myIndex === 0 ? 0 : gapTo(leader),
+      aheadGap: ahead ? gapTo(ahead) : 0,
+      // 원값으로 봅니다 — 반올림한 뒤 비교하면 0.0004 차이가 동률로 둔갑해요
+      tiedFirst: myIndex === 0 && rows.length > 1 && rows[1].v === rows[0].v,
+      soleEntrant: rows.length === 1,
+    };
+  }
+
+  /* 격차를 사람 말로. 🔒 "안타 2개면 역전"으로 바꾸지 않아요 —
+   * 상대 기록과 분모가 같이 움직여서 그 예측은 틀립니다. */
+  function raceGapText(metric, gap) {
+    if (!(gap > 0)) return "같은 기록이에요";
+    if (metric === "avg") return gap.toFixed(3) === "0.000" ? "0.001 미만 차이" : `타율 ${gap.toFixed(3)} 차이`;
+    if (metric === "era") return gap.toFixed(2) === "0.00" ? "0.01 미만 차이" : `자책 ${gap.toFixed(2)} 차이`;
+    return `${Math.round(gap)}${RACE_UNIT[metric] || ""} 차이`;
+  }
+
+  /* 규정까지 얼마나 남았나. 이닝은 아웃 단위로 올려 ⅓·⅔로 적어요 —
+   * "12.1이닝"으로 적으면 소수 12.1로 읽힙니다. */
+  function raceEligibilityText(e) {
+    if (!e || e.eligible) return "";
+    if (e.reason === "zero-era") return "무실점 기록은 지금 수상 집계에서 빠져요";
+    if (e.reason === "ab") return `순위에 들어가려면 ${Math.ceil(e.missing)}타수가 더 필요해요`;
+    const outs = Math.ceil(e.missing * 3 - 1e-9);                               // 정수 경계의 부동소수 오차만 흡수
+    const whole = Math.floor(outs / 3), rem = outs % 3;
+    const frac = rem === 1 ? "⅓" : rem === 2 ? "⅔" : "";
+    return `순위에 들어가려면 ${whole}${frac}이닝이 더 필요해요`;
+  }
+
+  /* 🏅 목표 카드 — 기존 순위표 위에 "다음에 뭘 노리면 되는지"를 붙여요. */
+  function raceProgressHTML(p, e, metric) {
+    const left = p.remaining > 0 ? `남은 ${p.remaining}경기` : "정규시즌 기록 집계가 끝났어요";
+    const wrap = (main, sub) => `<div class="race-goal"><div class="race-goal-main">${main}</div>`
+      + (sub ? `<div class="race-goal-sub">${sub}</div>` : "") + "</div>";
+    if (p.mode === "preseason") return wrap("첫 경기를 치르면 순위가 쌓여요", "");
+    if (p.mode === "unqualified") return wrap(raceEligibilityText(e), left);
+    if (p.mode === "empty") return wrap("아직 비교할 순위 기록이 없어요", left);
+    if (p.myIndex === 0) {
+      const head = p.tiedFirst ? "현재 공동 선두예요" : "현재 선두예요";
+      return wrap(`👑 ${head}`, p.soleEntrant ? `${left} · 지금 이 부문 집계 대상은 나뿐이에요` : left);
+    }
+    const rows = [`현재 ${p.myIndex + 1}위 · ${left}`, `선두와 ${raceGapText(metric, p.leaderGap)}`];
+    if (p.ahead) {
+      rows.push(`바로 앞 ${raceEscape(p.ahead.name)} <span class="rc-club">${raceEscape(p.ahead.team)}</span>`
+        + ` ${raceFmt(metric, p.ahead.v)} — 나와 ${raceGapText(metric, p.aheadGap)}`);
+    }
+    return `<div class="race-goal">${rows.map((r, i) =>
+      `<div class="${i === 0 ? "race-goal-main" : "race-goal-sub"}">${r}</div>`).join("")}</div>`;
+  }
 
   /* 순위표 HTML — 종목 탭 + 그 종목의 상위 5명(내가 5위 밖이면 내 줄을 아래에 핀). */
   function raceHTML() {
@@ -517,13 +618,17 @@ window.Career = (() => {
     const ranked = raceRank(raceKey);
     const myIdx = ranked.findIndex((x) => x.me);
     const line = (x, i) => `<tr class="${x.me ? "me" : ""}"><td>${i + 1}</td>`
-      + `<td>${x.name || "나"}${x.me ? ` <span class="rc-me">나</span>` : ""}<span class="rc-club">${x.team || ""}</span></td>`
+      + `<td>${raceEscape(x.name || "나")}${x.me ? ` <span class="rc-me">나</span>` : ""}<span class="rc-club">${raceEscape(x.team)}</span></td>`
       + `<td class="rc-v">${i === 0 ? "👑" : ""}${raceFmt(raceKey, x.v)}</td></tr>`;
     const shown = ranked.slice(0, 5).map(line).join("");
     const pinned = myIdx >= 5 ? `<tr class="rc-gap"><td colspan="3">⋯</td></tr>${line(ranked[myIdx], myIdx)}` : "";
     const tabs = mine.map(([, x]) =>
-      `<button type="button" class="race-tab${x.metric === raceKey ? " on" : ""}" data-k="${x.metric}">${x.emoji} ${x.name}</button>`).join("");
+      `<button type="button" class="race-tab${x.metric === raceKey ? " on" : ""}" aria-pressed="${x.metric === raceKey}" data-k="${x.metric}">${x.emoji} ${x.name}</button>`).join("");
+    // 🏅 목표 카드 — 순위는 위에서 **한 번 읽은 것**을 그대로 씁니다 (다시 줄세우지 않아요)
+    const elig = raceMyEligibility(sn.stats, raceKey, sn.total || 144);
+    const prog = raceProgressOf(raceKey, ranked, elig, sn.game || 0, sn.total || 144);
     return `<div class="race-tabs">${tabs}</div>`
+      + raceProgressHTML(prog, elig, raceKey)
       + `<table class="rank-table race-table"><thead><tr><th>#</th><th>선수</th><th>${t.emoji} ${RACE_UNIT[raceKey]}</th></tr></thead>`
       + `<tbody>${shown}${pinned}</tbody></table>`
       + `<div class="race-note">👑 이 부문 1위 — 시즌이 끝나면 부문 타이틀을 받아요</div>`;
@@ -570,6 +675,9 @@ window.Career = (() => {
         if (!btn || !S.season) return;
         raceKey = btn.dataset.k;
         renderStandings();
+        // 다시 그리면 누른 버튼이 사라져요 — 같은 부문 버튼으로 포커스를 되돌립니다
+        const again = body.querySelector(`.race-tab[data-k="${raceKey}"]`);
+        if (again) again.focus();
       });
     }
   }
@@ -1333,9 +1441,7 @@ window.Career = (() => {
     const tot = S.season.total || 144;
     const out = [];
     for (const [id, t] of myTitles()) {
-      if (t.metric === "avg" && (stats.ab || 0) < tot * 2) continue;
-      if (t.metric === "era" && (stats.ip || 0) < tot * 0.9) continue;
-      if (t.metric === "era" && titleMetric(stats, "era") <= 0) continue;
+      if (!raceMyEligibility(stats, t.metric, tot).eligible) continue;   // 🏅 화면과 같은 잣대
       if (raceTop(t.metric)) out.push({ id, v: titleMetric(stats, t.metric) });
     }
     return out;
@@ -2889,6 +2995,9 @@ window.Career = (() => {
      * 해외 진출로 새로 붙는 것들은 여기에 모아요. LEAGUES·leagueOf는 game.js의
      * 전역이지만, 테스트가 한 곳만 보면 되게 여기서 같이 내보내요. */
     _t: {
+      // 🏅 개인 타이틀 레이스 목표판 — 순수 계산 넷 + 화면 입구 하나
+      // (renderStandings를 열어야 "카드가 진짜 그려지고 탭이 먹는가"를 잴 수 있어요)
+      raceMyEligibility, raceProgressOf, raceGapText, raceEligibilityText, renderStandings,
       LEAGUES, leagueOf, oppFor, teamStrOf,
       POST_GATE, postingGates, postingOffers, moveToLeague, postLabel, KS_LABEL,
       LEAGUE_CLUBS, teamsOf, clubStrOf, driftBandOf, leagueTeams, driftTeamStr, teamWinP, gameWinP,
