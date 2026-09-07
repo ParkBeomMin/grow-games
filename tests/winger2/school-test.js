@@ -49,7 +49,7 @@
  * 종료 코드: 0 통과 · 1 빨간불 · 2 💥 죽음(안 돌았음) — `_load.js`가 걸어 줍니다.
  */
 "use strict";
-const { bootPage, pageMutsOK, townAuto, passStage, passEarly, passArc, tapFoot, tapChild, pickOrigin, seedBoth }
+const { bootPage, pageMutsOK, townAuto, passStage, passEarly, passArc, tapFoot, tapChild, pickOrigin, seedBoth, stageIdle }
   = require("./_load.js");
 
 let fail = 0;
@@ -498,30 +498,43 @@ console.log("\n── 🎮 S-8. 초등에 자리가 안 닿는다 ──");
 /* 🔑 **한 시드 = 창 하나.** 네 벌(초등 fw/df · 중등 fw/df)을 **같은 창에서** 굴리고
  *    매번 난수를 같은 자리로 되감아요 — 그래야 fw와 df가 **똑같은 난수 열**을 보고,
  *    차이가 나면 그건 오직 **자리 때문**입니다. */
-function probeSeed(muts, seed) {
+async function probeSeed(muts, seed) {
   const h = boot({ muts, seed });
   const T = h.W.WingerTown;
-  const one = (stageId, pos) => {
+  const one = async (stageId, pos) => {
     seedBoth(h.W, seed);
     const rec = [];
     h.W.W2Moment = { play: (el, ctx, cb) => { rec.push({ kind: ctx.kind, moment: ctx.moment }); cb(ctx.judge(0.5)); } };
     T.reset();
     let done = false;
     T.openStage(stageId, { pos, foot: "R" }, () => { done = true; });
+    /* ⏱️ **2026-09-06 — 시계가 `await` 루프라 동기 루프로는 한 칸도 안 굴러갑니다** (설계 153번).
+     *    옛 코드는 누른 직후 버튼이 `disabled`라 **한 번 누르고 break**했고, `rec`이 **빈 배열**이라
+     *    S-8이 «갈라진 시드 0개»로 **공짜 초록불**이 될 뻔했습니다.
+     * 🔒 `Scene.fast()`로 **간격만** 0으로 만듭니다 — 틱 개수는 그대로 90번이라
+     *    판정도 난수 소비량도 안 바뀌어요 (`clock-test` C-2가 그 계약을 지킵니다). */
+    const Sc = h.W.W2Scene;
+    if (Sc && Sc.fast) Sc.fast();
     for (let g = 0; g < 12 && !done; g++) {
+      await stageIdle(h.D, true);
       const b = h.D.getElementById("btn-town-next");
       if (!b || b.disabled || b.classList.contains("hidden")) break;
       h.press(b, "🏫 다음");
     }
+    /* 🔴 **여기에 정착을 또 넣지 마세요.** 마지막 누름이 `done`을 켜서 루프가 끝나는데,
+     *    그 뒤엔 버튼이 사라져 `stageIdle(anyScreen)`이 **상한 21초를 통째로 씁니다**
+     *    (탐침 80벌 × 21초 = 28분). 루프 「머리」의 정착 하나로 충분해요. */
     return rec;
   };
-  const r = { seed, fw: one("e", "fw"), df: one("e", "df"), mFw: one("m", "fw"), mDf: one("m", "df") };
+  const r = { seed, fw: await one("e", "fw"), df: await one("e", "df"),
+    mFw: await one("m", "fw"), mDf: await one("m", "df") };
   h.close();
   return r;
 }
 const sig = (r) => r.map((x) => `${x.kind}/${x.moment}`).join(",");
 {
-  const rows = PROBE_SEEDS.map((s) => probeSeed(null, s));
+  const rows = [];
+  for (const sd of PROBE_SEEDS) rows.push(await probeSeed(null, sd));
   const elemDiff = rows.filter((r) => sig(r.fw) !== sig(r.df));
   const midDiff = rows.filter((r) => sig(r.mFw) !== sig(r.mDf));
   const elemSame = elemDiff.length === 0 && rows.every((r) => r.fw.length > 0);
@@ -696,7 +709,8 @@ else {
 /* 🧪🔑 M-POS — 초등이 자리를 봄. S-8·S-8a가 갈려야 합니다. */
 if (!mutOK("M_POS_ELEM")) check(false, `🧪 **변이 M-POS — 초등이 🎯 자리를 봄**${MUT_DEAD}`);
 else {
-  const rows = PROBE_SEEDS.map((s) => probeSeed(MUT.M_POS_ELEM, s));
+  const rows = [];
+  for (const sd of PROBE_SEEDS) rows.push(await probeSeed(MUT.M_POS_ELEM, sd));
   const diff = rows.filter((r) => sig(r.fw) !== sig(r.df));
   const lock = rows.filter((r) => r.fw.concat(r.df).some((x) => x.moment === LOCKED_MOMENT));
   check(diff.length > 0 && lock.length > 0,

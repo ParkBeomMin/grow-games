@@ -497,7 +497,7 @@ async function toMain(h, o) {
    *    조기 화면에서 멈춘 채 `#agency-list button`을 눌러 **승낙**해 버렸어요 —
    *    그러면 🏟️ 최종이 안 와서 `btn-prospect-start`가 없고 **`S`가 null**이 됩니다.
    * 🔒 루프를 두 벌 두지 않습니다 — 드라이버가 갈라지면 한쪽만 고쳐지는 게 이 사고예요. */
-  passTown(h.W, h.press);
+  await passTown(h.W, h.press);
   h.W.localStorage.setItem("grow-auto-mini", prev == null ? "0" : prev);
   h.press(h.D.querySelector("#agency-list button"), "🏟️ 입단 제안");
   h.press(h.D.getElementById("btn-prospect-start"), "btn-prospect-start");

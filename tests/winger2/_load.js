@@ -485,12 +485,16 @@ function passEarly(W, press) {
 /* 🏘️/🏫 학교 화면에 서 있으면 [다음]을 눌러 끝까지 지나갑니다. 없으면 아무것도 안 해요.
  * 📨 사이에 낀 조기 제안 화면은 **거절로** 지나갑니다 (위 `passEarly`).
  * 돌려주는 값: 지나간 카드 수 (0이면 학교 화면이 아니었다는 뜻) */
-function passTown(W, press, restore) {
+async function passTown(W, press, restore) {
   const D = W.document;
   let n = 0;
   for (let g = 0; g < 24; g++) {
     const cur = D.querySelector(".screen.active");
     if (cur && cur.id === "screen-town") {
+      /* ⏱️ **2026-09-06 — 시계가 async라 여기서 기다려야 합니다** (설계 153번).
+       *    누른 직후엔 버튼이 언제나 `disabled`예요 — 안 기다리면 **한 번 누르고 break**라
+       *    🏟️ 제안 화면에 영영 못 닿습니다 (`bench-test`가 💥로 죽던 자리). */
+      await stageIdle(D);
       const b = D.getElementById("btn-town-next");
       if (!b || b.disabled || b.classList.contains("hidden")) break;
       press(b, "🏫 다음");
@@ -590,11 +594,41 @@ function pickOrigin(W, press, id) {
  *
  * 돌려주는 값: 굴러간 카드마다 읽은 `data-stage`의 배열 (+ `presses` · `kick`) */
 const DONE_DOTS = "#town-prog .town-dot.hit, #town-prog .town-dot.mid, #town-prog .town-dot.bad";
-function passStage(W, press, max) {
+/* ⏳ **그 누름이 다 굴러갈 때까지 기다립니다** (2026-09-06 · 설계 153번 · 구현 155번 §4-1)
+ * ═══════════════════════════════════════════════════════════════════════
+ * 🌍 **세계가 바뀌었습니다** — 시계가 `await` 루프로 돌면서 한 누름이 **단계 하나를 통째로**
+ *    굴립니다. 누른 「직후」에 점을 읽으면 언제나 0이에요.
+ * 🔴 그리고 **끊기는 자리는 「gained === 0」보다 한 칸 앞**입니다: 누른 직후 버튼이
+ *    `disabled`라 **점을 읽기도 전에 루프 조건이 먼저** 무너집니다.
+ *
+ * 🔒 **벽시계 문턱을 안 만듭니다.** 「몇 초 기다린다」가 아니라 **화면이 내는 신호**를 봐요:
+ *      ① 화면이 🏫을 떠났거나  ② 진행 버튼이 다시 눌리고 **⏩가 아님**
+ *    🔴 ⏩(`.town-fast`)는 경기 **중**에 뜨는 한 번짜리라 «다 굴렀다»가 아닙니다.
+ *       🔒 **글자가 아니라 클래스로 가릅니다** — 문구가 바뀌는 날 조용히 죽지 않게요.
+ * 🔴 **상한에 닿아도 던지지 않습니다.** 던지면 「빨간불」이 아니라 **💥 죽음**이 되어
+ *    «안 돈 것»과 구분이 안 돼요. 그냥 돌아오면 점이 모자라서 **부르는 쪽**(T-5·S-6·C-5)이
+ *    빨간불을 냅니다 — 「자가 복구가 실패를 삼키는」 자리를 만들지 않습니다. */
+const STAGE_CAP = 1400;                 // × 15ms = 21초. 🔒 문턱이 아니라 **상한**입니다
+/* 🔒 `anyScreen`은 **`T.openStage()`를 직접 부르는 탐침**용입니다 (`school-test` S-8 · `offer-test` O-1).
+ *    그 길은 화면 전환을 안 지나서 `.screen.active`가 🏫이 아닐 수 있어요 — 그때는 ①을 건너뜁니다. */
+async function stageIdle(D, anyScreen) {
+  const done = () => {
+    const cur = D.querySelector(".screen.active");
+    if (!anyScreen && (!cur || cur.id !== "screen-town")) return true;   // ① 화면을 떠남
+    const b = D.getElementById("btn-town-next");
+    if (!b || b.disabled || b.classList.contains("hidden")) return false;
+    return !b.classList.contains("town-fast");                // ② ⏩가 아닌 진행 버튼
+  };
+  for (let i = 0; i < STAGE_CAP && !done(); i++) await wait(15);
+  return done();
+}
+async function passStage(W, press, max) {
   const D = W.document;
   const seen = [];
   const dots = () => D.querySelectorAll(DONE_DOTS).length;
   let presses = 0, kick = 0;
+  /* 🔒 **루프 조건을 보기 「전에」** 한 번 — 들어선 직후엔 이미 정착돼 있어 곧바로 돌아옵니다 */
+  await stageIdle(D);
   for (let g = 0; g < (max || 16); g++) {
     const cur = D.querySelector(".screen.active");
     if (!cur || cur.id !== "screen-town") break;
@@ -604,6 +638,8 @@ function passStage(W, press, max) {
     const before = dots();
     press(b, "🏫 다음");
     presses += 1;
+    /* 🔒 **누름과 읽기 「사이」** — 시계가 다 돌 때까지. 여기가 없으면 `gained`가 언제나 0이에요 */
+    await stageIdle(D);
     const gained = dots() - before;
     /* 🏁 첫 누름이 **카드 0번을 실제로 굴렸는가.** 「들어서자마자 굴러가지 않는다」의 증거예요.
      * 🔴 **`gained > 0`을 반드시 같이 봅니다** — 굴린 게 없어도 킥오프로 세면
@@ -724,16 +760,16 @@ async function passArc(W, press, opt) {
   /* 🔒 **단계마다 자국을 남깁니다** — 📨 조기 제안(`screen-agency`)은 **지나가면서만**
    *    보이는 화면이라, 거절을 누른 「뒤」에만 자국을 찍으면 목록에서 통째로 사라져요.
    *    (`school-test`의 S-6a가 그 목록으로 화면 순서를 지킵니다) */
-  const stages = passStage(W, press);                       // 🏫 초5 대항전
+  const stages = await passStage(W, press);                 // 🏫 초5 대항전
   mark();                                                   // 📨 조기(e)
   const early = [];
   if (passEarly(W, press)) early.push("e");                 // 📨 초등 뒤 — **거절**
   mark();                                                   // 🏫 중등부
-  stages.push(...passStage(W, press));                      // 🏫 중등부
+  stages.push(...(await passStage(W, press)));               // 🏫 중등부
   mark();                                                   // 📨 조기(m)
   if (passEarly(W, press)) early.push("m");                 // 📨 중등 뒤 — **거절**
   mark();                                                   // 🏫 고등부
-  stages.push(...passStage(W, press));                      // 🏫 고등부
+  stages.push(...(await passStage(W, press)));               // 🏫 고등부
   mark();                                                   // 🏟️ 최종 제안
   if (back) back();
   return { stages, cards: stages.length, screens, early, child,
@@ -799,6 +835,6 @@ function pressRetarget(W, oldEl, root, newSel) {
 module.exports = { load, mutsOK, xiOf, xiAll, statsOf, play, spreadFor, SRC, ENGINE,
   bootPage, pageMutsOK, PAGE_DIR, pagePre, RAF_SHIM, seedBoth, SEED_SPLIT, mulberry32,
   townAuto, passTown,
-  wait, tapFoot, tapChild, tapChildArc, CHILD_SCREENS, CHILD_DEFAULT, pickOrigin, passStage, passEarly, passArc,
+  wait, tapFoot, tapChild, tapChildArc, CHILD_SCREENS, CHILD_DEFAULT, pickOrigin, passStage, stageIdle, passEarly, passArc,
   loadMoment, momentMutsOK, MSRC, MOMENT,
   momentDom, pressDom, pressRetarget };

@@ -125,7 +125,7 @@ const MUT_DEAD = `\n     🔴 **이 변이가 지금 소스에 안 걸립니다 
 /* 🎲 시드는 `_load.js`의 `seedBoth`가 **갈라서** 겁니다 — 두 난수원(`Math.random` ·
  * `WingerEngine._t`)에 같은 시드를 걸면 앞 1,000개가 **1000/1000 일치**해서 보폭이
  * 맞아 lockstep이 나요 (109번 §4 · `seed-split-test.js`가 지킵니다). */
-function playthrough(seed, muts) {
+async function playthrough(seed, muts) {
   const game = PROBE["game.js"].concat(ALLPASS["game.js"], (muts && muts["game.js"]) || []);
   const W = bootPage({ muts: { "game.js": game }, keys: { "grow-auto-mini": "1" } });
   W.__probe = [];
@@ -142,7 +142,7 @@ function playthrough(seed, muts) {
   press(D.getElementById("btn-name-next"), "btn-name-next");
   /* 🏘️ 동네 3장 — 이 파일은 `grow-auto-mini`를 켜고 뜨므로 그대로 지나갑니다 (85번 「순-B」) */
   press(D.querySelector(`#position-list .card[data-pos="${POS}"]`), `📍 ${POS}`);
-  passTown(W, press);
+  await passTown(W, press);
   press(D.querySelector("#agency-list button"), "🏟️ 입단 제안");
   press(D.getElementById("btn-prospect-start"), "btn-prospect-start");
   const S = () => W.__get("S");
@@ -189,9 +189,10 @@ const at = (c) => `${c.stage} ${c.year}년${c.month}월`;
 const q = (a, p) => { const s = a.slice().sort((x, y) => x - y); return s.length ? s[Math.min(s.length - 1, Math.floor(p * s.length))] : NaN; };
 const pct = (x) => `${(100 * x).toFixed(1)}%`;
 
-function gather(n, muts, seed0) {
+/* ⏱️ 2026-09-06 — `passTown`이 async가 됐습니다 (설계 153번) */
+async function gather(n, muts, seed0) {
   const runs = [];
-  for (let i = 0; i < n; i++) runs.push(playthrough((seed0 || 20000) + i * 7919, muts));
+  for (let i = 0; i < n; i++) runs.push(await playthrough((seed0 || 20000) + i * 7919, muts));
   return runs;
 }
 function stats(cards) {
@@ -203,182 +204,186 @@ function stats(cards) {
     ovr: cards.reduce((a, c) => a + c.x, 0) / cards.length };
 }
 
-const base = gather(RUNS);
-const cards = base.flatMap((r) => r.cards);
-const EV = cards.filter((c) => c.stage === "eval");
-const SV = cards.filter((c) => c.stage === "survival");
+/* 🔒 `passTown`이 async라 이 아래는 통째로 async IIFE 안입니다 (2026-09-06) */
+(async () => {
+  const base = await gather(RUNS);
+  const cards = base.flatMap((r) => r.cards);
+  const EV = cards.filter((c) => c.stage === "eval");
+  const SV = cards.filter((c) => c.stage === "survival");
 
-/* ══════════════════════════════════════════════════════════════
- * A. 🚪 표본이 진짜인가 — **측정 조건을 검사가 스스로 찍습니다**
- * ══════════════════════════════════════════════════════════════ */
-{
-  const errs = base.flatMap((r) => r.errs);
-  const reached = base.filter((r) => r.reached).length;
-  check(reached === RUNS && errs.length === 0,
-    `A-0. 🚪 ${RUNS}벌 전부 **게임 입구 → 36턴 → 🏆 평가전 → 🔥 프로 도전**까지 실제 버튼으로 도달 (${reached}/${RUNS})`
-    + (errs.length ? `\n     🔴 페이지 오류 ${errs.length}건 — ${errs[0]}` : ""));
-  const byStage = {};
-  for (const c of cards) (byStage[at(c)] = byStage[at(c)] || []).push(c);
-  const order = Object.keys(byStage).sort();
-  check(EV.length >= RUNS * 15 * 0.9 && SV.length >= RUNS * 4 * 0.9,
-    `A-1. 🧪 측정 조건 — 🏆 평가전 카드 ${EV.length}장(기대 ${RUNS * 15}) · 🔥 프로 도전 카드 ${SV.length}장(기대 ${RUNS * 4})`
-    + `\n     ${order.map((k) => { const s = stats(byStage[k]); return `${k} n=${s.n} ovr ${s.ovr.toFixed(1)} 아래${pct(s.lo)} 위${pct(s.hi)}`; }).join("\n     ")}`);
-  global.__byStage = byStage;
-}
-
-/* ══════════════════════════════════════════════════════════════
- * B. 📐 **N-3 — clamp가 유스 창의 「가운데」를 안 먹는다**
- *
- * 🔴 이게 이번 버그의 **재발 형태**입니다 (engineer 84번 §6-2 ③):
- *    위 clamp가 창 안으로 내려오면 *"훈련해도 안 나아진다"* 가 **잘 큰 쪽에서 다시 생깁니다.**
- *    성공률 값만 봐서는 정상으로 보여요.
- * ⚠️ 1년차는 뺍니다 — **아래 clamp는 1년차 최하위권에 일부러 닿는 설계된 바닥**이에요.
- *    (그 칸은 아래 D절이 따로 봅니다)
- * ══════════════════════════════════════════════════════════════ */
-{
-  const byStage = global.__byStage;
-  const rows = MID_STAGES.map((k) => ({ k, s: stats(byStage[k] || []) }));
-  const bad = rows.filter((r) => !(r.s.n > 0) || r.s.lo + r.s.hi > MID_MAX);
-  check(bad.length === 0,
-    `B-1. 📐 **N-3** — 2년차 이후 무대에서는 clamp가 **거의 안 물린다** (무대별 접촉률 ≤ ${pct(MID_MAX)})`
-    + `\n     ${rows.map((r) => `${r.k}: n=${r.s.n} 접촉 ${pct((r.s.lo || 0) + (r.s.hi || 0))} (아래 ${pct(r.s.lo || 0)} · 위 ${pct(r.s.hi || 0)}) 중앙비율 ${Number(r.s.med).toFixed(3)}`).join("\n     ")}`
-    + (bad.length ? `\n     🔴 창 가운데가 clamp에 물렸어요 — 잘 큰 쪽에서 "훈련해도 안 나아진다"가 재발합니다` : ""));
-}
-
-/* ══════════════════════════════════════════════════════════════
- * C. 🎯 **N-4a·N-4b — 위 clamp 접촉률 · 중앙값 비율** (designer 계약)
- * ══════════════════════════════════════════════════════════════ */
-{
-  const S = { "🏆 평가전": stats(EV), "🔥 프로 도전": stats(SV) };
-  const hiBad = Object.entries(S).filter(([, s]) => !(s.hi <= HI_MAX));
-  check(hiBad.length === 0,
-    `C-1. 🎯 **N-4a 위 clamp 접촉률 ≤ ${pct(HI_MAX)}**`
-    + `\n     ${Object.entries(S).map(([k, s]) => `${k} ${pct(s.hi)} (n=${s.n})`).join(" · ")}`
-    + (hiBad.length ? `\n     🔴 ${hiBad.map(([k, s]) => `${k} ${pct(s.hi)}`).join(" | ")}` : ""));
-  const medBad = Object.entries(S).filter(([, s]) => !(s.med >= MED_BAND[0] && s.med <= MED_BAND[1]));
-  check(medBad.length === 0,
-    `C-2. 🎯 **N-4b 중앙값 비율 ${MED_BAND[0]} ~ ${MED_BAND[1]}**`
-    + `\n     ${Object.entries(S).map(([k, s]) => `${k} ${Number(s.med).toFixed(3)} (평균 overall ${s.ovr.toFixed(1)})`).join(" · ")}`
-    + (medBad.length ? `\n     🔴 ${medBad.map(([k, s]) => `${k} ${Number(s.med).toFixed(3)}`).join(" | ")}` : ""));
-}
-
-/* ══════════════════════════════════════════════════════════════
- * D. 🚧 **N-4c 아래 clamp 접촉률 — designer 계약(≤10%)에 여유가 없습니다**
- *
- * 🔴 **이 칸은 「통과」가 아니라 「알려진 상태」로 둡니다.**
- *    designer가 어림한 5%도, engineer가 60벌로 잰 7.7%도 아니고, 여기 60벌 실측은 **≈10%**예요.
- *    문턱 바로 위아래에 붙어 있어서 그대로 걸면 **고장이 아니라 우연으로 빨간불**이 됩니다.
- *
- * 📌 **접촉은 거의 전부 1년차입니다** (아래 표가 그걸 찍어요) — 즉 **설계된 바닥이 일하는 것**이지
- *    축이 죽는 신호가 아닙니다. 다만 ⚠️ **훈련 산식이 초반을 낮추면 이 칸이 먼저 움직여요.**
- *
- * 🔧 그래서 **양방향**으로 둡니다:
- *    · > ${LO_CAP} → ❌ 회귀 (더 나빠졌습니다)
- *    · ≤ ${LO_GOAL} → ❌ **승격하세요** — designer 계약 ≤10%를 여유 있게 지키게 됐으니
- *      이 절을 지우고 C절에 `아래 ≤ 0.10` 한 줄로 합치세요
- *    · 그 사이 → 🚧 (종료 0, 그러나 눈에 보이게)
- * ══════════════════════════════════════════════════════════════ */
-{
-  const s = stats(EV);
-  const blocks = [];
-  for (let i = 0; i < RUNS; i += BLOCK) {
-    const c = base.slice(i, i + BLOCK).flatMap((r) => r.cards).filter((x) => x.stage === "eval");
-    blocks.push(stats(c).lo);
+  /* ══════════════════════════════════════════════════════════════
+   * A. 🚪 표본이 진짜인가 — **측정 조건을 검사가 스스로 찍습니다**
+   * ══════════════════════════════════════════════════════════════ */
+  {
+    const errs = base.flatMap((r) => r.errs);
+    const reached = base.filter((r) => r.reached).length;
+    check(reached === RUNS && errs.length === 0,
+      `A-0. 🚪 ${RUNS}벌 전부 **게임 입구 → 36턴 → 🏆 평가전 → 🔥 프로 도전**까지 실제 버튼으로 도달 (${reached}/${RUNS})`
+      + (errs.length ? `\n     🔴 페이지 오류 ${errs.length}건 — ${errs[0]}` : ""));
+    const byStage = {};
+    for (const c of cards) (byStage[at(c)] = byStage[at(c)] || []).push(c);
+    const order = Object.keys(byStage).sort();
+    check(EV.length >= RUNS * 15 * 0.9 && SV.length >= RUNS * 4 * 0.9,
+      `A-1. 🧪 측정 조건 — 🏆 평가전 카드 ${EV.length}장(기대 ${RUNS * 15}) · 🔥 프로 도전 카드 ${SV.length}장(기대 ${RUNS * 4})`
+      + `\n     ${order.map((k) => { const s = stats(byStage[k]); return `${k} n=${s.n} ovr ${s.ovr.toFixed(1)} 아래${pct(s.lo)} 위${pct(s.hi)}`; }).join("\n     ")}`);
+    global.__byStage = byStage;
   }
-  const y1 = EV.filter((c) => c.year === 1);
-  const y2 = EV.filter((c) => c.year !== 1);
-  const line = `실측 ${pct(s.lo)} (20벌 블록: ${blocks.map(pct).join(" · ")} · 블록 폭 ${pct(Math.max(...blocks) - Math.min(...blocks))})`
-    + `\n     · 1년차 카드 ${y1.length}장 중 접촉 ${pct(stats(y1).lo)} · 2년차 이후 ${y2.length}장 중 ${pct(stats(y2).lo)}`
-    + `\n     · 판정: 회귀는 **평균 > ${pct(LO_CAP)}** · 승격은 **블록이 전부 ≤ ${pct(LO_GOAL)}** (문턱이 블록 흩어짐 안에 서면 우연으로 뒤집혀요)`
-    + `\n     · designer 계약은 ≤${pct(DESIGNER_LO)}인데 실측이 그 위에 붙어 있어요 — **문턱을 더 조이지 마세요**`;
-  if (s.lo > LO_CAP) {
-    check(false, `D-1. ❌ **N-4c 회귀** — 아래 clamp 접촉률이 상한 ${pct(LO_CAP)}을 넘었습니다\n     ${line}`);
-  } else if (blocks.every((b) => b <= LO_GOAL)) {
-    /* 🔒 **블록이 전부** 문턱 아래일 때만 승격 신호를 냅니다 — 평균 하나로 재면
-     *    블록이 문턱을 걸치고 있을 때 **우연으로** 승격이 떠요 (2026-09-02에 그랬습니다). */
-    check(false, `D-1. ❌ **N-4c 승격하세요** — 아래 접촉률이 **20벌 블록 전부** ${pct(LO_GOAL)} 밑으로 내려왔습니다`
-      + `\n     ${line}`
-      + `\n     🔧 이제 designer 계약(≤${pct(DESIGNER_LO)})을 여유 있게 지킵니다.`
-      + ` **이 D절을 지우고 C절에 「아래 clamp 접촉률 ≤ ${DESIGNER_LO}」 한 줄로 합치세요.**`
-      + `\n     ⚠️ 🧒 초1~3 아크(카드 8 → 11장)가 아직 안 들어왔다면 **N = 11 뒤에 다시 재고** 승격하세요`);
-  } else {
-    console.log(`🚧 D-1. **N-4c 아래 clamp 접촉률 — 알려진 상태** (회귀 상한 ${pct(LO_CAP)} · 승격 문턱 ${pct(LO_GOAL)})`
-      + `\n     ${line}`
-      + `\n     ⚠️ 이 줄은 **"이게 맞다"가 아니라 "여기까지는 알려진 상태"**입니다.`
-      + ` 값을 움직일지 문턱을 다시 정할지는 designer·engineer의 몫이에요.`);
+
+  /* ══════════════════════════════════════════════════════════════
+   * B. 📐 **N-3 — clamp가 유스 창의 「가운데」를 안 먹는다**
+   *
+   * 🔴 이게 이번 버그의 **재발 형태**입니다 (engineer 84번 §6-2 ③):
+   *    위 clamp가 창 안으로 내려오면 *"훈련해도 안 나아진다"* 가 **잘 큰 쪽에서 다시 생깁니다.**
+   *    성공률 값만 봐서는 정상으로 보여요.
+   * ⚠️ 1년차는 뺍니다 — **아래 clamp는 1년차 최하위권에 일부러 닿는 설계된 바닥**이에요.
+   *    (그 칸은 아래 D절이 따로 봅니다)
+   * ══════════════════════════════════════════════════════════════ */
+  {
+    const byStage = global.__byStage;
+    const rows = MID_STAGES.map((k) => ({ k, s: stats(byStage[k] || []) }));
+    const bad = rows.filter((r) => !(r.s.n > 0) || r.s.lo + r.s.hi > MID_MAX);
+    check(bad.length === 0,
+      `B-1. 📐 **N-3** — 2년차 이후 무대에서는 clamp가 **거의 안 물린다** (무대별 접촉률 ≤ ${pct(MID_MAX)})`
+      + `\n     ${rows.map((r) => `${r.k}: n=${r.s.n} 접촉 ${pct((r.s.lo || 0) + (r.s.hi || 0))} (아래 ${pct(r.s.lo || 0)} · 위 ${pct(r.s.hi || 0)}) 중앙비율 ${Number(r.s.med).toFixed(3)}`).join("\n     ")}`
+      + (bad.length ? `\n     🔴 창 가운데가 clamp에 물렸어요 — 잘 큰 쪽에서 "훈련해도 안 나아진다"가 재발합니다` : ""));
   }
-}
 
-/* ══════════════════════════════════════════════════════════════
- * 🧪 변이 검증 — **고치기 전에 빨간불이 뜨는지**
- *    기준선 B-1·C-1·C-2와 **같은 술어**를 그대로 다시 겁니다.
- * ══════════════════════════════════════════════════════════════ */
-console.log("\n── 🧪 변이 검증 (고치기 전에 빨간불이 뜨는지) ──");
-function mutCheck(name, tag, why, want) {
-  if (!mutOK(name)) { check(false, `${tag}. 🧪 ${why}${MUT_DEAD}`); return; }
-  const runs = gather(MUT_RUNS, MUT[name], 31000);
-  const cs = runs.flatMap((r) => r.cards);
-  const ev = cs.filter((c) => c.stage === "eval");
-  const byStage = {};
-  for (const c of cs) (byStage[at(c)] = byStage[at(c)] || []).push(c);
-  const mid = MID_STAGES.map((k) => ({ k, s: stats(byStage[k] || []) }));
-  const res = {
-    n3: mid.some((r) => !(r.s.n > 0) || r.s.lo + r.s.hi > MID_MAX),
-    n4a: !(stats(ev).hi <= HI_MAX),
-    n4b: !(stats(ev).med >= MED_BAND[0] && stats(ev).med <= MED_BAND[1]),
-    lo: stats(ev).lo, hi: stats(ev).hi, med: stats(ev).med,
-    mid: mid.map((r) => `${r.k} 접촉 ${pct((r.s.lo || 0) + (r.s.hi || 0))}`).join(" · "),
-  };
-  const hit = want(res);
-  check(hit,
-    `${tag}. 🧪 ${why} → 빨간불`
-    + `\n     N-3 ${res.n3 ? "❌" : "🟢"} (${res.mid})`
-    + ` | N-4a 위 ${pct(res.hi)} ${res.n4a ? "❌" : "🟢"} | N-4b 중앙 ${Number(res.med).toFixed(3)} ${res.n4b ? "❌" : "🟢"}`
-    + ` | 아래 ${pct(res.lo)}`
-    + (hit ? "" : `\n     🔴 변이를 넣었는데 **아직 초록불** — 이 검사가 그 실패를 안 잡습니다`));
-}
-mutCheck("TIGHT_SPAN", "M-C1",
-  "**YOUTH_SPAN = [0.95, 1.05]** — 모두가 clamp에 붙어 축이 죽는 그 모양",
-  (r) => r.n3);
-/* ═════════════════════════════════════════════════════════════════════════
- * 🚨 **M-C2에서 N-4b(중앙값 밴드)를 뺐습니다 — 성질이 다릅니다** (2026-09-03)
- * ═════════════════════════════════════════════════════════════════════════
- * 옛 문장은 `n3 && n4a && n4b` **셋을 AND**로 묶고 있었어요. 🧒 어린 시절이 네 해가 되고
- * 🏫 학교 아크가 6 → 8장이 되면서 유스 `overall`이 올라갔고, 그 뒤로
- *   · N-3(2년차 이후 접촉) ❌ · N-4a(위 clamp 접촉 36%) ❌ 는 **세게 뭅니다**
- *   · N-4b(중앙값)는 **1.244로 밴드 [0.75, 1.25] 안**에 들어와 안 뭅니다
- * 라서 「변이를 넣었는데 초록불」이 났습니다.
- *
- * 🔑 **그건 N-4b가 죽은 게 아니라 방향이 다른 문장이기 때문입니다.**
- *    위 clamp(`YOUTH_SPAN[1] = 1.40`)가 **꼬리를 잘라** 중앙값을 밴드 안으로 눌러 넣어요 —
- *    「위로 미는」 변이는 **N-4a가** 물고, 「아래로 미는」 변이는 **N-4b가** 뭅니다
- *    (아래 M-C3가 `n3 && n4b`로 그걸 지킵니다 — 거긴 그대로 물어요).
- * 🔴 **셋을 AND로 묶으면 「제 몫을 다한 변이 검증」이 남의 방향 때문에 빨간불**이 되고,
- *    그때부터 사람이 "저건 원래 빨간불"로 배웁니다. 그래서 방향으로 가릅니다.
- * 🔒 그리고 **N-4b가 초록불로 남는 것 자체를 아래에서 확인**합니다 —
- *    말로만 «성질이 다르다»고 하면 그게 언제 거짓이 되는지 아무도 모르니까요. */
-mutCheck("REF20", "M-C2",
-  "🏆 평가전 기준선 32.0 → **20.0** — 유스 전체가 위 clamp에 붙음 (🔑 방향: **위**)",
-  (r) => r.n3 && r.n4a);
-mutCheck("REF50", "M-C3",
-  "🏆 평가전 기준선 32.0 → **50.0** — 유스 전체가 아래 clamp에 붙음 (🔑 방향: **아래** — N-4b가 여기서 뭅니다)",
-  (r) => r.n3 && r.n4b);
-
-/* 🔒 **반대 방향** — 「N-4b는 위로 미는 변이를 안 문다」가 **지금도 사실인가.**
- * 🔑 이 줄이 빨간불이 되면 위 M-C2에 `n4b`를 **되돌려 넣으라는 신호**입니다 —
- *    말로만 적어 둔 «성질이 다르다»가 언제 거짓이 되는지 검사가 직접 말하게 해요. */
-{
-  if (mutOK("REF20")) {
-    const runs = gather(MUT_RUNS, MUT.REF20, 31000);
-    const ev = runs.flatMap((r) => r.cards).filter((c) => c.stage === "eval");
-    const med = stats(ev).med;
-    const inBand = med >= MED_BAND[0] && med <= MED_BAND[1];
-    console.log(`${inBand ? "✅" : "🚧"} M-C2b. 🔒 **M-C2에서 N-4b는 초록불로 남는다** — 중앙값 ${Number(med).toFixed(3)} (밴드 ${MED_BAND.join(" ~ ")})`
-      + `\n     🔑 위 clamp(\`YOUTH_SPAN[1]\`)가 꼬리를 잘라 중앙값을 밴드 안으로 눌러 넣습니다 —`
-      + ` 「위로 미는」 변이는 **N-4a**의 몫이에요`
-      + (inBand ? "" : `\n     🚧 이제 N-4b도 뭅니다 — **M-C2의 판정에 \`&& r.n4b\`를 되돌려 넣으세요**`));
+  /* ══════════════════════════════════════════════════════════════
+   * C. 🎯 **N-4a·N-4b — 위 clamp 접촉률 · 중앙값 비율** (designer 계약)
+   * ══════════════════════════════════════════════════════════════ */
+  {
+    const S = { "🏆 평가전": stats(EV), "🔥 프로 도전": stats(SV) };
+    const hiBad = Object.entries(S).filter(([, s]) => !(s.hi <= HI_MAX));
+    check(hiBad.length === 0,
+      `C-1. 🎯 **N-4a 위 clamp 접촉률 ≤ ${pct(HI_MAX)}**`
+      + `\n     ${Object.entries(S).map(([k, s]) => `${k} ${pct(s.hi)} (n=${s.n})`).join(" · ")}`
+      + (hiBad.length ? `\n     🔴 ${hiBad.map(([k, s]) => `${k} ${pct(s.hi)}`).join(" | ")}` : ""));
+    const medBad = Object.entries(S).filter(([, s]) => !(s.med >= MED_BAND[0] && s.med <= MED_BAND[1]));
+    check(medBad.length === 0,
+      `C-2. 🎯 **N-4b 중앙값 비율 ${MED_BAND[0]} ~ ${MED_BAND[1]}**`
+      + `\n     ${Object.entries(S).map(([k, s]) => `${k} ${Number(s.med).toFixed(3)} (평균 overall ${s.ovr.toFixed(1)})`).join(" · ")}`
+      + (medBad.length ? `\n     🔴 ${medBad.map(([k, s]) => `${k} ${Number(s.med).toFixed(3)}`).join(" | ")}` : ""));
   }
-}
 
-console.log(fail ? `\n❌ ${fail}건 실패` : "\n✅ 통과");
-process.exit(fail ? 1 : 0);
+  /* ══════════════════════════════════════════════════════════════
+   * D. 🚧 **N-4c 아래 clamp 접촉률 — designer 계약(≤10%)에 여유가 없습니다**
+   *
+   * 🔴 **이 칸은 「통과」가 아니라 「알려진 상태」로 둡니다.**
+   *    designer가 어림한 5%도, engineer가 60벌로 잰 7.7%도 아니고, 여기 60벌 실측은 **≈10%**예요.
+   *    문턱 바로 위아래에 붙어 있어서 그대로 걸면 **고장이 아니라 우연으로 빨간불**이 됩니다.
+   *
+   * 📌 **접촉은 거의 전부 1년차입니다** (아래 표가 그걸 찍어요) — 즉 **설계된 바닥이 일하는 것**이지
+   *    축이 죽는 신호가 아닙니다. 다만 ⚠️ **훈련 산식이 초반을 낮추면 이 칸이 먼저 움직여요.**
+   *
+   * 🔧 그래서 **양방향**으로 둡니다:
+   *    · > ${LO_CAP} → ❌ 회귀 (더 나빠졌습니다)
+   *    · ≤ ${LO_GOAL} → ❌ **승격하세요** — designer 계약 ≤10%를 여유 있게 지키게 됐으니
+   *      이 절을 지우고 C절에 `아래 ≤ 0.10` 한 줄로 합치세요
+   *    · 그 사이 → 🚧 (종료 0, 그러나 눈에 보이게)
+   * ══════════════════════════════════════════════════════════════ */
+  {
+    const s = stats(EV);
+    const blocks = [];
+    for (let i = 0; i < RUNS; i += BLOCK) {
+      const c = base.slice(i, i + BLOCK).flatMap((r) => r.cards).filter((x) => x.stage === "eval");
+      blocks.push(stats(c).lo);
+    }
+    const y1 = EV.filter((c) => c.year === 1);
+    const y2 = EV.filter((c) => c.year !== 1);
+    const line = `실측 ${pct(s.lo)} (20벌 블록: ${blocks.map(pct).join(" · ")} · 블록 폭 ${pct(Math.max(...blocks) - Math.min(...blocks))})`
+      + `\n     · 1년차 카드 ${y1.length}장 중 접촉 ${pct(stats(y1).lo)} · 2년차 이후 ${y2.length}장 중 ${pct(stats(y2).lo)}`
+      + `\n     · 판정: 회귀는 **평균 > ${pct(LO_CAP)}** · 승격은 **블록이 전부 ≤ ${pct(LO_GOAL)}** (문턱이 블록 흩어짐 안에 서면 우연으로 뒤집혀요)`
+      + `\n     · designer 계약은 ≤${pct(DESIGNER_LO)}인데 실측이 그 위에 붙어 있어요 — **문턱을 더 조이지 마세요**`;
+    if (s.lo > LO_CAP) {
+      check(false, `D-1. ❌ **N-4c 회귀** — 아래 clamp 접촉률이 상한 ${pct(LO_CAP)}을 넘었습니다\n     ${line}`);
+    } else if (blocks.every((b) => b <= LO_GOAL)) {
+      /* 🔒 **블록이 전부** 문턱 아래일 때만 승격 신호를 냅니다 — 평균 하나로 재면
+       *    블록이 문턱을 걸치고 있을 때 **우연으로** 승격이 떠요 (2026-09-02에 그랬습니다). */
+      check(false, `D-1. ❌ **N-4c 승격하세요** — 아래 접촉률이 **20벌 블록 전부** ${pct(LO_GOAL)} 밑으로 내려왔습니다`
+        + `\n     ${line}`
+        + `\n     🔧 이제 designer 계약(≤${pct(DESIGNER_LO)})을 여유 있게 지킵니다.`
+        + ` **이 D절을 지우고 C절에 「아래 clamp 접촉률 ≤ ${DESIGNER_LO}」 한 줄로 합치세요.**`
+        + `\n     ⚠️ 🧒 초1~3 아크(카드 8 → 11장)가 아직 안 들어왔다면 **N = 11 뒤에 다시 재고** 승격하세요`);
+    } else {
+      console.log(`🚧 D-1. **N-4c 아래 clamp 접촉률 — 알려진 상태** (회귀 상한 ${pct(LO_CAP)} · 승격 문턱 ${pct(LO_GOAL)})`
+        + `\n     ${line}`
+        + `\n     ⚠️ 이 줄은 **"이게 맞다"가 아니라 "여기까지는 알려진 상태"**입니다.`
+        + ` 값을 움직일지 문턱을 다시 정할지는 designer·engineer의 몫이에요.`);
+    }
+  }
+
+  /* ══════════════════════════════════════════════════════════════
+   * 🧪 변이 검증 — **고치기 전에 빨간불이 뜨는지**
+   *    기준선 B-1·C-1·C-2와 **같은 술어**를 그대로 다시 겁니다.
+   * ══════════════════════════════════════════════════════════════ */
+  console.log("\n── 🧪 변이 검증 (고치기 전에 빨간불이 뜨는지) ──");
+  async function mutCheck(name, tag, why, want) {
+    if (!mutOK(name)) { check(false, `${tag}. 🧪 ${why}${MUT_DEAD}`); return; }
+    const runs = await gather(MUT_RUNS, MUT[name], 31000);
+    const cs = runs.flatMap((r) => r.cards);
+    const ev = cs.filter((c) => c.stage === "eval");
+    const byStage = {};
+    for (const c of cs) (byStage[at(c)] = byStage[at(c)] || []).push(c);
+    const mid = MID_STAGES.map((k) => ({ k, s: stats(byStage[k] || []) }));
+    const res = {
+      n3: mid.some((r) => !(r.s.n > 0) || r.s.lo + r.s.hi > MID_MAX),
+      n4a: !(stats(ev).hi <= HI_MAX),
+      n4b: !(stats(ev).med >= MED_BAND[0] && stats(ev).med <= MED_BAND[1]),
+      lo: stats(ev).lo, hi: stats(ev).hi, med: stats(ev).med,
+      mid: mid.map((r) => `${r.k} 접촉 ${pct((r.s.lo || 0) + (r.s.hi || 0))}`).join(" · "),
+    };
+    const hit = want(res);
+    check(hit,
+      `${tag}. 🧪 ${why} → 빨간불`
+      + `\n     N-3 ${res.n3 ? "❌" : "🟢"} (${res.mid})`
+      + ` | N-4a 위 ${pct(res.hi)} ${res.n4a ? "❌" : "🟢"} | N-4b 중앙 ${Number(res.med).toFixed(3)} ${res.n4b ? "❌" : "🟢"}`
+      + ` | 아래 ${pct(res.lo)}`
+      + (hit ? "" : `\n     🔴 변이를 넣었는데 **아직 초록불** — 이 검사가 그 실패를 안 잡습니다`));
+  }
+  await mutCheck("TIGHT_SPAN", "M-C1",
+    "**YOUTH_SPAN = [0.95, 1.05]** — 모두가 clamp에 붙어 축이 죽는 그 모양",
+    (r) => r.n3);
+  /* ═════════════════════════════════════════════════════════════════════════
+   * 🚨 **M-C2에서 N-4b(중앙값 밴드)를 뺐습니다 — 성질이 다릅니다** (2026-09-03)
+   * ═════════════════════════════════════════════════════════════════════════
+   * 옛 문장은 `n3 && n4a && n4b` **셋을 AND**로 묶고 있었어요. 🧒 어린 시절이 네 해가 되고
+   * 🏫 학교 아크가 6 → 8장이 되면서 유스 `overall`이 올라갔고, 그 뒤로
+   *   · N-3(2년차 이후 접촉) ❌ · N-4a(위 clamp 접촉 36%) ❌ 는 **세게 뭅니다**
+   *   · N-4b(중앙값)는 **1.244로 밴드 [0.75, 1.25] 안**에 들어와 안 뭅니다
+   * 라서 「변이를 넣었는데 초록불」이 났습니다.
+   *
+   * 🔑 **그건 N-4b가 죽은 게 아니라 방향이 다른 문장이기 때문입니다.**
+   *    위 clamp(`YOUTH_SPAN[1] = 1.40`)가 **꼬리를 잘라** 중앙값을 밴드 안으로 눌러 넣어요 —
+   *    「위로 미는」 변이는 **N-4a가** 물고, 「아래로 미는」 변이는 **N-4b가** 뭅니다
+   *    (아래 M-C3가 `n3 && n4b`로 그걸 지킵니다 — 거긴 그대로 물어요).
+   * 🔴 **셋을 AND로 묶으면 「제 몫을 다한 변이 검증」이 남의 방향 때문에 빨간불**이 되고,
+   *    그때부터 사람이 "저건 원래 빨간불"로 배웁니다. 그래서 방향으로 가릅니다.
+   * 🔒 그리고 **N-4b가 초록불로 남는 것 자체를 아래에서 확인**합니다 —
+   *    말로만 «성질이 다르다»고 하면 그게 언제 거짓이 되는지 아무도 모르니까요. */
+  await mutCheck("REF20", "M-C2",
+    "🏆 평가전 기준선 32.0 → **20.0** — 유스 전체가 위 clamp에 붙음 (🔑 방향: **위**)",
+    (r) => r.n3 && r.n4a);
+  await mutCheck("REF50", "M-C3",
+    "🏆 평가전 기준선 32.0 → **50.0** — 유스 전체가 아래 clamp에 붙음 (🔑 방향: **아래** — N-4b가 여기서 뭅니다)",
+    (r) => r.n3 && r.n4b);
+
+  /* 🔒 **반대 방향** — 「N-4b는 위로 미는 변이를 안 문다」가 **지금도 사실인가.**
+   * 🔑 이 줄이 빨간불이 되면 위 M-C2에 `n4b`를 **되돌려 넣으라는 신호**입니다 —
+   *    말로만 적어 둔 «성질이 다르다»가 언제 거짓이 되는지 검사가 직접 말하게 해요. */
+  {
+    if (mutOK("REF20")) {
+      const runs = await gather(MUT_RUNS, MUT.REF20, 31000);
+      const ev = runs.flatMap((r) => r.cards).filter((c) => c.stage === "eval");
+      const med = stats(ev).med;
+      const inBand = med >= MED_BAND[0] && med <= MED_BAND[1];
+      console.log(`${inBand ? "✅" : "🚧"} M-C2b. 🔒 **M-C2에서 N-4b는 초록불로 남는다** — 중앙값 ${Number(med).toFixed(3)} (밴드 ${MED_BAND.join(" ~ ")})`
+        + `\n     🔑 위 clamp(\`YOUTH_SPAN[1]\`)가 꼬리를 잘라 중앙값을 밴드 안으로 눌러 넣습니다 —`
+        + ` 「위로 미는」 변이는 **N-4a**의 몫이에요`
+        + (inBand ? "" : `\n     🚧 이제 N-4b도 뭅니다 — **M-C2의 판정에 \`&& r.n4b\`를 되돌려 넣으세요**`));
+    }
+  }
+
+  console.log(fail ? `\n❌ ${fail}건 실패` : "\n✅ 통과");
+  process.exit(fail ? 1 : 0);
+
+})();

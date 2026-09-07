@@ -211,7 +211,7 @@ async function toHome(h, o) {
   await tapFoot(h.W, h.press, o.foot === "L" ? "L" : "R");
   const back = townAuto(h.W);
   h.press(h.D.querySelector(`#position-list .card[data-pos="${o.pos}"]`), `📍 ${o.pos}`);
-  passTown(h.W, h.press, back);      // ♻️ 되돌립니다 — 이 파일은 진짜 미니게임을 잽니다
+  await passTown(h.W, h.press, back);      // ♻️ 되돌립니다 — 이 파일은 진짜 미니게임을 잽니다
   h.press(h.D.querySelector("#agency-list button"), "🏟️ 입단 제안");
   h.press(h.D.getElementById("btn-prospect-start"), "btn-prospect-start");
   return h;

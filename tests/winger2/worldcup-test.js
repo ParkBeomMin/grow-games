@@ -116,13 +116,13 @@ function boot(muts, seed) {
 }
 
 /* 🏟️ 유스 i번째 카드를 눌러 커리어를 만듭니다 (타이틀 → 이름 → 자리 → 🏘️ 동네 → 제안 → 조립대). */
-function careerAt(i, muts) {
+async function careerAt(i, muts) {
   const h = boot(muts, 5);
   h.press(h.D.getElementById("btn-new"), "btn-new");
   h.press(h.D.getElementById("btn-name-next"), "btn-name-next");
   const back = townAuto(h.W);            // ⚠️ 📍 자리를 누르기 **전**에 켜야 해요
   h.press(h.D.querySelector('#position-list .card[data-pos="wg"]'), "📍 wg");
-  passTown(h.W, h.press, back);
+  await passTown(h.W, h.press, back);
   const cards = Array.from(h.D.querySelectorAll("#agency-list button"));
   if (!cards[i]) { h.close(); throw new Error(`🏟️ 제안 카드가 ${cards.length}장뿐이에요 (${i + 1}번째를 눌러야 합니다)`); }
   h.press(cards[i], `🏟️ 유스 #${i}`);
@@ -137,135 +137,144 @@ function careerAt(i, muts) {
   h.close();
   return row;
 }
-const scan = (muts) => Array.from({ length: YOUTH_N }, (_, i) => careerAt(i, muts));
+/* ⏱️ 2026-09-06 — `passTown`이 async가 되면서(설계 153번) 여기도 순서대로 기다립니다 */
+const scan = async (muts) => {
+  const out = [];
+  for (let i = 0; i < YOUTH_N; i++) out.push(await careerAt(i, muts));
+  return out;
+};
 
 /* ══════════════════════════════════════════════════════════════
  * W-1 · W-2. 🇰🇷 대표팀도 소집 문턱도 **유스를 안 탄다**
  * ══════════════════════════════════════════════════════════════ */
 console.log("── 🇰🇷 W-1·W-2. 대표팀은 유스를 안 탄다 ──");
-const R = scan(null);
+/* 🔒 `passTown`이 async라 이 아래는 통째로 async IIFE 안입니다 (2026-09-06) */
+(async () => {
+  const R = await scan(null);
 
-/* 📊 측정 조건을 검사가 스스로 찍습니다 — 유스가 실제로 5곳 다 달라야
- *    W-1이 "다 같아서 통과"가 아니게 됩니다. */
-{
-  const mk = new Set(R.map((r) => r.market));
-  check(mk.size === YOUTH_N,
-    `W-0. 📊 유스 ${YOUTH_N}곳을 **각각 눌러** 서로 다른 커리어 ${mk.size}개를 만들었다`
-    + `\n     ${R.map((r) => `#${r.idx}:${r.market}`).join(" · ")}`
-    + (mk.size === YOUTH_N ? "" : `\n     🔴 유스가 ${mk.size}종뿐이에요 — W-1이 "다 같아서 통과"가 됩니다`));
-}
-{
-  const bad = R.filter((r) => r.nation !== MY_CODE);
-  check(bad.length === 0,
-    `W-1. 🇰🇷 유스 ${YOUTH_N}곳 **전부**에서 대표팀이 "${MY_CODE}"다 (${R[0].nationName})`
-    + `\n     ${R.map((r) => `${r.market}→${r.nation}`).join(" · ")}`
-    + (bad.length ? `\n     🔴 유스 국적이 대표팀을 정하고 있어요: ${bad.map((r) => `${r.market}→${r.nation}`).join(", ")}` : ""));
-}
-{
-  /* 🔑 **값이 아니라 관계로.** 문턱이 얼마인지는 안 봅니다 — 유스 간 **완전히 같은지**만 봐요.
-   *    그래야 `BAR_NAT_K`·`NAT_MEAN`을 누가 바꿔도 이 검사가 계속 유효합니다. */
-  const first = R[0].bars.join("/");
-  const diff = R.filter((r) => r.bars.join("/") !== first);
-  check(diff.length === 0,
-    `W-2. 🚪 소집 문턱 \`callBar\`가 유스 ${YOUTH_N}곳에서 **완전히 같다** (${WC_YEARS.length}개 대회 해 전부)`
-    + `\n     ${R.map((r) => `${r.market}:[${r.bars.join(",")}]`).join(" · ")}`
-    + (diff.length
-      ? `\n     🔴 유스마다 문턱이 달라요 — \`myNation\`이 🇰🇷를 답해도 **국적을 밖에서 다시 끌어오는 우회**가 있습니다`
-      : `\n     🔑 값을 안 보고 「같은가」만 봅니다 — 상수를 바꿔도 이 계약은 그대로예요`));
-}
-
-/* ══════════════════════════════════════════════════════════════
- * W-3. 🎲 **세대 흔들림은 살아 있다** · W-4. 💾 `myNation`은 세이브를 안 읽는다
- * ══════════════════════════════════════════════════════════════ */
-console.log("\n── 🎲 W-3·W-4. 흔들림과 세이브 무의존 ──");
-function noSave(muts) {
-  const h = boot(muts, 5);
-  const S = h.S();
-  const out = { sIsNull: S == null };
-  try {
-    const WC = h.WC();
-    out.nation = WC.myNation() ? WC.myNation().c : "(없음)";
-    out.bars = WC_YEARS.map((y) => WC.callBar(y));
-  } catch (e) {
-    out.threw = String(e.message).slice(0, 80);
+  /* 📊 측정 조건을 검사가 스스로 찍습니다 — 유스가 실제로 5곳 다 달라야
+   *    W-1이 "다 같아서 통과"가 아니게 됩니다. */
+  {
+    const mk = new Set(R.map((r) => r.market));
+    check(mk.size === YOUTH_N,
+      `W-0. 📊 유스 ${YOUTH_N}곳을 **각각 눌러** 서로 다른 커리어 ${mk.size}개를 만들었다`
+      + `\n     ${R.map((r) => `#${r.idx}:${r.market}`).join(" · ")}`
+      + (mk.size === YOUTH_N ? "" : `\n     🔴 유스가 ${mk.size}종뿐이에요 — W-1이 "다 같아서 통과"가 됩니다`));
   }
-  h.close();
-  return out;
-}
-{
-  const bars = R[0].bars;
-  const uniq = new Set(bars);
-  check(uniq.size > 1,
-    `W-3. 🎲 대회 해 ${WC_YEARS.join("·")}시즌의 문턱이 **전부 같지는 않다** (세대 흔들림이 살아 있어요)`
-    + `\n     ${WC_YEARS.map((y, i) => `${y}시즌:${bars[i]}`).join(" · ")} → 서로 다른 값 ${uniq.size}종`
-    + (uniq.size > 1 ? `\n     🔑 🇰🇷 고정 뒤로 문턱을 실제로 움직이는 건 **이것 하나뿐**이에요` : ""));
-}
-{
-  const n = noSave(null);
-  check(n.sIsNull && !n.threw && n.nation === MY_CODE,
-    `W-4. 💾 세이브가 **없는 자리(타이틀 화면)**에서도 \`myNation\`·\`callBar\`가 그대로 돈다`
-    + `\n     S = ${n.sIsNull ? "null" : "(있음)"} · 대표팀 ${n.nation} · 문턱 [${(n.bars || []).join(",")}]`
-    + (n.threw ? `\n     🔴 던졌어요 — ${n.threw}` : "")
-    + (n.sIsNull ? "" : `\n     🔴 타이틀에서 S가 이미 있어요 — 이 검사가 아무것도 안 지킵니다`));
-}
+  {
+    const bad = R.filter((r) => r.nation !== MY_CODE);
+    check(bad.length === 0,
+      `W-1. 🇰🇷 유스 ${YOUTH_N}곳 **전부**에서 대표팀이 "${MY_CODE}"다 (${R[0].nationName})`
+      + `\n     ${R.map((r) => `${r.market}→${r.nation}`).join(" · ")}`
+      + (bad.length ? `\n     🔴 유스 국적이 대표팀을 정하고 있어요: ${bad.map((r) => `${r.market}→${r.nation}`).join(", ")}` : ""));
+  }
+  {
+    /* 🔑 **값이 아니라 관계로.** 문턱이 얼마인지는 안 봅니다 — 유스 간 **완전히 같은지**만 봐요.
+     *    그래야 `BAR_NAT_K`·`NAT_MEAN`을 누가 바꿔도 이 검사가 계속 유효합니다. */
+    const first = R[0].bars.join("/");
+    const diff = R.filter((r) => r.bars.join("/") !== first);
+    check(diff.length === 0,
+      `W-2. 🚪 소집 문턱 \`callBar\`가 유스 ${YOUTH_N}곳에서 **완전히 같다** (${WC_YEARS.length}개 대회 해 전부)`
+      + `\n     ${R.map((r) => `${r.market}:[${r.bars.join(",")}]`).join(" · ")}`
+      + (diff.length
+        ? `\n     🔴 유스마다 문턱이 달라요 — \`myNation\`이 🇰🇷를 답해도 **국적을 밖에서 다시 끌어오는 우회**가 있습니다`
+        : `\n     🔑 값을 안 보고 「같은가」만 봅니다 — 상수를 바꿔도 이 계약은 그대로예요`));
+  }
 
-/* ══════════════════════════════════════════════════════════════
- * 🧪 변이 검증 — 고치기 전에 **빨간불이 뜨는지** 반드시 확인합니다
- *
- * 🔴 **기준선이 초록불인 걸 위에서 먼저 확인했습니다.** 이미 빨간불인 검사는
- *    남의 변이 신호까지 통째로 먹어요 (`91_engineer_hometown.md` §5).
- * ══════════════════════════════════════════════════════════════ */
-console.log("\n── 🧪 변이 검증 (고치기 전에 빨간불이 뜨는지) ──");
-if (fail) console.log(`   ⚠️ **기준선이 이미 ${fail}건 빨간불입니다** — 아래 변이 판정은 그 신호를 먹을 수 있어요.`);
-else console.log(`   ✔ 기준선(무변이) 전부 초록불 — 아래 빨간불은 **변이가 만든 것**이 맞습니다.`);
+  /* ══════════════════════════════════════════════════════════════
+   * W-3. 🎲 **세대 흔들림은 살아 있다** · W-4. 💾 `myNation`은 세이브를 안 읽는다
+   * ══════════════════════════════════════════════════════════════ */
+  console.log("\n── 🎲 W-3·W-4. 흔들림과 세이브 무의존 ──");
+  function noSave(muts) {
+    const h = boot(muts, 5);
+    const S = h.S();
+    const out = { sIsNull: S == null };
+    try {
+      const WC = h.WC();
+      out.nation = WC.myNation() ? WC.myNation().c : "(없음)";
+      out.bars = WC_YEARS.map((y) => WC.callBar(y));
+    } catch (e) {
+      out.threw = String(e.message).slice(0, 80);
+    }
+    h.close();
+    return out;
+  }
+  {
+    const bars = R[0].bars;
+    const uniq = new Set(bars);
+    check(uniq.size > 1,
+      `W-3. 🎲 대회 해 ${WC_YEARS.join("·")}시즌의 문턱이 **전부 같지는 않다** (세대 흔들림이 살아 있어요)`
+      + `\n     ${WC_YEARS.map((y, i) => `${y}시즌:${bars[i]}`).join(" · ")} → 서로 다른 값 ${uniq.size}종`
+      + (uniq.size > 1 ? `\n     🔑 🇰🇷 고정 뒤로 문턱을 실제로 움직이는 건 **이것 하나뿐**이에요` : ""));
+  }
+  {
+    const n = noSave(null);
+    check(n.sIsNull && !n.threw && n.nation === MY_CODE,
+      `W-4. 💾 세이브가 **없는 자리(타이틀 화면)**에서도 \`myNation\`·\`callBar\`가 그대로 돈다`
+      + `\n     S = ${n.sIsNull ? "null" : "(있음)"} · 대표팀 ${n.nation} · 문턱 [${(n.bars || []).join(",")}]`
+      + (n.threw ? `\n     🔴 던졌어요 — ${n.threw}` : "")
+      + (n.sIsNull ? "" : `\n     🔴 타이틀에서 S가 이미 있어요 — 이 검사가 아무것도 안 지킵니다`));
+  }
 
-/* 🧪 W1 — 유스 국적으로 되돌리기. W-1과 W-2가 **둘 다** 갈려야 합니다. */
-if (!mutOK("W1_OLD_NATION")) check(false, `🧪 **변이 W1 — 대표팀을 유스 국적으로 되돌림**${MUT_DEAD}`);
-else {
-  const M = scan(MUT.W1_OLD_NATION);
-  const off = M.filter((r) => r.nation !== MY_CODE);
-  const bars = new Set(M.map((r) => r.bars.join("/")));
-  check(off.length > 0 && bars.size > 1,
-    `🧪 **변이 W1 — \`myNation\`을 \`MARKET_NATION[S.market]\`으로 되돌림** → W-1·W-2가 빨간불`
-    + `\n     ${M.map((r) => `${r.market}→${r.nation}[${r.bars.join(",")}]`).join(" · ")}`
-    + `\n     ${off.length ? `✔ 🇰🇷가 아닌 유스 ${off.length}곳 (W-1)` : "🔴 W-1이 아직 초록불"}`
-    + ` · ${bars.size > 1 ? `✔ 문턱이 ${bars.size}갈래 (W-2)` : "🔴 W-2가 아직 초록불"}`);
-}
+  /* ══════════════════════════════════════════════════════════════
+   * 🧪 변이 검증 — 고치기 전에 **빨간불이 뜨는지** 반드시 확인합니다
+   *
+   * 🔴 **기준선이 초록불인 걸 위에서 먼저 확인했습니다.** 이미 빨간불인 검사는
+   *    남의 변이 신호까지 통째로 먹어요 (`91_engineer_hometown.md` §5).
+   * ══════════════════════════════════════════════════════════════ */
+  console.log("\n── 🧪 변이 검증 (고치기 전에 빨간불이 뜨는지) ──");
+  if (fail) console.log(`   ⚠️ **기준선이 이미 ${fail}건 빨간불입니다** — 아래 변이 판정은 그 신호를 먹을 수 있어요.`);
+  else console.log(`   ✔ 기준선(무변이) 전부 초록불 — 아래 빨간불은 **변이가 만든 것**이 맞습니다.`);
 
-/* 🧪 W2 — 우회. **W-1은 초록불로 남고 W-2만** 갈려야 합니다. */
-if (!mutOK("W2_BYPASS")) check(false, `🧪 **변이 W2 — 문턱만 몰래 유스를 봄**${MUT_DEAD}`);
-else {
-  const M = scan(MUT.W2_BYPASS);
-  const stillKr = M.every((r) => r.nation === MY_CODE);
-  const bars = new Set(M.map((r) => r.bars.join("/")));
-  check(stillKr && bars.size > 1,
-    `🧪 **변이 W2 — \`myNation\`은 🇰🇷인데 \`callBar\`만 유스를 봄** → **W-2만** 빨간불`
-    + `\n     ${M.map((r) => `${r.market}→${r.nation}[${r.bars.join(",")}]`).join(" · ")}`
-    + `\n     ${stillKr ? "✔ W-1은 그대로 초록불" : "🔴 W-1까지 갈렸어요 — 우회 변이가 아니게 됐습니다"}`
-    + ` · ${bars.size > 1 ? `✔ 문턱이 ${bars.size}갈래라 W-2가 잡습니다` : "🔴 **W-2가 우회를 못 잡아요** — W-1만으로는 이 자리가 비어 있습니다"}`);
-}
+  /* 🧪 W1 — 유스 국적으로 되돌리기. W-1과 W-2가 **둘 다** 갈려야 합니다. */
+  if (!mutOK("W1_OLD_NATION")) check(false, `🧪 **변이 W1 — 대표팀을 유스 국적으로 되돌림**${MUT_DEAD}`);
+  else {
+    const M = await scan(MUT.W1_OLD_NATION);
+    const off = M.filter((r) => r.nation !== MY_CODE);
+    const bars = new Set(M.map((r) => r.bars.join("/")));
+    check(off.length > 0 && bars.size > 1,
+      `🧪 **변이 W1 — \`myNation\`을 \`MARKET_NATION[S.market]\`으로 되돌림** → W-1·W-2가 빨간불`
+      + `\n     ${M.map((r) => `${r.market}→${r.nation}[${r.bars.join(",")}]`).join(" · ")}`
+      + `\n     ${off.length ? `✔ 🇰🇷가 아닌 유스 ${off.length}곳 (W-1)` : "🔴 W-1이 아직 초록불"}`
+      + ` · ${bars.size > 1 ? `✔ 문턱이 ${bars.size}갈래 (W-2)` : "🔴 W-2가 아직 초록불"}`);
+  }
 
-/* 🧪 W3 — 세대 흔들림 죽이기. W-3이 갈려야 합니다. */
-if (!mutOK("W3_NO_WOBBLE")) check(false, `🧪 **변이 W3 — 세대 흔들림을 0으로**${MUT_DEAD}`);
-else {
-  const n = noSave(MUT.W3_NO_WOBBLE);
-  const uniq = new Set(n.bars || []);
-  check(uniq.size === 1,
-    `🧪 **변이 W3 — \`BAR_WOBBLE\`을 0으로** → W-3이 빨간불 (문턱 [${(n.bars || []).join(",")}] · 값 ${uniq.size}종)`
-    + (uniq.size === 1 ? `\n     ✔ 대회 해 ${WC_YEARS.length}번이 전부 같은 값 — 문턱이 영영 고정입니다` : `\n     🔴 흔들림을 껐는데 아직 값이 갈려요 — W-3이 다른 걸 재고 있습니다`));
-}
+  /* 🧪 W2 — 우회. **W-1은 초록불로 남고 W-2만** 갈려야 합니다. */
+  if (!mutOK("W2_BYPASS")) check(false, `🧪 **변이 W2 — 문턱만 몰래 유스를 봄**${MUT_DEAD}`);
+  else {
+    const M = await scan(MUT.W2_BYPASS);
+    const stillKr = M.every((r) => r.nation === MY_CODE);
+    const bars = new Set(M.map((r) => r.bars.join("/")));
+    check(stillKr && bars.size > 1,
+      `🧪 **변이 W2 — \`myNation\`은 🇰🇷인데 \`callBar\`만 유스를 봄** → **W-2만** 빨간불`
+      + `\n     ${M.map((r) => `${r.market}→${r.nation}[${r.bars.join(",")}]`).join(" · ")}`
+      + `\n     ${stillKr ? "✔ W-1은 그대로 초록불" : "🔴 W-1까지 갈렸어요 — 우회 변이가 아니게 됐습니다"}`
+      + ` · ${bars.size > 1 ? `✔ 문턱이 ${bars.size}갈래라 W-2가 잡습니다` : "🔴 **W-2가 우회를 못 잡아요** — W-1만으로는 이 자리가 비어 있습니다"}`);
+  }
 
-/* 🧪 W4 — `myNation`이 세이브를 읽게. W-4가 갈려야 합니다. */
-if (!mutOK("W4_READS_S")) check(false, `🧪 **변이 W4 — \`myNation\`이 \`S\`를 읽게**${MUT_DEAD}`);
-else {
-  const n = noSave(MUT.W4_READS_S);
-  check(!!n.threw || n.nation !== MY_CODE,
-    `🧪 **변이 W4 — \`myNation\`이 \`S\`를 읽음** → W-4가 빨간불`
-    + `\n     ${n.threw ? `✔ 타이틀에서 그 자리로 던졌어요 — ${n.threw}` : `🔴 아직 멀쩡히 ${n.nation}을 답해요 — W-4가 아무것도 안 지킵니다`}`);
-}
+  /* 🧪 W3 — 세대 흔들림 죽이기. W-3이 갈려야 합니다. */
+  if (!mutOK("W3_NO_WOBBLE")) check(false, `🧪 **변이 W3 — 세대 흔들림을 0으로**${MUT_DEAD}`);
+  else {
+    const n = noSave(MUT.W3_NO_WOBBLE);
+    const uniq = new Set(n.bars || []);
+    check(uniq.size === 1,
+      `🧪 **변이 W3 — \`BAR_WOBBLE\`을 0으로** → W-3이 빨간불 (문턱 [${(n.bars || []).join(",")}] · 값 ${uniq.size}종)`
+      + (uniq.size === 1 ? `\n     ✔ 대회 해 ${WC_YEARS.length}번이 전부 같은 값 — 문턱이 영영 고정입니다` : `\n     🔴 흔들림을 껐는데 아직 값이 갈려요 — W-3이 다른 걸 재고 있습니다`));
+  }
 
-/* ---------- 마무리 ---------- */
-console.log(`\n⏱ ${((Date.now() - t0) / 1000).toFixed(1)}초`);
-if (fail) { console.log(`\n❌ ${fail}건 실패`); process.exit(1); }
-console.log("\n✅ 통과");
-process.exit(0);
+  /* 🧪 W4 — `myNation`이 세이브를 읽게. W-4가 갈려야 합니다. */
+  if (!mutOK("W4_READS_S")) check(false, `🧪 **변이 W4 — \`myNation\`이 \`S\`를 읽게**${MUT_DEAD}`);
+  else {
+    const n = noSave(MUT.W4_READS_S);
+    check(!!n.threw || n.nation !== MY_CODE,
+      `🧪 **변이 W4 — \`myNation\`이 \`S\`를 읽음** → W-4가 빨간불`
+      + `\n     ${n.threw ? `✔ 타이틀에서 그 자리로 던졌어요 — ${n.threw}` : `🔴 아직 멀쩡히 ${n.nation}을 답해요 — W-4가 아무것도 안 지킵니다`}`);
+  }
+
+  /* ---------- 마무리 ---------- */
+  console.log(`\n⏱ ${((Date.now() - t0) / 1000).toFixed(1)}초`);
+  if (fail) { console.log(`\n❌ ${fail}건 실패`); process.exit(1); }
+  console.log("\n✅ 통과");
+  process.exit(0);
+
+})();

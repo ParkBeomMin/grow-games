@@ -43,7 +43,7 @@
 "use strict";
 const fs = require("fs");
 const path = require("path");
-const { bootPage, pageMutsOK, townAuto, tapFoot, tapChild, tapChildArc, pickOrigin, passEarly, seedBoth, PAGE_DIR }
+const { bootPage, pageMutsOK, townAuto, tapFoot, tapChild, tapChildArc, pickOrigin, passEarly, seedBoth, stageIdle, PAGE_DIR }
   = require("./_load.js");
 
 let fail = 0;
@@ -211,10 +211,23 @@ async function arc(seed, muts, cadence) {
     if (cadence == null) await settle(D); else await wait(cadence);
     rec.start = mins().length;                        // 🔑 단계가 열릴 때 피드는 비어 있어야 해요
     for (let g = 0; g < 12; g++) {
+      /* 🔴 **기다림이 버튼 확인 「앞」에 와야 합니다** (2026-09-06 · 설계 153번 · 구현 155번 §4-1).
+       *    시계가 async라 누른 직후엔 버튼이 **언제나** `disabled`예요 — 옛 순서(확인 → 기다림)면
+       *    **한 번 누르고 break**라 단계가 영영 안 끝납니다. */
+      if (cur() !== "screen-town") break;
+      /* 🔴 **고정 간격만으로는 이제 못 누릅니다** (2026-09-06 · 설계 153번).
+       *    시계가 async라 [🏁 경기 시작]을 누른 뒤 버튼이 **단계가 끝날 때까지** `disabled`예요.
+       *    옛 코드는 여기서 break해서 **아크가 초5에 멈춘 채** 뒤 문장이 «남의 분»을 보고
+       *    빨간불을 냈습니다 — 코드가 아니라 **드라이버 때문**이었어요.
+       * 🔒 그래서 간격을 기다린 「뒤」에 **버튼이 살아날 때까지** 한 번 더 기다립니다. */
+      if (cadence == null) await settle(D); else await wait(cadence);
+      /* 🔒 **정착 경로에도 같은 기다림이 필요합니다** — `settle()`의 창(45ms)은
+       *    카드 간격(🤖 자동 진행 90ms)보다 **짧아서** 큐 한가운데서 돌아와요
+       *    (CLAUDE.md 「기다림이 카드보다 짧음」). 그 뒤 버튼이 `disabled`라 곧바로 break합니다. */
+      await stageIdle(D);
       if (cur() !== "screen-town") break;
       const b = D.getElementById("btn-town-next");
       if (!b || b.disabled || b.classList.contains("hidden")) break;
-      if (cadence == null) await settle(D); else await wait(cadence);
       rec.mins = mins();
       rec.seen.push(mins());
       press(b, "🏫 다음");
@@ -315,22 +328,30 @@ const finOf = (txt) => {
       + (sameRes ? "" : `\n     🔴 판정 시퀀스까지 갈렸어요 — 변이가 난수를 건드립니다. 이 문장은 지금 무효예요`)
       + (sameDev ? "" : `\n     🔴 **승패가 \`d\`로 샙니다.** 🏟️ 제안 등급(spotMul)이 경기 결과를 타요`));
     /* 🔑 **변이가 실제로 승패를 갈랐는지** 확인 — 안 갈렸으면 A-2는 아무것도 안 지킵니다.
-     * 🔴 **「전부 갈렸다」로는 못 잽니다** — 골이 하나도 안 난 아크는 0:0 → 0:0이라
-     *    뒤집어도 같은 값이에요. 그건 고장이 아니라 **잴 것이 없는 판**입니다.
-     *    그래서 ① **골이 난 판은 전부 갈렸는가** ② **골이 난 판이 충분한가**로 갈랐어요. */
-    const scoring = SEEDS.filter((s) => (finOf(base[s].stages.h.fin) || [0, 0]).some((n) => n > 0));
+     * 🔴 **「전부 갈렸다」로는 못 잽니다** — **대칭 스코어는 자기 자신이 거울**이에요.
+     *    `GOAL_BY` 뒤집기는 `us`↔`them`을 바꾸는 것이라 `hg === ag`인 판은
+     *    `1:1 → 1:1`로 **구조적으로 안 갈립니다.** 고장이 아니라 **잴 것이 없는 판**이에요.
+     *    🆕 **2026-09-06 — 옛 조건은 `0:0`만 뺐습니다**(`some(n => n > 0)`). `1:1`도 똑같이
+     *    못 재는 판인데 그건 안 뺐어요 — 시드 777이 `1:1`이 되는 날 **코드가 아니라 검사가**
+     *    빨간불을 냈습니다. 🔒 그래서 조건을 **「이긴 쪽이 있는가」**로 바로잡습니다.
+     *    그래서 ① **승부가 갈린 판은 전부 뒤집혔는가** ② **그런 판이 충분한가**로 봅니다. */
+    const scoring = SEEDS.filter((s) => {
+      const f = finOf(base[s].stages.h.fin) || [0, 0];
+      return f[0] !== f[1];
+    });
     const scoringSplit = scoring.filter((s) => finDiff.includes(s));
     const b2 = scoringSplit.length === scoring.length && scoring.length >= MIN_SCORING;
     check(b2,
-      `A-2b. 🔑 그 변이가 **🏁 스코어를 실제로 갈랐다** — 골이 난 판 **${scoring.length}벌**(바닥 ${MIN_SCORING}) 중 갈린 판 **${scoringSplit.length}벌**`
-      + `\n     🔎 측정 조건 — 🏁 0:0인 아크는 뒤집어도 0:0이라 **잴 것이 없어서** 뺐습니다 (시드 ${SEEDS.length}벌 중 ${SEEDS.length - scoring.length}벌)`
+      `A-2b. 🔑 그 변이가 **🏁 스코어를 실제로 갈랐다** — 승부가 갈린 판 **${scoring.length}벌**(바닥 ${MIN_SCORING}) 중 뒤집힌 판 **${scoringSplit.length}벌**`
+      + `\n     🔎 측정 조건 — 🏁 **비긴 아크**(0:0 · 1:1 …)는 뒤집어도 같은 값이라 **잴 것이 없어서** 뺐습니다 (시드 ${SEEDS.length}벌 중 ${SEEDS.length - scoring.length}벌)`
+      + `\n     🔑 **대칭 스코어는 자기 자신이 거울**이에요 — \`us\`↔\`them\`을 바꿔도 \`1:1\`은 \`1:1\`입니다`
       + `\n     ${SEEDS.map((s) => `${s}:${(finOf(base[s].stages.h.fin) || []).join(":")}→${(finOf(flip[s].stages.h.fin) || []).join(":")}`).join(" · ")}`
       + `\n     🌍 2026-09-02까지는 🧱이 \`PLAYABLE\`에서 빠져 \`GOAL_BY.d.miss\`가 **닿을 수 없었고**, 학교 경기가 늘 \`N:0\`이었어요.`
       + ` 🅰️ 끊긴 패스(\`a.miss\`)가 역습 실점이 되면서 **그 문장은 틀렸습니다** — 지금은 A-3이 「상대도 넣는다」를 봅니다`
       + (b2 ? "" :
         scoring.length < MIN_SCORING
-          ? `\n     🔴 골이 난 판이 ${scoring.length}벌뿐이라 A-2가 "원래 같은 값"을 재고 있을 수 있어요 — **시드를 늘리세요**`
-          : `\n     🔴 골이 났는데 안 갈린 판이 있어요 — 승패 뒤집기가 화면에 안 닿습니다`));
+          ? `\n     🔴 승부가 갈린 판이 ${scoring.length}벌뿐이라 A-2가 "원래 같은 값"을 재고 있을 수 있어요 — **시드를 늘리세요**`
+          : `\n     🔴 승부가 갈렸는데 안 뒤집힌 판이 있어요 — 승패 뒤집기가 화면에 안 닿습니다`));
   }
 
   /* ══════════════════════════════════════════════════════════════════════
@@ -421,7 +442,8 @@ const finOf = (txt) => {
      * 🌍 이 표가 서 있는 세계: 「🔥 카드는 `minAt`, 🌊 흐름은 `GRID = 12` 격자」입니다 —
      *    둘 중 하나가 움직이면 **여기가 먼저 빨간불**이고, 그건 정상 신호예요. */
     const OWN = {
-      e: [0, 12, 30, 36, 60, 72, 84, 90],
+      /* 🆕 2026-09-06 — `head.slice(0, 1)` 폐기로 🏫 초5에 **24'**가 늘었습니다 (설계 153번 §3-4) */
+      e: [0, 12, 24, 30, 36, 60, 72, 84, 90],
       m: [0, 12, 23, 36, 45, 60, 68, 84, 90],
       h: [0, 12, 23, 36, 45, 60, 68, 84, 90],
     };
@@ -523,14 +545,45 @@ const finOf = (txt) => {
      *    기대는 대리값이었어요. `drops`는 셋 다 안 탑니다. 분 개수는 참고로만 찍어요. */
     const dr = good.map((x) => x.drops);
     const noCount = dr.some((d) => d == null);
-    check(!noCount && dr.every((d) => d > 0),
+    /* ═══════════════════════════════════════════════════════════════════
+     * 🚧 **2026-09-06 — 이 경합이 「도달 불가」가 됐습니다** (설계 153번 · 시계 개편)
+     * ═══════════════════════════════════════════════════════════════════
+     * 경합을 만들려면 **옛 단계의 큐가 도는 동안** [다음 단계]를 눌러야 하는데,
+     * `runClock()`이 줄마다 `await draw()`를 하고 **큐가 다 빈 「뒤」에** `finishMatch()`로
+     * 버튼을 붙입니다. 👉 **사람이 아무리 빨리 눌러도 창이 없습니다.**
+     *
+     * 📏 실측: `drops` 8·8·8·14·14·14 (152번 회차) → **0·0·0·0·0·0** (지금).
+     *          변이-F(끄는 줄 제거)가 만든 누수도 **6/6판 → 0/6판**.
+     *
+     * 🔴 **그래서 B-1은 지금 「공짜 초록불」입니다** — 경합이 없으니 «남의 분이 없다»가 공짜예요.
+     * 🔒 **그런데 그걸 숨기지 않습니다**: `drops`가 전부 0이면 아래가 **🚧로 눈에 보이게** 찍히고
+     *    종료 코드에는 안 셉니다. 🔴 **양방향입니다** — 큐가 안 빈 채 버튼이 뜨는 날
+     *    `drops`가 0이 아니게 되고, 그러면 **자동으로 하드 검사로 돌아갑니다.**
+     * 📌 **판단이 필요합니다**(designer·오케스트레이터): 「끄는 줄」이 이제 필요 없다면
+     *    그 줄을 **지우는 판정**을 내리고 B를 통째로 버려야 해요 — 안 그러면
+     *    「아무도 안 지키는 방어」가 남습니다. 🏟️ 프로 경기 갈래(B-3)는 아직 그 자리가 열려 있어요. */
+    const raced = !noCount && dr.some((d) => d > 0);
+    if (!raced && !noCount) {
+      console.log(`🚧 B-2. 🎬 **세대 경합이 「도달 불가」입니다** — \`drops\` ${dr.join(" · ")} (전부 0)`);
+      console.log(`     🔴 시계 루프가 **큐를 다 비운 뒤에** [다음 단계] 버튼을 붙여서, 버튼으로는 경합을 만들 수 없어요.`);
+      console.log(`     🔴 **그래서 위 B-1은 지금 아무것도 안 지킵니다** — «남의 분이 없다»가 공짜로 참이에요.`);
+      console.log(`     📏 152번 회차: drops 8·8·8·14·14·14 · 변이-F 누수 6/6판 → 지금: 0 · 0/6판`);
+      console.log(`     📌 판단 필요 — ① 끄는 줄을 **지운다**(그럼 B를 버림) ② 다른 화면 때문에 여전히 필요하다(B-3 참고)`);
+      console.log(`     🔒 \`drops\`가 다시 0이 아니게 되면 **이 줄이 저절로 하드 검사로 돌아갑니다** (양방향)`);
+    } else check(!noCount && dr.every((d) => d > 0),
       `B-2. 🔬 그 판들에서 **끄는 줄이 실제로 껐다** — 판마다 \`drops\` ${dr.join(" · ")} (문턱 > 0)`
       + `\n     참고: B-1이 훑은 분 ${good.map((x) => x.n).join(" · ")}`
       + (noCount ? `\n     🔴 \`W2Scene._t.drops\`가 없어요 — 계수기가 빠졌는지 보세요` : "")
       + (!noCount && dr.some((d) => d === 0)
         ? `\n     🔴 0인 판은 **경합이 안 일어난** 겁니다 — 그 판에서 B-1은 아무것도 안 지켜요` : ""));
 
-    /* 🔴 변이 — 끄는 줄만 되돌리면 빨간불인가 */
+    /* 🔴 변이 — 끄는 줄만 되돌리면 빨간불인가.
+     * 🚧 **경합이 도달 불가면 이 변이도 잴 것이 없습니다** — 아래를 건너뜁니다.
+     *    🔴 「건너뛰었다」를 초록불로 세지 않아요: 위 🚧가 그 상태를 매번 적습니다. */
+    if (!raced) {
+      console.log(`🚧 변이-F · Fb. 🔬 **경합이 없어서 잴 것이 없습니다** — 끄는 줄을 지워도 누수가 안 생겨요`);
+      console.log(`     🔒 위 B-2의 🚧와 **한 몸**입니다. 경합이 돌아오면 둘 다 저절로 살아나요`);
+    } else {
     const mut = await run({ "match-scene.js": [...MUT.SLOW["match-scene.js"], ...MUT["M-F"]["match-scene.js"]] });
     const caught = mut.filter((x) => x.leak.length);
     const zeroed = mut.filter((x) => x.drops === 0);
@@ -546,6 +599,7 @@ const finOf = (txt) => {
       + (zeroed.length === mut.length ? "" :
         `\n     🔴 끄는 줄을 지웠는데도 \`drops\`가 올라갑니다 — **세는 자리가 그 갈래 밖**이에요.`
         + ` 그러면 B-2의 「>0 ↔ 0」 방향이 사라져 아무것도 안 지킵니다`));
+    }
   }
 
   /* ══════════ 🚧 B-3. `career.js`의 프로 경기 루프는 **아직 세대를 안 넘깁니다** ══════════

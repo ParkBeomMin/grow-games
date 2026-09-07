@@ -9,8 +9,11 @@
  *     gen()               → number          🎬 지금 경기의 **세대**. mount()마다 하나씩 올라가요
  *     push(card, gen)     → Promise         카드 1장. 딜레이·타이핑·골 연출이 다 여기 있어요
  *                                           🎬 `gen`을 주면 **그 세대가 아니면 한 글자도 안 씁니다**
+ *     clock(min, gen)     → boolean         ⏱️ **시계 한 칸.** `town.js`의 시계 루프가 1분마다 부릅니다
+ *                                           🎬 세대가 갈렸으면 **`false`** — 부르는 쪽이 루프를 끊어요
  *     summary(result)                       사후 집계 ("이 경기의 내 순간 N회")
  *     fast()                                ⏩ 빨리감기 — **연출만** 짧아집니다
+ *     isFast()            → boolean         ⏩가 걸렸나 (`town.js`의 `minMs()`가 봅니다)
  *     destroy()
  *
  *   🔥 내 순간 카드는 드라이버가 `push(card)`를 **두 번** 부릅니다 —
@@ -627,6 +630,11 @@ window.W2Scene = (() => {
       pitchEl: q(".w2-pitch"), ballEl: q(".w2-ball"), feed: q(".w2-feed"),
       h: 0, a: 0, mine: 0, fast: false, lite: !!c.lite, myName: c.myName || "나",
       slot: null, pending: null, myGoals: [], slots: slotsOf(host),
+      /* 🔬 ⏱️ 이 경기의 **시계 수열** — 검사 전용입니다 (`_t.clocks()`).
+       * 🔒 **경기 하나의 값이라 여기서 비웁니다.** `_drops`가 누적인 것과 성격이 달라요:
+       *    drops는 *"확률이 아니라 수로"* 보려고 단조 증가였고, clocks는 **단계마다
+       *    0'~90'을 다시 밟는지**를 봐야 합니다. 🔴 성격이 달라 안 묶었어요. */
+      clocks: [],
     };
     /* 킥오프 줄을 여기서 만들지 않습니다 — 엔진이 `kind: "kick"` 카드로 줘요.
      * 양쪽이 다 만들었더니 "킥오프!" 다음 줄에 "경기가 시작됩니다"가 또 떴습니다. */
@@ -693,6 +701,22 @@ window.W2Scene = (() => {
     } else if (changed && !S.fast) {
       await wait(150);
     }
+  }
+
+  /* ⏱️ **시계 한 칸** (설계 153번 §6-1). 🔒 **`town.js`의 시계 루프가 부릅니다.**
+   * 🔴 이 파일은 여전히 **`dt`도 `requestAnimationFrame`도 안 씁니다** — 판은 「카드를
+   *    따라가는 그림」 그대로이고, 시간축은 **`town.js`에 하나뿐**이에요.
+   *    🔴 **시계를 여기서 돌리지 마세요**(`setInterval`도, `rAF`도). 그 순간 이 파일이
+   *    「가짜 rAF」를 구조로 피한 성질을 잃고, `raf-test`가 지키는 자리가 통째로 열립니다.
+   * 🎬 세대가 갈리면 **`false`를 돌려줍니다** — 부르는 쪽이 그걸 보고 루프를 끊어요.
+   *    🔒 `push`의 끄는 줄과 **같은 계수기**(`_drops`)를 씁니다: 둘 다 「세대가 갈려서
+   *    한 글자도 안 썼다」는 같은 사건이라, 나누면 검사가 두 곳을 봐야 합니다. */
+  function clock(min, g) {
+    if (g != null && g !== _gen) { _drops += 1; return false; }
+    if (!S) return false;
+    setClock(min);
+    S.clocks.push(min);
+    return true;
   }
 
   /* 🔥 미니게임이 들어갈 자리. 드라이버가 `push()`보다 **먼저** 부릅니다 —
@@ -777,5 +801,6 @@ window.W2Scene = (() => {
   /* 🔬 `_t`는 **검사 전용 창구**입니다 — 게임 로직도 화면도 여기를 읽지 않아요.
    *    `drops()`는 누적이고 아무것도 0으로 안 되돌립니다 (위 `_drops` 주석). */
   return { mount, momentSlot, push, openMoment, closeMoment, summary, tally: summary,
-           gen: () => _gen, fast, isFast, destroy, _t: { drops: () => _drops } };
+           gen: () => _gen, clock, fast, isFast, destroy,
+           _t: { drops: () => _drops, clocks: () => (S ? S.clocks.slice() : []) } };
 })();

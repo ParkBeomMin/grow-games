@@ -206,7 +206,47 @@ function fastEcho(P) {
   return () => { w.setTimeout = real; };
 }
 
-function newPlayer(P, agencyIdx, pos, name) {
+/* ⏱️ **🏫 학교 경기는 시계가 돈 뒤에야 다음 버튼이 옵니다** (2026-09-06 · 설계 153번).
+ * `town.js`의 시계가 `0' → 90'`을 **한 칸씩** 오르고(`await` 루프), 그게 끝나야
+ * 결과 줄과 [다음]이 붙습니다. 🤖 자동 진행(`grow-auto-mini`)이라 간격은 0이지만
+ * **틱은 여전히 90번** 돌고, 프라미스 한 바퀴가 사이에 끼어요.
+ *
+ * 🔴 **`fastEcho`로는 안 됩니다.** 그건 `setTimeout`을 그 자리에서 부르는 것이고,
+ *    시계는 `await`로 멈춰요 — **`await`는 타이머가 즉시 풀려도 마이크로태스크 한 바퀴를
+ *    반드시 돕니다.** 동기 `.click()` 사슬 안에서는 스택이 안 비어 영영 안 돌아요.
+ *    🧪 실측 — 동기 재현은 `screen-town`에서 멈추고, 기다리면 `screen-main`에 닿습니다.
+ *
+ * 🔒 **벽시계 문턱을 안 박습니다** — 「화면이 멈출 때까지」 기다려요. `MIN_MS`나
+ *    `FLOW_MS`가 바뀌는 날 숫자를 박아 남기면 그때 조용히 모자랍니다.
+ * 🔒 상한은 **안 멈추면 조용히 안 넘어간다는 증거**입니다 — 넘으면 조용히 넘어가지 않고 던집니다. */
+const TOWN_HOLD = 12;          // 🔒 12 × 10ms = 120ms 동안 화면이 그대로면 멈춘 것으로 봅니다
+const TOWN_TRIES = 900;        // 🔒 × 10ms = 9초 상한
+function townState(P) {
+  const D = P.w.document;
+  const b = D.getElementById("btn-town-next");
+  return `${P.active()}|${D.querySelectorAll("#town-scene .w2-feed > *").length}`
+    + `|${D.querySelectorAll("#town-prog .town-dot.hit, #town-prog .town-dot.mid, #town-prog .town-dot.bad").length}`
+    + `|${b ? (b.disabled ? "off" : "on") + b.textContent : "-"}`;
+}
+async function settleTown(P) {
+  let prev = null, hold = 0;
+  for (let i = 0; i < TOWN_TRIES; i++) {
+    const now = townState(P);
+    hold = now === prev ? hold + 1 : 0;
+    if (hold >= TOWN_HOLD) return;
+    prev = now;
+    await new Promise((r) => setTimeout(r, 10));
+  }
+  throw new Error(`🏫 학교 화면이 ${(TOWN_TRIES * 10) / 1000}초 안에 안 멈춰요 (${townState(P)})`);
+}
+
+/* 🔑 **이 함수는 `async`지만 🏫 학교가 없는 흐름에서는 동기로 끝납니다.**
+ *    async 함수의 본문은 **첫 `await`까지 동기로** 도는데, ⚽ soccer·🎤 아이돌·⚾ 야구는
+ *    `screen-town`이 없어 `await`를 **한 번도 안 지납니다.** 그래서 그쪽 호출부는
+ *    **한 줄도 안 바뀌었어요** — 2,500줄을 통째로 async로 바꾸지 않은 근거입니다.
+ * 🔴 🏫 학교를 지나는 흐름(⚽ 더 윙어 II)은 **반드시 `await`** 해야 합니다 —
+ *    안 기다리고 들어오면 `soccerDebut`의 `__townAsync` 가드가 **던집니다.** */
+async function newPlayer(P, agencyIdx, pos, name) {
   const { w, $ } = P;
   /* 🤖 순간 카드를 **자동 진행(중립 s = 0.5)**으로 지나갑니다 — 픽스처 생성기에는 손이 없어요.
    * ⚠️ 이 열쇠는 `SKIP_KEYS`라 만들어진 픽스처에는 안 실립니다. */
@@ -273,30 +313,34 @@ function newPlayer(P, agencyIdx, pos, name) {
   if (!posCard) throw new Error(`포지션 카드 ${pos}가 없어요`);
   posCard.click();
   if (townFirst) {
-    /* 🏫 초5 2장 + 📨 조기 제안 + 중등부 3장 + 📨 조기 제안 + 고등부 3장 —
-     * 카드마다 [다음]이 한 번씩이에요.
-     * 🏁 **그리고 경기마다 맨 앞에 [🏁 경기 시작]이 한 번 더 있습니다**
-     *    (2026-09-04 · `town.js`의 `kickoff()`). 화면에 들어서자마자 굴리지 않아요 —
-     *    🔑 **같은 `#btn-town-next`입니다**(새 id가 아니에요). 그래서 여기서도
-     *    누르는 것은 늘어나기만 하고 선택자는 그대로예요: **8 → 11번.**
-     * 🔴 **줄을 그대로 적습니다.** 반복문으로 쓰면 G-1이 `.click()` 줄을 한 번만
-     *    뜯어가서 한 판만 지나간 채로 판정합니다. */
+    /* 🏫 **한 단계의 누름이 정확히 둘입니다** (2026-09-06 · 설계 153번):
+     *      🏁 경기 시작  +  🔚 단계 끝
+     *    카드와 카드 사이의 [다음 판] 다섯이 없어졌어요 — ⏱️ 시계가 **스스로** 이어 갑니다.
+     *    🔑 선택자는 그대로 `#btn-town-next` 하나이고 **횟수만 11 → 6**으로 줄었습니다.
+     * ⏱️ **누를 때마다 기다립니다** — 시계가 0'에서 90'까지 도는 동안 다음 버튼이 없어요.
+     *    🔴 `settleTown`을 빼면 두 번째 누름이 **아직 disabled인 버튼**에 가서 아무 일도
+     *       안 나고, 흐름이 `screen-town`에서 멈춥니다(실측).
+     * 🔴 **줄을 그대로 적습니다.** 반복문으로 쓰면 G-1이 누르는 줄을 한 번만
+     *    뜯어가서 한 판만 지나간 채로 판정합니다.
+     * 🔒 `__townAsync`는 **동기 호출자가 잘못 들어온 걸 잡는 표시**예요 — `soccerDebut`이 봅니다. */
+    w.__townAsync = true;
     $("btn-town-next").click();       // 🏁 초5 경기 시작
-    $("btn-town-next").click();
-    $("btn-town-next").click();
+    await settleTown(P);
+    $("btn-town-next").click();       // 🔚 초5 끝 → 📨 조기 제안으로
+    await settleTown(P);
     /* 📨 초등부 뒤의 조기 제안 — 픽스처는 **늘 거절합니다.** 예비 계약을 하면 🏟️ 최종
      * 제안이 안 오고(그 팀으로 갑니다) 아래 `유스 카드 ${agencyIdx}번`이 사라져요.
      * 🔒 편차 밴드는 카드 수·계약 여부에 무관하게 중립이라 이 선택이 곡선을 안 움직입니다. */
     $("btn-early-next").click();
     $("btn-town-next").click();       // 🏁 중등부 경기 시작
-    $("btn-town-next").click();
-    $("btn-town-next").click();
-    $("btn-town-next").click();
+    await settleTown(P);
+    $("btn-town-next").click();       // 🔚 중등부 끝
+    await settleTown(P);
     $("btn-early-next").click();       // 📨 중등부 뒤의 조기 제안 — 역시 거절이에요
     $("btn-town-next").click();       // 🏁 고등부 경기 시작
-    $("btn-town-next").click();
-    $("btn-town-next").click();
-    $("btn-town-next").click();
+    await settleTown(P);
+    $("btn-town-next").click();       // 🔚 고등부 끝 → 🏟️ 스카우트
+    await settleTown(P);
     const cards = w.document.querySelectorAll("#agency-list .card");
     if (!cards[agencyIdx]) throw new Error(`유스 카드 ${agencyIdx}번이 없어요`);
     cards[agencyIdx].click();
@@ -448,7 +492,28 @@ function soccerDebut(P, mode, plan, marketIdx, pos) {
    *   0 🇰🇷 K리그 · 1 🇯🇵 J리그 · 2 🇧🇷 브라질 · 3 🇬🇧 잉글랜드 · 4 🇮🇹 이탈리아
    * (난이도 순으로 놓여 있어요 — 뒤로 갈수록 데뷔 리그가 험해요) */
   const agency = marketIdx != null ? marketIdx : (mode === "semi" ? 0 : 1);
+  /* 🔑 `newPlayer`는 `async`지만 ⚽ soccer에는 🏫 학교 화면이 없어 **`await`를 한 번도 안 지납니다** —
+   *    async 함수의 본문은 첫 `await`까지 **동기로** 돌기 때문에 여기서 이미 다 끝나 있어요.
+   * 🔴 그래서 이 15개 호출부가 **한 줄도 안 바뀝니다.** 학교를 지나는 흐름이 이리로 들어오면
+   *    아래 가드가 **던집니다** — 조용히 반쯤 만들어진 선수로 넘어가지 않아요. */
   newPlayer(P, agency, pos || "fw", mode === "semi" ? "밑바닥" : "윙어");
+  if (P.w.__townAsync) {
+    throw new Error("🏫 학교를 지나는 흐름이에요 — `soccerDebut`이 아니라 `soccerDebutTown`(async)을 쓰세요");
+  }
+  return debutAfterNew(P, mode, plan);
+}
+
+/* 🏫 **⚽ 더 윙어 II 전용 입구** — 학교 시계(`0' → 90'`)를 기다린 뒤 나머지는 **같은 길**로 갑니다.
+ * 🔒 `soccerDebut`의 사본이 아닙니다 — 뒷부분은 `debutAfterNew` **한 곳**뿐이에요.
+ *    (사본을 만들면 ⚽ 두 갈래가 갈라지고, 그게 이 저장소가 여러 번 데인 자리입니다) */
+async function soccerDebutTown(P, mode, plan, marketIdx, pos) {
+  const agency = marketIdx != null ? marketIdx : (mode === "semi" ? 0 : 1);
+  await newPlayer(P, agency, pos || "fw", mode === "semi" ? "밑바닥" : "윙어");
+  return debutAfterNew(P, mode, plan);
+}
+
+/* 🔒 입단 「뒤」의 공통 길 — 유스 → 생존 라운드 → 엔딩 → 프로 커리어 시작. */
+function debutAfterNew(P, mode, plan) {
   youthUntilSurvival(P, plan);
   if (mode === "semi") {
     P.state().fandom = 400;
@@ -2320,7 +2385,9 @@ function makeSoccerHof() {
  * **그게 오히려 맞습니다**: 확인해야 할 것이 경기 화면·순간 카드·결과 버튼이라
  * 폰에서 직접 눌러 봐야 하는 것들이에요. 세이브는 그 문 앞까지만 데려다 줍니다.
  * (soccer 시나리오처럼 경기 뒤 상태가 필요해지면 이 스크립트를 async로 바꿔야 해요.) */
-function makeWinger2(kind) {
+/* 🏫 ⏱️ **async인 유일한 maker입니다** — 학교 시계(`0' → 90'`)를 기다려야 해서요.
+ * 🔒 나머지 일곱 게임의 maker는 **한 줄도 안 바뀌었습니다**(위 `soccerDebut`의 🔑 참고). */
+async function makeWinger2(kind) {
   const C = {
     match: { pos: "wg", emoji: "🔥", label: "🎯 윙어 — 리그 경기 직전" },
     def: { pos: "df", emoji: "🧱", label: "🛡️ 수비수 — 리그 경기 직전" },
@@ -2331,7 +2398,7 @@ function makeWinger2(kind) {
     let P;
     try {
       P = makePage("winger2", seed);
-      soccerDebut(P, "pro", "pos", 0, C.pos);
+      await soccerDebutTown(P, "pro", "pos", 0, C.pos);
       // 시즌 준비 턴을 다 쓰고 **경기 직전**에서 멈춰요
       let ready = false;
       for (let g = 0; g < 40 && P.active() === "screen-pro"; g++) {
@@ -2460,6 +2527,12 @@ function writeOut() {
  * 유스 엔딩 두 개는 확률을 재느라 오래 걸리니, 그것만 다시 뽑을 때 유용해요. */
 const want = (id, game) => !only || only === game || only === id;
 const t0 = Date.now();
+/* ⏱️ **⚽ 더 윙어 II 세 줄만 `await`이라 실행부를 async로 감쌉니다** (2026-09-06 · 설계 153번).
+ * 🔒 안쪽 순서는 **한 줄도 안 바뀝니다** — 나머지 일곱 게임은 그대로 동기예요.
+ *    (`newPlayer`가 `async`여도 🏫 학교가 없는 흐름은 `await`를 안 지나 동기로 끝납니다)
+ * 🔴 `writeOut()`이 **맨 끝에서 한 번** 돌아야 해서 통째로 감쌌어요 — 학교 세 줄만 떼어
+ *    뒤로 미루면 픽스처를 다 못 모은 채 파일이 써집니다. */
+(async () => {
 if (want("soccer-transfer", "soccer")) makeSoccerTransfer();
 if (want("soccer-promote", "soccer")) makeSoccerPromote();
 if (want("soccer-youth-ext", "soccer")) makeSoccerEnding("youth");
@@ -2508,9 +2581,9 @@ if (want("soccer-slot", "soccer")) makeSoccerSlot();
 if (want("soccer-hof-word", "soccer")) makeSoccerHof();
 if (want("soccer-promo", "soccer")) makeSoccerPromoRelegation("up");
 if (want("soccer-releg", "soccer")) makeSoccerPromoRelegation("down");
-if (want("winger2-match", "winger2")) makeWinger2("match");
-if (want("winger2-def", "winger2")) makeWinger2("def");
-if (want("winger2-bench", "winger2")) makeWinger2("bench");
+if (want("winger2-match", "winger2")) await makeWinger2("match");
+if (want("winger2-def", "winger2")) await makeWinger2("def");
+if (want("winger2-bench", "winger2")) await makeWinger2("bench");
 if (want("idol-concept", "idol")) {
   makeIdolConcept("idol-concept", "컴백 컨셉 선택 화면", "🎬",
     "컨셉 카드 4장이 좁은 화면에서 안 겹치고, 소문 2장에 🗣 배지가 붙는지", false, 2);
@@ -2525,3 +2598,4 @@ if (want("idol-report", "idol") || want("idol-tour", "idol") || want("idol-stand
 if (only === "rookie" || !only) makeRookieAll();
 
 log(`\n📦 ${OUT} — 시나리오 ${writeOut()}개 (${((Date.now() - t0) / 1000).toFixed(0)}초)`);
+})();

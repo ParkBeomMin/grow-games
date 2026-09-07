@@ -38,8 +38,10 @@
  *   · 🔴 **144번(`FILL_MIN` = 두 카드의 중점)의 세계가 아닙니다.** 그 식은 필러를 `n`장으로
  *     묶어 🏫 초5에 흐름 줄이 딱 하나였어요 — 되살아나면 F-1·F-1b가 먼저 빨간불입니다.
  *   · **단계가 90분 경기가 아니게 되면**(예: 「전반만 뛴다」) F-2·F-4부터 다시 보세요.
- *   · 🔒 **첫 구간 상한(I-A)은 「계약 D의 여유가 ~1.4초 · 추정」인 세계의 문장**입니다.
- *     실기기(I-10)에서 여유가 3초를 넘으면 designer가 2장으로 열어요 — 그때 I-A를 먼저 고치세요.
+ *   · 🔓 **첫 구간 상한(I-A)은 2026-09-06에 폐기했습니다** — 범민 님이 계약 D를 직접
+ *     풀었어요(*"첫 카드까지 걸리는 시간이 느는건 상관없어"*). 🏫 초5의 첫 구간은 이제 **2장**입니다.
+ *   · ⏱️ **시계가 흐릅니다**(설계 153번) — 한 누름(🏁 시작)이 단계를 **통째로** 굴려요.
+ *     그래서 `arc()`의 누름 루프가 `stageIdle()`로 기다립니다. 🔴 안 기다리면 한 번 누르고 끊겨요.
  *   · **카드 수 n이 단계마다 같아지면** F-5의 «중등이 뒤집혀 있다»는 여전히 성립하지만
  *     (`sIdx`가 가르니까요), `school-scene-test` B-1의 분 집합 자는 눈이 멉니다.
  *   · **필러를 `deck`에 넣기로 판정이 바뀌면** F-7이 곧바로 빨간불입니다 — 그때는
@@ -50,7 +52,7 @@
 "use strict";
 const fs = require("fs");
 const path = require("path");
-const { bootPage, pageMutsOK, townAuto, tapFoot, tapChildArc, pickOrigin, passEarly, seedBoth, PAGE_DIR }
+const { bootPage, pageMutsOK, townAuto, tapFoot, tapChildArc, pickOrigin, passEarly, seedBoth, PAGE_DIR, stageIdle }
   = require("./_load.js");
 
 let fail = 0;
@@ -98,8 +100,9 @@ const flowMins = (S_HALF && S_GRID && S_NEAR && S_FLOWMINS)
  * 🥅 하프타임은 `.w2-min` span이 **없어서**(`match-scene.js`의 half 갈래) 이 목록에 안 들어와요 —
  *    그 자리는 F-2가 따로 봅니다. */
 const FEED_MIN = {
-  // n=2 · 🏁 0'×2 · 🌊 12 · 🔥 30 · 🌊 36 · (🥅 45) · 🔥 60 · 🌊 72 · 🌊 84 · 🔚 90
-  e: [0, 0, 12, 30, 30, 36, 60, 60, 72, 84, 90],
+  // n=2 · 🏁 0'×2 · 🌊 12 · 🌊 24 · 🔥 30 · 🌊 36 · (🥅 45) · 🔥 60 · 🌊 72 · 🌊 84 · 🔚 90
+  // 🆕 2026-09-06 — `head.slice(0, 1)` 폐기로 **24'가 늘었습니다** (설계 153번 §3-4)
+  e: [0, 0, 12, 24, 30, 30, 36, 60, 60, 72, 84, 90],
   // n=3 · 🏁 0'×2 · 🌊 12 · 🔥 23 · 🌊 36 · 🔥 45 · (🥅 45) · 🌊 60 · 🔥 68 · 🌊 84 · 🔚 90
   m: [0, 0, 12, 23, 23, 36, 45, 45, 60, 68, 68, 84, 90],
   h: [0, 0, 12, 23, 23, 36, 45, 45, 60, 68, 68, 84, 90],
@@ -107,12 +110,16 @@ const FEED_MIN = {
 /* 🏁 0' 줄 — **두 줄**입니다 (설계 149번 §3-5). 대진 한 줄 + 🧡 `{me}`가 처음 뜨는 한 줄.
  * 🔒 「≥1」로 재면 둘째 줄을 지워도 통과해요 — **정확히 2**로 박습니다. */
 const KICK_N = 2;
-/* 🌊 흐름 줄의 수 — 🔒 **초5도 중·고도 넷**입니다. 144번은 1 vs 3으로 세 배 차이였어요.
- *    이 값이 카드 수 `n`을 안 타는 것이 149번 개편의 본체입니다. */
-const FLOW_N = 4;
-/* 🔒 **첫 순간 카드 「앞」의 유료 흐름 줄은 1장이 상한**(계약 D · 149번 §4-3).
- *    `flowMins`의 `head.slice(0, 1)`이 그 줄이에요 — 값이 아니라 **규칙**이 계약입니다. */
-const HEAD_FLOW_N = 1;
+/* 🕹️ 한 단계의 누름 — 🔒 **2회**(🏁 [경기 시작] + 🔚 [다음 단계]). 그 사이는 ⏱️ 시계가 굴립니다.
+ * 🆕 2026-09-06 — 옛 계약은 `카드 수 + 1`이었어요. [다음 판] 버튼 5개가 사라졌습니다. */
+const PRESS_N = 2;
+/* 🌊 흐름 줄의 수 — 🔒 **격자가 주는 칸을 한 칸도 안 자릅니다** (설계 153번 §3-4).
+ * 🆕 2026-09-06 — 149번의 `head.slice(0, 1)`(첫 구간 1장 상한)이 **폐기**되면서
+ *    🏫 초5가 4 → **5**가 됐습니다(12·24·36·72·84). 중·고는 원래 첫 구간이 1칸이라 그대로 4예요.
+ * 🌍 이 값이 서 있는 세계: 「계약 D(첫 카드 ≤90초)가 **입력이 아닌** 세계」입니다 —
+ *    범민 님이 *"첫 카드까지 걸리는 시간이 느는건 상관없어"*로 그 계약을 직접 풀었어요.
+ *    🔴 D가 다시 계약이 되면 이 값과 `flowMins`를 **같이** 보세요. */
+const FLOW_N = { e: 5, m: 4, h: 4 };
 const DECK_N = { e: 2, m: 3, h: 3 };                    // 🔘 진행 띠의 점 = 순간 카드 수
 const TOTAL_CARDS = 8;                                  // 🔒 아크 전체 (2 + 3 + 3)
 const HALF_AT = 45;                                     // 🥅 축구의 값이지 손잡이가 아니에요
@@ -131,8 +138,8 @@ const MUT = {
    *    🔑 DOM만으로는 `flow` **필드**가 실렸는지 못 봅니다(문구는 `fillerText`가 따로 고르니까요).
    *       F-9가 그 자리예요 — 「문구는 맞는데 `flow`를 안 실어 보내는」 상태를 잡습니다. */
   "LOG": {
-    "town.js": [[/    const draw = \(c, done\) => \{\n      if \(!Scene\) return;/,
-      '    const draw = (c, done) => {\n      if (!Scene) return;\n'
+    "town.js": [[/    const draw = \(c, done\) => \{\n      if \(!Scene\) return Promise\.resolve\(\);/,
+      '    const draw = (c, done) => {\n      if (!Scene) return Promise.resolve();\n'
       + '      (window.__drawLog = window.__drawLog || []).push({ stage: stage.id, kind: c.kind,'
       + ' min: c.min, flow: c.flow, text: c.text, me: myName, score: (c.score || []).join(":") });']],
     /* 🔬 ⏱️ **`delayOf`가 카드를 받았는가** — I-DEL이 이걸로 봅니다.
@@ -143,10 +150,14 @@ const MUT = {
       + '    (window.__delayLog = window.__delayLog || []).push(card ? String(card.kind) : "(없음)");\n'
       + '    if (S.fast) return 90;']],
   },
-  /* ⓐ ⏱️ 카드 앞 대본(필러 · 하프타임)을 통째로 끕니다 */
-  "M-NOFILL": { "town.js": [[/^      runTo\(i\);$/m, "      ;"]] },
-  /* ⓑ 🔚 마지막 카드 뒤(꼬리 필러 · 종료 휘슬)를 끕니다 */
-  "M-NOEND": { "town.js": [[/^      if \(last\) runTo\(null\);$/m, "      ;"]] },
+  /* ⓐ 🌊 **흐름 줄을 한 장도 안 그립니다.** 🆕 2026-09-06 — 옛 앵커(`runTo(i)`)는
+   *    `runClock()`으로 갈리면서 사라졌어요(설계 153번 E-3·E-4). 지키는 것은 그대로입니다. */
+  "M-NOFILL": { "town.js": [[/          await draw\(\{ kind: "filler", min: s\.min, text: fillerText\(stage\.id, fl, used\[fl\]\+\+, myName\),\n            score: \[hg, ag\], flow: fl \}\);/,
+    "          ;"]] },
+  /* ⓑ 🔚 **90' 종료 휘슬 줄을 안 그립니다.** 🆕 옛 앵커(`if (last) runTo(null)`)도 사라졌어요.
+   *    🔒 `finishMatch()`는 그대로 돌아서 버튼이 뜹니다 — 그래야 **「줄 없이 버튼만」**이 잡혀요. */
+  "M-NOEND": { "town.js": [[/          await draw\(\{ kind: "end", min: s\.min, text: END_LINE, score: \[hg, ag\] \}\);/,
+    "          ;"]] },
   /* ⓒ 🏁 0' 줄을 **[경기 시작]을 누른 뒤**로 옮깁니다.
    *    🔴 「존재한다」로만 재면 이 변이가 안 잡혀요 — F-3이 **누르기 전 상태**에서 잽니다. */
   "M-LATEKICK": { "town.js": [
@@ -158,8 +169,9 @@ const MUT = {
       + '        text: (KICK_LINE[stage.id] || KICK_LINE.m).replace("{opp}", away) });\n'
       + '      draw({ kind: "kick", min: 0, score: [hg, ag],\n'
       + '        text: (KICK2_LINE[stage.id] || KICK2_LINE.m).replace("{me}", myName) }); };'],
-    [/      btn\.onclick = \(\) => \{ btn\.disabled = true; playCard\(\); \};/,
-      "      btn.onclick = () => { btn.disabled = true; __kick(); playCard(); };"]] },
+    /* 🆕 2026-09-06 — 버튼이 부르는 것이 `playCard()` → **`runClock()`**으로 갈렸습니다 (설계 153번 E-6) */
+    [/      btn\.onclick = \(\) => \{ btn\.disabled = true; runClock\(\); \};/,
+      "      btn.onclick = () => { btn.disabled = true; __kick(); runClock(); };"]] },
   /* ⓒ' 🏁 **둘째 줄(🧡 `{me}`가 처음 뜨는 자리)만** 지웁니다 — 첫 줄은 그대로 서요.
    *    「0' 줄이 있는가」로 재면 이 변이가 **통째로 안 잡힙니다.** */
   "M-NOKICK2": { "town.js": [
@@ -179,12 +191,6 @@ const MUT = {
   /* ⓗ 🔘 필러가 `deck`으로 샙니다 — 진행 띠의 점과 `state.cards`가 늘어요 */
   "M-DECKLEAK": { "town.js": [[/^    const CARD_MIN = deck\.map\(\(_, k\) => minAt\(k, deck\.length\)\);$/m,
     "    deck.push(deck[0]);\n    const CARD_MIN = deck.map((_, k) => minAt(k, deck.length));"]] },
-  /* ⓘ 🔒 ⏱️ **첫 순간 카드 앞의 상한(1장)을 폐기합니다** — 계약 D를 잠그는 그 한 줄이에요
-   *    (설계 149번 §4-3 · §10-1). 🏫 초5의 격자 원본은 `[12,24,36,72,84]`라 **첫 구간이 2칸**이고,
-   *    `head.slice(0, 1)`이 24'를 잘라 1장으로 맞춥니다. 중·고는 원래 1칸이라 **안 갈려요** —
-   *    🔴 한 단계만 재면 이 변이가 안 잡힙니다. */
-  "M-HEADCAP": { "town.js": [[/const head = g\.filter\(\(m\) => m < cardMins\[0\]\);\n    return head\.slice\(0, 1\)\.concat/,
-    "const head = g.filter((m) => m < cardMins[0]);\n    return head.concat"]] },
   /* ⓙ ⏱️ **격자를 12 → 18로.** 18은 90의 약수라 카드 분과 공명해서, n=3의 첫 구간이
    *    **0칸**이 됩니다 — 범민 님이 짚은 *"30분 60분 하고 끝나는데"* 그 구멍이 그대로 남아요. */
   "M-GRID18": { "town.js": [[/const GRID = 12;/, "const GRID = 18;"]] },
@@ -196,8 +202,8 @@ const MUT = {
    *    🔴 겉보기 증상이 「같은 말이 두 번」뿐이라 눈으로는 거의 안 보여요 (engineer 150번 I-E). */
   "M-USEDIN": { "town.js": [
     [/    const used = \{ a: 0, h: 0, mid: 0 \};\n/, "    ;\n"],
-    [/    function runTo\(untilCard\) \{\n      while \(sp < script\.length\) \{/,
-      "    function runTo(untilCard) {\n      const used = { a: 0, h: 0, mid: 0 };\n      while (sp < script.length) {"]] },
+    [/    async function runClock\(\) \{\n      await queue;/,
+      "    async function runClock() {\n      await queue;\n      const used = { a: 0, h: 0, mid: 0 };"]] },
   /* ⓜ 🧡 **`{me}` 치환을 지웁니다** — 화면에 `"{me}가 공을 몰고 앞으로 나가요"`가 **글자 그대로** 떠요.
    *    사람이 보면 1초 만에 아는 버그인데, 149번 개편 직후에는 **아홉 검사 중 한 개도 안 물었습니다.** */
   "M-NOSUB": { "town.js": [[/return t\[useIdx % t\.length\]\.replace\("\{me\}", me\);/,
@@ -309,12 +315,17 @@ async function arc(seed, muts) {
      *    🔴 「존재한다」로만 재면 `btn.onclick` 안으로 옮긴 변이가 안 잡혀요. */
     const before = { presses: 0, feed: feed(), dots: D.querySelectorAll("#town-prog .town-dot").length };
     let presses = 0;
+    /* 🔒 **루프 조건 「앞」에도, 누름 「뒤」에도 정착을 기다립니다** (설계 153번 I-3).
+     * 🔴 시계가 async라 누른 직후엔 버튼이 언제나 `disabled`예요 — 안 기다리면
+     *    **한 번 누르고 break**라 단계가 영영 안 끝납니다(「도달 경로가 조용히 죽음」). */
+    await stageIdle(D);
     for (let g = 0; g < 16; g++) {
       if (cur() !== "screen-town") break;
       const b = D.getElementById("btn-town-next");
       if (!b || b.disabled || b.classList.contains("hidden")) break;
       press(b, `🏫 ${id} 진행`);
       presses += 1;
+      await stageIdle(D);
     }
     await settle(D);
     stages[id] = { before, presses, feed: feed(),
@@ -380,11 +391,6 @@ const tailMinOf = (id) => {
   return F.length ? F[F.length - 1] : 90;
 };
 const leadFillersOf = (r, id) => fillersOf(r, id).filter((x) => x.min < tailMinOf(id));
-/* 🔒 첫 순간 카드 「앞」의 흐름 줄 — 계약 D의 상한(1장)이 걸린 자리 (I-A) */
-const headFillersOf = (r, id) => {
-  const firstCard = minAt(0, DECK_N[id]);                  // 🔒 산식은 소스에서
-  return fillersOf(r, id).filter((x) => x.min < firstCard);
-};
 const minsOf = (r, id) => r.stages[id].feed.filter((x) => x.min != null).map((x) => x.min);
 const IDS = ["e", "m", "h"];
 
@@ -442,12 +448,12 @@ const IDS = ["e", "m", "h"];
       const want = flowMins(M);
       const got = fillersOf(base[SEEDS[0]], id).map((x) => x.min);
       if (got.join(",") !== want.join(",")) rel.push(`${id}: 화면 ${got.join("·")} ≠ 소스 격자 ${want.join("·")}`);
-      if (want.length !== FLOW_N) rel.push(`${id}: 소스 격자가 흐름 줄 ${want.length}장 (계약 ${FLOW_N}장)`);
+      if (want.length !== FLOW_N[id]) rel.push(`${id}: 소스 격자가 흐름 줄 ${want.length}장 (계약 ${FLOW_N[id]}장)`);
       if (want.indexOf(HALF_AT) >= 0) rel.push(`${id}: 격자가 ${HALF_AT}'을 내줬어요 — 🥅 하프타임과 겹칩니다`);
     }
     check(rel.length === 0,
       `F-1b. 🔗 **흐름 줄의 분이 소스의 격자와 일치**한다 — \`minAt\`·\`GRID\`·\`GRID_NEAR\`·\`flowMins\`를 \`town.js\`에서 뜯어 대조`
-      + `\n     🔒 그리고 **단계마다 정확히 ${FLOW_N}장** — 🏫 초5도 중·고도 같습니다 (144번은 1 vs 3으로 세 배 차이였어요)`
+      + `\n     🔒 그리고 흐름 줄이 **${IDS.map((id) => `${id} ${FLOW_N[id]}`).join(" · ")}장** — 🆕 \`head.slice(0, 1)\` 폐기로 🏫 초5에 24'가 늘었습니다`
       + `\n     🌍 F-1은 「지금 \`minAt\`·\`GRID\`」의 **값**이고, 이 줄은 구조가 바뀌어도 사는 **관계**예요 — 둘이 같이 빨간불이면 산식이 바뀐 겁니다`
       + (rel.length ? rel.map((b) => `\n     🔴 ${b}`).join("") : ""));
   }
@@ -490,15 +496,18 @@ const IDS = ["e", "m", "h"];
     }
     /* 🔒 **셀렉터마다 「탭 횟수 > 0」** — 아무것도 안 눌렀는데 타임아웃이 흐름을 끝까지
      *    미는 「자가 복구가 실패를 삼킴」을 막습니다. 계약은 **카드 수 + 1**(🏁 시작 한 번). */
+    /* 🆕 2026-09-06 — **누름이 2회로 고정**입니다 (설계 153번 §4-1 · `town-test` C-5와 같은 계약).
+     *    [다음 판] 버튼 5개가 사라져서 한 누름(🏁 시작)이 단계를 **통째로** 굴려요.
+     *    🔴 옛 계약(`카드 수 + 1`)을 되살리면 [다음 판]이 돌아왔다는 뜻입니다. */
     const taps = [];
     for (const s of SEEDS) for (const id of IDS) {
       const got = base[s].stages[id].presses;
-      if (got !== DECK_N[id] + 1) taps.push(`시드${s}/${id}: 누름 ${got} ≠ 카드 ${DECK_N[id]} + 🏁 1`);
+      if (got !== PRESS_N) taps.push(`시드${s}/${id}: 누름 ${got} ≠ ${PRESS_N} (🏁 시작 + 🔚 다음 단계)`);
     }
     check(bad.length === 0 && taps.length === 0,
       `F-3. 🏁 **\`0'\` 두 줄(대진 + 🧡 나)이 [경기 시작]을 누르기 「전」에 이미 큐를 지났다** (계약 D — 큐와 탭이 \`max()\`로 겹치는 자리)`
       + `\n     🔎 측정 조건 — 단계에 들어서서 **한 번도 안 누른 상태**에서 잽니다. 「존재한다」로만 재면 \`btn.onclick\` 안으로 옮겨도 통과해요`
-      + `\n     🔒 그 단계의 누름 = 카드 수 + 🏁 1 — ${IDS.map((id) => `${id} ${base[SEEDS[0]].stages[id].presses}`).join(" · ")}`
+      + `\n     🔒 그 단계의 누름 = **${PRESS_N}회** (🏁 시작 + 🔚 다음 단계) — ${IDS.map((id) => `${id} ${base[SEEDS[0]].stages[id].presses}`).join(" · ")}`
       + (bad.length ? bad.map((b) => `\n     🔴 ${b}`).join("") : "")
       + (taps.length ? taps.map((b) => `\n     🔴 ${b}`).join("") : ""));
   }
@@ -556,27 +565,12 @@ const IDS = ["e", "m", "h"];
       + (bad.length ? bad.map((b) => `\n     🔴 ${b}`).join("") : ""));
   }
 
-  /* ══════════ ⓔ' I-A. 🔒 첫 순간 카드 「앞」의 유료 흐름 줄이 **정확히 1장** ══════════
-   * 🔒 계약 D(첫 순간 카드까지 ≤ 90초)를 잠그는 자리입니다 — 설계 149번 §4-3·§10-1.
-   * 🌍 **이 문장이 서 있는 세계**: 「첫 카드까지의 시간 여유가 **추정 ~1.4초**뿐인 세계」예요.
-   *    👁️ 실기기(I-10)에서 「첫 구간 한 줄 있는 판 − 없는 판」의 **차이가 620ms**로 확인되고
-   *    실제 여유가 3초를 넘으면 designer가 2장으로 엽니다 — 그때 이 줄부터 다시 보세요.
-   * 🔴 **한 단계만 재면 안 됩니다** — 격자 원본이 첫 구간에 두 칸을 주는 것은 🏫 초5(n=2)뿐이라,
-   *    중·고만 보면 상한을 지워도 그대로 1장입니다. */
-  {
-    const bad = [];
-    for (const s of SEEDS) for (const id of IDS) {
-      const head = headFillersOf(base[s], id);
-      if (head.length !== HEAD_FLOW_N)
-        bad.push(`시드${s}/${id}: 첫 카드(${minAt(0, DECK_N[id])}') 앞에 흐름 줄 ${head.length}장 (계약 ${HEAD_FLOW_N}장) — ${head.map((x) => x.min + "'").join("·") || "없음"}`);
-    }
-    check(bad.length === 0,
-      `I-A. 🔒 **첫 순간 카드 「앞」의 유료 흐름 줄이 정확히 ${HEAD_FLOW_N}장** — \`flowMins\`의 \`head.slice(0, ${HEAD_FLOW_N})\`이 그 줄이에요`
-      + `\n     🔎 문턱 두 줄 — ① 견주는 상대: **계약 D**(첫 카드까지 90초)의 추정 여유 ~1.4초. 한 줄 620ms는 오차 안, 두 줄 1.24초는 밖`
-      + `\n                    ② 재는 칸: 🏫 **세 단계 전부**. 격자가 첫 구간에 2칸을 주는 것은 초5(n=2)뿐이라 중·고만 보면 눈이 멉니다`
-      + `\n     ${IDS.map((id) => `${id} ${headFillersOf(base[SEEDS[0]], id).map((x) => x.min + "'").join("·") || "없음"}`).join(" · ")}`
-      + (bad.length ? bad.map((b) => `\n     🔴 ${b}`).join("") : ""));
-  }
+  /* 🔓 **I-A(첫 순간 카드 앞의 유료 흐름 줄 1장)는 2026-09-06에 폐기했습니다.**
+   * 🌍 그 문장이 서 있던 세계: 「계약 D(첫 카드 ≤90초)의 추정 여유가 ~1.4초인 세계」.
+   *    범민 님이 *"첫 카드까지 걸리는 시간이 느는건 상관없어"*로 **그 계약을 직접 풀었고**,
+   *    설계 153번 §3-4가 `flowMins`의 `head.slice(0, 1)`을 지웠습니다.
+   * 🔴 **되살리지 마세요** — 지금 🏫 초5의 첫 구간은 **2장**(12'·24')이 맞습니다.
+   *    D가 다시 계약이 되면 그때 `flowMins`와 `FLOW_N`을 **같이** 되돌리세요. */
 
   /* ══════════ ⓔ'' I-B. 🗣️ 문구를 고르는 자가 **「그 흐름의 사용 순번」**이다 ══════════
    * 🔴 144번은 `t[j % t.length]`였습니다 — 흐름 줄이 넷이 되면서 `"a"`가 j=0·j=2·꼬리까지
@@ -792,13 +786,12 @@ const IDS = ["e", "m", "h"];
         const M = Array.from({ length: n }, (_, k) => minAt(k, n));
         const want = flowMins(M);
         return fillersOf(r, id).map((x) => x.min).join(",") === want.join(",")
-          && want.length === FLOW_N && want.indexOf(HALF_AT) < 0;
+          && want.length === FLOW_N[id] && want.indexOf(HALF_AT) < 0;
       });
       const f7 = IDS.every((id) => r.stages[id].dots === DECK_N[id]) && r.cards === TOTAL_CARDS;
       const f9 = r.draws.filter((x) => x.kind === "filler")
         .every((d) => d.flow === "a" || d.flow === "h" || d.flow === "mid");
       const f9b = r.draws.every((d) => d.kind === "filler" || d.flow == null);
-      const iA = IDS.every((id) => headFillersOf(r, id).length === HEAD_FLOW_N);
       const iB = IDS.every((id) => {
         const use = { a: 0, h: 0, mid: 0 };
         return fillersOf(r, id).every((f) => f.flow == null
@@ -812,7 +805,7 @@ const IDS = ["e", "m", "h"];
         return ["filler", "kick", "end", "half"].every((k) => (got[k] || 0) === (want[k] || 0));
       })();
       return { "F-1": f1, "F-1b": f1b, "F-2": f2, "F-3": f3, "F-4": f4, "F-5": f5, "F-7": f7,
-        "F-9": f9, "F-9b": f9b, "I-A": iA, "I-B": iB, "I-C": iC, "I-DEL": iDel };
+        "F-9": f9, "F-9b": f9b, "I-B": iB, "I-C": iC, "I-DEL": iDel };
     };
     /* `red` = **반드시** 빨간불이어야 하는 문장 · `also` = **딸려 오는 것이 정상**인 문장.
      * 🔴 `also`를 빈칸으로 두는 것이 기본입니다 — 여기에 이름을 적을 때는 **왜 딸려 오는지**를
@@ -820,8 +813,14 @@ const IDS = ["e", "m", "h"];
      * 🔒 `red`도 `also`도 아닌 문장이 빨간불이면 **그건 계약 위반**이에요 — 성질이 다른 것이
      *    한 검사에 묶여 있다는 뜻이라, 고친 뒤에도 빨간불이 남아 신호를 잃습니다. */
     const WANT = {
-      "M-NOFILL": { red: ["F-1", "F-2"], also: [] },   // 카드 앞 대본이 통째로 사라져요 (필러 + 하프타임)
-      "M-NOEND": { red: ["F-1", "F-1b", "F-4"], also: [] },   // 꼬리 필러 + 🔚 종료 휘슬
+      /* 🆕 2026-09-06 — 변이의 모양이 갈렸습니다 (`runTo` → `runClock`).
+       *    이제 M-NOFILL은 **🌊 흐름 줄만** 끕니다 — 🥅 하프타임은 그대로라 F-2가 안 뭅니다.
+       *    F-1b(격자 대조)와 F-5(교대)가 딸려 오는 게 정상이에요: 흐름 줄이 **0장**이라
+       *    격자와 대조할 것도, 교대를 잴 것도 없어집니다. */
+      "M-NOFILL": { red: ["F-1", "F-1b"], also: ["F-5"] },
+      /* 🆕 이제 M-NOEND는 **🔚 90' 줄만** 끕니다 — 꼬리 흐름 줄은 그대로라 F-1b가 안 뭅니다.
+       *    🔒 `finishMatch()`는 돌아서 버튼이 뜨니, **「줄 없이 버튼만」**이 잡히는 자리예요. */
+      "M-NOEND": { red: ["F-1", "F-4"], also: [] },
       "M-LATEKICK": { red: ["F-3"], also: [] },        // 🏁 0'이 누른 「뒤」로
       "M-NOHALF": { red: ["F-2"], also: [] },          // 🥅 0장
       "M-HALFPOS": { red: ["F-2"], also: [] },         // 🥅 자리가 한 칸 앞 (장수는 그대로 1장)
@@ -834,12 +833,9 @@ const IDS = ["e", "m", "h"];
       /* 🔑 F-1(분 목록)이 딸려 오는 것이 정상입니다 — 🏁 `0'` 두 줄이 **그 목록에 들어 있어서**
        *    한 장이 사라지면 목록이 통째로 어긋나요. F-3이 「무엇이 사라졌는지」를 가리킵니다. */
       "M-NOKICK2": { red: ["F-3"], also: ["F-1"] },
-      /* 🔒 ⏱️ **계약 D를 잠그는 그 한 줄** — 🏫 초5의 첫 구간이 2칸이 됩니다.
-       *    F-1(분 목록)·F-1b(격자 4장)도 같이 무는 게 정상이에요 — 흐름 줄이 다섯 장이 되니까요. */
-      "M-HEADCAP": { red: ["I-A"], also: ["F-1", "F-1b"] },
       /* 🔑 ⏱️ 격자 18은 90의 약수라 n=3의 첫 구간이 **0칸** — 범민 님이 짚은 그 구멍입니다.
        *    🏫 초5는 [18,72] 두 장, 중·고는 [36,54] 두 장이라 F-1b(4장)도 같이 물어요. */
-      "M-GRID18": { red: ["F-1", "I-A"], also: ["F-1b", "F-5"] },
+      "M-GRID18": { red: ["F-1", "F-1b"], also: ["F-5", "I-B", "I-C"] },
       /* 🔑 🗣️ 고르는 자를 슬롯 번호로 — I-B(순번 관계)가 **언제나** 뭅니다.
        *    I-B2(중복)는 스코어에 따라 겹치는 판이 안 나올 수도 있어서 `also`예요. */
       "M-USEJ": { red: ["I-B"], also: [] },

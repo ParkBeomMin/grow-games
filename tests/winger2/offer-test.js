@@ -43,7 +43,7 @@
  * 종료 코드: 0 통과 · 1 빨간불 · 2 💥 죽음(안 돌았음) — `_load.js`가 걸어 줍니다.
  */
 "use strict";
-const { bootPage, pageMutsOK, townAuto, passStage, passEarly, tapFoot, tapChild, tapChildArc, pickOrigin, seedBoth }
+const { bootPage, pageMutsOK, townAuto, passStage, stageIdle, passEarly, tapFoot, tapChild, tapChildArc, pickOrigin, seedBoth }
   = require("./_load.js");
 
 let fail = 0;
@@ -227,7 +227,7 @@ async function runArc(o) {
   if (h.active() === "screen-position")
     h.press(h.D.querySelector(`#position-list .card[data-pos="${opt.pos || "wg"}"]`), `🎯 ${opt.pos || "wg"}`);
   mark();
-  const stages = passStage(h.W, h.press);                    // 🏫 초5 대항전
+  const stages = await passStage(h.W, h.press);              // 🏫 초5 대항전
   mark();
   /* 📨 조기 화면에 선 그 자리에서 잽니다 — 화면이 바뀌기 **전**에요. */
   const grab = (id) => {
@@ -246,11 +246,11 @@ async function runArc(o) {
   };
   if (h.active() === "screen-agency") decide("e");
   mark();
-  stages.push(...passStage(h.W, h.press));                   // 🏫 중등부
+  stages.push(...(await passStage(h.W, h.press)));           // 🏫 중등부
   mark();
   if (h.active() === "screen-agency") decide("m");
   mark();
-  stages.push(...passStage(h.W, h.press));                   // 🏫 고등부
+  stages.push(...(await passStage(h.W, h.press)));           // 🏫 고등부
   mark();
   back();
   const sg = T.signed();
@@ -270,7 +270,7 @@ async function runArc(o) {
 /* 🏫 **초등 한 단계만** 굴려 그때 손 든 명단을 받아옵니다 (O-1b 전용 · 가볍습니다).
  * 🔑 `W2Moment.play`를 기록기로 바꾸고 판정은 게임이 자동 진행에서 쓰는 그 갈래
  *    (`ctx.judge(0.5)`)를 그대로 불러요 — 산식을 우회하지 않습니다. */
-function elemFit(muts, seeds) {
+async function elemFit(muts, seeds) {
   const out = [];
   for (const seed of seeds) {
     const h = boot({ muts, seed });
@@ -279,11 +279,19 @@ function elemFit(muts, seeds) {
     T.reset();
     let done = false;
     T.openStage("e", { pos: "mf", foot: "R" }, () => { done = true; });
+    /* ⏱️ **2026-09-06 — 시계가 `await` 루프**라 동기 루프로는 한 칸도 안 굴러갑니다 (설계 153번).
+     * 🔒 `Scene.fast()`는 **간격만** 0으로 만들어요 — 틱은 그대로 90번이라 판정이 안 바뀝니다. */
+    const Sc = h.W.W2Scene;
+    if (Sc && Sc.fast) Sc.fast();
     for (let g = 0; g < 12 && !done; g++) {
+      await stageIdle(h.D, true);
       const b = h.D.getElementById("btn-town-next");
       if (!b || b.disabled || b.classList.contains("hidden")) break;
       h.press(b, "🏫 다음");
     }
+    /* 🔴 **여기에 정착을 또 넣지 마세요.** 마지막 누름이 `done`을 켜서 루프가 끝나는데,
+     *    그 뒤엔 버튼이 사라져 `stageIdle(anyScreen)`이 **상한 21초를 통째로 씁니다**
+     *    (탐침 80벌 × 21초 = 28분). 루프 「머리」의 정착 하나로 충분해요. */
     /* 🔎 `keys`는 **덱을 관측한 값**이에요 — 소스에서 `PLAYABLE`을 읽지 않습니다.
      *    O-1b-조건이 «왜 편차 ≥ +2가 드문가»를 스스로 말하는 데 씁니다. */
     out.push({ seed, list: T.earlyOffers("e").list.slice(), dev: T.deviation(),
@@ -337,7 +345,7 @@ function fitCases(E) {
   return { hot, came: hot.filter((r) => r.list.indexOf(ALL_KIND_ID) >= 0) };
 }
 {
-  const E = elemFit(null, FIT_SEEDS);
+  const E = await elemFit(null, FIT_SEEDS);
   const F = fitCases(E);
   const atM = BASE.flatMap((r) => r.snap.filter((e) => e.id === "m")).filter((e) => e.list.indexOf(ALL_KIND_ID) >= 0);
   const dist = {};
@@ -459,7 +467,7 @@ async function rewind(muts) {
   /* 🧒 **네 해** → 🎯 자리 (🆕 초4 뒤) → 🏫 초5 → 📨 조기 제안 */
   await tapChildArc(h.W, h.press, ["ball", "fin", "gn", "h1"]);
   h.press(h.D.querySelector('#position-list .card[data-pos="wg"]'), "🎯 wg");
-  passStage(h.W, h.press);                    // 🏫 초5 대항전
+  await passStage(h.W, h.press);              // 🏫 초5 대항전
   passEarly(h.W, h.press);                    // 📨 조기 제안 — 🙅 거절
   const atPos = h.active(), cards0 = T.cards();
   /* ⬅️ 🔴 **되감기 지점이 바뀌었습니다.** 예전엔 📨 조기 제안을 지나면 🎯 자리 화면에
@@ -477,7 +485,7 @@ async function rewind(muts) {
   if (h.active() === "screen-position")
     h.press(h.D.querySelector('#position-list .card[data-pos="wg"]'), "🎯 wg 다시");
   const out = { atPos, originScreen, screen: h.active(), earlyOn: h.earlyOn(), childTaps,
-    takes: h.takes().length, extra: passStage(h.W, h.press).filter((x) => x === "e").length,
+    takes: h.takes().length, extra: (await passStage(h.W, h.press)).filter((x) => x === "e").length,
     cards0, cards: T.cards() };
   back();
   h.close();
@@ -587,7 +595,7 @@ for (const [name, label] of [
 /* 🧪 M-ALLEARLY — 🇬🇧이 초등에도 옴. O-1b가 갈려야 합니다. */
 if (!mutOK("M_ALLEARLY")) check(false, `🧪 **변이 M-ALLEARLY — 🇬🇧이 초등에도 옴**${MUT_DEAD}`);
 else {
-  const E = elemFit(MUT.M_ALLEARLY, FIT_SEEDS);
+  const E = await elemFit(MUT.M_ALLEARLY, FIT_SEEDS);
   const F = fitCases(E);
   const all = F.hot.length > 0 && F.came.length === F.hot.length;
   check(all,

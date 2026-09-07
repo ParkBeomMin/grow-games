@@ -146,7 +146,7 @@ const MUT_DEAD = `\n     🔴 **이 변이가 지금 소스에 안 걸립니다 
  * `WingerEngine._t`)에 같은 시드를 걸면 앞 1,000개가 **1000/1000 일치**해서 보폭이
  * 맞아 lockstep이 나요 (109번 §4 · `seed-split-test.js`가 지킵니다). */
 
-function boot(seed, muts) {
+async function boot(seed, muts) {
   const all = { "game.js": PROBE["game.js"].concat((muts && muts["game.js"]) || []) };
   for (const f of Object.keys(muts || {})) if (f !== "game.js") all[f] = muts[f];
   /* 🤖 자동 진행 — `playYouthMoment`가 `cb(judge(0.5), T)`로 즉시 답하는 그 갈래예요.
@@ -169,7 +169,7 @@ function boot(seed, muts) {
   press(D.getElementById("btn-name-next"), "btn-name-next");
   /* 🏘️ 동네 3장 — 이 파일은 `grow-auto-mini`를 켜고 뜨므로 그대로 지나갑니다 (85번 「순-B」) */
   press(D.querySelector(`#position-list .card[data-pos="${POS}"]`), `📍 ${POS}`);
-  passTown(W, press);
+  await passTown(W, press);
   press(D.querySelector("#agency-list button"), "🏟️ 입단 제안");
   press(D.getElementById("btn-prospect-start"), "btn-prospect-start");
   return { W, D, press, S: () => W.__get("S"),
@@ -239,8 +239,9 @@ function cell(W, kindKey, n) {
 }
 
 /* 무대 하나에서, 지정한 `overall()` 점들의 모든 카드 종류를 재요 */
-function sweep(seed, stage, points, muts, n, kinds) {
-  const h = boot(seed, muts);
+/* ⏱️ 2026-09-06 — `passTown`이 async가 됐습니다 (설계 153번) */
+async function sweep(seed, stage, points, muts, n, kinds) {
+  const h = await boot(seed, muts);
   const ok = driveTo(h, stage);
   const rows = [];
   if (ok) {
@@ -265,361 +266,367 @@ const fmt = (r) =>
 /* ══════════════════════════════════════════════════════════════
  * A. 🏆 평가전 무대 — 기준선(32.0)에서의 **중립성** (N-1)
  * ══════════════════════════════════════════════════════════════ */
-const evalBase = SEEDS.map((seed) => Object.assign({ seed }, sweep(seed, "eval", [REF.eval])));
-{
-  const errs = evalBase.flatMap((b) => b.errs);
-  check(evalBase.every((b) => b.ok),
-    `A-0. 🚪 게임 입구 → 🏠 훈련장 → 🏆 **평가전 무대에 실제 버튼으로 도달** (시드 ${SEEDS.join(" ")})`
-    + (evalBase.every((b) => b.ok) ? "" : "\n     🔴 .go-game이 안 떴어요 — 화면이 예상과 달라졌습니다"));
-  check(errs.length === 0, `A-0b. 페이지가 오류 없이 뜬다${errs.length ? ` — ${errs[0]}` : ""}`);
+/* 🔒 `passTown`이 async라 이 아래는 통째로 async IIFE 안입니다 (2026-09-06) */
+(async () => {
+  const evalBase = [];
+  for (const seed of SEEDS) evalBase.push(Object.assign({ seed }, await sweep(seed, "eval", [REF.eval])));
+  {
+    const errs = evalBase.flatMap((b) => b.errs);
+    check(evalBase.every((b) => b.ok),
+      `A-0. 🚪 게임 입구 → 🏠 훈련장 → 🏆 **평가전 무대에 실제 버튼으로 도달** (시드 ${SEEDS.join(" ")})`
+      + (evalBase.every((b) => b.ok) ? "" : "\n     🔴 .go-game이 안 떴어요 — 화면이 예상과 달라졌습니다"));
+    check(errs.length === 0, `A-0b. 페이지가 오류 없이 뜬다${errs.length ? ` — ${errs[0]}` : ""}`);
 
-  /* 🧪 측정 조건 — 게임이 실제로 그 기준선을 썼나 (검사가 스스로 찍습니다) */
-  const conds = evalBase.flatMap((b) => b.rows.map((r) => r.cond));
-  check(conds.length > 0 && conds.every((c) => c.stage === "eval"),
-    `A-0c. 🧪 측정 조건 — 카드가 **🏆 평가전 무대(ev.kind="eval")에서** 왔다`
-    + `\n     게임이 쓴 기준선: ${Array.from(new Set(conds.map((c) => c.ref))).join(" / ")}`
-    + ` · overall(): ${Array.from(new Set(evalBase[0].rows.map((r) => r.got.toFixed(2)))).join(" / ")}`);
+    /* 🧪 측정 조건 — 게임이 실제로 그 기준선을 썼나 (검사가 스스로 찍습니다) */
+    const conds = evalBase.flatMap((b) => b.rows.map((r) => r.cond));
+    check(conds.length > 0 && conds.every((c) => c.stage === "eval"),
+      `A-0c. 🧪 측정 조건 — 카드가 **🏆 평가전 무대(ev.kind="eval")에서** 왔다`
+      + `\n     게임이 쓴 기준선: ${Array.from(new Set(conds.map((c) => c.ref))).join(" / ")}`
+      + ` · overall(): ${Array.from(new Set(evalBase[0].rows.map((r) => r.got.toFixed(2)))).join(" / ")}`);
 
-  const bad = [];
-  let worst = 0, worstRow = null;
-  for (const b of evalBase) {
-    for (const r of b.rows) {
+    const bad = [];
+    let worst = 0, worstRow = null;
+    for (const b of evalBase) {
+      for (const r of b.rows) {
+        const d = Math.abs(r.p - r.m);
+        if (d > worst) { worst = d; worstRow = { seed: b.seed, r }; }
+        if (d > BAND) bad.push(`시드${b.seed} ${fmt(r)}`);
+        if (r.other) bad.push(`시드${b.seed} ${r.label}: perfect/ok/miss 아닌 판정 ${r.other}건`);
+      }
+    }
+    check(bad.length === 0 && evalBase.every((b) => b.ok),
+      `A-1. 🎯 **N-1 중립점** — overall() = ${REF.eval}(🏆 평가전 기준선)에서 perfect 빈도 = miss 빈도`
+      + `\n     (= 등급 ±1칸 기댓값 0. **값을 베껴 적지 않고 굴려서** 확인했어요 · 칸마다 ${N}회 × 시드 ${SEEDS.length})`
+      + `\n     최대 |Δ| = ${worst.toFixed(4)} ≤ ${BAND}${worstRow ? ` @ 시드${worstRow.seed} ${worstRow.r.label}` : ""}`
+      + (bad.length ? `\n     🔴 넘긴 칸 ${bad.length}개:\n       ${bad.slice(0, 6).join("\n       ")}` : ""));
+
+    const s1 = Math.max(sd(1 / 3), sd(0.5));
+    check(BAND >= SIGMA_MIN * s1,
+      `A-2. 📏 문턱 ${BAND}이 잡음 1σ(${s1.toFixed(4)})의 **${(BAND / s1).toFixed(1)}배** (≥${SIGMA_MIN}배)`
+      + ` — 실측 최대 |Δ|는 ${(worst / s1).toFixed(1)}σ였어요`);
+
+    /* 🔒 **배선 관계** — perfect 빈도는 `autoP` 그 자체여야 합니다.
+     *    (⚽🅰️ `outcome`은 r<p일 때 perfect · 🧱도 r<p라 **양쪽 다 perfect 빈도 = p**)
+     *    🔴 `autoP`를 계산해 놓고 `judge`가 딴 값을 쓰면 여기서 잡힙니다. */
+    const wired = [];
+    for (const b of evalBase) for (const r of b.rows) {
+      if (Math.abs(r.p - r.cond.autoP) > BAND) wired.push(`시드${b.seed} ${r.label}: p ${r.p.toFixed(4)} ≠ autoP ${Number(r.cond.autoP).toFixed(4)}`);
+    }
+    check(wired.length === 0,
+      `A-3. 🔒 **N-0 배선** — perfect 빈도가 게임이 계산한 \`autoP\` 그 값이다 (중심이 실제로 판정에 실렸나)`
+      + (wired.length ? `\n     🔴 ${wired.slice(0, 3).join(" | ")}` : ""));
+
+    /* 🔒 엔진 `outcome` 표의 **모양 계약** — 값이 아니라 형태예요 (옛 A-4 그대로) */
+    const shape = [];
+    for (const b of evalBase) for (const r of b.rows) {
+      if (r.kindKey === "d") {
+        if (r.o !== 0) shape.push(`🧱에 ok가 ${r.o.toFixed(4)} (읽기 게임이라 이분이어야 해요)`);
+        if (Math.abs(r.p + r.m - 1) > 1e-9) shape.push(`🧱 perfect+miss ≠ 1 (${(r.p + r.m).toFixed(4)})`);
+      } else {
+        if (r.o <= 0) shape.push(`${r.label}에 ok가 0 (세 갈래여야 해요)`);
+        if (Math.abs(r.m - (1 - r.p) / 2) > BAND) shape.push(`${r.label} miss ≠ (1−perfect)/2`);
+      }
+    }
+    check(shape.length === 0,
+      `A-4. 🔒 엔진 outcome 표의 **모양** — ⚽🅰️는 세 갈래에 miss = (1−perfect)/2 · 🧱은 두 갈래`
+      + (shape.length ? `\n     🔴 ${Array.from(new Set(shape)).slice(0, 4).join(" | ")}` : ""));
+
+    console.log(`     기준선(시드 ${SEEDS[0]}):\n       ${evalBase[0].rows.map(fmt).join("\n       ")}`);
+  }
+
+  /* ══════════════════════════════════════════════════════════════
+   * B. 🎭 **N-1b 무대 구분** — 🏆 평가전과 🔥 프로 도전은 **다른 자**를 씁니다
+   *
+   * 🌍 이 절이 서 있는 전제: 🔥 프로 도전은 36턴을 다 채운 유망주들과 겨루므로
+   *    기준선이 위(36.5)에 있습니다. 자 하나로 둘을 재면 프로 도전이 **+46% 쉬워져요**(84번 §3-3d).
+   * ══════════════════════════════════════════════════════════════ */
+  const survBase = [];
+  for (const seed of SEEDS.slice(0, 2)) survBase.push(Object.assign({ seed }, await sweep(seed, "survival", [REF.survival, REF.eval])));
+  {
+    check(survBase.every((b) => b.ok),
+      `B-0. 🚪 게임 입구 → **36턴 고루 훈련 → 🔥 프로 도전 무대까지 실제 버튼으로 도달** (시드 ${SEEDS.slice(0, 2).join(" ")})`
+      + (survBase.every((b) => b.ok) ? "" : "\n     🔴 🔥 프로 도전 버튼까지 못 갔어요"));
+    const conds = survBase.flatMap((b) => b.rows.map((r) => r.cond));
+    check(conds.length > 0 && conds.every((c) => c.stage === "survival"),
+      `B-0b. 🧪 측정 조건 — 카드가 **🔥 프로 도전 무대(ev.kind="survival")에서** 왔다`
+      + `\n     게임이 쓴 기준선: ${Array.from(new Set(conds.map((c) => c.ref))).join(" / ")}`);
+
+    /* B-1. 🔥 프로 도전 기준선(36.5)에서의 중립성 — N-1의 두 번째 점 */
+    const bad = [];
+    let worst = 0;
+    for (const b of survBase) for (const r of b.rows) {
+      if (r.target !== REF.survival) continue;
       const d = Math.abs(r.p - r.m);
-      if (d > worst) { worst = d; worstRow = { seed: b.seed, r }; }
+      if (d > worst) worst = d;
       if (d > BAND) bad.push(`시드${b.seed} ${fmt(r)}`);
-      if (r.other) bad.push(`시드${b.seed} ${r.label}: perfect/ok/miss 아닌 판정 ${r.other}건`);
     }
-  }
-  check(bad.length === 0 && evalBase.every((b) => b.ok),
-    `A-1. 🎯 **N-1 중립점** — overall() = ${REF.eval}(🏆 평가전 기준선)에서 perfect 빈도 = miss 빈도`
-    + `\n     (= 등급 ±1칸 기댓값 0. **값을 베껴 적지 않고 굴려서** 확인했어요 · 칸마다 ${N}회 × 시드 ${SEEDS.length})`
-    + `\n     최대 |Δ| = ${worst.toFixed(4)} ≤ ${BAND}${worstRow ? ` @ 시드${worstRow.seed} ${worstRow.r.label}` : ""}`
-    + (bad.length ? `\n     🔴 넘긴 칸 ${bad.length}개:\n       ${bad.slice(0, 6).join("\n       ")}` : ""));
+    check(bad.length === 0 && survBase.every((b) => b.ok),
+      `B-1. 🎯 **N-1 중립점(🔥 프로 도전)** — overall() = ${REF.survival}에서 perfect 빈도 = miss 빈도`
+      + `\n     최대 |Δ| = ${worst.toFixed(4)} ≤ ${BAND}`
+      + (bad.length ? `\n     🔴 넘긴 칸 ${bad.length}개:\n       ${bad.slice(0, 4).join("\n       ")}` : ""));
 
-  const s1 = Math.max(sd(1 / 3), sd(0.5));
-  check(BAND >= SIGMA_MIN * s1,
-    `A-2. 📏 문턱 ${BAND}이 잡음 1σ(${s1.toFixed(4)})의 **${(BAND / s1).toFixed(1)}배** (≥${SIGMA_MIN}배)`
-    + ` — 실측 최대 |Δ|는 ${(worst / s1).toFixed(1)}σ였어요`);
-
-  /* 🔒 **배선 관계** — perfect 빈도는 `autoP` 그 자체여야 합니다.
-   *    (⚽🅰️ `outcome`은 r<p일 때 perfect · 🧱도 r<p라 **양쪽 다 perfect 빈도 = p**)
-   *    🔴 `autoP`를 계산해 놓고 `judge`가 딴 값을 쓰면 여기서 잡힙니다. */
-  const wired = [];
-  for (const b of evalBase) for (const r of b.rows) {
-    if (Math.abs(r.p - r.cond.autoP) > BAND) wired.push(`시드${b.seed} ${r.label}: p ${r.p.toFixed(4)} ≠ autoP ${Number(r.cond.autoP).toFixed(4)}`);
-  }
-  check(wired.length === 0,
-    `A-3. 🔒 **N-0 배선** — perfect 빈도가 게임이 계산한 \`autoP\` 그 값이다 (중심이 실제로 판정에 실렸나)`
-    + (wired.length ? `\n     🔴 ${wired.slice(0, 3).join(" | ")}` : ""));
-
-  /* 🔒 엔진 `outcome` 표의 **모양 계약** — 값이 아니라 형태예요 (옛 A-4 그대로) */
-  const shape = [];
-  for (const b of evalBase) for (const r of b.rows) {
-    if (r.kindKey === "d") {
-      if (r.o !== 0) shape.push(`🧱에 ok가 ${r.o.toFixed(4)} (읽기 게임이라 이분이어야 해요)`);
-      if (Math.abs(r.p + r.m - 1) > 1e-9) shape.push(`🧱 perfect+miss ≠ 1 (${(r.p + r.m).toFixed(4)})`);
-    } else {
-      if (r.o <= 0) shape.push(`${r.label}에 ok가 0 (세 갈래여야 해요)`);
-      if (Math.abs(r.m - (1 - r.p) / 2) > BAND) shape.push(`${r.label} miss ≠ (1−perfect)/2`);
+    /* B-2. 🎭 **같은 능력치에서 두 무대의 중심이 다르다** — 값이 아니라 **비율**로 봅니다.
+     *      perfect 빈도 = autoP이고 autoP ∝ 1/기준선이므로,
+     *        (🏆 평가전 perfect) ÷ (🔥 프로 도전 perfect) = 36.5 ÷ 32.0 = 1.1406
+     *      🌍 이 관계는 **「두 무대가 서로 다른 기준선을 쓰는 세계」**의 문장이에요.
+     *         무대 구분이 폐기되면 이 줄부터 다시 보세요. */
+    const want = REF.survival / REF.eval;
+    const pairs = [];
+    for (const b of survBase) {
+      const e = evalBase.find((x) => x.seed === b.seed);
+      for (const [kindKey, label] of KINDS) {
+        const sv = b.rows.find((r) => r.kindKey === kindKey && r.target === REF.eval);
+        const ev = e && e.rows.find((r) => r.kindKey === kindKey);
+        if (sv && ev && sv.p > 0) pairs.push({ seed: b.seed, label, ratio: ev.p / sv.p, ev: ev.p, sv: sv.p });
+      }
     }
+    const off = pairs.filter((x) => Math.abs(x.ratio - want) > 0.03);
+    const gapOK = pairs.every((x) => x.ev - x.sv > STAGE_MIN);
+    check(pairs.length > 0 && off.length === 0 && gapOK,
+      `B-2. 🎭 **N-1b 무대 구분** — 같은 overall()(${REF.eval})에서`
+      + ` 🏆 평가전 perfect ÷ 🔥 프로 도전 perfect = **${want.toFixed(4)}** (= ${REF.survival} ÷ ${REF.eval}) ± 0.03`
+      + `\n     실측: ${pairs.map((x) => `${x.label} ${x.ratio.toFixed(3)}`).join(" · ")}`
+      + `\n     (두 무대의 perfect 차이도 전부 > ${STAGE_MIN}: ${pairs.map((x) => (x.ev - x.sv).toFixed(3)).join(" · ")})`
+      + (off.length ? `\n     🔴 비율이 어긋난 칸: ${off.map((x) => `${x.label} ${x.ratio.toFixed(3)}`).join(" | ")}` : "")
+      + (gapOK ? "" : `\n     🔴 두 무대의 중심이 사실상 같아요 — 자 하나로 둘을 재고 있습니다`));
+    console.log(`     🔥 프로 도전(시드 ${SEEDS[0]}):\n       ${survBase[0].rows.map(fmt).join("\n       ")}`);
   }
-  check(shape.length === 0,
-    `A-4. 🔒 엔진 outcome 표의 **모양** — ⚽🅰️는 세 갈래에 miss = (1−perfect)/2 · 🧱은 두 갈래`
-    + (shape.length ? `\n     🔴 ${Array.from(new Set(shape)).slice(0, 4).join(" | ")}` : ""));
 
-  console.log(`     기준선(시드 ${SEEDS[0]}):\n       ${evalBase[0].rows.map(fmt).join("\n       ")}`);
-}
-
-/* ══════════════════════════════════════════════════════════════
- * B. 🎭 **N-1b 무대 구분** — 🏆 평가전과 🔥 프로 도전은 **다른 자**를 씁니다
- *
- * 🌍 이 절이 서 있는 전제: 🔥 프로 도전은 36턴을 다 채운 유망주들과 겨루므로
- *    기준선이 위(36.5)에 있습니다. 자 하나로 둘을 재면 프로 도전이 **+46% 쉬워져요**(84번 §3-3d).
- * ══════════════════════════════════════════════════════════════ */
-const survBase = SEEDS.slice(0, 2).map((seed) =>
-  Object.assign({ seed }, sweep(seed, "survival", [REF.survival, REF.eval])));
-{
-  check(survBase.every((b) => b.ok),
-    `B-0. 🚪 게임 입구 → **36턴 고루 훈련 → 🔥 프로 도전 무대까지 실제 버튼으로 도달** (시드 ${SEEDS.slice(0, 2).join(" ")})`
-    + (survBase.every((b) => b.ok) ? "" : "\n     🔴 🔥 프로 도전 버튼까지 못 갔어요"));
-  const conds = survBase.flatMap((b) => b.rows.map((r) => r.cond));
-  check(conds.length > 0 && conds.every((c) => c.stage === "survival"),
-    `B-0b. 🧪 측정 조건 — 카드가 **🔥 프로 도전 무대(ev.kind="survival")에서** 왔다`
-    + `\n     게임이 쓴 기준선: ${Array.from(new Set(conds.map((c) => c.ref))).join(" / ")}`);
-
-  /* B-1. 🔥 프로 도전 기준선(36.5)에서의 중립성 — N-1의 두 번째 점 */
-  const bad = [];
-  let worst = 0;
-  for (const b of survBase) for (const r of b.rows) {
-    if (r.target !== REF.survival) continue;
-    const d = Math.abs(r.p - r.m);
-    if (d > worst) worst = d;
-    if (d > BAND) bad.push(`시드${b.seed} ${fmt(r)}`);
+  /* ══════════════════════════════════════════════════════════════
+   * C. 📈 **N-2 축이 산다** — overall()이 오르면 perfect 빈도가 오른다
+   *    🔴 이번 버그(36턴을 훈련해도 카드가 안 나아짐)를 잡는 자리입니다.
+   * ══════════════════════════════════════════════════════════════ */
+  const AXIS_PTS = [WIN[0], 26.0, 29.0, 32.0, 34.0, WIN[1]];
+  const AXIS_KINDS = [["g", "⚽ 결정"], ["d", "🧱 수비"]];
+  async function axisRows(seed, muts) {
+    return (await sweep(seed, "eval", AXIS_PTS, muts, N, AXIS_KINDS)).rows;
   }
-  check(bad.length === 0 && survBase.every((b) => b.ok),
-    `B-1. 🎯 **N-1 중립점(🔥 프로 도전)** — overall() = ${REF.survival}에서 perfect 빈도 = miss 빈도`
-    + `\n     최대 |Δ| = ${worst.toFixed(4)} ≤ ${BAND}`
-    + (bad.length ? `\n     🔴 넘긴 칸 ${bad.length}개:\n       ${bad.slice(0, 4).join("\n       ")}` : ""));
+  /* 한 종류의 창 양끝 상승폭 · 단조성 */
+  function axisStat(rows, kindKey) {
+    const a = rows.filter((r) => r.kindKey === kindKey).sort((x, y) => x.target - y.target);
+    const gain = a.length ? a[a.length - 1].p - a[0].p : 0;
+    let drops = 0;
+    for (let i = 1; i < a.length; i++) if (a[i].p < a[i - 1].p - 3 * sd(a[i].p)) drops += 1;
+    return { a, gain, drops };
+  }
+  const axisBase = [];
+  for (const seed of SEEDS.slice(0, 2)) axisBase.push({ seed, rows: await axisRows(seed) });
+  {
+    const rep = [];
+    let bad = 0;
+    for (const b of axisBase) for (const [kindKey, label] of AXIS_KINDS) {
+      const st = axisStat(b.rows, kindKey);
+      rep.push(`시드${b.seed} ${label} ${st.a.map((r) => r.p.toFixed(3)).join(" → ")} (Δ+${st.gain.toFixed(3)}${st.drops ? ` · 뒤집힘 ${st.drops}` : ""})`);
+      if (st.drops > 0) bad += 1;
+      if (kindKey === "g" && st.gain < GAIN_MIN) bad += 1;
+    }
+    check(bad === 0,
+      `C-1. 📈 **N-2 축이 산다** — 유스 창 overall() ${WIN[0]} → ${WIN[1]}에서`
+      + ` ⚽ perfect가 **최소 +${GAIN_MIN}** 오르고, 중간에 **뒤집히지 않는다**`
+      + `\n     ${rep.join("\n     ")}`
+      + (bad ? `\n     🔴 축이 죽었거나 단조가 깨졌어요 — 36턴을 훈련해도 카드가 안 나아집니다` : ""));
+  }
 
-  /* B-2. 🎭 **같은 능력치에서 두 무대의 중심이 다르다** — 값이 아니라 **비율**로 봅니다.
-   *      perfect 빈도 = autoP이고 autoP ∝ 1/기준선이므로,
-   *        (🏆 평가전 perfect) ÷ (🔥 프로 도전 perfect) = 36.5 ÷ 32.0 = 1.1406
-   *      🌍 이 관계는 **「두 무대가 서로 다른 기준선을 쓰는 세계」**의 문장이에요.
-   *         무대 구분이 폐기되면 이 줄부터 다시 보세요. */
-  const want = REF.survival / REF.eval;
-  const pairs = [];
-  for (const b of survBase) {
-    const e = evalBase.find((x) => x.seed === b.seed);
+  /* ══════════════════════════════════════════════════════════════
+   * D. 🎛️ **N-3b 조작 폭이 안 잘린다** — clamp가 중심을 잡아 주는 이유
+   *
+   * 🌍 전제: `cardP = clamp(autoP + 2·half(a)·(s−0.5), 0, 1)`. 중심이 0이나 1에 닿으면
+   *    조작 폭이 **통째로 잘려서** 잘하든 못하든 결과가 같아집니다(engine.js §2-6).
+   *    그래서 **유스 밖 능력치까지 밀어도** 중심이 폭을 먹지 않아야 해요.
+   * 🔒 엔진의 진짜 `cardP`를 부릅니다 — 산식 사본을 안 지어요.
+   * ══════════════════════════════════════════════════════════════ */
+  async function roomRows(seed, muts) {
+    const h = await boot(seed, muts);
+    const ok = driveTo(h, "eval");
+    const out = [];
+    if (ok) {
+      const E = h.W.WingerEngine;
+      for (const level of LEVELS) {
+        const got = setLevel(h.W, level);
+        for (const [kindKey, label] of KINDS) {
+          const c = cell(h.W, kindKey, 1).cond;
+          out.push({ level, kindKey, label, got, autoP: c.autoP, ability: c.ability,
+            hi: E.cardP(c.autoP, c.ability, 1), lo: E.cardP(c.autoP, c.ability, 0) });
+        }
+      }
+    }
+    h.W.close();
+    return out;
+  }
+  const roomBase = await roomRows(SEEDS[0]);
+  {
+    const bad = roomBase.filter((r) => r.hi > 1 - ROOM || r.lo < ROOM);
+    const abil = Array.from(new Set(roomBase.map((r) => Math.round(r.ability)))).sort((a, b) => a - b);
+    check(roomBase.length > 0 && bad.length === 0,
+      `D-1. 🎛️ **N-3b 조작 폭** — S.stats ${LEVELS.join("/")}(= 유스 밖까지)에서도`
+      + ` s=1의 중심이 ${1 - ROOM} 아래 · s=0의 중심이 ${ROOM} 위`
+      + `\n     🧪 측정 조건 — 능력치를 실제로 훑었다: ${abil.join(" → ")}`
+      + `\n     ${roomBase.filter((r) => r.kindKey !== "a").map((r) => `${r.label}·stats${r.level}(ovr${r.got.toFixed(0)}) autoP ${Number(r.autoP).toFixed(3)} → s0 ${r.lo.toFixed(3)} / s1 ${r.hi.toFixed(3)}`).join("\n     ")}`
+      + (bad.length ? `\n     🔴 조작 폭이 잘린 칸 ${bad.length}개: ${bad.slice(0, 3).map((r) => `${r.label}·stats${r.level} s0 ${r.lo.toFixed(3)} s1 ${r.hi.toFixed(3)}`).join(" | ")}` : ""));
+  }
+
+  /* ══════════════════════════════════════════════════════════════
+   * E. 🧭 **N-5 자가 훈련 「배분」이 아니라 「총량」을 본다** — designer 판정의 결정적 근거
+   *
+   * 🌍 **이 절이 서 있는 전제**: 유스의 자는 **훈련 총량**(`overall()` = 6칸 평균)입니다.
+   *    designer 판정(86번)의 결정적 근거가
+   *      *"`blendOf` 자 위에서는 **중립화 상수가 애초에 존재할 수 없다**"*
+   *    였어요 — 기준선을 고루(31.0)로 잡든 몰빵(45.5)으로 잡든 **그 선택이 곧 정책 난이도**라
+   *    "아무도 세지거나 약해지지 않는 점"이 없습니다.
+   *
+   * 🔒 **표본을 늘려 버티지 않고 짝으로 잽니다.** 훈련 **총량이 똑같은** 두 벌을 만들어요:
+   *      · 고루 : 6칸이 모두 같은 값
+   *      · 몰빵 : 주 스탯에 **총량의 5/6**, 나머지 다섯 칸이 1/6을 나눠 가짐
+   *    두 벌의 `overall()`은 **정의상 같습니다.** 그러니 중심도 같아야 해요.
+   *
+   * 🔴 **「유스는 총량, 프로는 특화」가 뒤집히면 이 절부터 다시 보세요.**
+   *    유스에서도 특화를 보상하기로 판정이 바뀌면 이 문장은 성립하지 않습니다.
+   *    (그때 `blendOf`로 돌아가려면 **중립점을 어디에 둘지**부터 답이 있어야 해요)
+   * ══════════════════════════════════════════════════════════════ */
+  const POLICY_BAND = 0.05;   // 두 배분의 카드 중심 차이 허용폭 (실측 0.000 · M4에서 +12%)
+  /* 🎚️ `overall()`이 `target`이 되도록 맞추되, 총량을 **주 스탯 쪽으로 몰아** 담습니다.
+   *    `spike = 1`이면 고루, `spike = 5`면 주 스탯 한 칸이 총량의 5/6이에요. */
+  function setShape(W, target, spike) {
+    const S = W.__get("S"), ov = W.__get("overall");
+    const main = W.__get("POS_INFO")[S.pos].stat;
+    const keys = Object.keys(S.stats);
+    for (const k of keys) S.stats[k] = 100;
+    const c = ov() / 100;                       // overall()은 칸 값에 정비례해요
+    const L = target / c;                       // 고루였을 때의 한 칸 값
+    const tot = L * keys.length;
+    for (const k of keys) S.stats[k] = k === main ? tot * spike / 6 : tot * (6 - spike) / 5 / 6;
+    return { got: ov(), main };
+  }
+  async function policyRows(seed, muts) {
+    const h = await boot(seed, muts);
+    const ok = driveTo(h, "eval");
+    const out = [];
+    if (ok) {
+      for (const [name, spike] of [["고루", 1], ["몰빵", 5]]) {
+        const { got, main } = setShape(h.W, REF.eval, spike);
+        for (const [kindKey, label] of KINDS) {
+          const r = cell(h.W, kindKey, N);
+          out.push(Object.assign({ name, spike, main, kindKey, label, got }, r));
+        }
+      }
+    }
+    const errs = h.W.__errs.slice();
+    h.W.close();
+    return { ok, rows: out, errs };
+  }
+  function polGap(rows) {
+    const gaps = [];
     for (const [kindKey, label] of KINDS) {
-      const sv = b.rows.find((r) => r.kindKey === kindKey && r.target === REF.eval);
-      const ev = e && e.rows.find((r) => r.kindKey === kindKey);
-      if (sv && ev && sv.p > 0) pairs.push({ seed: b.seed, label, ratio: ev.p / sv.p, ev: ev.p, sv: sv.p });
+      const a = rows.find((r) => r.name === "고루" && r.kindKey === kindKey);
+      const b = rows.find((r) => r.name === "몰빵" && r.kindKey === kindKey);
+      if (a && b && a.cond.autoP > 0) gaps.push({ label, g: b.cond.autoP / a.cond.autoP - 1, a, b });
     }
+    return gaps;
   }
-  const off = pairs.filter((x) => Math.abs(x.ratio - want) > 0.03);
-  const gapOK = pairs.every((x) => x.ev - x.sv > STAGE_MIN);
-  check(pairs.length > 0 && off.length === 0 && gapOK,
-    `B-2. 🎭 **N-1b 무대 구분** — 같은 overall()(${REF.eval})에서`
-    + ` 🏆 평가전 perfect ÷ 🔥 프로 도전 perfect = **${want.toFixed(4)}** (= ${REF.survival} ÷ ${REF.eval}) ± 0.03`
-    + `\n     실측: ${pairs.map((x) => `${x.label} ${x.ratio.toFixed(3)}`).join(" · ")}`
-    + `\n     (두 무대의 perfect 차이도 전부 > ${STAGE_MIN}: ${pairs.map((x) => (x.ev - x.sv).toFixed(3)).join(" · ")})`
-    + (off.length ? `\n     🔴 비율이 어긋난 칸: ${off.map((x) => `${x.label} ${x.ratio.toFixed(3)}`).join(" | ")}` : "")
-    + (gapOK ? "" : `\n     🔴 두 무대의 중심이 사실상 같아요 — 자 하나로 둘을 재고 있습니다`));
-  console.log(`     🔥 프로 도전(시드 ${SEEDS[0]}):\n       ${survBase[0].rows.map(fmt).join("\n       ")}`);
-}
+  const polBase = await policyRows(SEEDS[0]);
+  {
+    const gaps = polGap(polBase.rows);
+    const bad = gaps.filter((x) => Math.abs(x.g) > POLICY_BAND);
+    const tot = polBase.rows.filter((r) => r.kindKey === "g");
+    check(polBase.ok && gaps.length > 0 && bad.length === 0,
+      `E-1. 🧭 **N-5 배분 중립** — 훈련 **총량이 같으면** 배분이 달라도 카드 중심이 같다 (±${POLICY_BAND * 100}%)`
+      + `\n     🧪 측정 조건 — 두 벌의 overall(): ${tot.map((r) => `${r.name} ${r.got.toFixed(2)}`).join(" / ")}`
+      + ` (주 스탯 ${tot.length ? tot[0].main : "?"})`
+      + ` · 같은 벌의 blendOf: ${tot.map((r) => `${r.name} ${Number(r.cond.ability).toFixed(1)}`).join(" / ")}`
+      + `\n     중심 차이: ${gaps.map((x) => `${x.label} ${(x.g * 100 >= 0 ? "+" : "")}${(x.g * 100).toFixed(2)}%`).join(" · ")}`
+      + (bad.length ? `\n     🔴 자가 **훈련 배분**을 보고 있어요 — 그 자 위에는 중립화 상수를 놓을 자리가 없습니다` : ""));
 
-/* ══════════════════════════════════════════════════════════════
- * C. 📈 **N-2 축이 산다** — overall()이 오르면 perfect 빈도가 오른다
- *    🔴 이번 버그(36턴을 훈련해도 카드가 안 나아짐)를 잡는 자리입니다.
- * ══════════════════════════════════════════════════════════════ */
-const AXIS_PTS = [WIN[0], 26.0, 29.0, 32.0, 34.0, WIN[1]];
-const AXIS_KINDS = [["g", "⚽ 결정"], ["d", "🧱 수비"]];
-function axisRows(seed, muts) {
-  return sweep(seed, "eval", AXIS_PTS, muts, N, AXIS_KINDS).rows;
-}
-/* 한 종류의 창 양끝 상승폭 · 단조성 */
-function axisStat(rows, kindKey) {
-  const a = rows.filter((r) => r.kindKey === kindKey).sort((x, y) => x.target - y.target);
-  const gain = a.length ? a[a.length - 1].p - a[0].p : 0;
-  let drops = 0;
-  for (let i = 1; i < a.length; i++) if (a[i].p < a[i - 1].p - 3 * sd(a[i].p)) drops += 1;
-  return { a, gain, drops };
-}
-const axisBase = SEEDS.slice(0, 2).map((seed) => ({ seed, rows: axisRows(seed) }));
-{
-  const rep = [];
-  let bad = 0;
-  for (const b of axisBase) for (const [kindKey, label] of AXIS_KINDS) {
-    const st = axisStat(b.rows, kindKey);
-    rep.push(`시드${b.seed} ${label} ${st.a.map((r) => r.p.toFixed(3)).join(" → ")} (Δ+${st.gain.toFixed(3)}${st.drops ? ` · 뒤집힘 ${st.drops}` : ""})`);
-    if (st.drops > 0) bad += 1;
-    if (kindKey === "g" && st.gain < GAIN_MIN) bad += 1;
+    /* E-2. 🎯 **중립점이 두 배분 모두에서 성립한다** — A-1의 술어를 배분 축으로 한 번 더.
+     *      🔴 `blendOf` 자에서는 **어느 배분에서도 중립이 아니게** 됩니다
+     *         (바닥 40에 눌려 비율이 늘 1.25 이상) — 그게 "중립화할 점 자체가 없다"의 실측 모양이에요. */
+    const off = polBase.rows.filter((r) => Math.abs(r.p - r.m) > BAND);
+    check(polBase.ok && polBase.rows.length > 0 && off.length === 0,
+      `E-2. 🎯 **N-5b 중립점이 배분과 무관하게 성립** — 고루·몰빵 두 벌 모두 overall() = ${REF.eval}에서 |Δ| ≤ ${BAND}`
+      + `\n     ${polBase.rows.map((r) => `${r.name}·${r.label} autoP ${Number(r.cond.autoP).toFixed(4)} Δ${(r.p - r.m >= 0 ? "+" : "")}${(r.p - r.m).toFixed(4)}`).join("\n     ")}`
+      + (off.length ? `\n     🔴 ${off.length}칸이 중립이 아니에요` : ""));
   }
-  check(bad === 0,
-    `C-1. 📈 **N-2 축이 산다** — 유스 창 overall() ${WIN[0]} → ${WIN[1]}에서`
-    + ` ⚽ perfect가 **최소 +${GAIN_MIN}** 오르고, 중간에 **뒤집히지 않는다**`
-    + `\n     ${rep.join("\n     ")}`
-    + (bad ? `\n     🔴 축이 죽었거나 단조가 깨졌어요 — 36턴을 훈련해도 카드가 안 나아집니다` : ""));
-}
 
-/* ══════════════════════════════════════════════════════════════
- * D. 🎛️ **N-3b 조작 폭이 안 잘린다** — clamp가 중심을 잡아 주는 이유
- *
- * 🌍 전제: `cardP = clamp(autoP + 2·half(a)·(s−0.5), 0, 1)`. 중심이 0이나 1에 닿으면
- *    조작 폭이 **통째로 잘려서** 잘하든 못하든 결과가 같아집니다(engine.js §2-6).
- *    그래서 **유스 밖 능력치까지 밀어도** 중심이 폭을 먹지 않아야 해요.
- * 🔒 엔진의 진짜 `cardP`를 부릅니다 — 산식 사본을 안 지어요.
- * ══════════════════════════════════════════════════════════════ */
-function roomRows(seed, muts) {
-  const h = boot(seed, muts);
-  const ok = driveTo(h, "eval");
-  const out = [];
-  if (ok) {
-    const E = h.W.WingerEngine;
-    for (const level of LEVELS) {
-      const got = setLevel(h.W, level);
-      for (const [kindKey, label] of KINDS) {
-        const c = cell(h.W, kindKey, 1).cond;
-        out.push({ level, kindKey, label, got, autoP: c.autoP, ability: c.ability,
-          hi: E.cardP(c.autoP, c.ability, 1), lo: E.cardP(c.autoP, c.ability, 0) });
-      }
-    }
+  /* ══════════════════════════════════════════════════════════════
+   * 🧪 변이 검증 — **고치기 전에 빨간불이 뜨는지**
+   *    기준선과 **같은 술어**를 그대로 다시 겁니다.
+   * ══════════════════════════════════════════════════════════════ */
+  console.log("\n── 🧪 변이 검증 (고치기 전에 빨간불이 뜨는지) ──");
+
+  /* N-1의 술어 — 🏆 평가전 기준선에서 |perfect − miss| ≤ BAND */
+  async function n1Red(name, tag, why) {
+    if (!mutOK(name)) { check(false, `${tag}. 🧪 ${why}${MUT_DEAD}`); return; }
+    const { rows } = await sweep(SEEDS[0], "eval", [REF.eval], MUT[name]);
+    const over = rows.filter((r) => Math.abs(r.p - r.m) > BAND);
+    const mx = Math.max(...rows.map((r) => Math.abs(r.p - r.m)));
+    check(over.length > 0,
+      `${tag}. 🧪 ${why} → A-1(N-1 중립점)이 빨간불 (넘긴 칸 ${over.length}/${rows.length} · 최대 |Δ| ${mx.toFixed(4)})`
+      + (over.length ? "" : `\n     🔴 변이를 넣었는데 A-1이 **아직 초록불** — 중립성을 아무것도 안 지키고 있어요`
+        + `\n       ${rows.map(fmt).join("\n       ")}`));
   }
-  h.W.close();
-  return out;
-}
-const roomBase = roomRows(SEEDS[0]);
-{
-  const bad = roomBase.filter((r) => r.hi > 1 - ROOM || r.lo < ROOM);
-  const abil = Array.from(new Set(roomBase.map((r) => Math.round(r.ability)))).sort((a, b) => a - b);
-  check(roomBase.length > 0 && bad.length === 0,
-    `D-1. 🎛️ **N-3b 조작 폭** — S.stats ${LEVELS.join("/")}(= 유스 밖까지)에서도`
-    + ` s=1의 중심이 ${1 - ROOM} 아래 · s=0의 중심이 ${ROOM} 위`
-    + `\n     🧪 측정 조건 — 능력치를 실제로 훑었다: ${abil.join(" → ")}`
-    + `\n     ${roomBase.filter((r) => r.kindKey !== "a").map((r) => `${r.label}·stats${r.level}(ovr${r.got.toFixed(0)}) autoP ${Number(r.autoP).toFixed(3)} → s0 ${r.lo.toFixed(3)} / s1 ${r.hi.toFixed(3)}`).join("\n     ")}`
-    + (bad.length ? `\n     🔴 조작 폭이 잘린 칸 ${bad.length}개: ${bad.slice(0, 3).map((r) => `${r.label}·stats${r.level} s0 ${r.lo.toFixed(3)} s1 ${r.hi.toFixed(3)}`).join(" | ")}` : ""));
-}
 
-/* ══════════════════════════════════════════════════════════════
- * E. 🧭 **N-5 자가 훈련 「배분」이 아니라 「총량」을 본다** — designer 판정의 결정적 근거
- *
- * 🌍 **이 절이 서 있는 전제**: 유스의 자는 **훈련 총량**(`overall()` = 6칸 평균)입니다.
- *    designer 판정(86번)의 결정적 근거가
- *      *"`blendOf` 자 위에서는 **중립화 상수가 애초에 존재할 수 없다**"*
- *    였어요 — 기준선을 고루(31.0)로 잡든 몰빵(45.5)으로 잡든 **그 선택이 곧 정책 난이도**라
- *    "아무도 세지거나 약해지지 않는 점"이 없습니다.
- *
- * 🔒 **표본을 늘려 버티지 않고 짝으로 잽니다.** 훈련 **총량이 똑같은** 두 벌을 만들어요:
- *      · 고루 : 6칸이 모두 같은 값
- *      · 몰빵 : 주 스탯에 **총량의 5/6**, 나머지 다섯 칸이 1/6을 나눠 가짐
- *    두 벌의 `overall()`은 **정의상 같습니다.** 그러니 중심도 같아야 해요.
- *
- * 🔴 **「유스는 총량, 프로는 특화」가 뒤집히면 이 절부터 다시 보세요.**
- *    유스에서도 특화를 보상하기로 판정이 바뀌면 이 문장은 성립하지 않습니다.
- *    (그때 `blendOf`로 돌아가려면 **중립점을 어디에 둘지**부터 답이 있어야 해요)
- * ══════════════════════════════════════════════════════════════ */
-const POLICY_BAND = 0.05;   // 두 배분의 카드 중심 차이 허용폭 (실측 0.000 · M4에서 +12%)
-/* 🎚️ `overall()`이 `target`이 되도록 맞추되, 총량을 **주 스탯 쪽으로 몰아** 담습니다.
- *    `spike = 1`이면 고루, `spike = 5`면 주 스탯 한 칸이 총량의 5/6이에요. */
-function setShape(W, target, spike) {
-  const S = W.__get("S"), ov = W.__get("overall");
-  const main = W.__get("POS_INFO")[S.pos].stat;
-  const keys = Object.keys(S.stats);
-  for (const k of keys) S.stats[k] = 100;
-  const c = ov() / 100;                       // overall()은 칸 값에 정비례해요
-  const L = target / c;                       // 고루였을 때의 한 칸 값
-  const tot = L * keys.length;
-  for (const k of keys) S.stats[k] = k === main ? tot * spike / 6 : tot * (6 - spike) / 5 / 6;
-  return { got: ov(), main };
-}
-function policyRows(seed, muts) {
-  const h = boot(seed, muts);
-  const ok = driveTo(h, "eval");
-  const out = [];
-  if (ok) {
-    for (const [name, spike] of [["고루", 1], ["몰빵", 5]]) {
-      const { got, main } = setShape(h.W, REF.eval, spike);
-      for (const [kindKey, label] of KINDS) {
-        const r = cell(h.W, kindKey, N);
-        out.push(Object.assign({ name, spike, main, kindKey, label, got }, r));
-      }
-    }
+  /* N-2의 술어 — 창 양끝 ⚽ 상승폭 ≥ GAIN_MIN 이고 단조 */
+  async function n2Red(name, tag, why) {
+    if (!mutOK(name)) { check(false, `${tag}. 🧪 ${why}${MUT_DEAD}`); return; }
+    const rows = await axisRows(SEEDS[0], MUT[name]);
+    const st = axisStat(rows, "g");
+    check(st.gain < GAIN_MIN,
+      `${tag}. 🧪 ${why} → C-1(N-2 축이 산다)이 빨간불 (⚽ 상승폭 ${st.gain.toFixed(4)} < ${GAIN_MIN})`
+      + `\n     ${st.a.map((r) => r.p.toFixed(3)).join(" → ")}`
+      + (st.gain < GAIN_MIN ? "" : `\n     🔴 변이를 넣었는데 축이 **아직 살아 있어요** — C-1이 이 변이를 안 잡습니다`));
   }
-  const errs = h.W.__errs.slice();
-  h.W.close();
-  return { ok, rows: out, errs };
-}
-function polGap(rows) {
-  const gaps = [];
-  for (const [kindKey, label] of KINDS) {
-    const a = rows.find((r) => r.name === "고루" && r.kindKey === kindKey);
-    const b = rows.find((r) => r.name === "몰빵" && r.kindKey === kindKey);
-    if (a && b && a.cond.autoP > 0) gaps.push({ label, g: b.cond.autoP / a.cond.autoP - 1, a, b });
+
+  /* N-1b의 술어 — 두 무대의 perfect 비율이 36.5/32.0 */
+  async function n1bRed(name, tag, why) {
+    if (!mutOK(name)) { check(false, `${tag}. 🧪 ${why}${MUT_DEAD}`); return; }
+    const sv = await sweep(SEEDS[0], "survival", [REF.eval], MUT[name]);
+    const evl = await sweep(SEEDS[0], "eval", [REF.eval], MUT[name]);
+    const want = REF.survival / REF.eval;
+    const got = KINDS.map(([k]) => {
+      const a = evl.rows.find((r) => r.kindKey === k), b = sv.rows.find((r) => r.kindKey === k);
+      return a && b && b.p > 0 ? a.p / b.p : NaN;
+    });
+    const red = got.some((g) => !(Math.abs(g - want) <= 0.03));
+    check(sv.ok && evl.ok && red,
+      `${tag}. 🧪 ${why} → B-2(N-1b 무대 구분)가 빨간불`
+      + ` (비율 ${got.map((g) => (isFinite(g) ? g.toFixed(3) : "?")).join(" · ")} vs 계약 ${want.toFixed(3)})`
+      + (red ? "" : `\n     🔴 변이를 넣었는데 무대 구분이 **아직 살아 있는 것처럼 보입니다**`));
   }
-  return gaps;
-}
-const polBase = policyRows(SEEDS[0]);
-{
-  const gaps = polGap(polBase.rows);
-  const bad = gaps.filter((x) => Math.abs(x.g) > POLICY_BAND);
-  const tot = polBase.rows.filter((r) => r.kindKey === "g");
-  check(polBase.ok && gaps.length > 0 && bad.length === 0,
-    `E-1. 🧭 **N-5 배분 중립** — 훈련 **총량이 같으면** 배분이 달라도 카드 중심이 같다 (±${POLICY_BAND * 100}%)`
-    + `\n     🧪 측정 조건 — 두 벌의 overall(): ${tot.map((r) => `${r.name} ${r.got.toFixed(2)}`).join(" / ")}`
-    + ` (주 스탯 ${tot.length ? tot[0].main : "?"})`
-    + ` · 같은 벌의 blendOf: ${tot.map((r) => `${r.name} ${Number(r.cond.ability).toFixed(1)}`).join(" / ")}`
-    + `\n     중심 차이: ${gaps.map((x) => `${x.label} ${(x.g * 100 >= 0 ? "+" : "")}${(x.g * 100).toFixed(2)}%`).join(" · ")}`
-    + (bad.length ? `\n     🔴 자가 **훈련 배분**을 보고 있어요 — 그 자 위에는 중립화 상수를 놓을 자리가 없습니다` : ""));
 
-  /* E-2. 🎯 **중립점이 두 배분 모두에서 성립한다** — A-1의 술어를 배분 축으로 한 번 더.
-   *      🔴 `blendOf` 자에서는 **어느 배분에서도 중립이 아니게** 됩니다
-   *         (바닥 40에 눌려 비율이 늘 1.25 이상) — 그게 "중립화할 점 자체가 없다"의 실측 모양이에요. */
-  const off = polBase.rows.filter((r) => Math.abs(r.p - r.m) > BAND);
-  check(polBase.ok && polBase.rows.length > 0 && off.length === 0,
-    `E-2. 🎯 **N-5b 중립점이 배분과 무관하게 성립** — 고루·몰빵 두 벌 모두 overall() = ${REF.eval}에서 |Δ| ≤ ${BAND}`
-    + `\n     ${polBase.rows.map((r) => `${r.name}·${r.label} autoP ${Number(r.cond.autoP).toFixed(4)} Δ${(r.p - r.m >= 0 ? "+" : "")}${(r.p - r.m).toFixed(4)}`).join("\n     ")}`
-    + (off.length ? `\n     🔴 ${off.length}칸이 중립이 아니에요` : ""));
-}
+  /* N-3b의 술어 — 조작 폭이 안 잘림 */
+  async function n3bRed(name, tag, why) {
+    if (!mutOK(name)) { check(false, `${tag}. 🧪 ${why}${MUT_DEAD}`); return; }
+    const rows = await roomRows(SEEDS[0], MUT[name]);
+    const bad = rows.filter((r) => r.hi > 1 - ROOM || r.lo < ROOM);
+    check(rows.length > 0 && bad.length > 0,
+      `${tag}. 🧪 ${why} → D-1(N-3b 조작 폭)이 빨간불 (잘린 칸 ${bad.length}/${rows.length})`
+      + (bad.length ? `\n     예: ${bad.slice(0, 2).map((r) => `${r.label}·stats${r.level} s0 ${r.lo.toFixed(3)} s1 ${r.hi.toFixed(3)}`).join(" | ")}`
+        : `\n     🔴 변이를 넣었는데 D-1이 **아직 초록불** — clamp가 하는 일을 아무것도 안 지키고 있어요`));
+  }
 
-/* ══════════════════════════════════════════════════════════════
- * 🧪 변이 검증 — **고치기 전에 빨간불이 뜨는지**
- *    기준선과 **같은 술어**를 그대로 다시 겁니다.
- * ══════════════════════════════════════════════════════════════ */
-console.log("\n── 🧪 변이 검증 (고치기 전에 빨간불이 뜨는지) ──");
+  /* N-5의 술어 — 두 정책의 카드 중심 차이가 밴드 안 */
+  async function n5Red(name, tag, why) {
+    if (!mutOK(name)) { check(false, `${tag}. 🧪 ${why}${MUT_DEAD}`); return; }
+    const r0 = await policyRows(SEEDS[0], MUT[name]);
+    const gaps = polGap(r0.rows);
+    const bad = gaps.filter((x) => Math.abs(x.g) > POLICY_BAND);
+    const off = r0.rows.filter((r) => Math.abs(r.p - r.m) > BAND);
+    check(gaps.length > 0 && bad.length > 0 && off.length > 0,
+      `${tag}. 🧪 ${why} → E-1·E-2(N-5 배분 중립)가 빨간불`
+      + ` (중심 차이 ${gaps.map((x) => `${(x.g * 100).toFixed(1)}%`).join(" · ")} > ±${POLICY_BAND * 100}% · 중립 아닌 칸 ${off.length}/${r0.rows.length})`
+      + (bad.length ? "" : `\n     🔴 변이를 넣었는데 E-1이 **아직 초록불** — 자가 정책을 타는지를 아무것도 안 보고 있어요`));
+  }
 
-/* N-1의 술어 — 🏆 평가전 기준선에서 |perfect − miss| ≤ BAND */
-function n1Red(name, tag, why) {
-  if (!mutOK(name)) { check(false, `${tag}. 🧪 ${why}${MUT_DEAD}`); return; }
-  const { rows } = sweep(SEEDS[0], "eval", [REF.eval], MUT[name]);
-  const over = rows.filter((r) => Math.abs(r.p - r.m) > BAND);
-  const mx = Math.max(...rows.map((r) => Math.abs(r.p - r.m)));
-  check(over.length > 0,
-    `${tag}. 🧪 ${why} → A-1(N-1 중립점)이 빨간불 (넘긴 칸 ${over.length}/${rows.length} · 최대 |Δ| ${mx.toFixed(4)})`
-    + (over.length ? "" : `\n     🔴 변이를 넣었는데 A-1이 **아직 초록불** — 중립성을 아무것도 안 지키고 있어요`
-      + `\n       ${rows.map(fmt).join("\n       ")}`));
-}
+  await n2Red("CONST", "M1", "**옛 버그 복원** — 중심을 상수로 되돌림 (36턴을 훈련해도 카드가 안 나아짐)");
+  await n1bRed("ONE_REF", "M2", "**기준선을 하나로 합침** — 🔥 프로 도전이 +46% 쉬워지던 상태");
+  await n3bRed("WIDE_SPAN", "M3", "**clamp를 0.60~1.40 → 0.20~5.00** — 축이 폭주해 조작 폭이 잘림");
+  await n1Red("BLEND_RULER", "M4", "**자를 `overall()` 대신 `blendOf`로** — 정책에 좌우되는 자 (중립점이 사라짐)");
+  await n2Red("BLEND_RULER", "M4b", "**자를 `blendOf`로** — 유스 창에서는 바닥 40에 눌려 축이 통째로 죽음");
+  await n5Red("BLEND_RULER", "M4c", "**자를 `blendOf`로** — 같은 훈련 총량인데 **배분만으로** 중심이 달라지고, 어느 배분도 중립이 아님");
+  await n1Red("REF24", "M5", "🏆 평가전 기준선 32.0 → **24.0**");
+  await n1Red("REF34", "M6", "🏆 평가전 기준선 32.0 → **34.0**");
+  await n2Red("FLAT_SPAN", "M7", "**YOUTH_SPAN = [1, 1]** — 비율 clamp를 닫아 중심이 다시 상수가 됨");
 
-/* N-2의 술어 — 창 양끝 ⚽ 상승폭 ≥ GAIN_MIN 이고 단조 */
-function n2Red(name, tag, why) {
-  if (!mutOK(name)) { check(false, `${tag}. 🧪 ${why}${MUT_DEAD}`); return; }
-  const rows = axisRows(SEEDS[0], MUT[name]);
-  const st = axisStat(rows, "g");
-  check(st.gain < GAIN_MIN,
-    `${tag}. 🧪 ${why} → C-1(N-2 축이 산다)이 빨간불 (⚽ 상승폭 ${st.gain.toFixed(4)} < ${GAIN_MIN})`
-    + `\n     ${st.a.map((r) => r.p.toFixed(3)).join(" → ")}`
-    + (st.gain < GAIN_MIN ? "" : `\n     🔴 변이를 넣었는데 축이 **아직 살아 있어요** — C-1이 이 변이를 안 잡습니다`));
-}
+  console.log(fail ? `\n❌ ${fail}건 실패` : "\n✅ 통과");
+  process.exit(fail ? 1 : 0);
 
-/* N-1b의 술어 — 두 무대의 perfect 비율이 36.5/32.0 */
-function n1bRed(name, tag, why) {
-  if (!mutOK(name)) { check(false, `${tag}. 🧪 ${why}${MUT_DEAD}`); return; }
-  const sv = sweep(SEEDS[0], "survival", [REF.eval], MUT[name]);
-  const evl = sweep(SEEDS[0], "eval", [REF.eval], MUT[name]);
-  const want = REF.survival / REF.eval;
-  const got = KINDS.map(([k]) => {
-    const a = evl.rows.find((r) => r.kindKey === k), b = sv.rows.find((r) => r.kindKey === k);
-    return a && b && b.p > 0 ? a.p / b.p : NaN;
-  });
-  const red = got.some((g) => !(Math.abs(g - want) <= 0.03));
-  check(sv.ok && evl.ok && red,
-    `${tag}. 🧪 ${why} → B-2(N-1b 무대 구분)가 빨간불`
-    + ` (비율 ${got.map((g) => (isFinite(g) ? g.toFixed(3) : "?")).join(" · ")} vs 계약 ${want.toFixed(3)})`
-    + (red ? "" : `\n     🔴 변이를 넣었는데 무대 구분이 **아직 살아 있는 것처럼 보입니다**`));
-}
-
-/* N-3b의 술어 — 조작 폭이 안 잘림 */
-function n3bRed(name, tag, why) {
-  if (!mutOK(name)) { check(false, `${tag}. 🧪 ${why}${MUT_DEAD}`); return; }
-  const rows = roomRows(SEEDS[0], MUT[name]);
-  const bad = rows.filter((r) => r.hi > 1 - ROOM || r.lo < ROOM);
-  check(rows.length > 0 && bad.length > 0,
-    `${tag}. 🧪 ${why} → D-1(N-3b 조작 폭)이 빨간불 (잘린 칸 ${bad.length}/${rows.length})`
-    + (bad.length ? `\n     예: ${bad.slice(0, 2).map((r) => `${r.label}·stats${r.level} s0 ${r.lo.toFixed(3)} s1 ${r.hi.toFixed(3)}`).join(" | ")}`
-      : `\n     🔴 변이를 넣었는데 D-1이 **아직 초록불** — clamp가 하는 일을 아무것도 안 지키고 있어요`));
-}
-
-/* N-5의 술어 — 두 정책의 카드 중심 차이가 밴드 안 */
-function n5Red(name, tag, why) {
-  if (!mutOK(name)) { check(false, `${tag}. 🧪 ${why}${MUT_DEAD}`); return; }
-  const r0 = policyRows(SEEDS[0], MUT[name]);
-  const gaps = polGap(r0.rows);
-  const bad = gaps.filter((x) => Math.abs(x.g) > POLICY_BAND);
-  const off = r0.rows.filter((r) => Math.abs(r.p - r.m) > BAND);
-  check(gaps.length > 0 && bad.length > 0 && off.length > 0,
-    `${tag}. 🧪 ${why} → E-1·E-2(N-5 배분 중립)가 빨간불`
-    + ` (중심 차이 ${gaps.map((x) => `${(x.g * 100).toFixed(1)}%`).join(" · ")} > ±${POLICY_BAND * 100}% · 중립 아닌 칸 ${off.length}/${r0.rows.length})`
-    + (bad.length ? "" : `\n     🔴 변이를 넣었는데 E-1이 **아직 초록불** — 자가 정책을 타는지를 아무것도 안 보고 있어요`));
-}
-
-n2Red("CONST", "M1", "**옛 버그 복원** — 중심을 상수로 되돌림 (36턴을 훈련해도 카드가 안 나아짐)");
-n1bRed("ONE_REF", "M2", "**기준선을 하나로 합침** — 🔥 프로 도전이 +46% 쉬워지던 상태");
-n3bRed("WIDE_SPAN", "M3", "**clamp를 0.60~1.40 → 0.20~5.00** — 축이 폭주해 조작 폭이 잘림");
-n1Red("BLEND_RULER", "M4", "**자를 `overall()` 대신 `blendOf`로** — 정책에 좌우되는 자 (중립점이 사라짐)");
-n2Red("BLEND_RULER", "M4b", "**자를 `blendOf`로** — 유스 창에서는 바닥 40에 눌려 축이 통째로 죽음");
-n5Red("BLEND_RULER", "M4c", "**자를 `blendOf`로** — 같은 훈련 총량인데 **배분만으로** 중심이 달라지고, 어느 배분도 중립이 아님");
-n1Red("REF24", "M5", "🏆 평가전 기준선 32.0 → **24.0**");
-n1Red("REF34", "M6", "🏆 평가전 기준선 32.0 → **34.0**");
-n2Red("FLAT_SPAN", "M7", "**YOUTH_SPAN = [1, 1]** — 비율 clamp를 닫아 중심이 다시 상수가 됨");
-
-console.log(fail ? `\n❌ ${fail}건 실패` : "\n✅ 통과");
-process.exit(fail ? 1 : 0);
+})();

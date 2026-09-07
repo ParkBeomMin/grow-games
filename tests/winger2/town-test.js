@@ -60,7 +60,16 @@
 const fs = require("fs");
 const path = require("path");
 const { bootPage, pageMutsOK, townAuto, passArc, passStage, passEarly, tapFoot, tapChild, tapChildArc, pickOrigin, PAGE_DIR,
-  seedBoth } = require("./_load.js");
+  seedBoth, wait } = require("./_load.js");
+/* ⏳ **조건이 참이 될 때까지** — 🔴 벽시계 「문턱」이 아니라 **상한**입니다.
+ * 🌍 2026-09-06 · 설계 153번: 시계가 흐르면서 🏁 [경기 시작] → 🔥 첫 카드가 **즉시가 아닙니다**
+ *    (🏫 초5는 0'→30' = 시계 2.7초 + 0' 큐 1.24초 + 12'·24' 줄 1.24초 ≈ 5.2초).
+ * 🔴 상한에 닿아도 **던지지 않습니다** — 그러면 부르는 문장이 «안 떴다»로 빨간불을 냅니다.
+ *    던지면 💥 죽음이 되어 «안 돈 것»과 구분이 안 돼요. */
+async function until(fn, cap) {
+  for (let i = 0; i < (cap || 1400) && !fn(); i++) await wait(15);
+  return fn();
+}
 
 let fail = 0;
 const t0 = Date.now();
@@ -265,6 +274,11 @@ async function runT7(muts) {
    *    빨간불이 아니라 **💥 죽음**이 되어 «안 돈 것»과 구분이 안 돼요. */
   const pressed = arrive.btnLive;
   if (pressed) h.press(nextBtn(), "🏁 경기 시작");
+  /* ⏱️ **누른 「직후」가 아니라 시계가 카드까지 흐른 뒤에 봅니다** (2026-09-06 · 설계 153번 I-5).
+   * 🔒 이 검사는 🤖 자동 진행을 **안 켭니다**(진짜 미니게임이 떠야 잴 게 있어서요) —
+   *    그래서 `MIN_MS`가 90ms 그대로이고 🔥 첫 카드까지 ~5초가 걸려요.
+   * 🔴 **「기다렸다」를 통과로 세지 않습니다** — 아래 `kickOK`가 여전히 «떴는가»를 봅니다. */
+  if (pressed) await until(momentUp);
   const after = { hasMoment: momentUp(), screen: h.active(), pressed };
   const r = {
     seen, pre, kid, taps: arrive.taps, screen: arrive.screen,
@@ -401,7 +415,7 @@ async function runRewind(muts) {
    *    「🏫이 두 번 안 굴렀다」가 **아무것도 안 눌러서** 참이 돼요. */
   r.posTapped = r.afterChild === "screen-position";
   if (r.posTapped) h.press(h.D.querySelector('#position-list .card[data-pos="wg"]'), "🎯 wg");
-  r.stages = passStage(h.W, h.press);
+  r.stages = await passStage(h.W, h.press);
   back();
   r.cards2 = T.cards(); r.score2 = T.score();
   h.close();
@@ -421,7 +435,7 @@ async function runGuardProbe(muts) {
   pickOrigin(h.W, h.press, "seoul");
   await tapChildArc(h.W, h.press, ["ball", "fin", "gn", "h1"]);
   h.press(h.D.querySelector('#position-list .card[data-pos="wg"]'), "🎯 wg");
-  const first = passStage(h.W, h.press);          // 🏫 초5 — 여기서 `e`가 굴렀습니다
+  const first = await passStage(h.W, h.press);    // 🏫 초5 — 여기서 `e`가 굴렀습니다
   passEarly(h.W, h.press);                        // 📨 조기 제안 — 🙅 거절
   const r = { first, cards: T.cards(), score: T.score(), at: h.active() };
   /* 🙈 **안 보이는 버튼** — 실기기라면 여기 없습니다. 가드의 회귀만 봅니다. */
@@ -431,7 +445,7 @@ async function runGuardProbe(muts) {
   r.afterChild = h.active();
   if (r.afterChild === "screen-position")
     h.press(h.D.querySelector('#position-list .card[data-pos="wg"]'), "🎯 wg 다시");
-  r.extra = passStage(h.W, h.press);
+  r.extra = await passStage(h.W, h.press);
   back();
   r.cards2 = T.cards(); r.score2 = T.score();
   h.close();
@@ -471,32 +485,42 @@ check(O.spots.every((s) => /×[\d.]+ → ×[\d.]+/.test(s)),
         ? `\n     🔴 되감은 뒤 흐름을 **끝까지 안 걸었습니다** — 이 상태의 초록불은 아무것도 안 지켜요`
         : `\n     🔴 🏫이 두 번 굴렀거나 한 번도 안 굴렀어요`));
   /* ══════════════════════════════════════════════════════════════
-   * 🏁 T-7c. **한 단계의 누름 = 굴러간 카드 + 1** (드라이버가 정직한지 보는 자리)
+   * 🏁 **C-5. 한 단계의 누름이 「2회」다** — 🔴 T-7c(누름 = 카드 + 1)를 **대체**합니다
    * ══════════════════════════════════════════════════════════════
-   * 🔑 T-7b가 «사람이 보는 화면»을 본다면, 이 줄은 **드라이버의 셈**을 봅니다.
-   *    2026-09-04에 `_load.js`의 `passStage`가 **누름을 카드로 세서** T-5·T-6a·S-6·
-   *    S-6b·O-3·M-R **여섯이 한꺼번에** 빨간불이었어요. 덱은 한 장도 안 늘었는데요.
-   *    🔒 그래서 이제 `passStage`는 `#town-prog`의 「끝난 점」이 늘었는지로 셉니다.
+   * 🌍 **T-7c가 서 있던 세계가 끝났습니다** (2026-09-06 · 설계 153번 §4-1).
+   *    옛 세계: 🏁 시작 → 카드0 · **[다음 판]** → 카드1 · … · [다음 단계]
+   *             → 누름이 `카드 + 1`
+   *    🆕 세계: 🏁 시작 → **시계가 단계를 통째로 굴림** · [다음 단계]
+   *             → 누름이 **언제나 2회**, 굴러간 카드는 `deck.length`
+   *    🔴 [다음 판] 버튼 5개가 없어졌어요. 그게 범민 님의 *"쭉 흘러가고"*입니다.
    *
-   * 🔴 **이 관계가 두 방향을 다 막습니다:**
-   *    · 🏁 킥오프가 사라지면 → 누름이 카드와 **같아져** 빨간불
-   *    · `passStage`가 다시 「누름 = 카드」로 돌아가면 → 카드가 3장으로 **불어나** 빨간불
-   *    한쪽만 재면 다른 쪽이 조용히 지나갑니다.
+   * 🔑 **T-7c가 지키던 것을 그대로 살립니다** — *"드라이버가 누름을 카드로 세지 않는가"*.
+   *    이제는 그 반대 방향이 더 세요: 누름이 **2로 고정**인데 카드는 `n`장이라,
+   *    `passStage`가 누름을 카드로 세면 곧바로 어긋납니다.
+   *
+   * 🔴 **두 방향을 다 막습니다:**
+   *    · [다음 판]이 되살아나면 → 누름이 **3·4회**로 늘어 빨간불
+   *    · 🏁 킥오프가 사라져 들어서자마자 굴러가면 → `kick`이 0이 되어 빨간불
+   *      (그리고 T-7b가 「도착에 카드 없음」으로 같은 자리를 겹쳐 봅니다)
    *
    * 🌍 이 문장이 서 있는 세계:
-   *   「한 단계가 **[🏁 시작] → 카드 → … → [다음 단계]**로 굴러가고, 마지막 누름은
-   *   카드를 안 굴리는 세계」예요. 🔴 카드 「사이」에도 화면이 끼거나(하프타임 등)
-   *   마지막 누름이 카드를 하나 더 굴리게 되면 **이 +1이 옛말**입니다. */
-  const pressOK = R.stages.presses === R.stages.length + 1 && R.stages.kick === 1;
+   *   「한 누름(🏁 시작)이 **단계 하나를 통째로** 굴리고, 마지막 누름은 카드를 안 굴리는
+   *   세계」입니다. 🔴 카드 「사이」에 다시 버튼이 서면 **이 2가 옛말**이에요. */
+  const CARDS_E = 2;                    // 🔒 🏫 초5의 덱 — 계약(`STAGES`의 `n`)이라 검사에 박습니다
+  const PRESS_N = 2;                    // 🔒 🏁 [경기 시작] + 🔚 [다음 단계]
+  const pressOK = R.stages.presses === PRESS_N && R.stages.length === CARDS_E && R.stages.kick === 1;
   check(pressOK,
-    `T-7c. 🏁 **한 단계의 누름이 「굴러간 카드 + 1」이다** — 첫 누름이 카드 0번(🏁 경기 시작)이에요`
-    + `\n     🏫 초5: 누름 ${R.stages.presses}회 → 굴러간 카드 ${R.stages.length}장 [${R.stages.join("")}]`
+    `C-5. 🏁 **한 단계의 누름이 ${PRESS_N}회**다 (🏁 시작 + 🔚 다음 단계) — 그 사이는 ⏱️ 시계가 굴립니다`
+    + `\n     🏫 초5: 누름 ${R.stages.presses}회 → 굴러간 카드 ${R.stages.length}장 [${R.stages.join("")}] (계약 ${CARDS_E}장)`
     + ` · 첫 누름이 킥오프였나 ${R.stages.kick === 1 ? "✔" : "🔴"}`
     + (pressOK
       ? `\n     🔑 \`passStage\`는 **버튼 글자를 안 봅니다** — \`#town-prog\`의 끝난 점이 늘었는지로 세요`
-      : R.stages.presses === R.stages.length
-        ? `\n     🔴 누름과 카드가 같아졌어요 — 🏁 킥오프가 사라졌거나, 마지막 누름이 카드를 굴립니다`
-        : `\n     🔴 셈이 안 맞아요 — \`_load.js\`의 \`passStage\`가 누름을 카드로 세고 있는지 보세요`));
+        + `\n     🌍 🔴 **T-7c(누름 = 카드 + 1)를 대체한 문장**입니다 — [다음 판] 버튼 5개가 사라졌어요`
+      : R.stages.presses > PRESS_N
+        ? `\n     🔴 누름이 ${R.stages.presses}회예요 — **[다음 판]이 되살아났는지** 보세요 (\`town.js\`의 \`land()\`)`
+        : R.stages.kick !== 1
+          ? `\n     🔴 첫 누름이 카드를 안 굴렸어요 — 🏁 킥오프가 사라졌거나 시계가 안 돕니다`
+          : `\n     🔴 굴러간 카드가 ${R.stages.length}장이에요 — 시계가 단계를 끝까지 안 굴렸는지 보세요`));
 }
 
 /* 🚧 **T-6a-가드 — 알려진 상태입니다** (빨간불 아님 · 종료 코드에 안 셉니다)

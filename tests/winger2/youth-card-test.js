@@ -108,7 +108,7 @@ const MUT_DEAD = `\n     🔴 **이 변이가 지금 소스에 안 걸립니다 
 /* 🎲 시드는 `_load.js`의 `seedBoth`가 **갈라서** 겁니다 — 두 난수원(`Math.random` ·
  * `WingerEngine._t`)에 같은 시드를 걸면 앞 1,000개가 **1000/1000 일치**해서 보폭이
  * 맞아 lockstep이 나요 (109번 §4 · `seed-split-test.js`가 지킵니다). */
-function sweep(seed, muts) {
+async function sweep(seed, muts) {
   const W = bootPage({ muts, keys: { "grow-auto-mini": "1" } });
   seedBoth(W, seed);              // 🎲 엔진 난수는 **갈린 시드로** 따로 박아야 걸려요 (_rng는 로드 때 잡힘)
   const D = W.document;
@@ -124,7 +124,7 @@ function sweep(seed, muts) {
   press(D.getElementById("btn-name-next"), "btn-name-next");
   /* 🏘️ 동네 3장 — 이 파일은 `grow-auto-mini`를 켜고 뜨므로 그대로 지나갑니다 (85번 「순-B」) */
   press(D.querySelector(`#position-list .card[data-pos="${POS}"]`), `📍 ${POS}`);
-  passTown(W, press);
+  await passTown(W, press);
   press(D.querySelector("#agency-list button"), "🏟️ 입단 제안");
   press(D.getElementById("btn-prospect-start"), "btn-prospect-start");
   const S = () => W.__get("S");
@@ -179,61 +179,67 @@ const fmt = (r) => `${r.label} ovr${r.got.toFixed(1)}: p${r.p.toFixed(4)} o${r.o
  * 🔒 이 술어는 `youth-ability-test.js`의 N-1과 **같은 문장**이에요.
  *    여기서는 그걸 **`YOUTH_CARD_P`를 흔들었을 때 무너지는지** 보는 데 씁니다.
  * ══════════════════════════════════════════════════════════════ */
-const base = SEEDS.map((seed) => Object.assign({ seed }, sweep(seed)));
-{
-  const errs = base.flatMap((b) => b.errs);
-  check(base.every((b) => b.ok) && errs.length === 0,
-    `Y-0. 🚪 게임 입구 → 🏠 훈련장 → 🏆 **평가전 무대에 실제 버튼으로 도달** (시드 ${SEEDS.join(" ")})`
-    + (errs.length ? `\n     🔴 페이지 오류 — ${errs[0]}` : "")
-    + (base.every((b) => b.ok) ? "" : "\n     🔴 .go-game이 안 떴어요"));
+/* 🔒 `passTown`이 async라 이 아래는 통째로 async IIFE 안입니다 (2026-09-06) */
+(async () => {
+  /* ⏱️ 2026-09-06 — `passTown`이 async가 됐습니다 (설계 153번) */
+  const base = [];
+  for (const seed of SEEDS) base.push(Object.assign({ seed }, await sweep(seed)));
+  {
+    const errs = base.flatMap((b) => b.errs);
+    check(base.every((b) => b.ok) && errs.length === 0,
+      `Y-0. 🚪 게임 입구 → 🏠 훈련장 → 🏆 **평가전 무대에 실제 버튼으로 도달** (시드 ${SEEDS.join(" ")})`
+      + (errs.length ? `\n     🔴 페이지 오류 — ${errs[0]}` : "")
+      + (base.every((b) => b.ok) ? "" : "\n     🔴 .go-game이 안 떴어요"));
 
-  const bad = [];
-  let worst = 0;
-  for (const b of base) for (const r of b.rows) {
-    const d = Math.abs(r.p - r.m);
-    if (d > worst) worst = d;
-    if (d > BAND) bad.push(`시드${b.seed} ${fmt(r)}`);
-    if (r.other) bad.push(`시드${b.seed} ${r.label}: perfect/ok/miss 아닌 판정 ${r.other}건`);
+    const bad = [];
+    let worst = 0;
+    for (const b of base) for (const r of b.rows) {
+      const d = Math.abs(r.p - r.m);
+      if (d > worst) worst = d;
+      if (d > BAND) bad.push(`시드${b.seed} ${fmt(r)}`);
+      if (r.other) bad.push(`시드${b.seed} ${r.label}: perfect/ok/miss 아닌 판정 ${r.other}건`);
+    }
+    check(bad.length === 0 && base.every((b) => b.ok),
+      `Y-1. 🎯 **기준선(overall() = ${REF_EVAL})에서 perfect 빈도 = miss 빈도** — ${base.length * KINDS.length}칸 전부 |Δ| ≤ ${BAND}`
+      + `\n     (= 등급 ±1칸 기댓값 0. **값을 베껴 적지 않고 굴려서** 확인했어요 · 칸마다 ${N}회)`
+      + `\n     ⚠️ **"모든 능력치에서"가 아닙니다** — 그 반쪽은 2026-08-31에 폐기됐어요 (파일 머리말)`
+      + `\n     최대 |Δ| = ${worst.toFixed(4)}`
+      + (bad.length ? `\n     🔴 넘긴 칸 ${bad.length}개:\n       ${bad.slice(0, 6).join("\n       ")}` : ""));
+
+    const s1 = Math.max(sd(1 / 3), sd(0.5));
+    check(BAND >= SIGMA_MIN * s1,
+      `Y-2. 📏 문턱 ${BAND}이 잡음 1σ(${s1.toFixed(4)})의 **${(BAND / s1).toFixed(1)}배** (≥${SIGMA_MIN}배)`
+      + ` — 실측 최대 |Δ|는 ${(worst / s1).toFixed(1)}σ였어요`);
+    console.log(`     기준선(시드 ${SEEDS[0]} · 능력치 ${base[0].rows.length ? base[0].rows[0].ability.toFixed(0) : "?"}):`
+      + `\n       ${base[0].rows.map(fmt).join("\n       ")}`);
   }
-  check(bad.length === 0 && base.every((b) => b.ok),
-    `Y-1. 🎯 **기준선(overall() = ${REF_EVAL})에서 perfect 빈도 = miss 빈도** — ${base.length * KINDS.length}칸 전부 |Δ| ≤ ${BAND}`
-    + `\n     (= 등급 ±1칸 기댓값 0. **값을 베껴 적지 않고 굴려서** 확인했어요 · 칸마다 ${N}회)`
-    + `\n     ⚠️ **"모든 능력치에서"가 아닙니다** — 그 반쪽은 2026-08-31에 폐기됐어요 (파일 머리말)`
-    + `\n     최대 |Δ| = ${worst.toFixed(4)}`
-    + (bad.length ? `\n     🔴 넘긴 칸 ${bad.length}개:\n       ${bad.slice(0, 6).join("\n       ")}` : ""));
 
-  const s1 = Math.max(sd(1 / 3), sd(0.5));
-  check(BAND >= SIGMA_MIN * s1,
-    `Y-2. 📏 문턱 ${BAND}이 잡음 1σ(${s1.toFixed(4)})의 **${(BAND / s1).toFixed(1)}배** (≥${SIGMA_MIN}배)`
-    + ` — 실측 최대 |Δ|는 ${(worst / s1).toFixed(1)}σ였어요`);
-  console.log(`     기준선(시드 ${SEEDS[0]} · 능력치 ${base[0].rows.length ? base[0].rows[0].ability.toFixed(0) : "?"}):`
-    + `\n       ${base[0].rows.map(fmt).join("\n       ")}`);
-}
+  /* ══════════════════════════════════════════════════════════════
+   * 🧪 변이 검증 — **고치기 전에 빨간불이 뜨는지**
+   *    기준선 Y-1과 **같은 술어**를 그대로 다시 겁니다.
+   * ══════════════════════════════════════════════════════════════ */
+  console.log("\n── 🧪 변이 검증 (고치기 전에 빨간불이 뜨는지) ──");
+  async function mutCheck(name, tag, why, want) {
+    if (!mutOK(name)) { check(false, `${tag}. 🧪 ${why}${MUT_DEAD}`); return; }
+    const { rows } = await sweep(SEEDS[0], MUT[name]);
+    const over = rows.filter((r) => Math.abs(r.p - r.m) > BAND || r.other > 0);
+    const mx = rows.length ? Math.max(...rows.map((r) => Math.abs(r.p - r.m))) : NaN;
+    const hit = rows.length > 0 && (want ? want(rows, over) : over.length > 0);
+    check(hit,
+      `${tag}. 🧪 ${why} → Y-1이 빨간불 (넘긴 칸 ${over.length}/${rows.length} · 최대 |Δ| ${mx.toFixed(4)})`
+      + (hit ? "" : `\n     🔴 변이를 넣었는데 Y-1이 **아직 초록불** — 중립성을 아무것도 안 지키고 있어요`
+        + `\n       ${rows.map(fmt).join("\n       ")}`));
+  }
+  /* 🔒 **"그 종류만 무너지는가"까지 봅니다.** 기준선에서 나머지 두 종류는 중립이 그대로예요 —
+   *    한 손잡이가 다른 손잡이의 곡선을 끌고 가면 그것도 결함입니다. */
+  await mutCheck("P_GOAL", "M-P1", "⚽ 결정의 세기를 1/3 → **0.45**로 옮김",
+    (rows, over) => over.length > 0 && over.every((r) => r.kindKey === "g"));
+  await mutCheck("P_DEFEND", "M-P2", "🧱 수비의 세기를 0.5 → **0.65**로 옮김",
+    (rows, over) => over.length > 0 && over.every((r) => r.kindKey === "d"));
+  await mutCheck("FALLBACK", "M-P4", "**v1 자동 판정(`autoRes`)으로 조용히 떨어짐** — 판정 종류부터 달라져요",
+    (rows, over) => over.length > 0);
 
-/* ══════════════════════════════════════════════════════════════
- * 🧪 변이 검증 — **고치기 전에 빨간불이 뜨는지**
- *    기준선 Y-1과 **같은 술어**를 그대로 다시 겁니다.
- * ══════════════════════════════════════════════════════════════ */
-console.log("\n── 🧪 변이 검증 (고치기 전에 빨간불이 뜨는지) ──");
-function mutCheck(name, tag, why, want) {
-  if (!mutOK(name)) { check(false, `${tag}. 🧪 ${why}${MUT_DEAD}`); return; }
-  const { rows } = sweep(SEEDS[0], MUT[name]);
-  const over = rows.filter((r) => Math.abs(r.p - r.m) > BAND || r.other > 0);
-  const mx = rows.length ? Math.max(...rows.map((r) => Math.abs(r.p - r.m))) : NaN;
-  const hit = rows.length > 0 && (want ? want(rows, over) : over.length > 0);
-  check(hit,
-    `${tag}. 🧪 ${why} → Y-1이 빨간불 (넘긴 칸 ${over.length}/${rows.length} · 최대 |Δ| ${mx.toFixed(4)})`
-    + (hit ? "" : `\n     🔴 변이를 넣었는데 Y-1이 **아직 초록불** — 중립성을 아무것도 안 지키고 있어요`
-      + `\n       ${rows.map(fmt).join("\n       ")}`));
-}
-/* 🔒 **"그 종류만 무너지는가"까지 봅니다.** 기준선에서 나머지 두 종류는 중립이 그대로예요 —
- *    한 손잡이가 다른 손잡이의 곡선을 끌고 가면 그것도 결함입니다. */
-mutCheck("P_GOAL", "M-P1", "⚽ 결정의 세기를 1/3 → **0.45**로 옮김",
-  (rows, over) => over.length > 0 && over.every((r) => r.kindKey === "g"));
-mutCheck("P_DEFEND", "M-P2", "🧱 수비의 세기를 0.5 → **0.65**로 옮김",
-  (rows, over) => over.length > 0 && over.every((r) => r.kindKey === "d"));
-mutCheck("FALLBACK", "M-P4", "**v1 자동 판정(`autoRes`)으로 조용히 떨어짐** — 판정 종류부터 달라져요",
-  (rows, over) => over.length > 0);
+  console.log(fail ? `\n❌ ${fail}건 실패` : "\n✅ 통과");
+  process.exit(fail ? 1 : 0);
 
-console.log(fail ? `\n❌ ${fail}건 실패` : "\n✅ 통과");
-process.exit(fail ? 1 : 0);
+})();

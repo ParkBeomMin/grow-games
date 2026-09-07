@@ -215,11 +215,11 @@ async function toBench(h, opt) {
   }
   stamp();                                                  // 🎯 자리 — 🆕 **초4 바로 뒤**
   h.press(D.querySelector(`#position-list .card[data-pos="${o.pos || "wg"}"]`), `🎯 ${o.pos || "wg"}`);
-  passStage(h.W, h.press);                                  // 🏫 초5 대항전
+  await passStage(h.W, h.press);                            // 🏫 초5 대항전
   passEarly(h.W, h.press);                                  // 📨 조기 제안 — **거절**
-  passStage(h.W, h.press);                                  // 🏫 중등부
+  await passStage(h.W, h.press);                            // 🏫 중등부
   passEarly(h.W, h.press);                                  // 📨 — **거절**
-  passStage(h.W, h.press);                                  // 🏫 고등부
+  await passStage(h.W, h.press);                            // 🏫 고등부
   if (back) back();
   h.press(D.querySelector("#agency-list button"), "🏟️ 입단 제안");
   stamp();                                                  // 🧬 조립대
@@ -256,8 +256,8 @@ async function arcOf(seed, engineSeed) {
   pickOrigin(W, press, "seoul");
   await tapChildArc(W, press, ["ball", "fin", "gn", "h1"]);  // 🧒 초1~초4
   press(D.querySelector('#position-list .card[data-pos="wg"]'), "🎯 wg");   // 🆕 초4 뒤
-  passStage(W, press); passEarly(W, press);                 // 🏫 초5 → 📨
-  passStage(W, press); passEarly(W, press); passStage(W, press);
+  await passStage(W, press); passEarly(W, press);           // 🏫 초5 → 📨
+  await passStage(W, press); passEarly(W, press); await passStage(W, press);
   if (back) back();
   const T = W.WingerTown;
   const out = `${T.score()}/${T.cards()} ${T.rows().map((r) => r.res[0]).join("")}`;
