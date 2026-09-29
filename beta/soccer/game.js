@@ -467,7 +467,7 @@ $("btn-reroll")?.addEventListener("click", () => {
 
 function newState(market, pos, name, roll) {
   const { stats, talents } = roll || rollStats(pos);
-  return {
+  const st = {
     market: market.id, pos, name,
     year: 1, month: 1,
     stats, talents,
@@ -490,7 +490,14 @@ function newState(market, pos, name, roll) {
     stages: 0, // 출전 경기 수
     youth: { g: 0, a: 0, def: 0 }, // 유스 통산 골·도움·수비
     log: [],
+    /* 🏅 딴 업적 — 새 선수는 빈 칸으로 열어요. 이 칸이 **없는** 세이브는 옛 세이브라
+     * 첫 판정이 지난 기록을 조용히(late) 채워요(achieve.js). */
+    ach: {},
   };
+  /* 🎬 입단 때의 몸 — 은퇴 필름의 레이더 두 겹과 🦶 만든 양발 업적이 읽어요.
+   * **사본**이라 훈련으로 안 움직여요. 이 칸이 없는 옛 세이브는 그 줄을 안 그려요. */
+  st.origin = { stats: { ...stats }, talents: { ...talents }, weak: st.foot.weak };
+  return st;
 }
 
 const marketOf = () => MARKETS.find((m) => m.id === S.market);
@@ -760,6 +767,9 @@ function save() {
   if (!S) return;
   if (!curSlot) curSlot = "s" + Date.now() + Math.floor(Math.random() * 1e4);
   S.savedAt = Date.now();
+  /* 🧪 베타가 저장했다는 도장 — 운영판(soccer/)은 이 칸을 몰라서 안 고쳐요.
+   * 그래서 열 때 S.betaAt !== S.savedAt이면 **베타가 모르는 저장이 끼었다**는 뜻이에요(events.js onLoad). */
+  S.betaAt = S.savedAt;
   const sl = loadSlots();
   sl[curSlot] = S;
   saveSlots(sl);
@@ -901,6 +911,8 @@ function transcend(key, d, v, logFn) {
     logFn(`🌠💦 초월 실패… ${d.name} ${Math.round(S.stats[key])}부터 다시 (✨${lv} 유지)`);
     if (window.Fx) { Fx.burst(".awaken-btn", "💦", 8); Fx.flash(`💦 ${d.name} 초월 실패…`); }
   }
+  // 🔮 초월 **시도** — 성공·실패 모두 그 능력치가 다시 깎여요(🎲 다시 만드는 몸, 프로에서만)
+  if (window.WingerEvents) WingerEvents.awake(key);
   save();
   return true;
 }
@@ -949,6 +961,8 @@ function awakenTalent(key, logFn) {
     logFn(`🔮💦 각성 실패… ${d.name} ${Math.round(S.stats[key])}부터 다시 담금질!`);
     if (window.Fx) { Fx.burst(".awaken-btn", "💦", 8); Fx.flash(`💦 ${d.name} 각성 실패…`); }
   }
+  // 🔮 각성 **시도** — 성공·실패 모두(🎲 다시 만드는 몸, 프로에서만)
+  if (window.WingerEvents) WingerEvents.awake(key);
   save();
   return true;
 }
@@ -1147,12 +1161,19 @@ function openRecord(returnTo) {
 function renderRecordTabs() {
   const box = $("record-tabs");
   if (!box) return;
-  /* 월드컵을 한 번도 안 겪었으면 탭 줄 자체를 감춰요 — 빈 탭은 "여기 뭔가 있나"만
-   * 남기고 아무것도 안 알려줘요. 미발탁 기록("none")도 겪은 것으로 봐요. */
+  /* 🌏 월드컵 탭은 한 번이라도 겪었을 때만 둬요 — 빈 탭은 "여기 뭔가 있나"만 남기고
+   * 아무것도 안 알려줘요. 미발탁 기록("none")도 겪은 것으로 봐요.
+   * 📖 도감·🏅 업적 탭은 그리는 쪽(scenes.js · achieve.js)이 있을 때만 둬요 — 도감은 늘 판정 규칙 한 쪽이
+   * 있어서 빈 탭이 아니에요. 탭이 커리어 하나뿐이면 탭 줄 자체를 감춰요. */
   const has = Array.isArray(S.wcHist) && S.wcHist.length;
-  box.hidden = !has;
-  if (!has) { recordTab = "career"; return; }
-  const tabs = [["career", "⚽ 커리어"], ["wc", "🌏 월드컵"]];
+  const SC = window.WingerScenes;
+  const tabs = [["career", "⚽ 커리어"]];
+  if (has) tabs.push(["wc", "🌏 월드컵"]);
+  if (SC && SC.bookTab) tabs.push(["book", "📖 도감"]);
+  if (SC && SC.achTab && window.WingerAch) tabs.push(["ach", "🏅 업적"]);
+  if (!tabs.some(([id]) => id === recordTab)) recordTab = "career";
+  box.hidden = tabs.length < 2;
+  if (box.hidden) return;
   box.innerHTML = tabs.map(([id, name]) =>
     `<button class="rec-tab${recordTab === id ? " on" : ""}" data-tab="${id}">${name}</button>`).join("");
   box.querySelectorAll(".rec-tab").forEach((b) => {
@@ -1197,6 +1218,9 @@ function wcRecordHTML() {
 function renderRecord() {
   renderRecordTabs();
   if (recordTab === "wc") { $("record-card").innerHTML = wcRecordHTML(); return; }
+  // 📖 도감 · 🏅 업적 — 그리는 건 scenes.js예요(탭이 있을 때만 여기까지 와요)
+  if (recordTab === "book") { WingerScenes.bookTab($("record-card")); return; }
+  if (recordTab === "ach") { WingerScenes.achTab($("record-card")); return; }
   const m = marketOf();
   const trophyLine = S.trophies && S.trophies.length ? `🏆 ${S.trophies.join(", ")}` : "🏆 대회 1위 경력 없음";
   const y = S.youth || { g: 0, a: 0, def: 0 };
@@ -1257,9 +1281,12 @@ function renderRecord() {
     })
     .filter(Boolean)
     .join(" ");
+  // 🏅 대표 업적 — 효과는 없어요. 명예의 전당 카드와 같은 모양(scenes.js badge — 모르는 id면 안 그려요)
+  const repBadge = window.WingerAch && window.WingerScenes && WingerScenes.badge ? WingerScenes.badge(WingerAch.repOf(S)) : "";
   $("record-card").innerHTML = `
     <div class="draft-emoji">⚽</div>
     <div class="draft-title">${S.name}</div>
+    ${repBadge ? `<div class="rec-rep">🏅 대표 업적 ${repBadge}</div>` : ""}
     <div class="draft-team">${S.phase === "soccer-pro" ? `${S.group}${S.center ? " · 주장" : ""} · ${S.proYear}시즌` : `${m.emoji} ${m.name} 유망주 ${S.year}년차`} · ${POS_INFO[S.pos].name}</div>
     <div class="draft-summary">
       <b>🌱 유스 기록</b><br/>출전 ${S.stages || 0}경기 · ⚽ ${y.g}골 · 🅰️ ${y.a}도움 · 🛡️ 수비 ${y.def}<br/>⭐ 명성 ${Math.round(S.fandom)}<br/>${trophyLine}<br/>
@@ -1314,6 +1341,9 @@ function resumeSlot(id) {
   S.money = S.money || 0;
   S.gear = S.gear || {};
   fillStats(S);          // ⚡ 스피드 칸이 없는 옛 세이브를 여기서 채워요 (종합은 그대로예요)
+  /* 🎲 운영판이 낀 세이브면 진행 중 상태(떠 있는 이벤트·약속·「최근 10경기」…)를 정리해요.
+   * 정리했으면 바로 저장해요 — 안 그러면 다시 열 때마다 같은 정리를 또 해요. */
+  if (window.WingerEvents && WingerEvents.onLoad(S)) save();
   if (S.phase === "soccer-pro" && window.WingerCareer) {
     window.WingerCareer.showActivity();
   } else {
@@ -1533,6 +1563,9 @@ function renderMain() {
   }
 
   renderLog();
+  /* 🎲 유스 이벤트는 행동 직후 생기고, 달이 넘어간 **다음 화면 위에** 떠요.
+   * 답하기 전에는 모달이 「출전!」까지 가려요 — 옛 코드의 적용 시점과 같아야 늘 안전 == 현행이에요. */
+  if (window.WingerEvents) WingerEvents.draw();
 }
 
 function addLog(msg) {
@@ -1590,8 +1623,11 @@ function doTraining(def) {
   }
 
   const condMod = S.condition >= 70 ? 1.15 : S.condition >= 40 ? 1.0 : 0.6;
-  const buffMod = S.buff ? 1.5 : 1.0;
+  /* 🔥 다음 훈련 배수 — S.buff는 **참/거짓 그대로**예요(운영판이 `S.buff ? 1.5 : 1.0`으로 같은 칸을 읽어요).
+   * 🔥 도전 성공의 ×2.0만 새 칸 S.buffX에 있어요. 쓰면 둘 다 지워요. 훈련이 실패하면 안 써요(위 갈래). */
+  const buffMod = S.buff === true ? (S.buffX || 1.5) : 1.0;
   S.buff = false;
+  delete S.buffX;
   let gain = rand(2.2, 4.2) * S.talents[def.key] * m.growth * condMod * buffMod;
   if (S.stats[def.key] >= 100) gain *= 0.5;
   gain = Math.round(gain * 10) / 10;
@@ -1649,7 +1685,12 @@ function maybeEvent() {
       addLog(`📉 경기 실수 장면이 짤로 돌아요… 명성 -10`);
     },
   ];
-  pick(events)();
+  /* 🎲 일곱 칸 중 넷(0 개인지도 · 1 하이라이트 · 4 라이벌 · 6 실수 짤)은 **묻는 모양**이에요(events.js).
+   * 칸 뽑기는 옛 `pick(events)`와 **같은 난수 한 번**이라 빈도·분포가 한 톨도 안 바뀌어요.
+   * 확정을 고르면 옛 효과 그대로라 늘 안전 == 현행이에요. 나머지 셋은 옛 한 줄 그대로예요. */
+  const i = Math.floor(Math.random() * events.length);
+  if (window.WingerEvents && WingerEvents.youth(i, m)) return;
+  events[i]();
 }
 
 // ---------- 월 진행 ----------
@@ -2572,6 +2613,11 @@ function showEnding(survivedFinal, lastRound) {
       ? "1군 계약에는 닿지 못했어요. 하지만 아직 한 해가 남아 있어요 — 특훈으로 다시 도전할 수 있습니다."
       : "꿈은 이루지 못했지만 3년의 땀은 사라지지 않아요. 공은 둥그니까!";
   }
+  /* 🎓 어느 유스 엔딩이었나 — 위 분기가 이미 세운 플래그를 그대로 적어요(조건을 다시 계산하지 않아요).
+   * 🌱 재계약과 🎒 둘 다 canExtend라 둘은 분기가 정한 emoji로 갈라요. 특훈 뒤 다시 본 엔딩은 덮어써요.
+   * 🏅 업적(👑 스무 살의 계약서 · 📹 세미프로의 기적)이 읽어요. */
+  S.youthEnd = bigClub ? "big" : survivedFinal ? "pro" : callupWeak ? "callup" : scoutPro ? "scout"
+    : semiPro ? "semi" : emoji === "🌱" ? "ext" : "quit";
 
   const statLines = STAT_DEFS
     .map((d) => `${d.emoji} ${d.name} ${Math.round(S.stats[d.key])}`)
@@ -2752,7 +2798,18 @@ const HELP_SECTIONS = [
 ];
 
 function openHelp() {
-  if (window.Help) window.Help.open("⚽ 더 윙어 도움말", HELP_SECTIONS);
+  if (!window.Help) return;
+  /* 🎲 선택 이벤트의 판정 규칙은 도감 📐 쪽과 **같은 문장**을 써요(events.js rules) —
+   * 두 곳에 따로 적으면 한쪽만 고쳐져 어긋나요. */
+  const ev = window.WingerEvents
+    ? [{ emoji: "🎲", title: "선택 이벤트와 약속", body: WingerEvents.rules().map((l) => `· ${l}`).join("\n") }]
+    : [];
+  if (window.WingerAch) ev.push({ emoji: "🏅", title: "업적과 대표 업적", body:
+    "해낸 일을 남기는 기록이에요 — 경기에는 아무 효과가 없어요. 🎖️ 시즌 칭호와 다른 물건이에요.\n" +
+    "희귀도는 실제로 몇 %가 해내는지로 정했어요 (⚪ 흔함 · 🔵 드묾 · 🟣 귀함 · 🟡 전설).\n" +
+    "딴 업적 하나를 대표로 고르면 명예의 전당 카드와 공유 이미지에 실려요 — 📊 기록의 🏅 업적 탭에서 골라요." });
+  // 💾 기록 보관은 늘 마지막이에요(8종 공통 — help-section-test) — 그 앞에 끼워요
+  window.Help.open("⚽ 더 윙어 도움말", HELP_SECTIONS.slice(0, -1).concat(ev, HELP_SECTIONS.slice(-1)));
 }
 $("btn-help-main")?.addEventListener("click", openHelp);
 $("btn-help-pro")?.addEventListener("click", openHelp);

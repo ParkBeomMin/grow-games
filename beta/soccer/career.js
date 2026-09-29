@@ -218,6 +218,9 @@ window.WingerCareer = (() => {
   const esc = (v) => String(v == null ? "" : v)
     .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+  /* 🔢 등번호는 1~99 정수만 — 넣는 길(setNo)과 **읽는 길**(이름 줄 · 명전 항목)이 같은 검사를 봐요.
+   * 세이브를 읽는 길은 안 씻어서(이어하기·클라우드·운영판 저장) 글자가 들어 있을 수 있어요(검사 ❌-2) */
+  const validNo = (n) => Number.isInteger(n) && n >= 1 && n <= 99;
 
   const loadHof = () => JSON.parse(localStorage.getItem(HOF_KEY) || "[]");
   const saveHof = (list) => localStorage.setItem(HOF_KEY, JSON.stringify(list));
@@ -335,7 +338,8 @@ window.WingerCareer = (() => {
     S.leagueSince = 0;
     /* daesangW · bonsangW는 리그격을 곱해 쌓는 가중 수상 카운터예요.
      * 옛 카운터(daesang · bonsang)는 화면에 "MVP 3회"처럼 횟수로 보여주는 데 그대로 써요. */
-    S.career = { years: [], wins: 0, daesang: 0, bonsang: 0, daesangW: 0, bonsangW: 0, rookie: 0, sales: 0, goals: 0, assists: 0, defense: 0, apps: 0, teamW: 0, teamD: 0, teamL: 0 };
+    S.career = { years: [], wins: 0, daesang: 0, bonsang: 0, daesangW: 0, bonsangW: 0, rookie: 0, sales: 0, goals: 0, assists: 0, defense: 0, apps: 0, teamW: 0, teamD: 0, teamL: 0,
+      maxOvr: 0 };   // 🎬 커리어 최고 종합 — checkTitle이 올려요(처음부터 센 커리어에만 있어요)
     S.proLog = [];
     if (window.Stats) Stats.log("debut", { group: S.group, center: !!captain });
     startPrep();
@@ -1261,11 +1265,16 @@ window.WingerCareer = (() => {
    * ⚠️ 옛 세이브에는 S.titleIdx가 없어요. 마이그레이션하지 않고, 처음 볼 때
    * 조용히 지금 칭호로 맞춰 둡니다 — 안 그러면 이어하기만 했는데 "승급!"이 떠요. */
   function checkTitle() {
-    const idx = titleIdx(overall());
+    const ovr = overall();
+    const idx = titleIdx(ovr);
     const had = S.titleIdx;
     S.titleIdx = idx;
     S.career = S.career || {};
     if (S.career.bestTitle == null || idx > S.career.bestTitle) S.career.bestTitle = idx;
+    /* 🎬 커리어 최고 종합 — 필름의 「몸의 기록」이 읽어요. **처음부터 센 커리어만** 적어요
+     * (enterCareer가 0으로 열어요). 도중에 세기 시작하면 지난 전성기를 모르는 채로 「최고」를 적게 돼요 —
+     * 칸이 없는 옛 커리어는 필름이 클래스 이름만 그려요. */
+    if (typeof S.career.maxOvr === "number" && ovr > S.career.maxOvr) S.career.maxOvr = ovr;
     if (had == null || idx === had) return;
     if (idx > had) {
       /* 승급 명성 보너스 — 위 칭호일수록 세상이 더 크게 알아봐요.
@@ -1274,6 +1283,8 @@ window.WingerCareer = (() => {
       S.fandom = Math.max(0, (S.fandom || 0) + fan);
       proLog(`🏷️ 칭호 승급 — ${titleAt(idx)}! 명성 +${fan} · 수당 ×${titlePayMul(idx).toFixed(2)}`);
       queueFx([["award", `🏷️ ${titleAt(idx)}!`]]);
+      // 🎲 「급이 바뀐 첫 주」 — 승급 뒤 첫 mid 블록이 이 값을 쓰고 꺼요
+      if (window.WingerEvents) WingerEvents.mem().classUp = true;
     } else {
       /* 내려갈 때는 명성을 깎지 않아요 — 이미 노쇠 벌점이 따로 걸려 있어요.
        *
@@ -1367,7 +1378,8 @@ window.WingerCareer = (() => {
 
   function renderPrep() {
     checkTitle();
-    $("pro-name").textContent = `${S.name} (${POS_INFO[S.pos].name})`;
+    // 🔢 등번호 — 고른 뒤에만 붙어요(데뷔 첫 화면·옛 세이브의 다음 pre에서 물어요)
+    $("pro-name").textContent = `${S.name}${validNo(S.no) ? ` #${S.no}` : ""} (${POS_INFO[S.pos].name})`;
     // 리그 이름을 함께 보여줘요 — 승격·강등하면 여기가 바뀌는 게 제일 먼저 눈에 띄어야 해요
     $("pro-team").textContent =
       `${leagueOf(S).flag} ${S.group}${S.center ? " · 주장" : ""} · ${leagueOf(S).name}`
@@ -1402,6 +1414,10 @@ window.WingerCareer = (() => {
        * 오버레이는 위에 뜨는 모달이지 화면을 대신하는 게 아니에요. */
       WingerWorldCup.checkInvite();
     }
+    /* 🎲 선택 이벤트 — **여기 한 곳에서만** 굴려요(초대장 판정 바로 뒤 — 초대장이 먼저예요).
+     * 경기 뒤 다음 화면을 여는 갈래가 다섯이 넘어서, 갈래마다 심으면 반드시 하나가 새요.
+     * 같은 블록에서 두 번 안 굴려요(S.evSlot). 오버레이는 이 함수 끝에서 그려요. */
+    if (window.WingerEvents) WingerEvents.block();
 
     /* 🎖️ 이번 시즌 칭호 — 지난 시즌에 받아 온 거예요. 효과가 경기에 붙으니
      * 경기 화면으로 가기 전에 항상 보여야 해요. 없으면 줄 자체를 감춰요. */
@@ -1641,6 +1657,9 @@ window.WingerCareer = (() => {
     $("pro-log").innerHTML = (S.proLog || [])
       .map((l, i) => `<div class="${i === 0 ? "new" : ""}">${l}</div>`)
       .join("");
+    /* 🎲 떠 있는 이벤트 — 오버레이는 화면을 **대신하지 않아요.** 뒤의 준비 화면을 끝까지 그린 뒤에 얹어요
+     * (초대장과 같은 이유 — 닫았을 때 훈련 버튼 없는 화면이 남으면 안 돼요). */
+    if (window.WingerEvents) WingerEvents.draw();
   }
 
   function prepAction(def) {
@@ -1751,6 +1770,21 @@ window.WingerCareer = (() => {
       mates: mateNames(),          // 동료 골에 이름을 붙여요 (개인 순위로 이어집니다)
       finalize: (info) => proMatchFinalize(act, info),
     });
+    /* 📋 이번 경기에 판정될 약속이 있으면 중계 카드 위에 한 줄 — 상대가 정해진 약속은 그 팀과의 경기에서만.
+     * 결과가 나오면 proMatchFinalize가 지우고 판정 한 줄을 결과에 붙여요(컵·월드컵 화면에 남지 않게). */
+    const pl = $("stage-promise");
+    if (pl) {
+      const t = window.WingerEvents ? WingerEvents.promiseLine(act.opp) : null;
+      pl.textContent = t || "";
+      pl.hidden = !t;
+    }
+  }
+
+  /* 🏅 해트트릭 · 평점 10.0 — 업적이 읽는 칸이에요(리그·컵 둘 다). 옛 커리어는 여기서부터 세요.
+   * 평점은 **화면에 적힌 한 자리 숫자**로 봐요 — 「10.0」으로 보였는데 안 세면 화면과 기록이 어긋나요. */
+  function markFeat(goals, r) {
+    if (goals >= 3) S.career.hat = (S.career.hat || 0) + 1;
+    if (Number(r.toFixed(1)) >= 10) S.career.perfect = (S.career.perfect || 0) + 1;
   }
 
   /* 🪑 벤치인 주 — 경기는 팀만 치르고 나는 훈련장에 남아요.
@@ -1762,6 +1796,8 @@ window.WingerCareer = (() => {
    * (내 활약이 없으니 평점 항은 중간값 6.5로 둬요), 순위표와 경쟁자 명단도
    * 똑같이 한 라운드를 진행합니다. 안 그러면 벤치인 주만 리그가 멈춰요. */
   function benchShow(act) {
+    /* 🎲 직전 라운드는 벤치 — 약속은 판정하지 않고 다음 출전 경기로 넘겨요(벌이 아니에요) · 📍 집계 */
+    if (window.WingerEvents) WingerEvents.bench();
     const oppStr = clubStrByName(act.opp, S);
     /* 🪑 내가 없는 주도 **같은 눈금**으로 굴려요 — 내 종합만 빼고요.
      * 예전에는 teammateGoals(다른 자)라서, 내가 쉬는 주만 팀 득점이 뚝 떨어졌어요. */
@@ -1877,6 +1913,10 @@ window.WingerCareer = (() => {
      * (제보: "김우진은 어떻게 경기수가 20이지" — 12라운드에 20경기였습니다). */
     // 시즌 평균 평점 — 기록 화면에 보여줘요
     act.ratingSum = (act.ratingSum || 0) + clamp(myRankScore / 10, 1, 10);
+    /* 🎲 최근 10경기 · 직전 라운드·MOM · 📋 약속 판정 · 📍 집계 — 이 경기 표시 평점으로(새 난수 없음).
+     * 돌려받은 한 줄(약속 판정)은 결과 화면에 붙여요. */
+    const evNote = window.WingerEvents ? WingerEvents.league(info, clamp(myRankScore / 10, 1, 10), won) : "";
+    markFeat(info.myGoals, clamp(myRankScore / 10, 1, 10));
     act.goals = (act.goals || 0) + info.myGoals;
     act.assists = (act.assists || 0) + info.assists;
     act.defense = (act.defense || 0) + info.defense;
@@ -1991,7 +2031,11 @@ window.WingerCareer = (() => {
       ${ratingWhyHTML(myRankScore, info, S.pos, momAdj)}
       ${chartHTML(rows)}
       <div class="tour-pts">💰 경기 수당 +${pay}만 · ${dFan >= 0 ? `⭐ 명성 +${dFan}` : `📉 명성 ${dFan}`}</div>
+      ${evNote ? `<div class="tour-pts ev-promise">${evNote}</div>` : ""}
       ${extraLine}`;
+    // 📋 경기 띠는 이 경기 것이었어요 — 판정이 끝났으니 지워요(판정 한 줄은 위 결과에 있어요)
+    const pl = $("stage-promise");
+    if (pl) { pl.textContent = ""; pl.hidden = true; }
 
     let nextLabel, nextFn;
     if (!cbDone) {
@@ -2126,6 +2170,7 @@ window.WingerCareer = (() => {
      * 그대로 넣어서, 컵에서 해트트릭을 해도 시즌 평균이 안 움직였습니다. */
     const rateScore = matchRating(info, S.pos, 0);
     const rateShown = clamp(rateScore / 10, 1, 10);
+    markFeat(info.myGoals, rateShown);        // 🏅 해트트릭 · 10.0 — 컵 경기도 세요
     const act = S.activity;
     if (act) {
       act.goals = (act.goals || 0) + info.myGoals;
@@ -2313,6 +2358,8 @@ window.WingerCareer = (() => {
      * 개막 전인데 득점왕이 있는 표가 뜹니다(제보로 확인했어요 — 69명 중 12명에게
      * 지난 시즌 출전 기록이 남아 있었습니다).
      * 부문상 판정(바로 위)이 끝난 다음이라 상은 그대로 나가요. */
+    // 🔥 한 끗 레이스 — 표를 비우기 **전에** 최종 순위·1위와의 차이를 적어 둬요(결말은 결산 끝에 수상 표로)
+    if (window.WingerStory) WingerStory.preReset();
     if (window.WingerSquad) WingerSquad.resetSeason();
     /* 🏅 발롱도르 — 리그 최고를 넘어 세계 최고예요.
      * 리그MVP를 받은 시즌 중에서도, 리그격(prestige)을 곱한 값이 문턱을 넘어야 해요.
@@ -2415,6 +2462,10 @@ window.WingerCareer = (() => {
     S.money = (S.money || 0) + income;
     S.activity = null;
     S.pendingShow = false;
+    /* 🎲 결산 — 걸린 약속은 없던 일 · 열린 이야기는 결말로 · 🏅 업적 판정. 결산 화면(yearReport)이
+     * 이 상태를 읽어 한 줄씩 그려요. 월드컵이 먼저 끝난 뒤라 대회 기록도 여기서 봐요. */
+    if (window.WingerEvents) WingerEvents.yearEnd();
+    if (window.WingerAch) WingerAch.announce(WingerAch.check("season"));
     save();
     // 결산이 끝난 뒤에 올려요. save()보다 먼저 부르면 collect()가 **지난 시즌** 상태를
     // 담아 올리고 dirty=0 · 새 도장까지 찍어요. 바로 뒤 save()가 dirty를 다시 세워도
@@ -2552,6 +2603,16 @@ window.WingerCareer = (() => {
     return "혹독한 시즌…";
   }
 
+  /* 🏅 결산 한 줄 — 이 시즌에 딴 업적(희귀도 표시). 옛 세이브의 조용한 소급은 개수만 한 줄로 */
+  function achLine(season) {
+    if (!window.WingerAch || !S.ach) return "";
+    const got = Object.entries(S.ach).filter(([, v]) => v && v.y === season);
+    const late = got.filter(([, v]) => v.late).length;
+    const now = got.filter(([, v]) => !v.late).map(([id]) => WingerAch.LIST.find((a) => a.id === id)).filter(Boolean);
+    return (now.length ? `<div class="hint ach-season">🏅 이번 시즌 업적 — ${now.map((a) => `${WingerAch.TIER_ICON[a.tier]} ${a.name}`).join(" · ")}</div>` : "")
+      + (late ? `<div class="hint ach-season">🏅 지난 기록으로 업적 ${late}개를 채웠어요</div>` : "");
+  }
+
   function yearReport() {
     const y = S.career.years[S.career.years.length - 1];
     // 그릴 때만 소속을 메운 사본을 써요 — 세이브(S.career.years)는 그대로 둬요.
@@ -2561,6 +2622,8 @@ window.WingerCareer = (() => {
     ).join("");
     const forcedRetire = S.proYear >= CAREER_MAX;
     const cr = S.career;
+    // 🔢 🕯️ 결말 화면의 「선배 번호 물려받기」 — 그 시즌 결말이 있고 내 번호와 다를 때만(story.js inheritNo)
+    const inh = window.WingerStory ? WingerStory.inheritNo(y.y) : null;
     $("career-title").textContent = `📊 ${y.y}시즌 결산`;
     $("career-card").innerHTML = `
       <div class="draft-emoji">⚽</div>
@@ -2594,6 +2657,10 @@ window.WingerCareer = (() => {
           조용히 바뀌어서 "언제 사람이 바뀌었지?"가 됩니다. */
         (window.WingerSquad && WingerSquad.newsLine())
           ? `<div class="hint squad-news">${WingerSquad.newsLine()}</div>` : ""}
+      ${/* 📖 이 시즌에 닫힌 이야기 — 결말 이름으로 한 줄씩(흐지부지 포함) */
+        (window.WingerStory ? WingerStory.lines(y.y) : []).map((l) => `<div class="hint story-end">📖 ${esc(l)}</div>`).join("")}
+      ${inh ? `<div class="hint story-end"><button type="button" class="mini-btn" id="btn-senior-no">🔢 ${esc(inh.mate)} 선배의 #${inh.no} 물려받기</button></div>` : ""}
+      ${achLine(y.y)}
       ${moveNote ? `<div class="hint learn">${moveNote}</div>` : ""}
       ${/* 🎖️ 이 시즌에 받은 칭호 — 다음 시즌 경기에 붙어요. 결산에서 보여줘야
           "이번 시즌을 잘 치르면 다음 시즌이 편해진다"가 눈에 들어와요. */
@@ -2611,6 +2678,17 @@ window.WingerCareer = (() => {
           : "다음 시즌도 계속 뛸 수 있어요!"}
       </div>`;
     moveNote = null;   // 한 번만 보여줘요 — 다음에 결산을 열면 안 뜹니다
+    /* 효과 0 — S.no만 바뀌어요. 저장은 setNo 경로 그대로(1~99 정수 검증) */
+    const sn = $("btn-senior-no");
+    if (sn && inh) {
+      sn.onclick = () => {
+        if (!setNo(inh.no)) return;
+        sn.disabled = true;
+        sn.textContent = `✅ 이제 #${inh.no} — ${inh.mate} 선배의 번호를 달고 뛰어요`;
+        proLog(`🔢 #${inh.no} — ${inh.mate} 선배의 번호를 물려받았어요`);
+        queueFx([["flash", `🔢 #${inh.no}`]]);
+      };
+    }
     const act = $("career-actions");
     act.innerHTML = "";
     if (!forcedRetire) {
@@ -2946,7 +3024,8 @@ window.WingerCareer = (() => {
     S.leagueSince = S.proYear;               // 이적으로 리그가 바뀌어도 정착 기간을 새로 세요
     S.money = (S.money || 0) + (bonus || 0);
     if (!Array.isArray(S.moves)) S.moves = [];
-    S.moves.push({ y: S.proYear, from, to: club.name, fromLg: prevLeague, toLg: league.id });
+    /* fee — 계약금(새 이적부터). 💼 수수료 이벤트와 필름의 「계약금 N」이 읽어요. 옛 항목엔 없어요 → 필름은 null */
+    S.moves.push({ y: S.proYear, from, to: club.name, fromLg: prevLeague, toLg: league.id, fee: bonus || 0 });
     proLog(`💼 ${from} → ${club.name} 이적! (${league.name} · ${feeText(bonus || 0, prevBack)})`);
     /* 🎒 적응 — S.league을 새 리그로 바꾼 **뒤에** 굴려요. atCap·statCap이
      * 초월 단계를 보는데 그건 소속과 무관하지만, 문구에 새 리그 이름이 들어가요. */
@@ -2956,6 +3035,8 @@ window.WingerCareer = (() => {
       queueFx([["flash", learned.replace(/^🎒 /, "🎒 ")]]);
     }
     if (window.Stats) Stats.log("transfer", { y: S.proYear, from, to: club.name, fromLg: prevLeague, toLg: league.id, learn: learned ? 1 : 0 });
+    // 📖 🌍 낯선 땅 — 나라가 바뀐 이적이면 열어요(1장은 다음 시즌 준비 3턴 뒤)
+    if (window.WingerStory) WingerStory.onMove(prevLeague, league);
     save();
     return learned;
   }
@@ -3060,6 +3141,9 @@ window.WingerCareer = (() => {
     return Math.max(...ps);
   }
 
+  /* 🧮 커리어 점수 — **내역과 점수가 이 함수 하나에서** 나와요(careerScoreParts가 내역을 펼쳐요).
+   * ⚠️ 칸의 순서가 곧 더하는 순서예요. 옛 식(한 줄 합)과 **같은 순서로** 더해야 소수점까지 같은 값이 나와요 —
+   * 순서를 바꾸면 반올림 경계에서 명전 점수가 1점씩 움직일 수 있어요. 칸을 더하거나 빼면 명전 정렬이 바뀌어요. */
   function careerScore() {
     const c = S.career || { seasons: [], mvp: 0, gg: 0, roy: 0, rings: 0, warSum: 0 };
     /* 가중 카운터가 없는 옛 세이브는 가중 없이(1부 기준) 계산해요. 마이그레이션하지
@@ -3068,15 +3152,38 @@ window.WingerCareer = (() => {
     const bon = c.bonsangW != null ? c.bonsangW : (c.bonsang || 0);
     const ring = c.ringW != null ? c.ringW : (S.trophies ? S.trophies.length : 0);
     const W = SCORE_W;
-    return Math.round(
-      (c.ballon || 0) * W.ballon + dae * W.dae + bon * W.bon + (c.rookie || 0) * W.rookie +
-      ring * W.ring + (c.wins || 0) * W.mom + (S.fandom || 0) * W.fan +
-      (c.years ? c.years.length : 0) * W.year +
-      Math.max(0, peakPrestige() - 1) * W.peak +
-      (S.center ? W.center : 0) + transTotal() * W.trans +
-      (c.wcWin || 0) * W.wc + (c.wcBall || 0) * W.wcBall + (c.wcBoot || 0) * W.wcBoot
-      + (c.wcWall || 0) * W.wcWall
-    );
+    const peak = peakPrestige();
+    const years = c.years ? c.years.length : 0;
+    const parts = [
+      { k: "ballon", label: "🏅 발롱도르", n: c.ballon || 0, v: (c.ballon || 0) * W.ballon },
+      { k: "dae", label: "🏆 리그MVP(리그 격 가중)", n: c.daesang || 0, v: dae * W.dae },
+      { k: "bon", label: "🎖️ 베스트11(리그 격 가중)", n: c.bonsang || 0, v: bon * W.bon },
+      { k: "rookie", label: "🌟 신인왕", n: c.rookie || 0, v: (c.rookie || 0) * W.rookie },
+      { k: "ring", label: "🏆 우승(리그 격 가중)", n: S.trophies ? S.trophies.length : 0, v: ring * W.ring },
+      { k: "mom", label: "🏅 MOM", n: c.wins || 0, v: (c.wins || 0) * W.mom },
+      { k: "fan", label: "⭐ 명성", n: Math.round(S.fandom || 0), v: (S.fandom || 0) * W.fan },
+      { k: "year", label: "📅 뛴 시즌", n: years, v: years * W.year },
+      { k: "peak", label: "⛰️ 가장 높이 오른 리그", n: peak, v: Math.max(0, peak - 1) * W.peak },
+      { k: "center", label: "🎗️ 주장", n: S.center ? 1 : 0, v: S.center ? W.center : 0 },
+      { k: "trans", label: "🌠 초월", n: transTotal(), v: transTotal() * W.trans },
+      { k: "wc", label: "🌏 월드컵 우승", n: c.wcWin || 0, v: (c.wcWin || 0) * W.wc },
+      { k: "wcBall", label: "🏅 골든볼", n: c.wcBall || 0, v: (c.wcBall || 0) * W.wcBall },
+      { k: "wcBoot", label: "🥇 월드컵 골든부츠", n: c.wcBoot || 0, v: (c.wcBoot || 0) * W.wcBoot },
+      { k: "wcWall", label: "🛡️ 골든월", n: c.wcWall || 0, v: (c.wcWall || 0) * W.wcWall },
+    ];
+    careerScore.parts = parts;   // careerScoreParts가 읽어요 — 같은 계산을 두 번 적지 않게
+    return Math.round(parts.reduce((a, p) => a + p.v, 0));
+  }
+  /* 🧮 점수의 내역 — 칸마다 정수로 나누되 **합이 점수와 정확히 같게**(반올림 나머지가 큰 칸부터 1점씩).
+   * 보이는 칸을 더하면 보이는 점수가 돼요. 기여가 0인 칸은 빼요(있는 만큼만). */
+  function careerScoreParts() {
+    const total = careerScore();
+    const raw = careerScore.parts;
+    const out = raw.map((p) => ({ k: p.k, label: p.label, n: p.n, v: Math.floor(p.v) }));
+    let left = total - out.reduce((a, p) => a + p.v, 0);
+    const order = raw.map((p, i) => [p.v - Math.floor(p.v), i]).sort((a, b) => b[0] - a[0]);
+    for (let j = 0; left > 0 && j < order.length; j++, left--) out[order[j][1]].v += 1;
+    return out.filter((p) => p.v !== 0);
   }
 
   /* 🏛️ 명예의 전당에 이미 올라간 기록은 **옛 눈금**으로 매겨졌어요.
@@ -3158,6 +3265,9 @@ window.WingerCareer = (() => {
       `⚠️ 명예의 전당에는 남지 않아요. 기록을 남기려면 '은퇴'를 선택하세요.\n\n진행할까요?`
     )) return;
     saveLegacy({ pts: nextPts, gen: nextGen });
+    // 📖 열린 이야기는 흐지부지로 닫아요(방어 — 🔥은 결말 없이 없어져요) · 🏅 환생 판정(도감 장부에는 남아요)
+    if (window.WingerStory) WingerStory.closeAll();
+    if (window.WingerAch) WingerAch.check("rebirth");
     if (window.Stats) Stats.log("rebirth", { gen: nextGen, pts: nextPts, score: sc });
     clearSave();
     if (window.Cloud) Cloud.mark();
@@ -3251,6 +3361,10 @@ window.WingerCareer = (() => {
     .slice(0, WORD_MAX);
 
   function enshrine() {
+    // 📖 열린 이야기는 흐지부지로 닫아요(방어 — 🔥은 결말 없이 없어져요)
+    if (window.WingerStory) WingerStory.closeAll();
+    // 🏅 은퇴 판정 — 등급 업적(🐐·🌍)이 여기서 잡혀요. S가 살아 있을 때(clearSave 전) 해야 해요
+    if (window.WingerAch) WingerAch.check("retire");
     const c = S.career || { years: [], wins: 0, daesang: 0, bonsang: 0, rookie: 0 };
     const score = careerScore();
     const moves = moveLog(S);   // S를 비우기 전에 뽑아 둬요
@@ -3297,6 +3411,18 @@ window.WingerCareer = (() => {
       wcBall: c.wcBall || 0, wcBoot: c.wcBoot || 0, wcWall: c.wcWall || 0,
       nextGrade: nextGrade(score),
     };
+    /* 🎬 명전 요약 키 — 필름 전체는 안 실어요(목록 다운로드가 무거워져요). **한 번의 INSERT에 같이** 올라가요.
+     * 옛 항목엔 없는 칸이라 그리는 쪽이 없으면 안 그려요. rep는 기본값(가장 드문 업적) — 필름 마지막 장에서 바꿀 수 있어요 */
+    if (validNo(S.no)) entry.no = S.no;   // 남의 화면에 그려지는 값이라 정수만 올려요
+    if (window.WingerAch) {
+      const rep = WingerAch.repOf(S);
+      if (rep) entry.rep = rep;
+      entry.achN = Object.keys(S.ach || {}).length;
+      entry.style = WingerAch.style(S).k;
+      entry.best = WingerAch.bestMove(S);
+    }
+    const home = homeClub(S);
+    if (home) entry.home = home;
     /* ⚠️ **바로 안 올려요.** hof 표에는 UPDATE 정책이 없어서(읽기·넣기만 열려 있어요)
      * 같은 id로 다시 올려도 **덮어쓸 수가 없습니다.** 아무나 남의 헌액을 고칠 수 있게
      * 되는 게 싫어서 일부러 그렇게 둔 거예요. 그래서 🖊️ 한마디를 받고 **한 번에**
@@ -3313,6 +3439,10 @@ window.WingerCareer = (() => {
     const slot = twin ? hof.indexOf(twin) : -1;
     if (slot >= 0) hof[slot] = entry; else hof.push(entry);
     saveHof(hof);
+    /* 🎬 은퇴 필름 — S가 살아 있을 때 만들어 이 기기에 둬요(최근 20편). id는 명전 항목과 같아요(쌍둥이면 그 id) */
+    const film = window.WingerFilm && WingerFilm.build ? WingerFilm.build(S, entry) : null;
+    if (film) WingerFilm.put(film);
+    const filmOn = !!(film && window.WingerScenes && WingerScenes.openFilm);
     if (window.Stats) Stats.log("retire", {
       years: entry.seasons, wins: entry.wins, score: entry.score,
       // "어디까지 갔나" 분포를 보려면 마지막 리그와 트로피 수가 있어야 해요
@@ -3346,34 +3476,38 @@ window.WingerCareer = (() => {
     const act = $("career-actions");
     act.innerHTML = "";
     /* 🖊️ 한마디는 **카드를 보고 나서** 씁니다 — 자기 커리어를 읽은 뒤라야 할 말이 생겨요.
-     * 그래서 헌액은 이미 끝나 있고, 남기면 같은 id로 다시 올려 덮어씁니다(upsert). */
-    const wordBox = document.createElement("div");
-    wordBox.className = "hof-word-box";
-    wordBox.innerHTML = `
-      <div class="hof-word-title">🖊️ 마지막으로 한마디 남기고 갈까요?</div>
-      <div class="hof-word-sub">명예의 전당 카드에 함께 남아요 · 안 써도 괜찮아요</div>
-      <input id="hof-word" type="text" maxlength="${WORD_MAX}" placeholder="예) 후회 없이 뛰었습니다" />
-      <button class="mini-btn" id="btn-hof-word">남기기</button>
-      <div class="hof-word-done" id="hof-word-done"></div>`;
-    act.appendChild(wordBox);
-    const wordInput = $("hof-word");
-    const wordDone = $("hof-word-done");
-    $("btn-hof-word").onclick = () => {
-      const word = cleanWord(wordInput.value);
-      if (!word) { wordDone.textContent = "한 글자라도 적어 주세요."; return; }
-      entry.word = word;
-      /* 로컬 기록에도 같이 넣어요 — 명예의 전당은 로컬과 원격을 겹쳐 보여줘서,
-       * 한쪽에만 넣으면 내 화면과 남의 화면이 다른 말을 합니다. */
-      const list = loadHof();
-      const at = list.findIndex((x) => x.id === entry.id);
-      if (at >= 0) list[at] = entry; else list.push(entry);
-      saveHof(list);
-      flushHof();                       // 한마디까지 담아서 **한 번에** 올라가요
-      wordInput.value = word;
-      wordInput.disabled = true;
-      $("btn-hof-word").disabled = true;
-      wordDone.textContent = `“${word}” — 카드에 남겼어요`;
-    };
+     * 그래서 헌액은 이미 끝나 있고, 남기면 같은 id로 다시 올려 덮어씁니다(upsert).
+     * 🎬 필름이 뜨면 한마디·대표 업적은 **필름 마지막 장**에서 남겨요(WingerCareer.leave) — 여기 칸은 안 그려요.
+     * 같은 id(#hof-word)의 칸이 두 개가 되면 한쪽이 옛 항목으로 덮어써 올릴 수 없는 걸 계속 두드려요. */
+    if (!filmOn) {
+      const wordBox = document.createElement("div");
+      wordBox.className = "hof-word-box";
+      wordBox.innerHTML = `
+        <div class="hof-word-title">🖊️ 마지막으로 한마디 남기고 갈까요?</div>
+        <div class="hof-word-sub">명예의 전당 카드에 함께 남아요 · 안 써도 괜찮아요</div>
+        <input id="hof-word" type="text" maxlength="${WORD_MAX}" placeholder="예) 후회 없이 뛰었습니다" />
+        <button class="mini-btn" id="btn-hof-word">남기기</button>
+        <div class="hof-word-done" id="hof-word-done"></div>`;
+      act.appendChild(wordBox);
+      const wordInput = $("hof-word");
+      const wordDone = $("hof-word-done");
+      $("btn-hof-word").onclick = () => {
+        const word = cleanWord(wordInput.value);
+        if (!word) { wordDone.textContent = "한 글자라도 적어 주세요."; return; }
+        entry.word = word;
+        /* 로컬 기록에도 같이 넣어요 — 명예의 전당은 로컬과 원격을 겹쳐 보여줘서,
+         * 한쪽에만 넣으면 내 화면과 남의 화면이 다른 말을 합니다. */
+        const list = loadHof();
+        const at = list.findIndex((x) => x.id === entry.id);
+        if (at >= 0) list[at] = entry; else list.push(entry);
+        saveHof(list);
+        flushHof();                       // 한마디까지 담아서 **한 번에** 올라가요
+        wordInput.value = word;
+        wordInput.disabled = true;
+        $("btn-hof-word").disabled = true;
+        wordDone.textContent = `“${word}” — 카드에 남겼어요`;
+      };
+    }
     const hofBtn = document.createElement("button");
     hofBtn.className = "btn btn-primary";
     hofBtn.textContent = "🏛️ 명예의 전당 보기";
@@ -3387,7 +3521,56 @@ window.WingerCareer = (() => {
      * 못 올려도 `sent: false`로 남아서 다음에 명예의 전당을 열 때 다시 갑니다. */
     again.onclick = () => { flushHof().finally(() => location.reload()); };
     act.appendChild(again);
+    /* 🎬 필름으로 이어져요 — 마지막 장에 대표 업적 · 한마디 · 📤 공유 · 🏛️ 명전 · 🔁 새 선수가 있어요.
+     * 필름을 못 열면(화면 모듈 오류) 은퇴식 화면이 그대로 남아요 — 남기지 않으면 기본값으로 올라가요 */
+    if (filmOn) {
+      /* sent — 쌍둥이 헌액으로 이미 올라간 항목이면 true(처음부터 잠근 채 그릴 수 있게 — hof 표는 덮어쓸 수 없어요) */
+      try { WingerScenes.openFilm(film, { final: true, entryId: entry.id, sent: entry.sent !== false }); return; } catch (err) { console.error(err); }
+    }
     show("screen-career");
+  }
+
+  /* 가장 오래 뛴 클럽 — 명전 요약 키 `home`(같으면 먼저 뛴 곳). 옛 시즌은 fillClubs로 메워 셈해요 */
+  function homeClub(st) {
+    const per = {};
+    for (const y of fillClubs(((st.career && st.career.years) || []), st)) {
+      if (y && y.club != null) per[y.club] = (per[y.club] || 0) + 1;
+    }
+    let best = null;
+    for (const [club, seasons] of Object.entries(per)) if (!best || seasons > best.seasons) best = { club, seasons };
+    return best;
+  }
+
+  /* 🎬 필름 마지막 장의 [남기기] — 대표 업적과 한마디를 **아직 안 올린**(sent === false) 항목에만 넣고 한 번에 올려요.
+   * hof 표는 UPDATE가 없어서 올라간 뒤에는 못 바꿔요. 대표 업적은 이 커리어에서 딴 것만(필름의 ach). */
+  async function leave(entryId, opts) {
+    const list = loadHof();
+    const e = list.find((x) => x && x.game === "soccer" && x.id === entryId);
+    if (!e || e.sent !== false) return false;
+    const o = opts || {};
+    const film = window.WingerFilm ? WingerFilm.get(entryId) : null;
+    const earned = film && Array.isArray(film.ach) ? film.ach.map((a) => a.id) : null;
+    if (o.rep != null && window.WingerAch && WingerAch.tierOf(o.rep) && (!earned || earned.includes(o.rep))) e.rep = o.rep;
+    const word = cleanWord(o.word);
+    if (word) e.word = word;
+    saveHof(list);
+    if (film) {
+      film.head = Object.assign({}, film.head, { rep: e.rep || null });
+      film.word = e.word || null;
+      WingerFilm.put(film);
+    }
+    await flushHof();                     // 대표 업적·한마디까지 담아서 **한 번에** 올라가요
+    return true;
+  }
+
+  // 🔢 등번호 — 포지션별 추천 셋(첫 번호가 건너뛰기 기본값) · 1~99 정수만
+  const NO_SUGGEST = { fw: [9, 19, 20], wg: [7, 11, 17], mf: [8, 10, 6], df: [4, 5, 3] };
+  const noSuggest = (pos) => (NO_SUGGEST[pos] || NO_SUGGEST.fw).slice();
+  function setNo(n) {
+    if (!S || !validNo(n)) return false;
+    S.no = n;
+    save();
+    return true;
   }
 
   async function showHof() {
@@ -3492,7 +3675,9 @@ window.WingerCareer = (() => {
       div.innerHTML = `
         <div class="hof-face-emoji">⚽</div>
         <div class="hof-info">
-          <div class="hof-name">${i + 1}. ${e.gen > 1 ? `<span class="hof-gen">${e.gen}세</span> ` : ""}${esc(e.name)} <span class="hof-grade">${esc(e.grade)}</span></div>
+          <div class="hof-name">${i + 1}. ${e.gen > 1 ? `<span class="hof-gen">${e.gen}세</span> ` : ""}${esc(e.name)}${
+            /* 🏅 대표 업적 — 업적 표에 있는 id만(모르는 id·옛 항목은 안 그려요) */
+            e.rep && window.WingerScenes && WingerScenes.badge ? ` ${WingerScenes.badge(String(e.rep))}` : ""} <span class="hof-grade">${esc(e.grade)}</span></div>
           ${esc(e.team)} · ${e.seasons}시즌${e.goals != null ? ` · ⚽${e.goals} 🅰️${e.assists || 0}${e.defense != null ? ` 🛡️${e.defense}` : ""}` : ""} · 🏅MOM ${e.wins} · 🏆${e.daesang + e.bonsang} · 점수 ${hofScore(e)}
           ${/* 🌍 밟아 온 리그 — 옛 항목에는 없어요(읽는 쪽에서 건너뜁니다). */
             e.leagues ? `<div class="hof-lg">🌍 ${esc(e.leagues)}</div>` : ""}
@@ -3543,12 +3728,21 @@ window.WingerCareer = (() => {
       e.wcBoot ? `🥇 골든부츠 ${e.wcBoot}` : "",
       e.wcWall ? `🛡️ 골든월 ${e.wcWall}` : "",
     ].filter(Boolean).join(" · ");
+    /* 🎬 새 키 — 옛 항목엔 없어요(없으면 줄을 안 그려요). 🏅 대표 업적은 업적 표에 있는 id만 그려요(모르는 id면 없음) */
+    const A = window.WingerAch;
+    const repBadge = e.rep && window.WingerScenes && WingerScenes.badge ? WingerScenes.badge(String(e.rep)) : "";
+    const styleName = A && typeof e.style === "string" && Object.prototype.hasOwnProperty.call(A.STYLES, e.style) ? A.STYLES[e.style] : "";
+    const best = e.best && typeof e.best === "object" && e.best.name ? `${e.best.name} · 성공 확률 ${e.best.pct}%${e.best.y ? ` (${e.best.y}시즌)` : ""}` : "";
+    const home = e.home && typeof e.home === "object" && e.home.club ? `${e.home.club} · ${e.home.seasons}시즌` : "";
+    const film = window.WingerFilm && WingerFilm.get ? WingerFilm.get(e.id) : null;   // 이 기기에 그 필름이 있을 때만
+    const canShare = mine && window.WingerFilm && WingerFilm.share;
     const wrap = document.createElement("div");
     wrap.className = "av-overlay hof-overlay";
     wrap.innerHTML = `<div class="av-modal hofd-modal">
       <div class="hofd-head">
         <div class="hofd-emoji">⚽</div>
-        <div class="hofd-name">${e.gen > 1 ? `<span class="hof-gen">${e.gen}세</span> ` : ""}${esc(e.name)}${mine ? ` <span class="hofd-me">내 선수</span>` : ""}</div>
+        <div class="hofd-name">${e.gen > 1 ? `<span class="hof-gen">${e.gen}세</span> ` : ""}${esc(e.name)}${e.no ? ` <span class="hofd-no">#${esc(e.no)}</span>` : ""}${mine ? ` <span class="hofd-me">내 선수</span>` : ""}</div>
+        ${repBadge ? `<div class="hofd-rep">${repBadge}</div>` : ""}
         <div class="hofd-grade">${esc(e.grade)}</div>
         <div class="hofd-rank">${hofTab === "all" ? "전체" : hofTabs().find((t) => t.key === hofTab).label} ${rank}위 · 커리어 점수 ${hofScore(e)}</div>
       </div>
@@ -3566,15 +3760,29 @@ window.WingerCareer = (() => {
         ${row("🏆 수상", awards)}
         ${row("🌏 월드컵", wc)}
         ${row("🔮 초월", e.trans ? `${e.trans}회` : "")}
+        ${row("🏠 가장 오래 뛴 클럽", home)}
+        ${row("🧭 플레이 성향", styleName)}
+        ${row("🎯 최고의 한 수", best)}
+        ${row("🏅 딴 업적", e.achN ? `${e.achN}개` : "")}
         ${row("🗓️ 헌액", hofDateText(e))}
         ${/* 🖊️ 한마디 — 없는 항목이 훨씬 많아요(나중에 생긴 칸이라). 없으면 줄을 안 그려요. */
           e.word ? `<div class="hofd-word">🖊️ “${esc(e.word)}”</div>` : ""}
       </div>
-      <div class="av-actions"><button class="btn btn-primary" id="btn-hofd-close">닫기</button></div>
+      <div class="av-actions">
+        ${film && window.WingerScenes && WingerScenes.openFilm ? `<button class="btn btn-ghost" id="btn-hofd-film">🎬 필름</button>` : ""}
+        ${canShare ? `<button class="btn btn-ghost" id="btn-hofd-share">📤 공유 이미지</button>` : ""}
+        <button class="btn btn-primary" id="btn-hofd-close">닫기</button>
+      </div>
     </div>`;
     wrap.addEventListener("click", (ev) => { if (ev.target === wrap) wrap.remove(); });
     document.body.appendChild(wrap);
     document.getElementById("btn-hofd-close").onclick = () => wrap.remove();
+    const fb = document.getElementById("btn-hofd-film");
+    if (fb) fb.onclick = () => WingerScenes.openFilm(film, { final: false });
+    /* 📤 내 항목 — 이 기기에 필름이 있으면 필름으로, 없으면 명전 요약으로 그려요 */
+    const sb = document.getElementById("btn-hofd-share");
+    if (sb && WingerFilm.prepare) WingerFilm.prepare(film || e);   // 미리 구워 둬요 — iOS 사파리는 기다린 뒤의 공유를 제스처로 안 쳐 줘요
+    if (sb) sb.onclick = () => { sb.disabled = true; Promise.resolve(WingerFilm.share(film || e)).catch(() => {}).then(() => { sb.disabled = false; }); };
   }
 
   // ---------- 랜덤 매칭 (공용 ../match.js — Supabase 연동) ----------
@@ -3812,7 +4020,11 @@ window.WingerCareer = (() => {
     },
     transferOffers,
     moveToClub,
+    queueFx,         // 🎲 이벤트 결과 연출도 같은 줄에 서요(수상·이적 연출과 안 겹치게)
+    leave, noSuggest, setNo,   // 🎬 필름 마지막 장의 [남기기] · 🔢 등번호
     _t: {
+      proLog, seasonsAtClub, lastHype, WEEKS_PER_CB,   // 🎲 events.js가 뜨는 조건·로그에 써요
+      CAREER_MAX, careerScoreParts, gradeOfScore,      // 🏅 achieve.js · 🎬 film.js
       ratingOf, FAN_CAP, RATING_DIV, POS_AXIS, posAxis, AXIS_K, AXIS_OFF,
       RATE, RATE_RESULT, RATE_CONCEDE, ratingParts, matchRating, ratingWhyHTML,
       RACE_POS, leagueRound, ensureLeagueRecords, raceConceded, mateNames,

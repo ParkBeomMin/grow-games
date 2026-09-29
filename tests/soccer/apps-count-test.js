@@ -75,6 +75,26 @@ const goBtn = () => w.document.querySelector("#pro-actions .go-game");
 const trainBtn = () => Array.from(w.document.querySelectorAll("#pro-actions .action-btn"))
   .filter((b) => !b.disabled && b.dataset.key && !b.classList.contains("awaken-act"))[0];
 
+/* 레이어 치우기 — 있으면 하나 닫고 true.
+ * 🔢 등번호 창: 이 확인용 세이브(soccer-veteran)는 **번호가 없는 옛 세이브가 pre 블록에 서 있는** 모양이라,
+ *    열자마자 등번호 고르기가 떠요(2026-09-29 운영판 고도화 ① 스펙 §5-9 — 설계대로예요). 예전 「첫 버튼을 누른다」는
+ *    추천 번호(고르기만 하고 안 닫는 버튼)를 4,000번 눌러 0라운드로 끝났어요 → **「건너뛰기」로 닫아요**(추천 첫 번호를 달아요)
+ * 🎲 이벤트 창: 결과 창이면 「확인」, 묻는 창이면 확정(없으면 첫 칸) — 출전 수와 상관없는 선택이에요 */
+function closeLayer() {
+  const no = w.document.querySelector(".no-overlay #no-skip");
+  if (no) { no.click(); return true; }
+  const ev = w.document.querySelector(".ev-overlay");
+  if (ev) {
+    const ok = ev.querySelector(".ev-ok");
+    const pick = ok || ev.querySelector(".ev-opt.k-safe:not([disabled])") || ev.querySelector(".ev-opt:not([disabled])");
+    if (pick) { pick.click(); return true; }
+    ev.remove(); return true;
+  }
+  const ov = w.document.querySelector(".av-overlay");
+  if (ov) { const b = ov.querySelector("button:not([disabled])"); if (b) { b.click(); return true; } ov.remove(); return true; }
+  return false;
+}
+
 /* 라운드를 밀어요. **몇 라운드를 쳤는지는 act.week로 셉니다** —
  * 화면 상태로 세려다 한 번에 여러 라운드가 지나가는 걸 못 보고 0으로 셌어요. */
 function playUntil(target) {
@@ -89,8 +109,7 @@ function playUntil(target) {
       n.click(); continue;
     }
     /* 광고·각성 같은 레이어가 뜨면 먼저 치워요 — 안 치우면 그 뒤가 통째로 막혀요 */
-    const ov = w.document.querySelector(".av-overlay");
-    if (ov) { const b = ov.querySelector("button:not([disabled])"); if (b) { b.click(); continue; } ov.remove(); continue; }
+    if (closeLayer()) continue;
     const g = goBtn();
     if (g) { g.click(); continue; }
     const t = trainBtn();
@@ -144,14 +163,36 @@ for (let i = 0; i < 400 && !(active() === "screen-pro" && goBtn()); i++) {
     n.click(); continue;
   }
   if (active() !== "screen-pro") break;
-  const ov = w.document.querySelector(".av-overlay");
-  if (ov) { const b = ov.querySelector("button:not([disabled])"); if (b) { b.click(); continue; } ov.remove(); continue; }
+  if (closeLayer()) continue;
   const t = trainBtn(); if (!t) break; t.click();
 }
-if (active() === "screen-pro" && goBtn()) {
+/* 🎲 **이 자리는 선발로 뛰는 라운드에서만 뜻이 있어요.** 「경기하러 가기」를 눌렀을 때 선발에서 빠지면(🪑 벤치 —
+ * 선발은 그 라운드에 굴려요) benchShow가 곧바로 S.pendingShow = false로 그 라운드를 끝내서, 「나갔다 오면 다시 떠요」가
+ * 성립할 자리 자체가 없어요. 예전엔 벤치를 뽑은 판에서 이 줄이 빨간불이 됐어요 — HEAD에서도 4번 중 1번
+ * (grow-inspector 「커버리지가 난수에 걸림」 — 2026-09-29 inspector가 원인 확인: 확인용 세이브의 컨디션 38 → 선발 보정 −2.2 ·
+ * 보호 로테이션). 그래서 **선발로 뛰는 라운드가 올 때까지** 라운드를 넘겨요(상한 12). 끝내 못 닿으면 빨간불이 아니라 🚧예요 */
+let reentry = null;
+for (let tryRound = 0; tryRound < 12 && !reentry; tryRound++) {
+  for (let i = 0; i < 400 && !(active() === "screen-pro" && goBtn()); i++) {
+    if (active() === "screen-stage") {
+      const n = $("btn-stage-next");
+      const pk = (!n || n.hidden) ? w.document.querySelector("#pk-box button") : null;
+      if (pk) { pk.click(); continue; }
+      if (!n || n.hidden || n.disabled) break;
+      n.click(); continue;
+    }
+    if (active() !== "screen-pro") break;
+    if (closeLayer()) continue;
+    const t = trainBtn(); if (!t) break; t.click();
+  }
+  if (!(active() === "screen-pro" && goBtn())) break;
   const mate0 = mateMax();
   goBtn().click();                       // 경기 화면으로 (여기서 그 라운드 선발이 뽑혀요)
-  const xi0 = (S().activity.xi || []).join(",");
+  if (!S().pendingShow) { console.log(`   🪑 R${round()} 벤치 — 다시 들어갈 라운드가 아니에요, 다음 라운드로`); continue; }
+  reentry = { mate0, xi0: (S().activity.xi || []).join(",") };
+}
+if (reentry) {
+  const { mate0, xi0 } = reentry;
   w.__get('show("screen-pro")');         // 나갔다가
   w.WingerCareer.refreshPro();
   const again = goBtn();
@@ -160,6 +201,8 @@ if (active() === "screen-pro" && goBtn()) {
   console.log(`   다시 들어간 뒤 — 동료 최대 ${mateMax()} (들어가기 전 ${mate0})`);
   check(mateMax() === mate0, `② 다시 들어가도 출전 수가 안 오른다 (${mate0} → ${mateMax()})`);
   check((S().activity.xi || []).join(",") === xi0, "③ 그 라운드 선발도 그대로다");
+} else if (active() === "screen-pro" || active() === "screen-stage") {
+  console.log("🚧 선발로 뛰는 라운드에 12라운드 안에 못 닿았어요 — ②③은 **검증되지 않았어요**(빨간불 아님 · 난수 탓)");
 } else {
   check(false, `경기 직전 상태에 못 닿았어요 (화면 ${active()})`);
 }

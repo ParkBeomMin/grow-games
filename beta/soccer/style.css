@@ -687,3 +687,358 @@ body.fever-on .cloud-toast { top: calc(10px + var(--fever-h, 3.6rem)); }
 button.pf-slot { cursor: pointer; font-family: inherit; }
 .pf-slot.want { border-color: #6ee7a0; color: #6ee7a0; border-style: dashed; }
 .pf-slot.here.want { border-style: solid; }
+
+/* ═══════════════════════════════════════════════════════════════════
+ * 🎬 ① 선택 이벤트 · 🔢 등번호 · 📖 도감 · 🏅 업적 · 🎬 은퇴 필름 · 📤 공유 (scenes.js)
+ *
+ * 규칙 넷 — 이 블록 안에서는 예외 없이 지켜요.
+ *   · 색은 테마 변수만. 희귀도 넷도 아래 :root 변수예요(명전 카드·캔버스도 이 변수를 읽어요)
+ *   · 누르는 칸은 44px 이상(손가락 기준)
+ *   · 색만으로 가르지 않아요 — 희귀도·성공/실패·고른 것에 글자(흔함·✅·✓)를 같이 붙여요
+ *   · 움직임은 transform·opacity만, prefers-reduced-motion에서는 끄고 글자는 그대로 둬요
+ * ═══════════════════════════════════════════════════════════════════ */
+:root {
+  --r1: var(--dim);      /* ⚪ 흔함 */
+  --r2: var(--sky);      /* 🔵 드묾 */
+  --r3: #b48cff;         /* 🟣 귀함 — 각성 버튼과 같은 보라 */
+  --r4: #f2c14e;         /* 🟡 전설 — 월드컵 골드와 같은 금색 */
+}
+/* 화면 읽기 프로그램에만 들려요 */
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+/* 새로 넣은 버튼·접이는 키보드 포커스가 보여야 해요 */
+.ev-opt:focus-visible, .no-pick:focus-visible, .bk-tab:focus-visible, .ach-row:focus-visible,
+.rep-opt:focus-visible, .bk-fold > summary:focus-visible, .film-parts > summary:focus-visible,
+.rep-more > summary:focus-visible, .film-acts .btn:focus-visible, #btn-hof-word:focus-visible,
+.share-acts .btn:focus-visible, .no-acts .btn:focus-visible, .ev-ok:focus-visible {
+  outline: 3px solid var(--sky); outline-offset: 2px;
+}
+.ev-modal:focus, .no-modal:focus, .share-modal:focus, .ev-result:focus { outline: none; }
+/* 한글은 낱말 가운데서 안 끊어요(「해/요」「오/늘」) — 한 낱말이 한 줄보다 길 때만 끊어요 */
+.ev-modal, .no-modal, .bk, .film-ch, .share-modal, .stage-promise { word-break: keep-all; overflow-wrap: anywhere; }
+
+/* ---------- 🎲 선택 이벤트 오버레이 ---------- */
+.ev-modal { width: min(420px, 94vw); text-align: left; }
+.ev-kicker { font-size: .74rem; color: var(--dim); margin-bottom: 2px; }
+.ev-title { font-size: 1.22rem; margin-bottom: 6px; }
+.ev-body { font-size: .9rem; line-height: 1.6; color: var(--text); margin-bottom: 12px; }
+.ev-opts { display: flex; flex-direction: column; gap: 10px; }
+.ev-opt {
+  display: flex; flex-direction: column; gap: 5px; width: 100%; min-height: 48px;
+  padding: 11px 12px; text-align: left; cursor: pointer;
+  background: var(--bg); color: var(--text); border: 2px solid var(--line); border-radius: 14px;
+  font-family: inherit; font-size: .9rem; line-height: 1.45;
+  transition: border-color .12s ease, transform .12s ease;
+}
+.ev-opt:hover { border-color: var(--accent); }
+.ev-opt:active { transform: scale(.985); }
+.ev-opt:disabled { opacity: .55; cursor: default; }
+.ev-opt > span { display: block; }
+.ev-opt .ev-opt-head { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
+.ev-tag {
+  flex-shrink: 0; font-size: .68rem; padding: 1px 7px; border-radius: 99px;
+  border: 1px solid var(--line); color: var(--dim);
+}
+.k-try .ev-tag { border-color: var(--accent); color: var(--accent); }
+.k-promise .ev-tag { border-color: var(--sky); color: var(--sky); }
+.ev-opt-label { font-family: "Jua", sans-serif; font-size: 1.02rem; color: var(--cream); }
+.ev-pct { margin-left: auto; font-size: .8rem; color: var(--dim); white-space: nowrap; }
+.ev-pct b { font-family: "Jua", sans-serif; font-weight: 400; font-size: 1.3rem; color: var(--accent); }
+.ev-parts { font-size: .75rem; color: var(--dim); line-height: 1.5; }
+.ev-cut { color: var(--sky); }
+.ev-cond { font-size: .88rem; color: var(--cream); }
+.ev-opp, .ev-ref { font-size: .78rem; color: var(--sky); }
+.ev-opt .ev-fx, .ev-result .ev-fx { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.ev-fx-k { font-size: .72rem; color: var(--dim); margin-right: 2px; }
+.ev-chip {
+  max-width: 100%; font-size: .75rem; line-height: 1.35; padding: 2px 8px; border-radius: 99px;
+  background: var(--bg2); border: 1px solid var(--line); color: var(--text); overflow-wrap: anywhere;
+}
+.ev-chip.good { border-color: var(--accent); color: var(--accent); }
+.ev-chip.bad { border-color: var(--accent2); color: var(--accent2); }
+.ev-none { font-size: .78rem; color: var(--dim); }
+.ev-foot { font-size: .7rem; color: var(--dim); margin-top: 10px; text-align: center; line-height: 1.55; }
+.ev-err { font-size: .78rem; color: var(--accent2); text-align: center; margin-top: 6px; }
+/* 결과 — 판정 한 줄이 제일 먼저 읽혀야 해요 */
+.ev-result { text-align: center; padding: 4px 0 2px; }
+.ev-chosen { font-size: .78rem; color: var(--dim); }
+/* inline-block — 튀어 오르는 scale이 글자 폭에서만 일어나게. 블록이면 모달 폭째 커져 가로 스크롤이 번쩍여요 */
+.ev-verdict { display: inline-block; font-family: "Jua", sans-serif; font-size: 1.6rem; margin: 6px 0 4px; }
+.ev-verdict.ok { color: var(--accent); }
+.ev-verdict.fail { color: var(--accent2); }
+.ev-verdict.wait { color: var(--sky); font-size: 1.12rem; }
+.ev-verdict.none { color: var(--cream); font-size: 1.2rem; }
+.ev-line { font-size: .88rem; line-height: 1.6; margin-bottom: 6px; }
+.ev-result .ev-fx { justify-content: center; }
+.ev-modal .av-actions .btn, .no-acts .btn, .share-acts .btn { min-height: 48px; }
+@keyframes evIn { from { opacity: 0; transform: translateY(14px) scale(.97); } to { opacity: 1; transform: none; } }
+@keyframes evPop { 0% { opacity: 0; transform: scale(.5); } 55% { opacity: 1; transform: scale(1.12); } 100% { transform: scale(1); } }
+.ev-overlay .ev-modal, .no-overlay .no-modal { animation: evIn .28s ease-out; }
+.ev-verdict { animation: evPop .42s cubic-bezier(.2, 1.4, .4, 1); }
+
+/* 📋 경기 화면 — 이번 경기에 걸린 약속 한 줄(중계 카드 위) */
+.stage-promise {
+  margin: 0 0 8px; padding: 8px 12px; border-radius: 10px;
+  border: 1px dashed var(--sky); background: var(--bg2);
+  color: var(--cream); font-size: .86rem; line-height: 1.5;
+}
+.stage-promise:empty { display: none; }
+
+/* ---------- 🔢 등번호 ---------- */
+.no-modal { width: min(360px, 92vw); }
+.no-kicker { font-size: .72rem; color: var(--dim); }
+.no-sub { font-size: .8rem; color: var(--dim); margin: -4px 0 10px; }
+/* 유니폼 한 벌 — 몸통·소매·목둘레를 CSS로만 그려요(이미지 0장) */
+.no-shirt { position: relative; width: 132px; height: 116px; margin: 2px auto 6px; }
+.no-shirt::before {
+  content: ""; position: absolute; left: 28px; right: 28px; top: 8px; bottom: 0;
+  border-radius: 10px 10px 16px 16px; background: var(--accent);
+}
+.no-shirt::after {
+  content: ""; position: absolute; left: 50%; top: 6px; width: 34px; height: 18px; margin-left: -17px;
+  border-radius: 0 0 18px 18px; background: var(--bg2);
+}
+.no-sl { position: absolute; top: 12px; width: 34px; height: 46px; border-radius: 8px; background: var(--accent); }
+.no-sl.l { left: 8px; transform: rotate(28deg); }
+.no-sl.r { right: 8px; transform: rotate(-28deg); }
+.no-num {
+  position: absolute; left: 0; right: 0; top: 34px; z-index: 1; text-align: center;
+  font-family: "Jua", sans-serif; font-size: 2.7rem; line-height: 1; color: var(--bg);
+}
+@keyframes noFlip { 0% { opacity: 0; transform: scale(.4) rotate(-12deg); } 60% { opacity: 1; transform: scale(1.15); } 100% { transform: none; } }
+.no-num.flip { animation: noFlip .36s cubic-bezier(.2, 1.3, .4, 1); }
+.no-now { text-align: center; font-size: .82rem; color: var(--dim); margin-bottom: 8px; }
+.no-now b { color: var(--cream); font-weight: 600; }
+.no-sug { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-bottom: 10px; }
+.no-pick {
+  min-width: 56px; min-height: 48px; padding: 0 10px; border-radius: 12px; cursor: pointer;
+  background: var(--bg); border: 2px solid var(--line); color: var(--cream);
+  font-family: "Jua", sans-serif; font-size: 1.3rem;
+}
+.no-pick[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); background: var(--field); }
+.no-pick[aria-pressed="true"]::before { content: "✓ "; font-size: .9rem; }
+.no-own { display: flex; align-items: center; justify-content: center; gap: 8px; font-size: .84rem; color: var(--dim); }
+.no-own input {
+  width: 5.5em; min-height: 44px; padding: 0 8px; border-radius: 10px; text-align: center;
+  background: var(--bg); border: 2px solid var(--line); color: var(--text); font-size: 1.1rem; font-family: inherit;
+}
+.no-err { min-height: 1.2em; font-size: .78rem; color: var(--accent2); text-align: center; margin: 4px 0; }
+.no-note { font-size: .72rem; color: var(--dim); text-align: center; margin-top: 6px; }
+
+/* ---------- 📖 도감 · 🏅 업적 ---------- */
+/* 📊 기록 탭이 넷(커리어·월드컵·도감·업적)으로 늘어요 — 폭이 모자라면 가로로 넘기고, 칸은 손가락만큼 */
+.rec-tabs { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.rec-tab { flex: 1 0 auto; min-height: 44px; white-space: nowrap; }
+.bk { text-align: left; line-height: 1.5; }
+/* 탭 넷은 2×2 — 한 줄에 두면 320·390폭 모두에서 넷째(📐 판정 규칙)가 잘려 보여요(헤드리스 스크린샷) */
+.bk-tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin-bottom: 10px; }
+.bk-tab {
+  min-height: 44px; padding: 0 8px; border-radius: 10px; cursor: pointer;
+  background: var(--bg2); border: 1px solid var(--line); color: var(--dim);
+  font-family: "Jua", sans-serif; font-size: .86rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.bk-tab.on { background: var(--field); border-color: var(--accent); color: var(--accent); }
+.bk-prog { margin: 4px 0 8px; font-size: .84rem; color: var(--text); }
+.bk-prog b { font-family: "Jua", sans-serif; font-weight: 400; font-size: 1.1rem; color: var(--accent); }
+.bk-bar { height: 8px; border-radius: 4px; background: var(--bg); overflow: hidden; margin-top: 4px; }
+.bk-bar > i { display: block; height: 100%; background: var(--accent); }
+.bk-tiers { font-size: .74rem; color: var(--dim); margin-bottom: 6px; }
+.bk-group { margin: 10px 0 12px; }
+.bk-h {
+  display: flex; align-items: center; gap: 6px; margin-bottom: 6px;
+  font-family: "Jua", sans-serif; font-weight: 400; font-size: .98rem; color: var(--cream);
+}
+.bk-count { margin-left: auto; font-family: "Gowun Dodum", sans-serif; font-size: .74rem; color: var(--dim); }
+.bk-fold > summary { min-height: 44px; cursor: pointer; list-style: none; padding: 0 4px; border-bottom: 1px solid var(--line); }
+.bk-fold > summary::-webkit-details-marker { display: none; }
+.bk-fold > summary::before { content: "▸"; color: var(--dim); font-size: .8rem; }
+.bk-fold[open] > summary::before { content: "▾"; }
+.bk-fold[open] > summary { margin-bottom: 8px; }
+.bk-list { list-style: none; display: grid; gap: 6px; }
+.bk-item {
+  display: grid; grid-template-columns: 1.8em minmax(0, 1fr); column-gap: 6px; align-items: baseline;
+  padding: 8px 10px; border-radius: 10px; background: var(--bg2); border: 1px solid var(--line);
+}
+.bk-item .bk-emo { grid-row: span 2; font-size: 1.2rem; align-self: center; }
+.bk-item .bk-name { font-size: .92rem; color: var(--cream); overflow-wrap: anywhere; }
+.bk-item .bk-meta { font-size: .72rem; color: var(--dim); }
+.bk-item.unseen { border-style: dashed; }
+.bk-item.unseen .bk-name { color: var(--dim); }
+.bk-open { font-size: .8rem; color: var(--sky); margin-bottom: 8px; }
+.bk-left { font-size: .74rem; color: var(--dim); margin-top: 4px; }
+.bk-rules { padding-left: 1.1em; font-size: .86rem; line-height: 1.7; color: var(--text); }
+.bk-rules li { margin-bottom: 8px; }
+.bk-rules b { color: var(--accent); font-weight: 600; }
+.bk-empty { color: var(--dim); font-size: .86rem; text-align: center; padding: 14px 0; }
+/* 업적 한 줄 — 딴 것은 테두리 실선 + 「✔ 땄어요」, 못 딴 것은 점선 + 「아직」 */
+.ach-row {
+  display: grid; gap: 3px; width: 100%; padding: 9px 10px; border-radius: 10px;
+  background: var(--bg2); border: 1px solid var(--line); color: var(--text);
+  text-align: left; font-family: inherit; font-size: .86rem; line-height: 1.45;
+}
+li.ach-row:not(.got) { border-style: dashed; }
+li.ach-row:not(.got) .ach-name { color: var(--dim); }
+button.ach-row { cursor: pointer; min-height: 48px; }
+button.ach-row > span { display: block; }
+button.ach-row.rep { border: 2px solid var(--accent); }
+.ach-row .ach-top { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.ach-name { font-family: "Jua", sans-serif; color: var(--cream); font-size: .95rem; overflow-wrap: anywhere; }
+.ach-got { margin-left: auto; font-size: .7rem; color: var(--accent); white-space: nowrap; }
+.ach-no { margin-left: auto; font-size: .7rem; color: var(--dim); white-space: nowrap; }
+.ach-cond { font-size: .74rem; color: var(--dim); }
+.ach-meta { font-size: .7rem; color: var(--sky); }
+.ach-pick { font-size: .74rem; color: var(--accent); }
+.ach-tier {
+  display: inline-block; flex-shrink: 0; font-size: .66rem; line-height: 1.5; padding: 0 6px;
+  border-radius: 99px; border: 1px solid currentColor; white-space: nowrap;
+}
+.ach-tier[data-tier="t1"] { color: var(--r1); }
+.ach-tier[data-tier="t2"] { color: var(--r2); }
+.ach-tier[data-tier="t3"] { color: var(--r3); }
+.ach-tier[data-tier="t4"] { color: var(--r4); }
+/* 🏅 대표 업적 배지 — 희귀도 색 테 + 글자. 명전 카드(이름 옆)도 이 모양을 써요 */
+.ach-badge {
+  display: inline-flex; align-items: center; gap: 6px; max-width: 100%;
+  padding: 3px 10px 3px 5px; border-radius: 99px; border: 2px solid var(--line); background: var(--bg2);
+  vertical-align: middle;
+}
+.ach-badge[data-tier="t1"] { border-color: var(--r1); }
+.ach-badge[data-tier="t2"] { border-color: var(--r2); }
+.ach-badge[data-tier="t3"] { border-color: var(--r3); }
+.ach-badge[data-tier="t4"] { border-color: var(--r4); }
+.ach-badge .ach-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .88rem; }
+.ach-head { text-align: center; margin-bottom: 10px; }
+.ach-sec-h { font-family: "Jua", sans-serif; font-weight: 400; font-size: .98rem; color: var(--cream); margin: 12px 0 6px; }
+.ach-sub-h { font-size: .8rem; color: var(--dim); margin: 10px 0 4px; }
+.ach-head-t { font-size: .78rem; color: var(--dim); margin-bottom: 4px; }
+.ach-none { font-size: .84rem; color: var(--dim); }
+.ach-note { font-size: .72rem; color: var(--dim); margin-top: 6px; line-height: 1.55; }
+.ach-msg { min-height: 1em; font-size: .78rem; color: var(--accent2); }
+
+/* ---------- 🎬 은퇴 필름 — 장마다 필름 한 칸 ---------- */
+.film-ch {
+  position: relative; margin: 0 0 14px; padding: 16px 18px; border-radius: 16px;
+  background: linear-gradient(180deg, var(--field), var(--bg2)); border: 1px solid var(--line);
+}
+/* 필름 가장자리의 구멍 — 글자와 안 겹치게 안쪽 여백(18px)보다 바깥에만 둬요 */
+.film-ch::before, .film-ch::after {
+  content: ""; position: absolute; top: 12px; bottom: 12px; width: 5px; border-radius: 2px; opacity: .5;
+  background: repeating-linear-gradient(180deg, var(--bg) 0 7px, transparent 7px 15px);
+}
+.film-ch::before { left: 5px; }
+.film-ch::after { right: 5px; }
+/* overflow: hidden — 등번호가 커졌다 줄어드는 동안에도 화면 폭을 안 밀어요(헤드리스 실측: 막으면 390폭에서 51px 넘침) */
+.film-cover { text-align: center; padding: 26px 22px 22px; overflow: hidden; }
+.film-kicker { font-size: .78rem; color: var(--dim); letter-spacing: .04em; }
+.film-no {
+  display: inline-block;
+  font-family: "Jua", sans-serif; font-size: 4.2rem; line-height: 1; color: var(--accent);
+  margin: 10px 0 4px; text-shadow: 0 4px 0 var(--bg);
+}
+.film-name { font-size: 1.9rem; color: var(--cream); margin: 2px 0 4px; overflow-wrap: anywhere; }
+.film-meta { font-size: .84rem; color: var(--sky); line-height: 1.5; }
+.film-rep { margin: 12px 0 4px; }
+.film-grade { font-size: .92rem; color: var(--accent); margin-top: 8px; line-height: 1.5; }
+.film-score { margin-top: 10px; display: flex; flex-direction: column; align-items: center; }
+.film-score-k { font-size: .74rem; color: var(--dim); }
+.film-score b { font-family: "Jua", sans-serif; font-weight: 400; font-size: 2.6rem; line-height: 1.1; color: var(--text); }
+.film-h {
+  font-family: "Jua", sans-serif; font-weight: 400; font-size: 1.12rem; color: var(--accent); margin: 0 0 10px;
+}
+.film-count { font-family: "Gowun Dodum", sans-serif; font-size: .74rem; color: var(--dim); margin-left: 4px; }
+.film-card { padding: 12px; border-radius: 12px; background: var(--bg2); border: 1px solid var(--line); }
+.film-card-h { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.film-club { font-family: "Jua", sans-serif; font-weight: 400; font-size: 1.1rem; color: var(--cream); overflow-wrap: anywhere; }
+.film-tag { font-size: .7rem; padding: 1px 7px; border-radius: 99px; border: 1px solid var(--sky); color: var(--sky); }
+.film-sub { display: block; font-size: .78rem; color: var(--dim); margin: 2px 0 8px; line-height: 1.5; }
+.film-nums { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin: 0; }
+.film-nums > div { background: var(--bg); border-radius: 10px; padding: 6px 2px; text-align: center; min-width: 0; }
+.film-nums dt { font-size: .66rem; color: var(--dim); white-space: nowrap; }
+.film-nums dd { font-family: "Jua", sans-serif; font-size: 1.1rem; color: var(--text); margin: 0; }
+.film-list { list-style: none; margin: 8px 0 0; display: grid; gap: 5px; font-size: .86rem; line-height: 1.5; }
+.film-wc .film-sub { margin: 0; }
+.film-aw { display: block; font-size: .8rem; color: var(--sky); margin-top: 6px; line-height: 1.5; }
+.film-move { text-align: center; font-size: .8rem; color: var(--dim); padding: 8px 0; }
+.film-y { color: var(--dim); font-size: .78rem; }
+.film-radar { display: grid; justify-content: center; margin: 2px 0 4px; }
+.film-radar canvas { grid-area: 1 / 1; width: min(240px, 72vw); height: auto; }
+.film-legend { text-align: center; font-size: .76rem; color: var(--dim); }
+.film-legend .lg-to { color: var(--accent); }
+.film-stats { width: 100%; border-collapse: collapse; font-size: .82rem; margin-top: 6px; }
+.film-stats th, .film-stats td { padding: 5px 6px; border-bottom: 1px solid var(--line); text-align: right; color: var(--text); }
+.film-stats th[scope="row"], .film-stats thead th:first-child { text-align: left; color: var(--dim); font-weight: 400; }
+.film-stats thead th { color: var(--dim); font-weight: 400; font-size: .74rem; }
+.film-facts { list-style: none; margin-top: 8px; display: grid; gap: 3px; font-size: .86rem; }
+.film-style b { display: block; font-family: "Jua", sans-serif; font-weight: 400; font-size: 1.18rem; color: var(--cream); }
+.film-style span { font-size: .82rem; color: var(--dim); }
+.film-best, .film-luck { font-size: .88rem; margin-top: 8px; line-height: 1.55; }
+/* 🌟 가장 빛난 시즌 — 최고의 한 수 자리에 세 줄(시즌·클럽 / 리그·기록 / 수상) */
+.film-bright { margin-top: 8px; }
+.film-bright .film-best { margin-top: 0; }
+.film-bright .film-sub { margin: 2px 0 0; }
+.film-sent { margin: 8px 0 0; }
+.film-parts > summary {
+  display: flex; align-items: center; flex-wrap: wrap; min-height: 44px; margin: 0; cursor: pointer; list-style: none;
+}
+.film-parts > summary::-webkit-details-marker { display: none; }
+.film-parts > summary::after { content: "▾"; color: var(--dim); margin-left: 6px; font-size: .8rem; }
+.film-parts[open] > summary::after { content: "▴"; }
+.film-ptable { width: 100%; border-collapse: collapse; font-size: .82rem; margin-top: 6px; }
+.film-ptable th, .film-ptable td { padding: 5px 4px; border-bottom: 1px solid var(--line); }
+.film-ptable th { text-align: left; font-weight: 400; color: var(--text); }
+.film-ptable td { text-align: right; color: var(--cream); white-space: nowrap; }
+.film-ptable tfoot th, .film-ptable tfoot td { color: var(--accent); border-bottom: 0; }
+.film-n { color: var(--dim); font-size: .74rem; }
+.film-empty { color: var(--dim); font-size: .84rem; }
+.film-last { text-align: center; }
+.film-h4 { display: block; font-family: "Jua", sans-serif; font-weight: 400; font-size: 1rem; color: var(--cream); margin: 12px 0 6px; }
+.film-leave .film-h4:first-child { margin-top: 0; }
+.rep-now { margin-bottom: 4px; }
+.rep-more > summary {
+  display: flex; align-items: center; justify-content: center; min-height: 44px;
+  cursor: pointer; list-style: none; font-size: .84rem; color: var(--sky);
+}
+.rep-more > summary::-webkit-details-marker { display: none; }
+.rep-more > summary::after { content: " ▾"; color: var(--dim); }
+.rep-more[open] > summary::after { content: " ▴"; }
+.rep-list { display: grid; gap: 6px; text-align: left; }
+.rep-opt {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap; width: 100%; min-height: 44px;
+  padding: 6px 10px; border-radius: 10px; cursor: pointer; text-align: left;
+  background: var(--bg); border: 2px solid var(--line); color: var(--text); font-family: inherit; font-size: .84rem;
+}
+.rep-opt[aria-pressed="true"] { border-color: var(--accent); }
+.rep-opt[aria-pressed="true"]::before { content: "✓"; color: var(--accent); font-weight: 700; }
+.rep-opt:disabled { opacity: .6; cursor: default; }
+.rep-opt .film-y { margin-left: auto; }
+.film-word {
+  display: block; width: 100%; min-height: 44px; padding: .5rem .6rem; border-radius: 10px; text-align: center;
+  background: var(--bg); border: 2px solid var(--line); color: var(--text); font-family: inherit; font-size: .95rem;
+}
+.film-word:disabled { opacity: .7; }
+#btn-hof-word { min-height: 48px; }
+.film-note { font-size: .72rem; color: var(--dim); margin-top: 6px; line-height: 1.55; }
+.film-acts { display: grid; gap: 8px; margin-top: 16px; }
+.film-acts .btn { margin: 0; min-height: 48px; }
+.film-share-st { min-height: 1.2em; font-size: .8rem; color: var(--accent); margin-top: 8px; }
+/* 표지는 열 때 한 번만 움직여요 — 장은 가만히 둬요(스크롤로 숨겼다 보이는 연출은 안 해요) */
+@keyframes filmIn { from { opacity: 0; transform: translateY(18px) scale(.98); } to { opacity: 1; transform: none; } }
+@keyframes filmNo { 0% { opacity: 0; transform: scale(1.6); } 60% { opacity: 1; transform: scale(.94); } 100% { opacity: 1; transform: none; } }
+.film-cover { animation: filmIn .5s ease-out both; }
+.film-no { animation: filmNo .6s .15s cubic-bezier(.2, 1.2, .4, 1) both; }
+
+/* ---------- 📤 공유 이미지 창(공유 시트가 없을 때) ---------- */
+.share-modal { width: min(420px, 94vw); }
+.share-img {
+  display: block; max-width: 100%; max-height: 58vh; width: auto; height: auto; margin: 0 auto;
+  border-radius: 10px; border: 1px solid var(--line);
+}
+.share-hint { font-size: .8rem; color: var(--dim); margin: 8px 0; }
+.share-acts { flex-wrap: wrap; }
+.share-st { min-height: 1em; font-size: .78rem; color: var(--accent); margin-top: 4px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ev-overlay .ev-modal, .no-overlay .no-modal, .ev-verdict, .no-num.flip, .film-cover, .film-no {
+    animation: none !important;
+  }
+  .ev-opt, .ev-opt:active { transition: none !important; transform: none !important; }
+}

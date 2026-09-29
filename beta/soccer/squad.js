@@ -395,6 +395,11 @@ window.WingerSquad = (() => {
    * (S.wc.ready와 같은 원리 — 잊을 대상을 만들지 않아요). */
   const trustOf = () =>
     (S.clubTrust && S.clubTrust.y === S.proYear) ? (S.clubTrust.v || 0) : 0;
+  /* 🤝 이벤트가 움직이는 감독 신뢰 — 이번 시즌 것만 읽어요(y가 다르면 0 — 지우는 코드가 없어요).
+   * 월드컵의 S.clubTrust와 **칸을 따로** 둬요. 그 칸은 와일드카드가 다음 시즌에 대해 `=`로 덮어써서,
+   * 같은 칸이면 이벤트가 쌓은 신뢰가 초대장 한 번에 사라져요. 합은 한 줄(🤝 감독 신뢰)로 보여요. */
+  const trustEvOf = () =>
+    (S && S.trustEv && S.trustEv.y === S.proYear) ? (S.trustEv.v || 0) : 0;
 
   function myBonus() {
     const cond = clamp((S.condition - COND_MID) / COND_DIV, -COND_CAP, COND_CAP);
@@ -404,7 +409,8 @@ window.WingerSquad = (() => {
     const apps = (act && act.apps) || 0;
     const avg = apps ? (act.ratingSum || 0) / apps : null;
     const form = avg == null ? 0 : clamp((avg - FORM_MID) * FORM_MUL, -FORM_CAP, FORM_CAP);
-    const trust = trustOf();
+    // 선발 확률(myLine)과 실제 선발(rollLineup)이 **같은 합**을 봐요
+    const trust = trustOf() + trustEvOf();
     return { cond, form, avg, trust, total: cond + form + trust };
   }
   const lineupScore = (x) => x.str + rand(-FORM_SWING, FORM_SWING) + (x.me ? myBonus().total : 0);
@@ -786,8 +792,12 @@ window.WingerSquad = (() => {
       const young = x.age <= 21 ? " 🌱" : x.age >= 33 ? " 🕯️" : "";
       return `<span class="sq-age">${x.age}세${young}${mark}</span>`;
     };
+    /* 등번호는 나만 있어요 — 동료에겐 번호가 없어요(충돌을 안 봐요).
+     * ⚠️ **1~99 정수일 때만** 그려요 — 세이브를 읽는 길(이어하기·클라우드·운영판이 저장한 세이브)은 안 씻어서,
+     * 글자가 들어 있으면 innerHTML로 새요(검사 ❌-2). 숫자는 태그가 될 수 없어요 */
+    const noTag = Number.isInteger(S.no) && S.no >= 1 && S.no <= 99 ? ` <span class="sq-no">#${S.no}</span>` : "";
     const row = (x) => `<tr class="${x.me ? "me" : ""}">`
-      + `<td>${x.name}${x.me ? " <b>(나)</b>" : ""}${tag(x)}</td>`
+      + `<td>${x.name}${x.me ? `${noTag} <b>(나)</b>` : ""}${tag(x)}</td>`
       + `<td class="sq-pos">${posName(x.pos)}</td>`
       + `<td class="sq-str">${Math.round(x.str)}</td>`
       + `<td class="sq-rec">${x.apps ? `${x.apps}경기 ⚽${x.g}` : "-"}</td></tr>`;
@@ -801,6 +811,8 @@ window.WingerSquad = (() => {
     const parts = `실력 ${Math.round(L.line.find((x) => x.me).str)}`
       + ` · 컨디션 ${sign(b.cond)}`
       + ` · 폼 ${b.avg == null ? "—" : sign(b.form)}`
+      /* 🤝 감독 신뢰 — 이벤트(S.trustEv)와 월드컵(S.clubTrust)의 **합**이에요. 없으면 안 적어요 */
+      + (b.trust ? ` · 🤝 감독 신뢰 ${b.trust > 0 ? "+" : ""}${Math.round(b.trust)}` : "")
       + ` · 그날 흔들림 ±${FORM_SWING}`
       /* 몸이 바닥이면 감독이 뺄 수 있다는 걸 확률 옆에 적어요 */
       + (L.rest > 0 ? `<br/>🛌 몸이 상해서 감독이 뺄 수 있어요 (−${Math.round(L.rest * 100)}%)` : "");
@@ -844,7 +856,7 @@ window.WingerSquad = (() => {
   return {
     openSquad, rollLineup, matchXI, FORM_SWING,
     ensureSquads, ensureSquad, squadOf, startingXI, startingXIOf, leagueFaces,
-    isStarter, myLine, benchReason, myBonus, restP, benchTurn, creditMateGoals, markApps, resetSeason, squadHTML,
+    isStarter, myLine, benchReason, myBonus, trustEvOf, restP, benchTurn, creditMateGoals, markApps, resetSeason, squadHTML,
     ageSquads, newsLine, ageCurve, leagueXI,
     POS_SLOTS, slotsOf, slotOf, slotByKey, footFit, assignSlots, wantSlot, FOOT_FIT,
     FORMATION, BENCH, SQUAD_SIZE, BENCH_GAIN, SCORE_W, REST_BAR, REST_MAX,

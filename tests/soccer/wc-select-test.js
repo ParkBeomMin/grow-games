@@ -418,7 +418,13 @@ guard("⑨-b 기록 탭", () => {
   w.__get("openRecord")("screen-pro");
   const tabs = [...$("record-tabs").querySelectorAll(".rec-tab")];
   console.log(`   탭 — ${tabs.map((b) => b.textContent).join(" | ")}`);
-  check(tabs.length === 2, `탭이 둘이다 (${tabs.length})`);
+  /* 「어느 세계에서 성립하는 문장인가」 — **📖 도감 · 🏅 업적 탭이 있는 세계**의 계약이에요
+   * (2026-09-29 운영판 고도화 ① 스펙 §3-9 · §5-8 — 📊 기록 화면에 도감·업적 탭을 더했어요).
+   * 그 전에는 「탭이 둘(⚽ 커리어 · 🌏 월드컵)」이었어요. 도감·업적 탭을 빼는 판정이 나오면 이 줄부터 다시 보세요.
+   * 🌏 월드컵 탭이 **두 번째**라는 자리(커리어 바로 뒤)는 그대로 지켜요. */
+  const names = tabs.map((b) => b.textContent);
+  check(tabs.length === 4 && /커리어/.test(names[0]) && /월드컵/.test(names[1]) && /도감/.test(names[2]) && /업적/.test(names[3]),
+    `탭이 넷이다 — ⚽ 커리어 · 🌏 월드컵 · 📖 도감 · 🏅 업적 (${tabs.length}개: ${names.join(" · ")})`);
   check(/월드컵/.test(tabs[1] ? tabs[1].textContent : ""), "두 번째가 🌏 월드컵이다");
   tabs[1].click();
   const body = $("record-card").textContent.replace(/\s+/g, " ");
@@ -431,12 +437,17 @@ guard("⑨-b 기록 탭", () => {
   check(/🇧🇷 브라질/.test(body), "내가 못 든 대회의 우승국이 적힌다");
   check(/4년에 한 번/.test(body), "왜 기록이 드문지 알려준다");
 
-  /* 월드컵을 한 번도 안 겪었으면 탭 줄이 없어야 해요 — 빈 탭은 "여기 뭔가 있나"만 남겨요 */
+  /* 월드컵을 한 번도 안 겪었으면 **🌏 월드컵 탭이 없어야** 해요 — 빈 탭은 "여기 뭔가 있나"만 남겨요.
+   * 「어느 세계에서 성립하는 문장인가」 — 예전(탭이 커리어·월드컵 둘뿐)에는 「탭 줄 자체를 감춘다」였어요.
+   * **📖 도감 · 🏅 업적 탭이 있는 세계**(스펙 §3-9 · §5-8)에서는 월드컵이 없어도 탭 줄은 보이고(도감은 늘 판정 규칙 한 쪽이
+   * 있어 빈 탭이 아니에요 — game.js renderRecordTabs 주석) **월드컵 탭만** 빠져요. 도감·업적 탭이 빠지면 「줄을 감춘다」로 돌아가요 */
   st.wcHist = [];
   w.__get("openRecord")("screen-pro");
-  check($("record-tabs").hidden, "월드컵을 겪은 적이 없으면 탭 줄을 감춘다");
+  const noWc = [...$("record-tabs").querySelectorAll(".rec-tab")].map((b) => b.textContent);
+  check(!$("record-tabs").hidden && noWc.length === 3 && !noWc.some((t) => /월드컵/.test(t)),
+    `월드컵을 겪은 적이 없으면 🌏 월드컵 탭만 빠지고 탭 줄은 보인다 (${noWc.join(" · ")})`);
   const plain = $("record-card").textContent;
-  check(/유스 기록/.test(plain), "그때는 커리어 기록만 보인다");
+  check(/유스 기록/.test(plain), "그때 열려 있던 🌏 탭 대신 ⚽ 커리어 기록이 보인다");
 });
 
 // ---------- ⑩ 변이 검증 ----------
