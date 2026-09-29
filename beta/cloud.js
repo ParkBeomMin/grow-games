@@ -43,7 +43,6 @@
     } else {
       out.push(s + "-slots", s + "-legacy");
     }
-    if (game === "soccer") out.push(s + "-book");   // 📖 도감 장부(⚽ 더 윙어만 — 그림자 키는 안 올려요)
     if (BATTLE[game]) out.push(BATTLE[game]);
     return out;
   }

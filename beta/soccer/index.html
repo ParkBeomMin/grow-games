@@ -39,9 +39,6 @@
         <button class="btn btn-ghost hidden" id="btn-continue">이어하기</button>
         <button class="btn btn-ghost" id="btn-hof">🏛️ 명예의 전당</button>
         <button class="btn btn-ghost" id="btn-cloud">🔗 기록 연동</button>
-        <!-- 📖 도감 — 선수가 바뀌어도 이 기기에 쌓이는 기록이라 타이틀에서 바로 열어요 (scenes.js).
-             🔗 기록 연동 **뒤**에 둬요 — cloud-wire-test가 「#btn-cloud는 #btn-hof 바로 다음」을 지켜요(8종 공통 자리) -->
-        <button class="btn btn-ghost" id="btn-book">📖 도감</button>
         <button class="btn btn-ghost" id="btn-battle">⚔️ 배틀 아레나</button>
         <a class="series-link" href="../">🎮 키우기 시리즈 더 보기</a>
       </div>
@@ -157,9 +154,6 @@
       <h2 id="stage-title"></h2>
       <div class="tour-round" id="stage-round"></div>
       <label class="auto-toggle"><input type="checkbox" id="auto-mini" /> 🤖 경기 자동 진행</label>
-      <!-- 📋 이번 경기에 걸린 약속 — 중계 카드 위 한 줄. 글자는 career.js playShow가 채워요.
-           비어 있으면 CSS(:empty)가 숨겨요 — 컵·월드컵·유스 경기에서는 비워 둬야 해요 -->
-      <p class="stage-promise" id="stage-promise" aria-live="polite"></p>
       <div class="tour-card" id="stage-card"></div>
       <button class="btn btn-primary" id="btn-stage-next">다음</button>
     </section>
@@ -270,19 +264,6 @@
       <button class="btn btn-ghost" id="btn-hof-back">← 돌아가기</button>
     </section>
 
-    <!-- 📖 도감 — 이벤트·이야기·업적·판정 규칙. 슬롯 밖 기기 장부를 읽어요 (scenes.js openBook) -->
-    <section class="screen" id="screen-book">
-      <h2>📖 도감</h2>
-      <p class="hint">이 기기에 쌓이는 기록이에요 — 선수가 바뀌어도 남아요.</p>
-      <div id="book-body"></div>
-      <button class="btn btn-ghost" id="btn-book-back">← 돌아가기</button>
-    </section>
-
-    <!-- 🎬 은퇴 필름 — 세로로 내려 보는 한 편. 장은 scenes.js openFilm이 그려요 -->
-    <section class="screen" id="screen-film">
-      <div id="film-body"></div>
-    </section>
-
     <!-- 배틀 아레나 -->
     <section class="screen" id="screen-battle">
       <h2>⚔️ 배틀 아레나</h2>
@@ -330,13 +311,6 @@
   <script src="squad.js"></script>
   <script src="worldcup.js"></script>
   <script src="career.js"></script>
-  <!-- ① 선택 이벤트 · 이야기 · 도감 장부 · 업적 · 필름(로직) → 화면(scenes.js)은 맨 뒤 -->
-  <script src="events.js"></script>
-  <script src="story.js"></script>
-  <script src="book.js"></script>
-  <script src="achieve.js"></script>
-  <script src="film.js"></script>
-  <script src="scenes.js"></script>
 <script>if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");</script>
 </body>
 </html>
