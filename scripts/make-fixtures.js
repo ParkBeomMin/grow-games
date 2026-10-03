@@ -2376,103 +2376,106 @@ function makeSoccerHof() {
   }
 }
 
-// ---------- ⚽ 더 윙어 II (winger2) ----------
-/* v2는 **점진 확정** 경기라 카드를 한 장씩 그리며 진행해요. 그래서 여기서는
- * **경기를 치른 뒤**가 아니라 **경기 직전** 상태를 뜹니다.
- *
- * ⚠️ 이 스크립트는 통째로 동기 루프예요. v2 경기는 카드마다 setTimeout으로 넘어가서
- * 동기 루프 안에서는 타이머가 한 번도 안 돕니다 — 여기서 경기를 끝까지 못 몰아요.
- * **그게 오히려 맞습니다**: 확인해야 할 것이 경기 화면·순간 카드·결과 버튼이라
- * 폰에서 직접 눌러 봐야 하는 것들이에요. 세이브는 그 문 앞까지만 데려다 줍니다.
- * (soccer 시나리오처럼 경기 뒤 상태가 필요해지면 이 스크립트를 async로 바꿔야 해요.) */
-/* 🏫 ⏱️ **async인 유일한 maker입니다** — 학교 시계(`0' → 90'`)를 기다려야 해서요.
- * 🔒 나머지 일곱 게임의 maker는 **한 줄도 안 바뀌었습니다**(위 `soccerDebut`의 🔑 참고). */
+// ---------- ⚽ 더 윙어 II (winger2) — 1막 「마지막 한 해」 ----------
+/* 🔁 1막으로 새로 지으면서(2026-09-30 · 25번) 옛 조립대 · 🏫 학교 · 💼 프로 흐름은 없어졌어요 —
+ *    그 흐름을 누르던 옛 maker는 지우고 **1막의 네 자리**를 뜹니다(경기 직전 둘 · 대회 직전 · 테스트 직전).
+ *    옛 픽스처(`winger2-save-v1-slots`)는 새 게임이 안 읽어서, winger2를 다시 뽑을 땐 **옛 항목을 먼저 치워요.**
+ * 🔑 화면 조각(`W2Scenes` — director의 scenes.js)은 오버레이라 jsdom에서 누르기 번거로워요. **판정에 한 톨도
+ *    안 닿는 그리기 조각**이라 여기서는 즉시 풀리는 대역으로 갈아 끼웁니다. 🔒 세이브를 바꾸는 선택(카드 고르기 ·
+ *    이벤트 답)은 대역이 **고정된 규칙**으로 골라요(지호 남 · 늘 확정 · 개인 이야기 2장은 깃발).
+ *    🗓️ 주간 고르기 · 🏁 경기 시작 · [다음]은 **실제 버튼을 누릅니다**. 🤖 자동 진행이라 판은 중립(s = 0.5)이에요.
+ * ⏱️ 경기는 시계가 돈 뒤에야 [다음]이 와서 async예요. 🔒 판 시드도 이 시드에서 뽑아 재현돼요. */
 async function makeWinger2(kind) {
   const C = {
-    match: { pos: "wg", emoji: "🔥", label: "🎯 윙어 — 리그 경기 직전" },
-    def: { pos: "df", emoji: "🧱", label: "🛡️ 수비수 — 리그 경기 직전" },
-    bench: { pos: "fw", emoji: "🪑", label: "🪑 벤치인 주" },
+    match: { pos: "wg", week: 6, step: "match", emoji: "🔥", label: "🎯 윙어 — 리그 첫 경기 직전" },
+    def: { pos: "df", week: 6, step: "match", emoji: "🧱", label: "🧱 수비수 — 리그 첫 경기 직전" },
+    cup: { pos: "fw", week: 20, step: "cup", emoji: "🏆", label: "🏆 공격수 — 대회 주간 직전" },
+    test: { pos: "mf", week: 35, step: "test", emoji: "🎯", label: "🎯 미드필더 — 공개 테스트 직전" },
   }[kind];
   log(`⚽ 더 윙어 II — ${C.label}`);
-  for (const seed of seeds(30)) {
+  for (const seed of seeds(5)) {
     let P;
     try {
       P = makePage("winger2", seed);
-      await soccerDebutTown(P, "pro", "pos", 0, C.pos);
-      // 시즌 준비 턴을 다 쓰고 **경기 직전**에서 멈춰요
-      let ready = false;
-      for (let g = 0; g < 40 && P.active() === "screen-pro"; g++) {
-        if (P.w.document.querySelector("#pro-actions .go-game")) { ready = true; break; }
-        if (!doAct(P, "#pro-actions .action-btn", "pos")) break;
+      const w = P.w, d = w.document;
+      w.crypto.getRandomValues = (a) => { a[0] = Math.floor(w.Math.random() * 4294967296) >>> 0; return a; };
+      const safeIdx = (c) => {
+        const o = Array.isArray(c.opts) ? c.opts : [];
+        const f = o.findIndex((x) => x.k === "flag");
+        const s = o.findIndex((x) => x.k === "safe" || x.k === "ok");
+        return f >= 0 ? f : s >= 0 ? s : 0;
+      };
+      let people = null;
+      w.W2Scenes = {
+        pick: () => Promise.resolve({ preset: "jiho", gender: "m" }), intro: () => Promise.resolve(), portrait() {},
+        card: (c) => Promise.resolve(c.kind === "people" ? Math.max(0, c.opts.findIndex((o) => o.key === people)) : safeIdx(c)),
+        grade: () => Promise.resolve(), sheet: () => Promise.resolve(), doors: (l) => Promise.resolve(l[0].id),
+        ending: () => Promise.resolve(), film: () => Promise.resolve({}), book: () => Promise.resolve(),
+      };
+      const G = () => w.W2Game;
+      const S = () => G()._t.S;
+      const at = () => S() && S().week === C.week && G().stepsOf(S().week)[S().ph] === C.step;
+      const en = (el) => el && !el.disabled;
+      /* 입구는 DOMContentLoaded 뒤에 그려져요(game.js의 boot) — 그려질 때까지 기다려요 */
+      for (let t = 0; t < 400 && !d.querySelector(".w2-new"); t++) await new Promise((r) => setTimeout(r, 5));
+      if (!d.querySelector(".w2-new")) throw new Error("입구의 🆕 새로 시작 버튼이 안 그려져요");
+      d.querySelector(".w2-new").click();
+      let idx = 0;
+      for (let t = 0; t < 60000 && !at(); t++) {
+        await new Promise((r) => setTimeout(r, 5));
+        if (at()) break;
+        const start = d.querySelector("#w2-entry.w2-create .w2-start");
+        if (en(start)) {
+          d.querySelector(`.w2-pos [data-v="${C.pos}"]`).click();
+          d.querySelector(`.w2-foot [data-v="R"]`).click();
+          start.click();
+          continue;
+        }
+        const rest = d.querySelector("#w2-home .w2-rest");
+        if (en(rest)) {
+          const st = S();
+          people = { 2: "family", 3: "keeper", 32: "family" }[st.week] || null;
+          const pb = d.querySelector("#w2-home .w2-people");
+          if (people && en(pb)) { pb.click(); continue; }
+          if (st.cond < 50) { rest.click(); continue; }
+          const keys = ["shoot", "pass", "dribble", "defense", "stamina", "speed"];
+          const k = keys[idx++ % 6];
+          d.querySelector(`#w2-home .w2-tbtn[data-k="${k}"]`).click();
+          continue;
+        }
+        for (const sel of [".w2-live-go", ".w2-after-next", ".w2-next"]) {
+          const b = d.querySelector(sel);
+          if (en(b)) { b.click(); break; }
+        }
       }
-      if (!ready) throw new Error("경기 직전까지 못 갔어요");
-      const st = P.state();
-      const Sq = P.w.WingerSquad;
-      if (!Sq) throw new Error("squad.js가 안 실렸어요");
-      if (!P.w.WingerEngine) throw new Error("engine.js가 안 실렸어요");
-      if (!P.w.W2Scene) throw new Error("match-scene.js가 안 실렸어요");
-      if (kind === "bench") {
-        /* soccer-bench와 **같은 방법**이에요 — 실제로 도달한 상태에서 컨디션 한 칸만
-         * 낮춰 선발에서 밀리게 합니다. 0%면 "매 경기 바뀐다"를 못 보여줘서 15~45%를 찾아요. */
-        st.condition = 34;
-        P.get("save")();
-        const L = Sq.myLine();
-        /* 🔒 밴드가 넓은 건 헐거워서가 아니라 **`DEBUT_POOL = 3`이라 base가 52·57·62 셋**이라서예요.
-         * 옛 밴드(0.15~0.45)는 종합 70에서 **30시드 중 62%가 빗나갔습니다** — 이건 0.0%. */
-        if (L.odds < 0.10 || L.odds > 0.80) throw new Error(`선발 확률이 구간 밖이에요 (${Math.round(L.odds * 100)}%)`);
-      } else if (!Sq.isStarter()) {
-        throw new Error("이번 주가 벤치라 경기 화면을 못 봐요");
-      }
-      const lg = P.get("leagueOf")(st);
-      const L = Sq.myLine();
-      const common = "카드가 <b>아래에서 한 장씩</b> 밀려 올라오고 위 스코어보드와 ⏱ 시계가 "
-        + "그때그때 바뀌는지 봐주세요. <b>마지막 카드까지 스코어가 안 정해져 있어요</b> — "
-        + "미리 정해 놓고 재생하는 게 아닙니다.";
+      if (!at()) throw new Error(`${C.week}주 ${C.step} 앞까지 못 갔어요 (${S() ? `${S().week}주 · ${S().ph}` : "새 판 없음"})`);
+      const st = S();
+      const SH = w.W2Sheet;
+      const avg = SH.KEYS.reduce((a, k) => a + st.stats[k], 0) / 6;
+      const common = "⏱ 시계가 <b>0′부터 한 칸씩</b> 흐르고 카드가 아래에서 한 장씩 올라와요. "
+        + "<b>[🏁 경기 시작]을 눌러야</b> 시계가 돌아요. 90′ 휘슬이 그려진 <b>뒤에</b> 결과 · ⭐ 평점 · 📍 번호 집계가 붙고 [다음 →]이 떠요.<br>"
+        + "🤖 입구의 <b>자동 진행이 켜져 있으면 판 없이 중립</b>으로 흘러요 — 판을 보려면 끄고 들어오세요.";
       const F = {
-        match: {
-          title: `🎯 윙어 — ${lg.name} 리그 경기 직전`,
-          check: common
-            + "<br>🔥 <b>내 순간</b>이 오면 카드가 멈춰요 — 지금은 미니게임이 아직 없어서 "
-            + "자동으로 판정되고 넘어갑니다(다음 단계에서 붙어요). <b>안 오는 경기도 정상</b>이에요 "
-            + "— 신인은 경기당 1회 안팎이라, 끝나고 <b>🔥 이 경기의 내 순간 N회</b>로 세어 줍니다.<br>"
-            + "1점 차로 끝나가면 마지막 카드가 <b>90+1~5분(추가시간)</b>으로 떠요.<br>"
-            + "🏆 <b>결승골 축포는 이긴 경기에서만</b> 떠야 해요 — 진 경기에서 터지면 알려 주세요.<br>"
-            + "⏩ <b>빨리감기</b>는 <b>연출만</b> 짧게 합니다. 순간 카드는 그대로 열려야 해요.<br>"
-            + "경기가 끝나면 <b>스코어·평점 요약</b>이 남고 아래 버튼이 "
-            + "<b>🏋️ 다음 경기 준비</b>로 바뀝니다 — <b>눌러서 실제로 넘어가는지</b> 꼭 봐주세요.",
-        },
-        def: {
-          title: `🛡️ 수비수 — ${lg.name} 리그 경기 직전`,
-          check: common
-            + "<br>🧱 수비수는 <b>상대 공격 장면</b>에서 카드를 받아요 — 공격수보다 개입이 잦습니다.<br>"
-            + "<b>스코어와 무관하게 경기 내내 일정하게</b> 나와요. "
-            + "\"이기고 있으니 수비 상황이 늘어난다\"는 <b>사실이 아닙니다</b> — 그렇게 읽히면 알려 주세요.<br>"
-            + "😣 실점 연출이 회색 플래시로 짧게 지나가는지, 무실점으로 끝나면 평점이 오르는지 봐주세요.<br>"
-            + "경기가 끝나면 결과 요약과 <b>다음 경기 준비</b> 버튼이 뜨는지 확인해 주세요.",
-        },
-        bench: {
-          title: `🪑 벤치 — 선발 확률 ${Math.round(L.odds * 100)}%`,
-          check: "선발은 <b>매 경기 다시 뽑혀요</b>. 경기에 나가 보면 <b>🪑 벤치 화면</b>이 뜹니다 — "
-            + "팀은 나 없이 경기를 치르고(순위표도 굴러가요) 나는 훈련장에서 능력치 하나가 올라요.<br>"
-            + "여기가 <b>뛴 주와 대조하는 자리</b>예요 — 벤치 화면에도 결과와 "
-            + "<b>다음 경기 준비</b> 버튼이 제대로 뜨는지 봐주세요.<br>"
-            + "🛌 휴식으로 컨디션을 올리면 <b>👥 선발 %</b>가 오르는지도 확인해 주세요.",
-        },
+        match: { title: `🎯 윙어 — ${st.world.league.name} 첫 경기 직전`, check: common
+          + "<br>🔥 내 순간에 <b>🥅 상대 골문 6칸</b> 판이 열리는지 · 판의 문구는 <b>손(겨눔)만</b> 말하고 골은 경기 카드가 말하는지 봐 주세요." },
+        def: { title: `🧱 수비수 — ${st.world.league.name} 첫 경기 직전`, check: common
+          + "<br>🧱 수비수는 실점 위기에 <b>우리 골문</b> 판이 열려요 — 🧤 {keeper}가 가까운 쪽을 막고 🏃 슈터가 그쪽 아래에 서요."
+          + " <b>먼 쪽 빈 곳이 밝은지 · 🥅와 한눈에 갈리는지</b>(우리 색 · 차가운 밝은색 · 키퍼 이름) 봐 주세요." },
+        cup: { title: `🏆 공격수 — ${st.world.cup.name} 직전`, check: "🏆 20주 조별 3경기가 <b>고르기 없이</b> 이어져요 — 두 번째 경기부터 컨디션 +10."
+          + " 조 2위 안이면 21주 16강부터 단판이고, 비기면 🥅 <b>승부차기(첫 번째 키커가 나 — 판 한 번)</b>가 열려요. 끝나면 조 순위표 · 우승 학교 한 줄." },
+        test: { title: `🎯 미드필더 — ${st.world.test.name} 직전`, check: "🎯 기술 테스트 판 <b>3번</b>(미드필더: 🅰️ 둘 + 🧱 하나) → 연습경기 90분(킥오프 위 <b>스카우트 반신</b>)"
+          + " → 36주 📋 평가서 → ✉️ 문(지호는 「중」 + 깃발일 때만 두 장) → 🎓 엔딩 → 🎬 졸업 필름까지 한 번에 봐요." },
       }[kind];
       add({
         id: `winger2-${kind}`,
         game: "winger2", url: "winger2/", emoji: C.emoji,
         title: F.title,
-        state: `${st.group} · ${lg.name} · 종합 ${Math.round(P.overall())}`
-          + ` · ${P.get("POS_INFO")[st.pos].name} · 컨디션 ${Math.round(st.condition)}`
-          + ` · ${L.slots}자리 중 ${L.rank}번째`,
+        state: `${st.world.school.team} · ${SH.POS[st.pos]} · ${st.week}주 · 컨디션 ${Math.round(st.cond)} · 여섯 평균 ${avg.toFixed(1)}`,
         check: F.check,
         steps: [
-          "게임이 열리면 <b>이어하기</b> → 선수 카드",
-          kind === "bench"
-            ? "HUD의 <b>👥 선발 %</b> 확인 → <b>⚽ 경기하러 가기</b>"
-            : "<b>⚽ 경기하러 가기</b>를 눌러 경기 화면 보기",
-          "경기가 끝나면 <b>다음 경기 준비</b> 버튼을 눌러 넘어가는지 확인",
+          "게임이 열리면 <b>▶️ 이어하기</b>",
+          kind === "test" ? "기술 판 셋 → 연습경기 → 평가서 · 엔딩 · 필름까지" : "<b>🏁 경기 시작</b>을 눌러 경기 화면 보기",
+          "끝나면 <b>다음 →</b>을 눌러 실제로 넘어가는지 확인",
         ],
         keys: snapshot(P),
       });
@@ -2492,7 +2495,7 @@ async function makeWinger2(kind) {
  * 나머지가 안 사라져요. 같은 id는 이번에 뽑은 게 이깁니다. */
 const ORDER = ["soccer-transfer", "soccer-promote", "soccer-youth-ext", "soccer-semipro", "soccer-report",
   "soccer-aging", "soccer-hof-month", "soccer-slot", "soccer-hof-word",
-  "winger2-match", "winger2-def", "winger2-bench",
+  "winger2-match", "winger2-def", "winger2-cup", "winger2-test",
   "idol-concept", "idol-reveal", "idol-report", "idol-tour", "idol-standings",
   "rookie-posting", "rookie-posting-locked", "rookie-abroad-report", "rookie-cont-series", "rookie-retire"];
 
@@ -2581,9 +2584,12 @@ if (want("soccer-slot", "soccer")) makeSoccerSlot();
 if (want("soccer-hof-word", "soccer")) makeSoccerHof();
 if (want("soccer-promo", "soccer")) makeSoccerPromoRelegation("up");
 if (want("soccer-releg", "soccer")) makeSoccerPromoRelegation("down");
+/* ⚽ 1막으로 새로 지으면서 옛 winger2 항목(`winger2-bench` 등 · 옛 세이브 키)은 새 게임이 안 읽어요 — 다시 뽑을 땐 먼저 치워요 */
+if (want("winger2", "winger2")) for (let i = PREV.length - 1; i >= 0; i--) if (PREV[i].game === "winger2") PREV.splice(i, 1);
 if (want("winger2-match", "winger2")) await makeWinger2("match");
 if (want("winger2-def", "winger2")) await makeWinger2("def");
-if (want("winger2-bench", "winger2")) await makeWinger2("bench");
+if (want("winger2-cup", "winger2")) await makeWinger2("cup");
+if (want("winger2-test", "winger2")) await makeWinger2("test");
 if (want("idol-concept", "idol")) {
   makeIdolConcept("idol-concept", "컴백 컨셉 선택 화면", "🎬",
     "컨셉 카드 4장이 좁은 화면에서 안 겹치고, 소문 2장에 🗣 배지가 붙는지", false, 2);

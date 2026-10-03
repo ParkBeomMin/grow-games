@@ -1,83 +1,82 @@
-/* ⚽ 더 윙어 II — 엔진을 node에서 그대로 굴리기 위한 공용 로더.
+/* ⚽ 더 윙어 II 1막 — 검사 공용 **뼈대** (2026-10-02 · inspector · 26번 §1)
  *
- * 이 게임은 engineer가 엔진을 S·WingerSquad에서 떼어 **cfg로만 받게** 만들었어요
- * (13번 §10-3b). 그래서 이 저장소의 단골 함정 하나가 구조적으로 사라집니다 —
- * "소스에서 뜯어온 조각이 실제 배선과 다르다". **여기서는 진짜 엔진을 부릅니다.**
+ * 🔪 **뼈만 남겼습니다**(11번 §6 「`_load.js`는 뼈만 옮깁니다」). 옛 입구(동네 · 주발 · 초1~초4 ·
+ *    학교 아크 · 조기 제안)를 지나던 도우미(`townAuto` · `passTown` · `tapFoot` · `tapChild*` ·
+ *    `pickOrigin` · `passStage` · `stageIdle` · `passEarly` · `passArc`)는 **1막에 그 화면이 없어서** 지웠어요.
+ *    1막 한 판을 굴리는 장치는 따로 `_act.js`에 있습니다(이 파일은 엔진 · 판 · 페이지를 싣는 데까지).
  *
- * 🔒 지키는 것 셋
- *   ① 직접 eval을 안 씁니다. new Function(...) + return이에요
+ * 🔒 지키는 것 넷
+ *   ① 직접 eval을 안 씁니다. `new Function(...)` + `return`이에요
  *      (직접 eval은 `const`가 eval 스코프에 갇혀 값이 늘 undefined가 됩니다)
- *   ② 문턱은 **검사에 직접 적습니다.** _t.K에서 읽어 오면 상수를 바꿔도
- *      검사가 따라가서 아무것도 안 잡혀요 (13번 §10-3 🚨)
- *   ③ 변이는 **반드시 적용됐는지 확인**합니다. 안 맞는 정규식으로 갈아치우면
- *      "변이했는데 초록불"이 되는데, 그건 변이 검증이 통째로 거짓이 되는 자리예요
+ *   ② 문턱은 **검사에 직접 적습니다.** `_t.K`에서 읽어 오면 상수를 바꿔도
+ *      검사가 따라가서 아무것도 안 잡혀요
+ *   ③ 변이는 **반드시 적용됐는지 확인**합니다(`mutsOK` · `fileMutsOK` · 안 걸리면 `load*`가 던짐)
+ *   ④ 💥 **크래시는 종료 코드 2** — 0 통과 · 1 빨간불 · 2 죽음(안 돌았음)
  */
 "use strict";
 const fs = require("fs");
 const path = require("path");
-const ENGINE = "/workspace/grow-games/beta/winger2/engine.js";
+const ROOT = "/workspace/grow-games";
+const BETA = path.join(ROOT, "beta");
+const PAGE_DIR = path.join(BETA, "winger2");
+const ENGINE = path.join(PAGE_DIR, "engine.js");
 const SRC = fs.readFileSync(ENGINE, "utf8");
 
 /* ═══════════════════════════════════════════════════════════════════════
  * 💥 **크래시는 초록불도 빨간불도 아닙니다** — 종료 코드로 갈라 줍니다
- *
- * 이 저장소에서 같은 사고가 **세 번** 났어요:
- *   ① 축구 검사 열 개가 여러 커밋 동안 스택만 뱉고 죽어 있었음
- *   ② 검사 D의 `ME_P : 1` 정규식 (42·43번)
- *   ③ 검사 E의 `NPC_SPOT : 1` 정규식 — **두 게이트째 안 돌았습니다** (45번)
- *
- * ②③은 둘 다 "변이 정규식이 소스 문자열에 의존한다"는 같은 뿌리예요.
- * 소스가 바뀌면 정규식이 안 걸리고, `load()`가 던지고, 파일이 그 자리에서 죽습니다.
- * 그런데 **모아 돌릴 때는 `❌ 실패 1건`으로만 보여서** *안 돈 것*과 *빨간불*이 구분이 안 돼요.
- *
- * 🔧 그래서 종료 코드를 나눕니다 — `_load.js`를 부르는 모든 검사에 자동으로 걸려요:
  *     0 = 통과 · 1 = 빨간불(검사가 돌았고 계약이 깨짐) · **2 = 💥 죽음(안 돌았음)**
- *
- * 모아 돌릴 때는 이렇게 갈라 보세요:
+ * 모아 돌릴 때:
  *   red=0; dead=0
  *   for t in tests/winger2/*-test.js; do
  *     node "$t" >/dev/null 2>&1; c=$?
  *     [ $c -eq 1 ] && { echo "❌ $(basename $t)"; red=$((red+1)); }
  *     [ $c -ge 2 ] && { echo "💥 $(basename $t) — 안 돌았어요"; dead=$((dead+1)); }
  *   done; echo "빨간불 ${red}건 · 죽음 ${dead}건"
- *
- * 그리고 **정규식이 안 걸리는 것 자체를 검사로** 만드세요 — `mutsOK()`를 쓰면
- * 죽지 않고 ❌ 한 줄로 뜹니다(§ 아래). 죽는 것보다 그게 낫습니다. */
+ * ═══════════════════════════════════════════════════════════════════════ */
 function die(e) {
   console.log(`\n💥 검사가 죽었어요 — 이건 초록불도 빨간불도 아닙니다 (안 돈 겁니다)`);
   console.log(`   ${e && e.stack ? e.stack : e}`);
   process.exit(2);
 }
-process.on("uncaughtException", die);
-process.on("unhandledRejection", die);
+/* 🔒 **삼키지 않습니다.** 닫은 창의 늦은 콜백은 `bootPage`의 `close()`가 「전송을 먼저 끄고 한 틱 뒤에 닫기」로
+ *    막아요 — 여기서 스택을 보고 삼키면 **다른 창의 진짜 예외까지** 같이 묻힐 수 있습니다. */
+/* 🔒 **`tests/winger2/`의 검사에만** 겁니다 — 다른 검사(`check-page-test.js` 등)가 엔진 로더만 빌려 쓸 때
+ *    그 파일의 예외 방침(닫힌 페이지의 예외는 삼킴)을 덮어쓰지 않게요. */
+if (require.main && /[\\/]tests[\\/]winger2[\\/]/.test(require.main.filename || "")) {
+  process.on("uncaughtException", die);
+  process.on("unhandledRejection", die);
+}
 
 /* 🔎 변이 정규식이 **지금 소스에 걸리는지** 미리 확인합니다. 던지지 않아요.
- * 돌려주는 것: 안 걸린 정규식의 목록(빈 배열이면 전부 걸림).
- * 검사 파일이 이걸 ❌ 한 줄로 찍으면, 소스가 바뀌었을 때 **죽는 대신 빨간불**이 됩니다. */
-function mutsOK(table) {
+ * 돌려주는 것: 안 걸린 정규식의 목록(빈 배열이면 전부 걸림). */
+function mutsOKIn(src, table, label) {
   const bad = [];
-  for (const [name, muts] of Object.entries(table)) {
+  for (const [name, muts] of Object.entries(table || {})) {
     for (const [re] of muts) {
-      const hit = SRC.match(re);
-      if (!hit) bad.push(`${name}: ${re}`);
-      else if (SRC.replace(re, "\u0000") === SRC) bad.push(`${name}(치환 무효): ${re}`);
+      const hit = src.match(re);
+      if (!hit) bad.push(`${name}${label ? ` → ${label}` : ""}: ${re}`);
+      else if (src.replace(re, "\u0000") === src) bad.push(`${name}${label ? ` → ${label}` : ""}(치환 무효): ${re}`);
     }
   }
   return bad;
 }
+const mutsOK = (table) => mutsOKIn(SRC, table, "");
 
-/* muts = [[정규식, 바꿀 문자열], …]. 하나라도 안 걸리면 던집니다.
- * (던지는 건 그대로 둡니다 — 조용히 무변이로 통과하는 것보다 죽는 게 나아요.
- *  다만 위 `mutsOK()`로 **먼저 확인**하면 죽지 않고 빨간불로 뜹니다.) */
-function load(muts) {
-  let src = SRC;
+/* 🔧 소스 한 벌에 변이를 겁니다 — 하나라도 안 걸리면 던집니다(조용히 무변이로 통과하지 않게) */
+function applyMuts(src, muts, label) {
+  let out = src;
   for (const [re, rep] of muts || []) {
-    const before = src;
-    src = src.replace(re, rep);
-    if (src === before) throw new Error(`변이가 소스에 안 걸렸어요 — ${re}`);
+    const before = out;
+    out = out.replace(re, rep);
+    if (out === before) throw new Error(`${label || "소스"}에 변이가 안 걸렸어요 — ${re}`);
   }
+  return out;
+}
+
+/* ⚙️ 엔진을 node에서 그대로 — `Math`를 감싸 넘겨 엔진이 `_rng` 밖에서 `Math.random`을 부르는지 셉니다 */
+function load(muts) {
+  const src = applyMuts(SRC, muts, "engine.js");
   const win = {};
-  // Math를 감싸서 넘겨요 — 엔진이 _rng 밖에서 Math.random을 부르는지 셉니다
   const counter = { random: 0 };
   const MathShim = Object.create(Math);
   MathShim.random = function () { counter.random += 1; return Math.random(); };
@@ -87,33 +86,12 @@ function load(muts) {
 }
 
 /* ---------- 명단 픽스처 ----------
- * ⚠️ 실제 디스크의 명단과 **같은 모양**이어야 해요 (career.js engRow):
- *   { name, pos, slot:{g,a,d}, me, stats|null, str, foot }
- * 자리 결(slot)은 정규화 IIFE가 평균 1을 지키니 여기서는 1로 둡니다.
- * 동료 전력은 squad.js의 STR_SPREAD(±14)와 같은 폭으로 흩뿌려요 — 고정 패턴이라 재현됩니다. */
+ * ⚠️ 실제 1막 명단과 **같은 모양**이어야 해요(`world.js`의 `meRow` · `npc`):
+ *   { name, pos, slot:{}, me, stats|null, str, foot, buff? }
+ * 🔒 `FORMATION`은 1막 그대로(fw 2 · wg 2 · mf 4 · df 3) — 검사에 박은 값이에요. */
 const FORMATION = { fw: 2, wg: 2, mf: 4, df: 3 };
 const SPREAD = [-11, 7, -3, 13, -8, 2, 10, -14, 5, -6, 9];
 const statsOf = (a) => ({ shoot: a, pass: a, dribble: a, defense: a, stamina: a, speed: a });
-
-/* 🔴 **고정 SPREAD는 재현성을 주는 대신 아티팩트를 하나 만듭니다.**
- *
- * 배열이 `fw fw wg wg mf mf mf mf df df df` 순서로 그대로 붙어서, mateBase 70이면
- *   fw 59 · 77   wg 67 · **83**   mf 62 · 72 · 80 · 56   df 75 · 64 · 79
- * 가 **언제나** 나와요. `ACE_POOL.goal`이 `["fw","wg"]`가 된 뒤로는
- * `aceOf`가 능력치 최대 한 명을 고르니 **골 에이스가 100% 윙어**가 됩니다.
- * 실제 게임(`STR_SPREAD ±14` 무작위)에서는 **50.1%**예요 — 픽스처가 그 최악만 봅니다.
- * (`ACE_POOL.goal`이 `["fw"]`였을 때는 에이스 위치가 spread와 무관해서 없던 함정이에요.)
- *
- * 볼트의 **"픽스처가 디스크와 다른 모양이면 없는 병이 보인다"** 그 자리입니다 —
- * 실제로 `award-test.js` B-2가 이것 때문에 빨간불이었고, 코드는 멀쩡했어요.
- *
- * 🔧 그래서 **spin**을 받습니다.
- *   · `spin`을 안 주면 **예전 그대로**예요 (고정 SPREAD). 기존 검사의 기준선이 안 흔들립니다
- *   · `spin`이 숫자면 그 시드로 SPREAD를 **섞습니다**. 여러 spin을 돌리면
- *     명단 폭의 앙상블이 되어 실제 게임의 분포에 가까워져요
- *
- * ⚠️ **에이스가 누구인지가 결과를 가르는 검사**(포지션 분포·부문상)는 반드시 앙상블로
- *    보세요. 한 벌만 보면 그 한 벌의 우연을 재게 됩니다. */
 function mulberry32(a) {
   return function () {
     a |= 0; a = (a + 0x6D2B79F5) | 0;
@@ -122,25 +100,18 @@ function mulberry32(a) {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
+/* 🎲 `spin`을 주면 SPREAD를 섞습니다 — 고정 SPREAD 한 벌은 에이스 자리를 못 박아 버려요(옛 award-test B-2) */
 function spreadFor(spin) {
   if (spin == null) return SPREAD;
   const r = mulberry32(spin >>> 0);
   const out = SPREAD.slice();
-  for (let i = out.length - 1; i > 0; i--) {           // Fisher-Yates
+  for (let i = out.length - 1; i > 0; i--) {
     const j = Math.floor(r() * (i + 1));
     const t = out[i]; out[i] = out[j]; out[j] = t;
   }
   return out;
 }
-
-/* 🧍 **나 없는 선발 11명** — 열한 명 전부가 명단 폭을 그대로 받습니다.
- *
- * 🔴 검사들이 `xiOf(...)`로 만든 뒤 내 줄을 `me:false · str = base`로 바꿔 쓰고 있었는데,
- *    그러면 그 자리 하나만 **폭 없이 평평한 base**가 됩니다. 공격수 자리를 그렇게 쓰면
- *    fw는 {70, 폭 하나}인데 wg는 {폭, 폭}이라 **골 에이스가 wg로 기웁니다**
- *    (실측: fw 37.2% / wg 62.8% — 실제 게임은 50 대 50이에요).
- *    고정 SPREAD의 "골 에이스 100% 윙어"만큼은 아니지만 **같은 종류의 함정**이라 없앱니다.
- * ⚠️ `spin`을 주면 앙상블이 됩니다. 에이스가 누구인지가 결과를 가르는 검사에서는 꼭 쓰세요. */
+/* 🧍 나 없는 선발 11명 */
 function xiAll(mateBase, spin) {
   const base = mateBase == null ? 70 : mateBase;
   const sp = spreadFor(spin);
@@ -155,25 +126,22 @@ function xiAll(mateBase, spin) {
   }
   return rows;
 }
-
-function xiOf(pos, ability, mateBase, spin) {
-  const base = mateBase == null ? 70 : mateBase;
-  const sp = spreadFor(spin);
-  const rows = [];
-  let i = 0;
-  for (const p of ["fw", "wg", "mf", "df"]) {
-    for (let j = 0; j < FORMATION[p]; j++) {
-      rows.push({ name: `P${i}`, pos: p, slot: { g: 1, a: 1, d: 1 }, me: false,
-        str: Math.max(25, Math.min(99, base + sp[i % sp.length])) });
-      i += 1;
-    }
-  }
+/* 🧍 나 + 동료 10 — `buff`를 주면 내 줄에 실어요(1막의 `ACT1_SPOT` 통로 · 12번 §8-5) */
+function xiOf(pos, ability, mateBase, spin, buff) {
+  const rows = xiAll(mateBase, spin);
   const at = rows.findIndex((r) => r.pos === pos);
-  rows[at] = { name: "나", pos, slot: { g: 1, a: 1, d: 1 }, me: true, stats: statsOf(ability), foot: 1 };
+  const me = { name: "나", pos, slot: { g: 1, a: 1, d: 1 }, me: true, stats: statsOf(ability), foot: 1 };
+  if (buff) me.buff = buff;
+  rows[at] = me;
   return rows;
 }
 
-/* n경기를 굴려 집계합니다. 시드를 박으니 결과가 완전히 재현돼요. */
+/* 🫀 **1막의 중립 컨디션** — 엔진 `COND_REF`(`condMul = 1`)와 같은 값을 **검사에 박습니다**(소스에서 안 읽음).
+ * 🔗 `COND_REF`가 다시 움직이면(사슬의 머리 · 12번 §8-2) `engine-test` ⑧이 먼저 빨간불이 되고, 그때 여기를 같이 고칩니다. */
+const COND_NEUTRAL = 51;
+
+/* n경기를 굴려 집계합니다. 시드를 박으니 결과가 완전히 재현돼요.
+ * 🔒 기본 컨디션은 **1막 중립 51**(옛 80은 1막에서 `condMul 1.087` — 중립이 아닙니다) */
 function play(E, pos, ability, opt) {
   const o = opt || {};
   const n = o.n || 1000;
@@ -182,9 +150,9 @@ function play(E, pos, ability, opt) {
   const acc = { g: 0, a: 0, d: 0, cards: 0, success: 0, tg: 0, og: 0, n, matches: [] };
   for (let i = 0; i < n; i++) {
     const r = E._t.playMatch({
-      xi: xiOf(pos, ability, o.mateBase),
+      xi: xiOf(pos, ability, o.mateBase, o.spin == null ? null : o.spin + i, o.buff),
       oppName: "상대", teamStr: o.teamStr == null ? 70 : o.teamStr,
-      oppStr: o.oppStr == null ? 70 : o.oppStr, condition: o.condition == null ? 80 : o.condition,
+      oppStr: o.oppStr == null ? 70 : o.oppStr, condition: o.condition == null ? COND_NEUTRAL : o.condition,
     });
     acc.g += r.myGoals; acc.a += r.assists; acc.d += r.defense;
     acc.cards += r.mineCards; acc.success += r.mineSuccess;
@@ -197,29 +165,16 @@ function play(E, pos, ability, opt) {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
- * 🔥 `beta/winger-moment.js` — 미니게임 4종을 **브라우저 없이** 부르기
- *
- * 판정 산식(`s` → perfect/ok/miss)은 엔진에 있고, 이 파일이 내는 건 **조작 성공도 `s`**
- * 하나뿐이에요. `_t`에 `sCut/sOne/sKp/sBlk/winMul/rollBlock`이 나와 있어서
- * **그 파일의 함수를 그대로** 부를 수 있습니다 — 산식을 베껴 적지 않아요.
- *
- * `window`·`document`·`localStorage`를 자리만 채워 줍니다:
- *   · `document`는 `getElementById → null`만 있으면 돼요 (♿ 체크박스 배선이 조용히 넘어갑니다)
- *   · `localStorage`는 ♿ 판정 창 확대(`grow-wide-judge`)를 켜고 끄는 창구예요
- *   · `window.WingerEngine`을 넣어야 🫀 컨디션(`condMul`)이 진짜로 걸립니다 —
- *     안 넣으면 `condOf`가 1로 떨어져 **컨디션 검사가 아무것도 안 지켜요**
+ * 🥅 `beta/winger-moment.js` — 판을 **브라우저 없이** 부르기(산식 · 상수 쪽)
+ * `window` · `document` · `localStorage`를 자리만 채워 줍니다.
+ *   · `window.WingerEngine`을 넣어야 🫀 컨디션(`condMul`)이 진짜로 걸려요 — 안 넣으면 `condOf`가 1로 떨어져
+ *     **컨디션 검사가 아무것도 안 지킵니다**
  * ═══════════════════════════════════════════════════════════════════════ */
-const MOMENT = "/workspace/grow-games/beta/winger-moment.js";
+const MOMENT = path.join(BETA, "winger-moment.js");
 const MSRC = fs.readFileSync(MOMENT, "utf8");
-
 function loadMoment(muts, opt) {
   const o = opt || {};
-  let src = MSRC;
-  for (const [re, rep] of muts || []) {
-    const before = src;
-    src = src.replace(re, rep);
-    if (src === before) throw new Error(`winger-moment.js에 변이가 안 걸렸어요 — ${re}`);
-  }
+  const src = applyMuts(MSRC, muts, "winger-moment.js");
   const store = { "grow-wide-judge": o.wide ? "1" : "0" };
   const localStorage = {
     getItem: (k) => (k in store ? store[k] : null),
@@ -227,149 +182,99 @@ function loadMoment(muts, opt) {
   };
   const win = { WingerEngine: o.engine || load() };
   const doc = { getElementById: () => null, readyState: "complete", addEventListener() {} };
-  /* 🔒 직접 eval을 안 씁니다 — const가 eval 스코프에 갇혀 값이 늘 undefined가 돼요. */
-  const M = new Function("window", "document", "localStorage",
-    `${src}\nreturn window.W2Moment;`)(win, doc, localStorage);
+  const M = new Function("window", "document", "localStorage", `${src}\nreturn window.W2Moment;`)(win, doc, localStorage);
   M.__store = store;
   M.__win = win;
   return M;
 }
-/* 변이 정규식이 winger-moment.js에 걸리는지 미리 확인 — 죽지 않고 목록을 돌려줍니다. */
-function momentMutsOK(table) {
-  const bad = [];
-  for (const [name, muts] of Object.entries(table || {})) {
-    for (const [re] of muts) {
-      if (!MSRC.match(re)) bad.push(`${name}: ${re}`);
-      else if (MSRC.replace(re, "\u0000") === MSRC) bad.push(`${name}(치환 무효): ${re}`);
-    }
+const momentMutsOK = (table) => mutsOKIn(MSRC, table, "winger-moment.js");
+
+/* 🖥️ **진짜 DOM 위의 `W2Moment`** — 판을 실기기 순서로 눌러 보는 자리.
+ * 🔒 `url`이 있어야 `localStorage`가 삽니다(없으면 ♿ 확대가 검사에서 한 번도 안 걸려요). */
+function momentDom(muts) {
+  const { JSDOM } = require(path.join(ROOT, "tests/cloud/jsdom.js"));
+  const mom = applyMuts(MSRC, muts, "winger-moment.js");
+  const dom = new JSDOM("<!doctype html><body><div id=host></div></body>",
+    { runScripts: "outside-only", pretendToBeVisual: true, url: "https://x.test/winger2/" });
+  const W = dom.window;
+  W.eval(fs.readFileSync(ENGINE, "utf8"));
+  W.eval(mom);
+  return W;
+}
+/* 🖱️ 실기기 순서 그대로 — pointerdown → pointerup → click 셋 다 */
+function pressDom(W, el) {
+  for (const t of ["pointerdown", "pointerup", "click"]) {
+    const e = new W.Event(t, { bubbles: true, cancelable: true });
+    e.clientX = 10; e.clientY = 10;
+    el.dispatchEvent(e);
   }
-  return bad;
+}
+/* 🖱️🖱️ **브라우저의 click 재타겟** — pointerdown/up은 옛 요소에, click은 그 자리에 새로 생긴 요소에 */
+function pressRetarget(W, oldEl, root, newSel) {
+  for (const t of ["pointerdown", "pointerup"]) {
+    oldEl.dispatchEvent(new W.Event(t, { bubbles: true, cancelable: true }));
+  }
+  const fresh = root.querySelector(newSel);
+  if (!fresh) throw new Error(`재타겟할 새 요소를 못 찾았어요 — ${newSel}`);
+  fresh.dispatchEvent(new W.Event("click", { bubbles: true, cancelable: true }));
+  return fresh;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
- * 🖥️ 페이지를 JSDOM에 띄웁니다 — **진짜 게임 코드를 그대로** 부르려고요
- *
- * `prospect.js`는 game.js의 전역(S · rand · STAT_DEFS · POS_INFO …)과 `WingerSquad`에
- * 기대어 있어서, 산식만 떼어 오면 **그 전역들을 제가 다시 지어내게** 됩니다 —
- * 그게 이 저장소가 여러 번 데인 *"경로가 다른 시뮬레이터"*예요. 페이지째 띄웁니다.
- *
- *   opts.muts     { "prospect.js": [[정규식, 바꿀문자열], …], "career.js": […] }
- *                 파일별로 넣어요. **안 걸리면 던집니다.**
- *   opts.keys     localStorage에 심을 것 (없으면 새 게임으로 시작)
- *   opts.wide 등  그 밖은 안 씁니다
- *
- * 🔒 `window.__get(name)`으로 game.js의 최상위 const(전역에 안 붙는 것)를 꺼낼 수 있어요.
- * ═══════════════════════════════════════════════════════════════════════ */
-const PAGE_DIR = "/workspace/grow-games/beta/winger2";
-
-/* ═══════════════════════════════════════════════════════════════════════
- * ⏱️ **페이지 앞에 심는 preamble — 여기 한 벌만 있습니다** (2026-09-02 · 109번)
+ * 🖥️ 게임 페이지(`beta/winger2/index.html`)를 JSDOM에 — **진짜 스크립트 순서 그대로**
+ *   opts.muts   { "game.js": [[정규식, 바꿀 문자열], …], "index.html": […], "winger-moment.js": […] }
+ *               `<script src>`의 **basename**으로 겁니다. **안 걸리면 던집니다.**
+ *   opts.keys   localStorage에 심을 것
+ *   opts.fastTimers  setTimeout을 0ms로(연출 지연만 없앰 — rAF의 물리는 실시간 그대로)
+ *   opts.pre    preamble 뒤에 덧붙일 스크립트(문자열)
  * ═══════════════════════════════════════════════════════════════════════
- *
- * 🔴 **가짜 rAF가 미니게임을 통째로 얼렸습니다.** 이렇게 돼 있었어요:
- *
- *     window.requestAnimationFrame = (cb) => setTimeout(() => cb(0), 0);
- *
- * `winger-moment.js`의 판 넷은 전부 `last = nowMs()`(= performance.now, 큰 값)로
- * 시작해서 `dt = Math.min((t - last) / 1000, 0.05)`로 움직입니다. `t`가 늘 **0**이면
- *   ① 첫 프레임 dt가 **크게 음수** → 위치가 음수로 튀고
- *   ② 그 뒤로는 `last`도 0이라 dt가 **영원히 0** → **상대가 얼어붙습니다.**
- *
- * 그런데 **화면은 멀쩡히 그려져서 아무 검사도 안 울었어요.** 실측(109번 §2):
- *
- *   | 판 | 가짜 rAF | 진짜 시계 |
- *   |---|---|---|
- *   | 🏃 컷인   | 607ms 만에 **즉시 실패**, 갭이 `translateX(0.00%)`에 고정 (위치 1종) | 3155ms, 위치 396종 |
- *   | 🥅 1대1   | **안 끝남**, 키퍼가 `scaleX(0.2400)`에 고정 | 4005ms에 스스로 끝남, 412종 |
- *   | 🎯 킬패스 | **안 끝남**, 동료가 `translateX(7.15%)`에 고정 | 위치 398종 |
- *   | 🧱 차단   | **안 끝남**, 러너가 **`translateX(-4.13%)`**(음수!) — `.w2m-blk-go`를 904번 보고도 안 끝남 | 2264ms에 스스로 끝남, 282종 |
- *
- * `-4.13%`가 ①의 물증이고, 「904번 봤는데 안 끝남」이 *"1.7초 뒤 스스로 끝난다"*가
- * 거짓이었다는 물증입니다.
- *
- * 🔒 **그래서 preamble을 여기 한 벌만 둡니다.** 예전에는 같은 문자열이 **네 벌**
- *    (`_load.js` · `wiring-test.js` · `league-test.js` · `award-test.js`)이었고,
- *    `wiring-test.js` 한 벌만 고쳐진 채 **셋이 얼어붙은 판정 위에서 돌았어요.**
- *    복붙본이 하나라도 남으면 같은 일이 또 납니다 — `tests/winger2/raf-test.js`가
- *    **새 복붙본이 생기면 빨간불**을 냅니다.
- *
- * ⚠️ 시계는 **`performance.now()`**를 그대로 넘깁니다(가상 시계가 아니에요).
- *    `winger-moment.js`의 `nowMs()`가 같은 창의 `performance.now()`를 쓰니까
- *    **두 시계가 같은 시간축 위에 섭니다.** 가상 시계를 쓰려면 `performance.now`도
- *    같이 갈아야 하는데, 그러면 `setTimeout`(실시간)과 어긋나요.
- *    ⏳ 대가는 **벽시계**입니다 — 판이 진짜로 1.7~4초씩 걸려요. 그게 정상입니다.
- *
- *   opt.fastTimers  setTimeout을 0ms로 뭉갭니다 (rAF의 물리는 그대로 실시간이에요 —
- *                   `ender`의 620ms 같은 **지연만** 없앱니다) */
+ * ⏱️ preamble은 **여기 한 벌만** 있습니다 — 🔴 가짜 rAF에 `0`을 넘기면 판이 얼어붙어요(`raf-test`). */
 const RAF_SHIM = `window.requestAnimationFrame=(cb)=>setTimeout(()=>cb(typeof performance!=="undefined"&&performance.now?performance.now():Date.now()),0);`;
 function pagePre(keys, opt) {
   const o = opt || {};
   return `window.fetch=()=>Promise.reject(new Error("off"));
 ${RAF_SHIM}window.scrollTo=()=>{};
-window.alert=()=>{};window.confirm=()=>false;
-`   + (o.fastTimers ? `(function(){var st=window.setTimeout;window.setTimeout=function(fn,ms){return st(fn,0);};})();\n` : "")
+window.alert=()=>{};window.confirm=()=>${o.confirm ? "true" : "false"};
+`   + (o.fastTimers ? `(function(){var st=window.setTimeout;window.setTimeout=function(fn,ms){var a=[].slice.call(arguments,2);return st.apply(window,[fn,0].concat(a));};})();\n` : "")
     + `window.__errs=[];window.addEventListener("error",function(e){window.__errs.push(String(e.message||e.error));});\n`
-    + Object.entries(keys || {}).map(([k, v]) => `localStorage.setItem(${JSON.stringify(k)},${JSON.stringify(v)});`).join("");
+    + Object.entries(keys || {}).map(([k, v]) => `localStorage.setItem(${JSON.stringify(k)},${JSON.stringify(v)});`).join("")
+    + (o.pre || "");
+}
+/* `index.html`이 싣는 스크립트의 **basename → 실제 경로** — 변이 · 대조가 같은 파일을 보게 */
+function pageScripts(html) {
+  const out = {};
+  for (const m of (html || fs.readFileSync(path.join(PAGE_DIR, "index.html"), "utf8")).matchAll(/<script src="([^"]+)"><\/script>/g)) {
+    const f = path.resolve(PAGE_DIR, m[1].split("?")[0]);
+    out[path.basename(f)] = f;
+  }
+  return out;
 }
 function bootPage(opts) {
   const o = opts || {};
-  const { JSDOM } = require("/workspace/grow-games/tests/cloud/jsdom.js");
+  const { JSDOM } = require(path.join(ROOT, "tests/cloud/jsdom.js"));
   const muts = o.muts || {};
   const applied = {};
-  const PRE = pagePre(o.keys, o);
-  /* 🔴 **`index.html` 자신도 변이 대상입니다.** 예전에는 `<script src>`로 실린 .js만
-   *    갈아치웠는데, 그러면 `muts["index.html"]`을 넘겨도 **조용히 아무 일도 안 일어나요**
-   *    — `pageMutsOK`는 디스크에서 읽어 "걸린다"고 답하니 0번 검사도 초록불입니다.
-   *    (실제로 🏘️ 동네 건너뛰기 버튼 변이가 그 상태로 「안 잡힘」을 냈습니다.)
-   *    ⚠️ 마크업을 갈 때는 스크립트 태그를 인라인으로 바꾸기 **전**에 갈아야 해요. */
   let rawHtml = fs.readFileSync(path.join(PAGE_DIR, "index.html"), "utf8");
-  for (const [re, rep] of muts["index.html"] || []) {
-    const before = rawHtml;
-    rawHtml = rawHtml.replace(re, rep);
-    if (rawHtml === before) throw new Error(`index.html에 변이가 안 걸렸어요 — ${re}`);
-    applied["index.html"] = (applied["index.html"] || 0) + 1;
-  }
+  if (muts["index.html"]) { rawHtml = applyMuts(rawHtml, muts["index.html"], "index.html"); applied["index.html"] = muts["index.html"].length; }
   const html = rawHtml
+    .replace(/<script[^>]*src="https?:[^"]*"[^>]*><\/script>/g, "")
     .replace(/<script src="([^"]+)"><\/script>/g, (m0, src) => {
       const f = path.resolve(PAGE_DIR, src.split("?")[0]);
       if (!fs.existsSync(f)) return "";
-      let code = fs.readFileSync(f, "utf8");
       const base = path.basename(f);
-      for (const [re, rep] of muts[base] || []) {
-        const before = code;
-        code = code.replace(re, rep);
-        if (code === before) throw new Error(`${base}에 변이가 안 걸렸어요 — ${re}`);
-        applied[base] = (applied[base] || 0) + 1;
-      }
+      let code = fs.readFileSync(f, "utf8");
+      if (muts[base]) { code = applyMuts(code, muts[base], base); applied[base] = muts[base].length; }
       return `<script>\n${code}\n</script>`;
     })
-    .replace("</head>", `<script>${PRE}</script></head>`)
+    .replace("</head>", `<script>${pagePre(o.keys, o)}</script></head>`)
     .replace("</body>", `<script>window.__get=(n)=>eval(n);</script></body>`);
-  const dom = new JSDOM(html, { runScripts: "dangerously", pretendToBeVisual: true, url: "https://x.test/winger2/" });
+  const missing = Object.keys(muts).filter((k) => !applied[k]);
+  if (missing.length) throw new Error(`변이를 건 파일이 페이지에 안 실렸어요 — ${missing.join(", ")}`);
+  const dom = new JSDOM(html, { runScripts: "dangerously", pretendToBeVisual: true, url: o.url || "https://x.test/winger2/" });
   const w = dom.window;
   w.Ads = { display() {}, init() {} };
-  w.Stats = { log() {} };
   w.__applied = applied;
-
-  /* ═══════════════════════════════════════════════════════════════════
-   * 💥 **`W.close()` 뒤에 늦게 도는 콜백이 검사를 통째로 죽이는 자리** — 여기서 한 번에 막습니다
-   * ═══════════════════════════════════════════════════════════════════
-   * jsdom은 `close()` 뒤에 창 안의 `document`를 **`undefined`로 만듭니다.** 그런데
-   * `bootPage`가 심어 둔 `fetch`는 **즉시 거절**이라, 그 `.catch`가 창을 닫은 **뒤에**
-   * 돌면 `cloud.js`의 `syncPill`이 `document.body`를 읽다 `TypeError`로 던져요
-   * (`syncPill → syncEnd → index.html:234`). 그 던짐은 `uncaughtException`이라
-   * `die()`가 받아 **종료 코드 2(💥 안 돌았음)**가 됩니다 — 초록불도 빨간불도 아니에요.
-   *
-   * 🔴 **창마다 따로 피하지 않습니다.** 예전에는 검사가 각자
-   *    `W.Cloud.touch = () => {}` · `W.fetch = () => new Promise(() => {})`로 무력화했는데,
-   *    그러면 **그 줄을 안 적은 검사가 그대로 죽습니다**(engineer도 실측 스크립트에서
-   *    같은 자리를 만나 「창을 안 닫는 것」으로 피했어요 — 96번 §5-4).
-   *
-   * 🔧 두 겹으로 막아요:
-   *   ① ☁️ 클라우드 전송을 먼저 끕니다 — 새로 시작되는 왕복이 없어집니다
-   *   ② **진짜 close는 한 틱 뒤에** 합니다. 이미 예약된 마이크로태스크(`.catch` 등)는
-   *      `setImmediate`보다 **먼저** 도니까, 그때 `document`가 아직 살아 있어요.
-   * 🔒 세이브 내용에도, 화면에도 손대지 않습니다 — **닫는 순서만** 바꿉니다. */
+  /* 💥 `close()` 뒤에 늦게 도는 콜백이 검사를 통째로 죽이는 자리 — 클라우드 전송을 먼저 끄고 한 틱 뒤에 닫아요 */
   const rawClose = w.close.bind(w);
   let closed = false;
   w.close = () => {
@@ -381,50 +286,35 @@ function bootPage(opts) {
   };
   return w;
 }
-/* 변이 정규식이 그 파일에 걸리는지 미리 확인 — 죽지 않고 목록을 돌려줍니다. */
+/* 변이 정규식이 그 파일에 걸리는지 미리 — 죽지 않고 목록을 돌려줍니다.
+ * table = { 이름: { "game.js": [[re, rep]…], … } } · 파일은 `index.html`이 싣는 basename 또는 `index.html` */
 function pageMutsOK(table) {
+  const scripts = pageScripts();
   const bad = [];
   for (const [name, byFile] of Object.entries(table || {})) {
     for (const [file, muts] of Object.entries(byFile)) {
-      const src = fs.readFileSync(path.join(PAGE_DIR, file), "utf8");
-      for (const [re] of muts) {
-        if (!src.match(re)) bad.push(`${name} → ${file}: ${re}`);
-        else if (src.replace(re, "\u0000") === src) bad.push(`${name} → ${file}(치환 무효): ${re}`);
-      }
+      const f = file === "index.html" ? path.join(PAGE_DIR, "index.html") : (scripts[file] || path.join(PAGE_DIR, file));
+      if (!fs.existsSync(f)) { bad.push(`${name} → ${file}: 파일이 없어요`); continue; }
+      bad.push(...mutsOKIn(fs.readFileSync(f, "utf8"), { [name]: muts }, file));
     }
   }
   return bad;
 }
+/* 저장소 아무 파일 — 경로(ROOT 기준)로 대조 */
+function fileMutsOK(rel, table) {
+  const f = path.join(ROOT, rel);
+  if (!fs.existsSync(f)) return [`${rel}: 파일이 없어요`];
+  return mutsOKIn(fs.readFileSync(f, "utf8"), table, rel);
+}
 
 /* ═══════════════════════════════════════════════════════════════════════
- * 🎲 **난수원이 둘입니다 — 시드를 「갈라서」 겁니다** (2026-09-02 · 109번 · designer §18-5 ③)
- * ═══════════════════════════════════════════════════════════════════════
- *
- * 이 페이지에는 난수원이 **둘**이에요:
- *   ① `W.Math.random`      — 화면·동네·학교·제안이 직접 부릅니다
- *   ② `WingerEngine._t.seed()` — 엔진이 로드 때 `let _rng = Math.random`으로
- *      **함수를 잡아 두기 때문에** ①만 갈아서는 판정에 안 걸려요. 따로 걸어야 합니다.
- *
- * 🔴 **그런데 둘에 같은 시드를 걸면 lockstep이 납니다.**
- *    `engine.js`의 `mulberry32`와 검사 쪽 `mulberry32`가 **같은 알고리즘**이라,
- *    같은 시드면 **앞 1,000개가 1000/1000 완전히 일치**합니다 (109번 §4 실측).
- *    그러면 소비량까지 맞아떨어지는 자리에서 **보폭이 같아져** 두 흐름이 함께 움직여요 —
- *    balancer 실측에서 그 상태의 첫 측정이 **부호가 뒤집힌 값**을 냈습니다.
- *
- * ⚠️ **이건 잡음이 아니라 편향이라 표본을 늘려도 안 없어집니다.** 시드를 갈라야 사라져요.
- *
- * 🔒 그래서 시드를 **한 군데서** 가릅니다. 드라이버마다 손으로 두 줄을 적으면
- *    한 벌만 안 갈린 채로 남아요 — 그게 방금 rAF에서 겪은 일입니다(복붙본 넷 중 하나만 수정).
- *    `seed-split-test.js`가 **두 스트림 앞 1,000개가 일치하면 빨간불**을 냅니다.
- *
- * 🌍 이 계약이 서 있는 세계:
- *   「난수원이 **둘 이상**인 세계」의 문장입니다. 엔진이 `_rng`를 로드 시점에 안 잡고
- *   매번 `Math.random`을 부르도록 바뀌면 난수원이 **하나**가 되고, 그때는 가르는 것이
- *   아니라 **`_t.seed()`를 아예 안 부르는 것**이 맞습니다 — 이 함수부터 다시 보세요.
- *
- *   돌려주는 값: 되감을 수 있는 흐름 `{ i, fn }` — `i`를 옮기면 같은 자리로 돌아가요.
- *   opt.engine === false 면 ②를 안 겁니다 (D-0a처럼 **일부러 빼서** 재는 검사용). */
-const SEED_SPLIT = 0x9E3779B9;                 // 황금비 — 시드를 가르는 데만 씁니다
+ * 🎲 **난수원이 둘 이상이면 시드를 「갈라서」 겁니다** (11번 §7-3 #19)
+ *   ① `W.Math.random` — 판(`winger-moment.js`)·공용 `Fx`가 부릅니다
+ *   ② `WingerEngine._t.seed()` — 엔진은 로드 때 `let _rng = Math.random`으로 함수를 잡아 둬서 따로 걸어야 해요
+ * 🔴 같은 시드면 lockstep(앞 1,000개 1000/1000 일치) — 잡음이 아니라 편향이라 표본을 늘려도 안 없어집니다.
+ * 🌍 1막 게임은 판 시드에서 자리마다 갈라 낸 난수원(`world.js` `SALT`)을 엔진에 직접 겁니다 — 그 갈래는
+ *    `seed-split-test` B절이 따로 봐요. 이 함수는 **검사가 거는** 두 흐름만 가릅니다. */
+const SEED_SPLIT = 0x9E3779B9;
 function seedBoth(W, seed, opt) {
   const o = opt || {};
   const base = mulberry32(seed >>> 0);
@@ -438,403 +328,11 @@ function seedBoth(W, seed, opt) {
   return s;
 }
 
-/* ═══════════════════════════════════════════════════════════════════════
- * 🏘️ **동네 축구를 지나가는 드라이버** (2026-08-31 · 85번 「순-B」)
- *
- * 흐름이 바뀌었습니다 — `타이틀 → ✏️ 이름 → 📍 자리 → 🏘️ 동네 → 🏟️ 입단 제안 → 🧬 조립대`.
- * 📍 자리를 누르면 **곧바로 동네 순간 카드 3장**이 열려요. 조립대까지 가려면 그 셋을
- * 지나야 합니다.
- *
- * ⚠️ **`townAuto(W)`를 자리 누르기 「전」에 부르세요.** 첫 카드는 `WingerTown.open`이
- *    불리는 순간 바로 열립니다 — 그 뒤에 켜면 이미 진짜 미니게임이 떠 있어요.
- * 🤖 자동 진행은 `s = 0.5` **중립 조작**이에요. 판정 산식을 우회하는 게 아니라
- *    게임이 이미 갖고 있는 갈래(`autoMiniOn`)를 그대로 씁니다.
- * ♻️ 돌려받은 함수를 부르면 **원래 설정으로 되돌아갑니다** — 진짜 미니게임을 재는
- *    검사(youth-moment-test)가 이 뒤에 이어지니 켜 둔 채로 두면 안 돼요. */
-function townAuto(W) {
-  const prev = W.localStorage.getItem("grow-auto-mini");
-  W.localStorage.setItem("grow-auto-mini", "1");
-  return () => W.localStorage.setItem("grow-auto-mini", prev == null ? "0" : prev);
-}
-/* ═══════════════════════════════════════════════════════════════════════
- * 📨 **조기 제안 화면을 지나갑니다 — 반드시 「거절」입니다** (2026-09-01 · 98번)
- * ═══════════════════════════════════════════════════════════════════════
- * 🏫 초등·중등이 끝날 때마다 `screen-agency`가 **조기 제안 모드**로 한 번씩 섭니다.
- * 드라이버가 이걸 모르면 그 자리에서 **멈춰요** — 검사 9종이 그래서 💥로 죽었습니다.
- *
- * 🔴🔴 **`#agency-list`의 카드를 누르면 안 됩니다. 그건 「🤝 예비 계약」(승낙)이에요.**
- *    승낙하면 🏟️ 최종 제안에 **그 한 곳만** 옵니다 — `#agency-list`가 **1장**이 되어
- *    「5곳이 전부 온다」 위에 선 검사들이 통째로 어긋나요.
- *    ✅ 눌러야 하는 건 **`#btn-early-next`(🙅 거절하고 계속 뛸래요)** 하나뿐입니다.
- *
- * 🔑 **「조기 화면인가」를 화면 id로 판단하지 않습니다** — 최종도 `screen-agency`거든요.
- *    **`#btn-early-next`가 안 감춰져 있는가**로 봅니다. 그게 조기 모드의 표식이에요
- *    (`renderMarkets`가 최종 모드에서 이 버튼을 다시 감춥니다).
- *
- * 돌려주는 값: 거절을 눌렀으면 true. */
-function passEarly(W, press) {
-  const D = W.document;
-  const cur = D.querySelector(".screen.active");
-  if (!cur || cur.id !== "screen-agency") return false;
-  const b = D.getElementById("btn-early-next");
-  if (!b || b.disabled || b.classList.contains("hidden")) return false;
-  press(b, "🙅 조기 제안 거절");
-  return true;
-}
-
-/* 🏘️/🏫 학교 화면에 서 있으면 [다음]을 눌러 끝까지 지나갑니다. 없으면 아무것도 안 해요.
- * 📨 사이에 낀 조기 제안 화면은 **거절로** 지나갑니다 (위 `passEarly`).
- * 돌려주는 값: 지나간 카드 수 (0이면 학교 화면이 아니었다는 뜻) */
-async function passTown(W, press, restore) {
-  const D = W.document;
-  let n = 0;
-  for (let g = 0; g < 24; g++) {
-    const cur = D.querySelector(".screen.active");
-    if (cur && cur.id === "screen-town") {
-      /* ⏱️ **2026-09-06 — 시계가 async라 여기서 기다려야 합니다** (설계 153번).
-       *    누른 직후엔 버튼이 언제나 `disabled`예요 — 안 기다리면 **한 번 누르고 break**라
-       *    🏟️ 제안 화면에 영영 못 닿습니다 (`bench-test`가 💥로 죽던 자리). */
-      await stageIdle(D);
-      const b = D.getElementById("btn-town-next");
-      if (!b || b.disabled || b.classList.contains("hidden")) break;
-      press(b, "🏫 다음");
-      n += 1;
-      continue;
-    }
-    /* 📨 조기 제안이면 거절하고 계속 뜁니다. 아니면 여기서 끝이에요. */
-    if (!passEarly(W, press)) break;
-  }
-  if (restore) restore();
-  return n;
-}
-
-/* ═══════════════════════════════════════════════════════════════════════
- * 🏫 **초·중·고 학교 아크를 지나가는 드라이버** (2026-09-01 · 93번 §5 · 96번)
- *
- * 흐름이 또 바뀌었습니다 —
- *   `타이틀 → ✏️ 이름 → 🦶 주발 → 🗺️ 동네 → 🏫 초등부(2) → 🎯 자리 → 🏫 중등부(3) → 🏫 고등부(3) → 🏟️ 제안`
- *
- * 🔴 **`passTown`(옛 3장 드라이버)은 그대로 둡니다.** 그건 🎯 자리 카드를 곧바로 눌러
- *    🦶 주발·🗺️ 동네·🏫 초등부를 **건너뛰고** 중·고등 6장만 지나는 길이라, 그 위에 선
- *    검사 여섯(bench·grade·worldcup·youth-*)의 기준선이 안 흔들려요.
- *    🔑 **아크 전체(8장)를 재려면 반드시 `passArc`를 쓰세요** — `passTown`으로는
- *    초등 2장이 통째로 안 들어옵니다(그게 96번 §5-2 T-5의 「6장」이었어요).
- *
- * ⏳ 🦶 주발에는 **연출이 낄 수 있어서** 이 드라이버들은 **async**입니다.
- *    ⚠️ 시간을 박지 않습니다. **「화면이 바뀔 때까지」**를 기다려요. */
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
-/* ═══════════════════════════════════════════════════════════════════════
- * 🦶 **발을 고르고 [다음]을 눌러 넘어갑니다** — winger2 검사 전체가 쓰는 **한 벌**
- * ═══════════════════════════════════════════════════════════════════════
- * 🔴 **복붙본을 만들지 마세요.** 2026-09-02에 이 함수의 사본이 **셋**이었습니다
- *    (`_load.js` · `foot-map-test.js` · `youth-moment-test.js`의 `toHome` **인라인**).
- *    주발 화면에 [다음]이 붙자 **셋이 한꺼번에** 죽어 검사 7종이 종료 코드 2가 됐어요
- *    — rAF preamble이 네 벌이었을 때와 **같은 형태**입니다.
- *    🔒 `foot-next-test.js`의 **N-9**가 새 복붙본이 생기면 빨간불을 냅니다.
- *
- * 🆕 **탭은 「고르기」까지입니다. 넘기는 건 `#btn-foot-next`예요** (2026-09-02 · 111번).
- *    그전에는 탭이 곧 답이라 **탭 한 번**으로 넘어갔습니다.
- *
- * 🔑 **「화면이 바뀔 때까지」 기다림은 그대로 둡니다.** 지금은 [다음]이 그 자리에서
- *    바로 넘기지만, 이 대기는 *"넘어갈 때까지"*를 말할 뿐이라 연출이 다시 껴도 삽니다.
- *    (예전에 320ms를 박지 않은 판단이 여기서 값을 했어요 — 값을 박았으면
- *     연출이 사라진 날 이 줄이 **의미 없이 320ms를 버리는 줄**이 됐을 겁니다.)
- *
- * 🌍 이 드라이버가 서 있는 세계:
- *   「🦶 주발이 **고르기 + [다음]** 두 걸음인 세계」입니다. 탭이 곧 답으로 되돌아가면
- *   `#btn-foot-next`가 사라져 `press`가 던지므로 **여기부터 다시 보세요.** */
-async function tapFoot(W, press, foot) {
-  const D = W.document;
-  const cur = () => (D.querySelector(".screen.active") || {}).id;
-  press(D.querySelector(`#screen-foot .foot-card[data-foot="${foot === "L" ? "L" : "R"}"]`),
-    `🦶 ${foot === "L" ? "왼발" : "오른발"}`);
-  press(D.getElementById("btn-foot-next"), "🦶 다음");
-  for (let i = 0; i < 400 && cur() === "screen-foot"; i++) await wait(3);
-  if (cur() === "screen-foot")
-    throw new Error("🦶 발을 고르고 [다음]을 눌렀는데 화면이 안 넘어가요 — openFoot의 done 배선을 보세요");
-}
-/* 🗺️ 지역 하나를 골라 [다음]. 🏞️ 도는 지도 폴리곤 · 🏙️ 광역시는 옆 목록입니다. */
-function pickOrigin(W, press, id) {
-  const D = W.document;
-  const el = D.querySelector(`#origin-map .om-do[data-id="${id}"]`)
-    || D.querySelector(`#origin-cities .om-city[data-id="${id}"]`);
-  press(el, `🗺️ ${id}`);
-  press(D.getElementById("btn-origin-next"), "🏫 초등부로");
-}
-/* ═══════════════════════════════════════════════════════════════════════
- * 🏫 **지금 서 있는 그 단계**를 끝까지 지나갑니다.
- * ═══════════════════════════════════════════════════════════════════════
- * 🔴 **돌려주는 것은 「누른 횟수」가 아니라 「굴러간 카드」입니다** (2026-09-04 · 142번).
- *
- * 🏁 [경기 시작]이 붙으면서 **누름 = 카드**가 깨졌어요. 이제 한 단계는
- *      🏁 시작 → 카드 0 · [다음 판] → 카드 1 · … · [다음 단계] → **카드 없음**
- *    이라 누름이 `deck.length + 1`이고, 옛 드라이버는 그걸 전부 카드로 세서
- *    T-5 · T-6a · M-R · S-6 · S-6b · O-3 **여섯이 한꺼번에** 빨간불이 됐습니다.
- *    🟢 덱은 한 장도 안 늘었어요 — 언제나 정확히 **선언 + 1**이었고,
- *    `deal()`을 60,000판 굴리는 `school-test` S-7a는 그 내내 초록불이었습니다.
- *
- * 🔴 **버튼 글자로 가르지 않습니다.** *"🏁 경기 시작이면 세지 마라"*로 적으면
- *    문구가 바뀌는 날 **조용히 죽습니다** — 이 저장소의 「문자열 매칭」 그 자리예요.
- *    대신 **판이 실제로 움직였는지**를 봅니다: `#town-prog`의 「끝난 점」
- *    (`.town-dot.hit`/`.mid`/`.bad`)이 그 누름으로 **늘었는가**.
- *    🔑 이 점은 `progHTML(deck, i)`가 그리는 것이라 `state.cards`와 **다른 계수기**입니다 —
- *      `T.cards()`로 세면 T-6a의 *"`stages`가 `ee`이고 `cards2`가 2"*가 **자기 자신과 비교**가 돼요.
- *
- * 🔒 **한 누름이 두 장을 굴리면 두 칸이 들어갑니다** (늘어난 만큼 넣어요).
- *    이중 탭이 실제로 두 장을 태우는 날 「8장」이 그대로라 안 잡히면 안 되니까,
- *    누름 수도 같이 돌려줍니다 — 배열에 얹은 `presses`·`kick`이 그거예요
- *    (`join`·전개·`filter`는 그대로 도니 기존 호출부는 한 줄도 안 바뀝니다).
- *
- * 🌍 이 드라이버가 서 있는 세계:
- *   「한 단계의 진행이 **버튼 하나**(`#btn-town-next`)로만 나아가고, 진행 상황이
- *   `#town-prog`의 점으로 그려지는 세계」입니다. 점이 사라지거나 진행 버튼이
- *   둘로 갈리면 **여기부터 다시 보세요** — 그때 `seen`은 조용히 빈 배열이 되고,
- *   그건 T-5·S-6이 곧바로 빨간불로 알려 줍니다(조용히 통과하지 않아요).
- *
- * 돌려주는 값: 굴러간 카드마다 읽은 `data-stage`의 배열 (+ `presses` · `kick`) */
-const DONE_DOTS = "#town-prog .town-dot.hit, #town-prog .town-dot.mid, #town-prog .town-dot.bad";
-/* ⏳ **그 누름이 다 굴러갈 때까지 기다립니다** (2026-09-06 · 설계 153번 · 구현 155번 §4-1)
- * ═══════════════════════════════════════════════════════════════════════
- * 🌍 **세계가 바뀌었습니다** — 시계가 `await` 루프로 돌면서 한 누름이 **단계 하나를 통째로**
- *    굴립니다. 누른 「직후」에 점을 읽으면 언제나 0이에요.
- * 🔴 그리고 **끊기는 자리는 「gained === 0」보다 한 칸 앞**입니다: 누른 직후 버튼이
- *    `disabled`라 **점을 읽기도 전에 루프 조건이 먼저** 무너집니다.
- *
- * 🔒 **벽시계 문턱을 안 만듭니다.** 「몇 초 기다린다」가 아니라 **화면이 내는 신호**를 봐요:
- *      ① 화면이 🏫을 떠났거나  ② 진행 버튼이 다시 눌리고 **⏩가 아님**
- *    🔴 ⏩(`.town-fast`)는 경기 **중**에 뜨는 한 번짜리라 «다 굴렀다»가 아닙니다.
- *       🔒 **글자가 아니라 클래스로 가릅니다** — 문구가 바뀌는 날 조용히 죽지 않게요.
- * 🔴 **상한에 닿아도 던지지 않습니다.** 던지면 「빨간불」이 아니라 **💥 죽음**이 되어
- *    «안 돈 것»과 구분이 안 돼요. 그냥 돌아오면 점이 모자라서 **부르는 쪽**(T-5·S-6·C-5)이
- *    빨간불을 냅니다 — 「자가 복구가 실패를 삼키는」 자리를 만들지 않습니다. */
-const STAGE_CAP = 1400;                 // × 15ms = 21초. 🔒 문턱이 아니라 **상한**입니다
-/* 🔒 `anyScreen`은 **`T.openStage()`를 직접 부르는 탐침**용입니다 (`school-test` S-8 · `offer-test` O-1).
- *    그 길은 화면 전환을 안 지나서 `.screen.active`가 🏫이 아닐 수 있어요 — 그때는 ①을 건너뜁니다. */
-async function stageIdle(D, anyScreen) {
-  const done = () => {
-    const cur = D.querySelector(".screen.active");
-    if (!anyScreen && (!cur || cur.id !== "screen-town")) return true;   // ① 화면을 떠남
-    const b = D.getElementById("btn-town-next");
-    if (!b || b.disabled || b.classList.contains("hidden")) return false;
-    return !b.classList.contains("town-fast");                // ② ⏩가 아닌 진행 버튼
-  };
-  for (let i = 0; i < STAGE_CAP && !done(); i++) await wait(15);
-  return done();
-}
-async function passStage(W, press, max) {
-  const D = W.document;
-  const seen = [];
-  const dots = () => D.querySelectorAll(DONE_DOTS).length;
-  let presses = 0, kick = 0;
-  /* 🔒 **루프 조건을 보기 「전에」** 한 번 — 들어선 직후엔 이미 정착돼 있어 곧바로 돌아옵니다 */
-  await stageIdle(D);
-  for (let g = 0; g < (max || 16); g++) {
-    const cur = D.querySelector(".screen.active");
-    if (!cur || cur.id !== "screen-town") break;
-    const b = D.getElementById("btn-town-next");
-    if (!b || b.disabled || b.classList.contains("hidden")) break;
-    const stage = cur.dataset.stage || "?";
-    const before = dots();
-    press(b, "🏫 다음");
-    presses += 1;
-    /* 🔒 **누름과 읽기 「사이」** — 시계가 다 돌 때까지. 여기가 없으면 `gained`가 언제나 0이에요 */
-    await stageIdle(D);
-    const gained = dots() - before;
-    /* 🏁 첫 누름이 **카드 0번을 실제로 굴렸는가.** 「들어서자마자 굴러가지 않는다」의 증거예요.
-     * 🔴 **`gained > 0`을 반드시 같이 봅니다** — 굴린 게 없어도 킥오프로 세면
-     *    `presses 1 · 카드 0`인 죽은 흐름이 «누름 = 카드 + 1»을 **공짜로** 만족합니다
-     *    (자가 복구가 실패를 삼키는 자리). */
-    if (before === 0 && presses === 1 && gained > 0) kick = 1;
-    for (let k = gained; k > 0; k--) seen.push(stage);
-  }
-  seen.presses = presses;
-  seen.kick = kick;
-  return seen;
-}
-/* ═══════════════════════════════════════════════════════════════════════
- * 🧒 **어린 시절 — 이제 「네 해」입니다** (2026-09-03 · 설계 133번 · 커밋 fde6688)
- * ═══════════════════════════════════════════════════════════════════════
- * 🔴 **이 드라이버는 「자리 뒤가 중등부」인 세계에 살았습니다.** 그 세계가 끝났어요:
- *      옛: 🗺️ 지역 → 🧒 초1 → 🏫 초등부 → 📨 → 🎯 자리 → 🏫 중등부 → …
- *      🆕: 🗺️ 지역 → 🧒 초1 → 초2 → 초3 → 초4 → 🎯 자리 → 🏫 초5 → 📨 → 🏫 중등부 → …
- *    🔑 **바뀐 것이 둘입니다** — 어린 시절이 한 해에서 **네 해**로,
- *      🎯 자리가 초등부 **뒤**에서 초4 **뒤**로. 하나만 고치면 여기서 또 멈춥니다.
- *
- * 🔒 **탭 하나가 고르기 겸 넘김입니다** — [다음]이 없어요(🦶 주발과 다른 점).
- * 🔒 **시간을 박지 않습니다** — 「화면이 바뀔 때까지」 기다립니다. `ECHO_MS`(620ms)를
- *    박으면 연출이 사라지는 날 이 줄이 **의미 없이 620ms를 버리는 줄**이 됩니다.
- * 🔴 **돌려주는 값은 「눌렀는가」입니다** — 화면을 못 만나면 `null`이에요. 「도달했는가」만
- *    재면 화면이 사라져도 흐름이 끝까지 밀려 **아무것도 안 누르고 초록불**이 납니다.
- *
- * 🌍 이 드라이버가 서 있는 세계:
- *   「🧒 어린 시절이 **네 화면**이고, 해마다 **[다음] 없이 탭 하나**인 세계」입니다.
- *   해가 늘거나 줄면 `CHILD_SCREENS`가, [다음]이 붙으면 `tapChild`가 먼저 뒤집힙니다. */
-const CHILD_SCREENS = ["screen-child", "screen-child2", "screen-child3", "screen-child4"];
-/* 🔒 **기본 선택은 여기 한 벌뿐입니다.** 검사마다 손으로 적으면 해가 늘어난 날
- *    한 벌만 안 고쳐진 채 남아요 — rAF preamble 네 벌과 같은 형태예요.
- *    (🧸 공 · 🎯 골문 · 🌿 고르게 · 🔑 초1 굳히기 — 특별한 뜻은 없고 **고정**이라는 것만 계약입니다) */
-const CHILD_DEFAULT = ["ball", "fin", "gn", "h1"];
-
-/* 🧒 **그 해 하나**를 누릅니다. `yr`은 1~4 (안 주면 1).
- * 🔴 복붙본을 만들지 마세요 — `tapFoot`의 사본 셋이 한꺼번에 죽은 자리와 같습니다. */
-async function tapChild(W, press, want, yr) {
-  const y = yr || 1;
-  const sid = CHILD_SCREENS[y - 1];
-  if (!sid) throw new Error(`🧒 초${y} 화면이 CHILD_SCREENS에 없어요`);
-  const D = W.document;
-  const cur = () => (D.querySelector(".screen.active") || {}).id;
-  if (cur() !== sid) return null;
-  const key = want || CHILD_DEFAULT[y - 1];
-  /* 🔒 **화면으로 범위를 좁혀 찾습니다** — 네 화면의 `.card[data-child]`가 한 문서에 같이
-   *    살아서, `#child-list`처럼 목록 id에 기대면 화면이 늘어난 날 엉뚱한 걸 누릅니다. */
-  press(D.querySelector(`#${sid} .card[data-child="${key}"]`), `🧒 초${y} ${key}`);
-  for (let i = 0; i < 600 && cur() === sid; i++) await wait(3);
-  if (cur() === sid)
-    throw new Error(`🧒 초${y} 카드를 눌렀는데 화면이 안 넘어가요 — openChild의 done 배선을 보세요`);
-  return key;
-}
-/* 🧒 **네 해를 차례로.** 돌려주는 값은 **해마다 「실제로 누른」 키**의 배열(길이 4)이에요.
- *    화면을 못 만난 해는 `null`입니다 — 🔴 **길이가 아니라 `null`의 유무를 보세요.**
- *    `picks`를 주면 그 해의 기본값 대신 씁니다(짧으면 나머지는 기본값). */
-async function tapChildArc(W, press, picks) {
-  const p = Array.isArray(picks) ? picks : [];
-  const out = [];
-  for (let y = 1; y <= CHILD_SCREENS.length; y++) out.push(await tapChild(W, press, p[y - 1], y));
-  return out;
-}
-
-/* 🏫 **아크 전체**를 지나 🏟️ 제안 화면까지. 게임 입구(타이틀)에서 출발합니다.
- *
- * 🆕 **2026-09-03 — 흐름이 또 바뀌었습니다** (설계 133번 · 커밋 fde6688):
- *   `타이틀 → ✏️ 이름 → 🦶 주발 → 🗺️ 지역 → 🧒 초1·초2·초3·초4 → 🎯 자리`
- *   `→ 🏫 초5(2) → 📨 → 🏫 중등부(3) → 📨 → 🏫 고등부(3) → 🏟️ 제안`
- *   🔴 **🎯 자리가 🏫 초등부 「뒤」에서 🧒 초4 「뒤」로 왔습니다.** 옛 드라이버는
- *     초등부를 먼저 지나고 자리를 눌렀는데, 그 순서로는 지금 🧒 초2에서 멈춥니다.
- *
- *   돌려주는 것: { stages, cards, screens, early, child, childTaps }
- *     stages     카드마다 읽은 `data-stage` — 계약은 `e e m m m h h h`
- *     screens    지나온 화면들 (연달아 같은 화면은 한 번만)
- *     early      📨 조기 제안을 **거절로** 지난 단계들 — 계약은 `["e", "m"]`
- *     child      🧒 **해마다 실제로 누른** 키의 배열(길이 4) · 못 만난 해는 `null`
- *     childTaps  그중 실제로 누른 해의 수 — 계약은 **4**
- *              🔴 **「도달했다」가 아니라 「눌렀다」를 셉니다** — 화면이 사라지거나 순서가
- *              바뀌면 `tapChild`가 **조용히 `null`을 돌려주고** 흐름은 끝까지 갑니다
- *              (자가 복구가 실패를 삼키는 자리예요). 🔴 `child`가 **배열**이라
- *              `!= null`로 보면 언제나 참입니다 — **`childTaps`를 보세요.**
- *
- * 🔴 **조기 제안은 늘 「거절」입니다.** 승낙하면 최종 제안에 한 곳만 와서 그 위에 선
- *    검사들이 통째로 어긋나요 (`passEarly` 주석 참고). 🤝 승낙 갈래를 재는 검사는
- *    `offer-test.js`가 **따로** 몰고 갑니다.
- *
- * ⚠️ `townAuto`는 **🗺️ 지역 [다음]을 누르기 전**에 켜세요 — 🏫 초5 첫 카드는
- *    🎯 자리를 누르는 순간 바로 열립니다. */
-async function passArc(W, press, opt) {
-  const o = opt || {};
-  const D = W.document;
-  const cur = () => (D.querySelector(".screen.active") || {}).id;
-  const screens = [];
-  const mark = () => { const id = cur(); if (screens[screens.length - 1] !== id) screens.push(id); };
-  mark();
-  press(D.getElementById("btn-new"), "btn-new");
-  mark();
-  press(D.getElementById("btn-name-next"), "btn-name-next");
-  mark();
-  await tapFoot(W, press, o.foot || "R");
-  mark();
-  const back = o.auto === false ? null : townAuto(W);
-  pickOrigin(W, press, o.origin || "seoul");
-  mark();
-  /* 🧒 네 해 — `o.child`는 배열입니다. 옛 검사가 문자열 하나를 주던 자리는
-   *    **초1의 값**으로 받아 줍니다(나머지 해는 기본값). */
-  const wantArr = Array.isArray(o.child) ? o.child : (o.child ? [o.child] : []);
-  const child = [];
-  for (let y = 1; y <= CHILD_SCREENS.length; y++) {
-    child.push(await tapChild(W, press, wantArr[y - 1], y));
-    mark();
-  }
-  /* 🎯 자리 — 🆕 **초4 바로 뒤**입니다 */
-  if (cur() === "screen-position")
-    press(D.querySelector(`#position-list .card[data-pos="${o.pos || "wg"}"]`), `🎯 ${o.pos || "wg"}`);
-  mark();
-  /* 🔒 **단계마다 자국을 남깁니다** — 📨 조기 제안(`screen-agency`)은 **지나가면서만**
-   *    보이는 화면이라, 거절을 누른 「뒤」에만 자국을 찍으면 목록에서 통째로 사라져요.
-   *    (`school-test`의 S-6a가 그 목록으로 화면 순서를 지킵니다) */
-  const stages = await passStage(W, press);                 // 🏫 초5 대항전
-  mark();                                                   // 📨 조기(e)
-  const early = [];
-  if (passEarly(W, press)) early.push("e");                 // 📨 초등 뒤 — **거절**
-  mark();                                                   // 🏫 중등부
-  stages.push(...(await passStage(W, press)));               // 🏫 중등부
-  mark();                                                   // 📨 조기(m)
-  if (passEarly(W, press)) early.push("m");                 // 📨 중등 뒤 — **거절**
-  mark();                                                   // 🏫 고등부
-  stages.push(...(await passStage(W, press)));               // 🏫 고등부
-  mark();                                                   // 🏟️ 최종 제안
-  if (back) back();
-  return { stages, cards: stages.length, screens, early, child,
-    childTaps: child.filter((k) => k != null).length };
-}
-
-
-/* ═══════════════════════════════════════════════════════════════════════
- * 🖥️ **진짜 DOM 위의 `W2Moment`** — 미니게임 넷을 실기기 순서로 눌러 보는 자리
- *
- * `loadMoment()`는 `document.getElementById → null`만 있는 가짜 창이라 화면을 못 그려요.
- * 여기서는 jsdom을 띄우고 `engine.js` → `winger-moment.js`를 **디스크 그대로** 싣습니다.
- *
- * 🔴 **`press()`가 세 이벤트를 같은 요소에 보내면 이중 탭이 재현이 안 됩니다.**
- *    실제 브라우저는 손 뗄 때 `click`을 **「그 지점에 지금 있는 요소」**에게 보냅니다 —
- *    `pointerdown`이 화면을 갈아치웠으면 click은 **새로 생긴 버튼**에게 가요.
- *    그 경로를 재현하는 것이 `pressRetarget(oldEl, newSel)`입니다.
- * ═══════════════════════════════════════════════════════════════════════ */
-function momentDom(muts) {
-  const { JSDOM } = require("/workspace/grow-games/tests/cloud/jsdom.js");
-  let mom = MSRC;
-  for (const [re, rep] of muts || []) {
-    const before = mom;
-    mom = mom.replace(re, rep);
-    if (mom === before) throw new Error(`winger-moment.js에 변이가 안 걸렸어요 — ${re}`);
-  }
-  /* 🔒 **`url`이 있어야 `localStorage`가 삽니다.** 없으면 origin이 opaque라
-   *    `localStorage.getItem`이 던지고, `wideOn()`의 try/catch가 그걸 삼켜
-   *    ♿ **판정 창 확대(WIDE 1.30)가 검사에서 한 번도 안 걸립니다** —
-   *    「환경이 우연히 막아 줌」의 형태예요(코드가 막은 게 아니라 창이 없던 겁니다).
-   *    🔴 넣기 전에 확인했습니다: 아무도 안 심으면 `getItem`이 null이라 예전과 같아요. */
-  const dom = new JSDOM("<!doctype html><body><div id=host></div></body>",
-    { runScripts: "outside-only", pretendToBeVisual: true, url: "https://x.test/winger2/" });
-  const W = dom.window;
-  W.eval(fs.readFileSync(path.join(PAGE_DIR, "engine.js"), "utf8"));
-  W.eval(mom);
-  return W;
-}
-
-/* 🖱️ 실기기 순서 그대로 — pointerdown → pointerup → click 셋 다.
- *    하나만 보내던 검사가 24개 케이스를 놓친 전례가 있어요. */
-function pressDom(W, el) {
-  for (const t of ["pointerdown", "pointerup", "click"]) {
-    const e = new W.Event(t, { bubbles: true, cancelable: true });
-    e.clientX = 10; e.clientY = 10;
-    el.dispatchEvent(e);
-  }
-}
-
-/* 🖱️🖱️ **브라우저의 click 재타겟** — 이중 탭이 진짜로 나는 경로예요.
- *    `pointerdown`/`pointerup`은 **옛 요소**에, `click`은 **그 자리에 새로 생긴 요소**에.
- *    `newSel`을 못 찾으면 던집니다 — 조용히 아무 일도 안 일어나면 초록불이 되니까요. */
-function pressRetarget(W, oldEl, root, newSel) {
-  for (const t of ["pointerdown", "pointerup"]) {
-    oldEl.dispatchEvent(new W.Event(t, { bubbles: true, cancelable: true }));
-  }
-  const fresh = root.querySelector(newSel);
-  if (!fresh) throw new Error(`재타겟할 새 요소를 못 찾았어요 — ${newSel}`);
-  fresh.dispatchEvent(new W.Event("click", { bubbles: true, cancelable: true }));
-  return fresh;
-}
-
-module.exports = { load, mutsOK, xiOf, xiAll, statsOf, play, spreadFor, SRC, ENGINE,
-  bootPage, pageMutsOK, PAGE_DIR, pagePre, RAF_SHIM, seedBoth, SEED_SPLIT, mulberry32,
-  townAuto, passTown,
-  wait, tapFoot, tapChild, tapChildArc, CHILD_SCREENS, CHILD_DEFAULT, pickOrigin, passStage, stageIdle, passEarly, passArc,
-  loadMoment, momentMutsOK, MSRC, MOMENT,
-  momentDom, pressDom, pressRetarget };
+module.exports = { ROOT, BETA, PAGE_DIR, ENGINE, SRC, die,
+  load, mutsOK, mutsOKIn, applyMuts, fileMutsOK,
+  FORMATION, xiOf, xiAll, statsOf, play, spreadFor, mulberry32, COND_NEUTRAL,
+  loadMoment, momentMutsOK, MSRC, MOMENT, momentDom, pressDom, pressRetarget,
+  bootPage, pageMutsOK, pagePre, pageScripts, RAF_SHIM,
+  seedBoth, SEED_SPLIT, wait };

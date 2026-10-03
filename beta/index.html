@@ -108,7 +108,7 @@
     const GAMES = [
       { slug: "rookie", emoji: "⚾", title: "더 드래프트", sub: "야구선수 키우기",     genre: "스포츠", save: "rookie-save-v1" },
       { slug: "soccer", emoji: "⚽", title: "더 윙어",     sub: "축구선수 키우기",     genre: "스포츠", save: "winger-save-v1" },
-      { slug: "winger2", emoji: "⚽", title: "더 윙어 II", sub: "축구선수 키우기 (신작)", genre: "스포츠", save: "winger2-save-v1" },
+      { slug: "winger2", emoji: "⚽", title: "더 윙어 II", sub: "축구선수 키우기 (신작)", genre: "스포츠", save: "winger2-save-v2" },
       { slug: "idol",   emoji: "🎤", title: "더 트레이니", sub: "아이돌 연습생 키우기", genre: "연예",  save: "trainee-save-v1" },
       { slug: "stock",  emoji: "📈", title: "더 인베스터", sub: "주린이 키우기",       genre: "금융",  save: "investor-save-v1" },
       { slug: "dev",    emoji: "💻", title: "더 커밋",     sub: "개발자 키우기",       genre: "IT",    save: "devgrow-save-v1" },
@@ -127,6 +127,7 @@
       try { return JSON.parse(localStorage.getItem(save + "-slots")) || {}; } catch { return {}; }
     };
     const progressLabel = (st) => {
+      if (st.label) return st.label;
       const pro = st.phase && /pro|debut/.test(String(st.phase));
       if (pro) return `프로 ${st.proYear || 1}년차`;
       return `${st.year || 1}년차`;
@@ -144,12 +145,14 @@
     chars.sort((a, b) => b.savedAt - a.savedAt);
 
     // 이어하기 렌더
+    // 🔒 이름 · 진행 글자는 세이브(이 기기 · 클라우드로 받은 것)에서 와요 — HTML로 읽히지 않게 글자로만 끼워요
+    const esc = (v) => String(v).replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch]);
     if (chars.length) {
       document.getElementById("continue-wrap").hidden = false;
       document.getElementById("continue-row").innerHTML = chars.slice(0, 12).map((c) => `
         <a class="continue-card" href="${c.g.slug}/">
           <span class="ce">${c.g.emoji}</span>
-          <span class="ci"><b>${c.st.name}</b><span>${c.g.title} · ${progressLabel(c.st)}</span></span>
+          <span class="ci"><b>${esc(c.st.name)}</b><span>${c.g.title} · ${esc(progressLabel(c.st))}</span></span>
         </a>`).join("");
     }
 

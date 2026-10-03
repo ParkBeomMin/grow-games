@@ -108,82 +108,139 @@ guard("🟩 W2 시나리오 표", () => {
     + (bad.length ? bad.map((b) => `\n     🔴 ${b}`).join("") : ""));
 
   /* ══════════════════════════════════════════════════════════════
-   * 🔬 **덱의 카드가 「소스가 만들 수 있는 모양」인가** (2026-09-06)
+   * 🔬 **덱의 카드가 「1막이 실제로 만드는 모양」인가** (2026-10-02 · inspector · 26번 §5 — 1막으로 옮김)
    * ══════════════════════════════════════════════════════════════
-   * 🔴 여기까지는 「덱이 있나 · 필드가 있나」만 봤습니다. 그런데 픽스처는 **실제와 다른 모양**이
-   *    되어도 빨간불이 안 떠요 — 사람이 눌러 보는 화면만 조용히 어긋납니다.
-   *    실제로 두 번 났습니다:
-   *      · 2026-09-05 — 🥅 하프타임에 `poss`·`shots`·`rating`(학교에선 안 나오는 값)
-   *      · 2026-09-06 — 🏫 학교 덱에 🧱 `defend`(뽑힐 수 없는 종류) · 🔥 카드에 `flow`
-   * 🔒 **목록을 베껴 적지 않고 소스에서 읽습니다** — `PLAYABLE`이 바뀌면 검사가 따라갑니다. */
-  const TOWN = fs.readFileSync(path.join(BETA, "winger2/town.js"), "utf8");
-  const GAME = fs.readFileSync(path.join(BETA, "winger2/game.js"), "utf8");
-  const grabSrc = (src, re, wrap) => {
-    const m = src.match(re);
-    if (!m) throw new Error(`소스에서 표를 못 찾았어요 — ${re}`);
-    return new Function(`return ${wrap ? wrap(m[1]) : m[1]};`)();
-  };
-  const CARDS = grabSrc(TOWN, /const CARDS = (\[[\s\S]*?\n  \]);/);
-  const dropKey = (TOWN.match(/const PLAYABLE = CARDS\.filter\(\(c\) => c\.key !== "(\w)"\);/) || [])[1];
-  const KIND_OF = grabSrc(GAME, /const YOUTH_CARD_KIND = (\{.*\});/);
-  if (!dropKey || !CARDS.length) throw new Error("`PLAYABLE` 정규식이 안 걸려요 — 이 검사는 «안 돈» 겁니다");
-  /* 🏫 학교가 실제로 뽑을 수 있는 🔥 순간 카드 종류 */
-  const SCHOOL_KINDS = CARDS.filter((c) => c.key !== dropKey).map((c) => KIND_OF[c.key]);
-  /* 🏫 학교 모드는 `cfg.lite`로 갈립니다 — `mount`가 읽는 그 값이에요 */
-  const isSchool = (id) => !!(deck[id].cfg && deck[id].cfg.lite);
-
-  /* 🔬 판정 셋 — 「깨진 덱을 주면 실제로 잡는가」를 아래에서 되짚습니다(감도) */
-  const strayFlow = (d) => d.cards.filter((c) => c.kind !== "filler" && c.flow != null)
-    .map((c) => `${c.min}' \`${c.kind}\` flow=${JSON.stringify(c.flow)}`);
-  const badKind = (d) => d.cards.filter((c) => c.mine && SCHOOL_KINDS.indexOf(c.kind) < 0)
-    .map((c) => `${c.min}' \`${c.kind}\``);
-  const fatHalf = (d) => d.cards.filter((c) => c.kind === "half"
-    && (c.poss != null || c.shots != null || c.rating != null)).map((c) => `${c.min}'`);
-
-  {
-    const hit = [];
-    for (const id of ids) strayFlow(deck[id]).forEach((x) => hit.push(`${id}: ${x}`));
-    check(hit.length === 0,
-      `🟩 🌊 **\`flow\`가 흐름 줄에만 실린다** — 🔥 결정·🏁 괄호 카드엔 없다`
-      + `\n     🔑 \`match-scene.js\`의 \`const side = at[2] || (card.flow === …)\`에서 \`BALL_LOST\`의 셋째 칸이 \`""\`(falsy)라 **\`card.flow\`로 넘어갑니다** — 붙는 순간 판이 밀려요`
-      + `\n     🔒 \`town.js\`가 \`flow\`를 다는 자리는 \`filler\` 한 곳뿐입니다 (\`flow90-test\` F-9b와 한 쌍)`
-      + (hit.length ? hit.map((b) => `\n     🔴 ${b}`).join("") : ""));
+   * 🔴 옛 판은 🏫 학교 모드(`town.js`의 `PLAYABLE` · `lite`)를 기준으로 했어요. **1막엔 학교 모드가 없고**
+   *    `town.js`도 지워졌습니다(25번 §2). 그래서 **전제를 1막 계약으로** 바꿉니다 — 문장의 뜻은 그대로
+   *    「픽스처는 소스가 만들 수 있는 모양이어야 한다」(실제로 두 번 데인 자리 · 2026-09-05 · 09-06).
+   * 🔒 **목록을 베껴 적지 않고 1막 엔진에서 실제 카드를 뽑아** 모양을 잽니다(`tests/winger2/_load.js`의 진짜 엔진):
+   *    ① 종류는 엔진 카드 종류 중 하나
+   *    ② 칸(필드)은 **엔진이 그 종류에 실제로 다는 칸** + 드라이버(`live.js`)가 흐름 줄에 다는 `flow` +
+   *       확인 페이지 지시 `markDecisive`(휘슬 카드 · `_check.html`이 엔진의 markDecisive를 흉내 내는 자리)뿐
+   *    ③ `flow`는 흐름 줄(`filler`)에만 — 드라이버가 `flow`를 다는 자리가 `filler` 갈래 **한 곳**인지 소스로 대조
+   *    ④ 🔥 내 순간 카드의 종류는 판을 여는 종류(`W2Moment.opens`)이고, `moment` 이름은 엔진 `MINI` 표에 있는 것
+   * 🌍 이 문장이 서 있는 세계: 「1막의 경기 카드는 엔진(`createMatch`)과 드라이버(`live.js`) 둘이 만든다」.
+   *    다른 주인이 카드에 칸을 더하는 날(예: 하프타임 통계) 그 주인을 ②의 목록에 **명시적으로** 넣으세요. */
+  const { load: loadEngine, xiOf: xiW2 } = require(path.join(ROOT, "tests/winger2/_load.js"));
+  const E = loadEngine();
+  const FIELDS = {};
+  const MOMENTS = new Set();
+  for (const [k, v] of Object.entries(E.MINI)) for (const p of Object.keys(v)) for (const nm of v[p]) MOMENTS.add(nm);
+  E._t.seed(2026); E._t.skill = 0.5;
+  for (let i = 0; i < 400; i++) {
+    const pos = ["fw", "wg", "mf", "df"][i % 4];
+    const r = E._t.playMatch({ xi: xiW2(pos, 50 + (i % 5) * 10, 58), oppName: "상대", teamStr: 58, oppStr: 52 + (i % 4) * 4, condition: 51 });
+    for (const c of r.cards) { const s = FIELDS[c.kind] || (FIELDS[c.kind] = new Set()); Object.keys(c).forEach((f) => s.add(f)); }
   }
-  {
-    const school = ids.filter(isSchool);
+  const LIVE = fs.readFileSync(path.join(BETA, "winger2/live.js"), "utf8");
+  const flowSites = (LIVE.match(/card\.flow\s*=/g) || []).length;
+  const flowInFiller = /if \(card\.kind === "filler"\) \{\n\s*const fl = flowOf\([^\n]*\n[^\n]*\n\s*card\.flow = fl;/.test(LIVE);
+  const OPENS = (() => {
+    const { loadMoment } = require(path.join(ROOT, "tests/winger2/_load.js"));
+    const M = loadMoment();
+    return ["goal", "assist", "defend"].filter((k) => M.opens(k));
+  })();
+  const EXTRA = { filler: ["flow"], end: ["markDecisive"] };
+  const allowed = (kind) => new Set([...(FIELDS[kind] || [])].concat(EXTRA[kind] || []));
+  const kinds = Object.keys(FIELDS);
+  const strayFlow = (d) => d.cards.filter((c) => c.kind !== "filler" && c.flow != null).map((c) => `${c.min}' \`${c.kind}\` flow=${JSON.stringify(c.flow)}`);
+  const badKind = (d) => d.cards.filter((c) => kinds.indexOf(c.kind) < 0).map((c) => `${c.min}' \`${c.kind}\``);
+  const badMine = (d) => d.cards.filter((c) => c.mine && (OPENS.indexOf(c.kind) < 0 || (c.moment != null && !MOMENTS.has(c.moment))))
+    .map((c) => `${c.min}' \`${c.kind}\`${c.moment ? ` moment=${c.moment}` : ""}`);
+  const strange = (d) => d.cards.flatMap((c) => Object.keys(c).filter((f) => kinds.indexOf(c.kind) >= 0 && !allowed(c.kind).has(f)).map((f) => `${c.min}' \`${c.kind}\`.${f}`));
+  check(kinds.length >= 7 && flowSites === 1 && flowInFiller,
+    `🟩 🔎 측정 조건 — 1막 엔진 400경기에서 카드 종류 ${kinds.length}개(${kinds.join(" · ")}) · 🔥 판을 여는 종류 ${OPENS.join(" · ")} · 엔진 \`MINI\` 이름 ${[...MOMENTS].join(" · ")}`
+    + ` · \`live.js\`가 \`flow\`를 다는 자리 ${flowSites}곳(${flowInFiller ? "filler 갈래" : "🔴 filler 갈래가 아님"})`);
+  for (const [nm, fn, what] of [
+    ["flow", strayFlow, "🌊 **`flow`가 흐름 줄에만 실린다** — 🔥 결정·🏁 괄호 카드엔 없다"],
+    ["kind", badKind, "🟩 **카드 종류가 1막 엔진이 내는 종류다**"],
+    ["mine", badMine, "🔥 **내 순간 카드의 종류가 판을 여는 종류이고 `moment` 이름이 엔진 `MINI` 표에 있다**"],
+    ["field", strange, "🟩 **카드의 칸이 1막이 실제로 다는 칸뿐이다** — 엔진 카드 칸 + `live.js`의 `flow` + 페이지 지시 `markDecisive`"],
+  ]) {
     const hit = [];
-    for (const id of school) badKind(deck[id]).forEach((x) => hit.push(`${id}: ${x}`));
-    check(hit.length === 0 && school.length > 0,
-      `🟩 🏫 **학교 덱의 🔥 순간 카드가 \`PLAYABLE\`에서 나올 수 있는 종류다** — ${SCHOOL_KINDS.join(" · ")}`
-      + `\n     🔎 측정 조건 — \`cfg.lite\`인 시나리오 **${school.length}개**(${school.join(" · ")}). 종류 목록은 \`town.js\`의 \`PLAYABLE\`에서 읽습니다`
-      + (school.length ? "" : `\n     🔴 \`lite\` 시나리오가 0개예요 — 이 문장이 **아무것도 안 지킵니다**`)
-      + (hit.length ? hit.map((b) => `\n     🔴 ${b} — 학교에선 안 뽑히는 카드입니다`).join("") : ""));
+    for (const id of ids) fn(deck[id]).forEach((x) => hit.push(`${id}: ${x}`));
+    check(hit.length === 0, `🟩 ${what}`
+      + (hit.length ? `\n     🔴 1막 게임에서는 **안 나오는 모양** ${hit.length}곳 — 확인 페이지가 게임에 없는 화면을 보여 줍니다`
+        + hit.slice(0, 8).map((b) => `\n       · ${b}`).join("") + (hit.length > 8 ? `\n       · … 외 ${hit.length - 8}곳` : "") : ""));
   }
+  /* 🔬 **감도** — 깨뜨린 덱을 넣으면 넷이 각각 제 몫을 거르는가(안 거르면 「0건 위반」이 공짜 초록불이에요) */
   {
-    const school = ids.filter(isSchool);
-    const hit = [];
-    for (const id of school) fatHalf(deck[id]).forEach((x) => hit.push(`${id}: ${x}`));
-    check(hit.length === 0,
-      `🟩 🏫 **학교 덱의 🥅 하프타임에 \`poss\`·\`shots\`·\`rating\`이 없다** (설계 144번 §6)`
-      + `\n     🔑 학교는 상대를 **안 굴려서** 점유율을 적으려면 없는 값을 지어내야 합니다 — 실제 게임엔 안 뜨는 줄이에요`
-      + (hit.length ? hit.map((b) => `\n     🔴 ${b}`).join("") : ""));
-  }
-  /* 🔬 **감도** — 위 셋이 「깨진 덱을 주면 실제로 잡는가」. 파일이 아니라 **읽어 온 표**를
-   *    일부러 망가뜨려 되짚습니다. 안 잡히면 세 문장이 「0건 위반」으로 공짜 초록불이에요. */
-  {
-    const one = ids.find(isSchool) || ids[0];
-    const clone = (extra) => ({ cfg: deck[one].cfg, cards: deck[one].cards.concat([extra]) });
+    const one = ids[0];
+    const clone = (extra) => ({ cfg: deck[one].cfg, cards: [{ min: 1, kind: "kick", score: [0, 0], text: "x" }, extra] });
     const caught = {
       flow: strayFlow(clone({ min: 70, kind: "goal", mine: true, flow: "h" })).length > 0,
-      kind: badKind(clone({ min: 70, kind: "defend", mine: true })).length > 0,
-      half: fatHalf(clone({ min: 45, kind: "half", poss: 55 })).length > 0,
+      kind: badKind(clone({ min: 70, kind: "block", mine: false })).length > 0,
+      mine: badMine(clone({ min: 70, kind: "goal", mine: true, moment: "zzz" })).length > 0,
+      field: strange(clone({ min: 45, kind: "half", score: [0, 0], poss: 55 })).length > 0,
+      clean: strayFlow(clone({ min: 12, kind: "filler", flow: "a", text: "x", score: [0, 0] })).length === 0
+        && strange(clone({ min: 12, kind: "filler", flow: "a", text: "x", score: [0, 0] })).length === 0,
     };
     const dead = Object.keys(caught).filter((k) => !caught[k]);
     check(dead.length === 0,
-      `🟩 🔬 **세 자가 실제로 거른다** — 깨뜨린 덱을 넣어 되짚었습니다 (flow ${caught.flow ? "✔" : "🔴"} · kind ${caught.kind ? "✔" : "🔴"} · half ${caught.half ? "✔" : "🔴"})`
+      `🟩 🔬 **네 자가 실제로 거르고, 멀쩡한 흐름 줄은 안 거른다** — flow ${caught.flow ? "✔" : "🔴"} · kind ${caught.kind ? "✔" : "🔴"} · mine ${caught.mine ? "✔" : "🔴"} · field ${caught.field ? "✔" : "🔴"} · 멀쩡한 줄 ${caught.clean ? "✔" : "🔴"}`
       + (dead.length ? `\n     🔴 **안 걸린 자: ${dead.join(" · ")}** — 그 문장은 지금 아무것도 안 지킵니다` : ""));
   }
 });
+
+/* ══════════════════════════════════════════════════════════════
+ * 🎮 **확인 페이지의 판 칸(`W2M_LIST`)이 실제 판과 맞는가** (옛 `tests/winger2/check-w2m-test.js`를 여기로 · 26번 §1)
+ * ══════════════════════════════════════════════════════════════
+ * 🔄 1막에서 🧱 수비도 판을 엽니다(12번 §4 · 결정 A) — 옛 문장 「🧱은 목록에 없어야」가 **뒤집혔어요.**
+ *    지금 계약: ① 목록의 모든 칸이 **진짜로 판을 연다**(화면 0조각인 칸 없음) ② 칸의 이름 = 판이 스스로 말하는
+ *    이름(`W2Moment.WORDS[kind].title`) ③ 목록의 종류 = **판을 여는 종류 전부**(`opens` — 빠진 종류 없음)
+ *    ④ 설명에 폐기한 낱말 없음. 🔒 확인 페이지가 부르는 그대로(`play(box, { kind, moment: id, condition, foot, keeper })`) 엽니다. */
+async function w2BoardList(htmlOverride) {
+  const { momentDom, pressDom, loadMoment } = require(path.join(ROOT, "tests/winger2/_load.js"));
+  const html = htmlOverride || CHECK_SRC;
+  const a = html.indexOf("const W2M_LIST = [");
+  const b = a < 0 ? -1 : html.indexOf("\n    ];", a);
+  if (a < 0 || b < 0) return { err: "`_check.html`에서 `W2M_LIST`를 못 찾았어요" };
+  const list = new Function(`return ${html.slice(a + "const W2M_LIST = ".length, b + "\n    ]".length)};`)();
+  const BAN = ["갭", "코스 칸", "판정 창", "초록 존", "오프사이드"];
+  const rows = [];
+  for (const e of list) {
+    const W = momentDom(null);
+    const st = W.setTimeout; W.setTimeout = (fn) => st(fn, 0);
+    const host = W.document.getElementById("host");
+    W.W2Moment.play(host, { kind: e.kind, moment: e.id, condition: 80, foot: "R", keeper: e.kind === "defend" ? "태오" : null }, () => {});
+    await new Promise((r) => setTimeout(r, 6));
+    const go = host.querySelector(".w2m-go");
+    if (go) { pressDom(W, go); await new Promise((r) => setTimeout(r, 6)); }
+    rows.push({ id: e.id, kind: e.kind, name: e.name, desc: e.desc || "", drew: host.querySelectorAll(".w2m-cell").length,
+      real: (W.W2Moment.WORDS[e.kind] || {}).title || null });
+    try { W.close(); } catch (er) { /* 닫힘 */ }
+  }
+  const M = loadMoment();
+  const opens = ["goal", "assist", "defend", "block", "cutin", "killpass"].filter((k) => M.opens(k));
+  return {
+    rows, opens,
+    blank: rows.filter((r) => !r.drew),
+    misname: rows.filter((r) => !r.real || r.real.indexOf(r.name) < 0),
+    missing: opens.filter((k) => !rows.some((r) => r.kind === k)),
+    banned: rows.flatMap((r) => BAN.filter((x) => r.desc.indexOf(x) >= 0).map((x) => `${r.id}: 「${x}」`)),
+  };
+}
+async function w2BoardCheck() {
+  console.log("=== 🎮 확인 페이지 판 칸 ===");
+  const v = await w2BoardList();
+  const ok = (x) => !x.err && x.rows.length > 0 && !x.blank.length && !x.misname.length && !x.missing.length && !x.banned.length;
+  check(ok(v), v.err ? `🎮 ${v.err}` :
+    `🎮 **확인 페이지의 판 칸 ${v.rows.length}개가 전부 판을 열고 · 판이 말하는 이름을 쓰고 · 판을 여는 종류(${v.opens.join(" · ")})를 다 덮는다**`
+    + `\n     ${v.rows.map((r) => `${r.id}(${r.kind}): 칸 ${r.drew} · 판 이름 「${r.real}」`).join(" · ")}`
+    + (v.blank.length ? `\n     🔴 빈 칸: ${v.blank.map((r) => r.id).join(" · ")}` : "")
+    + (v.misname.length ? `\n     🔴 이름 어긋남: ${v.misname.map((r) => `${r.id} 「${r.name}」 vs 「${r.real}」`).join(" · ")}` : "")
+    + (v.missing.length ? `\n     🔴 목록에 없는 종류: ${v.missing.join(" · ")} — 그 판은 확인 페이지에서 **손맛을 못 봅니다**` : "")
+    + (v.banned.length ? `\n     🔴 폐기한 낱말: ${v.banned.join(" · ")}` : ""));
+  /* 🧪 감도 — 읽어 온 문자열에서 🧱 칸을 지우면 「빠진 종류」로, 이름을 바꾸면 「이름 어긋남」으로 잡히는가 */
+  if (ok(v)) {
+    const noCover = CHECK_SRC.replace(/\n\s*\{ id: "cover", emoji: "🧱"[\s\S]*?foot: true \},/, "");
+    const rename = CHECK_SRC.replace(/name: "슛 코스 막기", kind: "defend"/, 'name: "차단", kind: "defend"');
+    const m1 = noCover !== CHECK_SRC ? await w2BoardList(noCover) : null;
+    const m2 = rename !== CHECK_SRC ? await w2BoardList(rename) : null;
+    check(!!m1 && m1.missing.indexOf("defend") >= 0 && !!m2 && m2.misname.some((r) => r.kind === "defend"),
+      `🎮 🧪 감도 — 🧱 칸을 지운 사본은 「빠진 종류」(${m1 ? m1.missing.join(" · ") || "없음" : "변이 안 걸림"}) · 이름을 바꾼 사본은 「이름 어긋남」(${m2 ? m2.misname.map((r) => r.id).join(" · ") || "없음" : "변이 안 걸림"})으로 잡힌다`);
+  }
+}
 
 // ---------- 확인 페이지 부트스트랩 ----------
 /* <script src>를 인라인해서 로드 순서를 살려요. env.js가 반드시 _fixtures.js보다 먼저예요. */
@@ -945,6 +1002,7 @@ async function finish() {
   }
 
   await playground();
+  await w2BoardCheck();
 
   console.log(fail ? `\n❌ 실패 ${fail}건` : "\n✅ 전부 통과");
   process.exit(fail ? 1 : 0);

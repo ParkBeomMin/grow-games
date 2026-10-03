@@ -23,7 +23,7 @@
     rookie: "rookie-save-v1", idol: "trainee-save-v1", stock: "investor-save-v1",
     dev: "devgrow-save-v1", chef: "chef-save-v1", stream: "streamer-save-v1",
     soccer: "winger-save-v1", unicorn: "unicorn-save-v1",
-    winger2: "winger2-save-v1",
+    winger2: "winger2-save-v2",   // 더 윙어 II 1막 — 새 키(결정 6 · 옛 v1은 옮기지 않아요)
   };
   var BATTLE = {
     rookie: "grow-battle-v1", idol: "grow-battle-idol-v1", stock: "grow-battle-stock-v1",
@@ -44,6 +44,7 @@
       out.push(s + "-slots", s + "-legacy");
     }
     if (BATTLE[game]) out.push(BATTLE[game]);
+    if (game === "winger2") out.push("winger2-book");   // 📖 도감 장부(그림자 키 `-shadow`는 안 올려요 — 받을 때 지워지지 않게)
     return out;
   }
 
@@ -796,7 +797,9 @@
     chef: function (s) { return s.phase === "chef-pro" ? "오너셰프 " + (s.proYear || 0) + "년차" : (s.year || 1) + "년차 요리사"; },
     stream: function (s) { return s.phase === "stream-pro" ? "전업 스트리머 " + (s.proYear || 0) + "년차" : (s.year || 1) + "년차 스트리머"; },
     soccer: function (s) { return s.phase === "soccer-pro" ? "프로 " + (s.proYear || 0) + "시즌" : "유스 " + (s.year || 1) + "년차"; },
-    winger2: function (s) { return s.phase === "winger2-pro" ? "프로 " + (s.proYear || 0) + "시즌" : "유스 " + (s.year || 1) + "년차"; },
+    /* 더 윙어 II 1막 — 허브 색인(`winger2-save-v2-slots`의 `{ name, label, savedAt }`)이 있으면 그 `label`이에요(요약은 슬롯 맵을 먼저 읽어요).
+     * 색인이 없는 옛 세이브(`winger2-save-v2`)면 — 졸업했으면 `act1`이 있어요(2막을 기다리는지는 `act1.next`) */
+    winger2: function (s) { return s.label ? String(s.label) : s.act1 ? "1막 졸업" + (s.act1.next ? " · 2막 대기" : "") : "1막 " + (Math.floor(Number(s.week)) || 1) + "주"; },
     unicorn: function (s) {
       // beta/unicorn/game.js의 STAGES와 같은 표예요 (기준선·이름 모두 그쪽이 원본이에요)
       var STAGES = [

@@ -741,5 +741,36 @@ const K = T.K;
     + ` (mul 1과 1.3이 ${n1.toFixed(4)}로 같아져요 — 🫀 컨디션 · 🦶 주발 · ♿ 확대가 통째로 빠집니다)`);
 }
 
+/* ══════════════════════════════════════════════════════════════
+ * H. 🧱 **판은 하나, 배역은 셋** — 1막(2026-10-02 · inspector · 12번 §4 · 결정 A · 26번 §1 「6-B 그대로 + 🧱」)
+ *   🔄 옛 이 파일의 머리말 「수비는 판 없이 `s = 0.5`」는 **뒤집혔습니다**. 지금 계약 둘:
+ *     H-1 「판을 여는가」의 주인은 `opens` 하나 — **세 종류(goal · assist · defend)만** 열고, 그 밖은
+ *         (옛 판 이름 · 프로토타입 이름 · 빈 값) 전부 닫힌다. 🔒 `hasOwnProperty`라 `constructor`가 안 열려요
+ *     H-2 세 배역의 낱말 칸이 **같은 모양**이다 — 「낱말과 겉옷만 갈린다」(소스 머리말)의 구조 쪽.
+ *         한 배역에만 칸이 빠지면 그 판의 문구 자리가 `undefined`로 뜹니다
+ *   🔑 🧱의 `s`가 🥅와 비트 같은지(산식 0줄)는 `mirror-test.js`가 봅니다 — 여기는 **배선 구조**만.
+ * ══════════════════════════════════════════════════════════════ */
+{
+  const KINDS3 = ["goal", "assist", "defend"];
+  const SHUT = ["block", "cutin", "killpass", "constructor", "toString", "__proto__", "hasOwnProperty", "", null, undefined];
+  const openOK = (MM) => KINDS3.every((k) => MM.opens(k) === true) && SHUT.every((k) => MM.opens(k) === false);
+  check(openOK(M), `H-1. 🧱 \`opens\`가 세 종류(${KINDS3.join(" · ")})만 연다 — 닫힌 것 ${SHUT.map((k) => JSON.stringify(k)).join(" · ")}`);
+  const fieldsOf = (k) => Object.keys(M.WORDS[k] || {}).sort().join(",");
+  const shape = KINDS3.map(fieldsOf);
+  const linesOK = KINDS3.every((k) => Array.isArray(M.WORDS[k].lines) && M.WORDS[k].lines.length === 3 && M.WORDS[k].lines.every((t) => typeof t === "string" && t));
+  check(shape.every((x) => x === shape[0]) && linesOK && Object.keys(M.WORDS).sort().join(",") === KINDS3.slice().sort().join(","),
+    `H-2. 🧱 세 배역의 낱말 칸이 같은 모양이다 — ${shape[0].split(",").length}칸 · 설명 줄 3개씩 · \`WORDS\`의 종류 ${Object.keys(M.WORDS).join(" · ")}`);
+  /* 🧪 변이 — 🧱을 다시 닫으면(옛 세계) F-1이 빨간불 */
+  const MUT_F = [[/const opens = \(kind\) => Object\.prototype\.hasOwnProperty\.call\(WORDS, kind\);/,
+    'const opens = (kind) => kind !== "defend" && Object.prototype.hasOwnProperty.call(WORDS, kind);']];
+  const badF = momentMutsOK({ MUT_F });
+  check(badF.length === 0 && !openOK(loadMoment(MUT_F)), `H-변이. 🔴 \`opens\`에서 🧱을 빼면(옛 세계) → H-1이 빨간불${badF.length ? ` — 🔴 변이 정규식이 안 걸려요: ${badF.join(" · ")}` : ""}`);
+  const MUT_F2 = [[/ {6}late: "🏃 슛이 먼저 나왔어요",\n/, ""]];
+  const badF2 = momentMutsOK({ MUT_F2 });
+  const M2 = badF2.length ? null : loadMoment(MUT_F2);
+  const shape2 = M2 ? KINDS3.map((k) => Object.keys(M2.WORDS[k] || {}).sort().join(",")) : [];
+  check(!!M2 && !shape2.every((x) => x === shape2[0]), `H-변이. 🔴 🧱 낱말에서 칸 하나(late)를 빼면 → H-2가 빨간불${badF2.length ? ` — 🔴 변이 정규식이 안 걸려요` : ""}`);
+}
+
 console.log(fail ? `\n❌ ${fail}건 실패` : "\n✅ 통과");
 process.exit(fail ? 1 : 0);

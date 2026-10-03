@@ -102,14 +102,14 @@ const RENDER_W = 270, RENDER_H = 80;
 /* ⚽ 결과가 가리키는 **진영**. 🔒 자리(%)가 아니라 **어느 쪽인가**입니다 —
  *    표의 숫자를 손봐도 「골은 상대 골문 쪽」이라는 문장은 그대로 살아야 해요. */
 const SIDE_OF = { goal: "away", assist: "away", shot: "away", save: "home", concede: "home" };
-/* 🔥 내 순간으로 실제로 오는 카드 종류 (`town.js`의 `judgeFor`가 내는 셋) */
+/* 🔥 내 순간으로 실제로 오는 카드 종류 (엔진 `judgeFor`가 내는 셋 — 1막엔 🧱도 판을 엶) */
 const MINE_KINDS = ["goal", "assist", "defend"];
 /* 판정 결과 — `undefined`는 «발 끝에 안 걸렸어요»(결과가 없는 카드)예요 */
 const RESULTS = [undefined, "goal", "assist", "shot", "save", "concede"];
 /* 🌫️ 그 밖의 카드 — 판이 얼어붙지 않는지 같이 지나갑니다 */
 const OTHER_KINDS = ["filler", "kick", "half", "end"];
-/* 🌊 흐름 — `town.js`(🏫 학교)가 주는 값이에요.
- * 🔴 `undefined`가 목록에 **있어야** 합니다: 🏟️ 프로 경기(`engine.js`)는 안 주거든요.
+/* 🌊 흐름 — 1막 드라이버(`live.js`)가 **흐름 줄(`filler`)에만** 다는 값이에요(옛 `town.js` 자리).
+ * 🔴 `undefined`가 목록에 **있어야** 합니다: 흐름 줄이 아닌 카드엔 안 붙거든요.
  *    빼면 「flow 없이도 도는가」를 한 번도 안 재게 됩니다. */
 const FLOWS = [undefined, "a", "h", "mid"];
 
@@ -160,6 +160,10 @@ const MUT = {
    *       🧡 내가 공 뒤로 숨음). 셋 다 *"가장 필요한 순간에만 안 보인다"*였습니다.
    *    📏 되돌리면 겹치는 상태가 **2 → 171 / 2112**, 최악 **−0.33 → −13.66px**. */
   M_STAND: { "match-scene.js": [[/const STANDOFF = 8;/, "const STANDOFF = 0;"]] },
+  /* 🔴🧸 **M-CHIBI24 — 말을 옛 시안 크기로**(24px · 내 순간 ×1.2 · director 31번 §1에서 렌더로 버린 크기) */
+  M_CHIBI24: { "style.css": [
+    [/(\.w2-side\.home \.w2-dot\.me\.has-chibi \{\n {2}width: )22px; height: 22px; margin: -11px 0 0 -11px;/, "$1" + "24px; height: 24px; margin: -12px 0 0 -12px;"],
+    [/\.w2-pitch\.mine \.w2-dot\.me\.has-chibi \{ transform: scale\(1\.1\); \}/, ".w2-pitch.mine .w2-dot.me.has-chibi { transform: scale(1.2); }"]] },
   /* 🔴🏁 **M-WHISTLE — 킥오프·종료 휘슬을 흐름 줄과 같은 옷으로** 되돌립니다.
    *    *"삐— 경기 종료 휘슬"*이 *"측면에서 두드립니다"*와 구분이 안 됩니다. */
   M_WHISTLE: { "match-scene.js": [[/card\.kind === "kick" \|\| card\.kind === "end" \? "whistle"/,
@@ -224,7 +228,11 @@ function paint(css) {
   return { css: css.replace(/var\(--([a-z0-9-]+)(?:,[^()]*)?\)/gi, (m, n) => map[n] || "#000001"), map };
 }
 
-function scene(muts) {
+/* 🔄 2026-10-02 (1막) — `scene(muts, cfg)`: 1막 드라이버가 `mount`에 넘기는 칸(`pos` · `chibi`)을 받습니다.
+ *    옛 `lite`(🏫 학교 모드)는 **지워졌어요**(25번 §2) — 이제 모든 경기가 같은 화면입니다.
+ *    `cfg`를 안 주면 「윙어 자리 · 치비 없음」 — 치비 그림을 못 받았을 때(오프라인 · 파일 없음) 물러서는
+ *    **앰버 원**의 길이라 1막에도 실제로 있는 화면이에요(P-2~P-11은 그 길에서 잽니다). */
+function scene(muts, cfg) {
   const { JSDOM } = require("/workspace/grow-games/tests/cloud/jsdom.js");
   const painted = paint(readSrc("style.css", muts));
   const dom = new JSDOM(
@@ -240,7 +248,7 @@ function scene(muts) {
   W.eval(readSrc("match-scene.js", muts));
   const Sc = W.W2Scene;
   if (!Sc || !Sc.mount) throw new Error("W2Scene이 안 실렸어요");
-  Sc.mount(W.document.getElementById("host"), { home: "우리 학교", away: "아라 중등부", myName: "나", lite: true });
+  Sc.mount(W.document.getElementById("host"), Object.assign({ home: "우리 학교", away: "아라 중등부", myName: "나" }, cfg || {}));
   Sc.fast();
   return { W, D: W.document, Sc, colors: painted.map, close: () => dom.window.close() };
 }
@@ -265,6 +273,9 @@ function dotsOf(h) {
       dx: m ? parseFloat(m[1]) : NaN, dy: m ? parseFloat(m[2]) : NaN,
       w: parseFloat(st.width) || 0, h: parseFloat(st.height) || 0,
       bg: st.backgroundColor, bw: parseFloat(st.borderTopWidth) || 0,
+      /* 🧸 캐스케이드가 고른 배율(내 순간이면 `scale(1.1)` · 원이면 `scale(1.35)`) — 소스 순서가 아니라 이긴 규칙 */
+      sc: (() => { const m = String(st.transform || "").match(/scale\(([\d.]+)\)/); return m ? parseFloat(m[1]) : 1; })(),
+      chibi: el.classList.contains("has-chibi"),
     });
   }
   return out;
@@ -339,14 +350,27 @@ async function walk(h) {
   return { shots, pairs };
 }
 
+/* 🧸 **1막의 판 차림** — 드라이버(`live.js`)가 `mount`에 늘 `pos`와 `chibi`(`Art.chibi(who, "base")`)를 넘깁니다(계약 2).
+ *    🔑 「나」가 서는 집 자리가 포지션마다 달라요(`ME_AT` — 공격수 72·46 · 윙어 64·76 · 미드 48·36 · 수비수 30·40),
+ *       그래서 **판 밖 · 공 겹침은 네 자리 전부**에서 잽니다(director가 렌더로 잰 「포지션 넷」과 같은 칸).
+ *    🔑 그림을 못 받으면 말이 **앰버 원**으로 물러서요 — 그 길도 1막에 실제로 있어 `circle`로 함께 잽니다. */
+const CHIBI = "art/jiho-m-chibi-base.webp";
+const CONFIGS = [
+  { tag: "원 · 윙어", cfg: { pos: "wg" } },
+  { tag: "🧸 공격수", cfg: { pos: "fw", chibi: CHIBI } },
+  { tag: "🧸 윙어", cfg: { pos: "wg", chibi: CHIBI } },
+  { tag: "🧸 미드필더", cfg: { pos: "mf", chibi: CHIBI } },
+  { tag: "🧸 수비수", cfg: { pos: "df", chibi: CHIBI } },
+];
+
 async function main() {
 
 /* ══════════════════════════════════════════════════════════════
  * P-1. 🧤 **판 밖으로 나가는 점이 없다** — 자리(JS)와 밀림(CSS)이 한 쌍이다
  * ══════════════════════════════════════════════════════════════ */
 console.log("\n── 🧤 P-1. 판 밖으로 나가는 점 ──");
-{
-  const h = scene(null);
+for (const C of CONFIGS) {
+  const h = scene(null, C.cfg);
   const r = await walk(h);
   /* 🔒 **전제를 먼저 찍습니다** — 판이 `overflow: hidden`이 아니면 「밖으로 나가면 잘린다」가
    *    애초에 성립을 안 해요. 스타일시트가 안 걸린 상태도 여기서 걸립니다. */
@@ -355,7 +379,7 @@ console.log("\n── 🧤 P-1. 판 밖으로 나가는 점 ──");
   const moved = r.shots.every((s) => s.dots.every((d) => Number.isFinite(d.dx)));
   const ok0 = ov === "hidden" && nSide === 0 && moved;
   check(ok0,
-    `P-1-0. 🔒 전제가 서 있다 — 판이 \`overflow: ${ov}\` · \`.w2-side\`를 미는 CSS **${nSide}줄** ·`
+    `P-1-0. [${C.tag}] 🔒 전제가 서 있다 — 판이 \`overflow: ${ov}\` · \`.w2-side\`를 미는 CSS **${nSide}줄** ·`
     + ` 점의 인라인 \`transform\`을 ${moved ? "전부" : "**일부 못**"} 읽었다`
     + (ok0 ? "" : ov !== "hidden"
       ? `\n     🔴 판이 안 잘리면 P-1이 **아무것도 안 지킵니다** — style.css가 안 걸렸는지 보세요`
@@ -375,7 +399,7 @@ console.log("\n── 🧤 P-1. 판 밖으로 나가는 점 ──");
   }
   const nDots = r.shots.reduce((a, s) => a + s.dots.length + 1, 0);
   check(bad.length === 0,
-    `P-1. 🧤 **판 밖으로 나가는 점이 하나도 없다** — 카드 상태 ${r.shots.length}개 · 점 ${nDots}개`
+    `P-1. [${C.tag}] 🧤 **판 밖으로 나가는 점이 하나도 없다** — 카드 상태 ${r.shots.length}개 · 점 ${nDots}개`
     + `\n     격자: 가장 좁은 칸 하나 (판 ${PITCH_W}×${PITCH_H}px) · 견주는 것: 원의 바깥 테두리 ↔ 판 경계`
     + `\n     가장 아슬아슬한 곳: **${worst.what}** ${worst.cx.toFixed(1)}% — 여유 **${worst.m.toFixed(1)}px** (${worst.at})`
     + (bad.length
@@ -651,63 +675,68 @@ async function p7(muts) {
 console.log("\n── ⚽🏁⏳ P-8~10. 공 겹침 · 휘슬 옷 · 출발 시차 ──");
 /* 🚧 **알려진 미달의 상한** (아래 P-8) — 지금 크기를 박고 **더 나빠지면 빨간불**입니다.
  * 🔴 「현재값이 정답」이라고 단언하는 게 아니에요. *"여기까지는 알려진 상태"*입니다.
- * 📏 기준선 겹침 **2 / 2112** · 최악 **−0.33px**   ↔   M-STAND 되돌림 **171 / 2112** · **−13.66px**
- * 🔒 상한은 그 사이 — 개수 **8** · 깊이 **−2.0px**. 어느 쪽에도 안 붙었습니다. */
-const OVERLAP_N_CAP = 8;
-const OVERLAP_PX_CAP = -2.0;
+ * 🔄 **2026-10-02 (1막) — 깊이 상한을 「말 크기에 대한 비율」로 다시 적었습니다**(26번 §5 · 완화가 아니라 같은 뜻을 새 크기로).
+ *    옛 계약은 「🧡 반지름 **7px** 원에서 깊이 **−2px**까지는 닿음이지 숨음이 아니다」 → 비율 **2/7 ≈ 0.286**.
+ *    1막의 「나」는 **치비 말**(반지름 11px · 내 순간 ×1.1 — style.css)이라 같은 비율이면 **3.14px**입니다.
+ *    🔒 계산법은 옛 그대로예요 — 「나」의 반지름에 **내 순간의 배율을 늘 곱해서**(보수적으로) 잽니다. 배율은 소스 정규식이 아니라
+ *       **캐스케이드가 고른 값**(내 순간 스냅에서 읽은 `transform`)이라 원(×1.35) · 말(×1.1)이 저절로 갈려요.
+ * 📏 실측(1막 · 320px 판 270×80 · 2026-10-02):
+ *      원 · 윙어 **2개 · −0.33px(4.7%)**(옛 그대로) · 🧸 공격수 6 · −1.04(9.5%) · 🧸 윙어 **10 · −2.98px(27.1%)** · 🧸 미드 7 · −0.95(8.6%) · 🧸 수비수 4 · −1.10(10.0%)
+ *      ↔ M-STAND 되돌림 26~47개 · −13.66 ~ −17.07px(124~155%)
+ *    🔴 🧸 윙어의 27.1%는 상한 28.6%에 **가깝습니다**(0.16px) — director가 렌더로 잰 「320px 윙어 −2.4px」와 같은 자리예요.
+ *       판정은 결정적이라(굴림 0 · `fxRnd`는 결정적 카운터) 우연으로 넘나들지 않습니다. 넘으면 **말 · 공 · `STANDOFF` · `Y_MAX`가
+ *       움직인 것**이에요 — 그때 이 상수를 고치지 말고 그쪽을 보세요.
+ * 🔒 개수 상한: 원 **8**(옛 그대로) · 말 **16**(말이 크니 스치는 상태가 많아요 — 실측 최대 10 · M-STAND 최소 26의 사이). */
+const OVERLAP_RATIO_CAP = 2 / 7;
+const OVERLAP_N_CAP = { circle: 8, chibi: 16 };
+for (const C of CONFIGS) {
+  const h = scene(null, C.cfg);
+  const r = await walk(h);
+  const chib = !!C.cfg.chibi;
+  /* 🧡 내 순간의 배율 — **캐스케이드가 고른 값**(내 순간 스냅의 `transform`). 하나도 못 읽으면 반지름을 작게 봐서 겹침이 숨어요 */
+  const meDots = r.shots.flatMap((sh) => sh.dots.filter((d) => d.me));
+  const meScale = Math.max(...meDots.map((d) => d.sc));
+  const meR = meDots.length ? meDots[0].w / 2 : NaN;
+  const okChibi = meDots.length > 0 && meDots.every((d) => d.chibi === chib);
+  const bad = [];
+  let worstGap = Infinity, worstAt = "", nDots = 0;
+  for (const sh of r.shots) for (const d of sh.dots) {
+    const rd = (d.w / 2) * (d.me ? meScale : 1);
+    const dx = (d.cx - sh.ball.x) / 100 * RENDER_W, dy = (d.cy - sh.ball.y) / 100 * RENDER_H;
+    const gap = Math.hypot(dx, dy) - rd - sh.ball.w / 2;
+    nDots += 1;
+    if (!Number.isFinite(gap)) { bad.push(`${sh.label}: 값을 못 읽었어요`); continue; }
+    if (gap < 0) bad.push(`${sh.label}: ${d.side}${d.gk ? " 🧤gk" : d.me ? " 🧡나" : ""} ${gap.toFixed(2)}px`);
+    if (gap < worstGap) { worstGap = gap; worstAt = `${d.side}${d.gk ? " 🧤gk" : d.me ? " 🧡나" : ""} · ${sh.label}`; }
+  }
+  const nCap = OVERLAP_N_CAP[chib ? "chibi" : "circle"];
+  const pxCap = -OVERLAP_RATIO_CAP * meR;
+  const ratio = -worstGap / meR;
+  const meOK = meScale > 1 && Number.isFinite(meR) && okChibi;
+  const within = bad.length <= nCap && worstGap >= pxCap;
+  const tag = `P-8. [${C.tag}]`;
+  if (!meOK) {
+    check(false, `${tag} ⚽ 🧡 「나」의 반지름 · 내 순간 배율을 캐스케이드에서 못 읽었어요 (반지름 ${meR} · 배율 ${meScale} · 말 ${okChibi ? "✔" : "🔴"})`
+      + `\n     🔴 배율 없이 재면 🧡 나의 반지름을 **작게** 봐서 겹침이 조용히 사라집니다`);
+  } else if (bad.length === 0) {
+    check(false, `${tag} 🎉 **겹치는 점이 0개가 됐습니다** — 이 차림의 🚧를 지우고 상한을 0으로 내리세요`
+      + `\n     최악 여유 ${worstGap.toFixed(2)}px (${worstAt}) · 점 ${nDots}개`);
+  } else if (!within) {
+    check(false, `${tag} ⚽ **점이 공을 덮는 자리가 늘었습니다** — ${bad.length}개 (상한 ${nCap}) · 최악 **${worstGap.toFixed(2)}px**`
+      + ` = 반지름 ${meR}px의 **${(ratio * 100).toFixed(1)}%** (상한 ${(OVERLAP_RATIO_CAP * 100).toFixed(1)}% = ${pxCap.toFixed(2)}px)`
+      + `\n     🔎 견주는 것: 두 원의 반지름 합 ↔ 중심 거리 · 격자: 실측 320px 판 ${RENDER_W}×${RENDER_H}px · 점 ${nDots}개`
+      + bad.slice(0, 6).map((b) => `\n     🔴 ${b}`).join("")
+      + `\n     🔑 \`STANDOFF\`(공 둘레를 비우는 칸)와 \`Y_MIN\`/\`Y_MAX\`(세로 가둠) · 말 크기(\`.has-chibi\` 22px · ×1.1)를 **같이** 보세요`);
+  } else {
+    console.log(`🚧 ${tag} ⚽ 🧡 나와 공이 **${bad.length}개 상태에서 스칩니다** — 최악 ${worstGap.toFixed(2)}px = 반지름 ${meR}px의 ${(ratio * 100).toFixed(1)}% (${worstAt})`);
+    console.log(`     🔎 실측 320px 판 ${RENDER_W}×${RENDER_H}px · 점 ${nDots}개 · 내 순간 배율 ×${meScale} · 상한 ${nCap}개 / 반지름의 ${(OVERLAP_RATIO_CAP * 100).toFixed(1)}%(${pxCap.toFixed(2)}px) — 넘으면 ❌`);
+  }
+  h.close();
+}
+console.log(`     🔑 뿌리: \`Y_MAX\`(82%) 클램프가 물러설 자리를 잘라 \`STANDOFF\`(8칸)가 깎입니다 · 👁️ 닿음이 «숨음»으로 보이는지는 실기기 몫이에요`);
 {
   const h = scene(null);
   const r = await walk(h);
-
-  /* 🧡 **내 순간에는 내 동그라미가 커집니다**(`scale(1.35)`) — 겹침을 재려면 그 배수를
-   *    반드시 태워야 해요. 🔒 **산식이라 소스에서 뽑습니다**(문턱이 아니에요). */
-  const meScale = (() => {
-    const m = readSrc("style.css", null).match(/\.w2-pitch\.mine \.w2-dot\.me[^}]*scale\(([\d.]+)\)/);
-    return m ? parseFloat(m[1]) : NaN;
-  })();
-
-  /* ⚽ P-8 — **점이 공을 덮지 않는가.** P-1과 **같은 산수**입니다(반지름 합 ↔ 중심 거리).
-   * 🔑 문턱 두 줄:
-   *   ① **무엇과 견주나** — 두 원의 **반지름 합** ↔ **중심 사이 거리**. 자리(%)가 아니라
-   *      «겹치는가»라, 표의 숫자를 손봐도 이 문장은 그대로 삽니다.
-   *   ② **어느 칸에서 재나** — 🔴 **실측 320px 판(270 × 80)**. P-1의 264 × 76이 **아닙니다** —
-   *      겹침은 칸을 좁히면 **없는 병이 보입니다**(위 `RENDER_W` 주석). */
-  const bad = [];
-  let worstGap = Infinity, worstAt = "", nDots = 0;
-  for (const s of r.shots) for (const d of s.dots) {
-    const rd = (d.w / 2) * (d.me ? meScale : 1);
-    const dx = (d.cx - s.ball.x) / 100 * RENDER_W, dy = (d.cy - s.ball.y) / 100 * RENDER_H;
-    const gap = Math.hypot(dx, dy) - rd - s.ball.w / 2;
-    nDots += 1;
-    if (!Number.isFinite(gap)) { bad.push(`${s.label}: 값을 못 읽었어요`); continue; }
-    if (gap < 0) bad.push(`${s.label}: ${d.side}${d.gk ? " 🧤gk" : d.me ? " 🧡나" : ""} ${gap.toFixed(2)}px`);
-    if (gap < worstGap) { worstGap = gap; worstAt = `${d.side}${d.gk ? " 🧤gk" : d.me ? " 🧡나" : ""} · ${s.label}`; }
-  }
-  const meOK = Number.isFinite(meScale);
-  const within = bad.length <= OVERLAP_N_CAP && worstGap >= OVERLAP_PX_CAP;
-  if (!meOK) {
-    check(false, `P-8. ⚽ 🧡 커지는 배수(\`scale()\`)를 \`style.css\`에서 못 뽑았어요`
-      + `\n     🔴 배수 없이 재면 🧡 나의 반지름을 **작게** 봐서 겹침이 조용히 사라집니다`);
-  } else if (bad.length === 0) {
-    /* 🎉 **양방향입니다** — 미달이 해소되면 여기서 «이제 승격하세요»로 빨간불이 납니다.
-     *    (`tests/soccer/curve-test.js`가 쓰는 그 방식이에요. 안 그러면 아무도 파일을 안 열어요.) */
-    check(false, `P-8. 🎉 **겹치는 점이 0개가 됐습니다** — 이제 🚧를 지우고 상한을 0으로 내리세요`
-      + `\n     최악 여유 ${worstGap.toFixed(2)}px (${worstAt}) · 점 ${nDots}개`
-      + `\n     👉 \`OVERLAP_N_CAP\`을 0으로, \`OVERLAP_PX_CAP\`을 0으로 바꾸고 이 갈래를 지우면 됩니다`);
-  } else if (!within) {
-    check(false, `P-8. ⚽ **점이 공을 덮는 자리가 늘었습니다** — ${bad.length}개 (상한 ${OVERLAP_N_CAP})`
-      + ` · 최악 **${worstGap.toFixed(2)}px** (상한 ${OVERLAP_PX_CAP}px)`
-      + `\n     🔎 견주는 것: 두 원의 반지름 합 ↔ 중심 거리 · 격자: 실측 320px 판 ${RENDER_W}×${RENDER_H}px · 점 ${nDots}개`
-      + bad.slice(0, 6).map((b) => `\n     🔴 ${b}`).join("")
-      + `\n     🔑 \`STANDOFF\`(공 둘레를 비우는 칸)와 \`Y_MIN\`/\`Y_MAX\`(세로 가둠)를 **같이** 보세요 —`
-      + ` 물러설 자리가 클램프에 잘리면 \`STANDOFF\`가 그만큼 깎입니다`);
-  } else {
-    console.log(`🚧 P-8. ⚽ 🧡 나와 공이 **${bad.length}개 상태에서 스칩니다** — 최악 ${worstGap.toFixed(2)}px (${worstAt})`);
-    console.log(`     🔎 실측 320px 판 ${RENDER_W}×${RENDER_H}px · 점 ${nDots}개 · 상한 ${OVERLAP_N_CAP}개 / ${OVERLAP_PX_CAP}px (넘으면 ❌)`);
-    console.log(`     🔑 뿌리: \`Y_MAX\`(82%) 클램프가 물러설 자리를 잘라 \`STANDOFF\`(8칸)가 깎입니다.`);
-    console.log(`        390px 판(340×97.5)에서는 같은 자리가 **+2.98px**로 안 겹쳐요 — 가장 좁은 화면만의 일입니다.`);
-    console.log(`     👁️ 0.33px는 «숨는다»가 아니라 «닿는다»입니다 — 눈에 보이는지는 실기기 몫이에요.`);
-  }
 
   /* 🏁 P-9 — **휘슬이 흐름 줄과 다르게 보이는가.** P-2와 같은 방식(jsdom 캐스케이드)입니다.
    * 🔑 **색 하나로만 가르지 않습니다** — 흑백·색약에서도 갈려야 해요. 밝기·바탕·글꼴 셋 중
@@ -1006,29 +1035,56 @@ else {
 /* 🧪⚽ M-STAND — 점이 공 둘레를 안 비웁니다. **P-8만** 갈려야 합니다.
  * 🔑 「같은 모양의 흠 세 번째」의 자리예요 (🧤 키퍼 실종 → 🧤 키퍼가 공과 겹침 → 🧡 내가 숨음). */
 if (!mutOK("M_STAND")) check(false, `🧪 **변이 M-STAND — ⚽ 공 둘레를 안 비움**${MUT_DEAD}`);
-else {
-  const h = scene(MUT.M_STAND);
+else for (const C of [CONFIGS[0], CONFIGS[2]]) {
+  /* 🔑 원(옛 계약 그대로)과 🧸 윙어(1막 · 상한에 가장 가까운 자리) 둘에서 — 비율 상한이 **둘 다** 무는가 */
+  const h = scene(MUT.M_STAND, C.cfg);
   const r = await walk(h);
-  const meScale = parseFloat((readSrc("style.css", null)
-    .match(/\.w2-pitch\.mine \.w2-dot\.me[^}]*scale\(([\d.]+)\)/) || [0, 1])[1]);
+  const meDots = r.shots.flatMap((sh) => sh.dots.filter((d) => d.me));
+  const meScale = Math.max(...meDots.map((d) => d.sc));
+  const meR = meDots[0].w / 2;
   let over = 0, worst = Infinity, cut = 0;
-  for (const s of r.shots) for (const d of s.dots) {
+  for (const sh of r.shots) for (const d of sh.dots) {
     const rd = (d.w / 2) * (d.me ? meScale : 1);
-    const dx = (d.cx - s.ball.x) / 100 * RENDER_W, dy = (d.cy - s.ball.y) / 100 * RENDER_H;
-    const gap = Math.hypot(dx, dy) - rd - s.ball.w / 2;
+    const dx = (d.cx - sh.ball.x) / 100 * RENDER_W, dy = (d.cy - sh.ball.y) / 100 * RENDER_H;
+    const gap = Math.hypot(dx, dy) - rd - sh.ball.w / 2;
     if (gap < 0) over += 1;
     if (gap < worst) worst = gap;
     if (d.margin < 0) cut += 1;
   }
   h.close();
-  const caught = over > OVERLAP_N_CAP || worst < OVERLAP_PX_CAP;
+  const nCap = OVERLAP_N_CAP[C.cfg.chibi ? "chibi" : "circle"];
+  const caught = over > nCap || -worst / meR > OVERLAP_RATIO_CAP;
   check(caught && cut === 0,
-    `🧪⚽ **변이 M-STAND — \`STANDOFF\` 8 → 0** → P-8이 빨간불 · P-1은 초록불`
-    + `\n     겹치는 상태 **${over}개**(상한 ${OVERLAP_N_CAP}) · 최악 **${worst.toFixed(2)}px**(상한 ${OVERLAP_PX_CAP}) · 잘린 점 ${cut}개`
+    `🧪⚽ **변이 M-STAND — \`STANDOFF\` 8 → 0** [${C.tag}] → P-8이 빨간불 · P-1은 초록불`
+    + `\n     겹치는 상태 **${over}개**(상한 ${nCap}) · 최악 **${worst.toFixed(2)}px** = 반지름의 ${(-worst / meR * 100).toFixed(0)}%(상한 ${(OVERLAP_RATIO_CAP * 100).toFixed(1)}%) · 잘린 점 ${cut}개`
     + (caught && cut === 0
       ? `\n     ✔ **판 안에는 있는데 공을 덮습니다** — P-1이 못 보는 자리를 P-8이 봅니다`
       : cut > 0 ? `\n     🔴 P-1까지 갈렸어요 — 두 문장이 섞였습니다`
         : `\n     🔴 공 둘레를 통째로 없앴는데 상한 안이에요 — P-8이 겹침을 안 보고 있습니다`));
+}
+
+/* 🧪🧸 M-CHIBI24 — 말을 **옛 시안(24px · 내 순간 ×1.2)**으로 되돌립니다(director 31번 §1 — 그 크기에서 공이 테두리를 3.4px 덮었어요).
+ *    🔑 비율 상한이 **말 크기를 실제로 타는가**의 증거 — 원 차림은 그대로라 🧸 차림에서만 무는 게 맞아요. */
+if (pageMutsOK({ M_CHIBI24: MUT.M_CHIBI24 }).length) check(false, `🧪 **변이 M-CHIBI24 — 🧸 말 24px · ×1.2**${MUT_DEAD}`);
+else {
+  const h = scene(MUT.M_CHIBI24, CONFIGS[2].cfg);
+  const r = await walk(h);
+  const meDots = r.shots.flatMap((sh) => sh.dots.filter((d) => d.me));
+  const meScale = Math.max(...meDots.map((d) => d.sc));
+  const meR0 = 11;                         // 🔒 비율의 분모는 **지금 계약의 말**(22px) — 큰 말이 같은 자리에서 얼마나 더 덮나
+  let worst = Infinity, over = 0;
+  for (const sh of r.shots) for (const d of sh.dots) {
+    if (!d.me) continue;
+    const dx = (d.cx - sh.ball.x) / 100 * RENDER_W, dy = (d.cy - sh.ball.y) / 100 * RENDER_H;
+    const gap = Math.hypot(dx, dy) - (d.w / 2) * meScale - sh.ball.w / 2;
+    if (gap < 0) over += 1;
+    if (gap < worst) worst = gap;
+  }
+  h.close();
+  const ratio = -worst / (meDots[0].w / 2);
+  check(ratio > OVERLAP_RATIO_CAP,
+    `🧪🧸 **변이 M-CHIBI24 — 말 24px · 내 순간 ×1.2(옛 시안)** → P-8이 빨간불 — 최악 ${worst.toFixed(2)}px = 반지름 ${meDots[0].w / 2}px의 ${(ratio * 100).toFixed(1)}% (상한 ${(OVERLAP_RATIO_CAP * 100).toFixed(1)}%) · 스친 상태 ${over}개`
+    + `\n     🔑 director가 렌더로 버린 그 크기예요(31번 §1) — 비율 상한이 **말 크기를 실제로 탄다**는 증거입니다(분모 기준 ${meR0}px 계약)`);
 }
 
 /* 🧪🏁 M-WHISTLE — 휘슬을 흐름 줄과 같은 옷으로. **P-9만** 갈려야 합니다. */

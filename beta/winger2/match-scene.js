@@ -1,19 +1,23 @@
 /* 🎬 ⚽ 더 윙어 II — 순간 카드 경기 화면 (연출 전용)
  *
- *   window.W2Scene — career.js의 runV2Match가 부르는 이름 그대로예요
- *     mount(host, { home, away, myName, lite })   상단 고정 스코어보드 + 아래 피드를 깝니다
- *       lite  🏫 학교 대항전용 — 90분 경기가 아니라 **한 단계짜리 대항전**이라
- *             🅶🅾🅰🅻 배너 · 🏆 결승골 축포 · 🎉 Fx · ⌨️ 타이핑을 안 붙입니다.
- *             스코어보드 · 시계 · 피드 · 플래시 · 흔들림은 그대로예요.
+ *   window.W2Scene — 1막 드라이버(`live.js`의 `WingerLive.play`)가 부르는 이름 그대로예요(25번 계약 2)
+ *     mount(host, { home, away, myName, chibi, promiseLine, scout, pos })
+ *                                          상단 고정 스코어보드 + 판 + 아래 피드를 깝니다
+ *       chibi        🧸 내 치비 그림 경로(`Art.chibi(who, "base")`) — 판의 「나」 말이 되고,
+ *                    결과 줄에서 같은 이름표의 `-chibi-score` · `-block` · `-down`으로 바뀝니다(12번 §9-4).
+ *                    없거나 못 받으면 **예전의 앰버 원**으로 물러서요 — 깨진 그림 금지
+ *       promiseLine  📋 이번 경기에 걸린 약속 한 줄 또는 null — 스코어보드 안, 경기 내내 보여요
+ *       scout        🧑‍💼 공개 테스트면 `Art.src("scout", "interest")` · 아니면 null — 피드 맨 위(킥오프 위)
+ *       pos          (선택) "fw"·"wg"·"mf"·"df" — 판에서 「나」 말이 서는 집 자리. 없으면 윙어 자리
  *     momentSlot()        → HTMLElement     🔥 내 순간의 미니게임이 들어갈 자리
  *     gen()               → number          🎬 지금 경기의 **세대**. mount()마다 하나씩 올라가요
  *     push(card, gen)     → Promise         카드 1장. 딜레이·타이핑·골 연출이 다 여기 있어요
  *                                           🎬 `gen`을 주면 **그 세대가 아니면 한 글자도 안 씁니다**
- *     clock(min, gen)     → boolean         ⏱️ **시계 한 칸.** `town.js`의 시계 루프가 1분마다 부릅니다
+ *     clock(min, gen)     → boolean         ⏱️ **시계 한 칸.** 드라이버(`live.js`)의 시계 루프가 1분마다 부릅니다
  *                                           🎬 세대가 갈렸으면 **`false`** — 부르는 쪽이 루프를 끊어요
  *     summary(result)                       사후 집계 ("이 경기의 내 순간 N회")
  *     fast()                                ⏩ 빨리감기 — **연출만** 짧아집니다
- *     isFast()            → boolean         ⏩가 걸렸나 (`town.js`의 `minMs()`가 봅니다)
+ *     isFast()            → boolean         ⏩가 걸렸나 (드라이버의 시계 간격이 봅니다)
  *     destroy()
  *
  *   🔥 내 순간 카드는 드라이버가 `push(card)`를 **두 번** 부릅니다 —
@@ -44,7 +48,11 @@
  *    **정보를 Fx에 맡기지 않습니다** — 배너는 우리가 피드에 직접 그려요.
  *
  * ⑤ 소리는 넣지 않습니다(저장소 전체 오디오 호출 0건 — 무음 기대를 깨지 않아요).
- *    진동은 **우리 골에만 40ms 한 번**. */
+ *    진동은 **우리 골에만 40ms 한 번**.
+ * ⑥ 🧸 **치비도 `card.result`만 읽습니다**(감사 11번 §7-2 #15) — 굴림 0 · 판정 난수원 0.
+ *    그림 파일을 못 받아도 판정 · 스코어 · 문구는 한 글자도 안 바뀝니다(그림은 장식이에요).
+ *
+ * 🕰️ 옛 `lite`(🏫 학교 대항전) 갈래는 지웠습니다 — 1막에는 학교 아크가 없어요(25번 §2 「`lite` 정리」). */
 "use strict";
 
 window.W2Scene = (() => {
@@ -97,15 +105,18 @@ window.W2Scene = (() => {
    * 🔒 **두 줄은 겹치지 않습니다.** ①은 `push` 진입 시점의 한 번, ②는 그 뒤의 매 `await`.
    *    ①을 지우면 ②가 못 잡고(옛 카드가 새 `S`를 「자기 것」으로 잡아 버려요),
    *    ②를 지우면 ①이 못 잡아요(진입할 땐 세대가 맞았으니까요).
-   *    ⚠️ **같은 자리를 두 번 막지 마세요** — 부르는 쪽(`town.js`)에도 세대 확인을 두면
+   *    ⚠️ **같은 자리를 두 번 막지 마세요** — 부르는 쪽(드라이버 `live.js` — 옛 `town.js`)에도 세대 확인을 두면
    *    한쪽을 지워도 증상이 0장이라 변이가 아무것도 안 잡습니다. 세대의 소유자는 **여기**예요.
    *    ✍️ **await 뒤에는 반드시 `alive(my)`를 확인하세요**(②). 그리고 카드를 **줄 세워
    *    그리는 쪽**은 `gen()`을 받아 `push(card, g)`로 넘기세요(①) — 🏟️ 프로 경기
-   *    (`career.js`의 `runV2Match`)는 아직 안 넘깁니다. 다음 경기가 바로 이어지면 같은 자리예요.
+   *    (옛 `career.js`의 `runV2Match`)는 안 넘겼어요 — 🏆 대회 주간처럼 경기가 연달아 이어지면 같은 자리라
+   *    1막 드라이버는 **반드시 넘깁니다**(12번 §8-1).
    *
    * 🔬 **재현 방법** — 🚧 **이 자리는 검사가 안 지킵니다**(경합이라 109번에서 「검증 불가」로
    *    분류됐어요. 문턱을 박으면 느린 판에서 아무것도 안 지키고 빠른 판에서 우연으로
    *    빨간불이 떠요). 그래서 재현을 **여기 적어 둡니다** — 다음 사람이 이 자리를 팔 때 쓰세요.
+   *    (🕰️ 아래는 옛 `town.js` 🏫 학교 아크에서 잰 것이에요. 1막에서 같은 자리는 🏆 대회 주간의
+   *     연속 경기 — 드라이버의 그리기 줄 안, `push` **앞**에 지연을 심어 같은 방법으로 봅니다)
    *    ① `town.js`의 `queue.then(...)` 안, `Scene.push(...)` **앞**에 `await wait(260)`을 심고
    *       (⚠️ 정착을 기다리지 말고 **고정 간격**으로 [다음]을 누르세요. 큐가 다 비면
    *        경합 자체가 안 일어나서 가드를 지워도 초록불입니다)
@@ -154,9 +165,12 @@ window.W2Scene = (() => {
    * card.result는 **엔진이 정한 값**이에요. 여기서 만들지 않습니다. */
   function resultLine(card) {
     // 엔진이 goalBy(넣은 사람) · assistBy(찔러 준 사람)를 따로 줍니다
-    const me = esc(card.by || S.myName);
-    const scorer = esc(card.goalBy || card.by || S.myName);
-    const passer = esc(card.assistBy || card.by || S.myName);
+    /* 🔒 **평문**을 돌려줍니다 — 그리는 쪽이 `textContent`로 넣어요(아래 `line`).
+     * 🐛 예전엔 여기서 이름을 `esc()`하고, 그리는 쪽이 문장을 **또** `esc()`해서 이름에 `&` · `<`가 있으면
+     *    「&amp;」가 그대로 보였어요(이중 이스케이프). 사용자 글자는 한 자리(`textContent`)에서만 씻깁니다(25번 §6). */
+    const me = card.by || S.myName;
+    const scorer = card.goalBy || card.by || S.myName;
+    const passer = card.assistBy || card.by || S.myName;
     switch (card.result) {
       case "goal": return `⚽ 골!! ${scorer}, 그물을 흔듭니다!`;
       case "assist": return `🅰️ ${passer}의 침투 패스! ${scorer}가 마무리합니다!`;
@@ -198,6 +212,18 @@ window.W2Scene = (() => {
     const d = document.createElement("div");
     d.className = cls;
     if (html != null) d.innerHTML = html;
+    return d;
+  }
+  /* 받은 글자는 `textContent`로만 — 카드 한 줄 = 분 + 본문 */
+  function txt(tag, cls, text) {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    e.textContent = text == null ? "" : String(text);
+    return e;
+  }
+  function lineCard(cls, min, text) {
+    const d = el(`w2-card ${cls}`.trim());
+    d.append(txt("span", "w2-min", min), txt("span", "w2-body", text));
     return d;
   }
   function add(node) {
@@ -260,7 +286,13 @@ window.W2Scene = (() => {
    *       `style.css`의 `push-*`와 여기를 **같이** 보세요 — 둘이 한 쌍입니다. */
   const FORM_H = [[10, 50, " gk"], [24, 25, ""], [24, 75, ""], [42, 50, ""], [63, 27, ""]];
   const FORM_A = [[90, 50, " gk"], [77, 27, ""], [77, 73, ""], [58, 50, ""], [37, 67, ""]];
-  const ME_AT = [64, 76];      // 🧡 나 — 윙어라 측면 깊은 자리
+  /* 🧡 나 — **포지션마다 집 자리**가 다릅니다(1막은 넷 — 결정 4). [x, y, 역할]
+   * 🐛 옛 II는 윙어 하나라 [64, 76] 한 자리였어요. 그대로 두면 🧱 수비수의 말이 상대 진영에 서서
+   *    **우리 박스의 🧱 순간에 나만 멀리 있는** 그림이 됩니다 — 판이 카드를 따라간다는 약속이 깨져요.
+   * 📏 자리는 우리 · 상대 점과 **흐름(±7%)으로 밀려도** 반지름 합(말 12px + 점 4.5px)보다 떨어지게 골랐어요
+   *    (320px 판 기준 어림 — 👁️ 렌더로 한 번 더 봄). 역할은 라인 계수(`LINE` · `PULL`)를 고릅니다.
+   * 🔒 드라이버가 `pos`를 안 주면 윙어 자리 — 옛 판과 한 픽셀도 다르지 않아요. */
+  const ME_AT = { fw: [72, 46, "fwd"], wg: [64, 76, "wing"], mf: [48, 36, "mid"], df: [30, 40, "def"] };
 
   /* ══════════════════════════════════════════════════════════════════
    * 🏃 **점마다 다른 자리로 갑니다** — 대형이 통째로 미끄러지면 «뛴다»로 안 보여요
@@ -365,9 +397,10 @@ window.W2Scene = (() => {
   }
   /* 판에 실제로 서는 줄 — `FORM_*`에서 **만들어 씁니다.** 베껴 적으면 표가 갈라져요
    * (골키퍼 자리를 고쳤는데 움직임만 옛 자리를 보는 날이 그 날입니다). */
-  /* 🧡 **나는 `wing`이에요 — 우리 편 공격수와 같은 값을 쓰면 둘이 늘 붙어 다닙니다.**
-   *    윙어라 라인을 덜 타고(0.24), 공은 더 쫓아요(7.6) — 그게 이 게임의 자리이기도 합니다. */
-  const HOME_ROWS = FORM_H.map((f, i) => [f[0], f[1], ROLE[i] || "mid"]).concat([[ME_AT[0], ME_AT[1], "wing"]]);
+  /* 🧡 **윙어인 나는 `wing`이에요 — 우리 편 공격수와 같은 값을 쓰면 둘이 늘 붙어 다닙니다.**
+   *    윙어라 라인을 덜 타고(0.24), 공은 더 쫓아요(7.6). 다른 포지션은 그 줄의 역할을 씁니다 —
+   *    집 자리가 떨어져 있어 같은 계수로 움직여도 **나란히** 갈 뿐 포개지지 않아요. */
+  const homeRows = (me) => FORM_H.map((f, i) => [f[0], f[1], ROLE[i] || "mid"]).concat([[me[0], me[1], me[2]]]);
   const AWAY_ROWS = FORM_A.map((f, i) => [f[0], f[1], ROLE[i] || "mid"]);
 
   /* ⚽ **공이 어디로 가는가 — 표 하나가 전부입니다.** [x, y, 어느 진영으로 밀리나]
@@ -469,9 +502,7 @@ window.W2Scene = (() => {
 
   /* ---------- 타이핑 (순간 카드만) ---------- */
   async function type(body, text) {
-    /* 🏫 lite(학교)는 타이핑을 안 붙입니다 — 카드가 여덟 장이라 단계마다 몇 초씩 붙어요.
-     * 밀도의 차이(②)는 프로 경기의 것이고, 학교는 카드 **전부가** 🔥 내 순간입니다. */
-    if (S.fast || S.lite || reduced()) { body.textContent = text; return; }
+    if (S.fast || reduced()) { body.textContent = text; return; }
     const card = body.parentNode;
     card.classList.add("w2-typing");
     body.textContent = "";
@@ -498,18 +529,39 @@ window.W2Scene = (() => {
         setTimeout(() => S.root.classList.remove(shake), 400);
       }
     }
-    /* Fx는 **장식만** 맡깁니다 — reduced에서 통째로 안 떠도 정보가 안 사라지게요.
-     * 🏫 lite에서는 통째로 안 부릅니다. 축포가 학교에 안 어울리기도 하지만,
-     * 🔴 **`Fx.burst`가 입자마다 `Math.random()`을 씁니다** — 골이 들어갔을 때만 부르면
-     *    난수 소비량이 카드 성적을 타서 뒤 카드 순서가 어긋나요(위 fxRnd 주석). */
-    if (window.Fx && !S.lite) {
-      if (kind === "mine" || kind === "decisive") Fx.burst(S.topEl, "⚽", 14);
-      if (kind === "decisive") Fx.confetti({ level: "big", emojis: ["🏆", "⚽", "✨"] });
-    }
+    if (kind === "mine" || kind === "decisive") burst(S.topEl, ["⚽"], 12, 1);
     // 진동은 우리 골에만 40ms 한 번. 실점·동료 골에는 안 울려요
     if (kind === "mine" || kind === "decisive") {
       try { if (navigator.vibrate) navigator.vibrate(40); } catch { /* 지원 안 하는 기기 */ }
     }
+  }
+
+  /* 🎆 **굴림 0의 파티클** — 공용 `Fx.burst` · `Fx.confetti`를 여기서 안 부르는 까닭:
+   *    둘은 입자마다 `Math.random()`을 씁니다. 옛 II는 🏫 학교(`lite`)에서만 그걸 피했는데
+   *    `lite`가 사라지면 **모든 경기**가 골마다 `Math.random`을 수십 번 먹게 돼요 —
+   *    「판정 흐름에 `Math.random`을 새로 넣지 않는다」(25번 §5)에 정면으로 걸립니다(fx-count X-1이 잡았어요).
+   * 🔑 그래서 입자의 각도 · 거리를 **번호에서** 정합니다(굴림 없음 · `fxRnd`도 안 씀 — 소비량이 결과를 타지 않게).
+   * ♿ reduced에서는 아무것도 안 그립니다 — 정보는 배너 · 카드 글자에 있어요.
+   * 🔒 `transform` · `opacity`만 움직입니다(`style.css`의 `w2Pop2`). */
+  function burst(target, emojis, n, far) {
+    if (reduced() || !target || !target.getBoundingClientRect) return;
+    const r = target.getBoundingClientRect();
+    const box = el("w2-burst");
+    box.setAttribute("aria-hidden", "true");
+    box.style.left = `${Math.round(r.left + r.width / 2)}px`;
+    box.style.top = `${Math.round(r.top + r.height / 2)}px`;
+    for (let i = 0; i < n; i++) {
+      const p = document.createElement("i");
+      const a = (i / n) * Math.PI * 2 + (i % 2) * 0.26;
+      const d = (58 + (i % 3) * 26) * far;
+      p.textContent = emojis[i % emojis.length];
+      p.style.setProperty("--bx", `${Math.round(Math.cos(a) * d)}px`);
+      p.style.setProperty("--by", `${Math.round(Math.sin(a) * d)}px`);
+      p.style.animationDelay = `${(i % 4) * 30}ms`;
+      box.appendChild(p);
+    }
+    document.body.appendChild(box);
+    setTimeout(() => box.remove(), 1100);
   }
 
   /* 🅶🅾🅰🅻 배너 — **내 골에만** 붙입니다.
@@ -519,7 +571,41 @@ window.W2Scene = (() => {
    * 설계 §5-4도 동료 골은 "플래시만 (약하게)", 실점은 "회색 플래시 + 흔들림"이에요.
    * 그쪽 정보는 카드 문구가 이미 담고 있어서 reduced-motion에서도 안 사라집니다. */
   function banner(text) {
-    add(el("w2-goal", esc(text)));
+    /* 🧸 `chibi-score`가 배너 옆에서 뜁니다(12번 §9-4) — 장식이라 alt를 비웁니다(글자가 이미 말해요) */
+    const b = el("w2-goal");
+    b.appendChild(txt("span", "", text));
+    add(b);
+    react(b, "score", true);
+  }
+
+  /* 🧸 **결과의 치비** — `mount`가 받은 `chibi`(base 경로)의 이름표에서 자세만 바꿔 씁니다.
+   * 🔑 파일 이름이 곧 계약 키라(12번 §9-6) `…-chibi-base.webp` → `…-chibi-score.webp`가 성립해요.
+   *    모양이 다르면(드라이버가 다른 경로를 줌) base 그대로 — 자세가 틀려도 **깨지지는 않습니다.**
+   * 🔴 그림을 못 받으면 조용히 치웁니다 — 결과는 줄의 글자가 이미 말했어요. */
+  function react(host, pose, lead) {
+    if (!S || !S.chibi || !host) return;
+    const img = document.createElement("img");
+    img.className = lead ? "w2-react-lead" : "w2-react";
+    img.alt = "";
+    img.setAttribute("aria-hidden", "true");
+    img.decoding = "async";
+    img.addEventListener("error", () => { img.remove(); host.classList.remove("has-react"); });
+    img.src = S.chibi.replace(/-chibi-base(\.\w+)$/, `-chibi-${pose}$1`);
+    if (lead) host.insertBefore(img, host.firstChild);
+    else { host.classList.add("has-react"); host.appendChild(img); }
+  }
+  /* 결과 → 자세 — **`card.result`만 읽습니다**(원칙 ⑥).
+   *   내 순간: 막음 → 몸 던지기 · 실점 → 낙담 · 놓침(결과 없음, 공격) → 낙담 · 🎯 골문 안 슛 → 없음
+   *     (골문 안 슛은 약속에서 「살린 순간」이라 낙담으로 그리면 거짓말이에요 — 12번 §7-3)
+   *   남의 카드: 실점만 → 낙담(12번 §9-4 「실점 · 놓친 뒤 결과 줄」)
+   *   ⚽🅰️ 성공은 여기가 아니라 골 배너가 그립니다 */
+  function poseOf(card) {
+    const r = card.result;
+    if (!card.mine) return r === "concede" ? "down" : null;
+    if (r === "save") return "block";
+    if (r === "concede") return "down";
+    if (!r && card.kind !== "defend") return "down";
+    return null;
   }
 
   /* 🏆 결승골 — 엔진의 markDecisive()가 **`end` 카드를 내기 직전에** 이미 그린 카드
@@ -527,12 +613,12 @@ window.W2Scene = (() => {
    * 알 수 있어요 — 드라이버가 따로 뭘 넘기지 않아도 됩니다.
    * 카드가 열리는 순간에 터뜨리면 안 돼요: 1-0 뒤에 2-2가 되면 결승골이 아니거든요. */
   function celebrateDecisive() {
-    if (S.lite || S.decisiveDone) return;   // 🏫 학교엔 결승골이 없어요 (단계 하나짜리 대항전)
+    if (S.decisiveDone) return;
     const hit = S.myGoals.some((c) => c.decisive);
     if (!hit) return;
     S.decisiveDone = true;
-    add(el("w2-goal", "🏆 결승골!!"));
-    if (window.Fx) Fx.confetti({ level: "big", emojis: ["🏆", "⚽", "✨"] });
+    banner("🏆 결승골!!");
+    burst(S.topEl, ["🏆", "⚽", "✨"], 18, 1.6);
     if (!reduced()) {
       const f = el("w2-flash");
       document.body.appendChild(f);
@@ -579,24 +665,27 @@ window.W2Scene = (() => {
       `<i class="w2-slot" style="transition-delay:${(i % 4) * 26}ms">`
       + `<i class="w2-dot${k}" style="left:${x}%;top:${y}%"></i></i>`).join("");
   }
-  function pitchHTML() {
+  /* 🧸 `chibi`가 있으면 「나」 원 안에 치비를 넣습니다(`has-chibi` — 받침 + 링은 그대로).
+   *    판은 `aria-hidden`이라 alt를 비워요 — 같은 정보를 피드가 글로 말합니다. */
+  function pitchHTML(me, chibi) {
     return `<div class="w2-pitch" aria-hidden="true">`
       + `<span class="w2-mouth h"></span><span class="w2-mouth a"></span>`
       + `<span class="w2-side away">${dotsHTML(FORM_A)}</span>`
       + `<span class="w2-side home">${dotsHTML(FORM_H)}`
       + `<i class="w2-slot" style="transition-delay:13ms">`
-      + `<i class="w2-dot me" style="left:${ME_AT[0]}%;top:${ME_AT[1]}%"></i></i></span>`
+      + `<i class="w2-dot me${chibi ? " has-chibi" : ""}" style="left:${me[0]}%;top:${me[1]}%">`
+      + `${chibi ? `<img src="${esc(chibi)}" alt="" decoding="async">` : ""}</i></i></span>`
       + `<span class="w2-ball" style="transform:translate(50%,50%)"><b></b></span>`
       + `</div>`;
   }
   /* 🧍 겹과 「집 자리·역할」을 짝지어 둡니다 — `setPitch`가 카드마다 이 목록만 돕니다.
    * 🔒 겹이 하나라도 안 잡히면 **그 점은 그냥 안 움직입니다**(집 자리에 서 있어요).
    *    화면이 통째로 죽는 것보다 낫고, 판정에는 아무 영향이 없습니다. */
-  function slotsOf(host) {
+  function slotsOf(host, me) {
     const out = [];
     const hs = host.querySelectorAll(".w2-side.home .w2-slot");
     const as = host.querySelectorAll(".w2-side.away .w2-slot");
-    HOME_ROWS.forEach((r, i) => { if (hs[i]) out.push({ el: hs[i], x: r[0], y: r[1], role: r[2], home: true }); });
+    homeRows(me).forEach((r, i) => { if (hs[i]) out.push({ el: hs[i], x: r[0], y: r[1], role: r[2], home: true }); });
     AWAY_ROWS.forEach((r, i) => { if (as[i]) out.push({ el: as[i], x: r[0], y: r[1], role: r[2], home: false }); });
     return out;
   }
@@ -607,29 +696,51 @@ window.W2Scene = (() => {
     /* 🎬 세대를 올립니다 — 옛 세대가 남긴 그리기는 이 순간 전부 무효가 돼요.
      *    (그걸 실제로 막는 줄은 `push` 맨 앞입니다. 위 표 참고) */
     _gen += 1;
+    const me = ME_AT[c.pos] || ME_AT.wg;
+    const chibi = typeof c.chibi === "string" && c.chibi ? c.chibi : null;
+    const promise = typeof c.promiseLine === "string" && c.promiseLine.trim() ? c.promiseLine.trim() : null;
+    const scout = typeof c.scout === "string" && c.scout ? c.scout : null;
     host.innerHTML = `
       <div class="w2-scene">
         <div class="w2-top">
           <div class="w2-row">
-            <span class="w2-team home">${esc(c.home || "우리 팀")}</span>
+            <span class="w2-team home"></span>
             <span class="w2-score"><b>0</b><i>:</i><b>0</b></span>
-            <span class="w2-team away">${esc(c.away || "상대")}</span>
+            <span class="w2-team away"></span>
           </div>
           <div class="w2-meta">
             <span class="w2-clock">⏱ 0'</span>
             <span class="w2-mine-count" hidden></span>
           </div>
-          ${pitchHTML()}
+          ${promise ? `<p class="w2-promise"></p>` : ""}
+          ${pitchHTML(me, chibi)}
         </div>
-        <div class="w2-feed"></div>
+        <div class="w2-feed">${scout ? `<div class="w2-scout"><img alt="문 스카우트 — 관심" decoding="async">`
+          + `<p><b>스카우트석</b><br>문 스카우트가 이 경기를 지켜봐요</p></div>` : ""}</div>
       </div>`;
     const q = (s) => host.querySelector(s);
+    /* 🔒 받은 글자(학교 이름 · 약속 줄)와 그림 경로는 **`textContent` · 속성으로만** 넣어요(25번 §6) */
+    q(".w2-team.home").textContent = c.home || "우리 팀";
+    q(".w2-team.away").textContent = c.away || "상대";
+    if (promise) q(".w2-promise").textContent = promise;
+    /* 🖼️ 깨진 그림 금지 — 치비를 못 받으면 **예전의 앰버 원**으로, 스카우트를 못 받으면 글자만 남깁니다 */
+    const meImg = q(".w2-dot.me img");
+    if (meImg) {
+      meImg.addEventListener("error", () => {
+        const dot = meImg.parentNode;
+        meImg.remove();
+        if (dot) dot.classList.remove("has-chibi");
+        if (S && S.root && S.root.contains(dot)) S.chibi = null;   // 결과 줄 치비도 같은 파일 계열이라 같이 접어요
+      });
+    }
+    const scoutImg = q(".w2-scout img");
+    if (scoutImg) { scoutImg.addEventListener("error", () => scoutImg.remove()); scoutImg.src = scout; }
     S = {
       root: q(".w2-scene"), topEl: q(".w2-top"), scoreEl: q(".w2-score"),
       clockEl: q(".w2-clock"), mineEl: q(".w2-mine-count"),
       pitchEl: q(".w2-pitch"), ballEl: q(".w2-ball"), feed: q(".w2-feed"),
-      h: 0, a: 0, mine: 0, fast: false, lite: !!c.lite, myName: c.myName || "나",
-      slot: null, pending: null, myGoals: [], slots: slotsOf(host),
+      h: 0, a: 0, mine: 0, fast: false, myName: c.myName || "나", chibi,
+      slot: null, pending: null, myGoals: [], slots: slotsOf(host, me),
       /* 🔬 ⏱️ 이 경기의 **시계 수열** — 검사 전용입니다 (`_t.clocks()`).
        * 🔒 **경기 하나의 값이라 여기서 비웁니다.** `_drops`가 누적인 것과 성격이 달라요:
        *    drops는 *"확률이 아니라 수로"* 보려고 단조 증가였고, clocks는 **단계마다
@@ -689,11 +800,12 @@ window.W2Scene = (() => {
         : card.kind === "kick" || card.kind === "end" ? "whistle"
           : card.kind === "filler" ? "filler" : "";
     const min = card.min > 90 ? `90+${card.min - 90}'` : `${card.min == null ? "" : card.min}'`;
-    add(el("w2-card " + cls,
-      `<span class="w2-min">${esc(min)}</span><span class="w2-body">${esc(card.text || resultLine(card))}</span>`));
+    const line = add(lineCard(cls, min, card.text || resultLine(card)));
+    const pose = poseOf(card);
+    if (pose) react(line, pose);
 
     if (fx) {
-      if (!S.lite && (fx === "mine" || fx === "decisive")) banner(bannerText(card));
+      if (fx === "mine" || fx === "decisive") banner(bannerText(card));
       goalFx(fx);
       if (!S.fast && !reduced()) await wait(320);
     } else if (card.kind === "end") {
@@ -703,9 +815,9 @@ window.W2Scene = (() => {
     }
   }
 
-  /* ⏱️ **시계 한 칸** (설계 153번 §6-1). 🔒 **`town.js`의 시계 루프가 부릅니다.**
+  /* ⏱️ **시계 한 칸** (설계 153번 §6-1). 🔒 **드라이버(`live.js`)의 시계 루프가 부릅니다.**
    * 🔴 이 파일은 여전히 **`dt`도 `requestAnimationFrame`도 안 씁니다** — 판은 「카드를
-   *    따라가는 그림」 그대로이고, 시간축은 **`town.js`에 하나뿐**이에요.
+   *    따라가는 그림」 그대로이고, 시간축은 **드라이버에 하나뿐**이에요.
    *    🔴 **시계를 여기서 돌리지 마세요**(`setInterval`도, `rAF`도). 그 순간 이 파일이
    *    「가짜 rAF」를 구조로 피한 성질을 잃고, `raf-test`가 지키는 자리가 통째로 열립니다.
    * 🎬 세대가 갈리면 **`false`를 돌려줍니다** — 부르는 쪽이 그걸 보고 루프를 끊어요.
@@ -739,15 +851,10 @@ window.W2Scene = (() => {
     setScore(card.score);
     S.pending = card;
     S.mine += 1;
-    /* 🏫 lite(학교)에서는 안 셉니다 — **카드가 전부 내 순간**이라 "2판 중 내 순간 2회"가
-     * 아무 말도 안 해요. 프로 경기에서만 뜻이 있는 숫자입니다(설계 §5-2). */
-    if (!S.lite) {
-      S.mineEl.hidden = false;
-      S.mineEl.textContent = `🔥 내 순간 ${S.mine}회`;
-    }
+    S.mineEl.hidden = false;
+    S.mineEl.textContent = `🔥 내 순간 ${S.mine}회`;
 
-    const c = add(el("w2-card mine",
-      `<span class="w2-min">${esc(card.min > 90 ? `90+${card.min - 90}'` : card.min + "'")}</span><span class="w2-body"></span>`));
+    const c = add(lineCard("mine", card.min > 90 ? `90+${card.min - 90}'` : card.min + "'", ""));
     await type(c.querySelector(".w2-body"), stakeLine(card));
     if (!alive(my)) return null;
 
@@ -768,11 +875,12 @@ window.W2Scene = (() => {
     setScore(card.score);
     const cls = card.result === "goal" || card.result === "assist" || card.result === "save" ? "good"
       : card.result === "concede" ? "bad" : "";
-    add(el("w2-card " + cls,
-      `<span class="w2-min">${esc(card.min > 90 ? `90+${card.min - 90}'` : card.min + "'")}</span><span class="w2-body">${esc(card.text || resultLine(card))}</span>`));
+    const line = add(lineCard(cls, card.min > 90 ? `90+${card.min - 90}'` : card.min + "'", card.text || resultLine(card)));
+    const pose = poseOf(card);
+    if (pose) react(line, pose);
     const fx = fxOf(card);
     if (fx) {
-      if (!S.lite && (fx === "mine" || fx === "decisive")) banner(bannerText(card));
+      if (fx === "mine" || fx === "decisive") banner(bannerText(card));
       goalFx(fx);
       if (!S.fast && !reduced()) await wait(320);
       if (!alive(my)) return;

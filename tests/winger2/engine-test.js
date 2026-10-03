@@ -11,9 +11,15 @@
  *   ⑤  N ≤ 8 불변 · 3점 차면 6장에서 끊김 (설계 §3-1 · 검사 20번)
  *   ⑥  카드 score = 그 시점 확정 스코어 · 마지막 = result()  (화면이 자체 누적하지 않아요)
  *   ⑦  🏆 결승골 — **독립 오라클**과 대조 (엔진 출력을 정답으로 삼지 않습니다)
- *   ⑧  기준점 — condMul(80) = 1.0000 · sc(70) = 1.0000
+ *   ⑧  기준점 — **1막 중립 condMul(51) = 1.0000**(12번 §8-2 [1차 수정]) · 80 → 1.087 · 30 → 0.937 · sc(70) = 1.0000
  *   ⑨  _t.K가 소스의 상수와 같다 (대조용. 문턱은 아래에 직접 적습니다)
- *   ⑩  🔒 AXIS_K 잠금 — 3.00에서 바뀌면 빨간불
+ *   🪦 옛 ⑩(`AXIS_K` · `AXIS_OFF` · `POS_AXIS.n` · `RATE` · `MOM_MIN` — 옛 `career.js`의 계약)은 **버렸습니다**
+ *      (2026-10-02 · inspector · 11번 §6-A 「⑩ `AXIS_K` 잠금은 버림」). `career.js`가 1막에서 지워졌어요.
+ *      1막에서 같은 자리(기록 가중 · `n_pos` · 평점 `b`)는 `chain-test.js`가 **관계로** 봅니다.
+ *
+ * 🌍 이 파일이 서 있는 세계 — 「엔진 네 조각만 살린 1막」(결정 8 · 11번). 엔진 수정은 `COND_REF` 한 줄(80 → 51)뿐이라
+ *    ①~⑨는 거의 그대로이고, **⑧의 기준점만 1막 중립으로** 옮겼습니다. `COND_REF`가 다시 움직이면 ⑧이 먼저 빨간불이에요 —
+ *    그건 사슬의 머리라(12번 §8-2) `ACT1_SPOT` · `n_pos` · `b` · `T`를 다시 재라는 신호입니다.
  *
  * ⚠️ 문턱은 전부 **이 파일에 직접 적었습니다.** _t.K에서 읽어 오면 상수를 바꿔도
  *    검사가 따라가서 아무것도 안 잡혀요 (13번 §10-3).
@@ -220,9 +226,15 @@ const MUT_TABLE = {
     + (ex ? `\n     예: ${ex.score} — ${ex.seq}` : ""));
 }
 
-/* ---------- ⑧ 기준점 ---------- */
+/* ---------- ⑧ 기준점 ----------
+ * 🫀 **1막 중립은 51**입니다(12번 §8-2 [1차 수정] · 22번 R13 · 오케스트레이터 결정 F). 값은 **여기 박습니다** —
+ *    소스(`_t.K.COND_REF`)에서 읽으면 `COND_REF`를 옮겨도 검사가 따라가서 아무것도 안 잡혀요.
+ *    80 · 30의 배수는 설계가 적어 둔 값(「80이면 1.087 · 30이면 0.937」)이에요. */
 {
-  check(near(E.condMul(80), 1, 1e-9), `condMul(80) = 1.0000 (실제 ${E.condMul(80).toFixed(6)})`);
+  check(near(E.condMul(51), 1, 1e-9), `🫀 1막 중립 — condMul(51) = 1.0000 (실제 ${E.condMul(51).toFixed(6)})`);
+  check(near(E.condMul(80), 1.087, 0.0005) && near(E.condMul(30), 0.937, 0.0005),
+    `🫀 설계 §8-2의 두 점 — condMul(80) ≈ 1.087 (실제 ${E.condMul(80).toFixed(4)}) · condMul(30) ≈ 0.937 (실제 ${E.condMul(30).toFixed(4)})`);
+  check(E.condMul(null) === 1, `🫀 컨디션을 안 주면 중립 — condMul(null) = 1 (실제 ${E.condMul(null)})`);
   check(near(E.sc(70), 1, 1e-9), `sc(70) = 1.0000 (실제 ${E.sc(70).toFixed(6)})`);
   // §2-6 표 — succ의 중앙값. 값은 설계표에서 그대로 옮겨 적었습니다
   check(near(E.succ(40, 0.5), 0.35, 0.005), `succ(40, 0.5) ≈ 0.35 (실제 ${E.succ(40, 0.5).toFixed(3)})`);
@@ -237,7 +249,7 @@ const MUT_TABLE = {
 {
   const WANT = { SCENE_ATK: 0.72, BIG_BASE: 0.45, FAT: 0.55, URG: 0.18, FIN: 0.884,
     CON: 1.111, ME_P: 1.80, SPOT: 4.00, N_MIN: 6, N_MAX: 8,
-    COND_K: 0.30, COND_REF: 80, GOAL_GAP: 3,
+    COND_K: 0.30, COND_REF: 51, GOAL_GAP: 3,      /* 🫀 COND_REF 80 → 51 — 1막 계약의 유일한 엔진 수정(25번 §2 · engine.js 한 줄) */
     /* 22번 확정 (2026-08-28). CLUTCH는 1.35 → 1.25로 내렸어요 — 1.35는 시즌 골 +3.6%로
      * (라') 중립이 이어받은 ±3% 밴드를 넘습니다. FLOOR_SHARE는 0~0.20 전 구간이
      * 네 조건을 통과해서 안전망으로 0.12에 남겼습니다. */
@@ -351,52 +363,6 @@ const MUT_TABLE = {
  *
  * 이 파일은 0.5초 안에 끝나야 해서 무거운 몬테카를로를 여기 두지 않습니다.
  *   node tests/winger2/neutral-test.js   (≈15초) */
-
-/* ---------- ⑩ 🔒 AXIS_K 잠금 (검사 9번) ----------
- * AXIS_K는 hype와 승격 문턱 **양쪽**에서 ln(prestige)에 곱합니다.
- * 3.00 → 7.00으로 올리면 PL 소속인 것만으로 hype가 +6.13이 되어
- * **성적이 아니라 소속이 상을 정하게 돼요.** 값은 여기 직접 적습니다. */
-{
-  const CAREER = fs.readFileSync("/workspace/grow-games/beta/winger2/career.js", "utf8");
-  const m = CAREER.match(/const AXIS_K\s*=\s*([\d.]+)/);
-  check(!!m && Number(m[1]) === 3.00,
-    `🔒 AXIS_K = 3.00 (실제 ${m ? m[1] : "못 찾음"}) — 리그 격에 곱해집니다. 올리면 소속이 상을 정해요`);
-  /* 🔢 아래 네 값은 **22번 실측 ①에서 확정한 값**입니다 (2026-08-28).
-   * 🌟 에이스 구조 수정(나를 후보에서 뺌) 위에서 재적합한 값이라, 그 구조가 되돌아가면
-   * 전부 틀린 값이 됩니다 — mutation-test.js E가 그 구조 회귀를 지킵니다.
-   *
-   * ⚠️ 값을 검사에 **직접 적습니다.** 소스에서 읽어 오면 상수를 바꿔도 검사가 따라가서
-   *    아무것도 안 잡혀요. 계수를 옮기려면 이 줄도 같이 고치게 되는 게 맞습니다. */
-  const off = CAREER.match(/const AXIS_OFF\s*=\s*([\d.]+)/);
-  check(!!off && Number(off[1]) === 2.35,
-    `AXIS_OFF = 2.35 (실제 ${off ? off[1] : "못 찾음"}) — ①-G 최종 (39·40번)`);
-  const pos = CAREER.match(/const POS_AXIS = \{[\s\S]*?\n {2}\};/);
-  /* 🅳 후보 D 한 벌 (38번). 🌟 `ACE_POOL.goal`에 wg가 들어가고 `NPC_SPOT`이 2.90으로
-   *    내려간 위에서 재적합한 값이에요.
-   * ⚠️ `df.n`은 **철벽상 축이 「무실점」으로 옮겨간 뒤에도 「차단」 기준**입니다 —
-   *    designer 판정으로 `posAxis`는 차단을 계속 보거든요(37번 ① · `award-test.js` F).
-   *    그 판정이 뒤집히면 df 하나가 아니라 **네 포지션 n이 전부** 다시 잡힙니다.
-   * ⚠️ **balancer G-9 재측정 대기 중** — 여기서 또 움직일 수 있어요. */
-  const want = { fw: 1.072, wg: 0.967, mf: 0.873, df: 0.794 };
-  const gotN = {};
-  if (pos) for (const [, k, v] of pos[0].matchAll(/(\w+):\s*\{[^}]*n:\s*([\d.]+)/g)) gotN[k] = Number(v);
-  const bad = Object.entries(want).filter(([k, v]) => gotN[k] !== v).map(([k, v]) => `${k} ${gotN[k]}≠${v}`);
-  check(bad.length === 0, `POS_AXIS의 n이 설계 §3-2 표와 같다${bad.length ? ` — ${bad.join(", ")}` : ""}`);
-  const rate = CAREER.match(/const RATE = \{[\s\S]*?\n {2}\};/);
-  const bs = rate ? Array.from(rate[0].matchAll(/b:\s*(\d+)/g)).map((x) => Number(x[1])) : [];
-  check(bs.length >= 4 && bs.slice(0, 4).join(",") === "64,64,64,65",
-    `RATE의 b가 64/64/64/65 (실제 ${bs.slice(0, 4).join("/") || "못 찾음"})`);
-  /* 🏅 MOM_MIN 8.30 — 22번 확정. 7.6은 **사실상 안 물리는 문턱**이었어요
-   * (라운드 최고 평점이 거의 항상 7.6을 넘어서 7.0과 8.9%로 같았습니다).
-   * 8.30에서 능력치 110 MOM 6.2% (목표 6%).
-   * ⚠️ 이 값은 RATE의 b와 🌟 에이스 구조 **둘 다**에 딸려 있습니다 — 둘 중 하나가 움직이면 다시 재세요.
-   * ⚪ 여기서 지키는 건 **상수 자리**뿐입니다. "K리그1 능력치 110에서 MOM 5~8%"라는
-   *    행동 검사(22번 inspector 항목 24)는 career.js의 리그·평점·MOM 판정을 통째로
-   *    굴려야 해서 아직 안 만들었어요 — 42번 보고서에 미굳힘으로 남겼습니다. */
-  const mom = CAREER.match(/const MOM_MIN\s*=\s*([\d.]+)/);
-  check(!!mom && Number(mom[1]) === 8.40,
-    `MOM_MIN = 8.40 (실제 ${mom ? mom[1] : "못 찾음"}) — ①-G 최종 (39·40번)`);
-}
 
 console.log(fail ? `\n❌ ${fail}건 실패` : "\n✅ 통과");
 process.exit(fail ? 1 : 0);

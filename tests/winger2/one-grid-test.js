@@ -28,7 +28,9 @@
  *     🔒 **계약 ②** 빈 곳이 늘 줄어요 (넓어지면 «빨리 차라»가 죽음) → **G-9**
  *     🔑 여기는 **화면에서 재는 쪽**이에요. 같은 계약의 **구조 쪽**(소스 상수의 부등호)은
  *        `moment-test.js` **D-2b**가 봅니다 — 한 계약에 주인은 하나입니다
- *   · 🧱 **수비는 판을 안 엽니다** — `s = 0.5`만 돌려줘요(designer 117번 §6 c안) → **G-10**
+ *   · 🧱 **수비도 판을 엽니다**(🔄 2026-10-02 — 1막 12번 §4 · 결정 A 「슈팅 코스 막기」 · 우리 골문) → **G-10a·b·c**
+ *     🪦 옛 문장 「수비는 판을 안 엽니다 — `s = 0.5`만」은 **뒤집혔어요**(아래 `G-10` 주석). 그 가드는 이제
+ *        **모르는 종류**를 막는 자리(G-10c)로 남았습니다
  *   · 🏔️ `CELL_FLOOR`가 `s`의 **천장**을 잡습니다 → **G-11·G-11b·G-11c**
  *   · `.w2m-half` · `.w2m-keeper-body` · `.w2m-stake`는 **일부러 살렸습니다**(다른 검사가 봐요)
  *
@@ -39,8 +41,8 @@
  *   · *"키퍼를 다시 한 자리에 세우자"* · *"양쪽에서 협공하자"* → **G-8**을 먼저 여세요.
  *     🔑 옛 세계에서 계약 ①은 `|kc − 50| ≥ 4`라는 **거리**였습니다. 출발이 가운데로 오면서
  *     거리로는 못 막게 됐고 **부호 고정**으로 형태가 바뀌었어요 — 관계도 뒤집힙니다
- *   · *"🥅를 우리 골문으로 돌려 수비용을 만들자"*(117번 §6-4) → **G-10**이 옛 계약이 됩니다.
- *     🚨 그때도 🧱 차단의 **형태**(칩 둘 읽기 · 2단 국면 · 띠)는 되살리지 마세요
+ *   · ✅ *"🥅를 우리 골문으로 돌려 수비용을 만들자"*(117번 §6-4) → **실제로 났습니다**(1막) — 그래서 G-10을 뒤집었어요.
+ *     🚨 지금도 🧱 차단의 **형태**(칩 둘 읽기 · 2단 국면 · 띠)는 되살리지 마세요
  *   · 🥅 판정 줄(`cellS`)의 구조 계약(`sBar` 한 함수 · `상수 × mul`)은 여기가 아니라
  *     **`moment-test.js` E절**이 봅니다. 둘을 섞지 않았습니다
  *
@@ -196,6 +198,13 @@ const MUT = {
    * 🔒 그래서 정규식도 **`opens` 쪽**을 겨눕니다. 낱말을 안 박아요 — 안쪽 문장이 바뀌어도 삽니다. */
   E_NO_DEFEND_GUARD: [[/ {4}if \(!opens\(o\.kind\)\) \{[^\n]*\}/,
     "    /* 🧪 가드 제거 */"]],
+  /* 🔴 🧱 수비를 다시 닫습니다(옛 세계) — `opens`가 defend를 빼면 G-10a가 물어야 해요 */
+  E_DEFEND_CLOSED: [[/const opens = \(kind\) => Object\.prototype\.hasOwnProperty\.call\(WORDS, kind\);/,
+    'const opens = (kind) => kind !== "defend" && Object.prototype.hasOwnProperty.call(WORDS, kind);']],
+  /* 🔴 🏃 슈터를 공격 판에도 세웁니다 — G-10b */
+  E_SHOOTER_ALWAYS: [[/const defend = ctx\.kind === "defend";/, "const defend = true;"]],
+  /* 🔴 🧤 키퍼 이름 이스케이프를 뺍니다 — 이름이 HTML로 읽혀요(G-10a) */
+  E_KEEPER_RAW: [[/const keeper = esc\(String\(o\.keeper == null/, "const keeper = (String(o.keeper == null"]],
 
   /* 🔴 E-M8 — 🏔️ **`CELL_FLOOR`를 0으로.** `s`의 천장이 사라져 능숙이 만점을 굽습니다.
    *    🔑 **판정도 밝기도 여전히 같은 한 줄을 지나서** G-2는 초록불이에요. */
@@ -235,16 +244,23 @@ async function open(o) {
    *    `_load.js`의 `momentDom`에 url을 넣어 고쳤고, 여기서 실제로 켜 봅니다. */
   if (o.wide) W.localStorage.setItem("grow-wide-judge", "1");
   const host = W.document.getElementById("host");
-  let info = null, calls = 0;
-  W.W2Moment.play(host, { moment: "oneone", kind: o.kind || "goal",
-    condition: o.cond == null ? 80 : o.cond, foot: o.foot || "R" },
-  (j, i2) => { info = i2; calls += 1; });
+  let info = null, calls = 0, threw = null;
+  /* 🫀 기본 컨디션은 **엔진 중립**(1막 `COND_REF` 51 — `condMul = 1`)이에요. 옛 80이 옛 중립이었어서
+   *    이 값으로 옮기면 **옛 판과 비트 같은 창**이 됩니다(2026-10-02 · 1막으로 옮기며). */
+  try {
+    W.W2Moment.play(host, { moment: "oneone", kind: o.kind || "goal",
+      condition: o.cond == null ? 51 : o.cond, foot: o.foot || "R", keeper: o.keeper },
+    (j, i2) => { info = i2; calls += 1; });
+  } catch (e) { threw = e; }
   await wait(6);
+  /* 🧱 준비 화면의 옷(종류 클래스) — ▶️를 누르기 **전에** 읽어 둡니다(누르면 사라져요) */
+  const readyEl = host.querySelector(".w2m-ready");
+  const readyCls = readyEl ? readyEl.className : null;
   /* ▶️ 준비 화면을 실기기 순서로 지납니다 — **게임이 여는 문으로** 들어가요 */
   const go = host.querySelector(".w2m-go");
   if (go) { pressDom(W, go); await wait(6); }
   return {
-    W, host, T: W.W2Moment._t,
+    W, host, T: W.W2Moment._t, readyCls, threw,
     s: () => (info ? info.s : null),
     info: () => info, calls: () => calls,
     at: async (ms) => { clk = BASE + ms; await wait(6); },
@@ -568,7 +584,7 @@ async function main() {
         W.Math.random = mulberry32(SEEDS[0]);
         const st = W.setTimeout; W.setTimeout = (fn) => st(fn, 0);
         const host = W.document.getElementById("host");
-        W.W2Moment.play(host, { moment: "oneone", kind, condition: 80, foot: "R" }, () => {});
+        W.W2Moment.play(host, { moment: "oneone", kind, condition: 51, foot: "R" }, () => {});
         await wait(6);
         const go = host.querySelector(".w2m-go");
         const ready = host.textContent || "";
@@ -851,48 +867,77 @@ async function main() {
    *       *"저건 원래 빨간불이야"*가 됩니다. 여기는 **화면에서 재는 쪽**(G-8·G-9)만 맡아요.
 
   /* ══════════════════════════════════════════════════════════════════════
-   * 🧱 G-10. **수비는 판이 없다** — 화면을 한 조각도 안 그린다
+   * 🧱 G-10. **수비는 우리 골문 판을 연다** — 🔄 2026-10-02 **뒤집혔습니다**(옛 문장: 「수비는 판이 없다」)
    * ══════════════════════════════════════════════════════════════════════
-   * 🌍 **이 문장이 서 있는 세계**: designer 117번 §6의 **c안**입니다 —
-   *    `cardP(autoP, a, 0.5) = autoP`가 **모든 능력치에 대해 정의상** 성립해서,
-   *    육성은 그대로 살고 **조작만 빠지는** 세계예요.
-   * 🚨 가드가 빠지면 **수비 상황에 상대 골문이 뜹니다** — 화면이 만드는 기대(넣는다)와
-   *    상황의 핵심(막는다)이 정면으로 싸워요.
-   * 🔴 입구는 넷입니다(`career.js` · `game.js` · `town.js` · 여기 `play()`).
-   *    여기는 **마지막 안전망**이라, 앞의 셋이 다 빠져도 골문이 안 뜨는지를 봅니다.
-   * ⚠️ 범민 님이 *"**일단** 공격 상황에서"*라고 하셨어요 — 🥅를 **우리 골문으로 돌려**
-   *    수비용을 만드는 판정이 나오면 **이 문장이 통째로 옛 계약**이 됩니다(117번 §6-4).
-   *    🚨 그때도 🧱 차단의 **형태**(칩 둘 읽기 · 세기로 정답이 뒤집힘 · 2단 국면 · 띠)는
-   *       되살리지 마세요 — 폐기된 건 이름이 아니라 형태입니다. */
+   * 🌍 **이 문장이 서 있는 세계**: 1막 설계 12번 §4 · 결정 A 「슈팅 코스 막기」 — 🥅를 **우리 골문으로 돌려**
+   *    수비용을 만든 세계예요. 옛 G-10 주석이 예고한 그 판정(117번 §6-4)이 실제로 났고, 그래서 이 문장이
+   *    **통째로 옛 계약**이 됐습니다. 지금 계약:
+   *      G-10a 🧱은 **판을 연다** — 준비 화면도 본 판도 `w2m-k-defend` 옷 · 칸 6개 · 🏃 슈터 **하나**가 🧤 키퍼 쪽에 ·
+   *            키퍼 이름은 **글자로만**(이스케이프 — 이름이 HTML로 읽히면 안 돼요)
+   *      G-10b 🥅 결정 · 🅰️ 전개에는 슈터가 **없다**(수비 상황에만 서는 그림)
+   *      G-10c 🔒 **모르는 종류는 여전히 판을 안 연다** — 옛 G-10의 가드가 이제 지키는 자리(`opens` · `hasOwnProperty`)
+   * 🔑 🧱이 🥅와 **산식이 한 글자도 같다**(s 비트 같음)는 여기가 아니라 `mirror-test.js`가 봅니다(한 계약에 주인 하나).
+   * 🚨 옛 🧱 차단의 **형태**(칩 둘 읽기 · 세기로 정답이 뒤집힘 · 2단 국면 · 띠)는 여전히 되살리지 마세요. */
+  const KEEPER_TRICK = "태오<i>x</i>";
   async function defendProbe(muts) {
     const rows = [];
     for (const seed of SEEDS.slice(0, 6)) {
-      const h = await open({ seed, kind: "defend", muts });
-      await h.at(400);
-      rows.push({ seed,
-        html: (h.host.innerHTML || "").length,
-        goal: h.host.querySelectorAll(".w2m-goal").length,
-        cell: h.host.querySelectorAll(".w2m-cell").length,
-        go: h.host.querySelectorAll(".w2m-go").length,
-        calls: h.calls(), s: h.info() ? h.info().s : null });
+      const h = await open({ seed, kind: "defend", muts, keeper: KEEPER_TRICK });
+      await h.at(200);
+      const box = h.host.querySelector(".w2m-oneone");
+      const sh = h.host.querySelectorAll(".w2m-shooter");
+      const kc = kcOf(h);
+      const why = h.host.querySelector(".w2m-why");
+      rows.push({ seed, threw: !!h.threw,
+        ready: h.readyCls || "", box: box ? box.className : "",
+        cells: h.host.querySelectorAll(".w2m-cell").length,
+        shooters: sh.length, shooterR: sh[0] ? sh[0].classList.contains("w2m-shooter-r") : null,
+        keeperRight: isFinite(kc) ? kc > 50 : null,
+        nameText: why ? why.textContent.indexOf(KEEPER_TRICK) >= 0 : false,
+        injected: why ? why.querySelectorAll("i").length : -1 });
       h.close();
     }
     return rows;
   }
   const P10 = (rows) => {
-    const bad = rows.filter((r) => !(r.html === 0 && r.goal === 0 && r.cell === 0
-      && r.go === 0 && r.calls === 1 && r.s === 0.5));
+    const bad = rows.filter((r) => !(!r.threw && /w2m-k-defend/.test(r.ready) && /w2m-k-defend/.test(r.box) && r.cells === 6
+      && r.shooters === 1 && r.shooterR === r.keeperRight && r.nameText && r.injected === 0));
     return { bad, ok: rows.length > 0 && bad.length === 0 };
   };
+  async function attackShooters(muts) {
+    let n = 0, boards = 0;
+    for (const kind of ["goal", "assist"]) for (const seed of SEEDS.slice(0, 3)) {
+      const h = await open({ seed, kind, muts });
+      boards += h.host.querySelectorAll(".w2m-oneone").length;
+      n += h.host.querySelectorAll(".w2m-shooter").length;
+      h.close();
+    }
+    return { n, boards, ok: boards === 6 && n === 0 };
+  }
+  async function unknownProbe(muts) {
+    const rows = [];
+    for (const kind of ["block", "constructor", "cutin"]) {
+      const h = await open({ seed: SEEDS[0], kind, muts });
+      await h.at(400);
+      rows.push({ kind, threw: !!h.threw, html: (h.host.innerHTML || "").length, calls: h.calls(), s: h.info() ? h.info().s : null });
+      h.close();
+    }
+    return { rows, ok: rows.every((r) => !r.threw && r.html === 0 && r.calls === 1 && r.s === 0.5) };
+  }
+  const P10b = (x) => x;
+  const P10c = (x) => x;
   {
     const rows = await defendProbe(null);
     const g10 = P10(rows);
     check(g10.ok,
-      `G-10. 🧱 **수비는 판이 없다** — 화면 0조각 · 준비 화면도 없음 · \`s = 0.5\`가 **한 번** 온다 (판 ${rows.length}벌)`
-      + `\n     🔎 측정 조건 — \`play(host, { kind: "defend" }, cb)\`를 부르고 400ms 뒤 \`innerHTML\` 길이를 봅니다`
-      + `\n     🔑 «안 그렸는가»가 아니라 «**한 조각도** 안 그렸는가»예요 — 손잡이처럼 보이는 게 떠 있으면 그게 노이즈입니다`
-      + (g10.ok ? "" : `\n     🔴 ${g10.bad.slice(0, 3).map((r) => `seed${r.seed} html ${r.html}자 · 골문 ${r.goal} · 칸 ${r.cell} · cb ${r.calls}회 · s=${r.s}`).join(" · ")}`
-        + `\n     🚨 **수비 상황에 상대 골문이 떴습니다**`));
+      `G-10a. 🧱 **수비는 우리 골문 판을 연다** — 준비 화면 · 본 판 \`w2m-k-defend\` · 칸 6 · 🏃 슈터 1개(🧤 키퍼 쪽) · 키퍼 이름은 글자로만 (판 ${rows.length}벌)`
+      + `\n     🔎 측정 조건 — \`play(host, { kind: "defend", keeper: ${JSON.stringify(KEEPER_TRICK)} })\` · ▶️를 실기기 순서로 누름 · 시드 ${rows.map((r) => r.seed).join("/")}`
+      + (g10.ok ? "" : `\n     🔴 ${g10.bad.slice(0, 3).map((r) => `seed${r.seed} 준비「${r.ready}」 판「${r.box}」 칸 ${r.cells} · 슈터 ${r.shooters}(오른쪽 ${r.shooterR} · 키퍼 오른쪽 ${r.keeperRight}) · 이름 글자 ${r.nameText} · 끼어든 요소 ${r.injected}${r.threw ? " · 💥 던짐" : ""}`).join("\n        ")}`));
+    const g10b = await attackShooters(null);
+    check(g10b.ok, `G-10b. 🥅 결정 · 🅰️ 전개 판에는 🏃 슈터가 없다 — 판 ${g10b.boards}개 중 슈터 ${g10b.n}개 (수비 상황에만 서는 그림)`);
+    const g10c = await unknownProbe(null);
+    check(g10c.ok, `G-10c. 🔒 **모르는 종류는 판을 안 연다** — ${g10c.rows.map((r) => `${r.kind}: 화면 ${r.html}자 · cb ${r.calls}회 · s=${r.s}${r.threw ? " · 💥" : ""}`).join(" · ")}`
+      + `\n     🔑 옛 G-10(「🧱은 판이 없다」)의 가드가 **이제 여기를** 지킵니다 — \`opens\`가 자기 칸만 보니(\`hasOwnProperty\`) \`constructor\` 같은 이름도 안 열려요`);
   }
 
   /* ══════════════════════════════════════════════════════════════════════
@@ -1019,7 +1064,11 @@ async function main() {
        *    실제로 한 번 그랬어요 — 벗기기가 살아 있는지 여기서 봅니다. */
       const beforesIn = (c2) => (c2.match(/\.w2m-cell[^{}]*\{[^}]*\}/g) || [])
         .filter((r) => /::before/.test(r)).length;
-      const s4 = beforesIn(css) - beforesIn(bare(css));
+      /* 🔄 2026-10-02 — 옛 판은 **진짜 `style.css`의 주석**이 `::before`를 인용해서 이 감도가 섰어요. director가
+       *    `style.css`를 새로 쓰면서 그 주석이 사라져 **0이 됐습니다**(고장이 아니라 픽스처가 우연히 받쳐 주던 것).
+       *    🔒 그래서 **인용하는 주석을 사본에 직접 넣어** 잽니다 — 진짜 파일의 주석 모양에 안 기대요. */
+      const cssCite = css.replace(/(\.w2m-cell-in::after\s*\{)/, "/* 예: .w2m-cell-x::before 처럼 쓰지 마세요 */\n$1");
+      const s4 = cssCite === css ? 0 : beforesIn(cssCite) - beforesIn(bare(cssCite));
       const s1 = orphansOf(js, cssNoIn).length;
       const s2 = deadOf(js, cssGhost).length;
       const s3 = markBad(cssBefore);
@@ -1074,7 +1123,10 @@ async function main() {
       ["E_FLOOR0", "G-11", async (m) => !P11a(await sweep(m)).ok],
       ["E_WIN2", "G-11b", async (m) => !P11b(await sweep(m)).ok],
       ["E_WIN2", "G-11c", async (m) => !P11c(await sweep(m)).ok],
-      ["E_NO_DEFEND_GUARD", "G-10", async (m) => !P10(await defendProbe(m)).ok],
+      ["E_NO_DEFEND_GUARD", "G-10c", async (m) => !(await unknownProbe(m)).ok],
+      ["E_DEFEND_CLOSED", "G-10a", async (m) => !P10(await defendProbe(m)).ok],
+      ["E_SHOOTER_ALWAYS", "G-10b", async (m) => !(await attackShooters(m)).ok],
+      ["E_KEEPER_RAW", "G-10a", async (m) => !P10(await defendProbe(m)).ok],
       /* 🔑 **밝기 변이(M1)는 🏔️ 역산도 물어야** 합니다 — 화면이 어두워지면 역산한 바닥이
        *    5.0에서 9~13으로 벌어져요. G-2가 죽어도 여기가 잡습니다(겹쳐 보기). */
       ["M1_DIM", "G-11", async (m) => !P11a(await sweep(m)).ok],

@@ -55,6 +55,8 @@ const INS = { "match-scene.js": [
   /* 🏃 점 자리 뽑기가 시작되는 자리 */
   [/^    const dir = side === "a" \? 1 : side === "h" \? -1 : 0;$/m,
     '    const __fxD = (window.__fxN || 0);\n    const dir = side === "a" ? 1 : side === "h" ? -1 : 0;'],
+  /* 🎆 골 파티클(`burst`)이 실제로 불렸는지 셉니다 — X-1이 그 갈래를 **지났는지**의 증거(1막에선 모든 경기의 골) */
+  [/  function burst\(target, emojis, n, far\) \{/, '  function burst(target, emojis, n, far) {\n    try { window.__burstN = (window.__burstN || 0) + 1; } catch (e) { /* 닫힌 창 */ }'],
   /* 📋 한 줄로 적습니다 — 공 부분과 점 부분을 **갈라서** */
   [/^    S\.pitchEl\.classList\.toggle\("mine", !!card\.mine && phase !== "close"\);$/m,
     '    (window.__pitch = window.__pitch || []).push({ kind: card.kind, result: card.result,'
@@ -86,6 +88,10 @@ const MUT = {
   /* 🔴 ⓓ 흔들림 하나를 **엔진의 판정 난수원**으로 — 🎲 ②번을 건드립니다 */
   "M-ENGRND": { "match-scene.js": [[/^    dy \+= \(fxRnd\(\) \* 2 - 1\) \* JY;$/m,
     "    dy += ((window.__engRnd ? window.__engRnd() : fxRnd()) * 2 - 1) * JY;"]] },
+  /* 🔴 ⓕ 🎆 **골 파티클을 옛 공용 `Fx.burst`처럼 `Math.random`으로** — 1막에서 `lite`가 사라져 **모든 경기**의 골이
+   *    이 길을 지납니다(director 31번 §1). 옛 II는 학교(`lite`)만 피했어요 → X-1이 빨간불이어야 합니다 */
+  "M-BURSTRND": { "match-scene.js": [[/const a = \(i \/ n\) \* Math\.PI \* 2 \+ \(i % 2\) \* 0\.26;/,
+    "const a = Math.random() * Math.PI * 2;"]] },
   /* 🔴 ⓔ ⌨️ 타이핑 문장이 **판정 결과를 타게** 만듭니다 — 글자 수가 갈리면 굴림 수도 갈려요 */
   "M-STAKERES": { "match-scene.js": [[/^    const tail = STAKE_TAIL\[card\.stakeKey\] \|\| fallbackTail\(card\.kind, d\);$/m,
     '    const tail = (STAKE_TAIL[card.stakeKey] || fallbackTail(card.kind, d)) + (card.result || "");']] },
@@ -106,11 +112,18 @@ async function drive(name, opt) {
   const o = opt || {};
   const W = bootPage({ muts: withIns(name) });
   const D = W.document;
+  /* ⏳ **페이지 부팅이 끝난 뒤에** 셉니다(2026-10-02 · 1막) — 1막 `game.js`는 입구를 `DOMContentLoaded` 뒤에 그리고
+   *    그때 공용 `Stats.init`이 기기 id를 `Math.random`으로 두 번 뽑아요. 옛 입구는 실을 때 곧바로 부팅해서
+   *    세기 **전에** 끝났는데, 이제는 세는 **도중에** 끼어듭니다 — 경기 화면의 굴림이 아니에요(판정 흐름 밖).
+   *    🔒 기다리는 신호는 벽시계가 아니라 **입구가 그려졌는가**예요. */
+  for (let i = 0; i < 400 && !D.querySelector("#w2-entry"); i++) await new Promise((r) => setTimeout(r, 5));
   const Scene = W.W2Scene;
   if (!Scene || !Scene.mount) throw new Error("W2Scene이 안 실렸어요");
   const host = D.createElement("div");
   D.body.appendChild(host);
-  Scene.mount(host, { home: "우리 학교", away: "상대 학교", myName: "나", lite: !o.pro });
+  /* 🔄 2026-10-02 (1막) — 옛 `lite`(🏫 학교 모드)는 **없어졌습니다**(director가 `match-scene.js`에서 지움 · 25번 §2).
+   *    그래서 이 격자는 이제 **1막의 모든 경기**와 같은 화면이에요 — 골 파티클 · 배너까지 지납니다. */
+  Scene.mount(host, { home: "우리 학교", away: "상대 학교", myName: "나" });
   if (!o.slow) Scene.fast();
   /* 🎲 ①번 난수원 — **호출을 가로채서** 셉니다 (소스 문자열이 아니라) */
   let mathN = 0;
@@ -118,6 +131,7 @@ async function drive(name, opt) {
   W.Math.random = function () { mathN += 1; return rawRandom(); };
   W.__rngN = 0;
   W.__fxN = 0;
+  W.__burstN = 0;
   W.__pitch = [];
 
   const push = (c) => Scene.push(c, null);
@@ -140,7 +154,7 @@ async function drive(name, opt) {
         mine: true, judge: "perfect", stakeKey: "lead" });
     }
   }
-  const out = { pitch: W.__pitch.slice(), mathN, rngN: W.__rngN || 0, fxN: W.__fxN };
+  const out = { pitch: W.__pitch.slice(), mathN, rngN: W.__rngN || 0, fxN: W.__fxN, bursts: W.__burstN || 0 };
   W.close();
   return out;
 }
@@ -192,9 +206,14 @@ const uniq = (a) => [...new Set(a)];
       + (P.length === want ? "" : `\n     🔴 한 장도 안 밀었거나 도중에 멈췄어요 — 아래 문장들은 지금 아무것도 안 지킵니다`));
   }
 
-  /* ══════════ X-1. 🎲 `Math.random()` 호출 0 ══════════ */
+  /* ══════════ X-1. 🎲 `Math.random()` 호출 0 — 🔄 **「학교 경기만」에서 「모든 경기」로 넓혔습니다**(26번 §5) ══════════
+   * 옛 전제는 「🏫 학교(`lite`)만 0번」이었어요 — 프로 경기는 골마다 공용 `Fx.burst`가 `Math.random`을 먹었습니다.
+   * 1막엔 `lite`가 없고 director가 파티클을 **굴림 0**으로 바꿔(번호로 각도) 이제 **모든 경기 0번**이 계약이에요.
+   * 🔒 「골 연출을 실제로 지났나」를 같이 셉니다 — 파티클이 한 번도 안 불렸으면 이 0은 **공짜**예요. */
+  check(base.bursts > 0,
+    `X-1a. 🎆 격자가 골 연출을 **실제로 지났다** — 파티클(\`burst\`) ${base.bursts}회 (0이면 X-1이 골 갈래를 안 잰 것)`);
   check(base.mathN === 0,
-    `X-1. 🎲 화면을 그리는 동안 **\`Math.random()\` 호출이 0번** — ${base.mathN}번`
+    `X-1. 🎲 화면을 그리는 동안 **\`Math.random()\` 호출이 0번** — ${base.mathN}번 (1막 모든 경기 · 골 파티클 포함)`
     + `\n     🔒 소스 문자열이 아니라 **호출을 가로채서** 셉니다 (파일에 6번 나오지만 4번은 "쓰지 마세요" 주석이에요)`
     + (base.mathN === 0 ? "" : `\n     🔴 연출이 ①번 난수원을 씁니다 — 뒤 카드의 판정 굴림이 통째로 밀려요`));
 
@@ -274,8 +293,8 @@ const uniq = (a) => [...new Set(a)];
     const ok = typed && txt.length === 1 && rec.length === RESULTS.length;
     check(ok,
       `X-6. ⌨️ **여는 줄이 판정 결과를 안 탄다** — \`result\`를 ${rec.length}가지로 갈아도 굴림 ${fx.join("/")} · 문장 ${txt.length}종`
-      + `\n     🔎 측정 조건 — 🏟️ 프로 경기(\`lite: false\`) · **\`fast\`를 끄고**(안 그러면 타이핑이 아예 안 돕니다) · \`openMoment\`까지만`
-      + `\n     🔒 굴림이 ${FX_PER_PITCH}번(= \`setPitch\`만)이면 **한 글자도 안 친 것**이라 통과로 안 셉니다. 🏫 학교는 \`lite\`라 원래 안 칩니다`
+      + `\n     🔎 측정 조건 — 1막 경기(옛 \`lite\` 없음) · **\`fast\`를 끄고**(안 그러면 타이핑이 아예 안 돕니다) · \`openMoment\`까지만`
+      + `\n     🔒 굴림이 ${FX_PER_PITCH}번(= \`setPitch\`만)이면 **한 글자도 안 친 것**이라 통과로 안 셉니다`
       + `\n     "${txt[0] || ""}"`
       + (typed ? "" : `\n     🔴 타이핑이 안 돌았어요 (굴림 ${fx.join("/")}) — 이 문장은 지금 아무것도 안 지킵니다`)
       + (txt.length === 1 ? "" : `\n     🔴 여는 줄이 **판정 뒤에나 알 수 있는 것**을 말하고 있어요 — \`stakeLine\`을 보세요`));
@@ -316,6 +335,8 @@ const uniq = (a) => [...new Set(a)];
        *    「연출이 남의 난수원을 쓴다」의 뿌리는 X-1·X-2가 가리킵니다. */
       "M-MATHRND": { red: ["X-1"], also: ["X-4"] },
       "M-ENGRND": { red: ["X-2"], also: ["X-4"] },
+      /* 🔑 파티클은 `setPitch` 밖이라 X-3·X-4는 그대로여야 해요 — 「모든 경기 0번」(X-1)만 뭅니다 */
+      "M-BURSTRND": { red: ["X-1"], also: [] },
     };
     for (const [name, w] of Object.entries(WANT)) {
       const got = await probe(name);

@@ -2,7 +2,8 @@
  *
  *   W2Moment.play(container, opts, cb)
  *     opts = { kind: "goal"|"assist"|"defend", moment: (엔진이 주는 이름 — 화면 고르기에 안 씁니다),
- *              condition: 0~100, foot: "L"|"R", judge: (s) => "perfect"|"ok"|"miss" }
+ *              condition: 0~100, foot: "L"|"R", judge: (s) => "perfect"|"ok"|"miss",
+ *              keeper: 🧱 우리 키퍼 이름(없으면 「키퍼」 — 글자만, 산식 0) }
  *     cb(judge, detail)      detail = { s, moment, weak }
  *
  * ── 🥅 하나뿐입니다 — **골문 6칸** ──────────────────────────
@@ -12,31 +13,29 @@
  *
  *     🥅 골문 배경 · 6칸 · 어디로 찰지 한 번 탭 · 🧤 키퍼가 가운데에서 미끄러짐
  *
- * 🔴 **🏃 컷인 · 🎯 킬패스 · 🧱 차단은 없앴습니다.** 형태째 지웠어요 —
+ * 🔴 **🏃 컷인 · 🎯 킬패스 · 옛 🧱 차단은 없앴습니다.** 형태째 지웠어요 —
  *    같은 계단을 다른 이름으로 되살리지 마세요.
  *
- * ── 🎭 **판이 하나, 배역이 둘 — 🧱 수비는 판이 없습니다** ────
- * 카드 종류는 셋인데(⚽ 결정 · 🅰️ 전개 · 🧱 수비) **판은 공격 쪽 둘에만 뜹니다.**
- * 🔑 낱말만 갈리고 산식은 한 줄도 안 갈라져요 —
+ * ── 🎭 **판이 하나, 배역이 셋** (더 윙어 II 1막 · 설계 12번 §4 · 결정 A) ────
+ * 카드 종류 셋(⚽ 결정 · 🅰️ 전개 · 🧱 수비)이 **전부 같은 판(`runShotGrid`)**을 엽니다.
+ * 🔑 낱말과 겉옷만 갈리고 산식은 한 줄도 안 갈라져요 —
  *
- *     ⚽ 결정  빈 곳으로 **차요**       (내 골)
- *     🅰️ 전개  빈 곳으로 **굴려 줘요**  (동료가 마무리)
- *     🧱 수비  **화면을 안 엽니다** — `s = 0.5` 중립 판정만 돌려줘요
+ *     ⚽ 결정  상대 골문 · 빈 곳으로 **차요**         (내 골)
+ *     🅰️ 전개  상대 골문 · 빈 곳으로 **굴려 줘요**    (동료가 마무리)
+ *     🧱 수비  **우리 골문** · 🧤 우리 키퍼가 가까운 쪽을 막고 **먼 쪽 빈 곳에 몸을 던져요**
  *
- * 🔴 **수비에 골문 격자를 띄우지 않습니다** (117번 §6-1 a안 탈락 · 원칙 ①).
- *    *"한 명만 지나가면 실점이에요"*인데 화면이 **상대 골문**이면, 화면이 만드는 기대
- *    (**골을 넣는다**)와 상황의 핵심(**막는다**)이 정면으로 싸웁니다.
- * 🔴 **수비 카드를 안 뽑는 것도 아닙니다** (b안 탈락 · 원칙 ⑪) — `cardP.defend`·`MINI.defend`·
- *    `BLEND.df`·무실점 기록이 그 위에 서 있어서, **연출 축의 부족을 육성 축 손잡이로**
- *    고치는 게 됩니다.
- * ★ **c안입니다** — `cardP(autoP, a, 0.5) = autoP`가 **모든 능력치에 대해 정의상** 성립해요.
- *    🟢 육성은 그대로 살고(결과는 `autoP` = 능력치가 정합니다) **조작만 빠집니다.**
- * 🔒 **「카드」로 부르지 않습니다** (117번 §6-3 · 원칙 ③) — 손잡이가 있는 것처럼 보이는데
- *    없으면 그게 노이즈예요. 수비는 **중계 한 줄 + 결과**로 흐릅니다.
- * ⚠️ 범민 님이 *"**일단** 공격 상황에서"*라고 하셨어요 — 🥅가 *"바로 알겠다"*를 받으면
- *    **같은 격자를 우리 골문으로 돌려** 수비용을 만듭니다(117번 §6-4).
- *    🚨 그때도 🧱 차단의 **형태**(칩 둘 읽기 · 세기로 정답이 뒤집힘 · 2단 국면 · 띠)는
- *    되살리지 마세요. 이름을 갈아도 안 됩니다.
+ * 🔒 **🧱은 🥅의 거울입니다 — 거울은 낱말과 겉옷이지 산식이 아니에요.** `oneAt` · `cellS` ·
+ *    `CELL_FLOOR` · `ONE_WIN` · `TIER`를 **그대로** 부르니 보통 조작자의 `E[s]`가 🥅와 같다는
+ *    조건(설계 §4-1 g)이 **구성으로** 섭니다. 🧱에 따로 창·천장을 주는 순간 수비수만 세지거나
+ *    약해져요 — 그러려면 설계부터 다시입니다.
+ * 🔒 **새 굴림 0** — 🏃 상대 슈터가 서는 쪽은 `oneRoll()`이 이미 굴린 `side`(키퍼가 붙는 쪽)에서
+ *    나옵니다. `Math.random()`을 한 번도 더 안 불러요(판 모양의 소비량이 안 바뀜).
+ * 🔴 **공격 화면(상대 골문)에 수비를 얹지 않습니다** (117번 §6-1 a안 탈락 · 원칙 ①) — 🧱의 골문은
+ *    **우리 골문**이에요. 색 · 그물 · 키퍼 옷은 `style.css`의 `.w2m-k-defend`가 입힙니다.
+ * 🚨 옛 🧱 차단의 **형태**(칩 둘 읽기 · 세기로 정답이 뒤집힘 · 2단 국면 · 띠)는 되살리지 마세요.
+ *    이름을 갈아도 안 됩니다.
+ * 🔒 판을 여는가의 주인은 **`opens(kind)` 하나**예요(아래) — 부르는 쪽이 `kind === "defend"`를
+ *    따로 적으면 방어가 겹칩니다.
  *
  * ── 왜 전용 파일인가 ─────────────────────────────────────────
  * `timing.js`·`base.css`·`match.js`는 **8개 게임이 전부 내려받습니다.** 축구 하나만
@@ -295,15 +294,13 @@ window.W2Moment = (() => {
   };
 
   /* 🖼️ **상황 분류** — 세 줄 위계의 첫 줄이에요(112번 §11-8).
-   * 같은 미니게임이 두 종류로 열려요(🏃 돌파는 결정에도 전개에도). **무엇이 걸렸는지
+   * 같은 판이 세 종류로 열려요(⚽ 결정 · 🅰️ 전개 · 🧱 수비). **무엇이 걸렸는지
    * 모르는 것이 문제**라 맨 위에 작게 밝힙니다.
    * ⚠️ 첫 글자의 이모지(⚽·🅰️·🧱)가 카드 성격과 짝이에요 — 화면이 말하는 성격과
-   *    이 줄이 어긋나면 안 됩니다(youth-moment-test D-1이 그 자리를 봅니다). */
+   *    이 줄이 어긋나면 안 됩니다. */
   const STAKE = {
     goal: "⚽ 골 찬스 — 넣으면 골이에요",
     assist: "🅰️ 찬스 메이킹 — 성공하면 도움이에요",
-    /* 🧱은 **지금 이 판을 안 엽니다**(117번 §6). 줄을 남겨 두는 건 표가 카드 종류
-     * 셋을 그대로 비추게 하려는 거예요 — 수비용 판이 돌아오면 그때 이 줄이 다시 섭니다. */
     defend: "🧱 실점 위기 — 놓치면 실점이에요",
   };
 
@@ -322,7 +319,7 @@ window.W2Moment = (() => {
     const keys = (info.keys || [])
       .map((k) => `<span class="w2m-ready-key"><b>${esc(k.name)}</b><span>${esc(k.desc)}</span></span>`).join("");
     const wrap = document.createElement("div");
-    wrap.className = "tm-box w2m-ready";
+    wrap.className = "tm-box w2m-ready w2m-k-" + info.kind;   // 🏷️ 본 판과 같은 종류 옷 — 🧱 준비 화면이 🥅의 앰버로 뜨지 않게
     wrap.innerHTML = head(info.stake, info.title, info.why) + body
       + (keys ? `<div class="w2m-ready-keys">${keys}</div>` : "")
       + `<button type="button" class="btn btn-primary tm-btn w2m-go">▶️ 시작</button>`;
@@ -379,7 +376,7 @@ window.W2Moment = (() => {
   const TIER_IN = 0;
 
   /* 🔗 **중립화 상수입니다 — 트레이드오프 손잡이가 아니에요.**
-   *    🦶 주발 쪽 판 · 🫀 `COND_REF`(80) · ♿ 꺼짐에서 **옛 절대문턱 0.75를 소수점까지
+   *    🦶 주발 쪽 판 · 🫀 `COND_REF`(엔진 중립 — `condMul = 1`) · ♿ 꺼짐에서 **옛 절대문턱 0.75를 소수점까지
    *    그대로 재현**하는 값입니다. 종속: `CELL_FLOOR` · `ONE_WIN` · `ONE.cells` · `STRONG`.
    *
    *      0.9478 = 0.75 ÷ (1 − (100/cells)·CELL_FLOOR ÷ (ONE_WIN·STRONG))
@@ -551,10 +548,17 @@ window.W2Moment = (() => {
      * 🔴 판정 줄(`cellMul`)과 **같은 모양**의 조건을 씁니다 — 한쪽만 고치면
      *    화면이 판정과 반대를 가리켜요(2026-08-29에 실제로 났던 버그입니다). */
     const W = ctx.words;
-    /* 🏷️ **종류를 클래스로 남깁니다** — `w2m-k-goal` · `w2m-k-assist`.
+    /* 🏃 **상대 슈터 — 🧱 수비 판에만 섭니다**(설계 12번 §4-3). 🧤 우리 키퍼가 붙는 쪽(`side`)
+     * 아래에서 달려들어요 — 그 반대쪽이 빈 곳이고, 거기가 몸을 던질 곳입니다.
+     * 🔒 **새 굴림 0** — `board.side`는 `oneRoll()`이 이미 굴린 값이에요. 공(⚪)도 슈터 발끝으로 옮깁니다.
+     * 🔒 판정에 한 톨도 안 닿는 **그림**이에요(`cellS`는 이 값을 안 읽습니다). */
+    const defend = ctx.kind === "defend";
+    const shooterX = 50 + board.side * 30;
+    /* 🏷️ **종류를 클래스로 남깁니다** — `w2m-k-goal` · `w2m-k-assist` · `w2m-k-defend`.
      * 🔴 이게 없으면 `style.css`가 **한국어 `aria-label`의 첫 글자**로 종류를 갈라야 해요
      *    (director가 임시로 `[aria-label^="문전"]`에 붙여 뒀습니다). 낱말을 고치는 날
-     *    **CSS가 조용히 안 걸리는** 자리라, 여기서 구조로 내줍니다. */
+     *    **CSS가 조용히 안 걸리는** 자리라, 여기서 구조로 내줍니다. 🧱의 우리 골문 · 우리 색 ·
+     *    차가운 밝은색(`--m-lit-def`)도 `.w2m-k-defend` 한 자리에서 입어요. */
     const wrap = box(container, "w2m-oneone w2m-k-" + ctx.kind,
       head(ctx.stake, W.title, W.why)
       + `<div class="w2m-goal" role="group" aria-label="${esc(W.aria)}">`
@@ -572,8 +576,11 @@ window.W2Moment = (() => {
       + `width:100%;height:76%;border-radius:10px;pointer-events:none;`
       + `border:1px dashed var(--m-ghost, rgba(233,238,255,.5))"></i>`
       + `<i class="w2m-keeper-body"></i><b class="w2m-keeper-face">🧤</b></div>`
-      + `<b class="w2m-ball" aria-hidden="true" style="position:absolute;left:50%;bottom:2px;`
+      + `<b class="w2m-ball" aria-hidden="true" style="position:absolute;left:${defend ? shooterX : 50}%;bottom:2px;`
       + `transform:translateX(-50%);pointer-events:none;font-size:.9rem;line-height:1">⚪</b>`
+      + (defend ? `<b class="w2m-shooter ${board.side > 0 ? "w2m-shooter-r" : "w2m-shooter-l"}" aria-hidden="true"`
+        + ` style="position:absolute;left:${shooterX}%;bottom:14px;transform:translateX(-50%);pointer-events:none;`
+        + `font-size:1.1rem;line-height:1">🏃</b>` : "")
       + `<span class="w2m-foot-tag strong" style="${right ? "right:4px" : "left:4px"}">🦶 ＋${Math.round(FOOT_WIN * 100)}%</span>`
       + `<span class="w2m-foot-tag weak" style="${right ? "left:4px" : "right:4px"}">약발 －${Math.round(FOOT_WIN * 100)}%</span>`
       + `</div>`
@@ -723,8 +730,9 @@ window.W2Moment = (() => {
    *
    * 🔑 **여기서 갈리는 것은 낱말뿐입니다.** `runShotGrid`는 한 벌이고 산식도 한 줄이에요 —
    *    카드 종류가 고르는 건 **무슨 장면인가**뿐입니다.
-   * 🔴 **🧱 수비 칸이 없는 게 맞습니다** — 수비는 판을 안 열어요(머리말 🎭 · 117번 §6).
-   *    여기에 `defend`를 채워 넣는 순간 **수비 상황에 상대 골문이 뜹니다.**
+   * 🧱 **수비 칸의 골문은 「우리 골문」이에요**(설계 12번 §4-3) — 낱말이 그렇게 말하고
+   *    겉옷(`.w2m-k-defend`)이 우리 색으로 입힙니다. 🔴 상대 골문 낱말을 수비에 쓰지 마세요.
+   *    `{keeper}`는 `play()`가 우리 키퍼 이름(`opts.keeper`)으로 채워요 — 글자만, 산식 0.
    * 🔴 옛 `GAMES`(moment → 게임)는 죽었어요. 게임이 하나라 **moment로 고를 게 없습니다.**
    *    엔진의 `MINI` 표는 그대로 두고(engine.js는 한 줄도 안 건드려요) `opts.moment`는
    *    **화면 고르기에 안 씁니다** — `detail.moment`로 그대로 되돌려만 줘요.
@@ -772,40 +780,62 @@ window.W2Moment = (() => {
       late: "🧤 문전이 다 덮였어요 — 연결할 곳이 없었어요",
       hit: "✨",
     },
+    /* 🧱 **슛 코스 막기** — 🥅의 거울(설계 12번 §4-3 낱말 표 그대로). 🔴 판의 문구는 **손(겨눔)만**
+     * 말합니다 — 막았는지는 엔진이 정하고 경기 카드가 말해요. 「코스를 지웠어요!」 뒤에
+     * 「😣 그래도 뚫렸어요」가 올 수 있고, 그게 정직합니다. */
+    defend: {
+      title: "🧱 슛 코스 막기",
+      why: "🧤 {keeper}가 가까운 쪽을 막았어요 — <b>먼 쪽 빈 곳</b>으로 몸을 던져요",
+      aria: "우리 골문 6칸 — 가장 밝은 칸으로 몸을 던지세요",
+      lines: [
+        "🏃 상대가 우리 골문으로 달려들어요.",
+        "🧤 {keeper}는 <b>상대 쪽 기둥</b>을 지켜요 — 그 <b>반대쪽</b>이 비어요.",
+        "빈 곳 한가운데에 가까운 칸일수록 <b>밝아요.</b> 🦶 주발 쪽이 더 넓게 밝아요.",
+      ],
+      keys: [{ name: "골문 칸", desc: "테두리 = 슛 길에 닿는 칸 · ◎ = 완벽. 기다릴수록 테두리가 줄어요" }],
+      tip: "슛이 나오기 전에요!",
+      urgent: "🏃 상대가 발을 뒤로 뺐어요! 지금!",
+      great: "🧱 슛 길 한가운데로 정확히!",
+      ok: "🧱 발끝이 슛 길에 걸쳤어요",
+      onKeeper: "🧤 키퍼와 같은 쪽이었어요 — 먼 쪽이 비었어요",
+      far: "😣 슛 길에서 너무 멀었어요",
+      late: "🏃 슛이 먼저 나왔어요",
+      hit: "🛡️",
+    },
   };
 
-  /* 🔑 준비 화면의 「본 횟수」는 **한 열쇠**를 씁니다 — 규칙이 하나뿐이라
-   * 종류마다 세 번씩(모두 아홉 번) 전문을 펴면 그게 그냥 잔소리가 돼요.
-   * 낱말은 그때그때 그 카드의 것으로 보여 줍니다. */
-  const SHOT_KEY = "w2-shot";
+  /* 🔑 준비 화면의 「본 횟수」 열쇠 — 🥅(⚽·🅰️)과 🧱은 **다른 열쇠**예요(설계 12번 §4-3 · §11-3).
+   * ⚽·🅰️은 규칙이 하나라 한 열쇠를 나눠 씁니다(종류마다 세 번씩 전문을 펴면 잔소리가 돼요).
+   * 🧱은 **막는 쪽**이라 처음 3번은 따로 전문을 폅니다.
+   * 🔒 옛 II의 `w2-shot`은 안 씁니다 — 새 게임이라, 옛 II를 해 본 기기에서도 설명을 처음부터 보여 줘요. */
+  const READY_KEY_OF = { goal: "w2v2-shot", assist: "w2v2-shot", defend: "w2v2-cover" };
 
   /* 화면이 부르는 자리. 준비 화면 → 본 게임 → cb(판정) 순서예요.
-   * 🤖 자동 진행은 여기까지 안 옵니다 — career.js가 미니게임을 아예 안 열고
-   * 지금의 확률 굴림(autoJudge)을 그대로 써요. */
+   * 🤖 자동 진행은 여기까지 안 옵니다 — 드라이버(`live.js`)가 판을 아예 안 열고
+   * 중립(`s = 0.5`)으로 판정해요. */
   /* 🎮 **그 종류가 판(화면)을 여는가** — 🔑 이 물음의 **주인은 여기 하나**입니다.
-   * 부르는 쪽(`game.js`의 유스 순간 카드)은 상자를 비우고 클래스를 붙이기 **전에** 이걸 묻습니다.
+   * 🧱 수비도 이제 판을 엽니다(설계 12번 §4-4) — **`WORDS`에 낱말이 있는 종류면 엽니다.**
+   * 🔴 부르는 쪽(드라이버)은 `kind === "defend"`를 따로 적지 않고 이걸 묻습니다 — 같은 판단을
+   *    두 번 적으면 방어가 겹쳐 한쪽을 지워도 증상이 0장이 돼요(CLAUDE.md 「방어가 겹침」).
+   * 🔒 자기 칸만 봅니다(`hasOwnProperty`) — `"constructor"` 같은 이름이 물려받은 값으로 열리지 않게요.
    * 🔒 `opens`가 거짓이면 `play()`는 **화면을 한 조각도 안 그리고** 중립(`s = 0.5`)으로 흘려요. */
-  const opens = (kind) => kind !== "defend";
+  const opens = (kind) => Object.prototype.hasOwnProperty.call(WORDS, kind);
 
   function play(container, opts, cb) {
     const o = opts || {};
     const done = typeof cb === "function" ? cb : () => {};
     const judge = typeof o.judge === "function" ? o.judge : loneJudge;
-    /* 🧱 **수비는 판이 없습니다** (117번 §6 · 머리말 🎭).
-     * `s = 0.5`면 `cardP = autoP`라 **결과가 자동 갈래와 정의상 같아요** — 육성은 살고
-     * 조작만 빠집니다. 🔒 **화면을 한 조각도 안 그립니다** — 손잡이처럼 보이는 것을
-     * 띄웠다가 아무것도 안 하면 그게 노이즈예요(원칙 ③).
-     *
-     * 🔴 **부르는 쪽도 같은 것을 물어야 하는데, 「같은 판단을 두 번 적지」 않습니다.**
-     *    부르는 쪽이 `kind === "defend"`를 **따로 적으면** 방어가 겹쳐요 — 한쪽을 지워도
-     *    증상이 0장이라 **검사가 통째로 아무것도 못 지킵니다**(CLAUDE.md 「방어가 겹침」).
-     *    그래서 판단의 주인은 **`opens(kind)` 하나**이고, 아래 줄도 부르는 쪽도 그걸 씁니다.
-     * ⚠️ 부르는 쪽이 이걸 안 물으면 **상자를 비우고 클래스를 붙인 채로** 여기 닿아서
-     *    «아무것도 안 하는 빈 상자»가 뜹니다 — 그래서 여기서도 한 번 더 막아요. */
-    if (!opens(o.kind)) { done(judge(0.5), { s: 0.5, moment: o.moment || "block", weak: false }); return; }
-    /* 🔒 모르는 kind는 ⚽ 결정으로 떨어뜨립니다 — 화면이 통째로 안 뜨는 것보다 나아요. */
-    const kind = WORDS[o.kind] ? o.kind : "goal";
-    const words = WORDS[kind];
+    /* 🔒 낱말이 없는 종류는 **판을 안 엽니다** — `s = 0.5`면 `cardP = autoP`라 결과가 자동
+     * 갈래와 정의상 같아요. 화면을 한 조각도 안 그립니다(원칙 ③ — 손잡이처럼 보이는데
+     * 아무것도 안 하면 노이즈). 부르는 쪽도 `opens()`를 먼저 묻지만, 안 물었을 때
+     * «아무것도 안 하는 빈 상자»가 뜨지 않게 여기서도 한 번 막아요. */
+    if (!opens(o.kind)) { done(judge(0.5), { s: 0.5, moment: o.moment || "oneone", weak: false }); return; }
+    const kind = o.kind;
+    /* 🧱 `{keeper}` — 우리 키퍼 이름(태오 · 서아). 없으면 「키퍼」. 🔒 `why`·`lines`는 HTML로 들어가서
+     * **이름은 이스케이프**합니다. 받침 없는 이름이라 조사(가 · 는)가 그대로 맞아요. */
+    const keeper = esc(String(o.keeper == null || o.keeper === "" ? "키퍼" : o.keeper).slice(0, 20));
+    const fill = (t) => String(t).split("{keeper}").join(keeper);
+    const words = Object.assign({}, WORDS[kind], { why: fill(WORDS[kind].why), lines: WORDS[kind].lines.map(fill) });
     const ctx = {
       done: false, weak: false, kind, words,
       /* 🔒 `moment`는 **엔진이 준 이름 그대로 되돌려 줍니다.** 화면을 고르는 데는 안 써요 —
@@ -819,7 +849,7 @@ window.W2Moment = (() => {
     };
     if (!container) { ctx.cb(ctx.toJudge(0.5), { s: 0.5, moment: ctx.moment, weak: false }); return; }
     ready(container, {
-      key: SHOT_KEY, title: words.title, why: words.why, lines: words.lines,
+      kind, key: READY_KEY_OF[kind], title: words.title, why: words.why, lines: words.lines,
       keys: words.keys, stake: ctx.stake,
     }, (gate) => runShotGrid(container, ctx, gate));
   }

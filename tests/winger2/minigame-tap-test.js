@@ -46,9 +46,9 @@
  * │ **판이 `ready()` 준비 화면을 지나 열리는 세계**의 계약입니다.
  * │ 🔴 준비 화면을 없애는 판정이 나오면 이 파일이 통째로 옛 계약이 돼요 —
  * │    그때는 값을 고치지 말고 **여기부터 여세요.**
- * │ 🧱 수비는 **판을 아예 안 엽니다**(`play()`가 `s = 0.5`로 되돌려요) — 준비 화면도
- * │    본 게임도 없으니 **이중 탭이라는 개념이 없습니다.** 그래서 `GAMES`에 없어요.
- * │    그 가드 자체는 `one-grid-test.js`가 지킵니다.
+ * │ 🔄 2026-10-02 (1막) — 🧱 수비도 **판을 엽니다**(12번 §4). 옛 문장 「🧱은 판이 없어 이중 탭이라는
+ * │    개념이 없다 · `GAMES`에 없다」는 **뒤집혔어요** — 🧱도 준비 화면 → 본 판을 지나니 `GAMES`에 들어왔습니다.
+ * │    「모르는 종류는 판을 안 연다」(옛 가드의 남은 몫)는 `one-grid-test.js` G-10c가 지킵니다.
  * └────────────────────────────────────────────────────────────────
  *
  * ⏱️ 1초 안에 끝나요.
@@ -61,7 +61,7 @@ const check = (ok, msg) => { console.log(`${ok ? "✅" : "❌"} ${msg}`); if (!o
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const MUT = {
-  /* ⓐ 준비 화면 → 본 게임의 gate 제거 — **배역 둘 다** 이중 탭이 납니다 */
+  /* ⓐ 준비 화면 → 본 게임의 gate 제거 — **배역 셋 다** 이중 탭이 납니다 */
   READYGATE: [[/      gate\.shut = !!viaPointer;\n      wrap\.remove\(\);/,
     "      gate.shut = false;\n      wrap.remove();"]],
 };
@@ -81,9 +81,12 @@ const MUT = {
  * 🔴 이 표가 곧 「준비 화면 버튼이 사라지고 그 자리에 생기는 것」이에요.
  *    🔑 탭을 받는 자리는 `.w2m-goal` **하나**입니다(칸마다 달면 여섯 군데가 돼요) —
  *       그래서 재타겟 `click`이 가는 곳도 `.w2m-goal`입니다. */
+/* 🔄 2026-10-02 (1막) — 🧱 수비도 **같은 판**을 엽니다(12번 §4 · 결정 A). 준비 화면 → 본 판 두 층이 생겨
+ *    **이중 탭이라는 개념이 🧱에도 생겼어요** — 그래서 배역이 셋입니다(옛 머리말의 「🧱은 `GAMES`에 없어요」는 뒤집힘). */
 const GAMES = [
   { n: "⚽ 결정 — 🥅 골문 6칸", sel: ".w2m-goal", kind: "goal" },
   { n: "🅰️ 전개 — ⚡ 컷백 연결", sel: ".w2m-goal", kind: "assist" },
+  { n: "🧱 수비 — 슛 코스 막기(우리 골문)", sel: ".w2m-goal", kind: "defend" },
 ];
 
 /* 🔒 「먹혔다」의 증상은 **`.w2m-hit`** 하나예요 (`cb`는 620ms 뒤라 못 봅니다) */
@@ -94,13 +97,13 @@ function open(W, kind) {
   const host = D.createElement("div");
   D.body.appendChild(host);
   const seen = { cb: 0 };
-  W.W2Moment.play(host, { moment: "oneone", kind, condition: 80, foot: "R" }, () => { seen.cb += 1; });
+  W.W2Moment.play(host, { moment: "oneone", kind, condition: 51, foot: "R", keeper: kind === "defend" ? "태오" : null }, () => { seen.cb += 1; });
   return { host, seen };
 }
 
 (async () => {
   /* ══════════════════════════════════════════════════════════════
-   * A. 🖱️ 준비 화면 ▶️ 시작 → 본 게임 — **배역 둘 다**
+   * A. 🖱️ 준비 화면 ▶️ 시작 → 본 게임 — **배역 셋 다**
    * ══════════════════════════════════════════════════════════════ */
   {
     const W = momentDom();
@@ -134,10 +137,10 @@ function open(W, kind) {
     const nBad = rows.filter((r) => r.bad).map((r) => r.g.n);
     const nDead = rows.filter((r) => !r.live).map((r) => r.g.n);
     check(nBad.length === 0,
-      `A-1. 🖱️ **▶️ 시작에서 손 뗀 click이 골문으로 가도 안 먹힌다** — 배역 둘 다`
+      `A-1. 🖱️ **▶️ 시작에서 손 뗀 click이 골문으로 가도 안 먹힌다** — 배역 셋 다`
       + (nBad.length ? `\n     🔴 새어 나간 것: ${nBad.join(" · ")} — 판이 열리자마자 s ≈ 0으로 끝납니다` : ""));
     check(nDead.length === 0,
-      `A-2. 🔑 **그 다음 진짜 탭(칸)은 먹힌다** — 배역 둘 다 (이게 없으면 A-1은 "게임이 죽어 있어도 통과"예요)`
+      `A-2. 🔑 **그 다음 진짜 탭(칸)은 먹힌다** — 배역 셋 다 (이게 없으면 A-1은 "게임이 죽어 있어도 통과"예요)`
       + (nDead.length ? `\n     🔴 안 먹힌 것: ${nDead.join(" · ")}` : ""));
     /* 🔒 **판이 진짜로 떴는지**도 같이 셉니다 — 칸이 0개인 빈 화면 위에서 A-1이
      *    조용히 통과하는 길을 막아요(«아무 일도 안 일어났다»가 통과가 되는 자리). */
@@ -152,7 +155,7 @@ function open(W, kind) {
       + (zero.length ? `\n     🔴 한 번도 안 눌린 것: ${zero.join(" · ")}` : ""));
   }
 
-  /* 🧪 변이 ⓐ — 준비 화면 gate를 없애면 **배역 둘 다** 새어 나가야 합니다 */
+  /* 🧪 변이 ⓐ — 준비 화면 gate를 없애면 **배역 셋 다** 새어 나가야 합니다 */
   {
     const W = momentDom(MUT.READYGATE);
     const out = [];
@@ -164,7 +167,7 @@ function open(W, kind) {
     }
     const caught = out.filter(([, b]) => b).map(([n]) => n);
     check(caught.length === GAMES.length,
-      `A-변이. 🔴 준비 화면 gate를 없애면 → 빨간불 · **배역 둘 다** (${caught.length}/${GAMES.length})`
+      `A-변이. 🔴 준비 화면 gate를 없애면 → 빨간불 · **배역 셋 다** (${caught.length}/${GAMES.length})`
       + (caught.length === GAMES.length ? ` — ${caught.join(" · ")}`
         : `\n     🔴 **안 잡힌 것: ${out.filter(([, b]) => !b).map(([n]) => n).join(" · ")}**`
           + ` — 그 배역은 지금 이 검사가 안 지키고 있습니다`));

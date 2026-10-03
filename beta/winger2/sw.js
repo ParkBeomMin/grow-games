@@ -1,9 +1,34 @@
-/* winger2 서비스워커 — 네트워크 우선, 실패 시 캐시 (오프라인 플레이) */
-const CACHE = "winger2-v1";   // ⚽ 더 윙어 II 신설
-/* ⚠️ `./vendor/three.module.min.js`는 **691KB**입니다 — 설치할 때 한 번 받아 둬요.
- * 안 넣으면 **온라인에선 멀쩡하고 오프라인에서만 3D가 안 뜹니다**(그리고 CSS 실루엣으로
- * 조용히 떨어져서 아무도 눈치를 못 채요). 이 목록은 자동 생성이 없습니다. */
-const ASSETS = ["./", "./index.html", "./style.css", "./game.js", "./intro.js", "./town.js", "./grade.js", "./cup.js", "./career.js", "./squad.js", "./prospect.js", "./char3d.js", "./vendor/three.module.min.js", "./engine.js", "./match-scene.js", "./fever.js", "./camp.js", "./worldcup.js", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png", "../winger-moment.js", "../base.css", "../env.js", "../fx.js", "../radar.js", "../timing.js", "../match.js", "../help.js"];
+/* winger2 서비스워커 — 네트워크 우선, 실패 시 캐시 (오프라인 플레이)
+ * ⚽ 더 윙어 II 1막 — 옛 II 파일(career · town · squad · prospect · char3d · vendor …)을 걷어내고 새로 지었어요. */
+const CACHE = "winger2-v2";   // ⚽ 1막으로 새로 지음 — 접두사 `winger2-`가 activate의 startsWith와 짝이에요
+/* 🔒 이 목록은 **자동 생성이 없습니다.** 전용 js를 더하면 여기 손으로 넣으세요 — 빠뜨리면 온라인에선 멀쩡하고
+ *    **오프라인에서만** 깨져요. 🔴 `focus.js`는 다른 세션의 미커밋 파일이라 넣지 않아요(결정 8).
+ * 🖼️ 그림 66장(첫 베타 — 지호 남 · 여 + 두 세계 조연 · 25번 §1)은 설치 때 한 번 받아 둬요(약 3MB · 25번 §2). */
+const ASSETS = [
+  "./", "./index.html", "./style.css", "./engine.js", "./match-scene.js", "./art.js",
+  "./scenes.js", "./live.js", "./world.js", "./events.js", "./story.js", "./achieve.js",
+  "./book.js", "./sheet.js", "./film.js", "./game.js", "./manifest.webmanifest", "./icon-192.png",
+  "./icon-512.png", "../winger-moment.js", "../base.css", "../env.js", "../fx.js", "../radar.js",
+  "../timing.js", "../match.js", "../help.js",
+  /* 🖼️ art/ — 파일 이름이 곧 계약 키예요(12번 §9-6) */
+  "./art/bg-cup.webp", "./art/bg-dawn.webp", "./art/bg-field.webp", "./art/bg-gate.webp",
+  "./art/bg-home-jiho.webp", "./art/bg-locker.webp", "./art/bg-test.webp", "./art/coach-base.webp",
+  "./art/coach-smile.webp", "./art/coach-stern.webp", "./art/coach-worry.webp", "./art/dad-base.webp",
+  "./art/dad-smile.webp", "./art/dad-worry.webp", "./art/end-leave.webp", "./art/end-pro1.webp",
+  "./art/end-pro2.webp", "./art/end-semi.webp", "./art/end-trainee.webp", "./art/gaeun-base.webp",
+  "./art/gaeun-frown.webp", "./art/gaeun-respect.webp", "./art/jiho-f-base.webp", "./art/jiho-f-chibi-base.webp",
+  "./art/jiho-f-chibi-block.webp", "./art/jiho-f-chibi-down.webp", "./art/jiho-f-chibi-score.webp", "./art/jiho-f-down.webp",
+  "./art/jiho-f-fire.webp", "./art/jiho-f-moved.webp", "./art/jiho-f-smile.webp", "./art/jiho-f-surprise.webp",
+  "./art/jiho-f-tired.webp", "./art/jiho-m-base.webp", "./art/jiho-m-chibi-base.webp", "./art/jiho-m-chibi-block.webp",
+  "./art/jiho-m-chibi-down.webp", "./art/jiho-m-chibi-score.webp", "./art/jiho-m-down.webp", "./art/jiho-m-fire.webp",
+  "./art/jiho-m-moved.webp", "./art/jiho-m-smile.webp", "./art/jiho-m-surprise.webp", "./art/jiho-m-tired.webp",
+  "./art/minjae-base.webp", "./art/minjae-grin.webp", "./art/minjae-shock.webp", "./art/minjae-smirk.webp",
+  "./art/minseo-base.webp", "./art/minseo-grin.webp", "./art/minseo-shock.webp", "./art/minseo-smirk.webp",
+  "./art/scout-base.webp", "./art/scout-interest.webp", "./art/scout-smile.webp", "./art/seheon-base.webp",
+  "./art/seheon-frown.webp", "./art/seheon-respect.webp", "./art/seoa-base.webp", "./art/seoa-fire.webp",
+  "./art/seoa-grin.webp", "./art/seoa-tears.webp", "./art/taeo-base.webp", "./art/taeo-fire.webp",
+  "./art/taeo-grin.webp", "./art/taeo-tears.webp",
+];
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));
 });

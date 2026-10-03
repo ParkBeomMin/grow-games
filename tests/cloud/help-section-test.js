@@ -42,6 +42,8 @@ function buildHtml(game) {
 }
 
 for (const game of GAMES) {
+  /* ⚽ winger2는 **1막 모양**으로 따로 봅니다(아래 `winger2Column`) — 다른 7종의 문장은 한 글자도 안 바꿨어요. */
+  if (game === "winger2") continue;
   console.log(`\n--- ${game} ---`);
   let dom;
   try {
@@ -90,5 +92,79 @@ for (const game of GAMES) {
   check(!doc.querySelector(".help-overlay"), `${game}: 닫기 버튼을 누르면 모달이 사라진다`);
 }
 
-console.log(fail ? `\n❌ ${fail}건 실패` : "\n✅ 통과");
-process.exit(fail ? 1 : 0);
+/* ═══════════════════════════════════════════════════════════════════════
+ * ⚽ winger2 — **더 윙어 II 1막 모양**으로 옮긴 칸 (2026-10-02 · inspector · 25번 §8 · 26번 §5)
+ * ═══════════════════════════════════════════════════════════════════════
+ * 1막 `game.js`는 IIFE(`window.W2Game`)라 **전역 `openHelp`가 없습니다** — 도움말은 입구의 ❓ 버튼(`.w2-help`)이
+ * 엽니다(오케스트레이터 결정 25번 §8 · 전역은 안 늘림). 그래서 구조 문장 「`openHelp()` 접근 가능」만 1막 모양
+ * 「입구의 ❓를 **눌러서** 열린다」로 바꾸고, **사용자에게 보이는 계약은 그대로** 봅니다:
+ *   H-1 ❓를 누르면 `.help-overlay`가 열린다(누르기 전에는 없다)
+ *   H-2 마지막 섹션이 「💾 기록 보관」이고 본문에 8종 표준 문구 둘(「이 기기의 브라우저에 저장되고」 · 「🔗 기록 연동」)
+ *   H-3 닫기 버튼이 모달을 닫는다
+ * 🧪 이 칸의 감도 — 문구 한 줄 · 버튼 배선을 끊은 사본에서 **제 문장이** 빨간불이어야 해요. */
+function w2Html(over) {
+  const DIR = path.join(B, "winger2");
+  let html = fs.readFileSync(path.join(DIR, "index.html"), "utf8");
+  html = html.replace(/<script src="([^"]+)"><\/script>/g, (m, src) => {
+    const clean = src.split("?")[0];
+    const p = path.resolve(DIR, clean);
+    if (!fs.existsSync(p)) return m;
+    let code = fs.readFileSync(p, "utf8");
+    const base = path.basename(p);
+    for (const [re, rep] of (over && over[base]) || []) {
+      const before = code;
+      code = code.replace(re, rep);
+      if (code === before) throw new Error(`${base}에 변이가 안 걸렸어요 — ${re}`);
+    }
+    return `<script>\n${code}\n</script>`;
+  });
+  html = html.replace("</head>", `<script>${PRELUDE}</script></head>`);
+  return html;
+}
+async function winger2Column(over) {
+  const res = {}, msgs = {};
+  const say = (k, ok, msg) => { res[k] = ok; msgs[k] = msg; };
+  const dom = new JSDOM(w2Html(over), { runScripts: "dangerously", pretendToBeVisual: true, url: "https://x.test/winger2/" });
+  const w = dom.window;
+  const doc = w.document;
+  for (let i = 0; i < 200 && (doc.readyState === "loading" || !doc.querySelector("#w2-entry")); i++) await new Promise((r) => setTimeout(r, 5));
+  const before = !!doc.querySelector(".help-overlay");
+  const hb = doc.querySelector("#w2-entry .w2-help");
+  if (hb) for (const t of ["pointerdown", "pointerup", "click"]) hb.dispatchEvent(new w.MouseEvent(t, { bubbles: true, cancelable: true }));
+  const overlay = doc.querySelector(".help-overlay");
+  say("h1", !before && !!hb && !!overlay, `H-1 입구 ❓ ${hb ? "있음" : "없음"} → 누르면 .help-overlay ${overlay ? "열림" : "안 열림"} (누르기 전 ${before ? "이미 있음" : "없음"})`);
+  const secs = overlay ? Array.from(overlay.querySelectorAll(".help-sec")) : [];
+  const last = secs[secs.length - 1];
+  const lastTitle = last && last.querySelector("h4") ? last.querySelector("h4").textContent : "";
+  const lastBody = last && last.querySelector("p") ? last.querySelector("p").innerHTML : "";
+  say("h2", lastTitle.includes("💾") && lastTitle.includes("기록 보관") && /이 기기의 브라우저에 저장되고/.test(lastBody) && /🔗 기록 연동/.test(lastBody),
+    `H-2 섹션 ${secs.length}개 · 마지막 「${lastTitle}」 · 표준 문구 둘 ${/이 기기의 브라우저에 저장되고/.test(lastBody) ? "✔" : "✘"}${/🔗 기록 연동/.test(lastBody) ? "✔" : "✘"}`);
+  const closeBtn = overlay && overlay.querySelector(".help-close");
+  if (closeBtn) closeBtn.click();
+  say("h3", !!closeBtn && !doc.querySelector(".help-overlay"), `H-3 닫기 버튼 ${closeBtn ? "있음" : "없음"} → 누르면 모달이 ${doc.querySelector(".help-overlay") ? "남음" : "사라짐"}`);
+  try { if (w.Cloud) w.Cloud.touch = () => {}; w.fetch = () => new Promise(() => {}); } catch (e) { /* 닫힘 */ }
+  setImmediate(() => { try { w.close(); } catch (e) { /* 닫힘 */ } });
+  return { res, msgs };
+}
+(async () => {
+  console.log(`\n--- winger2 (1막 모양) ---`);
+  const base = await winger2Column(null);
+  for (const k of ["h1", "h2", "h3"]) check(base.res[k] === true, `winger2: ${base.msgs[k]}`);
+  const MUT = [
+    ["입구 ❓ 배선 끊기", "h1", { "game.js": [[/btn\("w2-help", "❓ 도움말", openHelp\)/, 'btn("w2-help", "❓ 도움말", null)']] }],
+    ["「🔗 기록 연동」 안내 문구를 옛 「☁️ 기록 연동」으로", "h2", { "game.js": [[/타이틀 화면의 🔗 기록 연동에서/, "타이틀 화면의 ☁️ 기록 연동에서"]] }],
+    ["「💾 기록 보관」 뒤에 섹션을 하나 더(마지막이 아니게)", "h2", { "game.js": [[/ {6}\+ "경기 도중에 닫으면 그 경기는 처음부터 다시 해요\." \},\n {2}\];/, '      + "경기 도중에 닫으면 그 경기는 처음부터 다시 해요." },\n    { emoji: "🧪", title: "뒤에 붙은 섹션", body: "x" },\n  ];']] }],
+  ];
+  if (Object.values(base.res).some((v) => v !== true)) {
+    console.log("   ⚠️ winger2 기준선이 빨간불이라 감도 확인을 건너뜁니다");
+  } else {
+    for (const [name, want, over] of MUT) {
+      let r = null, err = null;
+      try { r = await winger2Column(over); } catch (e) { err = e; }
+      check(!err && r && r.res[want] === false, `winger2: 🧪 변이 「${name}」 → ${want.toUpperCase().replace("H", "H-")}가 빨간불`
+        + (err ? ` — 💥 ${err.message}` : r && r.res[want] !== false ? " — 🔴 안 잡혔어요" : ""));
+    }
+  }
+  console.log(fail ? `\n❌ ${fail}건 실패` : "\n✅ 통과");
+  process.exit(fail ? 1 : 0);
+})().catch((e) => { console.log(`💥 ${e && e.stack ? e.stack : e}`); process.exit(2); });

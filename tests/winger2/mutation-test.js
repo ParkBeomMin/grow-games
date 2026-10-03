@@ -17,9 +17,18 @@
  *    괄호 안 숫자는 2026-08-28 실측값이고, 문턱은 그 사이에 박았습니다.
  *
  * 🎲 시드를 박았으니 이 검사는 **완전히 결정론적**입니다. 같은 소스면 같은 숫자예요.
+ *
+ * 🌍 **1막으로 옮기며(2026-10-02 · inspector · 11번 §6-A)** — 이 파일의 픽스처는 **중립 컨디션**에서 잽니다.
+ *    `_load.js`의 `play()` 기본 컨디션이 옛 80(옛 `COND_REF`)에서 **51(1막 `COND_REF`)**로 같이 옮겨서,
+ *    `condMul = 1`인 판이 그대로예요 → 엔진 수정이 `COND_REF` 한 줄뿐이라 **HEAD(옛 II)와 같은 숫자**가 나옵니다
+ *    (옮긴 뒤 다시 재서 HEAD 로그와 대조 — A 20.3/17.9 · B 19.2%/9.9% · C 1.222/2.575 · D · E가 그대로).
+ *    C는 옛 코드가 컨디션 80을 **직접** 적어 두어 1막에선 중립이 아니게 됐길래 `COND_NEUTRAL`로 바꿨어요.
+ *    🔴 아래 괄호 속 옛 실측(16.4 · 20.0 · 1.311 …)은 그보다 **앞선 계수**의 기록이에요 — 지금 값은 출력에 찍힙니다.
+ *    🔴 픽스처가 중립이 아니게 되면(컨디션 80을 넘기면 `condMul 1.087`) A의 도움 축이 문턱 밑으로 갑니다 —
+ *       실제로 옮기기 전 한 판이 그랬어요(wg 도움 16.3 < 17.1). **그건 고장이 아니라 픽스처가 중립을 벗어난 것**이에요.
  */
 "use strict";
-const { load, mutsOK, xiOf, play } = require("./_load.js");
+const { load, mutsOK, xiOf, play, COND_NEUTRAL } = require("./_load.js");
 
 let fail = 0;
 const check = (ok, msg) => { console.log(`${ok ? "✅" : "❌"} ${msg}`); if (!ok) fail += 1; };
@@ -44,9 +53,12 @@ const MUT_ACE_V0 = [
     "      * (row === ace ? (row.me ? SPOT : (NPC_SPOT[kind] || NPC_SPOT.goal)) : 1)\n      * (row.me ? ME_P : 1);"],
 ];
 
-/* 검사 D — condMul을 STEP 3 무게에도 겁니다. 세 줄이 한 벌이에요. */
+/* 검사 D — condMul을 STEP 3 무게에도 겁니다. 세 줄이 한 벌이에요.
+ * 🔄 2026-10-02 — 1막에서 `COND_REF`가 80 → **51**로 옮겨(25번 §2) 옛 정규식(`COND_REF = 80`)이 안 걸렸습니다.
+ *    🔒 **값에 안 묶이게** 숫자 자리를 `\d+`로 잡습니다 — `COND_REF`가 또 움직여도 이 변이는 걸려요
+ *    (값 자체는 `engine-test` ⑧이 지킵니다. 한 계약에 주인은 하나). */
 const MUT_COND3 = [
-  [/const COND_REF = 80;/, "const COND_REF = 80;\n  let _condHack = 80;"],
+  [/(const COND_REF = \d+;)/, "$1\n  let _condHack = 51;"],
   [/const cond = c\.condition;/, "const cond = c.condition; _condHack = cond;"],
   [/ {6}\* \(row\.me \? ME_P \* SPOT : 1\);/, "      * (row.me ? ME_P * SPOT * condMul(_condHack) : 1);"],
 ];
@@ -115,8 +127,14 @@ function mutCheck(name, E, msgFn) {
  * 🚨 값을 이 파일에 **직접 적습니다.** 소스나 설계 문서에서 읽어 오면 계수를 바꿔도
  *    검사가 따라가서 아무것도 안 잡혀요.
  * ══════════════════════════════════════════════════════════════ */
-const FW130_GOALS_MIN = 14.4;      // (라') fw110 목표 — 문턱, 소스에서 읽지 않습니다
-const WG130_ASSIST_MIN = 17.1;     // (라') wg110 목표
+/* 🔄 2026-10-02 (1막으로 옮기며 · inspector) — **wg 도움 문턱을 17.1 → 12.5로 옮겼습니다. 완화가 아니라 자리 잡기예요.**
+ *    17.1은 「(라′) 프로 리그 wg110 목표」라는 **옛 II의 설계 값**이었고, 1막엔 그 리그가 없어 근거가 사라졌어요.
+ *    남은 계약은 *"SPOT이 내 생산량을 만든다"* 하나라, 문턱은 **기준선과 변이 사이**에 둡니다(스킬 「여유」):
+ *      기준선 wg 도움 **17.9**(HEAD와 같은 값 · 1σ ≈ 0.42 — 경기당 SD 0.6 ÷ √3000 × 38) ↔ SPOT=1 변이 **8.0**
+ *    옛 17.1은 기준선에서 **1.9σ** 아래라 계수 한 번에 우연으로 빨간불이 날 자리였어요. 12.5는 기준선에서 **13σ** · 변이에서 1.56배.
+ *    fw 골은 14.4 그대로(기준선 20.3 · 변이 10.1 — 양쪽 여유 40% 안팎). */
+const FW130_GOALS_MIN = 14.4;      // 문턱 — 소스에서 읽지 않습니다(기준선 20.3 · 변이 10.1)
+const WG130_ASSIST_MIN = 12.5;     // 문턱 — 기준선 17.9 · 변이 8.0의 사이
 function measureSpot(E) {
   return {
     fwG: play(E, "fw", 130, { n: 3000, seed: 3, mateBase: 70 }).season.g,
@@ -197,7 +215,7 @@ function measureFat(E, seed, n) {
   E._t.seed(seed); E._t.skill = 0.5;
   let ag = 0, ng = 0, aa = 0, na = 0, cards = 0, m = 0;
   for (let i = 0; i < n; i++) {
-    const r = E._t.playMatch({ xi: xiOf("wg", 150, 60), oppName: "상대", teamStr: 88, oppStr: 52, condition: 80 });
+    const r = E._t.playMatch({ xi: xiOf("wg", 150, 60), oppName: "상대", teamStr: 88, oppStr: 52, condition: COND_NEUTRAL });
     let first = null;
     for (const c of r.cards) {
       if (first === null) { if (c.credit.g) first = "g"; else if (c.credit.a) first = "a"; continue; }
@@ -207,7 +225,7 @@ function measureFat(E, seed, n) {
   }
   E._t.seed(seed + 1); E._t.skill = 0.5;
   for (let i = 0; i < n; i++) {
-    cards += E._t.playMatch({ xi: xiOf("mf", 150, 45), oppName: "상대", teamStr: 95, oppStr: 45, condition: 80 }).mineCards;
+    cards += E._t.playMatch({ xi: xiOf("mf", 150, 45), oppName: "상대", teamStr: 95, oppStr: 45, condition: COND_NEUTRAL }).mineCards;
     m += 1;
   }
   return { ratio: (aa / na) / (ag / ng), cards: cards / m };

@@ -140,12 +140,61 @@ const agree = (a, b) => a.reduce((k, v, i) => k + (v === b[i] ? 1 : 0), 0);
     `C-1. 🔒 두 난수원을 **손으로 같이 심는 드라이버가 없다** — 심으려면 \`seedBoth\`를 쓰세요`
     + (bad.length ? `\n     🔴 ${bad.join(", ")}\n     시드를 안 가르면 앞 ${N}개가 완전히 일치합니다 (변이-1이 그걸 보여줘요)`
       : ` (검사 ${files.length}개를 훑음)`));
-  /* `seedBoth`를 쓰는 곳이 실제로 있어야 C-1이 의미가 있어요 —
-   * 아무도 안 쓰면 「위반이 없다」는 공짜로 참이 됩니다 */
-  const users = files.filter((f) => /\bseedBoth\s*\(/.test(code(fs.readFileSync(path.join(dir, f), "utf8"))));
-  check(users.length >= 5,
-    `C-2. 🔑 \`seedBoth\`를 실제로 쓰는 드라이버가 ${users.length}개 있다 — C-1이 **공짜로 참이 아니다**`
-    + `\n     ${users.join(", ")}`);
+  /* 🔄 2026-10-02 (1막으로 옮기며 · inspector) — 옛 C-2는 「`seedBoth`를 쓰는 드라이버가 5개 이상」이었어요.
+   *    1막 게임은 **스스로** 판 시드에서 경기마다 엔진 시드를 갈라 겁니다(`world.js` `engineSeed` — 아래 D) — 검사가
+   *    두 흐름을 손으로 심을 일이 거의 없어져 「사용처 5개」는 **문턱이 아니라 우연**이 됐습니다.
+   *    🔒 대신 **감지기 자체의 감도**를 봅니다 — 안 가른 두 줄을 넣은 가짜 파일을 C-1의 자로 재면 잡혀야 해요.
+   *    (그래야 「위반 0건」이 **공짜로 참**이 아닙니다 — 스킬 「소스를 읽어 세는 문장은 감도를 따로」) */
+  const fakeBad = code("W.Math.random = mulberry32(seed);\nW.WingerEngine._t.seed(seed);\n");
+  const fakeGood = code("W.Math.random = mulberry32(seed);\nW.WingerEngine._t.seed((seed ^ 0x9E3779B9) >>> 0);\n");
+  const flags = (src) => (/\bW?\.?WingerEngine\._t\.seed\s*\(/.test(src) || /\b_t\.seed\s*\(/.test(src))
+    && /\bMath\.random\s*=\s*mulberry32\s*\(/.test(src) && !(/\^\s*0x9[eE]3779[bB]9/.test(src) || /SEED_SPLIT/.test(src));
+  check(flags(fakeBad) && !flags(fakeGood),
+    `C-2. 🔬 C-1의 자가 **실제로 거른다** — 안 가른 두 줄을 넣은 가짜 파일 ${flags(fakeBad) ? "✔ 잡힘" : "🔴 안 잡힘"} · 가른 파일 ${flags(fakeGood) ? "🔴 잡힘" : "✔ 통과"}`);
+}
+
+/* ══════════ D. 🎲 **1막 게임의 난수원이 서로 갈려 있는가** (2026-10-02 · inspector · 11번 §7-3 #19 · 25번 §5) ══════════
+ * 1막엔 난수원이 **여럿**이에요 — 판 시드 하나에서 자리마다 소금(`SALT`)으로 갈라 냅니다(`world.js`):
+ *   엔진(경기마다 `engineSeed`) · 🎲 이벤트 · 🌦️ 상황 조각 · 🏫 세계 모양 · 🏷️ 이름 · ⭐ 평점 · 🎯 테스트 · 🥅 승부차기
+ * 🔴 두 자리의 소금이 같으면 **같은 수열**이 나와 두 축이 함께 움직입니다(lockstep — 위 A·B와 같은 병).
+ *    특히 🌦️ 상황 조각은 「이벤트 난수원에서 **따로** 굴린다」가 계약이에요(23번 §2 · 24번 §0-1 소금 `0x2545F491`).
+ * 🔒 엔진 쪽은 **진짜 `_rng`**를 꺼내 봅니다(위 PEEK) — 검사 쪽 `mulberry32`끼리 견주면 안 적힌 가정 위에 서요.
+ * 🧪 변이: 상황 조각의 소금을 이벤트와 같게 → D-1이 빨간불이어야 합니다. */
+{
+  const WSRC = fs.readFileSync("/workspace/grow-games/beta/winger2/world.js", "utf8");
+  const loadWorld = (src) => new Function("window", `${src}\nreturn window.W2World;`)({});
+  const drawsOf = (X, seed, key) => {
+    const out = {};
+    const take = (r) => { const a = []; for (let i = 0; i < N; i++) a.push(r()); return a; };
+    for (const nm of ["event", "sit", "world", "name", "rate", "test", "pk"]) out[nm] = take(X.rngOf(seed, key, X.SALT[nm]));
+    out.engine = engineDraws(X.engineSeed(seed, key), N);
+    return out;
+  };
+  const worstPair = (X) => {
+    let worst = 0, at = "";
+    for (const seed of SEEDS) for (const key of [0, 6, 100, 400]) {
+      const d = drawsOf(X, seed, key);
+      const names = Object.keys(d);
+      for (let i = 0; i < names.length; i++) for (let j = i + 1; j < names.length; j++) {
+        const k = agree(d[names[i]], d[names[j]]);
+        if (k > worst) { worst = k; at = `${names[i]}↔${names[j]} @ 시드 ${seed} · 자리 ${key}`; }
+      }
+    }
+    return { worst, at };
+  };
+  const X0 = loadWorld(WSRC);
+  const salts = Object.values(X0.SALT);
+  const base = worstPair(X0);
+  check(new Set(salts).size === salts.length && base.worst <= 2,
+    `D-1. 🎲 1막의 난수원 ${Object.keys(X0.SALT).length + 0}자리(엔진 · 이벤트 · 상황 · 세계 · 이름 · 평점 · 테스트 · 승부차기)가 **서로 갈린다** — 소금 ${salts.length}개가 모두 다름 · 짝마다 앞 ${N}개 중 최대 일치 ${base.worst}개${base.at ? ` (${base.at})` : ""}`
+    + `\n     🔎 측정 조건 — 시드 ${SEEDS.join("/")} × 자리 0 · 6 · 100 · 400 · 엔진은 진짜 \`_rng\`(PEEK)`);
+  /* 🧪 변이 — 상황 조각의 소금을 이벤트와 같게 */
+  const MUT_SIT = [/sit: 0x2545f491,/, "sit: 0x85ebca6b,"];
+  const hit = MUT_SIT[0].test(WSRC);
+  const m = hit ? worstPair(loadWorld(WSRC.replace(MUT_SIT[0], MUT_SIT[1]))) : null;
+  check(hit && m.worst === N,
+    `D-변이. 🔴 상황 조각의 소금을 이벤트와 같게 하면 → 두 흐름이 **${m ? m.worst : "?"}/${N}** 일치(lockstep) → D-1이 빨간불`
+    + (hit ? "" : `\n     🔴 변이 정규식이 \`world.js\`에 안 걸려요 — 그 변이는 **안 도는** 상태입니다`));
 }
 
 console.log(fail ? `\n❌ ${fail}건 실패` : "\n✅ 통과");

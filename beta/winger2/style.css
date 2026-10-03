@@ -1,767 +1,128 @@
-/* ⚽ 더 윙어 II — 야간 조명 네이비 테마 (grow/base.css 위에 덮어씀)
+/* ⚽ 더 윙어 II · 1막 「마지막 한 해」 — 화면 옷 (grow-director · base.css 위에 덮어씀)
  *
- * 왜 초록이 아닌가 — 허브에 초록 게임이 이미 셋(더 윙어·더 드래프트·더 인베스터)이라
- * 같은 초록이면 아이콘과 카드가 구분이 안 갑니다. 밤 경기장 조명 아래 남색으로 갈랐어요.
- * 축구라는 신호는 잔디(--turf)가 경기 화면에서 냅니다 — UI 전체를 초록으로 칠하지 않아도
- * 필드 한 조각이면 읽혀요.
+ * 🧭 한 파일 네 절 — 고칠 곳을 절 제목으로 찾으세요
+ *   0. 🎨 테마 · 뼈대                (:root · #app · #w2 · #w2-layer)
+ *   1. 🎬 경기 화면                  (match-scene.js — window.W2Scene · `.w2-*`)
+ *   2. 🔥 순간 판 🥅 · 🧱            (beta/winger-moment.js — `.w2m-*`)
+ *   3. 🖼️ 장면 · 오버레이 · 초상      (scenes.js — window.W2Scenes · `.w2o-*` · `.w2p-*` · `.w2f-*` · `.w2b-*`)
+ *   4. 🗓️ engineer 화면 옷            (#w2-entry · #w2-home · #w2-match — 클래스 목록이 온 뒤)
  *
- * ⚠️ 절대색을 쓰지 마세요. 이 파일 안에서도 화면마다 색이 갈립니다.
- *    새 색이 필요하면 여기 변수를 하나 더 만들어서 쓰세요. */
+ * 규칙 넷 — 고칠 때 지켜 주세요
+ *  ① 애니메이션은 transform · opacity만. left/top/width/box-shadow를 움직이면 저사양 폰에서
+ *    레이아웃 · 페인트를 매 프레임 다시 돌려요.
+ *  ② 절대색 금지 — 아래 :root 변수만 씁니다. 새 색이 필요하면 변수를 하나 더 만드세요
+ *    (그림자용 검정 · 흰 반투명은 예외 — 어느 테마에서도 같은 뜻이에요).
+ *  ③ prefers-reduced-motion은 축약 대상이 아닙니다 — 절마다 맨 아래 reduce 블록이 있어요.
+ *    **끄더라도 정보는 남습니다**: 골 배너 · 스코어 · 문구 · 판정 칸은 DOM에 그대로이고 움직임만 사라져요.
+ *  ④ 손가락 칸은 44px 이상 — 축약 대상이 아닙니다.
+ *
+ * 🕰️ 옛 II(유스 · 프로 커리어)의 옷 약 3,000줄은 **통째로 뺐습니다**(25번 §2 — 새로 씀).
+ *    경기 화면 · 순간 판 몫은 옛 파일에서 옮겨 왔고(감사 11번 §2 — `:768`–`:1610`),
+ *    옛 판 셋(🏃 컷인 · 🎯 킬패스 · 🧱 차단)의 옷은 **형태째** 지운 판이라 안 옮겼습니다. */
+
+/* ═══════════════════════════════════════════════════════════════════
+ * 0. 🎨 테마 — 밤 경기장 남색 (옛 II 그대로 · theme-color #0f1830)
+ * ═══════════════════════════════════════════════════════════════════
+ * 왜 초록이 아닌가 — 허브에 초록 게임이 이미 셋이라 아이콘과 카드가 안 갈려요.
+ * 1막에선 남색이 **솔빛고 훈련복 색**(남색 · 흰색 — 12번 §3-2)이기도 합니다.
+ * 축구라는 신호는 잔디(--turf)와 그림(웹툰 반신 · 치비)이 냅니다. */
 :root {
   --bg: #0f1830;          /* 밤하늘 */
   --bg2: #17224a;
   --field: #1e2b58;       /* 카드 표면 */
-  --line: #4a63c4;      /* 경계선. bg 대비 3.2:1 — 얇은 선이 안 사라지는 최소선이에요 */
+  --line: #4a63c4;        /* 경계선 — bg 대비 3.2:1, 얇은 선이 안 사라지는 최소선 */
   --sand: #d8b077;
   --cream: #eaf0ff;
   --accent: #ff9f45;      /* 조명 앰버 — 이 게임의 얼굴색 */
-  --accent2: #ff4d6d;     /* 경고·부정. 앰버와 헷갈리지 않게 붉은 핑크로 벌렸어요 */
-  --sky: #6fc9ff;         /* 차가운 조명빛 — 좋아지는 쪽·링크 */
+  --accent2: #ff4d6d;     /* 경고 · 부정 */
+  --sky: #6fc9ff;         /* 차가운 조명빛 — 좋아지는 쪽 · 🧱 수비의 색 */
   --text: #e9eeff;
   --dim: #96a5d2;
 
-  /* 경기 화면 전용 — base.css에는 없는 값이에요 */
-  --good: #6ee7a0;        /* 우리 쪽 좋은 일 (base.css .pbp .good과 같은 값) */
+  /* 경기 화면 */
+  --good: #6ee7a0;
   --good2: #b6ecca;
   --bad: #ff8a80;
-  --turf: #17452f;        /* 조명 아래 잔디 줄무늬 */
+  --turf: #17452f;
   --turf2: #133b28;
   --ink: #241300;         /* 앰버 위에 얹는 글자색 */
+  --ink-def: #06223a;     /* 🧱 하늘빛 위에 얹는 글자색 */
+  --amber-hi: #ffc47f;    /* 앰버 버튼 · 배너의 윗면 */
+  --sky-hi: #c4e9ff;      /* 🧱 하늘빛 알약의 윗면 */
 
-  /* 🔥 미니게임 4종(winger-moment.js) — 반투명 톤을 변수로 잡아요.
-   * rgba를 칸마다 박으면 🌏 월드컵 테마에서 그 칸만 앰버로 남습니다(아래 wc-mode에서
-   * 한 자리만 갈아요). 실제로 겪은 사고예요 — `.w2-card.mine`의 rgba가 아직 그렇습니다.
-   *
-   * 🦶 주발/약발을 **초록/빨강으로 안 가릅니다.** 약발은 틀린 게 아니라 좁은 거예요.
-   * 조명이 켜진 쪽(앰버) ↔ 그늘진 쪽(차가운 회색)으로 갈라서, 판정 색(초록/노랑/빨강)과
-   * 축이 안 겹치게 했어요 — 한 화면에서 색이 두 가지 뜻을 가지면 둘 다 안 읽힙니다. */
-  --m-face: rgba(4, 8, 20, .55);            /* 잔디·골문 안쪽 어두운 판 */
+  /* 🔥 순간 판 — 반투명 톤도 변수로(칸마다 rgba를 박으면 테마를 못 갈아입어요) */
+  --m-face: rgba(4, 8, 20, .55);
   --m-strong: rgba(255, 159, 69, .24);      /* 🦶 주발 쪽 — 조명이 켜진 코스 */
   --m-strong-line: rgba(255, 159, 69, .9);
-  --m-weak: rgba(150, 165, 210, .20);       /* 약발 쪽 — 그늘 (잔디 위라 .13은 묻혔어요) */
+  --m-weak: rgba(150, 165, 210, .20);       /* 약발 쪽 — 그늘 */
   --m-weak-line: rgba(150, 165, 210, .62);
-  /* ♿ reduced-motion에서 광(box-shadow)을 끄는 대신 쓰는 **진한 톤**이에요.
-   * 여기 없으면 그 블록이 rgba를 직접 박게 되고, 월드컵 테마에서 그 칸만 앰버로 남아요. */
-  --m-strong-2: rgba(255, 159, 69, .38);
+  --m-strong-2: rgba(255, 159, 69, .38);    /* ♿ reduce에서 광 대신 쓰는 진한 톤 */
   --m-weak-2: rgba(150, 165, 210, .22);
-  --m-hit: var(--accent);                   /* 판정 플래시 바탕 */
+  --m-hit: var(--accent);
+  --m-cell-line: rgba(255, 255, 255, .26);
+  --m-lit: rgba(255, 214, 102, .78);        /* 🥅 지금 밝기의 색 (밝기 자체는 JS 몫 — 판정이라서) */
+  --m-lit-next: rgba(255, 214, 102, .5);
+  --m-ghost: rgba(233, 238, 255, .5);
+  --m-mark: var(--cream);                   /* ♿ 상태 표시는 무채색 한 색 */
+  /* 🧱 슛 코스 막기 — **우리 골문**(12번 §4-3). 밝은 칸이 🥅의 앰버와 **다른 축**이어야 해요 */
+  --m-lit-def: rgba(111, 201, 255, .74);
+  --m-lit-def-next: rgba(111, 201, 255, .48);
+  --m-face-def: rgba(10, 20, 58, .72);      /* 우리 골문 안쪽 — 솔빛고 남색 */
+  --m-net-def: rgba(233, 238, 255, .16);    /* 우리 그물 — 흰 실 */
+  --keeper-ours: rgba(190, 236, 96, .74);   /* 🧤 태오 · 서아의 라임색 골키퍼 상의(그림과 같은 색) */
+  --keeper-ours-2: rgba(120, 170, 40, .55);
 
-  /* 🥅 골문 격자(winger-moment.js의 `runShotGrid`) — **JS가 인라인 폴백으로 들고 있던 값**을
-   * 여기로 올렸어요. 폴백과 **같은 값**이라 평상시 화면은 한 픽셀도 안 바뀝니다.
-   * 🔴 올린 이유는 🌏 월드컵입니다 — 인라인 폴백은 `body.wc-mode`가 못 갈아입혀서
-   *    대회 중에 **골문 칸만 평상시 앰버로** 남아 있었어요(아래 wc-mode에 짝을 뒀습니다).
-   * 🔒 여기 있는 것은 **색**뿐이에요. 밝기(opacity)는 판정 그 자체라 JS 몫입니다. */
-  --m-cell-line: rgba(255, 255, 255, .26);  /* 칸을 가르는 세로선 */
-  --m-lit: rgba(255, 214, 102, .78);        /* 지금 밝기 — 칠하는 색 (밝기는 JS가 씁니다) */
-  --m-lit-next: rgba(255, 214, 102, .5);    /* 🔮 예고 띠 */
-  --m-ghost: rgba(233, 238, 255, .5);       /* 🔮 0.45초 뒤 키퍼의 자취 */
-  /* ♿ **상태 표시는 무채색입니다.** 🔦 지금 최고 · ⬇️ 곧 나빠짐 · ⬆️ 곧 좋아짐을
-   * 초록/빨강으로 가르면 적록 색약에서 **같은 픽셀**이 돼요(이 저장소에서 세 번 났습니다).
-   * 그래서 셋 다 이 한 색을 쓰고, **모양·자리·움직임으로만** 갈랐어요. */
-  --m-mark: var(--cream);
+  /* 🫀 컨디션 구간 다섯(12번 §5-2 · 21번 §2-1) — **51 = 「보통」은 무채색**(경기 날 51이 빨강 · 노랑이면
+   *    기준 선수가 늘 벌받는 느낌). 색만이 아니라 게이지 글자에 구간 이름이 같이 적혀요 */
+  --zone-exhausted: rgba(255, 77, 109, .58);
+  --zone-tired: rgba(255, 159, 69, .52);
+  --zone-normal: rgba(190, 194, 206, .38);
+  --zone-good: rgba(110, 231, 160, .46);
+  --zone-peak: rgba(46, 214, 124, .72);
+
+  /* 🖼️ 장면 · 오버레이 */
+  --scrim: rgba(5, 9, 22, .82);             /* 오버레이 뒤 */
+  --panel: rgba(18, 27, 60, .96);           /* 대사 · 선택 판 */
+  --spot: rgba(111, 201, 255, .30);         /* 반신 뒤 조명 — 남색 훈련복이 남색 바탕에 묻히지 않게 */
+  --spot2: rgba(255, 159, 69, .16);
+  --r1: var(--dim);                         /* 🏅 흔함 */
+  --r2: var(--sky);                         /* 🏅 드묾 */
+  --r3: #c9a4ff;                            /* 🏅 귀함 */
+  --r4: var(--accent);                      /* 🏅 전설 */
+
+  /* 🎨 반투명 톤 — 절대색을 칸마다 박지 않게 여기로(옛 II의 `.w2-card.mine` 사고 — 테마를 못 갈아입음) */
+  --glow: rgba(255, 159, 69, .12);           /* 밤 경기장 조명 — 화면 맨 위 번짐 */
+  --accent-a10: rgba(255, 159, 69, .10);
+  --accent-a14: rgba(255, 159, 69, .14);
+  --accent-a28: rgba(255, 159, 69, .28);
+  --accent2-a08: rgba(255, 77, 109, .08);
+  --veil: var(--veil);            /* 그림 위 글자 받침 — bg 남색 */
+  --keeper-theirs: rgba(233, 238, 255, .72); /* 🥅 상대 키퍼 — 흰빛 */
+  --keeper-theirs-2: rgba(150, 165, 210, .5);
+  --tint-summer: rgba(255, 214, 120, .22);  --tint-summer-2: rgba(255, 170, 60, .08);
+  --tint-autumn: rgba(255, 150, 70, .26);   --tint-autumn-2: rgba(170, 70, 30, .16);
 }
 
 body {
   background:
-    radial-gradient(ellipse 120% 60% at 50% -10%, rgba(255, 159, 69, .12) 0%, transparent 60%),
+    radial-gradient(ellipse 120% 60% at 50% -10%, var(--glow) 0%, transparent 60%),
     repeating-linear-gradient(90deg, var(--bg2) 0px, var(--bg2) 40px, var(--bg) 40px, var(--bg) 80px),
     var(--bg);
 }
-
-.title-box h1 { color: var(--accent); }
-
 .btn-primary {
-  background: linear-gradient(180deg, #ffc47f, var(--accent));
+  background: linear-gradient(180deg, var(--amber-hi), var(--accent));
   color: var(--ink);
-  box-shadow: 0 4px 0 #c96f18;
+  box-shadow: 0 4px 0 rgba(0, 0, 0, .35);
 }
-
-.bar-fill.scout { background: linear-gradient(90deg, #ffd9a8, var(--accent)); }
-.bar-fill.stat { background: linear-gradient(90deg, #9fd0ff, var(--sky)); }
-
-.tag { background: rgba(255, 159, 69, 0.14); color: var(--accent); }
-
-.card-grid.three { grid-template-columns: 1fr 1fr 1fr; }
-
-.series-link {
-  display: block;
-  margin-top: 18px;
-  color: var(--dim);
-  font-size: 0.85rem;
-  text-decoration: none;
-}
-.series-link:hover { color: var(--sky); }
-
-.draft-card {
-  background: linear-gradient(180deg, var(--field), var(--bg2));
-  border-color: var(--line);
-}
-.draft-summary { border-color: var(--line); }
-
-.season-standings .me td { color: var(--accent); font-weight: 700; }
-
-/* 연도별 기록표 — 원래 7칸(시즌·소속·출전·⚽·🅰️·🛡️·수상)이었는데 폭 28~34px에
- * 이모지 헤더(🅰️도움·🛡️수비)를 얹었더니 실기기에서 헤더가 세로로 쪼개졌어요(도/움, 수/비).
- * ⚾ 더 드래프트(beta/rookie/career.js:1023)처럼 4칸(시즌·소속·성적·수상)으로 줄였어요 —
- * 골·도움·수비를 '성적' 한 칸으로 합치고, 항상 12인 출전은 표에서 뺐어요.
- * table-layout:fixed는 칼럼 수가 바뀌면 폭이 통째로 밀리니 이 게임 전용 클래스
- * (.season-soccer)로 따로 잡아요. 나머지 폭은 '수상' 칸이 가져가요 — 수상 배지는
- * 길이가 들쭉날쭉해서 유일하게 유동 폭이어야 해요(이 판단은 7칸 때와 동일하게 유지). */
-.season-soccer { table-layout: fixed; }
-.season-soccer th:nth-child(1), .season-soccer td:nth-child(1) { width: 38px; }
-/* 폭은 0.74rem(≈11.8px) 기준으로 계산했어요. 한글은 글자당 약 1em,
- * 숫자는 약 0.5em이에요. 기본 셀 패딩이 좌우 4px씩(base.css) 붙습니다.
- *   소속 4자(예: 머드독스) ≈ 47px + 패딩 8 + 여백 8 → 64px 필요 → 72px
- *   성적 '45골 23도움 11수비' ≈ 102px + 패딩 8 → 110px 필요 → 112px
- * 예전 44/100px은 둘 다 모자라서 소속이 성적에 달라붙었어요. */
-.season-soccer th:nth-child(2), .season-soccer td:nth-child(2) { width: 72px; }
-.season-soccer th:nth-child(3), .season-soccer td:nth-child(3) { width: 112px; }
-.season-soccer th, .season-soccer td { word-break: keep-all; }
-/* 소속 칸 — 44px일 때 '머드독스'(4자)가 칸보다 넓어서 옆 성적 칸에 붙었어요.
- * 폭을 늘리는 것만으로는 이름이 더 길어지면 또 새니, overflow로 구조적으로 막아요.
- * padding-right가 이름과 성적 사이 여백을 보장해요. */
-.season-soccer .yr-club {
-  /* 수상 칸이 여러 줄로 늘어나면 행이 높아지는데, 소속만 top이라 혼자 위에
-     붙어 보였어요. 다른 칸과 같은 눈높이로 맞춥니다. */
-  vertical-align: middle;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  padding-right: 6px;
-}
-/* 이적한 시즌은 눈에 띄게 — 표를 훑으며 언제 소속이 바뀌었는지 바로 보이게 */
-.season-soccer .yr-club.moved { color: var(--accent); }
-.season-soccer .yr-lg { display: block; font-size: 0.62rem; opacity: .65; }
-/* 그 시즌 팀 최종 순위 — 어느 해에 팀이 무너졌는지 표만 훑어도 보이게 */
-.season-soccer .yr-rank { display: block; font-size: 0.62rem; opacity: .55; }
-.season-soccer .yr-stat { white-space: nowrap; }
-
-/* FM식 경기 스코어보드 */
-.matchscore {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  margin: 6px 0 4px;
-  padding: 12px 10px;
-  background: linear-gradient(180deg, var(--field), var(--bg2));
-  border: 1px solid var(--line);
-  border-radius: 14px;
-}
-.matchscore .ms-team {
-  flex: 1;
-  text-align: center;
-  font-family: "Jua", sans-serif;
-  font-size: 0.95rem;
-  color: var(--text);
-  line-height: 1.2;
-}
-.matchscore .ms-team.home { color: var(--accent); }
-.matchscore .ms-num {
-  font-family: "Jua", sans-serif;
-  font-size: 1.7rem;
-  min-width: 84px;
-  text-align: center;
-  color: var(--text);
-  background: rgba(0, 0, 0, 0.25);
-  border-radius: 10px;
-  padding: 2px 8px;
-}
-.matchscore .ms-num.win { color: var(--good2); }
-.matchscore .ms-num.lose { color: var(--bad); }
-.ms-line {
-  text-align: center;
-  color: var(--dim);
-  font-size: 0.9rem;
-  margin-bottom: 8px;
-}
-.ms-line b { color: var(--accent); }
-
-/* 경기 시뮬레이션 뷰 — 스코어보드 + 미니 필드 */
-.msim { margin-bottom: 6px; }
-.scoreboard {
-  display: flex; align-items: center; justify-content: center; gap: 8px;
-  padding: 10px 8px;
-  background: linear-gradient(180deg, var(--field), var(--bg2));
-  border: 1px solid var(--line); border-bottom: 0;
-  border-radius: 12px 12px 0 0;
-}
-.scoreboard .sb-team {
-  flex: 1; text-align: center; line-height: 1.15;
-  font-family: "Jua", sans-serif; font-size: 0.9rem; color: var(--text);
-}
-.scoreboard .sb-team.home { color: var(--accent); }
-.scoreboard .sb-score {
-  font-family: "Jua", sans-serif; font-size: 1.7rem;
-  background: rgba(0, 0, 0, 0.3); border-radius: 8px; padding: 2px 12px;
-  min-width: 78px; text-align: center; color: var(--text);
-}
-.scoreboard .sb-score i { opacity: 0.55; margin: 0 4px; font-style: normal; }
-.sb-clock {
-  text-align: center; font-size: 0.76rem; color: var(--dim);
-  background: var(--bg2); border: 1px solid var(--line); border-top: 0; padding: 3px;
-}
-.pitch {
-  position: relative; height: 92px; overflow: hidden;
-  border: 1px solid var(--line); border-top: 0; border-radius: 0 0 12px 12px;
-  background: repeating-linear-gradient(90deg, var(--turf) 0 30px, var(--turf2) 30px 60px);
-}
-.pitch .pitch-mid { position: absolute; left: 50%; top: 0; bottom: 0; width: 2px; background: rgba(255, 255, 255, 0.22); }
-.pitch .net { position: absolute; top: 50%; transform: translateY(-50%); font-size: 1.15rem; opacity: 0.85; }
-.pitch .net.left { left: 3px; }
-.pitch .net.right { right: 3px; }
-.pitch .ball {
-  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
-  font-size: 1.2rem; transition: left 0.5s ease, top 0.5s ease;
-  filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.5));
-}
-/* box-shadow 애니메이션은 프레임마다 페인트를 다시 돌려요 — opacity만 움직이는
- * 덧레이어로 바꿨습니다. 저사양 폰에서 골 순간에 끊기던 자리예요. */
-.pitch::after {
-  content: ""; position: absolute; inset: 0; pointer-events: none;
-  opacity: 0; box-shadow: inset 0 0 0 3px var(--good2);
-}
-.pitch.goal-a::after { box-shadow: inset 0 0 0 3px var(--bad); }
-.pitch.goal-h::after, .pitch.goal-a::after { animation: sbGoalFx 0.55s ease; }
-@keyframes sbGoalFx { 0%, 100% { opacity: 0; } 45% { opacity: 1; } }
-.msim .pbp { margin-top: 8px; }
-.ms-final {
-  text-align: center; font-family: "Jua", sans-serif; font-size: 1.05rem;
-  margin: 8px 0 4px; color: var(--text);
-}
-.ms-final.win { color: var(--good2); }
-.ms-final.lose { color: var(--bad); }
-
-/* 🎒 이적 적응으로 배운 것 — 한 번만 뜨는 줄이라 눈에 띄어야 해요 */
-.hint.learn { color: var(--accent); }
-
-/* 💼 이적 제안 — 리그별로 묶고, 카드마다 도박의 크기(평점 페널티·수상 가치)를 적어요 */
-.tf-group {
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  padding: 10px;
-  margin-bottom: 12px;
-  background: linear-gradient(180deg, var(--field), var(--bg2));
-}
-.tf-group.up { border-color: var(--accent); }
-.tf-group.down { border-color: var(--dim); }
-.tf-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
-  flex-wrap: wrap;
-  padding: 2px 4px 8px;
-  border-bottom: 1px solid var(--line);
-  margin-bottom: 8px;
-}
-.tf-head .tf-lg { font-family: "Jua", sans-serif; font-size: 1.05rem; color: var(--accent); }
-/* 리그가 5개로 늘어서 묶음마다 위/아래를 한 마디로 적어요 */
-.tf-head .tf-lg small { font-family: inherit; font-size: 0.72rem; color: var(--dim); }
-.tf-group.same .tf-head .tf-lg { color: var(--text); }
-.tf-group.down .tf-head .tf-lg { color: var(--dim); }
-.tf-risk { font-size: 0.76rem; color: var(--sky); }
-.tf-group.up .tf-head .tf-risk { color: var(--accent2); }
-.tf-card {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  width: 100%;
-  text-align: left;
-  padding: 10px 12px;
-  margin-bottom: 6px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--bg2);
-  color: var(--text);
-  font-family: inherit;
-  font-size: 0.92rem;
-  cursor: pointer;
-}
-.tf-card:last-child { margin-bottom: 0; }
-.tf-card:hover, .tf-card:focus-visible { border-color: var(--accent); transform: translateY(-1px); }
-.tf-card:active { transform: scale(0.98); }
-.tf-card .tf-top,
-.tf-card .tf-sub { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
-.tf-card .tf-name { font-family: "Jua", sans-serif; color: var(--text); }
-.tf-card .tf-str { font-size: 0.8rem; color: var(--dim); }
-.tf-card .tf-fee { font-size: 0.82rem; color: var(--accent); }
-/* 카드만 보고 눌러도 어느 리그인지 알 수 있어야 해요 */
-.tf-card .tf-lg { font-size: 0.8rem; color: var(--sky); }
-.tf-card.down .tf-lg, .tf-card.down .tf-risk { color: var(--dim); }
-/* 🏟️ 그 클럽이 리그 안에서 어디쯤인지 — 전력 숫자만으로는 감이 안 와요 */
-.tf-card .tf-rank { font-size: 0.78rem; color: var(--dim); }
-
-@media (max-width: 380px) {
-  .card-grid.three { grid-template-columns: 1fr; }
-  .tf-card .tf-sub { flex-direction: column; gap: 2px; }
-}
-
-/* 📊 기록 화면 표 — 결산 표와 같은 이유로 3칸이에요.
- * 칸을 나누면 폰 폭에서 헤더가 세로로 쪼개져요. 수상 칸만 유동 폭입니다. */
-.season-record { table-layout: fixed; }
-.season-record th, .season-record td { word-break: keep-all; }
-/* 폭 근거는 위 .season-soccer 주석과 같아요. 성적 칸은 112px 필요합니다.
- * 시즌 칸은 44 → 60px — 아래에 소속·리그를 작은 글씨로 붙였어요.
- * ("3시즌 103골"이 어느 리그 기록인지 알 수가 없다는 제보) */
-.season-record th:nth-child(1), .season-record td:nth-child(1) { width: 60px; }
-.season-record th:nth-child(2), .season-record td:nth-child(2) { width: 112px; }
-.season-record .yr-stat { white-space: nowrap; }
-.season-record .rec-season { vertical-align: middle; line-height: 1.35; }
-/* 소속은 칸보다 길 수 있어서 넘치면 잘라요 (전체 이름은 title에 있어요) */
-.season-record .rec-club {
-  display: block; font-size: 0.66rem; color: var(--accent); opacity: .85;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-.season-record .rec-lg { display: block; font-size: 0.62rem; opacity: .6; white-space: nowrap; }
-
-/* 🏆 리그 순위표 — 접이식. 루키의 같은 요소와 모양을 맞춰요 */
-.standings-box { margin: 0 0 10px; border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; }
-.standings-box > summary { cursor: pointer; font-size: .85rem; color: var(--cream); list-style: none; }
-.standings-box > summary::-webkit-details-marker { display: none; }
-.standings-box > summary::before { content: "▸ "; color: var(--dim); }
-.standings-box[open] > summary::before { content: "▾ "; }
-
-/* 평균 평점 칸 — 좁게 고정해 '성적'이 세로로 접히지 않게 해요 */
-.yr-avg { white-space: nowrap; width: 38px; color: var(--cream); }
-.ch-club { color: var(--dim); font-size: .92em; }
-.ch-role { display: block; font-size: .78em; opacity: .6; }
-/* 그 라운드 클럽 성적 — 소속 옆에 한 글자. 줄을 새로 만들지 않아요(inline) */
-.ch-res { margin-left: .28em; font-size: .78em; }
-.ch-res.r-w { color: var(--accent); }
-.ch-res.r-l { color: var(--accent2); }
-.ch-res.r-d { color: var(--dim); }
-
-/* 🏆 승부차기 — 컵 단판에서 비겼을 때만 나와요 */
-.pk-head { font-size: .95rem; color: var(--cream); margin-bottom: .4rem; }
-.pk-score { font-size: 1.9rem; font-weight: 800; letter-spacing: .06em; margin: .2rem 0 .5rem; }
-.pk-score b { color: var(--dim); }
-.pk-score b.win { color: var(--accent); }
-.pk-board { max-height: 8.4rem; overflow-y: auto; text-align: left; margin: 0 auto .5rem; max-width: 22rem; }
-.pk-line { font-size: .82rem; padding: .12rem 0; color: var(--dim); }
-.pk-line.ok { color: var(--cream); }
-.pk-line.no { color: var(--accent2); }
-.pk-hint { font-size: .9rem; color: var(--text); margin: .35rem 0 .5rem; min-height: 1.2rem; }
-.pk-btns { display: flex; gap: .4rem; justify-content: center; flex-wrap: wrap; }
-.pk-side { flex: 1 1 5.5rem; max-width: 8rem; }
-
-/* 유스 라운드 판정 근거 — 확률과 가장 크게 작용한 조각 */
-.pass-why { color: var(--sky); font-size: .84rem; margin-top: 2px; }
-.pass-why b { color: var(--cream); }
-
-/* ⭐ 경기 평점 내역 — 접어 두고, 궁금할 때만 펼쳐요 */
-.rate-why { margin: .4rem auto; max-width: 24rem; text-align: left; }
-.rate-why > summary { cursor: pointer; font-size: .86rem; color: var(--accent); list-style: none; text-align: center; }
-.rate-why > summary::-webkit-details-marker { display: none; }
-.rate-why > summary::after { content: " ▾"; color: var(--dim); }
-.rate-why[open] > summary::after { content: " ▴"; }
-.rw-body { display: flex; flex-wrap: wrap; gap: .25rem .5rem; margin-top: .35rem; }
-.rw-item { font-size: .8rem; color: var(--dim); white-space: nowrap; }
-.rw-item b { color: var(--cream); font-weight: 600; }
-
-/* 🥇 개인 순위 — 득점·도움·수비·평점·MOM을 한 표에 */
-.race-title { font-size: .82rem; color: var(--accent); margin-bottom: 4px; }
-.race-table { font-size: .82rem; }
-.race-table th, .race-table td { padding: .24rem .28rem; }
-.race-table td:first-child, .race-table th:first-child { width: 1.5rem; }
-/* 숫자 칸 — 한 부문만 보여주니 폭을 줄이고 이름·소속에 자리를 넘겨요 */
-.race-table .rc-v, .race-table th:last-child { width: 4.2rem; text-align: right; white-space: nowrap; }
-.race-table .ch-club { display: block; font-size: .68rem; color: var(--dim); }
-/* 🏷️ 칭호 — 이 표에서 "다른 팀 선수가 어느 급인가"를 읽는 유일한 자리예요.
- * 소속·역할과 같은 회색으로 두면 묻혀서, 색을 살짝 올려 눈에 걸리게 합니다. */
-.race-table .ch-title { color: var(--cream); font-weight: 600; }
-
-/* 🎖️ 시즌 칭호 — 지난 시즌에 받아 이번 시즌 경기에 붙는 효과예요.
- * 경기하러 가기 전에 늘 보여야 해서 접지 않고 칩으로 깔아 둡니다. */
-.buff-row {
-  display: flex; flex-wrap: wrap; align-items: center; gap: .3rem;
-  /* 아래 여백이 .1rem이라 바로 밑의 🏆 리그 순위표 상자와 거의 붙어 보였어요.
-   * 순위표(.standings-box)는 자기 위 여백이 0이라 여기서 띄워 줘야 합니다. */
-  margin: .5rem 0 .7rem;
-}
-.buff-head { font-size: .72rem; color: var(--dim); margin-right: .1rem; }
-.buff-chip {
-  display: inline-flex; align-items: baseline; gap: .3rem;
-  padding: .16rem .45rem; border-radius: .7rem;
-  background: rgba(255, 209, 102, .12); border: 1px solid rgba(255, 209, 102, .35);
-  font-size: .72rem; color: var(--cream); line-height: 1.35;
-}
-.buff-chip b { font-weight: 600; color: var(--accent); font-size: .68rem; }
-/* 🌍 밟아 온 리그 — 명예의 전당 카드와 은퇴식에 한 줄 */
-.hof-lg { font-size: .72rem; color: var(--dim); margin-top: .12rem; }
-.lg-path { letter-spacing: .01em; }
-/* 결산의 '다음 시즌 칭호' 한 줄 */
-.buff-next .bn-eff { color: var(--accent); }
-.buff-next.dim { opacity: .72; }
-.race-note { font-size: .72rem; color: var(--dim); margin-top: .3rem; }
-/* 부문 탭 — 정렬만 바꿔요. 좁은 화면에서는 가로로 넘겨서 봐요 */
-.race-tabs {
-  display: flex; gap: .25rem; overflow-x: auto; padding-bottom: .3rem;
-  margin-bottom: .35rem; -webkit-overflow-scrolling: touch;
-}
-.race-tab {
-  flex: 0 0 auto; font-family: inherit; font-size: .74rem; white-space: nowrap;
-  padding: .28rem .55rem; border-radius: 999px; cursor: pointer;
-  background: var(--bg2); border: 1px solid var(--line); color: var(--dim);
-}
-.race-tab.on { background: var(--field); border-color: var(--accent); color: var(--accent); font-weight: 700; }
-/* 그 부문 숫자 — 표에서 제일 먼저 읽혀야 하는 값이에요 */
-.race-table th:last-child { color: var(--accent); }
-.race-table td.rc-v { color: var(--text); font-weight: 700; }
-
-/* 🔥 1년 특훈 — 프로 도전에 실패한 뒤 한 해를 더 쓰는 화면 */
-.camp-stat {
-  display: flex; align-items: center; gap: .4rem;
-  justify-content: flex-start; padding: .6rem .7rem; font-size: .9rem;
-}
-.camp-stat .cs-emoji { font-size: 1.1rem; }
-.camp-stat .cs-now { margin-left: auto; color: var(--dim); font-size: .8rem; }
-
-/* 두 갈래는 나란히 두 칸 — 셋을 한 줄에 두면 글자가 접혀서 안 읽혀요.
-   '다른 능력치 고르기'는 아래 한 줄을 통째로 써요(얇고 길게). */
-.action-grid.camp-two { grid-template-columns: 1fr 1fr; }
-.camp-way {
-  display: flex; flex-direction: column; justify-content: center; gap: .25rem;
-  text-align: center; padding: .8rem .5rem; min-height: 5.4rem;
-}
-.camp-way .cw-top { font-size: .92rem; font-weight: 700; line-height: 1.25; }
-.camp-way .cw-sub { font-size: .68rem; color: var(--dim); line-height: 1.35; }
-.action-grid.camp-two .camp-back {
-  grid-column: 1 / -1; padding: .45rem; font-size: .78rem; opacity: .85;
-}
-
-/* 연타 레이어 — 화면 한가운데. 아래에 붙여 두면 폰에서 접혀 안 보였어요 */
-.tap-modal { width: min(340px, 90vw); }
-.tap-hint { font-size: .78rem; color: var(--dim); margin-bottom: 10px; line-height: 1.5; }
-.ct-bar {
-  height: 10px; border-radius: 5px; overflow: hidden;
-  background: rgba(255, 255, 255, .1); margin-bottom: 12px;
-}
-.ct-fill { height: 100%; width: 100%; background: var(--accent); transition: width .05s linear; }
-.ct-btn {
-  width: 100%; padding: 2.2rem .8rem; border-radius: 18px; cursor: pointer;
-  font-family: inherit; color: var(--cream); font-weight: 700;
-  background: var(--field); border: 3px solid var(--line);
-  display: flex; flex-direction: column; align-items: center; gap: .3rem;
-  /* 연타라 터치가 겹쳐요 — 길게 눌러 나오는 선택·확대를 막아요 */
-  user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
-  touch-action: manipulation;
-}
-.ct-btn .ct-emoji { font-size: 2.6rem; }
-.ct-btn .ct-count { font-size: 2rem; color: var(--accent); }
-.ct-btn.hit { animation: ct-pop .09s ease-out; border-color: var(--accent); }
-@keyframes ct-pop { from { transform: scale(1); } 50% { transform: scale(.95); } to { transform: scale(1); } }
-
-/* 👥 스쿼드 — 선발 11 + 벤치 */
-.squad-table { width: 100%; font-size: .74rem; }
-.squad-table td, .squad-table th { padding: .16rem .2rem; }
-.squad-table .sq-pos { color: var(--dim); }
-.squad-table .sq-str { text-align: right; color: var(--cream); width: 2.6em; }
-.squad-table .sq-rec { text-align: right; color: var(--dim); white-space: nowrap; }
-.squad-table tr.me td { color: var(--accent); font-weight: 600; }
-.squad-table tr.sq-sep td {
-  padding-top: .4rem; color: var(--dim); font-size: .72rem; border-bottom: 1px solid var(--line);
-}
-.sq-note { font-size: .76rem; margin-bottom: .35rem; color: var(--text); }
-
-/* 🪑 벤치인 주의 결과 화면 */
-.bench-card { text-align: center; padding: .6rem .4rem; }
-.bench-card .draft-emoji { font-size: 2.4rem; }
-.bench-card .tour-line { color: var(--dim); font-size: .82rem; margin: .3rem 0 .5rem; }
-/* ⚖️ 동률 규칙 한 줄 — 표 바로 아래, 본문보다 작고 흐리게 */
-.wc-tie-note { font-size: .78rem; color: var(--muted); margin: .35rem .2rem .1rem; text-align: center; }
-/* 🖊️ 은퇴 한마디 — 남기는 칸(은퇴식)과 남은 줄(명예의 전당) */
-.hof-word-box { background: var(--card2, rgba(255,255,255,.04)); border-radius: 12px;
-  padding: .7rem .7rem .6rem; margin: .2rem 0 .6rem; text-align: center; }
-.hof-word-title { font-size: .95rem; font-weight: 600; }
-.hof-word-sub { font-size: .76rem; color: var(--muted); margin: .15rem 0 .5rem; }
-.hof-word-box input { width: 100%; box-sizing: border-box; padding: .5rem .6rem; margin-bottom: .4rem;
-  border-radius: 8px; border: 1px solid rgba(255,255,255,.18); background: rgba(0,0,0,.25);
-  color: var(--text); font-size: .92rem; text-align: center; }
-.hof-word-box input:disabled { opacity: .7; }
-.hof-word-done { font-size: .8rem; color: var(--accent); margin-top: .35rem; min-height: 1em; }
-.hof-word { font-size: .82rem; color: var(--accent); margin-top: .15rem;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.hofd-word { margin: .5rem .1rem .1rem; padding: .5rem .6rem; border-radius: 10px;
-  background: rgba(255,255,255,.05); color: var(--text); font-size: .9rem; line-height: 1.5; text-align: center; }
-/* 🪑 대표팀 벤치 카드 — 순위표를 품어서 조금 넓게 잡아요 */
-.wc-bench .rank-table { margin: .55rem 0 .2rem; }
-.wc-bench .tour-line b { color: var(--text); }
-/* 🗣️ 감독 한마디 — 벤치인 이유는 숫자가 아니라 말로 전해요 */
-.coach-say { color: var(--text); font-size: .9rem; line-height: 1.55; margin: .4rem .2rem .55rem; }
-/* 👥 스쿼드 레이어 — base.css의 .av-modal 껍데기를 빌려 씁니다 */
-.squad-modal { width: min(420px, 94vw); text-align: left; }
-.squad-modal .av-title { text-align: center; }
-.squad-modal .av-actions { margin-top: 10px; }
-.sq-odds { color: var(--accent); font-weight: 600; }
-/* 확률이 어디서 나왔는지 펼쳐 주는 줄 — 본문보다 한 단계 작고 흐리게 */
-.sq-parts { font-size: 0.82rem; color: var(--muted); line-height: 1.6; }
+.btn { min-height: 44px; }
+/* 오버레이가 떠 있는 동안 뒤 화면이 손가락에 끌려가지 않게 (scenes.js가 붙였다 뗍니다) */
+html.w2-lock, html.w2-lock body { overflow: hidden; }
 
 /* ═══════════════════════════════════════════════════════════════════
- * 🌏 월드컵 테마 — 대회 기간에만 화면의 결이 바뀌어요.
- *
- * ⚠️ 이 블록의 규칙 하나: **색과 결만 바꾸고 레이아웃은 절대 안 건드려요.**
- * 이 저장소에서 CSS는 자동 검증의 사각지대라(기계가 화면을 못 봐요), 여기서
- * 간격이나 폭을 만지면 "성적 칸이 세로로 접히는" 류의 사고를 아무도 못 잡아요.
- * 팔레트·보더·글자색까지입니다.
- *
- * 붙고 떨어지는 건 worldcup.js의 themeSync()가 해요 — 켜고 끄는 게 아니라
- * S.wc에서 **파생**시킵니다. 대회가 끝나 S.wc가 null이 되면 다음 렌더에서
- * 반드시 떨어지고, 한 렌더를 놓쳐도 그다음이 고쳐요(자기 복구형).
- * ═══════════════════════════════════════════════════════════════════ */
-body.wc-mode {
-  /* ⚠️ 예전에는 대회 모드가 "밤 경기장 네이비 + 골드"였어요. v2의 평상시 테마가
-   * 바로 그 네이비라, 그대로 두면 **대회 중인지 아닌지가 화면에서 안 보입니다.**
-   * 그래서 대회는 한 칸 더 올려 크림슨 + 골드로 갈랐어요 — 결승전 카펫 색이에요. */
-  --bg: #2a0a18;
-  --bg2: #3d0f22;
-  --field: #4a1229;
-  --line: #a8365e;
-  --accent: #f2c14e;
-  --sky: #ffb9cd;
-  --text: #ffeef3;
-  --dim: #d6a4b3;
-  background:
-    radial-gradient(ellipse 140% 70% at 50% -10%, rgba(242, 193, 78, .12) 0%, transparent 62%),
-    repeating-linear-gradient(90deg, var(--bg2) 0px, var(--bg2) 40px, var(--bg) 40px, var(--bg) 80px),
-    var(--bg);
-}
-/* 변수로 안 도는 자리만 골라서 덮어요 */
-body.wc-mode .btn-primary {
-  background: linear-gradient(180deg, #ffe08a, var(--accent));
-  color: #2b1d00;
-  box-shadow: 0 4px 0 #b08420;
-}
-body.wc-mode .tag { background: rgba(242, 193, 78, .14); color: var(--accent); }
-body.wc-mode .bar-fill.scout { background: linear-gradient(90deg, #ffe6a8, var(--accent)); }
-/* 헤더에 골드 밑줄 — "지금은 대회 중"이 화면 맨 위에서 보여야 해요 */
-body.wc-mode .hud { box-shadow: inset 0 -3px 0 var(--accent); }
-body.wc-mode h2 { color: var(--accent); }
-/* 결과 카드에 은은한 광 — 승리 색(연두)은 그대로 둬요. 이겼다는 신호까지
- * 골드로 덮으면 승패가 한눈에 안 들어와요 */
-body.wc-mode .ms-final { text-shadow: 0 0 14px rgba(242, 193, 78, .35); }
-/* 대회 잔디도 조명 아래 밤 잔디로 — 변수 하나만 갈면 경기 화면이 전부 따라와요 */
-body.wc-mode { --turf: #3f1430; --turf2: #340f28; }
-/* 미니게임 톤도 같이 — 앰버가 골드로 바뀌니 🦶 주발 쪽도 골드여야 합니다.
- * 여기 네 줄이 없으면 대회 중에 미니게임만 평상시 앰버로 남아요. */
-body.wc-mode {
-  --m-face: rgba(24, 4, 14, .55);
-  --m-strong: rgba(242, 193, 78, .24);
-  --m-strong-line: rgba(242, 193, 78, .9);
-  --m-weak: rgba(214, 164, 179, .20);
-  --m-weak-line: rgba(214, 164, 179, .62);
-  --m-strong-2: rgba(242, 193, 78, .38);
-  --m-weak-2: rgba(214, 164, 179, .22);
-  /* 🥅 골문 칸의 빛도 골드로 — 이 두 줄이 없으면 대회 중에 격자만 평상시 앰버로 남아요 */
-  --m-lit: rgba(242, 193, 78, .78);
-  --m-lit-next: rgba(242, 193, 78, .5);
-}
-
-/* 🌏 대회 화면 조각들 */
-.wc-row { margin: 0 0 10px; }
-.wc-badge {
-  background: rgba(242, 193, 78, .12);
-  border: 1px solid rgba(242, 193, 78, .4);
-  border-radius: 12px;
-  padding: 7px 10px;
-  font-size: .82rem;
-  color: #f2c14e;
-  line-height: 1.5;
-}
-/* 아직 문턱에 못 닿았을 때 — 같은 자리지만 조용해야 해요 */
-.wc-badge.dim { background: rgba(147, 182, 162, .08); border-color: var(--line); color: var(--dim); }
-.wc-badge b { color: var(--text); }
-.wc-card { text-align: center; padding: .6rem .4rem; }
-.wc-card .draft-emoji { font-size: 2.4rem; }
-.wc-card.champ .draft-title { color: #f2c14e; text-shadow: 0 0 18px rgba(242, 193, 78, .5); }
-.wc-group { margin-top: .5rem; }
-
-/* 📨 초대장 — 8종 공용 모달 껍데기(.av-modal) 위에 봉투 결만 얹어요 */
-.wc-invite { width: min(400px, 92vw); }
-.wc-inv-flag { font-size: 2.6rem; line-height: 1.1; }
-.wc-invite .av-title { color: #f2c14e; }
-.wc-inv-line { font-size: .95rem; line-height: 1.6; margin: .3rem 0 .5rem; }
-.wc-inv-sub { font-size: .78rem; color: var(--dim); line-height: 1.6; margin-top: .4rem; }
-/* 와일드카드는 선택지가 둘이라 세로로 쌓아요 — 한 줄에 두면 글자가 접혀요
- * (🔥 1년 특훈에서 세 개를 한 줄에 뒀다가 같은 지적을 받았어요) */
-.wc-invite .av-actions { flex-direction: column; }
-/* 🌏 대회 개인 기록 — 리그 개인 순위 자리에 들어가요 */
-.wc-rec { font-size: .84rem; line-height: 1.7; }
-.wc-rec-row b { color: var(--accent); }
-.wc-rec-next { color: var(--sky); margin-top: .2rem; }
-.wc-rec-note { color: var(--dim); font-size: .74rem; margin-top: .35rem; }
-/* 🥇 대회 개인 순위 · 🏆 수상 */
-.wc-nat { display: block; font-size: .68rem; color: var(--dim); }
-.wc-awards { margin-top: .5rem; }
-.wc-award { font-size: .84rem; line-height: 1.7; color: var(--dim); }
-.wc-award.me { color: var(--accent); font-weight: 600; }
-.wc-award b { color: var(--text); }
-.wc-award.me b { color: var(--accent); }
-/* 🎲 깜짝 발탁 — 소집 카드의 한 줄 */
-.wc-lucky { color: var(--accent); font-size: .88rem; margin: .3rem 0; }
-/* 🏆 토너먼트 대진표 */
-.wc-bracket .wc-vs { color: var(--dim); font-size: .7rem; }
-.wc-bracket td { white-space: nowrap; }
-/* 🏆 이번 대회 우승국 — 내가 못 들었을 때 누가 들었는지 */
-.wc-champ { font-size: .86rem; color: var(--dim); margin: .3rem 0; }
-.wc-champ b { color: var(--accent); }
-/* 📊 기록 화면 탭 */
-.rec-tabs { display: flex; gap: 6px; margin-bottom: 10px; }
-.rec-tab {
-  flex: 1; padding: 8px 6px; border-radius: 10px; cursor: pointer;
-  background: var(--bg2); border: 1px solid var(--line); color: var(--dim);
-  font-family: "Jua", sans-serif; font-size: .92rem;
-}
-.rec-tab.on { background: var(--field); border-color: var(--accent); color: var(--accent); }
-.wc-hist td, .wc-hist th { white-space: nowrap; }
-.wc-rec-champ { font-size: .74rem; color: var(--dim); }
-/* 🌏 결산의 월드컵 — 감독 한마디 블록 */
-.wc-report { margin: .5rem 0; }
-/* 🌏 결산의 대표팀 감독 한마디 아래 사실 줄 */
-.wc-fact { font-size: .78rem; color: var(--dim); margin-top: .2rem; }
-
-/* ---------- 🏛️ 명예의 전당 — 달 탭과 헌액 카드 ---------- */
-/* 달 탭 — 개수가 늘면 가로로 넘겨서 봐요(부문 탭과 같은 방식). */
-.hof-tabs {
-  display: flex; gap: .3rem; overflow-x: auto; padding-bottom: .35rem; margin-bottom: .6rem;
-  -webkit-overflow-scrolling: touch;
-}
-.hof-tab {
-  flex: 0 0 auto; padding: .38rem .6rem; border-radius: .7rem; cursor: pointer;
-  background: var(--bg2); border: 1px solid var(--line); color: var(--dim);
-  font-family: "Jua", sans-serif; font-size: .8rem; white-space: nowrap;
-}
-.hof-tab span { font-size: .68rem; opacity: .7; }
-.hof-tab.on { background: var(--field); border-color: var(--accent); color: var(--accent); }
-/* 카드가 눌리는 것이라는 표시 — 오른쪽 꺾쇠 */
-.hof-card { cursor: pointer; }
-.hof-more { color: var(--dim); font-size: 1.1rem; flex-shrink: 0; }
-/* 헌액 카드 레이어 */
-.hofd-modal { width: min(400px, 94vw); text-align: left; }
-.hofd-head { text-align: center; margin-bottom: .7rem; }
-.hofd-emoji { font-size: 2.2rem; }
-.hofd-name { font-family: "Jua", sans-serif; font-size: 1.15rem; color: var(--cream); }
-.hofd-me {
-  font-size: .66rem; color: var(--accent); border: 1px solid var(--accent);
-  border-radius: .6rem; padding: .06rem .32rem; vertical-align: middle;
-}
-.hofd-grade { font-size: .82rem; color: var(--accent); }
-.hofd-rank { font-size: .72rem; color: var(--dim); margin-top: .2rem; }
-.hofd-body { font-size: .82rem; }
-.hofd-row {
-  display: flex; justify-content: space-between; gap: .8rem;
-  padding: .34rem 0; border-top: 1px solid var(--line);
-}
-.hofd-row span { color: var(--dim); flex-shrink: 0; }
-.hofd-row b { color: var(--cream); font-weight: 500; text-align: right; }
-
-/* ---------- 🎉 피버 타임 ---------- */
-/* 화면 맨 위에 붙는 띠. 화면 전환 때마다 다시 그려져요(show → Fever.tick). */
-.fever-bar {
-  position: fixed; top: 0; left: 0; right: 0; z-index: 60;
-  display: flex; align-items: center; gap: .5rem;
-  padding: .38rem .7rem;
-  background: linear-gradient(90deg, #ff8a3d, #ffd166, #ff8a3d);
-  background-size: 200% 100%;
-  color: #2a1600; font-size: .78rem;
-  animation: fv-slide 6s linear infinite;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, .35);
-}
-@keyframes fv-slide { from { background-position: 0 0; } to { background-position: 200% 0; } }
-.fever-bar .fv-emoji { font-size: 1.05rem; }
-.fever-bar .fv-body { flex: 1; display: flex; flex-direction: column; line-height: 1.25; min-width: 0; }
-.fever-bar .fv-body b { font-family: "Jua", sans-serif; font-size: .86rem; }
-.fever-bar .fv-eff { font-size: .7rem; opacity: .85; }
-.fever-bar .fv-left { font-size: .7rem; opacity: .8; white-space: nowrap; }
-/* 띠가 첫 화면을 가리지 않게 본문을 그만큼 내려요.
-   높이는 fever.js가 **실제로 재서** --fever-h에 넣어요. 상수로 두면 반드시
-   어긋나요 — 효과가 많으면 문구가 두 줄로 접혀 띠가 두꺼워지거든요.
-   20px는 #app의 원래 위 여백(base.css)이에요. 이걸 빼먹으면 본문이 띠에 붙어요. */
-body.fever-on #app { padding-top: calc(20px + var(--fever-h, 3.6rem)); }
-/* ☁️ 동기화 알약·토스트는 같은 구석(우측 상단)을 써요. 알약은 z-index가 띠보다
-   낮아서 피버 중엔 아예 안 보였어요 — 위치로 비켜요(가리는 쪽이 아니라 남는 쪽으로). */
-body.fever-on .cloud-sync,
-body.fever-on .cloud-toast { top: calc(10px + var(--fever-h, 3.6rem)); }
-/* 처음 마주친 순간의 알림 */
-.fever-modal { width: min(340px, 90vw); }
-.fever-modal .fv-big { font-size: 2.6rem; }
-.fever-modal .fv-note { font-size: .84rem; color: var(--dim); margin: .2rem 0 .4rem; }
-.fever-modal .fv-eff-big { font-size: .9rem; color: var(--accent); margin: .2rem 0; }
-
-/* ---------- 📈 동료도 크고 늙어요 ---------- */
-.sq-age { font-size: .68rem; color: var(--dim); margin-left: .3rem; }
-.sq-age .sq-slump { color: var(--bad); font-weight: 500; }
-.sq-age .sq-surge { color: var(--good); font-weight: 500; }
-/* 결산의 팀 소식 한 줄 */
-.squad-news { color: var(--cream); }
-/* 🌏 대회 개인 순위의 부문 탭 — 리그 개인 순위(.race-tabs) 결을 그대로 써요 */
-.wc-face-tabs { margin-bottom: .4rem; }
-
-/* ---------- 📊 능력치 레이더 · 🦶 주발과 약발 ---------- */
-.stat-shape { display: flex; align-items: center; gap: .4rem; margin-bottom: .5rem; }
-.stat-radar { width: min(190px, 46vw); height: auto; flex-shrink: 0; }
-.foot-box { flex: 1; min-width: 0; text-align: center; }
-.feet { display: flex; justify-content: center; gap: .5rem; }
-.foot {
-  width: 44px; height: 60px; border-radius: 22px / 30px;
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  border: 2px solid var(--line); background: var(--bg2);
-}
-.foot .foot-ico { font-size: .8rem; opacity: .5; }
-.foot b { font-size: 1.15rem; font-family: "Jua", sans-serif; }
-.foot.main { border-color: var(--good); background: rgba(110, 231, 160, .16); }
-.foot.main b { color: var(--good); }
-.foot.weak b { color: var(--dim); }
-.foot.weak { transform: scaleX(-1); }
-.foot.weak b { transform: scaleX(-1); }
-.foot-note { font-size: .7rem; color: var(--dim); margin-top: .35rem; line-height: 1.4; }
-/* 🦶 주발 고르기 — 선수 등록 화면 */
-.foot-pick { display: flex; align-items: center; justify-content: center; gap: .6rem; margin: .2rem 0 .5rem; }
-.foot-pick-label { font-size: .82rem; color: var(--dim); }
-.foot-pick-btns { display: flex; gap: .35rem; }
-.foot-opt {
-  padding: .34rem .8rem; border-radius: .7rem; cursor: pointer;
-  background: var(--bg2); border: 1px solid var(--line); color: var(--dim);
-  font-family: "Jua", sans-serif; font-size: .84rem;
-}
-.foot-opt.on { background: var(--field); border-color: var(--good); color: var(--good); }
-/* ---------- 📍 내 자리 (세부 포지션) ---------- */
-.pos-field { margin-top: .5rem; }
-.pf-grid {
-  display: flex; flex-direction: column; gap: 3px;
-  padding: 6px 4px; border-radius: 10px;
-  background: linear-gradient(180deg, rgba(110,231,160,.07), rgba(110,231,160,.02));
-  border: 1px solid var(--line);
-}
-.pf-row { display: flex; justify-content: center; gap: 4px; }
-.pf-slot {
-  min-width: 30px; padding: .12rem .2rem; border-radius: .35rem;
-  font-size: .58rem; letter-spacing: .02em; text-align: center;
-  border: 1px solid var(--line); color: var(--dim); background: var(--bg2); opacity: .45;
-}
-.pf-slot.on { opacity: 1; }
-.pf-slot.here { background: var(--good); border-color: var(--good); color: var(--bg); font-weight: 700; }
-.pf-note { font-size: .68rem; color: var(--dim); margin-top: .3rem; line-height: 1.4; }
-.pf-note b { color: var(--cream); }
-/* 📍 자리를 고를 수 있어요 — 내 포지션 칸만 눌러집니다 */
-button.pf-slot { cursor: pointer; font-family: inherit; }
-.pf-slot.want { border-color: var(--good); color: var(--good); border-style: dashed; }
-.pf-slot.here.want { border-style: solid; }
-
-/* ═══════════════════════════════════════════════════════════════════
- * 🎬 순간 카드 경기 화면 (match-scene.js — window.W2Scene)
- *
- * 세로 화면 문법: 위 1/3은 맥락(스코어보드·시계·흐름), 아래는 액션(중계 피드).
- * 새 카드는 아래에서 위로 밀려 들어옵니다.
- *
- * 규칙 셋 — 고칠 때 지켜 주세요.
- *  ① 애니메이션은 transform·opacity만. left/top/box-shadow를 움직이면
- *    저사양 폰에서 레이아웃·페인트를 매 프레임 다시 돌려요.
- *  ② 절대색 금지. 위 :root 변수만 씁니다.
- *  ③ prefers-reduced-motion은 축약 대상이 아니에요 — 맨 아래 블록을 지우지 마세요.
- *    **끄더라도 정보는 남습니다**: 골 배너·스코어·문구는 전부 DOM에 그대로 있고
- *    움직임만 사라져요.
- * ═══════════════════════════════════════════════════════════════════ */
+ * 1. 🎬 경기 화면 (match-scene.js — window.W2Scene)
+ * ═══════════════════════════════════════════════════════════════════
+ * 세로 화면 문법: 위 1/3은 맥락(스코어보드 · 시계 · 판), 아래는 액션(중계 피드).
+ * 새 카드는 아래에서 위로 밀려 들어옵니다. */
 
 .w2-scene { position: relative; }
 
@@ -786,7 +147,6 @@ button.pf-slot { cursor: pointer; font-family: inherit; }
   min-width: 82px; text-align: center; white-space: nowrap;
 }
 .w2-score i { opacity: .5; margin: 0 4px; font-style: normal; }
-/* 숫자가 바뀐 순간만 튕겨요 — scale은 레이아웃을 안 건드립니다 */
 .w2-score.bump { animation: w2Bump .42s cubic-bezier(.2, 1.4, .4, 1); }
 @keyframes w2Bump { 0% { transform: scale(1); } 40% { transform: scale(1.22); } 100% { transform: scale(1); } }
 
@@ -795,42 +155,32 @@ button.pf-slot { cursor: pointer; font-family: inherit; }
   margin-top: 5px; font-size: .74rem; color: var(--dim);
 }
 .w2-clock { font-variant-numeric: tabular-nums; }
-/* 🔥 내 순간 횟수 — 경기 전에 약속하지 않고, 실제로 온 만큼만 셉니다 */
 .w2-mine-count { color: var(--accent); }
 .w2-mine-count[hidden] { display: none; }
 
-/* ═══════════════════════════════════════════════════════════════════
- * 🟩 축구판 — **카드를 따라가는 그림**입니다 (match-scene.js의 `setPitch`)
- *
- * 🕰️ 여기 있던 것은 6px짜리 「흐름 막대」였고, 그 앞에는 **공이 무작위로 튀던
- *    미니 필드**였습니다. 막대는 정직했지만 «경기를 보고 있다»는 느낌이 안 났고,
- *    옛 미니 필드는 느낌은 났지만 **거짓말**이었어요(카드와 아무 상관없이 튐).
- * 🔑 이 판은 **둘 다** 합니다 — 자리는 전부 `card.kind`/`card.result`가 정하고,
- *    화면은 그리로 **미끄러지기만** 해요.
- *
- * ⏱️ **`dt`도 rAF도 안 씁니다.** 움직임은 전부 `transition`이에요 — 검사 하네스의
- *    가짜 시계(`cb(0)`)에서도 얼어붙을 게 없고, 자리는 언제나 인라인 `transform`에
- *    적혀 있어 기계가 그대로 읽습니다.
- *
- * ① `transform`/`opacity`만 움직입니다 — 점 22개의 `left`를 애니메이션하면
- *    저사양 폰에서 매 프레임 레이아웃이 다시 돕니다. 좌표는 **한 번 심고 끝**이에요.
- * ② ♿ **색으로만 가르지 않습니다.** 완전 흑백에서도 갈려야 해요:
- *      · 우리 편 = **꽉 찬** 작은 원        · 상대 = **속 빈** 원(테두리만)
- *      · 나 = **가장 큰 원 + 바깥 링**      · 공 = 유일한 **흰 핵** + 혼자 움직임
- *    🔴 색을 지워도(흑백) 채움·크기·링·움직임 넷이 남습니다.
- * ③ ♿ 판은 `aria-hidden`이에요 — **같은 정보를 피드가 글로 이미 말합니다.**
- * ═══════════════════════════════════════════════════════════════════ */
+/* 📋 약속 줄 — **킥오프 위, 경기 내내 보입니다**(스코어보드 안 — 25번 §2 · 12번 §7-3).
+ * 피드에 두면 카드가 쌓이며 위로 밀려 사라져요. 90분 동안 무엇을 걸었는지가 보여야 합니다.
+ * 🔒 % 기호를 안 씁니다(약속은 확률이 아니라 다음 경기의 사실 — 12번 §6-4). 글자는 드라이버가 준 그대로. */
+.w2-promise {
+  margin-top: 6px; padding: 3px 10px; border-radius: 999px;
+  font-size: .76rem; line-height: 1.5; color: var(--cream);
+  background: rgba(0, 0, 0, .28); border: 1px dashed var(--accent);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* ---------- 🟩 축구판 — 카드를 따라가는 그림 (match-scene.js의 `setPitch`) ----------
+ * ⏱️ dt도 rAF도 안 씁니다. 움직임은 전부 transition — 자리는 인라인 transform에 적혀 있어요.
+ * ♿ 색으로만 가르지 않습니다: 우리 편 = 꽉 찬 원 · 상대 = 속 빈 원 · 나 = 가장 큰 말 + 링 · 공 = 흰 핵.
+ * ♿ 판은 aria-hidden — 같은 정보를 피드가 글로 말합니다. */
 .w2-pitch {
   position: relative; margin-top: 7px; overflow: hidden;
   height: clamp(76px, 25vw, 104px);
   border-radius: 8px; border: 1px solid var(--line);
-  /* 🌱 잔디 줄무늬 + 중앙선 + 센터서클 — 배경 하나로 그려요(요소를 안 늘립니다) */
   background:
     radial-gradient(circle at 50% 50%, transparent calc(13% - 1px), rgba(255, 255, 255, .16) 13%, transparent calc(13% + 1px)),
     linear-gradient(90deg, transparent calc(50% - .5px), rgba(255, 255, 255, .16) calc(50% - .5px), rgba(255, 255, 255, .16) calc(50% + .5px), transparent calc(50% + .5px)),
     repeating-linear-gradient(90deg, var(--turf) 0 9%, var(--turf2) 9% 18%);
 }
-/* 🥅 골문 — 좌(우리) · 우(상대). 세로 막대 하나면 «저기가 골대»가 읽혀요 */
 .w2-mouth {
   position: absolute; top: 30%; bottom: 30%; width: 5px;
   border: 1px solid var(--cream); opacity: .55; border-radius: 2px;
@@ -838,27 +188,11 @@ button.pf-slot { cursor: pointer; font-family: inherit; }
 .w2-mouth.h { left: 1px; border-right: 0; }
 .w2-mouth.a { right: 1px; border-left: 0; }
 
-/* 🧍 한 팀 = 판과 같은 크기의 겹 하나. **이 겹은 이제 안 움직입니다** — 묶는 역할만 해요
- * (`.w2-side.home .w2-dot`처럼 「어느 편인가」로 색을 가르는 자리입니다).
- * 🔒 움직이는 것은 **그 안의 `.w2-slot` 열한 개**뿐이에요. 아래 「전진·후퇴」 자리 참고. */
+/* 🧍 한 팀 = 판과 같은 크기의 겹. **이 겹은 안 움직입니다**(밀림은 match-scene.js `dotShift`가 냄).
+ * ⚠️ `.w2-side`를 미는 규칙을 되살리지 마세요 — 두 번 밀려 우리 키퍼가 판 밖으로 나갑니다. */
 .w2-side { position: absolute; inset: 0; }
-/* 🏃 **점 하나의 겹** — 판과 같은 크기라 `translate(3%, -2%)`가 곧 **판의 3% · −2%**예요.
- * (⚽ 공이 쓰는 것과 같은 수법입니다 — 퍼센트가 자기 크기 기준이라는 함정을 겹 하나로 지웁니다.)
- *
- * 🔑 **자리를 왜 점이 아니라 겹에 두나** — `.w2-pitch.mine .w2-dot.me`의 `scale(1.35)`와
- *    같은 요소에서 부딪히기 때문입니다. 인라인 `transform`이 이기면 「내 순간에 커지는」
- *    연출이 **조용히 죽어요**. 겹이 옮기고, 점이 커집니다. ⚠️ `!important`는 안 씁니다.
- * ⏳ `transition-delay`는 match-scene.js가 겹마다 인라인으로 심어요(0·34·68·102ms) —
- *    열한 개가 동시에 출발하면 그것도 «대형이 미끄러진다»로 보입니다.
- * 🔴 한 점의 진짜 자리는 **셋의 합**이에요:
- *      점의 `left`(집 자리) + `.w2-side`의 밀림(아래) + 이 겹의 어긋남(인라인) */
-/* ⏱️ **시간 예산** — 카드 간 딜레이(`delayOf`)보다 **짧아야** 합니다.
- *    점이 아직 가는 중에 다음 카드가 오면 두 흐름이 겹쳐 보여요.
- *      · 점이 다 서기까지 **최대 498ms** = .42s + 시차 최대 78ms
- *      · ⚽ 공 500ms (`.w2-ball`) — 점과 거의 같이 도착합니다
- *      · 카드 간 딜레이: 1점 차 이내 **900ms**(🏫 학교가 쓰는 값) · 2점 600ms · 3점 이상 350ms
- *    🟢 900·600에서는 다 서고 나서 다음 카드가 옵니다.
- *    🟡 350ms(3점 이상 벌어진 경기)에서만 겹쳐요 — 이미 기운 경기라 «몰아친다»로 읽힙니다. */
+/* 🏃 점 하나의 겹 — `translate(3%, -2%)`가 곧 판의 3% · −2%.
+ * ⏱️ 시간 예산: .42s + 시차 최대 78ms = 498ms(실측 514) < 흐름 줄 620ms(`FLOW_MS` — 종속값) */
 .w2-slot {
   position: absolute; inset: 0;
   transition: transform .42s cubic-bezier(.3, .85, .35, 1);
@@ -867,31 +201,45 @@ button.pf-slot { cursor: pointer; font-family: inherit; }
   position: absolute; width: 9px; height: 9px; margin: -4.5px 0 0 -4.5px;
   border-radius: 50%; box-sizing: border-box;
 }
-/* 우리 편 — **꽉 찬** 원 */
 .w2-side.home .w2-dot { background: var(--good); }
-/* 상대 — **속 빈** 원. 흑백에서도 채움 여부로 갈립니다 */
 .w2-side.away .w2-dot { background: transparent; border: 2px solid var(--dim); }
-/* 🧤 골키퍼 — 둘 다 모서리를 죽여 둡니다(자리로도 읽히지만 모양을 하나 더 줍니다) */
 .w2-dot.gk { border-radius: 3px; }
-/* 🧡 나 — **가장 크고, 혼자 바깥 링을 두릅니다**
- * 🐛 `.w2-dot.me`로만 적었더니 바로 위 `.w2-side.home .w2-dot`(특이도 0,2,1)에
- *    **배경이 먹혀** 나도 우리 편과 같은 초록으로 렌더됐습니다. 렌더로만 보이는 흠이라
- *    **겹 이름을 같이 적습니다.** ⚠️ `!important`로 이기지 마세요 — 다음 사람이 못 덮어요. */
+/* 🧡 나 — 가장 크고 혼자 바깥 링. 겹 이름을 같이 적어야 `.w2-side.home .w2-dot`(0,2,1)을 이깁니다 */
 .w2-side.home .w2-dot.me {
   width: 14px; height: 14px; margin: -7px 0 0 -7px;
   background: var(--accent);
   border: 2px solid var(--cream);
   transition: transform .3s cubic-bezier(.2, 1.4, .4, 1);
 }
-/* 🔥 내 순간 — "지금 나한테 왔다"가 판에서도 읽혀야 해요 */
 .w2-pitch.mine .w2-dot.me { transform: scale(1.35); }
+/* 🧸 **나 = 치비 말**(12번 §9-4 `chibi-base` — 나머지 21명은 원 그대로).
+ * 🔑 말은 **동그란 받침 + 링**입니다 — 앰버 링 · 밝은 받침이 「가장 큰 원 + 바깥 링」을 그대로 지켜요
+ *    (흑백에서도 갈림). 그림은 받침 안에서 **머리와 어깨만** 보이게 키워 잘랐어요 — 24px에 온몸을
+ *    넣으면 얼굴이 9px이라 안 읽힙니다.
+ * 📏 22px · 내 순간 1.1배인 까닭 — 렌더로 쟀어요(스크래치패드 · 320/390 × 포지션 넷 × 카드 40장).
+ *    24px · 1.2배에서는 공이 말 테두리를 **최대 3.4px**, 22px · 1.15배에서도 2.4px 덮었습니다
+ *    (옛 판 계약 `pitch-test` P-8의 허용선 −2px 초과 — 320px 윙어 자리).
+ *    `STANDOFF` 8은 가로로 약 21.6px지만 **세로로는 약 18.3px**(판이 가로로 길어서 `YW`)라, 공이 위아래에서
+ *    다가오면 반지름이 큰 말이 먼저 닿아요. 🔴 그래서 말을 줄였지 `STANDOFF`를 키우지 않았습니다(점 22개 전부의 간격이 바뀜).
+ * 🔴 그림이 안 오면(오프라인 · 파일 없음) match-scene.js가 `has-chibi`를 떼고 원으로 물러섭니다. */
+.w2-side.home .w2-dot.me.has-chibi {
+  width: 22px; height: 22px; margin: -11px 0 0 -11px;
+  background: radial-gradient(circle at 50% 40%, var(--cream), var(--sky) 140%);
+  border: 2px solid var(--accent);
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .6);
+}
+.w2-dot.me img {
+  display: block; width: 100%; height: 100%; object-fit: cover;
+  transform: scale(1.75); transform-origin: 50% 20%;
+}
+.w2-pitch.mine .w2-dot.me.has-chibi { transform: scale(1.1); }
 
-/* ⚽ 공 — 겹이 판과 같은 크기라 `translate(84%, 40%)`가 곧 **판의 84% · 40%** 자리예요.
- * (퍼센트가 자기 크기 기준이라는 함정을 이 겹 하나로 지웁니다.) */
+/* ⚽ 공 — 겹이 판과 같은 크기라 `translate(84%, 40%)`가 곧 판의 84% · 40% */
 .w2-ball {
   position: absolute; left: 0; top: 0; width: 100%; height: 100%;
   pointer-events: none;
-  transition: transform .5s cubic-bezier(.25, .85, .35, 1);   /* ⏱️ 점(최대 498ms)과 같이 도착 */
+  transition: transform .5s cubic-bezier(.25, .85, .35, 1);
 }
 .w2-ball b {
   position: absolute; left: 0; top: 0;
@@ -899,55 +247,38 @@ button.pf-slot { cursor: pointer; font-family: inherit; }
   border-radius: 50%; background: var(--cream);
   box-shadow: 0 0 0 1px rgba(0, 0, 0, .55), 0 2px 4px rgba(0, 0, 0, .5);
 }
-
-/* 🕸️ 골망 — **골 카드가 왔을 때만** 흔듭니다. 여기서 골을 만들지 않아요 */
-.w2-pitch.net-a .w2-mouth.a, .w2-pitch.net-h .w2-mouth.h {
-  animation: w2Net .5s ease-out; opacity: 1;
-}
-@keyframes w2Net {
-  0% { transform: scaleX(1); } 35% { transform: scaleX(2.6); } 100% { transform: scaleX(1); }
-}
+/* 🕸️ 골망 — 골 카드가 왔을 때만 */
+.w2-pitch.net-a .w2-mouth.a, .w2-pitch.net-h .w2-mouth.h { animation: w2Net .5s ease-out; opacity: 1; }
+@keyframes w2Net { 0% { transform: scaleX(1); } 35% { transform: scaleX(2.6); } 100% { transform: scaleX(1); } }
 .w2-pitch.net-a .w2-ball b, .w2-pitch.net-h .w2-ball b { animation: w2BallPop .5s ease-out; }
 @keyframes w2BallPop { 0% { transform: scale(1); } 40% { transform: scale(1.6); } 100% { transform: scale(1); } }
-
-/* ⏱️ **시계만 도는 구간에 판이 죽어 보이지 않게** (설계 153번 D-2)
- *
- * 🔒 **공 하나만** 숨을 쉽니다. 🔴 점 22개를 흔들면 «대형이 움직인다»가 되어
- *    `setPitch`가 정한 자리를 **화면이 덮어씁니다** — 그 순간 판이 거짓말을 해요.
- *    공은 위 ②에서 이미 «혼자 움직이는 것»으로 약속돼 있어서, 여기가 판을 통틀어
- *    **거짓말이 안 되는 유일한 자리**입니다.
- *
- * 🔴 **JS 굴림이 0입니다.** CSS 애니메이션 하나뿐이라 «`setPitch` 한 번 = 정확히 22굴림»이
- *    한 톨도 안 갈려요 (`fx-count-test`가 그 수를 셉니다 · 원칙 🔴 「연출용 굴림은 판정 난수원 밖」).
- * 🔴 **`.w2-ball`의 인라인 `transform`을 안 건드립니다** — `pitch-test`가 그 값을 그대로 읽어요.
- *    움직이는 것은 **안쪽 겹 `b`**이고, 겹이 다르니 바깥 좌표와 섞이지 않습니다.
- * 🔒 **폭이 ±0.6px입니다.** 11px 공에서 «자리가 바뀌었다»로 안 읽히는 크기예요 —
- *    더 키우면 그건 숨이 아니라 **이동**이고, 이동은 `setPitch`만 정합니다.
- * 🔒 🕸️ 골망이 흔들릴 때는 바로 위 `w2BallPop`이 이깁니다 (특이도 0,3,1 > 0,1,1) —
- *    두 애니메이션이 겹치지 않아요. 골망 클래스가 빠지면 숨이 알아서 돌아옵니다.
- * ♿ `prefers-reduced-motion`에서 끕니다 (아래 reduce 블록). */
+/* ⏱️ 시계만 도는 구간 — **공 하나만** 숨을 쉽니다(±0.6px · JS 굴림 0) */
 .w2-ball b { animation: w2BallIdle 2.8s ease-in-out infinite alternate; }
 @keyframes w2BallIdle {
   from { transform: translate3d(-.6px, .4px, 0) scale(1); }
   to { transform: translate3d(.6px, -.4px, 0) scale(1.06); }
 }
 
-/* 🕰️ **전진·후퇴(`translateX(±7%/±4%)`)가 여기 있었습니다. 지금은 없어요.**
- *
- * 🐛 ⚽ 공은 `.w2-side` **밖**이라 그 밀림을 안 탔습니다. 그런데 점을 공 쪽으로 붙이는
- *    산수(`match-scene.js`의 `dotShift`)는 그 밀림을 모릅니다 — **두 좌표계가 7%씩
- *    어긋나 있었어요.** 320px 렌더에서 **우리 중원이 공 위에 정확히 포개졌습니다**(−7.3px).
- * 🔒 그래서 **밀림도 `dotShift`가 냅니다**(`PUSH = { home: 7, away: 4 }`).
- *    ⚠️ **여기에 `.w2-side` 미는 규칙을 되살리지 마세요 — 두 번 밀립니다.**
- *    🧤 그러면 우리 키퍼가 10 − 7 − 7 = **−4%**로 판 밖에 나갑니다(실점 카드마다요).
- *
- * 🏷️ `.push-a`/`.push-h` 클래스는 **남겨 뒀습니다** — 이제 「어느 쪽 흐름인가」를 DOM에
- *    적어 두는 **상태 표시**예요(움직임이 아니라). 나중에 잔디 색을 흐름 쪽으로 기울이는 것
- *    같은 걸 여기 걸 수 있고, 검사가 「`card.flow`가 판에 닿았나」를 이걸로 읽습니다. */
+/* ---------- 🧑‍💼 테스트 경기 — 스카우트석(12번 §5-4 「킥오프 위에 스카우트 반신 한 장」) ----------
+ * 피드 맨 위, 킥오프 줄보다 먼저 섭니다 — 경기가 흐르면 위로 밀려 올라가요(스코어보드를 안 먹게).
+ * 🔴 점수를 말하지 않습니다 — 절정의 무게는 점수가 아니라 연출이 집니다(12번 §5-4). */
+.w2-scout {
+  display: flex; align-items: flex-end; gap: 10px;
+  padding: 8px 10px 0; border-radius: 12px; overflow: hidden;
+  background:
+    radial-gradient(ellipse 80% 120% at 18% 100%, var(--spot), transparent 70%),
+    linear-gradient(180deg, var(--field), var(--bg2));
+  border: 1px solid var(--line);
+  animation: w2In .32s cubic-bezier(.2, .9, .3, 1);
+}
+.w2-scout img { width: 76px; height: 96px; object-fit: cover; object-position: 50% 0; flex: none; }
+.w2-scout p { padding-bottom: 12px; font-size: .84rem; line-height: 1.5; color: var(--text); }
+.w2-scout b { color: var(--accent); font-family: "Jua", sans-serif; font-weight: 400; }
 
 /* ---------- 아래 피드 ---------- */
 .w2-feed { padding: 10px 0 4px; display: flex; flex-direction: column; gap: 6px; }
 .w2-card {
+  position: relative;
   display: grid; grid-template-columns: 42px 1fr; gap: 8px; align-items: baseline;
   background: rgba(0, 0, 0, .22); border-left: 3px solid var(--line);
   border-radius: 8px; padding: 7px 10px;
@@ -959,29 +290,27 @@ button.pf-slot { cursor: pointer; font-family: inherit; }
 .w2-card.good { border-left-color: var(--good); color: var(--good2); }
 .w2-card.bad { border-left-color: var(--bad); color: var(--bad); }
 .w2-card.filler { color: var(--dim); }
-/* 🏁 킥오프(0') · 종료 휘슬(90') — **경기의 괄호**입니다.
- * 🐛 셋(`filler`/`kick`/`end`)이 한 클래스였는데, 90분 대본이 들어오면서 0'과 90'이
- *    **매 경기 반드시** 뜨게 됐어요. *"삐— 경기 종료"*가 *"측면에서 두드립니다"*와
- *    **같은 흐릿한 옷**을 입으면 경기가 어디서 시작하고 끝나는지가 안 읽힙니다.
- * 🔒 흐름 줄은 흐릿하게(`filler`), 괄호는 **또렷하게**. 색이 아니라 **밝기와 글꼴**로 갈라요 —
- *    흑백에서도 갈립니다. */
+/* 🏁 킥오프 · 종료 휘슬 — 경기의 괄호. 색이 아니라 밝기와 글꼴로 갈라요(흑백에서도) */
 .w2-card.whistle {
-  color: var(--cream);
-  background: rgba(255, 255, 255, .05);
-  border-left-color: var(--dim);
-  font-family: "Jua", sans-serif;
+  color: var(--cream); background: rgba(255, 255, 255, .05);
+  border-left-color: var(--dim); font-family: "Jua", sans-serif;
 }
-/* 🔥 내 순간 — 여기만 타이핑이 붙어요. 전부 타이핑하면 밀도 차이가 사라집니다 */
-.w2-card.mine { border-left-color: var(--accent); background: rgba(255, 159, 69, .1); }
+/* 🔥 내 순간 — 여기만 타이핑이 붙어요 */
+.w2-card.mine { border-left-color: var(--accent); background: var(--accent-a10); }
 .w2-card.mine .w2-body { color: var(--cream); }
-.w2-card.mine .w2-stake { color: var(--accent); font-family: "Jua", sans-serif; }
-/* 타이핑 중 커서 — 글자 폭을 안 밀도록 폭 0에 그림자로 그려요 */
-.w2-typing .w2-body::after {
-  content: "▍"; color: var(--accent); animation: w2Caret .7s steps(1) infinite;
-}
+.w2-typing .w2-body::after { content: "▍"; color: var(--accent); animation: w2Caret .7s steps(1) infinite; }
 @keyframes w2Caret { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
+/* 🧸 결과 줄의 치비 — 막음(`chibi-block`) · 실점 · 놓침(`chibi-down`) (12번 §9-4).
+ * 🔒 장식입니다 — 무엇이 일어났는지는 줄의 글자가 말해요(alt 비움 · aria-hidden) */
+.w2-card.has-react { padding-right: 54px; min-height: 48px; }
+.w2-react {
+  position: absolute; right: 4px; bottom: 2px; width: 44px; height: 44px;
+  object-fit: contain; pointer-events: none;
+  animation: w2React .42s cubic-bezier(.2, 1.4, .4, 1);
+}
+@keyframes w2React { from { opacity: 0; transform: translateY(8px) scale(.7); } to { opacity: 1; transform: none; } }
 
-/* 🥅 하프타임 — 카드가 아니라 구분선이에요 */
+/* 🥅 하프타임 — 카드가 아니라 구분선 */
 .w2-half {
   display: flex; align-items: center; gap: 8px; margin: 4px 0;
   font-size: .78rem; color: var(--dim);
@@ -990,30 +319,26 @@ button.pf-slot { cursor: pointer; font-family: inherit; }
 .w2-half::before, .w2-half::after { content: ""; flex: 1; height: 1px; background: var(--line); }
 .w2-half b { color: var(--cream); font-weight: 400; }
 
-/* ⚽ 골 배너 — **내 골에만** 붙습니다(설계 §5-4).
- * 동료 골·실점에는 안 붙여요 — 바로 위 카드 문구와 같은 말이 두 번 나옵니다.
- * reduced-motion에서도 이 줄은 DOM에 남아요. 움직임만 사라집니다. */
+/* ⚽ 골 배너 — 내 골 · 내 도움에만. 🧸 `chibi-score`가 옆에서 뜁니다(12번 §9-4 「골 배너 옆」) */
 .w2-goal {
+  display: flex; align-items: center; justify-content: center; gap: 6px;
   text-align: center; font-family: "Jua", sans-serif; font-size: 1.5rem;
   padding: 8px; border-radius: 10px; color: var(--ink);
-  background: linear-gradient(180deg, #ffc47f, var(--accent));
+  background: linear-gradient(180deg, var(--amber-hi), var(--accent));
   animation: w2Pop .5s cubic-bezier(.2, 1.5, .4, 1);
 }
+.w2-goal img { width: 52px; height: 52px; margin: -14px 0 -12px; object-fit: contain; flex: none; }
 @keyframes w2Pop { from { opacity: 0; transform: scale(.6); } to { opacity: 1; transform: scale(1); } }
 
-/* 순간 카드의 미니게임 자리 */
 .w2-moment { margin: 6px 0 2px; }
-
-/* 사후 집계 — "이 경기의 내 순간 N회" */
 .w2-tally {
   text-align: center; font-size: .84rem; color: var(--dim);
   border: 1px dashed var(--line); border-radius: 10px; padding: 8px; margin-top: 8px;
 }
 .w2-tally b { color: var(--accent); }
 
-/* ---------- 골 연출 (설계 §5-4) ---------- */
-/* 풀스크린 플래시. position:fixed라 부모에 transform이 있으면 어긋나요 —
- * 그래서 셰이크는 body가 아니라 .w2-scene에 겁니다(아래). */
+/* ---------- 골 연출 ----------
+ * 풀스크린 플래시. position:fixed라 부모에 transform이 있으면 어긋나요 — 셰이크는 .w2-scene에 겁니다 */
 .w2-flash {
   position: fixed; inset: 0; z-index: 88; pointer-events: none;
   background: var(--accent); opacity: 0;
@@ -1022,7 +347,18 @@ button.pf-slot { cursor: pointer; font-family: inherit; }
 .w2-flash.mate { background: var(--good); animation-duration: .3s; }
 .w2-flash.bad { background: var(--dim); animation-duration: .3s; }
 @keyframes w2Flash { 0% { opacity: 0; } 22% { opacity: .42; } 100% { opacity: 0; } }
-
+/* 🎆 골 파티클 — **굴림 0**(각도 · 거리는 번호에서 — match-scene.js `burst`). 위치는 fixed 한 점 */
+.w2-burst { position: fixed; left: 0; top: 0; width: 0; height: 0; z-index: 89; pointer-events: none; }
+.w2-burst i {
+  position: absolute; left: 0; top: 0; font-style: normal; font-size: 18px; line-height: 1;
+  opacity: 0; transform: translate(-50%, -50%);
+  animation: w2Burst .8s ease-out forwards;
+}
+@keyframes w2Burst {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(.4); }
+  15% { opacity: 1; }
+  100% { opacity: 0; transform: translate(-50%, -50%) translate(var(--bx), var(--by)) scale(1); }
+}
 .w2-scene.shake { animation: w2Shake .3s ease-in-out; }
 .w2-scene.shake-x { animation: w2ShakeX .24s ease-in-out; }
 @keyframes w2Shake {
@@ -1037,53 +373,31 @@ button.pf-slot { cursor: pointer; font-family: inherit; }
   66% { transform: translate3d(4px, 0, 0); }
 }
 
-/* ---------- ♿ 어지럼증·광과민성 — 축약 대상이 아닙니다 ----------
- * 흔들림·플래시·타이핑을 전부 끕니다. **정보는 그대로 남아요** —
- * 골 배너·스코어·중계 문구는 DOM에 있고 움직임만 사라집니다. */
+/* ---------- ♿ 경기 화면 — 어지럼증 · 광과민성 (축약 대상이 아닙니다) ----------
+ * 흔들림 · 플래시 · 타이핑 · 등장을 끕니다. 판의 점과 공은 **미끄러지지 않고 그 자리에 한 프레임에** 섭니다. */
 @media (prefers-reduced-motion: reduce) {
-  .w2-card, .w2-half, .w2-goal, .w2-score.bump,
-  .w2-scene.shake, .w2-scene.shake-x, .pitch.goal-h::after, .pitch.goal-a::after,
+  .w2-card, .w2-half, .w2-goal, .w2-score.bump, .w2-scout, .w2-react,
+  .w2-scene.shake, .w2-scene.shake-x,
   .w2-pitch.net-a .w2-mouth.a, .w2-pitch.net-h .w2-mouth.h,
-  /* ⏱️ 시계 구간의 공 숨(153번 D-2)과 ⏩ 빨리감기의 등장(D-3)도 여기서 멈춥니다.
-   * 🟢 **잃는 정보가 0입니다** — 공의 자리도 버튼도 그대로 서 있어요. */
-  .w2-pitch.net-a .w2-ball b, .w2-pitch.net-h .w2-ball b,
-  .w2-ball b, .btn.town-fast {
+  .w2-pitch.net-a .w2-ball b, .w2-pitch.net-h .w2-ball b, .w2-ball b {
     animation: none !important;
   }
-  /* 🟩 축구판 — **미끄러지는 것만** 끕니다. 자리는 그대로 «그 자리»로 갑니다:
-   *    공이 상대 골망에 있고 우리 줄이 밀고 올라간 그림이 **한 프레임에** 서요.
-   *    🔴 판을 통째로 숨기지 않습니다 — 움직임이 정보를 갖고 나가면 안 돼요. */
   .w2-slot, .w2-ball, .w2-dot.me { transition: none !important; }
-  .w2-flash { display: none !important; }
+  .w2-flash, .w2-burst { display: none !important; }
   .w2-typing .w2-body::after { display: none; }
 }
 
 /* ═══════════════════════════════════════════════════════════════════
- * 🔥 순간 카드 미니게임 4종 (beta/winger-moment.js) — 연출 (grow-director)
- *
- * grow-engineer가 **기하**(위치·크기·겹침)를 잡아 뒀고, 여기서 **색·움직임·손맛**을
- * 얹습니다. 클래스 이름은 그대로 두고 덧칠했어요.
- * (⚾ 야구의 `.ps-*`가 rookie/style.css에 있는 것과 같은 자리예요.)
- *
- * ── 고칠 때 지켜 주세요 ─────────────────────────────────────────
- * ① **판정을 그리기만 합니다.** 판정 창(폭)은 winger-moment.js가 인라인 style로
- *    박아 넣은 값이에요 — 여기서 .w2m-gate의 width나 .w2m-half의 폭을 덮으면
- *    **화면과 판정이 갈라집니다.** 보이는 폭이 곧 판정 창이라는 게 원칙 ③의 자리예요.
- * ② **애니메이션은 transform·opacity만.** left/top/width/box-shadow를 프레임마다
- *    움직이면 저사양 폰에서 레이아웃·페인트를 다시 돌립니다.
- * ③ **움직이는 조각(갭·키퍼·동료)에 transition을 붙이지 마세요.** 그림이 값보다
- *    늦게 따라오면 눌렀을 때 보이던 자리와 판정하는 자리가 어긋나요.
- * ④ **절대색 금지.** 위 :root의 --m-* / --accent / --turf만 씁니다.
- * ⑤ **위계**: 미니게임 연출은 골 세리머니보다 항상 작습니다 (아래 표 참고).
- * ⑥ 🪦 **2026-09-02 — 판이 «하나»가 됐습니다** (116번). 🥅 골문 6칸만 남고
- *    🏃 컷인 · 🎯 킬패스 · 🧱 차단은 **형태째** 사라졌어요(`.w2m-block2`도 grep 0건입니다).
- *    아래 1·3·4 절은 **지금 아무 데도 안 걸립니다** — 지우지 않고 둔 건 `.w2m-strong`/`-weak`를
- *    🎖️ 대표팀 화면(`.fg-lane`)이 아직 빌려 쓰고 있어서예요. 되살릴 땐 그 절을 통째로 읽으세요.
- * ⑦ prefers-reduced-motion 블록은 맨 아래에 있습니다 — 축약 대상이 아니에요.
- * ═══════════════════════════════════════════════════════════════════ */
+ * 2. 🔥 순간 판 (beta/winger-moment.js) — 🥅 일대일 슈팅 · ⚡ 컷백 연결 · 🧱 슛 코스 막기
+ * ═══════════════════════════════════════════════════════════════════
+ * 판은 하나(`runShotGrid`), 낱말과 겉옷만 셋입니다 — `w2m-k-goal` · `w2m-k-assist` · `w2m-k-defend`.
+ * ① **판정을 그리기만 합니다.** 폭 · 자리는 JS가 인라인으로 박은 값이고, 칸의 밝기(opacity)는
+ *    **그 칸의 `s` 자체**라 JS 몫입니다 — `.w2m-cell*` 선택자 안에 opacity를 쓰지 마세요(G-2a).
+ * ② 움직이는 조각(키퍼 · 슈터)에 transition을 붙이지 마세요 — 그림이 값보다 늦게 따라오면
+ *    눌렀을 때 보이던 자리와 판정하는 자리가 어긋나요.
+ * ③ 위계: 판 연출은 골 세리머니보다 항상 작습니다(상자 안 .28 · 흔들림 2px · 파티클 8 · 진동 없음). */
 
 /* ---------- 공통 상자 ---------- */
-/* .tm-box(base.css)를 껍데기로 빌려 쓰고 결만 바꿔요 — 밤 경기장 판. */
 .w2m-box, .w2m-ready {
   position: relative;
   background: linear-gradient(180deg, var(--field), var(--bg2));
@@ -1092,30 +406,24 @@ button.pf-slot { cursor: pointer; font-family: inherit; }
 }
 .w2m-box { border-width: 2px; }
 
-/* ---------- 🧭 준비 화면 ----------
- * 규칙이 여러 단계인 메커닉은 한 줄 설명으로 첫 판을 날립니다. 처음 3번은 전문,
- * 그 뒤엔 한 줄 — 그건 winger-moment.js가 정하고, 여기서는 **읽히게** 만들어요.
- * ⏱️ 이 화면 위에서는 아무것도 안 돌아요. 그래서 재촉하는 연출도 넣지 않습니다. */
+/* ---------- 🧭 준비 화면 ---------- */
 .w2m-ready { border-color: var(--accent); }
-/* 무엇이 걸렸는지 — 첫 줄이자 제일 굵은 줄이에요 (설계 §5-1) */
 .w2m-stake {
   display: inline-block;
   font-family: "Jua", sans-serif; font-size: .84rem; line-height: 1.4;
-  color: var(--ink); background: linear-gradient(180deg, #ffc47f, var(--accent));
+  color: var(--ink); background: linear-gradient(180deg, var(--amber-hi), var(--accent));
   border-radius: 999px; padding: .22rem .8rem; margin: 0 0 8px;
 }
 .w2m-ready .tm-label { font-size: 1.05rem; margin-bottom: 8px; }
+.w2m-why { font-size: .86rem; line-height: 1.55; color: var(--text); margin: 0 0 8px; }
+.w2m-why b { color: var(--accent); font-weight: 600; }
 .w2m-ready-lines {
   text-align: left; margin: 0 auto 10px; padding: 0; max-width: 22rem;
   font-size: .86rem; line-height: 1.55; list-style: none; color: var(--text);
 }
 .w2m-ready-lines li { position: relative; padding: .18rem 0 .18rem 1.35em; }
-/* 번호 대신 조명 점 — 순서가 아니라 '읽을 것 셋'이라서요 */
-.w2m-ready-lines li::before {
-  content: "•"; position: absolute; left: .35em; top: .18rem; color: var(--accent);
-}
-.w2m-ready-lines b, .w2m-ready-short b { color: var(--accent); font-weight: 600; }
-.w2m-ready-short { font-size: .86rem; line-height: 1.55; margin: 0 0 10px; color: var(--text); }
+.w2m-ready-lines li::before { content: "•"; position: absolute; left: .35em; top: .18rem; color: var(--accent); }
+.w2m-ready-lines b { color: var(--accent); font-weight: 600; }
 .w2m-ready-keys {
   display: flex; flex-wrap: wrap; gap: 6px; justify-content: center;
   padding-top: 8px; border-top: 1px solid var(--line);
@@ -1125,22 +433,9 @@ button.pf-slot { cursor: pointer; font-family: inherit; }
   font-size: .76rem; color: var(--dim); line-height: 1.5; text-align: left;
 }
 .w2m-ready-key b { color: var(--cream); flex-shrink: 0; }
-/* ▶️ 시작 — 여기부터 시간이 흘러요. 화면에서 제일 누르고 싶게 생겨야 합니다. */
 .w2m-go { min-height: 48px; }
 
-/* ---------- 🎬 판정 피드백 ----------
- *
- * ⚖️ **골 세리머니보다 작습니다.** 미니게임은 카드 *안*에서 벌어지고 골은 그 *결과*예요.
- *
- *   | 사건        | 밝기            | 흔들림        | 파티클              | 진동  |
- *   |-------------|-----------------|---------------|---------------------|-------|
- *   | ⚽ 골       | 풀스크린 .42    | 화면 5px      | burst 14 + confetti | 40ms  |
- *   | 🎮 미니게임 | **상자 안 .28** | **상자 2px**  | **burst 8 (완벽만)**| 없음  |
- *
- * 세 등급이 **색만 다른 게 아니라 다른 일이 일어납니다** —
- *   완벽: 앰버 섬광 + 테두리 점등 + 파티클 8   ← 제일 밝고, 유일하게 파티클이 있어요
- *   좋아요: 옅은 하늘빛 섬광                    ← 조용해요
- *   놓침: 붉은 섬광 + 상자가 2px 좌우로 한 번   ← 유일하게 흔들려요 */
+/* ---------- 🎬 판정 피드백 — 완벽 · 좋아요 · 놓침은 색만이 아니라 **다른 일**이 일어납니다 ---------- */
 .w2m-box::after {
   content: ""; position: absolute; inset: 0; pointer-events: none;
   border-radius: inherit; opacity: 0; background: var(--m-hit);
@@ -1150,17 +445,13 @@ button.pf-slot { cursor: pointer; font-family: inherit; }
 .w2m-t-perfect { --hit-a: .28; border-color: var(--accent); }
 .w2m-t-ok { --hit-a: .13; --m-hit: var(--sky); border-color: var(--sky); }
 .w2m-t-miss { --hit-a: .18; --m-hit: var(--accent2); border-color: var(--accent2); }
-/* 놓쳤을 때만 상자가 한 번 흔들려요. 골의 셰이크(5px)보다 작은 2px입니다. */
 .w2m-t-miss { animation: w2mNudge .22s ease-in-out; }
 @keyframes w2mNudge {
   0%, 100% { transform: translate3d(0, 0, 0); }
   30% { transform: translate3d(-2px, 0, 0); }
   70% { transform: translate3d(2px, 0, 0); }
 }
-/* 눌리자마자 조작 칸이 조용해져요 — 결과 줄로 눈이 가야 합니다 */
-.w2m-hit .w2m-lane, .w2m-hit .w2m-goal, .w2m-hit .w2m-pitch,
-.w2m-hit .w2m-read, .w2m-hit .w2m-sweeps { opacity: .45; transition: opacity .25s ease; }
-
+.w2m-hit .w2m-goal { opacity: .45; transition: opacity .25s ease; }
 .w2m-res {
   margin: 10px 0 0; font-size: .92rem; line-height: 1.5;
   animation: w2mRes .3s cubic-bezier(.2, 1.3, .4, 1);
@@ -1169,30 +460,13 @@ button.pf-slot { cursor: pointer; font-family: inherit; }
 .w2m-res.w2m-good { color: var(--good); font-family: "Jua", sans-serif; font-size: 1rem; }
 .w2m-res.w2m-mid { color: var(--cream); }
 .w2m-res.w2m-bad { color: var(--accent2); }
-/* 🎖️ **「🦶 약발로!」는 훈장입니다** — 🚧 **engineer의 한 줄이 오면 켜집니다**
- * ══════════════════════════════════════════════════════════════════════
- * 🐛 지금 이 줄은 `W.great + " 🦶 약발로!"`라 **텍스트 노드 하나**예요. 같은 화면에
- *    「약발 －25%」 벌점표가 떠 있어서, 붙어 있는 한 문장이 ***"약발로밖에"***로 읽힙니다.
- *    성취를 그린 화면이 **조건을 단 변명**처럼 읽히는 자리예요. CSS로는 못 밉니다 —
- *    감쌀 요소가 없으니까요.
- *
- * 🔧 **`beta/winger-moment.js` 709줄 한 곳**만 바뀝니다 (131_director_childbtn.md §5):
- *      - W.great + (ctx.weak ? " 🦶 약발로!" : "")
- *      + W.great + (ctx.weak ? ' <b class="w2m-win-weak">🦶 약발로!</b>' : "")
- *    `ender`가 `p.innerHTML = line + ...`으로 넣으니 `<b>`가 그대로 삽니다.
- *
- * 🎨 **새 색을 안 만듭니다.** 이 화면의 색은 🦶 한 축(앰버 주발 ↔ 회색 약발)이고
- *    성패는 `--good`/`--accent2` 축이에요. 여기에 세 번째 색을 넣으면 셋 다 안 읽힙니다.
- *    그래서 **색은 그대로 두고 「모양」만 바꿉니다** — 테두리를 두른 알약이 훈장이 돼요.
- *    적록 색약·흑백에서도 테두리는 남습니다.
- * 🚧 지금은 아무도 안 켭니다. 위 한 줄이 들어오면 그날 바로 뜹니다. */
+/* 🎖️ 「🦶 약발로!」는 훈장 — 색이 아니라 모양(테두리 알약)으로 갈라요 */
 .w2m-win-weak {
   display: inline-block; margin-left: .15rem; padding: 1px 8px;
   border: 1px solid currentColor; border-radius: 999px;
   font-size: .82rem; font-weight: 400; white-space: nowrap;
 }
-/* 🎚️ 조작 정확도 — **결과가 아니라 손**이에요. 골이 됐는지는 이 줄의 문구와
- * 뒤이어 오는 경기 카드가 말합니다. scaleX라 폭이 변해도 레이아웃을 안 건드려요. */
+/* 🎚️ 조작 정확도 — 결과가 아니라 손. scaleX라 레이아웃을 안 건드려요 */
 .w2m-acc {
   display: block; width: min(200px, 76%); height: 5px;
   margin: 8px auto 0; border-radius: 99px; overflow: hidden;
@@ -1203,122 +477,21 @@ button.pf-slot { cursor: pointer; font-family: inherit; }
   background: currentColor; transform-origin: left center;
 }
 
-/* ---------- 버튼 (네 종 공용) ----------
- * 📱 폰에서 **손가락으로 누를 칸**이에요. 48px은 협상 대상이 아닙니다 —
- * 타이밍 게임에서 칸이 좁으면 못 눌러서 지는 거지 늦어서 지는 게 아니게 돼요.
- * touch-action/user-select는 두 번 탭 확대와 길게 눌러 나오는 선택을 막아요
- * (⚾ 야구 연타 버튼 .ct-btn과 같은 이유). */
-.w2m-btns { display: flex; gap: 8px; justify-content: center; margin-top: 12px; flex-wrap: wrap; }
-.w2m-btns .btn {
-  flex: 1 1 40%; min-height: 52px; padding: 10px 8px; font-size: .95rem;
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
-  line-height: 1.25;
-  background: var(--bg2); border: 1px solid var(--line); color: var(--text);
-  user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
-  touch-action: manipulation;
-}
-.w2m-btns .btn:active { transform: scale(.97); }
-.w2m-btns .btn:disabled { opacity: .38; }
-.w2m-btns .btn:disabled:active { transform: none; }
-
-/* ═════════ 1. 🏃 컷인 돌파 — 조준 + 타이밍 ═════════
- * 🦶 **그려진 칸 폭이 곧 판정 창이에요** (주발 ＋25% · 약발 －25%, 설계 §4-5).
- * 폭은 JS가 인라인으로 박습니다 — 여기서 덮으면 화면과 판정이 갈라져요. */
-.w2m-lane {
-  height: 40px; border-radius: 10px; border-color: var(--line);
-  background:
-    repeating-linear-gradient(90deg, var(--turf) 0 16px, var(--turf2) 16px 32px);
-}
-.w2m-gate {
-  position: absolute; top: 0; bottom: 0;
-  background: var(--m-weak);
-  border-left: 1px solid var(--m-weak-line); border-right: 1px solid var(--m-weak-line);
-}
-.w2m-gate.w2m-strong {
-  background: var(--m-strong);
-  border-left-color: var(--m-strong-line); border-right-color: var(--m-strong-line);
-}
-/* 가운데 눈금 — 판정은 **칸 중심에서 벗어난 거리**로 재요. 눈금이 없으면
- * 넓은 칸일수록 어디가 한가운데인지 안 보여서, 넓은 게 오히려 헷갈립니다. */
-.w2m-gate-mid {
-  position: absolute; left: 50%; top: 3px; bottom: 3px; width: 1px; margin-left: -.5px;
-  background: var(--m-weak-line);
-}
-.w2m-gate.w2m-strong .w2m-gate-mid { background: var(--m-strong-line); }
-.w2m-gate-tag {
-  position: absolute; left: 50%; top: 3px; transform: translateX(-50%);
-  font-size: .62rem; line-height: 1; opacity: .85; pointer-events: none;
-}
-/* 갭 — 폭 100% 트랙을 translateX(%)로 밀어요. 안쪽 <i>가 실제로 보이는 기둥이에요.
- * ⛔ transition 금지 (블록 머리말 ③). */
-.w2m-gap {
-  position: absolute; left: 0; top: 0; bottom: 0; width: 100%;
-  pointer-events: none; will-change: transform;
-}
-.w2m-gap > i {
-  position: absolute; left: 0; top: -2px; bottom: -2px; width: 10px; margin-left: -5px;
-  border-radius: 3px;
-  background: linear-gradient(180deg, var(--cream), var(--accent));
-  box-shadow: 0 0 10px var(--accent);
-}
-/* ●●● 남은 왕복 — 갭은 CUT.sweeps번 오가고 닫혀요. 안 보여주면 "갑자기 닫혔다"가 됩니다. */
-.w2m-sweeps {
-  margin: 6px 0 0; font-size: .8rem; letter-spacing: .28em;
-  color: var(--dim); min-height: 1.2em;
-}
-.w2m-sweeps.last { color: var(--accent2); }
-/* 코스 버튼 — 주발 쪽이 화면에서도 밝아요 */
-.w2m-side .w2m-side-arrow { font-size: 1.15rem; }
-.w2m-side .w2m-side-lab { font-size: .86rem; }
-.w2m-side .w2m-side-win { font-size: .68rem; color: var(--dim); }
-.w2m-side.w2m-strong { border-color: var(--m-strong-line); background: var(--m-strong); }
-.w2m-side.w2m-strong .w2m-side-win { color: var(--accent); }
-
-/* ═════════ 2. 🥅 1대1 마무리 — 조준 ═════════ */
-
-/* 📏 **판이 화면 폭을 되찾습니다 — 여섯 칸이 손가락에 맞으려면요.**
- *
- * 🔴 렌더 실측(320px · 진짜 사슬)에서 칸이 **36.00px**이었어요 — 44px에서 18% 모자랍니다.
- *    🏫 학교 판(`#town-card`)은 **42.00px**이라 거기도 미달이었습니다.
- *    먹고 있던 건 상자가 아니라 **여백의 사슬**이에요. 한쪽만 세면:
- *      `#app` 16 + `.tour-card` 테두리 2 + 여백 16 + `.tm-box` 테두리 2 + 여백 14 + 골문 테두리 2 = **52px**
- *    양쪽 104px을 320에서 빼면 216px이 남고, 그걸 여섯으로 나눈 값이 36.00입니다.
- *
- * 🔑 **그래서 상자를 「`#app`의 콘텐츠 폭」에 맞춰 다시 폅니다.**
- *    🔴 부모 이름(`#stage-card` 같은)으로 가르지 **않았어요** — 판이 서는 자리가 셋이라서요:
- *      🏟️ `#stage-card`(좌우 여백 16+테두리 2) · 🏫 `#town-card`(여백 0) · 🧪 확인 페이지의 iframe.
- *    셋을 선택자로 가르면 **화면 구조가 바뀌는 날 한 갈래가 조용히 죽습니다.**
- *    폭을 화면에서 직접 재면 **부모가 무엇이든 같은 폭**이 나오고, 죽을 갈래가 없어요.
- *      · `100vw - 32px` — `#app`의 좌우 여백(16 × 2)을 뺀 폭
- *      · `448px`        — `#app`의 최대 폭(480) − 그 여백. 넓은 화면에서 더는 안 벌어집니다
- *    `margin-inline`의 `%`는 `width`의 `%`와 **같은 기준(부모 폭)**이라 정확히 가운데에 서요.
- *
- * 🔒 **이건 넘침이 아니라 정렬입니다.** 상자의 좌우 끝이 `#stage-card`의 **바깥 테두리**에
- *    딱 맞아요(320px에서 둘 다 288px). 🏫 학교에서는 부모가 이미 그 폭이라 **한 픽셀도 안 움직입니다.**
- *
- * 📐 그리고 **골문 비율이 좋아집니다** — 넓힌 뒤 안쪽이 320px에서 272×100(2.72:1),
- *    390px에서 342×109(3.14:1)이에요. 진짜 골대가 7.32 × 2.44 = **3.0:1**이라
- *    넓히는 쪽이 「축구 골대」로 **더** 읽힙니다(넓히기 전은 2.16:1 — 납작했어요).
- * 🔴 **높이는 안 건드렸습니다** — 세로는 이미 100~121px이라 여유가 있고, 줄이면 탭이 나빠져요.
- */
+/* ---------- 🥅 골문 6칸 — 상자를 #app의 콘텐츠 폭으로 다시 폅니다 ----------
+ * 여백의 사슬(#app 16 + 카드 테두리 · 여백 + 상자 테두리 · 여백)이 320px에서 칸을 36px로 깎았어요.
+ * 부모 이름으로 가르지 않고 **화면 폭에서 직접** 잽니다 — 판이 서는 자리가 여럿이라서요.
+ *   `100vw - 32px` = #app 좌우 여백을 뺀 폭 · `448px` = #app 최대 폭(480) − 여백 */
 .w2m-oneone {
-  /* 🔒 `.tm-box`(base.css)의 `margin: 10px 0`·`padding: 14px`을 **가로만** 덮습니다 —
-   *    세로 여백은 그대로예요(카드 사이 간격이 이 판에서만 달라지면 안 됩니다). */
   --w2m-span: min(100vw - 32px, 448px);
   width: var(--w2m-span);
   margin-inline: calc((100% - var(--w2m-span)) / 2);
   padding-inline: 10px;
 }
-/* 🥅 골문은 상자 여백 안쪽으로 **6px 더** 나옵니다 — 남는 4px이 상자 테두리와의 숨통이에요.
- * 🔴 0으로 붙이지 마세요: 골문 테두리 2px과 상자 테두리 2px이 붙어 **4px 겹선**으로 읽힙니다. */
 .w2m-oneone .w2m-goal { margin-inline: -6px; }
-
 .w2m-goal {
   position: relative; overflow: hidden; cursor: pointer;
-  /* 📱 96px(JS의 min-height 바닥)보다 키웁니다 — 좌표를 손가락으로 찍는 유일한 판이에요 */
-  height: clamp(104px, 30vw, 148px);
+  height: clamp(104px, 30vw, 148px);          /* 📱 JS의 min-height 96px 바닥보다 키웁니다 */
   border-radius: 10px; border: 2px solid var(--line);
-  /* 골망 — 잔디가 아니라 그물이라 격자예요 */
   background:
     repeating-linear-gradient(90deg, transparent 0 11px, rgba(255, 255, 255, .07) 11px 12px),
     repeating-linear-gradient(0deg, transparent 0 11px, rgba(255, 255, 255, .07) 11px 12px),
@@ -1327,29 +500,17 @@ button.pf-slot { cursor: pointer; font-family: inherit; }
   touch-action: manipulation;
 }
 .w2m-goal:active { border-color: var(--accent); }
-/* 🦶 절반이 색으로 갈려요. 폭(50%)은 JS가 박고 여기서는 톤만 얹습니다. */
+/* 🦶 절반의 색 — 폭(50%)은 JS가 박고 여기는 톤만. 판정 줄(`cellMul`)과 같은 조건이에요 */
 .w2m-half { position: absolute; top: 0; bottom: 0; }
 .w2m-half.w2m-strong { background: var(--m-strong); }
 .w2m-half.w2m-weak { background: var(--m-weak); }
-/* 절반이 갈린다는 걸 선으로도 한 번 더 — 키퍼가 가운데 있으면 색 경계가 안 보여요 */
 .w2m-half + .w2m-half { border-left: 1px dashed var(--m-weak-line); }
-/* 🥅 골대 기둥 — 여기 붙으면 여유(margin)가 깎여요(ONE.post). 폭은 JS가 상수에서 읽어 박습니다. */
-.w2m-post {
-  position: absolute; top: 0; bottom: 0; opacity: .32;
-  background: repeating-linear-gradient(135deg, var(--cream) 0 4px, transparent 4px 8px);
-  border-inline: 1px solid var(--cream);
-}
-/* 🧤 키퍼 — 트랙은 kc%로 한 번만 밀고(kc는 안 바뀜), 몸통만 scaleX로 벌려요.
- * 몸통은 폭 100%(골문 폭)를 kc에 중심 두고 있어서 scaleX(kw/50) = 폭 2·kw% 입니다.
- * ⛔ transition 금지 — 몸통이 값보다 늦게 벌어지면 "빈 곳인 줄 알았는데 막혔어요"가 돼요. */
+/* 🧤 키퍼 — 트랙은 translateX(kc%) · 몸통은 scaleX(cov/50). ⛔ transition 금지 */
 .w2m-keeper { position: absolute; left: 0; top: 0; bottom: 0; width: 100%; pointer-events: none; will-change: transform; }
-/* 불투명한 흰 상자로 뒀더니 "골문 절반이 하얀" 것처럼 보였어요 — 🦶 절반의 색이
- * 통째로 가려집니다. 반투명 + 또렷한 윤곽으로 바꿔 **뒤가 비치게** 했어요:
- * 키퍼가 덮은 자리도 주발 쪽인지 약발 쪽인지가 계속 보여야 합니다. */
 .w2m-keeper-body {
   position: absolute; left: -50%; top: 12%; width: 100%; height: 76%;
   border-radius: 10px; transform-origin: center;
-  background: linear-gradient(180deg, rgba(233, 238, 255, .72), rgba(150, 165, 210, .5));
+  background: linear-gradient(180deg, var(--keeper-theirs), var(--keeper-theirs-2));
   box-shadow: inset 0 0 0 2px var(--cream), 0 0 14px rgba(0, 0, 0, .5);
 }
 .w2m-keeper-face {
@@ -1357,8 +518,6 @@ button.pf-slot { cursor: pointer; font-family: inherit; }
   font-size: 1.3rem; line-height: 1;
   filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .6));
 }
-/* 골문은 104~148px밖에 안 돼요 — 이름표가 크면 조준할 칸을 먹습니다(실측에서
- * 높이의 5분의 1을 먹고 키퍼와 겹쳤어요). 작게, 모서리에 붙여 둡니다. */
 .w2m-foot-tag {
   position: absolute; top: 3px; font-size: .6rem; line-height: 1.25;
   padding: .06rem .3rem; border-radius: 999px; pointer-events: none; white-space: nowrap;
@@ -1366,71 +525,12 @@ button.pf-slot { cursor: pointer; font-family: inherit; }
 .w2m-foot-tag.strong { color: var(--accent); background: rgba(0, 0, 0, .42); border: 1px solid var(--m-strong-line); }
 .w2m-foot-tag.weak { color: var(--dim); background: rgba(0, 0, 0, .42); border: 1px solid var(--m-weak-line); }
 .w2m-tip { font-size: .78rem; color: var(--dim); margin: 7px 0 0; min-height: 1.3em; }
-/* 키퍼가 다 벌어진 뒤 남은 1초 — 화면이 안 변하는 구간이라 말로 알려요.
- * (움직이는 재촉 막대를 안 넣는 이유: 조준 판은 표적이 하나여야 합니다) */
 .w2m-tip.urgent { color: var(--accent2); }
 
-/* ---------- 🔦 칸의 상태 셋 — **색이 아니라 모양으로** 갈라요 ----------
- *
- * 🔴 **자물쇠부터**: 칸의 `background`·`border`·`box-shadow`는 마음껏이지만
- *    **`opacity`만은 JS 몫**입니다. 밝기가 곧 그 칸의 `s`(들어갈 확률)라,
- *    CSS가 덮는 순간 **화면과 판정이 갈라져요.** `!important`도 안 됩니다 —
- *    `one-grid-test.js`의 **G-2a**가 `.w2m-cell*` 선택자 안의 `opacity`를
- *    **소스에서** 잡습니다. 그래서 아래에는 `opacity`가 **한 줄도 없어요.**
- *    (칠은 전부 `color`·`background`·`box-shadow`로 합니다)
- *
- * ♿ **왜 색으로 안 가르나** — 「들어감」을 초록, 「0점」을 빨강으로 칠하는 게 제일 쉬운
- *    길인데, **적록 색약에서 그 둘이 같은 픽셀**이 됩니다. 이 저장소에서 세 번 났어요
- *    (🦶 주발이 판정과 반대색 · 📨 제안 밝기 역순 · 🧱 동네 점이 파랑 ≡ 초록).
- *    그리고 이 화면은 이미 **앰버(주발) ↔ 회색(약발)**로 한 축을 쓰고 있어서,
- *    색을 한 축 더 얹으면 **한 화면에서 색이 두 가지 뜻**을 갖게 돼요 — 둘 다 안 읽힙니다.
- *
- * 🔑 그래서 **무채색(`--m-mark`) 한 색**이고, 갈리는 자리는 **칸 한가운데 하나**입니다.
- *    JS가 켜는 등급 둘은 서로 배타라(`!hot && v > 0`), 가운데가 곧 **상태 칸**이에요:
- *
- *   | 상태                        | 가운데   | 칸 테두리 | 뜻                     |
- *   |-----------------------------|----------|-----------|------------------------|
- *   | 🔦 `-hot`  지금 누르면 완벽 | ◎ 큰 링  | 2px 링    | s ≥ perfect            |
- *   | ·  `-in`   들어가긴 함      | ● 5px 점 | 없음      | s > 0                  |
- *   | (클래스 없음) 0점           | **빈칸** | 없음      | s = 0 · 절대 안 들어감 |
- *
- *   · 셋이 **한 자리**를 나눠 써서 눈이 한 군데만 봅니다 — ◎ / ● / 빈칸
- *   · ◎는 **구멍 뚫린 큰 링**, ●는 **꽉 찬 작은 점**이라 **완전 흑백에서도** 갈려요.
- *     밝기가 아니라 **면적과 구멍**으로 가르니 칸이 밝든 어둡든 그대로입니다
- *   · 링(칸 전체)은 `hot`에만 있어 **둘째 채널**이 됩니다 — 가운데를 놓쳐도 남아요
- *   · 🔴 **둘 다 `::after`입니다** — `::before`와 박스 장식(`box-shadow: inset`)은
- *     `.w2m-cell-lit`(밝기 칠)보다 **아래**로 깔립니다. 그래서 정작 **제일 밝은 `hot` 칸**에서
- *     ◎와 링이 크림색을 잃고 앰버가 됐어요 — 렌더 실측 rgb(247,224,160) → 옮긴 뒤 rgb(234,240,255).
- *     🔑 표시가 무채색이 아니게 되면 ♿ 「색은 한 축만」이 그 자리에서 깨집니다.
- *     `::after`는 마지막 자식이라 칠 **위**로 올라오는데, 칸 자체는 여전히 🧤 키퍼 **아래**예요
- *
- * 🔑 **`in`은 눈에 띄려고 있는 게 아닙니다.** 초보자에게 필요한 건 정답이 아니라
- *    **「이 칸은 0점」**이고, 그건 **점이 없는 칸**이 말합니다 — 밝기 0.05와 0을
- *    3.4초 안에 폰에서 못 읽으니까요. 그래서 점은 **작고 조용**해요.
- *    🔴 **키우지 마세요** — 커지는 순간 `hot`을 가리고, 그러면 「완벽」이 안 읽힙니다.
- *    ⚽ `perfect`가 판 천장의 종속값이 되면서 ◎가 **두 배로 자주** 떠요(주발·약발 양쪽).
- *
- * 🪦 **⬇️ `soon`(▼) · ⬆️ `rise`(▲)는 지웠습니다** (2026-09-02 · designer 125번 · 122번 §4).
- *    `rise`는 JS에서 먼저 사라졌는데 **CSS만 살아 있었고**(죽은 규칙), `soon`은
- *    「`in`이 450ms 뒤에 할 말」이라 **같은 판에서 같은 말을 두 번** 했어요(적중 6.6~14.9%).
- *    🔴 되살리지 마세요 — 되살아나는 건 클래스가 아니라 **가운데를 두고 다투는 셋째 표시**입니다.
- *    🔑 그래서 이 판에는 **움직이는 표시가 한 개도 없습니다** — 아래 reduced-motion에
- *       칸 줄이 없는 게 그 뜻이에요(끌 움직임이 없어서 **두 판이 같은 그림**입니다).
- * ⛔ `box-shadow`를 **애니메이션하지 마세요** — 프레임마다 페인트를 다시 돕니다. 정지값이에요. */
-
-/* 🔦 지금 누르면 완벽한 칸 — 밝기는 이미 JS가 그리고 있어요. 여기는 **경계**를 줍니다.
- * (밝은 칸이 둘·셋 붙어 있을 때 «어디까지가 좋은 띠인가»가 안 보였어요) */
-.w2m-cell-hot {
-  border-radius: 5px;
-  /* 🔴 **링을 여기(`box-shadow: inset`)에 두지 마세요.** 박스 장식은 자식보다 **아래**로
-   * 깔려서 `.w2m-cell-lit`(앰버 칠)이 그 위를 덮습니다 — 링이 크림색을 잃고
-   * **앰버가 돼요**(렌더 실측: rgb(244,226,177) · 크림은 rgb(234,240,255)).
-   * 표시가 무채색이 아니게 되는 순간 ♿ 「색은 한 축만」이 깨집니다. 링은 아래 `::after`가 그려요.
-   * 여기 남은 건 **안쪽 그늘**뿐입니다 — 이건 칠 아래에 깔려도 되는 장식이에요. */
-  box-shadow: inset 0 0 10px rgba(0, 0, 0, .4);
-}
-/* ⌖ 링과 조준점을 **한 겹**으로 그립니다 — 마지막 자식이라 밝기 칠 **위**로 올라와요.
- * 조준점은 **칸 한가운데**예요. 위쪽은 🦶 이름표가, 아래쪽은 🔮 예고 띠와 ⚪ 공이 씁니다. */
+/* 🔦 칸의 상태 셋 — **색이 아니라 모양으로**: ◎ 완벽(hot) · ● 들어감(in) · 빈칸 0점.
+ * 🔴 여기 opacity가 한 줄도 없는 게 맞습니다(밝기 = `s` = JS 몫 · G-2a).
+ * 🔴 둘 다 `::after` — `.w2m-cell-lit`(밝기 칠) **위**로 와야 크림색을 지켜요(♿ 색은 한 축만). */
+.w2m-cell-hot { border-radius: 5px; box-shadow: inset 0 0 10px rgba(0, 0, 0, .4); }
 .w2m-cell-hot::after {
   content: "◎";
   position: absolute; top: 0; right: 0; bottom: 0; left: 0;
@@ -1440,11 +540,6 @@ button.pf-slot { cursor: pointer; font-family: inherit; }
   text-shadow: 0 1px 3px rgba(0, 0, 0, .85);
   pointer-events: none;
 }
-
-/* · 들어가긴 하는 칸 — **가운데 점 하나**. 「여긴 0점이 아니에요」가 전부입니다.
- * 🔒 점 크기(5px)는 **손잡이가 아니에요** — 위 주석의 이유로 작습니다.
- * 🕶️ 어두운 칸에도 밝은 칸에도 서야 해서, 점 바깥에 **1px 어두운 테**를 둘렀어요.
- *    (칸이 밝아지면 크림색 점이 앰버에 붙어 버립니다 — 테가 그걸 떼어 놔요) */
 .w2m-cell-in::after {
   content: "";
   position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
@@ -1454,1541 +549,649 @@ button.pf-slot { cursor: pointer; font-family: inherit; }
   pointer-events: none;
 }
 
-/* ---------- 🅰️ **컷백 연결 — 같은 격자, 딴 장면** ----------
- *
- * 🔴 **판정도 조작도 한 톨도 안 바뀝니다.** `runShotGrid` 한 벌이 그대로 돌아요 —
- *    바뀌는 것은 **어디에서 벌어지는 일인가**뿐입니다.
- *
- * 낱말은 이미 「⚡ 컷백 연결 · 문전 6칸」인데 그림이 **골망**이었어요. 골문 안을
- * 겨누는 그림에 «동료에게 굴려 주세요»라고 적혀 있으면, 낱말과 그림 중 **그림이 이깁니다.**
- * 그래서 셋을 바꿔 «골라인 앞의 땅»으로 다시 칠했어요:
- *
- *   ① 🕸️ **골망 격자 → 잔디 줄무늬** (`.w2m-pitch`와 같은 결이에요 — 이 게임에서 이미 «땅»입니다)
- *   ② ⚪ **위쪽에 골라인** — 이 선 앞이 문전이에요. 선 «안»이 아니라 «앞»이라는 게 이 판의 전부입니다
- *   ③ 🥅 **골대 기둥을 지웁니다** — 문전에는 기둥이 없어요
- *
- * 🧤 키퍼는 그대로 둡니다. 키퍼가 문전을 덮으러 나오는 건 컷백에서도 같은 장면이에요.
- *
- * ✅ **임시 갈래를 지웠습니다** (2026-09-02). engineer가 `"w2m-oneone w2m-k-" + ctx.kind`를
- *    내주면서 종류가 DOM에 남게 됐어요 — 그래서 `.w2m-goal[aria-label^="문전"]` 갈래를
- *    **셋 다 지웠습니다.** 한국어 낱말에 붙은 선택자였어서, 문구를 다듬는 날
- *    **소리 없이** 골문 그림으로 되돌아갈 자리였습니다(「도달 경로가 조용히 죽음」).
- *    🔑 둘을 같이 두는 것도 답이 아니에요 — **같은 결과를 내는 줄이 둘**이면 하나가 죽어도
- *       증상이 0장이라 아무도 못 봅니다(「방어가 겹침」).
- *    🔎 렌더로 확인 — ⚡ 컷백 판의 wrap이 `w2m-oneone w2m-k-assist`이고 잔디가 그대로 깔립니다. */
+/* ---------- ⚡ 컷백 연결 — 같은 격자, 골라인 앞의 땅 ---------- */
 .w2m-k-assist .w2m-goal {
   background:
     linear-gradient(180deg, var(--m-face), transparent 60%),
     repeating-linear-gradient(90deg, var(--turf) 0 22px, var(--turf2) 22px 44px);
 }
-/* ⚪ 골라인 — 화면에서 제일 단호한 흰 선이에요. «이 앞이 문전»입니다. */
 .w2m-k-assist .w2m-goal::before {
   content: ""; position: absolute; left: 0; right: 0; top: 0; height: 4px;
-  background: var(--cream);
-  /* 상자 테두리(파란 --line)와 **붙어 있으면 같은 선으로** 읽혀요 — 아래에 그늘을 한 줄 깝니다 */
-  box-shadow: 0 1px 3px rgba(0, 0, 0, .75);
+  background: var(--cream); box-shadow: 0 1px 3px rgba(0, 0, 0, .75);
   pointer-events: none;
 }
-/* 🥅 문전에는 기둥이 없어요 (ONE.post는 지금 **그림만**이고 판정에 안 걸립니다) */
-.w2m-k-assist .w2m-post { display: none; }
 
-/* ═════════ 3. 🎯 킬패스 — 조준 + 타이밍 ═════════ */
-.w2m-pitch {
-  position: relative; overflow: hidden;
-  height: clamp(92px, 26vw, 124px);
-  border-radius: 10px; border: 2px solid var(--line);
+/* ---------- 🧱 슛 코스 막기 — **우리 골문** (12번 §4-3 · 결정 A) ----------
+ * 판도 산식도 🥅와 한 벌입니다(`runShotGrid`) — 갈리는 것은 **겉옷 넷**뿐이에요(12번 §16):
+ *   ① 우리 골문 — 솔빛고 남색 안쪽 + 흰 실 그물 + 흰 기둥(상대 골문은 검은 안쪽 + 옅은 실)
+ *   ② 우리 색 — 상자 테두리 · 상황 알약이 하늘빛(🥅는 앰버)
+ *   ③ 🧤 우리 키퍼 — 라임색 골키퍼 상의(태오 · 서아의 그림과 같은 색 — 12번 §9-3). 🥅의 상대 키퍼는 흰빛
+ *      🎨 12번 §4-3은 「키퍼 옷도 우리 학교 색」이라 적었는데, 그 뒤 그림에서 태오 · 서아가 **라임색**으로
+ *         섰습니다. 초상에서 본 그 옷이어야 「우리 키퍼」로 읽혀요 — 그림을 따랐습니다
+ *   ④ 밝은 칸 — **차가운 하늘빛**(`--m-lit-def`). 🥅의 앰버와 **다른 축**이라 한 화면에서 안 섞여요
+ * 🔴 🦶 주발 절반(앰버 ↔ 회색)은 **그대로** 둡니다 — 수비수에게도 주발은 판정 창 ±25%예요(12번 §4-3).
+ *    주발 표시를 수비에서 빼면 **죽은 스위치**가 됩니다(옛 II 유스에서 데인 자리).
+ * 🔒 `--m-lit` · `--m-lit-next`는 JS가 인라인 `var(--m-lit, …)`로 읽습니다 — 이 상자에서 변수만
+ *    갈아 끼우면 칸의 **밝기(=판정)는 한 톨도 안 바뀌고 색만** 바뀝니다. */
+.w2m-k-defend { --m-lit: var(--m-lit-def); --m-lit-next: var(--m-lit-def-next); --m-hit: var(--sky); border-color: var(--sky); }
+.w2m-k-defend .w2m-stake,
+.w2m-ready.w2m-k-defend .w2m-stake { color: var(--ink-def); background: linear-gradient(180deg, var(--sky-hi), var(--sky)); }
+.w2m-ready.w2m-k-defend { border-color: var(--sky); }
+.w2m-k-defend .w2m-why b, .w2m-ready.w2m-k-defend .w2m-ready-lines b,
+.w2m-ready.w2m-k-defend .w2m-ready-lines li::before { color: var(--sky); }
+/* 흰 골대(기둥 · 크로스바 3px) + 땅 쪽은 옅은 선 — 틀 하나로 「우리 골대」를 그립니다 */
+.w2m-k-defend .w2m-goal {
+  border-width: 3px 3px 2px; border-color: var(--cream) var(--cream) var(--line);
   background:
-    repeating-linear-gradient(90deg, var(--turf) 0 22px, var(--turf2) 22px 44px);
+    repeating-linear-gradient(90deg, transparent 0 9px, var(--m-net-def) 9px 10px),
+    repeating-linear-gradient(0deg, transparent 0 9px, var(--m-net-def) 9px 10px),
+    var(--m-face-def);
 }
-/* 🚩 오프사이드 라인 — 넘으면 s=0이에요. 화면에서 제일 단호한 선이어야 합니다. */
-.w2m-offside {
-  position: absolute; top: 0; bottom: 0; width: 2px;
-  background: var(--accent2);
-  box-shadow: 0 0 8px var(--accent2);
+.w2m-k-defend .w2m-goal:active { border-color: var(--sky) var(--sky) var(--line); }
+.w2m-k-defend .w2m-keeper-body {
+  background: linear-gradient(180deg, var(--keeper-ours), var(--keeper-ours-2));
+  box-shadow: inset 0 0 0 2px var(--cream), 0 0 14px rgba(0, 0, 0, .5);
 }
-.w2m-offside b {
-  position: absolute; right: 4px; bottom: 2px;
-  font-size: .58rem; font-weight: 400; letter-spacing: .02em;
-  color: var(--accent2); white-space: nowrap;
+/* 판정 색 — 완벽 하늘빛 · 좋아요 크림 · 놓침 붉음(🥅의 완벽 앰버와 같은 자리, 다른 축) */
+.w2m-k-defend.w2m-t-perfect { --m-hit: var(--sky); border-color: var(--sky); }
+.w2m-k-defend.w2m-t-ok { --m-hit: var(--cream); border-color: var(--cream); }
+/* 🏃 상대 슈터 — 키퍼가 붙은 쪽 아래에서(12번 §4-3). DOM과 자리는 engineer(`winger-moment.js`)가 박습니다.
+ * 🔴 여기서는 **옷만** — 움직임(자리)은 JS 값이라 transition · animation을 걸지 않습니다(위 ②).
+ * ✅ 클래스 이름 `w2m-shooter`(+ 방향 `w2m-shooter-l` · `-r`)는 engineer의 DOM과 맞춰 확인했어요. */
+.w2m-shooter {
+  position: absolute; bottom: 2px; z-index: 2; pointer-events: none;
+  font-size: 1.15rem; line-height: 1;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .7));
 }
-/* ①②③ 줄 이름표 — **안 움직입니다.** 왼쪽 끝에 고정이에요.
- * 달리는 아이콘에 숫자를 붙였더니 맨 윗줄에서 경기장 밖으로 나가 잘렸어요
- * (.w2m-pitch가 overflow:hidden). 줄 순서 = 버튼 ①②③ 순서라 이걸로 충분해요. */
-.w2m-lane-no {
-  position: absolute; left: 5px; transform: translateY(-50%);
-  font-size: .68rem; font-weight: 400; line-height: 1; color: var(--accent); opacity: .75;
-}
-/* 동료 — 폭 100% 트랙을 translateX(%)로 밀어요. ⛔ transition 금지. */
-.w2m-run { position: absolute; left: 0; right: 0; height: 0; line-height: 0; will-change: transform; }
-.w2m-run .w2m-run-ico {
-  position: absolute; left: 0; top: 0; transform: translate(-50%, -50%);
-  font-size: 1.05rem; line-height: 1;
-}
-.w2m-run.w2m-offside-run { opacity: .3; }
-.w2m-run-btn .w2m-run-no { color: var(--accent); }
-.w2m-run-btn:disabled .w2m-run-no { color: var(--dim); }
-.w2m-btns .w2m-run-btn { flex: 1 1 0; min-width: 5.2rem; font-size: .82rem; }
+/* 🏃는 글꼴마다 **왼쪽을 봅니다** — 왼쪽 기둥 밑의 슈터(`-l`)만 뒤집어 골문 가운데로 달려들게.
+ * 🔒 `transform`이 아니라 개별 `scale` 속성 — JS가 인라인 `transform: translateX(-50%)`를 박아 두어서
+ *    `transform`을 쓰면 그 자리를 덮어 슈터가 반 칸 밀려요(자리 = JS 값) */
+.w2m-shooter-l { scale: -1 1; }
 
-/* ═════════ 4. 🧱 차단 — 읽기 ═════════
- * 🚨 **여기에는 고를 때 움직이는 것이 하나도 없습니다.** 반짝임도, 카운트다운도,
- * 재촉하는 색 전환도요. 1초에 고르든 10초에 고르든 화면이 똑같아야 해요.
- * (🧊 볼카운트가 "타이밍처럼 생겼는데 핵심이 안 누르기"라 세 번 고치고 죽은 자리)
- * 판정 뒤의 섬광은 **내 입력에 대한 답**이라 예외예요 — 고르는 동안은 정지입니다. */
-.w2m-read {
-  display: flex; gap: 6px; justify-content: center; flex-wrap: wrap;
-  margin: 0 0 2px;
-}
-/* 읽을 것이 **둘**이라 칩도 둘. 한 문장으로 이으면 "주발"과 "몸 방향의 세기"가
- * 한 덩어리로 읽혀서, 세기에 따라 정답이 갈리는 이 판의 핵심이 안 보여요. */
-.w2m-sig {
-  flex: 1 1 8.5rem; max-width: 12rem;
-  display: flex; flex-direction: column; gap: 2px; align-items: center;
-  padding: .45rem .5rem; border-radius: 10px;
-  background: rgba(0, 0, 0, .28); border: 1px solid var(--line);
-  font-size: .8rem; line-height: 1.4; color: var(--text);
-}
-.w2m-sig > b { font-size: .7rem; font-weight: 400; color: var(--dim); }
-/* 🎨 세기는 **초록/빨강이 아니라 실선/점선**이에요. "살짝 흔들었어요"는 틀린 신호가
- * 아니라 **다른 쪽을 가리키는** 신호입니다 — 색으로 가르면 나쁜 신호로 읽혀요. */
-.w2m-tell-hi { border: 2px solid var(--accent); background: var(--m-strong); color: var(--cream); }
-.w2m-tell-lo { border: 2px dashed var(--m-weak-line); background: rgba(0, 0, 0, .28); color: var(--dim); }
-.w2m-tell-lo > b { opacity: .8; }
-/* 방향 셋은 한 줄에 — cup.js 승부차기(.pk-side)와 같은 모양이에요 */
-.w2m-btns.w2m-dirs .btn { flex: 1 1 0; min-width: 4.4rem; min-height: 62px; }
-.w2m-dir .w2m-dir-arrow { font-size: 1.3rem; }
-.w2m-dir .w2m-dir-lab { font-size: .78rem; color: var(--dim); }
-
-/* 좁은 폰 — 코스 버튼의 글자가 접히기 시작하는 폭이에요 */
-@media (max-width: 360px) {
-  .w2m-side .w2m-side-win { display: none; }
-  /* 🎯 킬패스의 ①②③은 **셋이 한 줄에** 있어야 해요. 하나가 아래로 내려가면 그 동료만
-   * 다른 급으로 보입니다 — 셋의 속도만 다르고 값은 같은 판이라 거짓말이 돼요.
-   * (실측: 320px 폰에서 셋째가 통째로 아래 줄로 내려가 폭이 2배가 됐습니다) */
-  .w2m-btns.w2m-dirs .btn, .w2m-btns .w2m-run-btn { min-width: 0; padding: 8px 3px; font-size: .78rem; }
-  .w2m-sig { flex-basis: 100%; }
-}
-
-/* ---------- ♿ 어지럼증·광과민성 — 축약 대상이 아닙니다 ----------
- *
- * 🔴 **끄더라도 네 판 다 할 수 있어야 해요.**
- * 🏃 컷인·🥅 마무리·🎯 킬패스는 **움직임이 판정의 일부**라 표적을 세울 수가 없습니다.
- * 세우면 게임이 사라져요. 그래서 이렇게 갈랐습니다 —
- *
- *   ⛔ 끕니다 : 판정 섬광 · 상자 흔들림 · 결과 줄 튀어오름 · 상자 등장 페이드 ·
- *              갭 기둥의 광 · 버튼 눌림 스케일 · Fx 파티클(fx.js가 스스로 봅니다)
- *   ✅ 남깁니다: 갭·키퍼·동료의 이동 (**판정 그 자체**) · 모든 글자와 색 ·
- *              칸 폭(🦶 주발) · ●●● 남은 왕복 · 조작 정확도 막대
- *
- * 즉 **정보는 한 톨도 안 사라지고 장식만 사라집니다.** 이동은 rAF가 직접 그리는
- * 것이라 CSS로 끄지도 않아요 — 여기서 실수로 지울 수 있는 자리가 아닙니다.
- *
- * 대신 장식이 빠진 만큼 **판정 칸을 또렷하게** 만듭니다: 테두리를 굵히고 칸을
- * 진하게 칠해요. 광이 없어도 어디를 노리는지 보여야 하니까요. */
+/* ---------- ♿ 순간 판 — 어지럼증 · 광과민성 ----------
+ * 🔴 끄더라도 판은 할 수 있어야 해요. 키퍼 · 슈터의 이동은 **판정 그 자체**라 CSS로 끄지 않습니다
+ *    (rAF가 직접 그려요). 끄는 것은 장식뿐 — 섬광 · 흔들림 · 결과 줄 튀어오름 · 상자 등장. */
 @media (prefers-reduced-motion: reduce) {
-  .w2m-box, .w2m-ready,
-  .w2m-box.w2m-hit::after, .w2m-t-miss, .w2m-res {
-    animation: none !important;
-  }
-  .w2m-btns .btn:active { transform: none; }
-  .w2m-hit .w2m-lane, .w2m-hit .w2m-goal, .w2m-hit .w2m-pitch,
-  .w2m-hit .w2m-read, .w2m-hit .w2m-sweeps { transition: none !important; }
-  /* 섬광이 사라진 자리를 **정지한 색**이 대신해요 — 판정이 무엇이었는지는 남아야 합니다 */
+  .w2m-box, .w2m-ready, .w2m-box.w2m-hit::after, .w2m-t-miss, .w2m-res { animation: none !important; }
+  .w2m-hit .w2m-goal { transition: none !important; }
+  /* 섬광이 사라진 자리를 정지한 색이 대신해요 — 판정이 무엇이었는지는 남아야 합니다 */
   .w2m-box.w2m-hit::after { opacity: var(--hit-a, .16); }
-  /* 갭 기둥의 광 대신 또렷한 흰 기둥으로 */
-  .w2m-gap > i { box-shadow: none; background: var(--cream); width: 12px; margin-left: -6px; }
-  .w2m-offside { box-shadow: none; width: 3px; }
-  /* 🦶 칸을 더 진하게 — 폭 차이가 광 없이도 읽혀야 해요 */
-  .w2m-gate, .w2m-half.w2m-weak { background: var(--m-weak-2); }
-  .w2m-gate.w2m-strong, .w2m-half.w2m-strong { background: var(--m-strong-2); }
-  /* 🔦 **칸의 상태 표시에는 여기서 끌 게 없습니다.** ◎(hot) · ●(in) · 빈칸 셋 다
-   * **정지 그림**이라, 이 판은 평상시 화면과 **한 픽셀도 다르지 않아요**(렌더로 쟀습니다).
-   * 🪦 예전엔 ▲/▼가 1.1초로 까딱여서 여기서 껐는데 그 둘이 지워졌어요 —
-   *    **끌 애니메이션이 없어졌으니 줄도 같이 지웁니다.** 남겨 두면 «여기서 무언가
-   *    달라진다»는 거짓 기별이 되고, 없어진 클래스가 CSS에만 사는 자리가 돼요.
-   * 🔴 칸의 `opacity`를 제일 쓰고 싶어지는 자리가 여기인데, 그건 G-2a가 막습니다. */
+  .w2m-half.w2m-weak { background: var(--m-weak-2); }
+  .w2m-half.w2m-strong { background: var(--m-strong-2); }
 }
-
-/* ---------- 🧬 선수 만들기 (조립대) ----------
- *
- * 🔴 **3택 카드를 폐기했습니다** (2026-08-30 · 74번 판정 ⑤).
- *    옛 주석은 3열 → 1열 캐러셀로 옮겨 온 내력을 적고 있었는데, **선수가 하나가 되어**
- *    캐러셀 자체가 사라졌어요 — 스와이프 · `●○○` · ‹ › 넘기기가 전부 없습니다.
- *    원래의 *"견줌"*은 📊 견주기 시트가 **직전 ↔ 지금 2열**로 이어받습니다.
- *
- * 🎨 색: 조립대는 선수가 하나라 구분색이 필요 없어요. `--pc-tone` 하나만 씁니다.
- *    📊 시트의 두 열(↩️ 직전 · 🎲 지금)만 색으로 갈라요. */
-.pbench { --pc-tone: var(--sky); }
-
-/* 👕 **킷** — 유니폼의 색이 여기 한 곳에 있습니다.
- *
- * 🔑 **읽는 곳이 셋**이에요. 넷이 아니라 셋인 게 아니라, 셋 다 **같은 네 값**을 봅니다:
- *      ① `char3d.js`의 3D 유니폼 (무대에서 `getComputedStyle`로 읽어요)
- *      ② 🧬 조립대 무대의 CSS 폴백 `.pc-jersey`
- *      ③ 🏠/💼 HUD의 미니 유니폼 `.w2-hudkit .pc-jersey`
- * 🔴 그래서 `.w2c-stage`가 아니라 **`:root`에 둡니다.** 무대에만 두면 HUD가 못 읽어서
- *    **두 벌의 색이 갈라져요** — 조립대에서 본 옷과 HUD의 옷이 다른 옷이 됩니다.
- *
- * 🏟️ **팀 색이 생기면 여기가 손잡이입니다.** 클럽이 정해질 때
- *    `document.documentElement.style.setProperty("--kit-body", …)` 네 줄이면
- *    3D·폴백·HUD가 **한 번에** 갈아입어요. 셰이더도 지오메트리도 마크업도 안 건드립니다.
- *    (한 화면만 다른 색으로 굳는 사고는 아이돌에서 절대색을 박았다가 실제로 났어요)
- * ⚠️ 지금은 **무지 유니폼**입니다 — 흰 유니폼을 야간 조명 톤으로 옮겼어요.
- *    `--cream`은 순백이 아니라 살짝 푸른 흰색이라 네이비 배경 위에서 안 튑니다. */
-:root {
-  --kit-body: #eaf0ff;      /* = --cream. 3D가 이 값을 문자열로 읽어서 var()를 못 풀어요 */
-  --kit-sleeve: #eaf0ff;
-  --kit-trim: #1a2547;      /* 소매·목·밑단 트림 — 참고 이미지의 검은 트림 자리 */
-  --kit-text: #141d3c;      /* 등에 새기는 글자색 */
-}
-.pcs-col.tone-a { --pc-tone: var(--sky); }
-.pcs-col.tone-b { --pc-tone: var(--accent2); }
-
-/* 🧬 조립대 본문 — 세로로 길어요. 스크롤을 허용하고 [이 선수로 시작]은 아래에 둡니다. */
-.pbench {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 12px 12px 10px;
-  text-align: left;
-  border-color: var(--line);
-}
-/* 🎬 슬롯 — 들어올 때 `data-slot` 순서대로 채워집니다
- * (0 🎲 두 벌 고르기 → 1 🌱 등급 → 2 📈 레이더 → 3 🎁 타고난 것). 0은 지연 없이 맨 먼저예요.
- *
- * ⚠️ **번호는 화면에 보이는 순서**예요. DOM 순서와 같습니다 — CSS `order`로 눈속임하면
- *    낭독 순서가 어긋나요. 순서를 바꿀 일이 생기면 `prospect.js`의 `benchHTML`에서 바꾸세요.
- * ⏱️ 짧게 잡았습니다(최대 0.39초). 🎲를 누를 때마다 다시 도는 연출이라
- *    길면 **굴리는 리듬을 잡아먹어요** — 굴림은 몇 번이든 눌러도 되는 행동입니다. */
-.pb-slot { display: block; animation: pbSlotIn .22s ease both; }
-.pb-slot[data-slot="1"] { animation-delay: .03s; }
-.pb-slot[data-slot="2"] { animation-delay: .10s; }
-.pb-slot[data-slot="3"] { animation-delay: .17s; }
-@keyframes pbSlotIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
-
-/* 🧍 머리글 = **무대**입니다. 이름·🎂·🦶는 무대 위에 얹혀요 (선수 소개 컷의 문법).
- * ⚠️ `position: sticky`가 여기 걸립니다 — 아래 「무대」 절의 설명을 보세요. */
-.pb-head {
-  position: sticky;
-  top: 0;
-  z-index: 3;
-  display: block;
-  margin: -12px -12px 4px;          /* 카드 안쪽 여백을 밀어내고 폭을 꽉 채웁니다 */
-  border-radius: 12px 12px 0 0;
-  overflow: hidden;
-  background: var(--field);          /* 스크롤한 내용이 무대 뒤로 비치면 안 돼요 */
-}
-/* 🔒 잠긴 사실 줄 — 🎂 나이 · 🦶 주발. **무대 밖으로 내렸습니다** (위 `.pc-id` 주석 참고).
- * 📏 키가 5번 작업에서 여기 합류합니다 */
-.pb-meta { display: block; font-size: .78rem; color: var(--dim); margin-top: -2px; }
-
-/* 🎁 타고난 것 — **굴릴 수 있는 것과 없는 것의 대비가 이 화면의 교육입니다.**
- * 그래서 📊 배분 상자(노랑 점선)와 **다른 색**으로 잠금을 말해요. */
-.pb-gift {
-  border: 1px dashed rgba(167, 139, 250, .34);
-  border-radius: 12px;
-  padding: 6px 8px;
-  background: rgba(167, 139, 250, .06);
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.pb-gift .pcg-cap b { color: #c4b5fd; }
-.pb-lock { font-size: .8rem; }
-
-/* 🎲 남은 예산 — 숫자와 점 **둘 다**로 읽혀야 해요.
- * ⚠️ 예산이 무제한이면 점이 없습니다(그릴 수가 없어요) — 그때는 쓴 횟수만 나옵니다. */
-.pb-budget { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 10px 0 6px; font-size: .78rem; color: var(--dim); }
-.pb-bud-lab { color: var(--text); }
-.pb-pips { display: inline-flex; gap: 6px; align-items: center; }
-.pb-pip { width: 10px; height: 10px; border-radius: 50%; background: var(--line); }
-.pb-pip.on { background: var(--accent); box-shadow: 0 0 6px rgba(255, 209, 102, .6); }
-.pb-bud-note { flex: 1 1 100%; font-size: .7rem; opacity: .85; word-break: keep-all; }
-
-/* 🧒 머리글 — 이름 · 🔒 잠긴 사실 · 실루엣 */
-/* 🧒 이름표 — **무대 위에 얹습니다.** 3D 뒤로 글자가 묻히지 않게 위쪽에 그늘(scrim)을 깔아요.
- *
- * 🔴 **이름 한 줄만 남겼습니다.** 🎂 나이·🦶 주발을 여기 같이 뒀더니 320px에서 두 줄로
- *    접히면서 **유니폼 등의 이름 위를 덮었어요**(렌더에서 확인 — 이름이 두 번 겹쳐 보입니다).
- *    이제 등에 진짜 이름이 새겨져 있으니, 무대 위 이름표는 **낭독용 한 줄**이면 충분합니다.
- * 🔒 `nowrap` + `ellipsis`가 **두 줄이 되는 길을 아예 막습니다** — 긴 이름이 와도
- *    세로로 자라지 않아요. 전체 이름은 등판이 보여 줍니다.
- * 🔒 렌더 검사가 `.pc-id`와 **등판의 화면 사각형이 안 겹치는지**를 잽니다(N절). */
-.pc-id {
-  position: absolute;
-  left: 12px; right: 40%; top: 6px;
-  z-index: 2;
-  min-width: 0;
-  display: block;
-  pointer-events: none;             /* 무대를 끌어 돌리는 손을 막지 않아요 */
-  text-shadow: 0 1px 3px rgba(4, 8, 20, .85);
-}
-.pc-name {
-  display: block; font-family: "Jua", sans-serif; font-size: 1.08rem;
-  color: var(--text); line-height: 1.25;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-.pc-age { display: block; font-size: .76rem; color: var(--dim); }
-
-/* 📈/📊 두 개의 자 — **같은 선수를 다른 잣대로 두 번** 봅니다.
- * 캡션이 그 말을 안 하면 화면에 모순이 있는 것처럼 읽혀요. */
-/* 🇰🇷 `word-break: keep-all` — 없으면 한국어가 낱말 한가운데서 끊겨요
- * (`다음 등급까 / 지예요`가 그대로 나왔습니다) */
-.pc-cap, .pcg-cap { display: block; font-size: .68rem; color: var(--dim); line-height: 1.5; word-break: keep-all; }
-.pc-cap b { color: var(--sky); }
-.pcg-cap b { color: var(--accent); }
-.pc-now {
-  display: block;
-  border: 1px dashed rgba(127, 209, 232, .32);
-  border-radius: 12px;
-  padding: 6px 6px 2px;
-  background: rgba(127, 209, 232, .05);
-}
-.pc-radar-box { display: block; text-align: center; }
-/* 📐 캔버스는 300×260이고 여기서 살짝만 줄여요(비율 ≈ 1.1).
- * 더 줄이면 radar.js가 캔버스 좌표에 12px로 박아 그리는 **라벨이 안 읽힙니다.** */
-.pc-radar { width: 100%; max-width: 272px; height: auto; }
-
-/* 📊 능력치 여섯 줄 — **줄의 주인공은 바와 ⭐**예요.
- * 열일곱의 타고난 값은 18~54라 글자는 거의 F~E입니다. 🎲 전후를 가르는 건 바예요. */
-.pc-grades {
-  display: block;
-  border: 1px dashed rgba(255, 209, 102, .3);
-  border-radius: 12px;
-  padding: 6px 8px;
-  background: rgba(255, 209, 102, .05);
-}
-.pcg-cap { margin-bottom: 4px; }
-.pcg-row { display: flex; align-items: center; gap: 6px; margin: 3px 0; padding: 1px 4px; margin-left: -4px; margin-right: -4px; border-radius: 8px; }
-.pcg-name { flex: 0 0 84px; font-size: .74rem; color: var(--text); text-align: left; white-space: nowrap; }
-.pcg-val { flex: 0 0 22px; font-size: .68rem; color: var(--dim); text-align: right; }
-
-/* ⭐ **이 화면의 진짜 주인공**이에요.
- * 여섯 칸이 거의 전부 `F`라, 알아야 할 건 *"지금 얼마나"*가 아니라
- * ***"어디까지 클 수 있나"***입니다 — 그래서 등급 글자보다 큽니다(16.3px vs 13.1px).
- * ⚠️ 별이 없는 줄도 **칸은 남겨요** — 아니면 이름 뒤 정렬이 줄마다 흔들립니다. */
-/* ⚠️ `min-width: 0` — 없으면 ⭐가 있는 줄만 칸이 min-content(≈20px)로 벌어져서
- *    **바 길이가 줄마다 2px씩 달라집니다.** 렌더에서 144 vs 146px으로 잡혔어요. */
-.pcg-row .pcg-star { flex: 0 0 20px; min-width: 0; font-size: 1.02rem; line-height: 1; text-align: center;
-  filter: drop-shadow(0 0 5px rgba(255, 209, 102, .75)); }
-.pcg-row.is-top { background: rgba(255, 209, 102, .13); box-shadow: inset 2px 0 0 var(--accent); }
-.pcg-row .stat-grade { flex: 0 0 18px; min-width: 18px; font-size: .82rem; opacity: .9; }
-
-/* 📏 **잠재력 바** (`.pcg-fill`) — 조립대와 📊 견주기 시트가 함께 쓰는 **절대 자**(값 ÷ 54).
- *
- * ⚠️ 아래 `.bar-fill.xp`(**XP 바** — 다음 승급까지)와 **다른 자예요. 합치지 마세요.**
- *    자는 그 화면이 던지는 질문이 정합니다:
- *      🧬 조립대 · 📊 시트 *"직전과 지금 중 어느 모양이 나은가"* → 절대 크기 → 잠재력 바
- *      🏠 유스 홈 · 💼 준비 *"다음 승급까지 얼마나"*  → 구간 진행률 → XP 바
- *    구간 진행률로 그렸더니 렌더에서 `패스 40(E)`이 **0px**, `스피드 24(F)`가 **99.6px**였어요 —
- *    바가 순서를 **거꾸로** 말하고 있었습니다. */
-.pcg-bar { flex: 1 1 auto; display: block; height: 8px; border-radius: 99px; overflow: hidden; background: #0a140d; }
-.pcg-fill { display: block; height: 100%; background: linear-gradient(90deg, #6ee7a0, #ffd166); }
-
-.pc-hint { font-size: .78rem; color: var(--dim); line-height: 1.6; word-break: keep-all; }
-.pc-trait, .pc-flaw { font-size: .82rem; line-height: 1.5; word-break: keep-all; }
-.pc-trait { color: var(--accent); }
-.pc-flaw { color: var(--accent2); }
-.pc-eff { display: block; font-size: .72rem; color: var(--dim); }
-/* ══════════════════════════════════════════════════════════════════
- * 🧍 무대 — 3D 캐릭터(char3d.js)가 서는 자리
- *
- * 🔑 **접히는 선 위에 무엇이 오는가**가 이 화면의 설계입니다 (390px 실측 기준):
- *      🧬 제목 32 + 안내 50 + 🧍 무대 240 + 🌱 등급 여섯 줄 195 ≈ **517px**
- *    390×667(작은 폰)에도 이 넷이 함께 들어옵니다. 📈 레이더와 🎁 타고난 것은 그 아래예요.
- *
- * 🔑 **왜 무대가 `sticky`이고 🎲가 화면 아래에 붙는가** —
- *    조립대는 세로로 1,300px이 넘고 🎲 버튼은 원래 y≈925(접히는 선 **아래**)에 있었어요.
- *    *"🎲를 굴리면 체형이 바뀝니다"*인데 **굴리는 순간 캐릭터가 화면 밖**이면
- *    아무 일도 안 일어난 것과 같습니다. 그래서 세로 스포츠 UI의 검증된 형태를 씁니다 —
- *    **위는 맥락을 고정(무대), 아래는 행동을 고정(🎲)**, 가운데만 스크롤.
- *
- * ⚠️ 이 무대는 **조립대 전용**이에요. 🔥 순간 카드가 도는 화면에는 안 깔립니다 —
- *    미니게임은 프레임 위에서 판정해서, 3D가 같이 돌면 곡선이 기기 성능에 의존해요.
- * ══════════════════════════════════════════════════════════════════ */
-.w2c-stage {
-  position: relative;
-  display: block;
-  width: 100%;
-  height: clamp(176px, 30vh, 240px);
-  overflow: hidden;
-  /* 🌙 조명 아래 잔디 — 절대색이 아니라 테마 변수입니다.
-   * 🎨 월드컵 테마가 `--turf`를 갈아도 무대가 같이 따라와요. */
-  background:
-    radial-gradient(120% 78% at 50% 118%, rgba(255, 159, 69, .20) 0%, rgba(255, 159, 69, 0) 62%),
-    radial-gradient(86% 70% at 50% 8%, var(--bg2) 0%, var(--bg) 100%);
-}
-/* 무대 바닥 — 👕 유니폼이 그 위에 **떠 있는** 것처럼 보이게 하는 그림자 한 장.
- * (공이 있던 자리예요. 공은 지웠지만 이 그림자는 남깁니다 — 없으면 옷이 허공에 뜹니다.)
- * ⚠️ 유니폼은 무대 **가운데**예요 (캐릭터판은 이름표에 왼쪽을 내주려고 오른쪽으로 비켰습니다) */
-.w2c-stage::before {
-  content: "";
-  position: absolute;
-  left: 50%; bottom: 16%;
-  width: 30%; height: 5.5%;
-  transform: translateX(-50%);
-  border-radius: 50%;
-  background: radial-gradient(closest-side, rgba(4, 8, 20, .6), rgba(4, 8, 20, 0));
-}
-/* 🌑 이름표 뒤 그늘 — **3D 위에 글자를 얹으니 반드시 필요합니다.**
- * 캐릭터가 돌면 뒤 밝기가 바뀌어요. 그늘이 없으면 어떤 각도에서는 이름이 안 읽힙니다.
- *
- * ⚠️ **위쪽에 깝니다.** 처음엔 아래쪽에 깔았는데 그 그늘이 ⚽ 공과 👟 축구화를
- *    통째로 삼켰어요 — 🦶 주발이 보이라고 만든 자리를 연출이 덮은 겁니다. */
-.pb-head::after {
-  content: "";
-  position: absolute;
-  left: 0; right: 0; top: 0;
-  height: 42%;
-  z-index: 1;
-  pointer-events: none;
-  background: linear-gradient(to bottom, rgba(6, 11, 26, .88) 0%, rgba(6, 11, 26, .42) 52%, transparent 100%);
-}
-.w2c-canvas {
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  width: 100%;
-  height: 100%;
-  display: block;
-  /* 🖐️ 좌우로 끌면 선수가 돌아가요. **세로 스크롤은 그대로 남깁니다** —
-   * 조립대는 세로로 길어서 여기서 스크롤을 뺏으면 화면이 갇힙니다. */
-  touch-action: pan-y;
-  cursor: grab;
-}
-.w2c-canvas:active { cursor: grabbing; }
-
-/* 🦶 주발 칩 — **글자가 말합니다. 좌우로 뜻을 만들지 않아요.**
- *
- * 🔴 캐릭터판은 ⚽ 공을 **주발 쪽**에 놓았어요. 캐릭터가 우리를 마주 보니
- *    *캐릭터의 왼발이 화면 오른쪽*이라 거울이 한 번 뒤집혔고, 그걸 세 겹으로 막았습니다.
- *    **유니폼은 돌아갑니다** — 앞을 보면 착용자의 왼쪽이 화면 오른쪽, 뒤를 보면 반대예요.
- *    **안정된 좌우가 없어서**, 공을 한쪽에 놓으면 **반 바퀴마다 거짓말**이 됩니다.
- *    예전에 🦶 표시의 색이 판정과 반대이던 버그가 정확히 그 형태였어요 —
- *    *"안 보이는 것"*이 아니라 **거짓말을 하고 있던 것**입니다.
- * ✅ 그래서 공은 **가운데**, 칩은 그 아래. 좌우를 외울 일이 아예 없습니다. */
-.w2c-foot {
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-  /* ⚠️ 3%입니다. 옷자락이 무대 아래쪽 22% 근처까지 내려와요(⚽ 공을 지우고 유니폼을
-   * 키운 뒤로) — 여기를 올리면 칩이 옷을 덮습니다. 렌더 검사 A절이 그걸 잽니다. */
-  bottom: 3%;
-  z-index: 2;
-  font-size: .72rem;
-  color: var(--text);
-  background: rgba(4, 8, 20, .62);
-  border: 1px solid var(--line);
-  border-radius: 99px;
-  padding: 2px 8px;
-  white-space: nowrap;
-}
-/* ⚽ **공을 지웠습니다** (2026-08-31 · 범민 님 *"공은 없애도 되고"*).
- *
- * 예전엔 char3d.js가 공의 화면 위치를 재서 `--ball-x`/`--ball-bot`으로 넘기고,
- * 칩이 그 아래에 붙었어요. 공이 사라지면서 **그 배선이 통째로 없어졌습니다** —
- * 칩은 이제 위의 기본 자리(가운데 아래)에 그냥 앉습니다.
- * 🔑 3D가 뜨든 안 뜨든 **칩 자리가 같아집니다.** 덜 얽힌 쪽이 맞아요. */
-
-/* 👕 **CSS 유니폼** — `<i>` 다섯 개와 글자 두 줄. 이미지도 캔버스도 없어요.
- *
- * 🔑 **폴백을 따로 만들지 않고 그 위에 3D를 얹습니다.** WebGL이 없거나(jsdom·구형 기기)
- *    three.js 내려받기가 실패하거나 컨텍스트를 잃으면 **아무것도 안 해도 이게 보입니다.**
- *    `.is-3d`가 붙으면 조용히 사라져요.
- * 🔑 **여기에도 이름과 번호가 글자로 들어갑니다.** 3D가 못 떠도 *"내 선수"*는 남아야 해요 —
- *    캐릭터판의 폴백은 실루엣이라 **누구인지 알 수 없었습니다.**
- * 🎨 색은 전부 `--kit-*` — 3D와 **같은 네 값**을 읽습니다. 팀 색이 생기면 같이 갑니다. */
-.pc-jersey {
-  position: absolute;
-  left: 50%; top: 46%;
-  transform: translate(-50%, -50%);
-  display: block;
-  width: 132px;
-  height: 148px;
-}
-.w2c-stage.is-3d .pc-jersey { display: none; }
-.pc-jersey i { position: absolute; display: block; }
-/* 몸통 — **아래로 벌어지는 사다리꼴.** 참고 이미지의 실루엣이에요 */
-.j-body {
-  left: 14px; top: 14px; width: 104px; height: 118px;
-  background: var(--kit-body);
-  clip-path: polygon(11% 0, 89% 0, 100% 96%, 97% 100%, 3% 100%, 0 96%);
-}
-.j-hem {
-  left: 14px; top: 122px; width: 104px; height: 10px;
-  background: var(--kit-trim);
-  clip-path: polygon(1% 0, 99% 0, 100% 60%, 97% 100%, 3% 100%, 0 60%);
-}
-/* 소매 — 바깥·아래로 벌어져요 */
-.j-sleeve {
-  top: 16px; width: 34px; height: 46px;
-  background: var(--kit-sleeve);
-  border-bottom: 5px solid var(--kit-trim);
-}
-.j-sleeve.l { left: 0; clip-path: polygon(30% 0, 100% 0, 100% 100%, 0 76%); border-radius: 4px 0 0 6px; }
-.j-sleeve.r { right: 0; clip-path: polygon(0 0, 70% 0, 100% 76%, 0 100%); border-radius: 0 4px 6px 0; }
-/* 목 트림 */
-.j-collar {
-  left: 50%; top: 13px; width: 34px; height: 13px;
-  transform: translateX(-50%);
-  border-radius: 50%;
-  background: var(--kit-trim);
-}
-/* 🇰🇷 등에 새겨지는 이름과 번호 — **비어 있으면 무지 유니폼**입니다 */
-.pc-jersey b {
-  position: absolute;
-  left: 14px; width: 104px;
-  text-align: center;
-  color: var(--kit-text);
-  font-family: "Jua", sans-serif;
-  font-weight: 400;
-  line-height: 1;
-  white-space: nowrap;
-  overflow: hidden;
-}
-.j-name { top: 36px; font-size: .82rem; letter-spacing: .5px; }
-.j-no { top: 56px; font-size: 3.1rem; }
 
 /* ═══════════════════════════════════════════════════════════════════
- * 👕 **HUD 미니 유니폼** — 🏠 유스 홈 · 💼 프로 화면의 이름 왼쪽에 섭니다
+ * 3. 🖼️ 장면 · 오버레이 · 초상 (scenes.js — window.W2Scenes)
  * ═══════════════════════════════════════════════════════════════════
- *
- * 🔴 **여기서 WebGL이 돌면 안 됩니다.** HUD는 늘 떠 있는 자리예요.
- *    🔥 순간 카드는 **프레임 위에서 판정**해서, 저사양 폰에서 3D가 같이 돌면
- *    `s` 분포가 내려가고 **곡선이 기기 성능에 의존**합니다 —
- *    밸런스 사고가 아니라 **밸런스를 잴 수 없게 되는 사고**예요.
- *
- * ✅ 그래서 HUD는 **3D를 굽지도, 돌리지도 않습니다. CSS 유니폼 그 자체를 줄여서 씁니다.**
- *    한 번 구워 캐시하는 방법(`toDataURL`)보다 이쪽이 낫다고 판단한 이유:
- *      ① 구우려면 **three.js 691KB를 HUD 화면에서 받아야** 합니다. 조립대는 커리어당
- *         한 번뿐이라, 이어하기로 들어온 판에는 구울 것이 없어요 —
- *         결국 🏠 유스 홈이 매번 three.js를 받게 됩니다(**「첫 로딩에 안 받기」가 깨져요**).
- *      ② 44px짜리 래스터 한 장을 위해 WebGL 컨텍스트를 여는 값이 너무 큽니다.
- *      ③ 🏟️ 팀 색이 생겼을 때 **다시 구울 필요가 없어요** — `--kit-*` 네 변수만 갈면
- *         3D·폴백·HUD가 한 번에 갈아입습니다. 캐시 수명주기가 아예 안 생겨요.
- *      ④ 세이브에 이미지를 넣을 이유가 사라집니다 (localStorage·클라우드 동기화 무관).
- *      ⑤ jsdom에서도 그대로 그려집니다 — 검사 14종이 안 죽어요.
- *
- * 🔑 **모양은 조립대 폴백과 글자 하나까지 같습니다.** 같은 마크업(`jerseyHTML`)에
- *    `transform: scale()`만 걸었어요 — 두 벌로 나뉘면 **반드시 갈라집니다.**
- *    `transform`은 합성만 다시 하니 저사양에서도 레이아웃·페인트가 안 돕니다.
- *
- * ⚠️ 자리는 `.hud-id` 안, 이름 **왼쪽**입니다 (base.css의 `.hud-avatar`가 쓰던 자리예요).
- *    📱 designer 로드맵의 **하단 액션바(ⓔ)**가 나중에 `.hud-acts` 자리에 들어올 텐데,
- *    거기를 안 건드리려고 일부러 위쪽 줄에 붙였습니다 — **자리를 뺏지 않아요.**
- *    세로도 안 늘어납니다: 이름+소속 두 줄이 이미 50px이라 그 안에 들어갑니다. */
-.w2-hudkit {
-  position: relative;
-  flex: 0 0 auto;
-  width: 44px;              /* 132 × 1/3 */
-  height: 50px;             /* 148 × 1/3 (올림) */
-}
-/* 무대 안의 `.pc-jersey`는 가운데 정렬로 떠 있어요 — 여기서는 좌상단 기준으로 눕힙니다 */
-.w2-hudkit .pc-jersey {
-  left: 0; top: 0;
-  transform: scale(.3333);
-  transform-origin: 0 0;
-}
-/* 🔢 번호만 남깁니다. 3.1rem × 1/3 ≈ 15px — 읽힙니다. (이름은 4px이라 안 넣어요) */
-.w2-hudkit .j-no { top: 44px; font-size: 3.4rem; }
+ * 장면 = **배경 + 반신 겹치기**(12번 §9-6 · 누끼 WebP). 반신은 아래를 대사 판이 덮어 허리께에서 잘립니다.
+ * 🔒 이름 공간: `.w2o-*` 오버레이 · `.w2p` 홈 초상 · `.w2f-*` 필름 · `.w2b-*` 도감 · `.w2-fig/face/glyph/mark/bgimg` 그림 조각.
+ *    engineer의 `w2-` 클래스와 겹치지 않게 골랐어요. */
 
-/* 🔢 **등번호 고르기** — 유니폼 등에 새겨질 번호를 여기서 정합니다.
- *
- * 🔑 포지션 관례 셋 중 하나예요 (공격수 9 · 윙어 7 · 미드 8 · 수비 4 …).
- *    자유 입력이 아닌 이유는 `prospect.js`의 `SHIRT_NOS` 주석에 적어 뒀습니다 —
- *    한 줄로 요약하면 **고르는 재미지 채우는 칸이 아니라서**예요.
- * ⚠️ 누르면 화면을 다시 그리지 않고 **등판 글자만** 갈아 끼웁니다 (`setShirtNo`).
- *    다시 그리면 🎬 슬롯 연출이 세 칸 다시 돌아서 고르는 맛이 사라져요.
- * ⚠️ 이 줄은 **자기 안에서 끝납니다** — 조립대 구성이 바뀌면 통째로 옮기면 돼요. */
-.pc-shirt { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.pc-shirt-lab { font-size: .78rem; color: var(--dim); }
-.pc-no {
-  min-width: 46px; min-height: 44px;      /* 👍 손가락 기준 — 44px 밑으로 내리지 마세요 */
-  padding: 0 10px;
-  font-family: "Jua", sans-serif;
-  font-size: 1.05rem;
-  color: var(--text);
-  background: var(--bg2);
-  border: 2px solid var(--line);
-  border-radius: 10px;
-  cursor: pointer;
-}
-.pc-no.on { color: var(--ink); background: var(--accent); border-color: var(--accent); }
-
-/* 🎲 · 📊 — **화면 아래에 붙는 행동 줄**입니다 (위 「무대」 절의 짝).
- *
- * 🔑 무대가 위에 고정되고 이 줄이 아래에 고정되니, 가운데를 아무리 스크롤해도
- *    **「캐릭터」와 「굴리는 손」이 언제나 한 화면에** 있습니다. 🎲를 누른 순간
- *    체형이 바뀌는 게 보여요 — 그게 이 화면의 전부입니다.
- * ⚠️ `sticky`라 문서 흐름에서 자리를 그대로 차지해요. 맨 아래까지 스크롤하면
- *    제자리로 돌아가고 [이 선수로 시작]이 그 아래에 온전히 나옵니다. */
-.pc-tools {
-  position: sticky;
-  bottom: 0;
-  z-index: 4;
-  display: flex;
-  gap: 8px;
-  padding: 6px 0 8px;
-  background: linear-gradient(to top, var(--bg) 62%, transparent);
-}
-.pc-tools .btn { margin: 0; flex: 1 1 0; font-size: .86rem; padding: 12px 4px; }
-
-/* 📊 견주기 시트 — 아래에서 올라와요 */
-/* ⚠️ `[hidden]`은 `display: flex`에 집니다 — 이 한 줄이 없으면 시트가 **처음부터 열려**
- * 카드를 통째로 덮어요 (390px 렌더에서 그대로 나왔습니다). */
-.pc-sheet[hidden] { display: none; }
-.pc-sheet {
-  position: fixed;
-  inset: 0;
-  z-index: 70;
-  background: rgba(0, 0, 0, .55);
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-}
-.pcs-panel {
-  width: 100%;
-  max-width: 520px;
-  max-height: 88vh;
-  overflow-y: auto;
-  background: var(--bg2);
-  border: 2px solid var(--line);
-  border-radius: 18px 18px 0 0;
-  padding: 12px 12px 20px;
-  animation: pcsUp .22s ease;
-}
-@keyframes pcsUp { from { transform: translateY(24px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-.pcs-head { display: flex; align-items: center; justify-content: space-between; font-family: "Jua", sans-serif; font-size: 1.05rem; color: var(--accent); }
-.pcs-x { min-width: 44px; min-height: 44px; background: none; border: 0; color: var(--dim); font-size: 1rem; cursor: pointer; }
-.pcs-cap { font-size: .72rem; color: var(--dim); line-height: 1.6; margin: 4px 0 8px; word-break: keep-all; }
-.pcs-cap b { color: var(--accent); }
-.pcs-tbl { width: 100%; border-collapse: collapse; table-layout: fixed; }
-.pcs-tbl th, .pcs-tbl td { padding: 5px 2px; text-align: center; vertical-align: middle; }
-.pcs-lab { width: 32%; text-align: left !important; font-size: .72rem; color: var(--dim); font-weight: 400; white-space: nowrap; }
-.pcs-col { font-size: .72rem; color: var(--pc-tone); line-height: 1.3; }
-.pcs-col span { display: block; font-size: .74rem; color: var(--text); overflow: hidden; text-overflow: ellipsis; }
-.pcs-tbl tr + tr { border-top: 1px solid rgba(255, 255, 255, .07); }
-.pcs-tbl td .stat-grade { display: block; font-size: .95rem; }
-.pcs-lab .pcg-star { font-size: .88rem; }
-.pcs-bar { display: block; height: 4px; margin: 3px auto 0; width: 72%; background: #0a140d; border-radius: 99px; overflow: hidden; }
-.pcs-fill { display: block; height: 100%; background: linear-gradient(90deg, #6ee7a0, #ffd166); }
-.pcs-best { background: rgba(255, 209, 102, .1); border-radius: 8px; }
-.pcs-txt { font-size: .72rem; color: var(--text); line-height: 1.4; }
-.prospect-talent { line-height: 1.8; font-size: .72rem; margin-top: 10px; }
-
-@media (max-width: 359px) {
-  /* 320px — 무대를 낮추고 폴백 유니폼을 줄여요. **접지는 않습니다** —
-   * 여기서 무대를 없애면 *"내 이름이 새겨진다"*는 이 화면의 유일한 이유가 사라져요. */
-  .w2c-stage { height: clamp(150px, 26vh, 190px); }
-  /* 320px은 무대가 좁아요 — 칩 글자만 줄입니다 (자리는 가운데 아래로 고정) */
-  .w2c-foot { font-size: .68rem; padding: 2px 6px; }
-  /* 👕 HUD 유니폼도 한 치수 줄여요. 320px에서는 이름 줄과 턴·자금 줄이 어차피
-   * 두 줄로 갈라지는데(재 봤어요), 유니폼이 그 갈라짐을 **더 벌리지는 않게** 합니다.
-   * ⚠️ 여기서 더 줄이면 🔢 번호가 10px 밑으로 내려가 못 읽어요 — 그럼 넣을 이유가 없습니다. */
-  .w2-hudkit { width: 36px; height: 41px; }
-  .w2-hudkit .pc-jersey { transform: scale(.2727); }
-  .pc-jersey { transform: translate(-50%, -50%) scale(.86); }
-  .pc-name { font-size: 1rem; }
-  .pcg-name { flex: 0 0 64px; font-size: .68rem; }
-  .pcg-row { gap: 4px; }
-}
-
-/* ♿ **축약 대상이 아닙니다.** 흔들림·회전은 어지럼증과 광과민성 발작을 부릅니다.
- * 🔑 그리고 **정보는 하나도 안 잃습니다** — 3D는 정지 포즈 한 장으로, 슬롯은 그 자리에서
- *    바로 보입니다(`animation: none`이면 `both`의 시작 상태 opacity:0에 갇히니 **끝 상태를
- *    직접 적어 줍니다**). 조립대에서 읽어야 할 것은 전부 그대로 남아요.
- * (3D 쪽 정지는 char3d.js의 `reduceMotion()`이 맡습니다 — 회전·숨쉬기를 끄고 한 장만 그려요) */
-@media (prefers-reduced-motion: reduce) {
-  .pcs-panel { animation: none; }
-  .pb-slot { animation: none; opacity: 1; transform: none; }
-}
-
-/* ---------- 📊 능력치 등급 F~S · XP 바 · 승급 카드 (70번 갈래 F2) ----------
- *
- * ⚠️ **뼈대만입니다. 연출은 director 몫이에요.** 클래스는 여기 다 나와 있어요:
- *   .stat-row.graded > .stat-grade(.g-F ~ .g-S) · .bar.xp-bar > .bar-fill.xp · .stat-xp
- *   .grade-up-layer > .grade-up-card > .gu-stat · .gu-from · .gu-arrow · .gu-to · .gu-say
- *   .pbench > .pb-head · .pb-meta · .pb-gift(.pb-lock) · .pb-slot · .pb-budget > .pb-pip
- *   .pc-grades > .pcg-cap · .pcg-row > .pcg-name · .pcg-star · .stat-grade · .pcg-bar > .pcg-fill
- *     ⚠️ 조립대의 바는 **잠재력 바(.pcg-fill)**예요 — 아래 XP 바(.bar-fill.xp)와 자가 다릅니다
- *
- * ⚠️ `.stat-row` · `.bar` · `.stat-val`의 본체는 **base.css(8종 공유)**에 있어요.
- * 여기서는 winger2 전용 클래스만 얹습니다 — 공유 파일은 안 건드려요. */
-.stat-grade {
-  flex: 0 0 auto;
-  min-width: 26px;
-  text-align: center;
-  font-size: .9rem;
-  font-weight: 800;
-  letter-spacing: -.5px;
-}
-.g-F { color: #8d9aa0; }
-.g-E { color: #9fb5a4; }
-.g-D { color: #7fd1e8; }
-.g-C { color: #6ee7a0; }
-.g-B { color: #ffd166; }
-.g-A { color: #ff9f45; }
-.g-S { color: #ff6b9d; text-shadow: 0 0 8px rgba(255, 107, 157, .55); }
-
-/* 📶 **XP 바** — **다음 승급까지 얼마**를 그려요. 100칸짜리 절대 막대가 아닙니다.
- * 🏠 유스 홈 · 💼 준비가 던지는 질문이 *"다음 승급까지 얼마나"*라서요.
- * ⚠️ 🧬 조립대·📊 견주기 시트의 **잠재력 바(.pcg-fill)**와 자가 다릅니다 —
- *    거기 질문은 *"직전과 지금 중 어느 모양이 나은가"*라 절대 크기예요. **한 클래스로 묶지 마세요.** */
-.bar-fill.xp { background: linear-gradient(90deg, #6ee7a0, #ffd166); }
-.stat-xp { flex: 0 0 auto; min-width: 40px; text-align: right; font-size: .66rem; color: var(--dim); }
-/* 🔢 숫자는 **작게 병기**해요 — 주인공은 등급입니다 */
-.stat-row.graded .stat-val { font-size: .72rem; color: var(--dim); width: 26px; }
-.stat-row.graded .stat-val.max { color: #ffd166; }
-.stat-row.graded .stat-pot { min-width: 58px; font-size: .64rem; }
-
-/* 🎉 승급 카드 — 화면 위에 잠깐 떴다 사라져요.
- * 매끄러운 증가는 만족스럽지 않고 **문턱을 넘는 순간**이 필요해요 (설계 §B-3).
- *
- * ⚖️ **무게를 나눕니다** (2026-08-30 · director · 설계 갈래 F ④):
- *
- *   주 스탯(`.has-main`) → **큰 카드**. 🎉 · 테두리 발광 · 반짝임 · 크게 튀어오름
- *   그 밖(`.grade-up-card`) → **작은 토스트**. 조용히 떴다 집니다
- *
- * 36턴에 5~6장뿐이라(실측) 한 장 한 장이 사건이어야 하는데, 전부 같은 무게면
- * *"내 무기가 컸다"*와 *"넓게 컸다"*가 같은 소리로 들려요.
- *
- * 🚧 **가운데 무게(S2·S3 = 보통 카드)는 아직 못 만듭니다.** `POS_INFO`에 주 스탯
- *    (`stat`) 하나뿐이라 코드 어디에도 2·3순위가 없어요. 연출이 그걸 정하면 그건
- *    표시가 아니라 **설계**입니다 — designer/engineer가 S2·S3를 정하면 여기에
- *    `.gu-row.gu-sub` 한 줄만 더하면 됩니다.
- *
- * ⚠️ 카드는 **한 턴에 한 장**이에요(두 칸이 올라도 줄이 둘). 2.6초짜리를 쌓으면
- *    손이 5.2초 멈춥니다 — grade.js가 그렇게 짜여 있어요.
- * ⚠️ 애니메이션은 **transform·opacity만** 씁니다. 순간 카드가 도는 중에 이게 겹치면
- *    프레임이 흔들리고, 미니게임은 프레임 위에서 판정해요. */
-.grade-up-layer {
-  position: fixed;
-  left: 50%;
-  top: 18%;
-  transform: translateX(-50%);
-  z-index: 60;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  align-items: center;
-  /* 🖐️ 훈련을 연타해도 **손을 막지 않아요** — 카드는 보이기만 합니다 */
-  pointer-events: none;
-  max-width: 92vw;
-}
-/* ── 작은 토스트 (기본) ── */
-.grade-up-card {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  padding: 7px 12px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: rgba(12, 30, 18, .92);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, .4);
-  animation: gradeUpToast 2.6s ease forwards;
-}
-/* ── 🎯 큰 카드 — 주 스탯이 오른 판. *"내 무기가 컸다"* ── */
-.grade-up-card.has-main {
-  position: relative;
-  gap: 5px;
-  padding: 14px 22px;
-  border: 2px solid var(--accent);
-  border-radius: 16px;
-  background: linear-gradient(180deg, rgba(46, 38, 14, .97), rgba(12, 30, 18, .97));
-  box-shadow: 0 10px 30px rgba(0, 0, 0, .55), 0 0 22px rgba(255, 209, 102, .35);
-  animation: gradeUpPop 2.6s ease forwards;
-}
-/* ✨ 반짝임 둘 — 요소를 안 늘리려고 가상요소로 씁니다 (JS는 그대로예요) */
-.grade-up-card.has-main::before,
-.grade-up-card.has-main::after {
-  content: "✨";
-  position: absolute;
-  top: -10px;
-  font-size: .9rem;
-  animation: guSpark 2.6s ease-out forwards;
-}
-.grade-up-card.has-main::before { left: 6px; }
-.grade-up-card.has-main::after { right: 6px; animation-delay: .12s; }
-.gu-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: .78rem;
-  white-space: nowrap;
-  opacity: .82;
-}
-.gu-row.gu-main { font-size: 1.14rem; opacity: 1; }
-.gu-stat { font-weight: 700; }
-.gu-from { color: var(--dim); font-weight: 800; }
-.gu-arrow { color: var(--dim); }
-.gu-to { color: var(--accent); font-weight: 800; font-size: 1.1em; }
-.gu-main .gu-to { text-shadow: 0 0 10px rgba(255, 209, 102, .6); }
-.gu-say { color: var(--dim); font-weight: 700; }
-.gu-main .gu-say { color: var(--accent); }
-@keyframes gradeUpPop {
-  0%   { opacity: 0; transform: translateY(14px) scale(.86); }
-  12%  { opacity: 1; transform: translateY(0) scale(1.12); }
-  22%  { transform: translateY(0) scale(1); }
-  82%  { opacity: 1; transform: translateY(0) scale(1); }
-  100% { opacity: 0; transform: translateY(-10px) scale(.98); }
-}
-@keyframes gradeUpToast {
-  0%   { opacity: 0; transform: translateY(8px); }
-  10%  { opacity: 1; transform: translateY(0); }
-  80%  { opacity: 1; transform: translateY(0); }
-  100% { opacity: 0; transform: translateY(-6px); }
-}
-@keyframes guSpark {
-  0%   { opacity: 0; transform: translateY(6px) scale(.6); }
-  18%  { opacity: 1; transform: translateY(-6px) scale(1.15); }
-  55%  { opacity: .9; transform: translateY(-10px) scale(1); }
-  100% { opacity: 0; transform: translateY(-16px) scale(.9); }
-}
-/* ♿ 움직임을 줄이는 설정이면 뜨고 지기만 해요 — **무게 차이는 그대로 남습니다**
- * (크기·테두리·발광은 애니메이션이 아니라 정적인 차이라서요) */
-@media (prefers-reduced-motion: reduce) {
-  .grade-up-card, .grade-up-card.has-main { animation: none; opacity: 1; }
-  .grade-up-card.has-main::before, .grade-up-card.has-main::after { animation: none; opacity: .9; }
-}
-
-/* 🌱 유망주 카드의 능력치 여섯 줄은 **위 유망주 절**에 있어요 (`.pcg-*`).
- * 여기 있던 `.pcg-row .bar { flex: 0 0 26px }`는 3열 시절의 잔재였습니다 —
- * 바가 26px이면 셋을 가르는 유일한 정보가 다 똑같아 보여요.
- * 그리고 그 바는 이제 `.bar.xp-bar`가 아니라 **`.pcg-bar > .pcg-fill`**입니다. */
-
-@media (max-width: 520px) {
-  /* 좁은 화면에선 XP 숫자를 접어요 — 등급과 바가 먼저입니다 */
-  .stat-xp { display: none; }
-  .stat-row.graded .stat-pot { min-width: 44px; font-size: .6rem; }
-}
-
-/* ══════════════════════════════════════════════════════════════════════
- * 🦶 주발 · 🗺️ 동네 — 생성 흐름 앞단 두 화면 (설계 93번 §3·§4)
- * ══════════════════════════════════════════════════════════════════════
- * ⚠️ **곧 재배치됩니다** — 🏫 학교 3단계가 들어오면 🎯 자리가 카드 뒤로 빠져요.
- *    그래서 이 절은 주변 선택자에 안 기댑니다(`.screen` 안쪽 자기 클래스만 씁니다).
- * ♿ prefers-reduced-motion 블록은 이 절 **맨 아래**에 있어요 — 축약 대상이 아닙니다. */
-
-/* 🔢 생성 화면 차례 — `WingerIntro.STEPS`가 글자를 채웁니다 */
-.step-head { display: flex; align-items: baseline; justify-content: space-between; gap: .5rem; }
-.step-no { font-family: "Jua", sans-serif; font-size: .78rem; color: var(--dim); letter-spacing: .05em; white-space: nowrap; }
-
-/* ---------- 🦶 주발 ---------- */
-/* 📐 두 발을 **크게** 두고 ← 뒤로는 화면 아래에 붙입니다 (설계 93번 §3-3의 그림).
- * 그러려면 화면 자체가 세로로 늘어나야 해요 — `.screen.active`의 block을 덮습니다. */
-#screen-foot.active { display: flex; flex-direction: column; min-height: calc(100vh - 68px); }
-/* 🦶 발을 고른 뒤 [다음]을 눌러야 넘어가요 (2026-09-02 · 111번 · 범민 님 요청).
- * 여기는 `#btn-back-foot { margin-top: auto; }`로 **뒤로만** 바닥에 붙이던 자리였습니다 —
- * 이제 바닥에 붙는 건 [뒤로 · 다음] 두 짝이에요. 🗺️ `.origin-bar`와 같은 문법입니다. */
-.foot-bar { display: flex; gap: 8px; margin-top: auto; padding-top: 10px; }
-.foot-bar .btn { width: auto; margin-top: 0; }
-.foot-bar #btn-back-foot { flex: 0 0 auto; padding: 14px 16px; }
-.foot-bar #btn-foot-next { flex: 1 1 auto; }
-.foot-bar .btn:disabled { opacity: .45; cursor: default; box-shadow: none; }
-.foot-pair { display: flex; gap: 12px; margin: .2rem 0 .5rem; }
-.foot-card {
-  flex: 1 1 0; min-width: 0; min-height: 292px;
-  display: flex; flex-direction: column; align-items: center; gap: .35rem;
-  padding: 14px 8px 10px; border-radius: 18px; cursor: pointer;
-  background: linear-gradient(180deg, var(--bg2), var(--field));
-  border: 2px solid var(--line); color: var(--text);
-  transition: transform .16s ease, border-color .16s ease, box-shadow .16s ease;
-}
-/* 🔴 **고른 것이 확실히 보여야 합니다** (111번). 탭해도 바로 안 넘어가니, 표시가
- *    약하면 *"눌렸나?"*가 돼요. 그래서 넷을 겹칩니다 —
- *      ① 앰버 테두리 + 글로우   ② ⚽ 공이 발 앞으로 굴러들어옴
- *      ③ ✓ 배지               ④ **안 고른 쪽을 흐리게** (`.foot-pair.chosen`)
- *    ④는 고르기 **전에는 안 걸립니다** — 두 장 다 멀쩡해야 「아직 안 골랐다」가 읽혀요. */
-.foot-card.on {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(255, 209, 102, .28), 0 6px 18px rgba(255, 159, 69, .18);
-}
-.foot-card.picked { transform: translateY(-5px) scale(1.03); }
-.foot-pair.chosen .foot-card:not(.on) { opacity: .5; filter: saturate(.45); }
-/* ✓ 배지 — `opacity`로만 숨겨요. `display:none`으로 두면 켜질 때 카드가 흔들립니다. */
-.foot-pick {
-  font-size: .72rem; font-weight: 700; letter-spacing: .02em;
-  padding: 3px 10px; border-radius: 999px;
-  background: var(--accent); color: var(--ink);
-  opacity: 0; transform: translateY(-3px);
-  transition: opacity .16s ease, transform .16s ease;
-}
-.foot-card.on .foot-pick { opacity: 1; transform: none; }
-.foot-name { font-family: "Jua", sans-serif; font-size: 1.06rem; color: var(--text); }
-.foot-card.on .foot-name { color: var(--accent); }
-
-/* 🦶 발 한 짝 — **CSS로 그립니다.** 이미지도 캔버스도 안 써요(오프라인 PWA).
- * 기본 그림은 오른발이고, 왼발은 그림만 통째로 좌우 반전합니다
- * (`.foot-name`·판정 창은 밖에 있어서 안 뒤집혀요 — 글자가 뒤집히면 안 되니까요). */
-/* 📐 그림은 **크게**. 96 × 104로 그리고 통째로 1.2배 키웁니다 —
- * 안쪽 좌표를 전부 다시 잡는 것보다 안 어긋나요(반전도 같은 transform에 얹습니다). */
-.foot-art { position: relative; width: 96px; height: 104px; flex: 0 0 128px; }
-/* 🔴 **좌우가 눈에 띄게 달라야 합니다.** 앞코가 어디를 향하는지가 안 보이면
- *    두 카드가 똑같아 보여서 「왼발/오른발」이 글자로만 남아요(원칙 ③).
- *
- *    처음엔 clip-path로 축구화 옆모습을 그렸는데 **범민 님이 「그림이 이상하다」**고
- *    하셨어요. 이모지는 폰트가 그려 주니 어느 기기에서도 축구화로 보입니다.
- *    👟은 **앞코가 오른쪽**을 향하니 기본이 오른발이고, 왼발은 통째로 뒤집어요. */
-.foot-card[data-foot="L"] .foot-art { transform: scaleX(-1); }
-.foot-shoe {
-  position: absolute; left: 8px; top: 26px;
-  font-size: 62px; line-height: 1; font-style: normal;
-  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, .45));
-}
-/* ⚽ 공은 **고른 쪽 발 앞**에만 붙어요 — 탭한 순간 굴러들어옵니다 */
-.foot-ball {
-  position: absolute; left: 63px; top: 55px; font-size: 25px; line-height: 1;
-  opacity: 0; transform: translateX(-14px);
-  transition: opacity .2s ease, transform .2s ease;
-}
-.foot-card.on .foot-ball { opacity: 1; transform: none; }
-
-/* 🎯 판정 창 미리보기 — **그려진 칸 폭이 곧 판정 창**입니다.
- * 🔴 좌우와 색은 `intro.js`가 winger-moment.js의 판정 줄과 **같은 모양**으로 정해요.
- *    여기서 `order`나 `flex-direction: row-reverse`로 뒤집지 마세요 —
- *    2026-08-29에 정확히 그렇게 색과 판정이 갈라졌습니다. 폭도 인라인 flex 값이
- *    (1 ± FOOT_WIN) 그대로라 **여기서 덮으면 화면이 거짓말을 합니다.** */
-.foot-gate {
-  display: flex; width: 100%; height: 24px; margin-top: auto;
-  border-radius: 8px; overflow: hidden; border: 1px solid var(--line);
-}
-.fg-lane { display: flex; align-items: center; justify-content: center; font-size: .72rem; font-style: normal; min-width: 0; }
-.fg-lane.w2m-strong { background: var(--m-strong); box-shadow: inset 0 0 0 1px var(--m-strong-line); }
-.fg-lane.w2m-weak { background: var(--m-weak); box-shadow: inset 0 0 0 1px var(--m-weak-line); }
-.foot-gate-cap { font-size: .62rem; color: var(--dim); letter-spacing: .04em; }
-.foot-cap { font-size: .78rem; color: var(--dim); text-align: center; margin: .1rem 0 .5rem; }
-.foot-eff {
-  list-style: none; margin: 0 0 .2rem; padding: .6rem .75rem;
-  border-radius: 12px; background: var(--bg2); border: 1px solid var(--line);
-}
-.foot-eff li { font-size: .8rem; color: var(--dim); line-height: 1.7; }
-.foot-eff b { color: var(--accent); }
-
-/* ---------- 🗺️ 동네 지도 + 📖 스토리 ----------
- * 🖐️ 🏙️ 광역시 8곳은 지도에서 점 하나 크기(서울 ↔ 인천이 16단위)라 **폴리곤으로는
- *    못 눌러요.** 지도에는 핀만 찍고 탭은 옆 칸(`.origin-cities`)이 받습니다.
- *    그래서 핀에 `pointer-events: none`이 걸려 있어요 — 겹친 히트 영역을 안 만들려고요. */
-.origin-wrap { display: flex; gap: 8px; align-items: flex-start; }
-.origin-map { flex: 0 0 190px; width: 190px; height: 380px; }
-.origin-map svg { display: block; width: 190px; height: 380px; }
-.om-do {
-  fill: var(--field); stroke: var(--line); stroke-width: 1.3;
-  cursor: pointer; transition: fill .15s ease, stroke .15s ease;
-}
-.om-do.on { fill: var(--accent); stroke: #fff2cc; stroke-width: 2; }
-/* 🖱️ 눌러서 고른 뒤에 남는 **네모난 기본 포커스 테두리**를 지웁니다 —
- * 지도 위에서는 폴리곤 모양을 안 따라가서 흰 사각형으로 보여요.
- * ⌨️ 대신 키보드 초점(`:focus-visible`)에는 **하늘색 굵은 외곽선**을 남깁니다.
- *    접근성은 축약 대상이 아니에요 — 지우기만 하면 안 됩니다. */
-.om-do:focus { outline: none; }
-.om-do:focus-visible { outline: none; stroke: var(--sky); stroke-width: 3; }
-.om-lab {
-  font-family: "Jua", sans-serif; font-size: 13px; fill: var(--text);
-  opacity: .82; pointer-events: none;
-}
-.om-lab.on { fill: #4a3200; opacity: 1; }
-.om-pin { fill: var(--accent2); stroke: rgba(0, 0, 0, .5); stroke-width: 1; pointer-events: none; }
-.om-pin.on { fill: var(--accent); stroke: #fff2cc; stroke-width: 1.6; r: 7; }
-/* 🏷️ 광역시 이름표는 **고른 순간에만** — 8개를 늘 띄우면 서울 ↔ 인천이 겹쳐 못 읽어요.
- * 바탕판 대신 글자에 테두리를 둘러(`paint-order`) 지도 위 어디서든 읽히게 합니다. */
-.om-pin-lab {
-  font-family: "Jua", sans-serif; font-size: 12px; fill: var(--accent);
-  stroke: var(--bg); stroke-width: 3px; paint-order: stroke fill;
-  opacity: 0; pointer-events: none;
-}
-.om-pin-lab.on { opacity: 1; }
-/* 🏝️ 제주 확대 상자 — 실제 크기면 탭 칸이 40 × 25px이라 손가락에 안 맞아요 (`intro.js`의 INSET) */
-.om-inset-box { fill: rgba(0, 0, 0, .18); stroke: var(--line); stroke-width: 1; stroke-dasharray: 4 3; }
-
-.origin-cities { flex: 1 1 0; min-width: 0; height: 380px; display: flex; flex-direction: column; gap: 3px; }
-.om-city {
-  flex: 1 1 0; min-height: 44px; display: flex; align-items: center; gap: .35rem;
-  padding: 0 .5rem; border-radius: 10px; cursor: pointer;
-  background: var(--bg2); border: 1px solid var(--line); color: var(--dim);
-  font-family: "Jua", sans-serif; font-size: .86rem;
-}
-.om-city.on { background: var(--field); border-color: var(--accent); color: var(--accent); }
-.om-city-dot { flex: 0 0 9px; width: 9px; height: 9px; border-radius: 50%; background: var(--accent2); }
-.om-city.on .om-city-dot { background: var(--accent); box-shadow: 0 0 0 3px rgba(255, 209, 102, .25); }
-
-/* 📖 스토리 — **읽기 전용 화면을 안 만듭니다.** 고른 그 자리 아래에 펼쳐져요 */
-.origin-story {
-  margin-top: 12px; padding: 12px 14px; min-height: 104px;
-  border-radius: 14px; background: var(--bg2); border: 1px solid var(--line);
-}
-.om-empty { color: var(--dim); font-size: .86rem; line-height: 1.65; }
-.om-note { font-size: .76rem; }
-.om-place { font-family: "Jua", sans-serif; font-size: 1.02rem; color: var(--accent); margin-bottom: .35rem; }
-.om-story { font-size: .9rem; line-height: 1.8; color: var(--text); }
-.om-hof { margin-top: .6rem; padding-top: .55rem; border-top: 1px dashed var(--line); display: flex; flex-direction: column; gap: .12rem; }
-.om-hof-h { font-size: .74rem; color: var(--dim); }
-.om-hof-v { font-size: .84rem; color: var(--sky); }
-.om-hof-v.dim { color: var(--dim); }
-
-.origin-bar {
-  position: sticky; bottom: 0; z-index: 2; display: flex; gap: 8px;
-  padding: 10px 0 6px; background: linear-gradient(180deg, transparent, var(--bg) 45%);
-}
-.origin-bar .btn { width: auto; margin-top: 0; }
-.origin-bar #btn-back-origin { flex: 0 0 auto; padding: 14px 16px; }
-.origin-bar #btn-origin-next { flex: 1 1 auto; }
-.origin-bar .btn:disabled { opacity: .45; cursor: default; box-shadow: none; }
-
-/* ---------- 🏘️ 동네 진행 · 결과 (CSS가 아직 안 붙어 있던 자리) ----------
- * 🔴 색이 **판정과 같은 방향**이어야 합니다 — `town.js`가 붙이는 클래스는
- *      perfect → `hit` · ok → `mid` · miss → `bad`
- *    입니다. 잘한 쪽이 초록, 놓친 쪽이 붉은색이에요. 반대로 칠하면 화면이
- *    거짓말을 합니다(🦶 주발 색이 판정과 반대였던 그 사고와 같은 형태). */
-/* ⚠️ `.town-dot`은 **점이 아니라 칩**이에요 — `town.js`가 카드 이모지를 안에 넣습니다
- * (`<span class="town-dot hit">⚽</span>`). 12px 점으로 두면 이모지가 밖으로 삐져나와요. */
-.town-prog { display: flex; gap: 10px; justify-content: center; margin: .1rem 0 .9rem; }
-.town-dot {
-  position: relative; width: 38px; height: 38px; border-radius: 50%;
-  display: flex; align-items: center; justify-content: center; font-size: 1.05rem;
-  background: var(--bg2); border: 2px solid var(--line);
-  filter: grayscale(.7) opacity(.5);        /* 아직 안 뛴 판은 흐리게 */
-}
-/* 🚨 **처음엔 판정색을 `rgba(…, .18)`로 얹었는데, 헤드리스로 재 보니 perfect 칩이
- *    「초록」이 아니었습니다** — 칠한 색의 평균이 `(37, 73, 74)`, 즉 **파랑이 초록과
- *    같았어요. 바탕(`--bg2` = 남색)이 82%나 비쳐서, 민트를 얇게 얹으면 **청록**이 됩니다.
- *    잘한 판이 화면에서 「좋음」으로 안 읽히던 거예요 — 🦶 주발 색이 판정과 반대였던
- *    그 사고와 **같은 형태**(색이 판정과 다른 말을 함)입니다.
- * ✅ 그래서 **판정색을 바탕에 섞지 않고, 검은 스크림 아래에 통째로 깝니다.**
- *    `rgba(0,0,0,.55)` + `var(--good)` → `(50, 104, 72)` — 초록이 초록입니다.
- * 🔑 겸사겸사 **절대색이 사라집니다** — 예전 세 줄은 `--good`·`--accent`·`--accent2`를
- *    손으로 베낀 값이라, 테마가 움직이면 이 칸만 옛 색으로 남았어요.
- * 📏 재는 자: `scripts/w2-avatar-render.js` **T2절** (다섯을 한 줄에 세워 찍습니다) */
-.town-dot.now {
-  filter: none; border-color: var(--accent);
-  background: linear-gradient(rgba(255, 255, 255, .10), rgba(255, 255, 255, .10)), var(--bg2);
-  box-shadow: 0 0 0 4px rgba(255, 159, 69, .16);
-}
-.town-dot.hit { filter: none; border-color: var(--good); background: linear-gradient(rgba(0, 0, 0, .55), rgba(0, 0, 0, .55)), var(--good); }
-.town-dot.mid { filter: none; border-color: var(--accent); background: linear-gradient(rgba(0, 0, 0, .55), rgba(0, 0, 0, .55)), var(--accent); }
-.town-dot.bad { filter: none; border-color: var(--accent2); background: linear-gradient(rgba(0, 0, 0, .55), rgba(0, 0, 0, .55)), var(--accent2); }
-/* ♿ **색만으로 말하지 않습니다** — 색각 이상이면 초록/빨강이 같은 회색이에요.
- * 결과마다 글자 표식을 하나씩 답니다. 접근성은 축약 대상이 아니에요. */
-.town-dot.hit::after, .town-dot.mid::after, .town-dot.bad::after {
-  position: absolute; right: -3px; bottom: -3px; width: 16px; height: 16px; border-radius: 50%;
+/* ---------- 🧩 그림 조각 — 초상 · 이름 글자 · 감정 표시 · 배경 ---------- */
+.w2-fig { position: absolute; margin: 0; aspect-ratio: 2 / 3; animation: w2FigIn .32s ease both; }
+@keyframes w2FigIn { from { opacity: 0; transform: translate(-50%, 10px); } to { opacity: 1; transform: translate(-50%, 0); } }
+.w2-face { display: block; width: 100%; height: 100%; object-fit: contain; object-position: 50% 100%; }
+/* 🔤 그림이 없거나 못 받은 자리 — **이름 글자**(깨진 그림 금지 · 계약 5) */
+.w2-glyph {
   display: flex; align-items: center; justify-content: center;
-  font-size: .58rem; font-weight: 700; line-height: 1; color: var(--bg);
+  width: 100%; height: 100%;
+  font-family: "Jua", sans-serif; font-size: clamp(2rem, 14vw, 4.6rem); line-height: 1; color: var(--cream);
+  background: radial-gradient(ellipse 70% 55% at 50% 40%, var(--spot), transparent 75%), linear-gradient(180deg, var(--field), var(--bg2));
+  border-radius: 45% 45% 14px 14px;
 }
-.town-dot.hit::after { content: "✓"; background: var(--good); }
-.town-dot.mid::after { content: "·"; background: var(--accent); }
-.town-dot.bad::after { content: "✕"; background: var(--accent2); }
-.town-res {
-  margin-top: .7rem; padding: .7rem .8rem; border-radius: 12px;
-  background: var(--bg2); border: 1px solid var(--line); border-left-width: 4px;
-  font-size: .9rem; line-height: 1.6;
+/* 💬 감정 표시 — 옅은 표정을 받치는 말풍선(qa.md 관찰). 장식이라 aria-hidden, 표정은 대체 문구가 말함 */
+.w2-mark {
+  position: absolute; top: 7%; right: 12%; z-index: 2;
+  min-width: 2.2em; height: 2.2em; padding: 0 .35em;
+  display: flex; align-items: center; justify-content: center;
+  font-family: "Jua", sans-serif; font-size: clamp(.95rem, 4.4vw, 1.3rem); line-height: 1; color: var(--ink);
+  background: var(--cream); border-radius: 999px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, .45);
+  animation: w2Mark .5s cubic-bezier(.2, 1.5, .4, 1) .18s both;
 }
-.town-res.good { border-left-color: var(--good); }
-.town-res.mid { border-left-color: var(--accent); }
-.town-res.bad { border-left-color: var(--accent2); }
-.town-line { margin-top: .5rem; font-size: .84rem; color: var(--dim); line-height: 1.6; }
-.town-line b { color: var(--accent); }
-
-/* ---------- 🏟️ 경기 진행 (설계 101번 §3) ----------
- * 스코어보드·시계·흐름 막대·중계 피드는 `match-scene.js`의 `.w2-*`를 그대로 씁니다 —
- * 여기서는 **자리와 간격만** 잡아요. 🎬 결이 더 필요하면 director가 이어받습니다.
- * 🔒 `.town-place`의 **자라는 무대 띠**(`--st-h` 34→48→66px)와 위아래로 떨어져 있어요 —
- *    둘이 같은 자리를 다투면 단계가 커지는 게 안 보입니다. */
-#town-scene { margin: .2rem 0 .1rem; }
-#town-scene .w2-feed { padding-bottom: 0; }
-
-/* 🏁 단계 끝 스코어 — **여덟 판 뛰고도 누가 이겼는지 모르던 상태**를 끝냅니다.
- * 🔴 **표시입니다.** 승패는 편차 `d`에도 `spotMul`에도 한 톨도 안 닿아요. */
-.town-final {
-  margin-top: .55rem; padding: .5rem .7rem; border-radius: 10px;
-  font-family: "Jua", sans-serif; font-size: 1.05rem; text-align: center;
-  background: rgba(0, 0, 0, .22); border: 1px solid var(--line); color: var(--text);
+.w2-mark::after {
+  content: ""; position: absolute; left: 22%; bottom: -5px; width: 10px; height: 10px;
+  background: var(--cream); transform: rotate(45deg); border-radius: 0 0 3px 0;
 }
-.town-final.win { border-color: var(--good); color: var(--good2); }
-.town-final.lose { border-color: var(--bad); color: var(--bad); }
+.w2-mark.m-down { color: var(--field); }
+@keyframes w2Mark { from { opacity: 0; transform: scale(.4) translateY(6px); } to { opacity: 1; transform: none; } }
+.w2-bgimg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 45%; }
+.w2-rare { display: inline-block; font-size: .7rem; line-height: 1.5; padding: 0 7px; border-radius: 999px; border: 1px solid currentColor; white-space: nowrap; }
+.w2-rare.r1 { color: var(--r1); } .w2-rare.r2 { color: var(--r2); } .w2-rare.r3 { color: var(--r3); } .w2-rare.r4 { color: var(--r4); }
 
-/* ⏩ **[빨리감기]의 옷** (설계 153번 D-3)
- *
- * 🔒 **버튼은 `#btn-town-next` 그대로**입니다 — `town.js`가 `.town-fast` 한 겹만 얹어요.
- *    🔴 새 id를 만들지 않습니다: «🏫 학교 화면의 조작은 하나»(`town-test` T-7a)가
- *       그 순간 깨지고, 화면에 누를 것이 둘로 보입니다.
- *
- * 🔑 **[다음]과 달라 보여야 합니다.** 저건 «눌러야 다음이 온다»이고
- *    이건 «안 눌러도 흘러간다»예요 — 금색 채움과 두꺼운 그림자를 빼고 **테두리만** 남깁니다.
- *    누르면 사라지는 한 번짜리라 무게를 안 줘요.
- * 🔴 그래도 **손가락 칸은 축약 대상이 아닙니다** — `min-height: 44px`.
- * 🔒 `.btn.town-fast`로 적어 `.btn-primary`(0,1,0)의 `width: 100%`·배경·그림자를 덮습니다.
- *    ⚠️ `!important`로 이기지 마세요 — 다음 사람이 못 덮어요 (위 🧡 나의 그 흠과 같은 자리).
- * ♿ 등장 움직임은 reduce에서 꺼집니다. 버튼은 그대로 서 있어요. */
-.btn.town-fast {
-  display: block;
-  width: auto;
-  min-height: 44px;
-  margin: 10px auto 0;
-  padding: 10px 22px;
-  font-size: .95rem;
-  background: transparent;
-  color: var(--text);
+/* ---------- 🗓️ 홈 위 ⅓ — `.w2-portrait` 칸(engineer가 두고 `portrait()`가 채움 · 계약 13) ----------
+ * 🔒 `portrait()`는 칸의 자식을 **통째로 갈아요** — 주 · 컨디션 같은 글자는 칸 **밖**에 두세요.
+ * 🌸 계절 색만 CSS로(12번 §5-2) — 배경 그림은 봄 운동장 한 장이고, 여름 · 가을은 빛만 얹어요. */
+.w2-portrait, .w2p {
+  position: relative; overflow: hidden;
+  height: clamp(190px, 34vh, 300px);
+  border-radius: 16px; border: 1px solid var(--line);
+  background: linear-gradient(180deg, var(--sky), var(--field));
+}
+.w2p::after { content: ""; position: absolute; inset: 0; z-index: 1; pointer-events: none; }
+.w2p[data-season="summer"]::after { background: linear-gradient(180deg, var(--tint-summer), var(--tint-summer-2)); }
+.w2p[data-season="autumn"]::after { background: linear-gradient(180deg, var(--tint-autumn), var(--tint-autumn-2)); }
+.w2p-fig { left: 50%; bottom: -24%; height: 124%; z-index: 2; transform: translateX(-50%); }
+.w2p .w2-mark { top: 9%; right: 14%; }
+
+/* ---------- 🪟 오버레이 껍데기 (#w2-layer) ----------
+ * 🔒 한 번에 하나(scenes.js가 줄 세움) · 뒤 화면은 `html.w2-lock`으로 안 끌려감 · z 70(골 연출 88 · Fx 90보다 아래 —
+ *    승급 카드 위로 색종이가 떨어져야 해요) */
+.w2o {
+  position: fixed; inset: 0; z-index: 70;
+  display: flex; justify-content: center;
+  background: var(--scrim);
+  word-break: keep-all; overflow-wrap: anywhere;   /* 한국어는 낱말 단위로 — 「닫았\n다」처럼 끊기지 않게 */
+  animation: w2oIn .22s ease both;
+}
+.w2o:focus { outline: none; }
+@keyframes w2oIn { from { opacity: 0; } to { opacity: 1; } }
+.w2o-box {
+  position: relative; width: 100%; max-width: 480px; height: 100%;
+  display: flex; flex-direction: column; overflow: hidden;
+}
+/* 장면 — 배경 + 반신. 대사 판이 아래를 덮어요(반신이 판 뒤로 들어가 허리께에서 잘림) */
+.w2o-scene {
+  position: relative; flex: 1 1 auto; min-height: 34vh; overflow: hidden;
+  background:
+    radial-gradient(ellipse 80% 60% at 50% 45%, var(--spot), transparent 70%),
+    linear-gradient(180deg, var(--field), var(--bg));
+}
+/* 📏 반신은 장면 높이를 따라 크되 **폭 상한**이 있습니다(132vw · 상자 480px에서 634px) —
+ *    대사가 짧아 장면이 길어지면(도입 · 엔딩) 얼굴만 화면을 다 덮는 확대가 됐어요(렌더로 봄) */
+.w2o-scene .w2-fig { left: 50%; bottom: -12%; height: min(112%, 132vw, 634px); transform: translateX(-50%); }
+.w2o-panel {
+  position: relative; z-index: 3; flex: 0 1 auto;
+  max-height: 66vh; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain;
+  margin-top: -18px; padding: 16px 16px calc(16px + env(safe-area-inset-bottom, 0px));
+  background: var(--panel); border-top: 1px solid var(--line); border-radius: 18px 18px 0 0;
+  box-shadow: 0 -10px 24px rgba(0, 0, 0, .4);
+}
+.w2o-panel.is-ok { border-top: 3px solid var(--good); }
+.w2o-panel.is-bad { border-top: 3px solid var(--bad); }
+.w2o-kicker { font-size: .78rem; line-height: 1.4; color: var(--accent); margin-bottom: 4px; }
+.w2o-title { font-family: "Jua", sans-serif; font-weight: 400; font-size: 1.25rem; line-height: 1.35; color: var(--cream); margin-bottom: 6px; }
+.w2o-body { font-size: .92rem; line-height: 1.65; color: var(--text); white-space: pre-line; margin-bottom: 12px; }
+/* ♿ 눈에는 안 보이고 낭독만 하는 라벨(대화 장면 · 필름의 대화상자 이름) */
+.w2o-label {
+  position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden;
+  clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+.w2o-ok { width: 100%; margin-top: 12px; }
+.w2o-head { text-align: center; margin-bottom: 12px; }
+.w2o-sub { font-size: .82rem; line-height: 1.5; color: var(--dim); margin-top: 4px; }
+
+/* ---------- 🎲 선택지 — 도전 · 확정 · 약속 · 거래 · 🤝 사람 ----------
+ * 📱 한 장이 한 손가락 칸(최소 52px). 종류는 **색과 모양 둘로**: 도전 = 앰버 실선 · 약속 = 하늘빛 점선 · 확정 = 회색 */
+.w2o-opts { display: flex; flex-direction: column; gap: 8px; }
+.w2o-opt {
+  display: flex; flex-direction: column; align-items: stretch; gap: 4px; width: 100%; min-height: 52px;
+  padding: 11px 12px; border-radius: 12px; border: 1px solid var(--line);
+  background: rgba(0, 0, 0, .24); color: var(--text);
+  font: inherit; text-align: left; cursor: pointer;
+  touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+}
+.w2o-opt:active { transform: scale(.985); }
+.w2o-opt:focus-visible, .w2o-hero:focus-visible, .w2o-door:focus-visible, .w2f-rep:focus-visible, .w2b-tab:focus-visible {
+  outline: 3px solid var(--accent); outline-offset: 2px;
+}
+.w2o-opt.k-try { border-color: var(--accent); }
+.w2o-opt.k-promise { border-color: var(--sky); border-style: dashed; }
+.w2o-opt.is-off { opacity: .5; cursor: not-allowed; }
+/* 「돌아가기」(🤝 사람 고르기의 물러서기) — 고를 거리가 아니라 나가는 문이라 옅게 */
+.w2o-opt.k-back { min-height: 44px; border-style: dashed; background: transparent; }
+.w2o-opt.k-back .w2o-opt-label { font-family: inherit; font-size: .9rem; color: var(--dim); }
+/* 🐛 버튼 안 세로 flex에서 머리 줄이 **내용 폭으로 줄어**(120px) 짧은 이름(「넘긴다」 · 「🏠 아버지」)이 꼬리표 · 얼굴
+ *    아래로 떨어졌어요(진짜 게임 렌더에서 봄) — 머리 줄은 언제나 버튼 폭 전체를 씁니다 */
+.w2o-opt-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; width: 100%; }
+.w2o-tag { font-size: .72rem; line-height: 1.5; padding: 0 8px; border-radius: 999px; border: 1px solid currentColor; color: var(--dim); }
+.k-try .w2o-tag { color: var(--accent); }
+.k-promise .w2o-tag { color: var(--sky); }
+.w2o-opt-label { flex: 1 1 8em; font-family: "Jua", sans-serif; font-size: 1rem; line-height: 1.35; color: var(--cream); }
+.w2o-pct { font-size: .82rem; color: var(--dim); white-space: nowrap; }
+.w2o-pct b { font-family: "Jua", sans-serif; font-weight: 400; font-size: 1.2rem; color: var(--accent); }
+.w2o-parts, .w2o-sit, .w2o-cond, .w2o-opp, .w2o-ref, .w2o-none, .w2o-note { font-size: .78rem; line-height: 1.5; color: var(--dim); }
+.w2o-parts { color: var(--text); font-variant-numeric: tabular-nums; }
+.w2o-cut { color: var(--dim); }
+.w2o-cond { color: var(--cream); }
+.w2o-fx { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; font-size: .76rem; line-height: 1.5; }
+.w2o-fx-k { color: var(--dim); margin-right: 2px; }
+.w2o-chip { padding: 0 7px; border-radius: 999px; border: 1px solid var(--line); background: rgba(255, 255, 255, .05); color: var(--text); }
+.w2o-chip.good { border-color: var(--good); color: var(--good2); }
+.w2o-chip.bad { border-color: var(--bad); color: var(--bad); }
+/* 🤝 사람 — 반신을 **둥글게 잘라** 얼굴만(12번 §9-4 「조연의 작은 얼굴」 — 그림 0장) */
+.w2o-opt-face {
+  width: 40px; height: 40px; flex: none; border-radius: 50%; overflow: hidden;
+  background: radial-gradient(circle at 50% 35%, var(--spot), var(--field));
   border: 1px solid var(--line);
-  box-shadow: none;
+}
+.w2o-opt-face img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 0; transform: scale(1.7); transform-origin: 50% 8%; }
+.w2o-opt-face .w2-glyph { font-size: 1.1rem; border-radius: 50%; }
+.w2o-foot { display: flex; flex-direction: column; gap: 2px; margin-top: 10px; font-size: .72rem; line-height: 1.6; color: var(--dim); }
+/* 결과 카드 — 결말 글(📖 story-end) · 받은 것 칩 */
+.w2o-line2 { color: var(--cream); }
+.w2o-result-fx { margin: -4px 0 8px; font-size: .84rem; }
+
+/* ---------- 👥 카드 여섯 — 두 칸 × 세 줄(한 줄 = 한 주인공의 남 · 여 — 13번 §2-1) ----------
+ * 🔒 남 · 여를 색으로 가르지 않습니다(분홍 · 파랑 같은 성별 색 없음) — 이름표 글자 하나(남자부 · 여자부)만 달라요. */
+.w2o-pick .w2o-box, .w2o-book .w2o-box, .w2o-film .w2o-box, .w2o-shot .w2o-box {
+  display: block; overflow-y: auto; overscroll-behavior: contain; background: var(--bg);
+  padding: 18px 16px calc(24px + env(safe-area-inset-bottom, 0px));
+}
+.w2o-heroes { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.w2o-hero {
+  position: relative; display: flex; flex-direction: column; align-items: center; gap: 3px;
+  padding: 0 0 10px; border-radius: 14px; overflow: hidden;
+  border: 2px solid var(--line); background: linear-gradient(180deg, var(--field), var(--bg2));
+  color: var(--text); font: inherit; cursor: pointer; min-height: 44px;
+  touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+}
+.w2o-hero:not(.is-locked):active { border-color: var(--accent); transform: scale(.98); }
+.w2o-hero-fig {
+  position: relative; width: 100%; aspect-ratio: 4 / 5; overflow: hidden;
+  background: radial-gradient(ellipse 70% 60% at 50% 42%, var(--spot), transparent 75%), linear-gradient(180deg, var(--bg2), var(--field));
+}
+.w2o-hero-fig img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: 50% 0; }
+.w2o-hero-fig .w2-glyph { border-radius: 0; }
+.w2o-hero-name { font-family: "Jua", sans-serif; font-size: 1.15rem; line-height: 1.2; color: var(--cream); margin-top: 6px; }
+.w2o-hero-world { font-size: .7rem; line-height: 1.6; padding: 0 8px; border-radius: 999px; border: 1px solid var(--line); color: var(--sky); }
+.w2o-hero-line { font-size: .72rem; line-height: 1.4; color: var(--dim); padding: 0 8px; text-align: center; }
+.w2o-hero.is-locked { cursor: default; border-style: dashed; }
+.w2o-hero.is-locked .w2o-hero-fig > :not(.w2o-lock), .w2o-hero.is-locked .w2o-hero-name,
+.w2o-hero.is-locked .w2o-hero-line, .w2o-hero.is-locked .w2o-hero-world { opacity: .42; }
+/* 자물쇠 판은 그림 칸의 **아래쪽** — 가운데의 이름 글자를 가리지 않게(렌더로 봄) */
+.w2o-lock {
+  position: absolute; left: 6px; right: 6px; bottom: 8px;
+  padding: 6px 4px; border-radius: 10px;
+  font-size: .74rem; line-height: 1.35; text-align: center; color: var(--cream);
+  background: rgba(0, 0, 0, .66);
+}
+.w2o-toast { min-height: 1.5em; margin-top: 10px; font-size: .82rem; text-align: center; color: var(--accent); }
+
+/* ---------- 💬 대사 — 도입 · 엔딩 ---------- */
+.w2o-intro .w2o-scene, .w2o-ending .w2o-scene { min-height: 48vh; }
+.w2o-talk { cursor: pointer; }
+.w2o-speaker[hidden] { display: none; }   /* 🐛 `display`가 `hidden`을 덮어 화자 없는 줄에 빈 알약이 떴어요 */
+.w2o-speaker {
+  display: inline-block; margin-bottom: 8px; padding: 2px 12px; border-radius: 999px;
+  font-family: "Jua", sans-serif; font-size: .9rem; color: var(--ink); background: var(--accent);
+}
+.w2o-line { min-height: 4.9em; font-size: 1.02rem; line-height: 1.7; color: var(--text); white-space: pre-line; }
+.w2o-line.is-typing::after { content: "▍"; color: var(--accent); animation: w2Caret .7s steps(1) infinite; }
+.w2o-next { width: 100%; margin-top: 10px; }
+.w2o-end-title {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px;
+  margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px solid var(--line);
+}
+.w2o-end-emo { font-size: 1.6rem; line-height: 1; }
+.w2o-end-title b { font-family: "Jua", sans-serif; font-weight: 400; font-size: 1.35rem; line-height: 1.3; color: var(--cream); }
+.w2o-end-tier { font-size: .76rem; color: var(--dim); }
+.w2o-end-next { flex-basis: 100%; font-size: .78rem; color: var(--sky); }
+
+/* ---------- 📊 승급 카드 — 가운데 한 장 ---------- */
+.w2o-grade { align-items: center; }
+.w2o-grade .w2o-box { height: auto; align-items: center; justify-content: center; overflow: visible; }
+.w2o-grade-card {
+  width: min(320px, 86vw); padding: 20px 18px 16px; border-radius: 18px; text-align: center;
+  background: linear-gradient(180deg, var(--field), var(--bg2)); border: 2px solid var(--accent);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, .5);
+  animation: w2Pop .45s cubic-bezier(.2, 1.5, .4, 1);
+}
+.w2o-grade-k { font-family: "Jua", sans-serif; font-weight: 400; font-size: 1.05rem; color: var(--cream); }
+.w2o-grade-row { display: flex; align-items: center; justify-content: center; gap: 14px; margin: 12px 0 6px; font-family: "Jua", sans-serif; }
+.w2o-grade-from { font-weight: 400; font-size: 2rem; color: var(--dim); }
+.w2o-grade-arr { font-size: 1.4rem; color: var(--dim); }
+.w2o-grade-to {
+  font-weight: 400; font-size: 3.4rem; line-height: 1; color: var(--accent);
+  animation: w2GradeTo .6s cubic-bezier(.2, 1.6, .4, 1) .15s both;
+}
+@keyframes w2GradeTo { from { opacity: 0; transform: scale(.3) rotate(-12deg); } to { opacity: 1; transform: none; } }
+.w2o-grade-card.is-s { border-color: var(--cream); }
+.w2o-grade-card.is-s .w2o-grade-to { color: var(--cream); text-shadow: 0 0 18px var(--accent); }
+.w2o-grade-sub { font-size: .84rem; color: var(--text); }
+
+/* ---------- 📋 평가서 — 칸이 차례로 차고, 마지막에 구간 도장 ----------
+ * 🔒 **점수보다 순서**가 절정을 만듭니다(12번 §5-4) — 칸 180ms 간격 · 합계 · 도장. reduce면 한 번에 섭니다 */
+.w2o-cols { display: flex; flex-direction: column; gap: 8px; margin: 10px 0; }
+.w2o-col {
+  display: grid; grid-template-columns: 5.4em 1fr auto; align-items: center; gap: 2px 8px;
+  animation: w2Row .35s ease both; animation-delay: var(--d, 0ms);
+}
+@keyframes w2Row { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.w2o-col-k { font-size: .84rem; color: var(--cream); white-space: nowrap; }
+.w2o-bar { height: 10px; border-radius: 99px; overflow: hidden; background: rgba(0, 0, 0, .38); }
+.w2o-bar i {
+  display: block; height: 100%; border-radius: 99px; transform-origin: left center;
+  background: linear-gradient(90deg, var(--sky), var(--accent));
+  animation: w2Fill .6s ease-out both; animation-delay: var(--d, 0ms);
+}
+@keyframes w2Fill { from { transform: scaleX(0); } }
+.w2o-col-v { min-width: 4.8em; text-align: right; font-family: "Jua", sans-serif; font-size: .92rem; color: var(--text); font-variant-numeric: tabular-nums; }
+.w2o-col-note { grid-column: 1 / -1; font-size: .72rem; line-height: 1.45; color: var(--dim); }
+.w2o-total {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px;
+  margin: 6px 0 10px; padding: 10px 12px; border-radius: 12px;
+  border: 1px solid var(--line); background: rgba(0, 0, 0, .25);
+  animation: w2Row .35s ease both; animation-delay: var(--d, 0ms);
+}
+.w2o-total-n { font-family: "Jua", sans-serif; font-size: 1.1rem; color: var(--cream); }
+.w2o-stamp {
+  font-family: "Jua", sans-serif; font-weight: 400; font-size: 1.3rem; line-height: 1.3;
+  padding: 2px 12px; border-radius: 10px; border: 2px solid currentColor; color: var(--cream);
+  transform: rotate(-4deg);
+  animation: w2Stamp .45s cubic-bezier(.2, 1.6, .4, 1) both; animation-delay: calc(var(--d, 0ms) + 220ms);
+}
+@keyframes w2Stamp { from { opacity: 0; transform: rotate(-4deg) scale(1.35); } to { opacity: 1; transform: rotate(-4deg) scale(1); } }
+.t-top .w2o-stamp { color: var(--accent); }
+.t-high .w2o-stamp { color: var(--sky); }
+.t-low .w2o-stamp { color: var(--dim); }
+.w2o-coach { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; margin-bottom: 8px; font-size: .84rem; line-height: 1.5; }
+.w2o-coach-k { color: var(--dim); }
+.w2o-coach-line { flex: 1 1 10em; color: var(--text); }
+.w2o-zero { font-size: .7rem; padding: 0 7px; border-radius: 999px; border: 1px dashed var(--dim); color: var(--dim); white-space: nowrap; }
+.w2o-doorinfo { list-style: none; display: flex; flex-direction: column; gap: 2px; margin-bottom: 8px; font-size: .8rem; color: var(--dim); }
+.w2o-doorinfo .is-open { color: var(--sky); }
+.w2o-doorinfo .w2o-doorinfo-k { color: var(--cream); }
+.w2o-memo { font-size: .78rem; line-height: 1.5; color: var(--dim); }
+
+/* ---------- ✉️ 문 — 봉투 두 장. 고른 쪽은 테두리 + 「✔ 이 길」(색만으로 안 가름) ---------- */
+.w2o-doorlist { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 12px 0 4px; }
+.w2o-door {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+  min-height: 132px; padding: 14px 10px; border-radius: 14px;
+  border: 2px solid var(--line); background: linear-gradient(180deg, var(--field), var(--bg2));
+  color: var(--text); font: inherit; cursor: pointer; touch-action: manipulation;
+}
+.w2o-door[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-a28); }
+.w2o-door[aria-pressed="true"]::after { content: "✔ 이 길"; font-size: .74rem; color: var(--accent); }
+.w2o-door.is-off { opacity: .45; cursor: not-allowed; }
+.w2o-door-env { font-size: 2rem; line-height: 1; }
+.w2o-door-label { font-family: "Jua", sans-serif; font-size: 1rem; line-height: 1.35; color: var(--cream); text-align: center; }
+.w2o-door-sub { font-size: .74rem; line-height: 1.4; color: var(--dim); text-align: center; }
+
+/* ---------- 🎬 졸업 필름 — 한 장씩 내려 읽는 긴 종이 ---------- */
+.w2o-film .w2o-box { padding: 0 0 calc(24px + env(safe-area-inset-bottom, 0px)); }
+.w2f-cover { position: relative; height: 72vh; min-height: 380px; overflow: hidden; background: linear-gradient(180deg, var(--field), var(--bg)); }
+.w2f-fig { left: 50%; bottom: 0; height: 86%; transform: translateX(-50%); }
+.w2f-cover-text {
+  position: absolute; left: 0; right: 0; bottom: 0; z-index: 3;
+  padding: 64px 18px 18px; text-align: center;
+  background: linear-gradient(180deg, transparent, var(--veil) 48%);
+}
+.w2f-kick { font-size: .8rem; color: var(--accent); }
+.w2f-name { font-family: "Jua", sans-serif; font-weight: 400; font-size: 2rem; line-height: 1.2; color: var(--cream); word-break: keep-all; overflow-wrap: anywhere; }
+.w2f-meta { font-size: .9rem; color: var(--sky); }
+.w2f-end { margin-top: 4px; font-family: "Jua", sans-serif; font-size: 1.1rem; color: var(--accent); }
+.w2f-tier { font-size: .8rem; color: var(--dim); }
+.w2f-ch {
+  margin: 14px 16px 0; padding: 12px 14px; border-radius: 14px;
+  background: linear-gradient(180deg, var(--field), var(--bg2)); border: 1px solid var(--line);
+}
+.w2f-h { font-family: "Jua", sans-serif; font-weight: 400; font-size: 1.05rem; line-height: 1.35; color: var(--cream); margin-bottom: 6px; }
+.w2f-season { padding: 0 0 12px; overflow: hidden; }
+.w2f-ch-top { position: relative; height: 112px; overflow: hidden; display: flex; align-items: flex-end; background: linear-gradient(180deg, var(--sky), var(--field)); }
+.w2f-ch-top .w2f-h { position: relative; z-index: 1; width: 100%; margin: 0; padding: 26px 14px 8px; background: linear-gradient(180deg, transparent, var(--veil)); }
+.w2f-line { margin: 8px 14px 0; font-size: .88rem; line-height: 1.6; color: var(--text); }
+.w2f-nums { display: grid; grid-template-columns: repeat(auto-fit, minmax(64px, 1fr)); gap: 6px; margin: 10px 14px 0; }
+.w2f-body .w2f-nums { margin: 10px 0 0; }
+.w2f-nums div { padding: 6px 4px; border-radius: 10px; text-align: center; background: rgba(0, 0, 0, .25); }
+.w2f-nums dt { font-size: .7rem; color: var(--dim); }
+.w2f-nums dd { font-family: "Jua", sans-serif; font-size: 1.2rem; color: var(--cream); }
+.w2f-radar { position: relative; width: 260px; max-width: 100%; aspect-ratio: 260 / 240; margin: 0 auto; }
+.w2f-radar canvas { position: absolute; left: 0; top: 0; width: 100%; height: 100%; }
+.w2f-legend { font-size: .72rem; color: var(--dim); text-align: center; }
+.w2f-stats, .w2f-ptable { width: 100%; margin: 8px 0; border-collapse: collapse; font-size: .82rem; }
+.w2f-stats th, .w2f-stats td, .w2f-ptable th, .w2f-ptable td {
+  padding: 5px 6px; text-align: right; font-weight: 400; font-variant-numeric: tabular-nums;
+  border-bottom: 1px solid var(--line);
+}
+.w2f-stats th[scope="row"], .w2f-ptable th { text-align: left; color: var(--text); }
+.w2f-stats thead th { color: var(--dim); }
+.w2f-ptable tfoot th, .w2f-ptable tfoot td { font-family: "Jua", sans-serif; color: var(--cream); border-bottom: 0; }
+.w2f-fact { margin-top: 4px; font-size: .86rem; line-height: 1.6; color: var(--text); }
+.w2f-best { color: var(--cream); }
+.w2f-stats tr.is-up td:last-child { color: var(--accent); }   /* 등급이 오른 칸 — 색 + 글자(등급이 적혀 있어요) */
+/* 🎬 마지막 장 — 엔딩 배경 + 반신(12번 §7-6 장 8) */
+.w2f-last { padding-top: 0; overflow: hidden; }
+.w2f-last-top {
+  position: relative; height: 46vh; min-height: 260px; margin: 0 -14px 10px; overflow: hidden;
+  display: flex; align-items: flex-end; background: linear-gradient(180deg, var(--field), var(--bg));
+}
+.w2f-last-top .w2f-fig { height: 92%; }
+.w2f-last-top .w2f-h { position: relative; z-index: 3; width: 100%; margin: 0; padding: 40px 14px 10px; text-align: center; background: linear-gradient(180deg, transparent, var(--veil)); }
+.w2f-up { font-size: .8rem; color: var(--accent); }
+.w2f-style b { display: block; font-family: "Jua", sans-serif; font-weight: 400; font-size: 1.1rem; color: var(--accent); }
+.w2f-style span { font-size: .84rem; line-height: 1.5; color: var(--text); }
+.w2f-list { list-style: none; display: flex; flex-direction: column; gap: 4px; font-size: .88rem; line-height: 1.5; }
+.w2f-parts summary { display: flex; align-items: center; min-height: 44px; margin: 0; cursor: pointer; }
+.w2f-h4 { display: block; margin: 10px 0 6px; font-family: "Jua", sans-serif; font-weight: 400; font-size: .95rem; color: var(--cream); }
+.w2f-reps { display: flex; flex-wrap: wrap; gap: 6px; }
+.w2f-rep {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 6px 12px;
+  border-radius: 999px; border: 1px solid var(--line); background: rgba(0, 0, 0, .2);
+  color: var(--text); font: inherit; font-size: .84rem; cursor: pointer;
+}
+.w2f-rep[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-a14); }
+.w2f-rep[aria-pressed="true"]::before { content: "✔"; color: var(--accent); }
+.w2f-word {
+  width: 100%; min-height: 44px; padding: 10px 12px; border-radius: 10px;
+  border: 1px solid var(--line); background: var(--bg); color: var(--text); font: inherit;
+}
+.w2f-word:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.w2f-note, .w2f-empty { margin-top: 4px; font-size: .74rem; line-height: 1.5; color: var(--dim); }
+.w2f-next { margin-top: 8px; font-size: .84rem; color: var(--sky); }
+.w2f-acts { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
+.w2f-acts .btn { width: 100%; }
+.w2f-share-st { min-height: 1.4em; margin-top: 6px; font-size: .8rem; text-align: center; color: var(--accent); }
+.w2o-shot-img { display: block; width: 100%; height: auto; margin: 10px 0; border-radius: 12px; }
+
+/* ---------- 📖 도감 ---------- */
+.w2b-tabs { display: grid; grid-template-columns: repeat(5, 1fr); gap: 2px; margin-bottom: 10px; border-bottom: 1px solid var(--line); }
+.w2b-tab {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
+  min-width: 0; min-height: 52px; padding: 6px 2px; border: 0; border-radius: 10px 10px 0 0;
+  background: transparent; color: var(--dim); font: inherit; font-size: .76rem; line-height: 1.2; cursor: pointer;
+}
+.w2b-ico { font-size: 1.1rem; line-height: 1; }
+.w2b-tab[aria-selected="true"] { color: var(--cream); background: var(--field); box-shadow: inset 0 -3px 0 var(--accent); }
+.w2b-count { margin-bottom: 6px; font-size: .78rem; color: var(--dim); text-align: right; }
+.w2b-list { list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.w2b-list > li {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px;
+  padding: 9px 12px; border-radius: 10px; border: 1px solid var(--line); background: rgba(0, 0, 0, .22);
+  font-size: .88rem; line-height: 1.5;
+}
+.w2b-list > li.is-unseen { color: var(--dim); border-style: dashed; }
+.w2b-list b { font-weight: 400; font-family: "Jua", sans-serif; color: var(--cream); }
+.w2b-list .is-unseen b { color: var(--dim); }
+.w2b-sub { flex-basis: 100%; font-size: .74rem; line-height: 1.45; color: var(--dim); }
+.w2b-ends { list-style: none; display: flex; flex-wrap: wrap; gap: 4px; flex-basis: 100%; }
+.w2b-ends li { padding: 0 8px; border-radius: 999px; border: 1px solid var(--line); font-size: .8rem; line-height: 1.6; }
+.w2b-ends li.is-unseen { color: var(--dim); border-style: dashed; }
+.w2b-empty { padding: 20px 0; font-size: .84rem; color: var(--dim); text-align: center; }
+.w2b-grads { margin: 0 0 8px; }
+
+/* ---------- ♿ 장면 — 어지럼증 · 광과민성 ----------
+ * 등장 · 도장 · 막대 차오름 · 타이핑 커서를 끕니다. **글자와 숫자는 처음부터 다 서 있어요**(정보 손실 0). */
+@media (prefers-reduced-motion: reduce) {
+  .w2o, .w2-fig, .w2-mark, .w2o-grade-card, .w2o-grade-to, .w2o-col, .w2o-bar i, .w2o-total, .w2o-stamp {
+    animation: none !important;
+  }
+  .w2o-line.is-typing::after { display: none; }
+  .w2o-opt:active, .w2o-hero:not(.is-locked):active { transform: none; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+ * 4. 🗓️ engineer 화면 옷 — #w2-entry · #w2-home · #w2-match (계약 13)
+ * ═══════════════════════════════════════════════════════════════════
+ * 이름은 engineer 코드(`game.js` · `live.js`)에서 **읽어 온 그대로**예요(읽기만 — 목록 문서보다 코드가 먼저 섰어요).
+ * 🔒 engineer의 클래스는 `w2-` · 이 파일의 장면은 `w2o-`/`w2p`/`w2f-`/`w2b-`.
+ * ⚠️ engineer 코드 안에서 **두 뜻으로 쓰인 이름 둘**은 화면으로 좁혀 입혔어요 —
+ *    `w2-foot`(만들기의 🦶 주발 버튼 묶음 · 홈의 아래 띠) · `w2-next`(홈의 「다음 경기」 글 · [다음 →] 버튼). */
+
+/* 버튼 — engineer가 `.btn` 대신 `w2-btn`을 씁니다. 옷이 없으면 브라우저 기본 버튼(작은 회색)으로 떠요 */
+.w2-btn {
+  display: block; width: 100%; min-height: 48px; margin-top: 10px; padding: 12px 16px;
+  border-radius: 14px; border: 2px solid var(--line); background: transparent; color: var(--sky);
+  font-family: "Jua", sans-serif; font-size: 1.05rem; line-height: 1.3; cursor: pointer;
+  touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+  transition: transform .12s ease;
+}
+.w2-btn:active { transform: scale(.97); }
+.w2-btn:disabled { opacity: .45; cursor: not-allowed; }
+.w2-btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.w2-btn[hidden] { display: none !important; }       /* 🐛 base.css와 같은 자리 — `display`가 `hidden`을 이겨요 */
+.w2-btn-primary {
+  border-color: transparent; color: var(--ink);
+  background: linear-gradient(180deg, var(--amber-hi), var(--accent));
+  box-shadow: 0 4px 0 rgba(0, 0, 0, .35);
+}
+/* ⚽ 경기 — 판 아래 버튼 띠. 📱 엄지 자리(화면 아래)에 붙어 따라와요(경기 연출 스킬 §7) */
+.w2-live-bar {
+  position: sticky; bottom: 0; z-index: 4;
+  padding: 8px 0 calc(8px + env(safe-area-inset-bottom, 0px));
+  background: linear-gradient(180deg, transparent, var(--bg) 35%);
+}
+.w2-live-bar:empty { display: none; }
+/* ⏩ 빨리감기 — [🏁 경기 시작]과 **달라 보여야** 합니다(저건 눌러야 오고, 이건 안 눌러도 흘러감) — 테두리만 */
+.w2-btn.w2-live-fast {
+  width: auto; margin: 0 auto; padding: 10px 22px; font-size: .95rem; color: var(--text);
   animation: w2FastIn .24s ease-out;
 }
-@keyframes w2FastIn {
-  from { opacity: 0; transform: translateY(4px); }
-  to { opacity: 1; transform: none; }
-}
+@keyframes w2FastIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 
-/* ---------- 🏟️ 제안 등급 색 (CSS가 아직 안 붙어 있던 자리) ----------
- * 🔴 **등급이 오를수록 밝아집니다 — 순서를 뒤집지 마세요.**
- *    `town.js`의 OFFER는 t0 관찰 대상 ×0.90 → t4 특급 영입 ×1.10 순입니다.
- *    색이 반대로 가면 *"좋은 제안이 시들해 보이는"* 화면이 돼요. */
-/* 🎨 **한 색 계열에서 진해지기만 합니다** — 회색 → 금색.
- * 처음엔 t2를 하늘색으로 뒀는데, 하늘색이 앰버보다 **밝아서** 렌더로 재 보니
- * ⭐⭐(중립)가 ⭐⭐⭐(위)보다 밝게 나왔어요. 색상을 섞으면 밝기 순서가 뒤집힙니다.
- * 밝기(상대휘도): 71 → 104 → 137 → 211 → 240 — **단조 증가**입니다. */
-.card.offer-t0 { border-color: #3d4a44; }
-.card.offer-t1 { border-color: #6b6a4e; }
-.card.offer-t2 { border-color: #9a8a52; }
-.card.offer-t3 { border-color: var(--accent); }
-.card.offer-t4 { border-color: #fff0bd; box-shadow: 0 0 0 3px rgba(255, 209, 102, .26); }
-.offer-grade { font-family: "Jua", sans-serif; font-size: .84rem; color: var(--accent); }
-.card.offer-t0 .offer-grade, .card.offer-t1 .offer-grade { color: var(--dim); }
-.offer-word { font-size: .76rem; color: var(--sky); line-height: 1.5; }
-.card.offer-t0 .offer-word, .card.offer-t1 .offer-word { color: var(--dim); }
+/* ---------- 공통 ---------- */
+.w2-screen { animation: fadein .3s ease; }
+.w2-error {
+  margin: 0 0 10px; padding: 10px 12px; border-radius: 10px;
+  border: 1px solid var(--accent2); background: var(--accent2-a08);
+  font-size: .88rem; line-height: 1.5; color: var(--accent2);
+}
+.w2-note { margin-top: 6px; font-size: .8rem; line-height: 1.5; color: var(--dim); word-break: keep-all; }
+.w2-back { color: var(--dim); border-style: dashed; }
 
-/* ═══════════════════════════════════════════════════════════════════════
- * 🏫 학교 3단계 — **무대가 커집니다** (설계 93번 §5-2 · engineer 96번 §7)
- * ═══════════════════════════════════════════════════════════════════════
- * 🔑 이 아크에서는 **능력치가 안 자랍니다.** 그래서 「1년이 지났다」를 말하는 것이
- *    화면밖에 없어요 — 글자만 바뀌면 세 단계가 통째로 같은 화면입니다.
- *
- * 🔴 **마크업을 한 줄도 안 늘렸습니다.** 검사 20종이 게임 입구로 걸어 들어와서
- *    버튼을 누르는 구조라, 요소를 하나 끼우면 그 길이 어긋나요.
- *    `#screen-town[data-stage]`(e/m/h) + 가상 요소 둘만으로 무대를 세웁니다.
- *
- * 📏 **기계로 잰 것** (`scripts/w2-avatar-render.js` T절 · 390/320 × 기본/reduce):
- *      무대 띠     34 → 48 → 66px   ← 단조 증가. 「커진다」가 숫자로 섭니다
- *      관중 자리   20 → 34 → 52px   (띠에서 바닥 14px을 뺀 하늘 몫)
- *      제목        1.6 → 1.7 → 1.85rem
- * ⚠️ **손맛은 못 잽니다** — 세 단계가 「자란 것」으로 읽히는지는 실기기에서 봐야 해요.
- *
- * 🎨 색은 전부 테마 변수 + **중립 스크림**(검정/흰색 알파)으로만 만듭니다.
- *    앰버·초록을 직접 박으면 🌏 대회 모드(`body.wc-mode`가 --accent를 골드로 바꿔요)에서
- *    이 화면만 옛 색으로 남아요. 스크림은 밑에 깔린 테마색을 어둡게/밝게만 합니다. */
-#screen-town { --st-h: 34px; }            /* 🏫 초등 — 공터 */
-#screen-town[data-stage="m"] { --st-h: 48px; }   /* 🏫 중등 — 운동장 */
-#screen-town[data-stage="h"] { --st-h: 66px; }   /* 🏫 고등 — 관중석 */
+/* ---------- 🚪 입구 · ✏️ 만들기 (#w2-entry · 만들기는 같은 id에 `.w2-create`) ---------- */
+#w2-entry { padding-top: 6vh; text-align: center; }
+.w2-title { font-family: "Jua", sans-serif; font-weight: 400; font-size: 2.6rem; line-height: 1.1; color: var(--accent); }
+.w2-title::before { content: "⚽"; display: block; font-size: 3.2rem; margin-bottom: 6px; animation: bounce 1.6s ease-in-out infinite; }
+.w2-sub { margin-top: 4px; font-size: 1rem; color: var(--cream); }
+.w2-count { margin-top: 8px; font-size: .8rem; color: var(--dim); }
+.w2-entry-acts { display: flex; flex-direction: column; margin-top: 22px; }
+.w2-save {
+  display: flex; flex-direction: column; gap: 2px; padding: 12px 14px; text-align: left;
+  border-radius: 14px; border: 1px solid var(--line); background: linear-gradient(180deg, var(--field), var(--bg2));
+}
+.w2-save-grad { border-color: var(--accent); }
+.w2-save-name { font-family: "Jua", sans-serif; font-weight: 400; font-size: 1.15rem; color: var(--cream); }
+.w2-save-meta { font-size: .82rem; color: var(--dim); }
+.w2-alumni { margin-top: 12px; font-size: .8rem; color: var(--sky); }
+.w2-opts { display: flex; flex-direction: column; gap: 6px; margin-top: 18px; text-align: left; }
+.w2-opt {
+  display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 6px 10px;
+  border-radius: 10px; border: 1px solid var(--line); font-size: .86rem; line-height: 1.4; color: var(--text); cursor: pointer;
+}
+.w2-opt input { flex: none; width: 20px; height: 20px; accent-color: var(--accent); }
+#w2-entry.w2-create { padding-top: 0; text-align: left; }
+.w2-create-title { margin-bottom: 14px; font-family: "Jua", sans-serif; font-weight: 400; font-size: 1.4rem; color: var(--cream); }
+.w2-field { display: flex; flex-direction: column; gap: 6px; margin: 12px 0; font-size: .86rem; color: var(--dim); }
+.w2-field input {
+  min-height: 48px; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line);
+  background: var(--bg2); color: var(--text); font: inherit; font-size: 1.05rem;
+}
+.w2-field input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.w2-field-label { margin: 14px 0 6px; font-size: .86rem; color: var(--dim); }
+/* 고르는 칸 — 고른 것은 테두리 + 「✔」(색만으로 안 가름) */
+.w2-seg { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.w2-seg .w2-btn { margin-top: 0; font-size: .98rem; color: var(--text); }
+.w2-seg-btn[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-a14); color: var(--cream); }
+.w2-seg-btn[aria-pressed="true"]::after { content: " ✔"; color: var(--accent); }
+.w2-form-msg { min-height: 1.4em; margin-top: 8px; font-size: .86rem; color: var(--accent2); }
 
-.town-place {
-  position: relative; overflow: hidden;
-  margin: .25rem 0 .85rem;
-  padding: calc(var(--st-h) + 12px) 12px 12px;
-  border: 1px solid var(--line); border-radius: 14px;
-  background: linear-gradient(180deg, var(--bg), var(--bg2));
-  font-size: .84rem; line-height: 1.6; color: var(--dim);
+/* ---------- 🗓️ 주간 화면 (#w2-home) — 위 ⅓ 초상(`.w2-portrait`) · 머리 · 훈련 여섯 · 휴식 · 사람 ---------- */
+#w2-home .w2-portrait { margin-bottom: 10px; }
+.w2-head { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+.w2-week { font-family: "Jua", sans-serif; font-size: 1.1rem; color: var(--cream); }
+#w2-home .w2-head .w2-next { font-size: .84rem; color: var(--sky); }
+/* 🫀 게이지 — 폭(`width`)은 engineer가 값으로 박고, 여기는 구간 색만(계약 11 — 화면이 문턱을 따로 안 가짐) */
+.w2-gauge { position: relative; height: 32px; margin-top: 4px; overflow: hidden; border-radius: 10px; border: 1px solid var(--line); background: rgba(0, 0, 0, .35); }
+.w2-gauge-bar { position: absolute; left: 0; top: 0; bottom: 0; background: var(--zone-normal); }
+.w2-gauge[data-zone="exhausted"] .w2-gauge-bar { background: var(--zone-exhausted); }
+.w2-gauge[data-zone="tired"] .w2-gauge-bar { background: var(--zone-tired); }
+.w2-gauge[data-zone="good"] .w2-gauge-bar { background: var(--zone-good); }
+.w2-gauge[data-zone="peak"] .w2-gauge-bar { background: var(--zone-peak); }
+.w2-gauge-text {
+  position: relative; z-index: 1; display: flex; align-items: center; height: 100%; padding: 0 10px;
+  font-size: .8rem; color: var(--text); text-shadow: 0 1px 2px rgba(0, 0, 0, .85);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-/* 글자는 무대 「위」가 아니라 무대 「아래」에 섭니다 — 배경 위에 얹으면 대비가 무너져요 */
-.town-place > * { position: relative; z-index: 1; }
-.town-place::before, .town-place::after { content: ""; position: absolute; left: 0; right: 0; }
-.town-place::before { top: 0; height: calc(var(--st-h) - 14px); }   /* 하늘 · 관중 */
-.town-place::after { top: calc(var(--st-h) - 14px); height: 14px; } /* 바닥 */
+/* 🏋️ 훈련 여섯 — 세 칸 × 두 줄(12번 §5-2). 효율은 **버튼에 숫자로**(보이는 값 = 들어가는 값) */
+.w2-train { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.w2-tbtn {
+  display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 0; min-height: 92px;
+  margin-top: 0; padding: 8px 6px; border-radius: 12px; color: var(--text);
+  background: linear-gradient(180deg, var(--field), var(--bg2));
+}
+.w2-tbtn-name { font-family: "Gowun Dodum", sans-serif; font-size: .8rem; white-space: nowrap; }
+.w2-tbtn-grade { font-family: "Jua", sans-serif; font-weight: 400; font-size: 1.45rem; line-height: 1.1; color: var(--accent); }
+.w2-tbtn-bar { width: 100%; height: 5px; overflow: hidden; border-radius: 99px; background: rgba(0, 0, 0, .4); }
+.w2-tbtn-bar i { display: block; height: 100%; border-radius: 99px; background: var(--sky); }
+.w2-tbtn-eff { font-family: "Gowun Dodum", sans-serif; font-size: .7rem; color: var(--dim); white-space: nowrap; }
+.w2-acts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+.w2-acts > :only-child { grid-column: 1 / -1; }
+.w2-acts .w2-btn { display: flex; flex-direction: column; align-items: center; gap: 1px; margin-top: 0; color: var(--text); }
+.w2-acts small { font-family: "Gowun Dodum", sans-serif; font-size: .72rem; color: var(--dim); }
+.w2-people { border-color: var(--sky); }
+/* 📊 기록 · 순위표 — 접힘 */
+.w2-panel { margin-top: 12px; border-radius: 12px; border: 1px solid var(--line); background: rgba(0, 0, 0, .2); }
+.w2-panel > summary {
+  display: flex; align-items: center; min-height: 44px; padding: 0 12px; cursor: pointer;
+  font-family: "Jua", sans-serif; font-size: .92rem; color: var(--cream);
+}
+.w2-rec, .w2-rank { padding: 0 12px 8px; font-size: .78rem; line-height: 1.55; color: var(--text); word-break: keep-all; }
+.w2-table { width: calc(100% - 16px); margin: 0 8px 8px; border-collapse: collapse; font-size: .8rem; }
+.w2-table th, .w2-table td { padding: 5px 4px; text-align: center; border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+.w2-table th { font-weight: 400; color: var(--dim); }
+.w2-table td:nth-child(2) { text-align: left; }
+.w2-table .w2-me td { color: var(--accent); font-weight: 700; }
+.w2-table .w2-me td:first-child::before { content: "▶ "; }            /* 우리 학교 — 색 + 표시(흑백에서도) */
+.w2-table .w2-ace-team td { color: var(--bad); }
+#w2-home .w2-foot { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
+#w2-home .w2-foot .w2-btn { margin-top: 0; font-size: .92rem; }
 
-/* 🏫 초등 — 해질녘 공터. **아무도 안 봅니다** (관중 0) · 흙바닥 · 선이 없어요 */
-#screen-town[data-stage="e"] .town-place::before {
-  /* 🌇 해가 지는 쪽은 **아래**입니다 — 위로 뿌리면 대낮 하늘이 돼요 */
-  background: linear-gradient(0deg, var(--accent), transparent 85%); opacity: .26;
+/* ---------- ⚽ 경기 (#w2-match) — 머리 · 경기 화면(1절) · 경기 뒤 · 🎯 기술 테스트 · 🥅 승부차기 ---------- */
+.w2-match-head { margin-bottom: 8px; text-align: center; font-family: "Jua", sans-serif; font-size: 1.05rem; color: var(--cream); }
+.w2-after {
+  margin-top: 12px; padding: 14px; border-radius: 14px; text-align: center;
+  border: 1px solid var(--line); background: linear-gradient(180deg, var(--field), var(--bg2));
+  animation: w2In .32s cubic-bezier(.2, .9, .3, 1);
 }
-#screen-town[data-stage="e"] .town-place::after {
-  background: linear-gradient(rgba(0, 0, 0, .46), rgba(0, 0, 0, .46)), var(--sand);
+.w2-after-score { font-family: "Jua", sans-serif; font-size: 1.2rem; line-height: 1.4; color: var(--cream); }
+.w2-after-score.w2-res-W { color: var(--good2); }
+.w2-after-score.w2-res-L { color: var(--bad); }
+.w2-after-rating { margin-top: 4px; font-size: .95rem; color: var(--accent); }
+.w2-after-lines { list-style: none; margin: 8px 0 0; font-size: .84rem; line-height: 1.6; color: var(--text); text-align: left; }
+.w2-after-lines li + li { margin-top: 2px; }
+.w2-tech { margin-bottom: 10px; }
+.w2-tech-head { margin-bottom: 6px; text-align: center; font-family: "Jua", sans-serif; color: var(--accent); }
+.w2-tech-res { margin-top: 8px; text-align: center; font-family: "Jua", sans-serif; font-size: 1.05rem; }
+.w2-tech-perfect { color: var(--accent); }
+.w2-tech-ok { color: var(--sky); }
+.w2-tech-miss { color: var(--dim); }
+.w2-pk {
+  margin-top: 12px; padding: 12px; border-radius: 14px;
+  border: 1px solid var(--accent); background: linear-gradient(180deg, var(--field), var(--bg2));
 }
-/* 🏫 중등 — 학교 운동장. 멀리 한 줄 · **바닥에 흰 선이 그어집니다** */
-#screen-town[data-stage="m"] .town-place::before {
-  background:
-    radial-gradient(circle at 50% 100%, var(--dim) 40%, transparent 43%) left bottom / 13px 10px repeat-x,
-    linear-gradient(180deg, var(--sky), transparent 72%);
-  opacity: .3;
-}
-#screen-town[data-stage="m"] .town-place::after {
-  background:
-    linear-gradient(180deg, transparent 60%, rgba(255, 255, 255, .34) 60% 64%, transparent 64%),
-    var(--turf);
-}
-/* 🏫 고등 — 관중석이 찼어요. 조명 · 머리들이 층층이 · **라인 밖에 낯선 어른들**
- * 🔴 「스카우트」라고 쓰지 않습니다 (원칙 ⑧ — 누군지는 다음 화면에서 밝혀져요).
- *    그래서 실루엣입니다. 글자로 설명하지 않아요. */
-#screen-town[data-stage="h"] .town-place::before {
-  background:
-    radial-gradient(circle at 50% 100%, var(--bg) 44%, transparent 47%) left bottom / 26px 17px repeat-x,
-    radial-gradient(circle at 50% 100%, var(--dim) 40%, transparent 43%) left bottom / 13px 10px repeat,
-    radial-gradient(ellipse 70% 130% at 50% 0%, rgba(255, 255, 255, .22), transparent 66%),
-    var(--bg2);
-  opacity: .92;
-}
-#screen-town[data-stage="h"] .town-place::after {
-  background:
-    linear-gradient(180deg, transparent 56%, rgba(255, 255, 255, .38) 56% 60%, transparent 60%),
-    repeating-linear-gradient(90deg, var(--turf) 0 20px, var(--turf2) 20px 40px);
-}
+.w2-pk-head { margin-bottom: 8px; text-align: center; font-family: "Jua", sans-serif; color: var(--cream); }
+/* 두 줄 — 왼쪽 우리 · 오른쪽 상대. 차는 순서대로 한 줄씩 내려가요(서든데스도 그대로 이어져요) */
+.w2-pk-list { list-style: none; display: grid; grid-template-columns: 1fr 1fr; gap: 4px 8px; font-size: .82rem; }
+.w2-pk-kick { padding: 4px 8px; border-radius: 8px; background: rgba(0, 0, 0, .25); }
+.w2-pk-us { grid-column: 1; }
+.w2-pk-them { grid-column: 2; }
+.w2-pk-ok { color: var(--good2); }
+.w2-pk-no { color: var(--dim); }
+.w2-pk-score { margin-top: 8px; text-align: center; font-family: "Jua", sans-serif; font-size: 1.6rem; color: var(--cream); }
 
-/* 📍 장소와 머리글 — 구분자(` — `)는 마크업에만 남기고 화면에서는 줄을 바꿉니다.
- * 🔒 CSS가 안 와도 읽히도록 engineer가 일부러 넣어 둔 글자예요. 지우지 마세요. */
-.town-place-at {
-  display: block; font-family: "Jua", sans-serif; font-size: 1rem;
-  color: var(--accent); margin-bottom: .15rem;
-}
-.town-sep { display: none; }
-.town-head { display: block; color: var(--dim); }
-/* 제목도 같이 자랍니다 — 1.6 → 1.7 → 1.85rem */
-#screen-town[data-stage="m"] #town-title { font-size: 1.7rem; }
-#screen-town[data-stage="h"] #town-title { font-size: 1.85rem; text-shadow: 0 0 16px rgba(255, 255, 255, .2); }
-
-/* 📏 편차 칩 — 🏫 결과줄과 📨 제안 힌트가 **같은 자를 씁니다.**
- * 🔴 부호로 색을 가르지 않습니다. `편차 -1`은 「못했다」가 아니라 「기준보다 하나 낮다」이고,
- *    밴드는 0을 축으로 대칭이에요. 빨강을 칠하면 중립인 값이 벌점처럼 읽힙니다. */
-.town-dev, .agency-dev {
-  display: inline-block; white-space: nowrap;
-  padding: 1px 8px; border-radius: 99px;
-  background: var(--bg2); border: 1px solid var(--line);
-  font-size: .74rem; color: var(--dim); font-variant-numeric: tabular-nums;
-}
-
-/* ═══════════════════════════════════════════════════════════════════════
- * 📨 조기 제안 (98번 §8) — **최종 카드와 다른 몸입니다**
- * ═══════════════════════════════════════════════════════════════════════
- * 🔴 ⭐도 `📣 주목 ×`도 여기엔 없습니다. 조기 등급은 아무 데도 안 쓰여서
- *    보여주는 순간 거짓말이 돼요 (98번 §3-3). 그 자리는 **그 팀이 하는 말**이 씁니다.
- * 🔴 그리고 이 카드는 **누르는 물건이 아닙니다** — 누르는 건 안에 든 버튼 하나뿐이에요.
- *    그래서 `.card`의 손가락 커서와 뜨는 효과를 **꺼야 합니다.** 안 끄면 카드가
- *    「눌러도 되는 것처럼」 보이고, 눌러도 아무 일이 없는 화면이 됩니다. */
-.card-grid .offer-early {
-  grid-column: 1 / -1;              /* 2열 격자에서 반쪽으로 서면 글이 다 깨져요 */
-  display: grid; grid-template-columns: 46px 1fr; gap: 2px 10px;
-  align-items: center; text-align: left; padding: 14px; cursor: default;
-}
-.card.offer-early:hover, .card.offer-early:focus-visible { transform: none; border-color: var(--line); }
-.offer-early .card-emoji { grid-column: 1; grid-row: 1 / span 2; font-size: 2rem; text-align: center; }
-.offer-early .card-title, .offer-early .card-sub { grid-column: 2; }
-/* 🗣️ 말이 주인공이라 그 위 줄은 한 칸 물러섭니다 — 하늘색이 둘이면 둘 다 안 읽혀요 */
-.offer-early .card-sub { color: var(--dim); }
-.offer-early .offer-word, .offer-early .card-desc, .offer-early .offer-take { grid-column: 1 / -1; }
-/* 🗣️ 이 화면의 주인공 — 등급이 빠진 자리를 이 한마디가 대신합니다 */
-.offer-early .offer-word { margin-top: .5rem; font-size: .9rem; line-height: 1.6; }
-.offer-early .card-desc { margin-top: .1rem; }
-/* 🤝 카드 안의 결정 버튼 — 손가락 기준 44px을 넘깁니다 */
-.offer-take { min-height: 46px; margin-top: .65rem; padding: 12px 16px; font-size: 1rem; }
-
-/* ℹ️ 승낙/거절이 무슨 뜻인지 — 숫자 없이 **말로** (원칙 ③ · 설계 §6-4) */
-.offer-note {
-  margin: 14px 0 2px; padding: 12px 14px;
-  border-radius: 14px; background: var(--bg2); border: 1px solid var(--line);
-  display: flex; flex-direction: column; gap: .55rem; text-align: left;
-}
-.offer-note-line {
-  margin: 0; padding-left: .7rem; border-left: 3px solid var(--line);
-  font-size: .82rem; line-height: 1.65; color: var(--dim);
-}
-.offer-note-line:first-child { border-left-color: var(--accent); }
-.offer-note-line b { color: var(--text); }
-.offer-note-line:first-child b:first-child { color: var(--accent); }
-/* 🔴 잃는 것을 잃는 색으로 — 첫 줄의 마지막 강조는 *"다른 팀은 못 봐요"*입니다.
- * 얻는 것만 색칠하면 그 화면은 광고가 돼요. */
-.offer-note-line:first-child b:last-of-type { color: var(--accent2); }
-
-/* 🙅 거절 = **계속 뛰기**. 카드가 있는 판에서는 결정이 카드 안(🤝)에 있으니
- * 이 버튼은 한 칸 내려섭니다 — 같은 화면에 원색 버튼이 둘이면 어느 쪽이 「진행」인지
- * 안 읽혀요. 🔑 다만 **0곳 판에서는 이게 유일한 조작**이라 원색 그대로 둡니다
- * (`#agency-list:empty`가 정확히 「손 든 곳이 없다」예요 — 최종 화면은 항상 5곳입니다). */
-#agency-list:not(:empty) ~ #btn-early-next {
-  background: transparent; color: var(--sky); border: 2px solid var(--line);
-  box-shadow: none; font-size: 1rem;
-}
-/* 📭 0곳 — **화면을 건너뛰지 않기로 한 자리**(designer §18 수정 ②)라
- * 여기가 허전하면 「고장」으로 읽힙니다. 빈 벤치를 그려 「비어 있음」을 상태로 만들어요.
- * 🔒 그림만입니다 — 글자는 안 넣습니다. 사실은 이미 위 힌트가 말하고 있고(낭독 대상),
- *    가상 요소로 문장을 넣으면 그 문장은 복사도 번역도 안 되는 글이 돼요. */
-#agency-list:empty {
-  display: block; min-height: 92px;
-  border: 1px dashed var(--line); border-radius: 16px; opacity: .5;
-  /* 🏟️ 선만 그어진 빈 라인 하나. 🚫 벤치·사람 모양을 그리려다 지웠어요 —
-   *    추상적인 도형은 「그리다 만 것」으로 읽혀서 **고장으로 보입니다.** */
-  background: linear-gradient(180deg, transparent 48%, var(--line) 48% 51%, transparent 51%);
-  background-size: 66% 100%;
-  background-position: center;
-  background-repeat: no-repeat;
-}
-
-/* 🏟️ 제안 화면의 **세 얼굴** — 한 화면이 세 몫을 합니다 (98번 §13-3).
- *   📨 …이 끝났어요  (조기)   · 🏟️ 입단 제안 (최종) · 🤝 입단 확정 (승낙 뒤)
- * 🔑 CSS는 글자를 못 읽으니 **상태로** 가릅니다:
- *   조기 = `#btn-early-next`가 안 감춰진 판  ·  확정 = 감춰졌는데 카드가 한 장인 판
- *   (최종은 언제나 5곳이라 「카드 한 장」이 곧 승낙입니다 — `renderMarkets`의 `continue`)
- * ⚠️ `:has()`를 모르는 브라우저에서는 **세 얼굴이 다 기본 제목으로 보입니다.**
- *    정보는 제목 글자에 이미 다 있어요(📨/🏟️/🤝). 없어도 안 깨지는 층입니다. */
-#screen-agency:has(#btn-early-next:not(.hidden)) #agency-title {
-  font-size: 1.32rem; color: var(--sky);   /* 중간 소식 — 최종보다 한 칸 낮게 */
-}
-#screen-agency:has(#btn-early-next.hidden) #agency-list .card:only-child {
-  box-shadow: 0 0 0 3px rgba(255, 255, 255, .12);
-}
-/* 카드가 한 장이면 2열 격자에서 **반쪽**으로 섭니다 — 확정 화면이 그래요 */
-#agency-list .card:only-child { grid-column: 1 / -1; }
-
-/* 🤝 조기 계약 — 🏛️ 은퇴식 카드의 한 줄 (career.js `.hint.sign-note`).
- * 🔒 안 했으면 줄 자체가 없습니다. 그래서 **있으면 사건**이라 배지로 세웁니다. */
-.sign-note {
-  display: inline-block; margin: .4rem 0 .1rem; padding: .3rem .85rem;
-  border-radius: 99px; background: var(--bg2); border: 1px solid var(--accent);
-  color: var(--text); font-size: .82rem; line-height: 1.5;
-}
-
-/* ══════════════════════════════════════════════════════════════════════
- * 🧒 어린 시절 한 해 고르기 — **가로 긴 박스 버튼** (`.arc-list`)
- * ══════════════════════════════════════════════════════════════════════
- * 📱 범민 님 요청 (2026-09-03): *"초1 뭘하고 놀았나는 가로 긴 박스형 버튼으로."*
- *
- * 🔴 **네 번 쓰입니다.** 초1 · 초2 · 초3 · 초4가 같은 모양으로 이어져요
- *    (designer가 네 해 아크를 설계 중). 그래서 이 절은 **초1을 그리지 않고
- *    「한 해를 고르는 화면」을 그립니다** — `#screen-child` 같은 id에 안 기댑니다.
- *    새 해 화면은 `<div class="arc-list">` 하나만 두면 그대로 같은 모양이 돼요.
- *
- * 🏷️ **접두사는 `.arc-`입니다** (designer의 「어린 시절 네 해」 = arc4).
- *    🔴 `.yr-`을 쓰지 마세요 — 이미 **연도별 기록 표**가 그 이름을 씁니다
- *    (`.yr-club`·`.yr-lg`·`.yr-rank`·`.yr-stat`·`.yr-avg` — career.js의 `<td>`들).
- *    선택자는 안 부딪히지만 **이름이 두 가지 뜻**을 갖는 순간 다음 사람이 헷갈립니다.
- * 🔒 **`.w2m-` 접두사도 빌려 쓰지 않습니다** — 그건 미니게임 칸의 이름이에요
- *    (`one-grid-test.js`의 G-6·G-6b·G-6c가 그 이름들을 양방향으로 셉니다).
- *
- * 🔒 **마크업을 안 바꿉니다.** 버튼은 `.card` + `.card-emoji`/`.card-title`/`.card-desc`
- *    그대로예요 — `tests/winger2/child-test.js`와 `_load.js`가 `#child-list .card[data-child]`로
- *    찾습니다. 여기서 클래스를 갈면 **검사가 버튼을 못 찾아 조용히 0개**가 돼요.
- *    바뀐 것은 **부모의 클래스 한 낱말**(`card-grid` → `arc-list`)뿐입니다.
- *
- * 🔴 **왜 격자를 버렸나** — `.card-grid`는 2열이라 **3장이면 한 장이 홀로 남습니다.**
- *    ①②
- *    ③  ← 이 자리가 「덜 중요한 것」처럼 읽혀요. 세 선택지는 **대등**해야 합니다.
- *    게다가 해마다 선택지가 2개나 4개가 될 수 있는데, 2열은 그때마다 다른 사고를 냅니다.
- *    세로 한 줄은 **몇 개든 대등**하고 낱말이 길어져도 안 깨져요.
- *
- * ♿ **가로 긴 박스의 값어치는 손가락입니다.** 세로 68px을 **바닥으로** 깔았어요
- *    (권장 44px보다 큽니다 — 줄이 두 줄로 늘면 더 커집니다). 320 · 360 · 390 · 430
- *    네 폭에서 재서 §「폭별 세로 크기 표」에 적었습니다.
- *
- * 🎨 **고른 표시는 색만으로 하지 않습니다** — 적록 색약·흑백에서 앰버 테두리는
- *    회색 테두리와 거의 같은 밝기예요. 그래서 넷을 겹칩니다 (🦶 주발 화면과 같은 문법):
- *      ① 앰버 테두리 + 글로우   ② ✓ 배지 (`::after` — **모양**)
- *      ③ 고른 줄의 제목이 앰버  ④ **안 고른 줄을 흐리게** (`:disabled`)
- *    ②④는 색을 못 가려도 읽힙니다 — 있고 없음, 진하고 흐림이에요. */
-
-/* 한 해 = 세로로 쌓인 가로 긴 박스들 */
-.arc-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; }
-/* 📏 위 세 줄(🔢 띠 · 📍 자리 · 📖 이야기)이 `.hint`의 18px 여백을 **각각** 쓰면
- * 320px에서 세 번째 박스가 화면 밖으로 밀립니다 — 여백은 덩어리 끝에서 한 번만 줍니다.
- * 📍와 📖는 **한 덩어리**로 읽혀야 해요(같은 해의 같은 장면). */
-.child-place { margin-bottom: 2px; }
-.child-story { margin-bottom: 12px; }
-
-/* 🔴 `.card`를 **덮어씁니다** — base.css의 `.card`는 가운데 정렬 세로 카드예요.
- * base.css는 8종 공유라 손대지 않고, 여기서 `.arc-list` 안쪽만 갈아입힙니다. */
-.arc-list .card {
-  /* 🔴 `flex-direction: row`을 **반드시 적습니다** — base.css의 `.card`가 `column`이에요.
-   *    안 적으면 셋이 세로로 쌓여 **가운데 정렬 카드 그대로**입니다(렌더로 잡았습니다:
-   *    이모지 y14 · 제목 y51 · 설명 y75.6 · 높이 107px). 「가로 긴 박스」의 핵심 한 줄이에요. */
-  display: flex; flex-direction: row; flex-wrap: wrap;
-  align-items: center; justify-content: flex-start;
-  column-gap: 12px; row-gap: 3px;
-  /* 📱 68px — 손가락 바닥. 오른쪽 34px은 ✓ 배지 자리라 글자가 안 깔립니다 */
-  min-height: 68px;
-  padding: 12px 34px 12px 10px;
-  border-radius: 14px;
-  text-align: left;
-  position: relative;
-  /* 🔴 base.css의 `translateY(-2px)` 들림을 끕니다 — 세로로 쌓인 긴 박스가
-   *    하나만 들리면 줄이 어긋나 보여요. 강조는 테두리와 바탕으로 합니다. */
-  transition: border-color .14s ease, background-color .14s ease, box-shadow .14s ease;
-}
-.arc-list .card:hover, .arc-list .card:focus-visible { transform: none; }
-/* ⌨️ 키보드 초점 — 테두리 색만으로는 「고른 것」과 구분이 안 갑니다 */
-.arc-list .card:focus-visible { outline: 2px solid var(--sky); outline-offset: 2px; }
-
-.arc-list .card-emoji {
-  flex: 0 0 34px; font-size: 1.7rem; line-height: 1.15; text-align: center;
-}
-/* 🔤 **낱말 길이가 해마다 달라집니다** — `keep-all`이 없으면 한국어가 글자 단위로
- *    쪼개져 *"빈 곳을 먼저 보고 먼/저 뛰었어요"*가 됩니다. `anywhere`는 띄어쓰기가
- *    아예 없는 긴 낱말이 왔을 때만 마지막 수단으로 끊어요. */
-/* 🔴 **`flex: 1 1 0`입니다 — `auto`가 아니에요.** `auto`면 기준 크기가 「글자를 한 줄로
- *    폈을 때의 폭」이라, 긴 낱말이 오면 **제목이 통째로 다음 줄로 밀려나** 이모지가 혼자
- *    한 줄을 차지합니다 (긴 낱말 판에서 렌더로 잡았습니다 — 이모지 y13 · 제목 y52).
- *    `0`이면 기준이 0이라 **항상 이모지 옆에 앉고**, 남는 폭을 채운 뒤 안에서 줄을 접어요. */
-.arc-list .card-title {
-  flex: 1 1 0; min-width: 0;
-  font-size: 1rem; line-height: 1.35; color: var(--text);
-  word-break: keep-all; overflow-wrap: anywhere;
-}
-/* 두 번째 줄 — 이모지 칸(34) + 사이(12)만큼 들여써서 제목 아래에 맞춥니다 */
-.arc-list .card-desc {
-  flex: 1 1 100%; min-width: 0; padding-left: 46px;
-  font-size: .76rem; line-height: 1.45; color: var(--dim);
-  word-break: keep-all; overflow-wrap: anywhere;
-}
-
-/* ✅ 고른 줄 */
-.arc-list .card.on {
-  border-color: var(--accent);
-  background: linear-gradient(180deg, rgba(255, 159, 69, .14), var(--field));
-  box-shadow: 0 0 0 3px rgba(255, 209, 102, .26);
-}
-.arc-list .card.on .card-title { color: var(--accent); }
-/* ✓ 배지 — **`::after`입니다**(표시는 맨 위 겹에). `opacity`로만 숨겨요 —
- * `display:none`으로 두면 켜지는 순간 칸이 흔들립니다. */
-.arc-list .card::after {
-  content: "✓"; position: absolute; right: 9px; top: 50%;
-  width: 22px; height: 22px; margin-top: -11px; border-radius: 999px;
-  background: var(--accent); color: var(--ink);
-  font-size: .78rem; font-weight: 700; line-height: 22px; text-align: center;
-  opacity: 0; transform: scale(.7);
-  transition: opacity .14s ease, transform .14s ease;
-}
-.arc-list .card.on::after { opacity: 1; transform: none; }
-/* 🌫️ 안 고른 줄 — `intro.js`가 고른 뒤 나머지를 `disabled`로 잠급니다.
- *    고르기 **전에는 안 걸려요**: 셋 다 멀쩡해야 「아직 안 골랐다」가 읽힙니다. */
-.arc-list .card:disabled { opacity: .42; filter: saturate(.45); cursor: default; }
-.arc-list .card:disabled:hover { border-color: var(--line); }
-
-/* ══════════════════════════════════════════════════════════════════════
- * 🔢 몇 학년인가 — 네 해 진행 띠 (`.arc-steps`)
- * ══════════════════════════════════════════════════════════════════════
- * 🔴 **같은 화면이 네 번 오는 것에 대한 답입니다.** 선택지 글만 바뀌면
- *    *"아까 그 화면 아닌가"*가 돼요. 띠가 한 칸씩 차오르면 **같은 화면이 아니라
- *    이어지는 화면**으로 읽힙니다 — 남은 횟수도 같이 보이고요.
- *
- * 🔑 **글자 넷은 늘 초1·초2·초3·초4로 고정**이라 마크업에 그대로 적어 둡니다.
- *    해가 바뀔 때 engineer가 갈 것은 **부모의 `data-yr` 한 글자**뿐이에요
- *    (`data-yr="1"` → `"2"`). JS가 칸을 다시 그리지 않습니다.
- *
- * ♿ `aria-hidden`입니다 — 같은 말을 `.child-place`가 이미 글로 합니다
- *    (*"📍 서울 · 초등학교 1학년 · 여덟 살"*). 낭독으로 「초1 초2 초3 초4」를
- *    해마다 네 번 듣는 건 정보가 아니라 소음이에요. */
-.arc-steps { display: flex; gap: 6px; list-style: none; margin: 0 0 10px; padding: 0; }
-.arc-steps:empty { display: none; }
-.arc-step {
-  flex: 1 1 0; min-width: 0; text-align: center;
-  font-size: .68rem; line-height: 1; letter-spacing: .02em;
-  color: var(--dim); padding: 5px 0 6px;
-  border-top: 3px solid var(--line); border-radius: 2px;
-}
-/* 🎨 **색 말고 굵기와 글자로** 셋을 가릅니다 — 지난 해는 흰 띠, 올해는 앰버 **굵은** 띠(5px),
- *    올 해는 흐린 띠. 흑백으로 찍어도 굵기 차이가 남습니다(렌더 실측: 131번 §4). */
-.arc-scene[data-yr="2"] .arc-step:nth-child(-n + 1),
-.arc-scene[data-yr="3"] .arc-step:nth-child(-n + 2),
-.arc-scene[data-yr="4"] .arc-step:nth-child(-n + 3) {
-  color: var(--text); border-top-color: var(--text);
-}
-.arc-scene[data-yr="1"] .arc-step:nth-child(1),
-.arc-scene[data-yr="2"] .arc-step:nth-child(2),
-.arc-scene[data-yr="3"] .arc-step:nth-child(3),
-.arc-scene[data-yr="4"] .arc-step:nth-child(4) {
-  color: var(--accent); border-top: 5px solid var(--accent);
-  font-family: "Jua", sans-serif; padding-top: 3px;
-}
-
-/* ══════════════════════════════════════════════════════════════════════
- * 🌤️🌇🌙🌌 네 해의 **시간대 톤 4단** (`.arc-scene[data-yr]`)
- * ══════════════════════════════════════════════════════════════════════
- * 📮 designer 요청입니다 (130_designer_arc4.md §2-3 · 위험 3):
- *    *"같은 컴포넌트를 네 번 쓰면 사람은 같은 질문으로 읽습니다."*
- *
- * 🔑 **한 화면에 손잡이가 `data-yr` 하나뿐입니다.** 섹션에 `data-yr="2"`만 적으면
- *    진행 띠·바탕 톤·카드 표면이 **같이** 2번째 해로 갑니다. 두 군데 적으면 갈라져요
- *    (🦶 주발 색이 판정과 갈라졌던 것과 같은 형태의 사고입니다).
- *
- * 🕰️ 여덟 살 낮 → 아홉 살 노을 → 열 살 저녁 → 열한 살 밤.
- *    **네 해가 흐른다**는 것을 색이 말합니다 — 초3의 이름이 🌙인 것과 맞췄어요.
- *
- * ♿ **톤은 정보가 아니라 공기입니다.** 알파가 .06~.10이라 흑백에서는 거의 사라지고,
- *    그래도 되게 만들었어요 — 몇 학년인지는 **진행 띠와 `.child-place` 글자**가 말합니다.
- *    🔴 여기에 「고른 것」이나 「좋고 나쁨」을 실으면 안 됩니다. 색이 두 가지 뜻을 갖게 돼요.
- * 🔒 절대색을 안 씁니다 — 톤은 전부 `--sky`/`--accent`/`--bg2` 계열의 옅은 겹입니다. */
-.arc-scene { --arc-tone: rgba(111, 201, 255, .07); }              /* 🌤️ 기본 = 낮 */
-.arc-scene[data-yr="2"] { --arc-tone: rgba(255, 159, 69, .07); }  /* 🌇 노을 */
-.arc-scene[data-yr="3"] { --arc-tone: rgba(150, 130, 255, .08); } /* 🌙 저녁 */
-.arc-scene[data-yr="4"] { --arc-tone: rgba(20, 32, 92, .30); }    /* 🌌 밤 */
-/* 화면 위쪽에 얇게 깔리는 하늘 — `#app`의 좌우 여백을 넘어가지 않습니다(가로 넘침 0). */
-.arc-scene.active {
-  background: radial-gradient(ellipse 130% 40% at 50% 0%, var(--arc-tone) 0%, transparent 70%);
-}
-/* 카드 표면에도 같은 톤을 한 겹 — 바탕만 갈면 박스가 그 위에 떠 보여요 */
-.arc-scene .arc-list .card {
-  background: linear-gradient(180deg, var(--arc-tone), transparent),
-    linear-gradient(180deg, var(--bg2), var(--field));
-}
-/* 🔴 고른 줄은 **톤보다 앰버가 이깁니다** — 톤이 「고른 것」을 흐리면 안 돼요 */
-.arc-scene .arc-list .card.on {
-  background: linear-gradient(180deg, rgba(255, 159, 69, .14), var(--field));
-}
-
-/* ══════════════════════════════════════════════════════════════════════
- * 🧺 지금까지 고른 것 (`.arc-tally`) — 🚧 **초2부터 켜집니다**
- * ══════════════════════════════════════════════════════════════════════
- * 🚧 **오늘은 아무도 안 켭니다.** 초1에는 쌓인 게 없어서 빈 채로 있고
- *    (`:empty { display: none }`), 초2부터 engineer가 칩을 채웁니다.
- *    죽은 규칙이 아니라 **비워 둔 자리**예요 — designer의 네 해 설계가 오면
- *    무엇을 담을지가 정해집니다 (131_director_childbtn.md §engineer에게 넘길 것).
- *
- * 🔴 **여기가 왜 필요한가** — 네 번 고르는데 앞의 셋이 화면에서 사라지면
- *    *"내가 뭘 골랐더라"*가 되고, 그러면 네 번째 선택이 **아무 맥락 없는 3택**이 됩니다.
- *    쌓인 게 보여야 네 해가 **한 사람의 이야기**로 읽혀요. */
-.arc-tally { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; margin: 0 0 10px; }
-.arc-tally:empty { display: none; }
-.arc-chip {
-  font-size: .7rem; line-height: 1.5; color: var(--dim);
-  padding: 3px 9px; border-radius: 999px;
-  background: var(--bg2); border: 1px solid var(--line);
-  word-break: keep-all;
-}
-
-/* ♿ 움직임을 줄이는 설정 — **정보는 하나도 안 줄입니다.**
- * 흔들림·떠오름만 끄고 색·테두리·판정 창 폭 차이는 그대로 남아요.
- * 🦶 발을 고른 뒤의 320ms 대기도 `intro.js`가 건너뜁니다(연출이 진행을 붙잡으면 안 돼요).
- *
- * 🏫 **학교 3단계 무대와 📨 제안 화면에는 끌 것이 없습니다** — 일부러 그렇게 만들었어요.
- *    무대가 커지는 것 자체가 연출이라 움직임을 하나도 안 썼습니다. 🔑 그래서
- *    **reduce 판이 기본 판과 값이 같습니다** — 띠 46/60/78px · 관중 자리 20/34/52px ·
- *    제목 25.6/27.2/29.6px이 네 판(390/320 × 기본/reduce)에서 전부 같아요.
- *    🔴 여기에 흔들림·번쩍임을 나중에 얹는다면 **이 블록에 끄는 줄도 같이** 넣으세요. */
 @media (prefers-reduced-motion: reduce) {
-  .foot-card, .foot-ball, .foot-pick, .om-do { transition: none !important; }
-  .foot-card.picked { transform: none; }
-  .foot-card.on .foot-ball { opacity: 1; transform: none; }
-  .foot-pick { transform: none; }
-  /* 🧒 한 해 고르기 — **정보는 하나도 안 줄입니다.** ✓ 배지가 커지는 것만 끄고
-   * 앰버 테두리·글로우·흐림·진행 띠 굵기는 그대로 남아요 (렌더로 확인: 131번 §4). */
-  .arc-list .card, .arc-list .card::after { transition: none !important; }
-  .arc-list .card.on::after { opacity: 1; transform: none; }
+  .w2-btn, .w2-live-fast, .w2-screen, .w2-after, .w2-title::before { animation: none !important; transition: none !important; }
+  .w2-btn:active { transform: none; }
 }
-
-/* ══════════════════════════════════════════════════════════════
- * 🎲 **두 벌 중 하나 고르기** (`.pb-pick`) — 2026-09-01 · 101번 §1-6
- * ══════════════════════════════════════════════════════════════
- * 🔴 **나란히**여야 합니다. 세로로 쌓으면 스크롤이 둘을 갈라서 **견줌이 사라져요** —
- *    2택의 값어치는 *"고를 수 있다"*가 아니라 ***"견줄 수 있다"***에 있습니다.
- * ♿ 고른 쪽을 **색으로만** 말하지 않아요 — 글자(고른 모양 / 이걸로)와 `aria-pressed`가
- *    함께 말합니다. 색만 쓰면 색을 못 가리는 눈에는 두 벌이 똑같아 보여요.
- * ⚠️ 여기는 **동작하는 최소한**입니다 — 390px 다듬기는 director 몫이에요 (101번 §6).
- * 📏 등급 글자와 바는 아래 🌱 등급 여섯 줄과 **같은 자**(`.stat-grade`·`.pcg-bar`)를 씁니다 —
- *    자가 다르면 두 벌을 견주는 뜻이 사라집니다. 🔴 다만 **줄 이름은 `.pbo-row`로 갈라 뒀어요**
- *    (`.pcg-row`로 두면 *"조립대에 능력치 여섯 줄"*을 세는 검사가 18줄을 봅니다). */
-.pb-pick { display: block; }
-.pb-opts { display: flex; gap: 8px; align-items: stretch; margin-top: 6px; }
-.pb-opt {
-  flex: 1 1 0; min-width: 0; display: block; text-align: left;
-  padding: 8px 8px 6px; border-radius: 12px; cursor: pointer;
-  font-family: inherit; color: var(--text);
-  border: 1px solid var(--line); background: var(--bg2);
-}
-.pb-opt.on { border-color: var(--accent); background: rgba(255, 209, 102, .10); box-shadow: inset 0 0 0 1px var(--accent); }
-.pbo-lab { display: block; font-size: .72rem; color: var(--dim); margin-bottom: 4px; }
-.pb-opt.on .pbo-lab b { color: var(--accent); }
-.pbo-row { display: flex; align-items: center; gap: 5px; margin: 3px 0; }
-.pbo-name { flex: 0 0 18px; font-size: .8rem; line-height: 1; text-align: center; }
-/* ⭐ 가장 크게 자랄 칸 — 여기서는 별을 따로 안 그리고 **칸 이모지를 빛냅니다**
- *    (좁은 두 칸에 ⭐ 자리를 또 만들면 바가 죽어요. 별의 뜻은 아래 여섯 줄이 말합니다) */
-.pbo-row.is-top .pbo-name { filter: drop-shadow(0 0 6px rgba(255, 209, 102, .85)); }
-.pbo-row .stat-grade { flex: 0 0 16px; min-width: 16px; font-size: .74rem; opacity: .9; }

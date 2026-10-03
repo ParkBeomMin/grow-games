@@ -141,7 +141,10 @@ async function measure(browser, dir, width, boost, cssPatch) {
 (async () => {
   const browser = await chromium.launch({ args: ["--no-sandbox", "--disable-dev-shm-usage"] });
   try {
-    for (const dir of ["beta/soccer", "beta/winger2"]) {
+    /* ⚽ `beta/winger2`는 뺐습니다(2026-10-02 · inspector) — 더 윙어 II 1막이 옛 II 파일을 걷어내면서
+     *    `fever.js`를 **계약대로 지웠어요**(25번 §2 「옛 파일 삭제」). 1막에는 피버 띠가 없으니 이 칸은
+     *    **없는 기능을 재는** 자리가 됩니다. 피버를 1막에 다시 들이면 그때 이 목록에 되돌리세요. */
+    for (const dir of ["beta/soccer"]) {
       console.log(`\n=== ${dir} ===`);
       for (const [label, boost, want] of CASES) {
         for (const w of WIDTHS) {
