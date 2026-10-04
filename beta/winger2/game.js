@@ -37,6 +37,8 @@ window.W2Game = (() => {
     COND_TRAIN: -10, COND_REST: 25, COND_PEOPLE: -3, COND_MATCH: -12,   // 12번 §10-1
     CUP_RECOVER: 10,         // 21번 §2-3 · 24번 §2 — 대회 주간 경기 사이 회복(두 번째 경기부터)
     NAME_MAX: 8,             // 입력 칸 — 한글 8자
+    /* 📣 알림 줄 — 공용 `Fx.flash`가 1.6초 뒤 지우니 그 뒤 + 짧은 틈 · 한꺼번에 넷 이상이면 둘 + 「그 밖에 N개」 */
+    NOTE_MS: 1600, NOTE_GAP: 250, NOTE_BUNDLE: 4, NOTE_SHOW: 2,
   });
   /* 🫀 컨디션 구간 — 엔진 중립(`COND_REF` 51)에 맞춘 다섯(21번 §2-1 · 12번 §5-2) · 51은 가운데 「보통」 무채색 */
   const ZONES = [
@@ -58,7 +60,63 @@ window.W2Game = (() => {
   const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
   const r2 = (v) => Math.round(v * 100) / 100;
   const autoOn = () => { try { return localStorage.getItem(AUTO_KEY) === "1"; } catch (e) { return false; } };
-  const flash = (t) => { if (window.Fx && window.Fx.flash) window.Fx.flash(t); };
+  /* 📣 알림 — **한 번에 하나**: 앞 알림이 사라진 뒤 다음(공용 `Fx.flash`는 부를 때마다 화면 가운데에 새로 띄워 겹쳐요).
+   *    엔딩 · 필름 오버레이가 열려 있으면 닫힐 때까지 기다려요(장면 위에 겹치지 않게).
+   * ♿ 같은 글을 `role="status"` 띠(`#w2-toast.w2-toast`)에도 써서 스크린리더가 읽어요. 움직임 줄이기면 `Fx.flash`가
+   *    **아무것도 안 띄우니**(공용 fx.js) 그 띠가 눈에도 보여요(`.is-shown` · 움직임 없음). 기본 모양은 `:where()`라
+   *    `style.css`의 `.w2-toast` 규칙이 언제나 이겨요. */
+  const noteQ = [];
+  let noteRun = false;
+  const pause = (ms) => new Promise((r) => setTimeout(r, ms));
+  const stillMotion = () => { try { return window.matchMedia("(prefers-reduced-motion: reduce)").matches; } catch (e) { return false; } };
+  const overScene = () => !!document.querySelector("#w2-layer .w2o-ending, #w2-layer .w2o-film");
+  function toastEl() {
+    let el = document.getElementById("w2-toast");
+    if (el) return el;
+    if (!document.getElementById("w2-toast-css")) {
+      const st = document.createElement("style");
+      st.id = "w2-toast-css";
+      st.textContent = ":where(.w2-toast){position:fixed;left:0;bottom:0;z-index:9990;width:1px;height:1px;margin:0;padding:0;"
+        + "overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0;pointer-events:none}"
+        + ":where(.w2-toast.is-shown){left:16px;right:16px;bottom:calc(16px + env(safe-area-inset-bottom, 0px));width:auto;height:auto;"
+        + "padding:10px 14px;overflow:visible;clip:auto;white-space:normal;border:1px solid var(--line, #4a63c4);border-radius:12px;"
+        + "background:var(--field, #1e2b58);color:var(--cream, #eaf0ff);text-align:center;font-size:.95rem;line-height:1.4}";
+      document.head.appendChild(st);
+    }
+    el = document.createElement("p");
+    el.id = "w2-toast";
+    el.className = "w2-toast";
+    el.setAttribute("role", "status");
+    el.setAttribute("aria-live", "polite");
+    document.body.appendChild(el);
+    return el;
+  }
+  async function drainNotes() {
+    if (noteRun) return;
+    noteRun = true;
+    try {
+      while (noteQ.length) {
+        while (overScene()) await pause(250);
+        const t = noteQ.shift();
+        const el = toastEl();
+        const still = stillMotion() || !(window.Fx && window.Fx.flash);
+        el.classList.toggle("is-shown", still);
+        el.textContent = t;
+        if (!still) window.Fx.flash(t);
+        await pause(TUNE.NOTE_MS);
+        el.textContent = "";
+        el.classList.remove("is-shown");
+        await pause(TUNE.NOTE_GAP);
+      }
+    } finally {
+      noteRun = false;
+    }
+  }
+  const flash = (t) => {
+    if (!t) return;
+    noteQ.push(String(t));
+    drainNotes().catch((e) => console.error(e));
+  };
 
   /* ---------- 👥 주인공 카드 여섯(13번 §2-1) — 첫 베타는 지호 남 · 여 둘만(25번 §1) ---------- */
   const PRESETS = {
@@ -397,11 +455,13 @@ window.W2Game = (() => {
       save();
     }
   }
+  /* 🏅 업적 알림 — 판정 · 개수 · 저장은 그대로, 띄우는 방식만(위 알림 줄). 한꺼번에 넷 이상이면 둘 + 묶음 한 줄 */
   const announce = (ids) => {
-    for (const id of ids || []) {
-      const d = window.W2Ach.LIST.find((x) => x.id === id);
-      if (d) flash(`🏅 ${window.W2Ach.TIER_ICON[d.tier] || ""} ${d.name}`);
-    }
+    const A = window.W2Ach;
+    const lines = (ids || []).map((id) => A.LIST.find((x) => x.id === id)).filter(Boolean)
+      .map((d) => `🏅 ${A.TIER_ICON[d.tier] || ""} ${d.name}`);
+    const many = lines.length >= TUNE.NOTE_BUNDLE;
+    (many ? lines.slice(0, TUNE.NOTE_SHOW).concat(`🏅 그 밖에 ${lines.length - TUNE.NOTE_SHOW}개 — 📖 도감에서`) : lines).forEach(flash);
   };
   const achCheck = () => { announce(window.W2Ach.check(S)); save(); };
 
