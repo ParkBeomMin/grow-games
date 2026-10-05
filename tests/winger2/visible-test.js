@@ -42,7 +42,7 @@ const MUT_S = {
   M_EACH: [[/const t10 = tenths\(\[body, skill, record, stagePt, test\]\);/, "const t10 = [body, skill, record, stagePt, test].map((v) => Math.round(v * 10));"],
     [/const total = t10\.reduce\(\(a, b\) => a \+ b, 0\) \/ 10;/, "const total = Math.round((body + skill + record + stagePt + test) * 10) / 10;"]],
   /* V-4c — 구간을 원래 합(두 자리 · 24번 문턱)으로 */
-  M_RAWTIER: [[/const tier = tierOf\(total\);/, 'const tier = ((x) => (x >= 69.93 ? "top" : x >= 60.37 ? "high" : x >= 51.31 ? "mid" : "low"))(body + skill + record + stagePt + test);']],
+  M_RAWTIER: [[/const tier = final \? tierOf\(total\) : null;/, 'const tier = final ? ((x) => (x >= 64.43 ? "top" : x >= 57.44 ? "high" : x >= 50.82 ? "mid" : "low"))(body + skill + record + stagePt + test) : null;']],
 };
 const SSRC = fs.readFileSync(path.join(PAGE_DIR, "sheet.js"), "utf8");
 {
@@ -133,7 +133,8 @@ async function v1(muts, seeds) {
     for (let i = 0; i < snaps.length; i++) {
       const s0 = snaps[i], s1 = snaps[i + 1] || { stats: S.stats };
       const vals = Object.values(s0.effs);
-      if (!(vals.length === 6 && vals.every((v) => v === vals[0]))) effBad.push(`${s0.week}주 버튼마다 효율이 다름 ${vals.join(",")}`);
+      /* v2: 훈련 칸 일곱(여섯 능력치 + 🦶 약발 — 29번 §3-6 P2 (가)) · 효율은 일곱 다 같음(같은 컨디션) */
+      if (!(vals.length === 7 && "weak" in s0.effs && vals.every((v) => v === vals[0]))) effBad.push(`${s0.week}주 버튼마다 효율이 다름 ${vals.join(",")}`);
       const want = G.gauge(s0.cond);
       if (!new RegExp(`경기 ×${want.mul.toFixed(2)}`).test(s0.gtxt) || s0.zone !== want.zone || Math.abs(want.mul - r2(E.condMul(Math.round(s0.cond)))) > 1e-9) gaugeBad.push(`${s0.week}주 「${s0.gtxt}」 zone ${s0.zone} ↔ ${want.zone} ×${want.mul}`);
       if (s0.choice.k !== "train") continue;
@@ -148,7 +149,7 @@ async function v1(muts, seeds) {
     return { trains, bad, effBad, gaugeBad, ratios, snaps: snaps.length };
   }
   const b = await v2(null);
-  check(b.trains >= 15 && b.bad.length === 0 && b.effBad.length === 0, `V-2. 🏋️ 훈련 ${b.trains}주 — 그 주의 능력치 증가 == ${TRAIN_UP} × **버튼에 적힌 효율**(컨디션 −10 전) · 버튼 여섯의 효율이 같음 (어긋남 ${b.bad.length})`
+  check(b.trains >= 15 && b.bad.length === 0 && b.effBad.length === 0, `V-2. 🏋️ 훈련 ${b.trains}주 — 그 주의 능력치 증가 == ${TRAIN_UP} × **버튼에 적힌 효율**(컨디션 −10 전) · 버튼 일곱(🦶 약발 포함)의 효율이 같음 (어긋남 ${b.bad.length})`
     + (b.bad.length ? `\n     🔴 ${b.bad.slice(0, 3).join(" · ")}` : "") + (b.effBad.length ? `\n     🔴 ${b.effBad.slice(0, 2).join(" · ")}` : ""));
   check(b.gaugeBad.length === 0, `V-3b. 🫀 홈 화면 게이지 ${b.snaps}번 — 글자 「경기 ×…」와 \`data-zone\`이 그 컨디션의 \`gauge()\` · 엔진 \`condMul\`과 같다` + (b.gaugeBad.length ? `\n     🔴 ${b.gaugeBad.slice(0, 3).join(" · ")}` : ""));
 
@@ -209,7 +210,8 @@ async function v1(muts, seeds) {
       for (const final of [false, true]) {
         const s = Sh.compute(mkS(0, i), final);
         const sum = r2(s.cols.reduce((a2, x) => a2 + x.v, 0));
-        if (Math.abs(sum - s.total) > 1e-9 || s.tier !== Sh.tierOf(s.total)) bad4.push(`#${i}${final ? " 최종" : " 중간"}: 칸 합 ${sum} ↔ total ${s.total} · ${s.tier}`);
+        /* 중간 평가서는 구간이 없어요(계약 7′) · 최종은 화면 합계로 */
+        if (Math.abs(sum - s.total) > 1e-9 || s.tier !== (final ? Sh.tierOf(s.total) : null)) bad4.push(`#${i}${final ? " 최종" : " 중간"}: 칸 합 ${sum} ↔ total ${s.total} · ${s.tier}`);
       }
       const t = [-6, 0, 6].map((tr) => Sh.compute(mkS(tr, i), true));
       const same = t.every((x) => x.total === t[0].total && JSON.stringify(x.cols.map((q) => q.v)) === JSON.stringify(t[0].cols.map((q) => q.v)));
@@ -222,7 +224,7 @@ async function v1(muts, seeds) {
   check(d.bad4.length === 0, `V-4. 📋 평가서 120장(중간 · 최종) — 칸 합 == \`total\` · 구간 == 문턱표 (어긋남 ${d.bad4.length})` + (d.bad4.length ? `\n     🔴 ${d.bad4.slice(0, 3).join(" · ")}` : ""));
   check(d.bad5.length === 0, `V-5. 📝 감독 의견은 **점수 0** — 🤝 −6 · 0 · +6에서 칸 · 합계가 같고 의견 한 줄만 바뀜 (60판 · 어긋남 ${d.bad5.length})` + (d.bad5.length ? `\n     🔴 ${d.bad5.slice(0, 3).join(" · ")}` : ""));
   /* ══════════ V-4b · V-4c — 진짜 화면에 그려진 숫자로 ══════════ */
-  const T1 = { top: 699, high: 604, mid: 513 };       // 🔒 25번 §8(10-03) — 한 자리 문턱 69.9 · 60.4 · 51.3을 0.1 단위 정수로 · 박은 값
+  const T1 = { top: 644, high: 574, mid: 508 };       // 🔒 38번 §5 — 한 자리 문턱 64.4 · 57.4 · 50.8을 0.1 단위 정수로 · 박은 값(중간 평가서엔 도장 없음 — 7′)
   const TNAME = { top: "최상", high: "상", mid: "중", low: "하" };
   const tierOfShown = (t10) => (t10 >= T1.top ? "top" : t10 >= T1.high ? "high" : t10 >= T1.mid ? "mid" : "low");
   /* 문턱 바로 위 · 0.1 아래 판 — 속도 하나를 이분 탐색으로 움직여 **화면 합계가 문턱을 막 넘는 자리**를 찾아요.
@@ -261,14 +263,15 @@ async function v1(muts, seeds) {
         const sh = Sh.compute(S, final);
         const p = W.W2Scenes.sheet(Object.assign({ title: "📋 스카우트 평가서" }, sh));
         await wait(2);
-        const vals = [...layer.querySelectorAll(".w2o-col-v")].map((e) => Math.round(parseFloat(e.textContent) * 10));
-        const tot = Math.round(parseFloat((layer.querySelector(".w2o-total-n") || { textContent: "합계 NaN" }).textContent.replace("합계", "")) * 10);
+        const vals = [...layer.querySelectorAll(".w2o-col-v")].map((e) => (/^아직/.test(e.textContent.trim()) ? 0 : Math.round(parseFloat(e.textContent) * 10)));
+        /* 중간은 「지금까지 X」 · 아직 칸은 「아직 · 최대 N」(점수 0)이나 「v / max · +N 아직」 — 앞의 숫자만 점수 */
+        const tot = Math.round(parseFloat(((layer.querySelector(".w2o-total-n") || { textContent: "NaN" }).textContent.match(/-?[\d.]+/) || ["NaN"])[0]) * 10);
         const stamp = ((layer.querySelector(".w2o-stamp") || {}).textContent || "").replace(/^구간 「|」$/g, "");
         const ok = layer.querySelector(".w2o-ok");
         if (ok) ok.dispatchEvent(new W.MouseEvent("click", { bubbles: true }));
         await p;
         if (vals.length !== 5 || vals.reduce((a2, b2) => a2 + b2, 0) !== tot) sumBad.push(`${name}${final ? "" : " 중간"}: 칸 ${vals.map((v) => v / 10).join(" + ")} ≠ 합계 ${tot / 10}`);
-        if (stamp !== TNAME[tierOfShown(tot)]) tierBad.push(`${name}${final ? "" : " 중간"}: 합계 ${tot / 10} → 「${TNAME[tierOfShown(tot)]}」인데 도장 「${stamp}」`);
+        if (final ? stamp !== TNAME[tierOfShown(tot)] : stamp !== "") tierBad.push(`${name}${final ? "" : " 중간"}: 합계 ${tot / 10} → 「${TNAME[tierOfShown(tot)]}」인데 도장 「${stamp}」`);
       }
     }
     W.close();

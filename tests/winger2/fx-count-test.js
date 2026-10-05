@@ -356,6 +356,34 @@ const uniq = (a) => [...new Set(a)];
       + (s["X-6"] ? `\n     🔴 안 잡혔어요 — 타이핑이 지금 아예 안 도는지(fast·lite·reduced) 보세요` : ""));
   }
 
+  /* ══════════ X-7. 🎮 v2 — **새 판이 열린 진짜 경기**에서도 `Math.random` 0(39번 §1 · 38번 §1 「경기 화면 Math.random 0 — 새 판 연출 포함」) ══════════
+   * 진짜 페이지 · 진짜 오버레이 · 진짜 `match-scene.js` · **진짜 `winger-moment.js`**로 1막 첫 경기 넷을 사람처럼 눌러(판 준비 ▶️ · 칸)
+   * **경기 동안**(`WingerLive.play`가 불려 풀릴 때까지)의 `Math.random` 호출을 셉니다. 경기 밖(승급 카드의 공용 `Fx.burst`)은 셈 밖이에요.
+   * 변이 BRAND — 판 연출 난수 하나를 `Math.random`으로(`winger-moment.js`) → 빨간불 */
+  {
+    const { boot: boot7, runAct: run7 } = require("./_act.js");
+    async function inMatch(muts) {
+      const env = boot7({ seed: 2027, pos: "df", gender: "f", realScenes: true, realMoment: true, fastTimers: "keep-long", muts });
+      const w = env.w;
+      let active = false, n = 0, matches = 0, boards = 0;
+      const raw = w.Math.random;
+      w.Math.random = function () { if (active) n += 1; return raw(); };
+      const rawPlay = w.WingerLive.play;
+      w.WingerLive.play = (host, cfg) => { active = true; matches += 1; return rawPlay(host, cfg).then((info) => { active = false; boards += (info.boards || []).filter((b) => !b.auto).length; return info; }); };
+      await run7(env, { until: (S) => S.week >= 13, stall: 3000 });
+      w.close();
+      return { n, matches, boards };
+    }
+    const r7 = await inMatch(null);
+    check(r7.matches >= 4 && r7.boards >= 6 && r7.n === 0, `X-7. 🎮 새 판이 열린 진짜 경기 ${r7.matches}판(사람이 둔 판 ${r7.boards}번) 동안 \`Math.random\` **${r7.n}번**`);
+    const bad7 = pageMutsOK({ BRAND: { "winger-moment.js": [[/B\.r = \[fx\(\), fx\(\), fx\(\), fx\(\)\];/, "B.r = [Math.random(), fx(), fx(), fx()];"]] } });
+    if (bad7.length) check(false, `X-7 변이 정규식이 안 걸림 — ${bad7.join(" · ")}`);
+    else {
+      const m7 = await inMatch({ "winger-moment.js": [[/B\.r = \[fx\(\), fx\(\), fx\(\), fx\(\)\];/, "B.r = [Math.random(), fx(), fx(), fx()];"]] });
+      check(m7.n > 0, `변이-BRAND(판 연출 난수 하나를 \`Math.random\`으로) → X-7이 빨간불 (${m7.n}번)`);
+    }
+  }
+
   console.log(fail ? `\n❌ ${fail}건 실패` : "\n✅ 통과");
   process.exit(fail ? 1 : 0);
 })();

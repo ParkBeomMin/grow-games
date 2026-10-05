@@ -1,11 +1,13 @@
-/* ⚽ 더 윙어 II 1막 — 📖 이야기 6편(공유 셋 + 주인공마다 하나) · 한 판에 넷까지
+/* ⚽ 더 윙어 II 1막 — 📖 이야기 6편(공유 셋 + 가족 셋 중 하나) · 한 판에 넷까지
  *
- *   📍 slot   번호의 주인        — 1주 늘 열림 · 1장 6주(도전) · 2장 25주(약속) · 결말 25주 경기 뒤(평점 집계 d)
- *   🔥 race   이웃 학교 에이스   — 11주 한 번 판정(나 M ≥ 1 · 에이스 S − M ≤ 1) · 2장 29주(약속) · 결말 34주
+ *   📍 slot   번호의 주인        — 1주 늘 열림 · 1장 6주(도전) · 2장 25주(약속) · 결말 25주 경기 뒤(「같은 장면」 집계 D)
+ *   🔥 race   이웃 학교 에이스   — 11주 한 번 판정(나 M ≥ 1 · 에이스 S − M ≤ 0) · 2장 29주(약속) · 결말 34주
  *   🕯️ senior 마지막 공          — 🤝 사람 → {keeper}(3~31주) · 2장 33주(약속) · 결말 33주 경기 뒤
- *   🏠 개인 — 🏭 father(지호) · 🎓 apply(도윤) · ✉️ letter(하람) — 🤝 사람 → 가족(2~30주) · 2장 32주(깃발 — 판정 없음)
+ *   🏠 가족 — 🏭 father(아버지) · 🎓 apply(엄마) · ✉️ letter(할머니) — 🤝 사람에서 **한 사람**을 고름(2~30주) ·
+ *            나머지 둘은 그 판에서 닫힘 · 2장 32주(깃발 — 판정 없음)
  *
- * 설계: 12번 §7-4 · 21번 §4(🔥 둘만의 기록) · 13번 §4-4(틀 자리 · 성별 낱말 없음) · ① 스펙 §4(모양)
+ * 설계: 12번 §7-4 · 21번 §4(🔥 둘만의 기록) · 13번 §4-4(틀 자리 · 성별 낱말 없음) · 27번 §6(2장 약속 판돈) ·
+ *       29번 §2-2(📍 「같은 장면」) · §3-2(가족 셋 · P1 (가)) · 36번 §3-5(`q`에 같은 상황) · ① 스펙 §4(모양)
  *
  * ── 🔒 지키는 것 ────────────────────────────────────────────
  *  · **이야기는 여는 순간 자기 2장 자리까지 잡아요 — 자리가 없으면 안 열어요.** 1막의 2장 자리는 고정 주라
@@ -13,7 +15,7 @@
  *  · **자동 장이 선 주(📍 6 · 25 · 🔥 11 · 29 · 🕯️ 33)엔 🤝 사람 버튼에 이야기 얼굴이 안 떠요** —
  *    한 주 한 장 규칙이 여는 판을 몰래 깎지 않게(21번 §4-1).
  *  · **결말은 규칙표로 빈칸 없이**(위에서부터 첫 번째) — 숨은 굴림 0. 1장의 「참음」과 「걸었다가 실패」는 다른 결말.
- *  · 개인 이야기 2장은 **판정이 없는 선택** — 문은 확률이 아니라 **마음**으로 열어요.
+ *  · 가족 이야기 2장은 **판정이 없는 선택** — 문은 확률이 아니라 **마음**으로 열어요(문 = 고른 이야기 + 깃발 + 11월 구간).
  *  · 🔥은 **둘만의 기록**(리그 경기만) — 리그 66명 순위가 아니에요.
  *  · 사람 이름은 **틀 자리**(`{rival}` · `{keeper}` · `{ace}` · `{me}` · `{family}`)로만. */
 "use strict";
@@ -23,9 +25,9 @@ window.W2Story = (() => {
   const TUNE = Object.freeze({
     SLOT1: 6, SLOT2: 25,           // 12번 §7-4 — 📍 1장 · 2장(결정전) 주
     RACE_OPEN: 11, RACE2: 29, RACE_END: 34,   // 21번 §4-1 — 🔥 여는 주 · 두 번째 맞대결 · 결말 주
-    RACE_N: 1,                     // 21번 §4-1 · 24번 §2(R16 그대로) — 11주에 S − M ≤ N이면 엶
+    RACE_N: 0,                     // 21번 §4-1 · 28번 둘째 값 · 38번 §5 — 11주에 S − M ≤ N이면 엶
     RACE_CLOSE: 1,                 // 〃 — 「한 끗의 거리」 0 ≤ S − M ≤ 1
-    SLOT_WIN: 2, SLOT_PAIR: 1,     // 12번 §7-4 — 📍 d ≥ 2 되찾음 · |d| ≤ 1 둘이 선 양 날개
+    SLOT_LINE: 1.5,                // 29번 §2-2 · 38번 §5 — 📍 D ≥ +1.5 되찾음 · ≤ −1.5 넘겨줌 · 그 사이 둘이 선 양 날개
     SENIOR2: 33, SENIOR_FROM: 3, SENIOR_LAST: 31,   // 12번 §7-4 — 🕯️ 2장 · 여는 주 3~31
     FAM2: 32, FAM_FROM: 2, FAM_LAST: 30,            // 12번 §7-4 — 🏠 2장 · 여는 주 2~30
     FAM_HINT: 25,                  // 12번 §7-4 — 「{family}와 이야기할 시간이 얼마 안 남았어요」 한 줄
@@ -34,7 +36,7 @@ window.W2Story = (() => {
   const W = () => window.W2World;
   const EV = () => window.W2Events;
   const K = () => window.W2Events.kit;
-  const FAM_SID = { jiho: "father", doyun: "apply", haram: "letter" };
+  const FAM_SIDS = ["father", "apply", "letter"];
   /* 결말 이름 — `id`는 출하 뒤 안 바꿔요(도감 장부 · 업적이 가리켜요) */
   const LIST = [
     { sid: "slot", emoji: "📍", name: "번호의 주인", ends: [
@@ -44,11 +46,11 @@ window.W2Story = (() => {
     { sid: "senior", emoji: "🕯️", name: "마지막 공", ends: [
       { id: "gift", name: "마지막 선물" }, { id: "dawn", name: "새벽을 나눈 친구" },
       { id: "missed", name: "따라가지 못한 새벽" }, { id: "shake", name: "악수로 끝난 계절" }] },
-    { sid: "father", emoji: "🏭", name: "아버지의 운동장", preset: "jiho", ends: [
+    { sid: "father", emoji: "🏭", name: "아버지의 운동장", family: true, ends: [
       { id: "number", name: "아버지의 등번호" }, { id: "grounds", name: "각자의 운동장" }] },
-    { sid: "apply", emoji: "🎓", name: "두 장의 원서", preset: "doyun", ends: [
+    { sid: "apply", emoji: "🎓", name: "두 장의 원서", family: true, ends: [
       { id: "second", name: "두 번째 길을 남긴 선수" }, { id: "single", name: "한 길만 본 선수" }] },
-    { sid: "letter", emoji: "✉️", name: "바다 건너 온 편지", preset: "haram", ends: [
+    { sid: "letter", emoji: "✉️", name: "바다 건너 온 편지", family: true, ends: [
       { id: "crossed", name: "바다를 건넌 답장" }, { id: "drawer", name: "서랍 속의 편지" }] },
   ];
   const def = (sid) => LIST.find((s) => s.sid === sid) || null;
@@ -65,7 +67,8 @@ window.W2Story = (() => {
   }
   const openOf = (S, sid) => book(S).open.find((o) => o.sid === sid) || null;
   const everOpened = (S, sid) => !!openOf(S, sid) || book(S).done.some((d) => d.sid === sid);
-  const famSid = (S) => FAM_SID[S.preset] || "father";
+  /* 🏠 따라간 가족 이야기 — 연(또는 닫은) 셋 중 하나 · 아직 안 골랐으면 null(29번 §3-2) */
+  const famSid = (S) => FAM_SIDS.find((sid) => everOpened(S, sid)) || null;
   /* 📍은 1주에 늘 열려요(훅) — 새 판을 만들 때 부릅니다 */
   function start(S) {
     const b = book(S);
@@ -77,7 +80,7 @@ window.W2Story = (() => {
     const slot = openOf(S, "slot");
     if (slot) n += slot.ch < 1 ? 2 : slot.ch < 2 ? 1 : 0;
     else if (!everOpened(S, "slot")) n += 2;
-    for (const sid of ["senior", "race", famSid(S)]) { const o = openOf(S, sid); if (o) n += Math.max(0, 2 - o.ch); }
+    for (const sid of ["senior", "race", famSid(S)]) { const o = sid ? openOf(S, sid) : null; if (o) n += Math.max(0, 2 - o.ch); }
     return n;
   }
   /* 🔥 11주에 열릴 판인가 — 🔒 리그 3라운드(10주)까지의 **둘만의 기록**으로 */
@@ -96,14 +99,20 @@ window.W2Story = (() => {
     if (w === TUNE.SENIOR2 && senior && senior.ch === 1) return true;
     return false;
   }
-  /* 🤝 사람 — 이 주에 이야기 장이 준비된 사람(없으면 버튼이 안 떠요 · 12번 §5-2) */
+  /* 🤝 사람 — 이 주에 이야기 장이 준비된 사람(없으면 버튼이 안 떠요 · 12번 §5-2).
+   * 🏠 가족 이야기를 아직 안 골랐으면 **세 얼굴**(아버지 · 엄마 · 할머니) — 얼굴 밑에 그 이야기의 문이 열리는 구간 한 줄 */
   function people(S, w) {
     if (autoWeek(S, w)) return [];
     const out = [];
-    const F = EV().FAMILY[S.preset] || EV().FAMILY.jiho;
-    const fam = openOf(S, famSid(S));
-    if (!everOpened(S, famSid(S)) && w >= TUNE.FAM_FROM && w <= TUNE.FAM_LAST) out.push({ key: "family", who: F.who, name: F.name, sid: famSid(S) });
-    if (fam && fam.ch === 1 && w === TUNE.FAM2) out.push({ key: "family", who: F.who, name: F.name, sid: famSid(S) });
+    const fsid = famSid(S);
+    if (!fsid && w >= TUNE.FAM_FROM && w <= TUNE.FAM_LAST) {
+      for (const sid of FAM_SIDS) {
+        const F = EV().FAMILY[sid];
+        out.push({ key: "family", who: F.who, name: F.name, sid, note: `${def(sid).emoji} 이 이야기의 문은 평가서 「${FAM_TEXT[sid].tierName}」에서 열려요` });
+      }
+    }
+    const fam = fsid ? openOf(S, fsid) : null;
+    if (fam && fam.ch === 1 && w === TUNE.FAM2) { const F = EV().FAMILY[fsid]; out.push({ key: "family", who: F.who, name: F.name, sid: fsid }); }
     if (!everOpened(S, "senior") && w >= TUNE.SENIOR_FROM && w <= TUNE.SENIOR_LAST) {
       out.push({ key: "keeper", who: S.world.keeper.who, name: W().short(S.world.keeper.name), sid: "senior" });
     }
@@ -112,7 +121,7 @@ window.W2Story = (() => {
   /* 🗓️ 홈의 사실 한 줄 — 25주 가족 마감(마감을 모르고 지나가지 않게 · 원칙 ③) */
   function notes(S, w) {
     const out = [];
-    if (w === TUNE.FAM_HINT && !everOpened(S, famSid(S))) {
+    if (w === TUNE.FAM_HINT && !famSid(S)) {
       out.push(K().fillS(S, "{family|와} 이야기할 시간이 얼마 안 남았어요"));
     }
     return out;
@@ -126,7 +135,8 @@ window.W2Story = (() => {
     if (!EV().fits(S, st)) return null;
     return K().tryOpt(S, id, K().fillS(S, label), x, k, stake, dr.sit, K().sitText(S, sit, dr.sit));
   }
-  const promChapter = (S) => (EV().fits(S, "trust") ? K().promOpt(S) : null);
+  /* 2장 약속 — **늘 고를 수 있어요**: 판돈 = min(2, 6 − |🤝|) · 0이면 이야기만 걸린 약속(27번 §6-3) */
+  const promChapter = (S) => K().promOpt(S, Math.min(EV().TUNE.TRUST_STAKE, EV().TUNE.TRUST_CAP - Math.abs(Number(S.trust) || 0)));
   const recLine = (S) => {
     const X = W();
     return { M: X.recOf(S, "me"), S: X.recOf(S, X.aceRow(S).id), cat: ["골", "도움", "수비"][X.catOf(S.pos)] };
@@ -164,11 +174,12 @@ window.W2Story = (() => {
     const b = book(S);
     const choice = S.choice || {};
     const who = choice.k === "people" ? choice.who : null;
-    const fsid = famSid(S);
-    const FT = FAM_TEXT[fsid];
     const fill = (t) => K().fillS(S, t);
-    const F = EV().FAMILY[S.preset] || EV().FAMILY.jiho;
-    if (who === "family") {
+    /* 🏠 고른 가족 이야기 — 이미 열었으면 그것, 아직이면 이번 주 🤝에서 고른 것(셋 중 하나만) */
+    const fsid = famSid(S) || (FAM_SIDS.indexOf(choice.fam) >= 0 ? choice.fam : null);
+    const FT = fsid ? FAM_TEXT[fsid] : null;
+    const F = fsid ? EV().FAMILY[fsid] : null;
+    if (who === "family" && fsid) {
       if (!everOpened(S, fsid) && w >= TUNE.FAM_FROM && w <= TUNE.FAM_LAST) {
         b.open.push({ sid: fsid, ch: 1, at: w, f: {} });
         return storyCard(S, dr, { id: "s_fam1", sid: fsid, ch: 1, title: `${def(fsid).emoji} ${FT.t1}`, body: fill(FT.b1),
@@ -244,21 +255,31 @@ window.W2Story = (() => {
   function judged(S, id, ok) {
     if (id === "s_senior2") { const st = openOf(S, "senior"); if (st) st.f.p2 = !!ok; }
   }
-  /* 📍 집계 — 공식 경기마다(리그 + 대회): 내 평점 > {rival} 평점이면 +1, 낮으면 −1(같으면 0).
-   * 🔒 화면에 적힌 평점(한 자리)으로 견줘요 — 보이는 값 = 판정 값. */
-  function tally(S, myR, rivalR) {
+  /* 📍 집계 — 「같은 장면, {rival}라면」(29번 §2-2): 공식 경기마다(리그 + 대회) 내 판마다
+   *    Δ = 해냄(⚽ 골 · 🅰️ 도움 · 🧱 막음 — `perfect`) − q(같은 장면을 {rival}가 맡았다면 해냈을 확률 · 같은 상황).
+   * 🔒 경기 합을 **소수 한 자리**로 반올림해 쌓아요(0.1 단위 정수로 — 보이는 값 = 판정 값 · 집계는 화면 숫자의 합).
+   * 돌려주는 것: 그 경기 줄에 쓸 사실 `{ n, made, exp, d, D }` · 창 밖이면 null */
+  function tally(S, boards) {
     const st = openOf(S, "slot");
-    if (!st || !st.f.on || myR == null || rivalR == null) return 0;
-    const d = myR > rivalR ? 1 : myR < rivalR ? -1 : 0;
-    st.f.d = (st.f.d || 0) + d;
-    return d;
+    if (!st || !st.f.on) return null;
+    const bs = (boards || []).filter((x) => x && typeof x.q === "number" && Number.isFinite(x.q));
+    const made = bs.filter((x) => x.judge === "perfect").length;
+    /* 🔒 보이는 값 = 판정 값 — 「{rival}라면 X번」을 한 자리로 먼저 접고, 그 접은 값으로 Δ를 셈(경기 줄의 「나 − X = ±d」가 늘 맞고 ·
+     *    경기 줄의 d를 더하면 집계 D와 같아요 · 29번 §2-2) */
+    const e10 = Math.round(bs.reduce((a, x) => a + x.q, 0) * 10);
+    const d10 = made * 10 - e10;
+    st.f.d = (Math.round((Number(st.f.d) || 0) * 10) + d10) / 10;
+    return { n: bs.length, made, exp: e10 / 10, d: d10 / 10, D: st.f.d };
   }
 
   /* ---------- 결말 — 규칙표(위에서부터 첫 번째) ---------- */
   function endOf(S, sid) {
     const st = openOf(S, sid);
     const f = (st && st.f) || {};
-    if (sid === "slot") { const d = f.d || 0; return d >= TUNE.SLOT_WIN ? "took" : d >= -TUNE.SLOT_PAIR ? "pair" : "gave"; }
+    if (sid === "slot") {   // 0.1 단위 정수로 견줘요 — 1.5와 15/10이 부동소수로 갈리지 않게
+      const d10 = Math.round((Number(f.d) || 0) * 10), L10 = Math.round(TUNE.SLOT_LINE * 10);
+      return d10 >= L10 ? "took" : d10 <= -L10 ? "gave" : "pair";
+    }
     if (sid === "race") {
       const r = recLine(S);
       return r.M > r.S ? "ace" : r.S - r.M <= TUNE.RACE_CLOSE ? "close" : "far";
@@ -293,12 +314,13 @@ window.W2Story = (() => {
     const end = endOf(S, sid);
     b.open = b.open.filter((o) => o !== st);
     const name = endName(sid, end);
-    b.done.push({ sid, end, week: S.week, name, ch: st.ch });
+    /* 1장의 고름 · 결과를 남겨 둬요 — 문 엔딩의 까닭(`act1.doorWhy` · 29번 §7-2)이 닫힌 뒤에도 읽어요 */
+    b.done.push({ sid, end, week: S.week, name, ch: st.ch, r1: st.f.r1 || null, ok1: typeof st.f.ok === "boolean" ? st.f.ok : null });
     if (window.W2Book) window.W2Book.mark("end", `${sid}:${end}`);
     const d = def(sid);
     const T = END_TEXT[`${sid}:${end}`] || { mood: "base", t: "" };
     const who = sid === "slot" ? S.world.rivalWho : sid === "race" ? S.world.aceWho : sid === "senior" ? S.world.keeper.who
-      : (EV().FAMILY[S.preset] || EV().FAMILY.jiho).who;
+      : (EV().FAMILY[sid] || EV().FAMILY.father).who;
     return { kind: "story-end", sid, end, title: `${d.emoji} ${d.name}`, body: `「${name}」`, line: K().fillS(S, T.t),
       who, mood: T.mood, bg: sid === "race" ? "bg-cup" : sid === "senior" ? "bg-field" : sid === "slot" ? "bg-locker" : (FAM_TEXT[sid] || {}).bg,
       opts: [{ k: "ok", label: "확인" }] };
@@ -308,7 +330,7 @@ window.W2Story = (() => {
     const out = [];
     const want = [];
     if (w === TUNE.SLOT2) want.push("slot");
-    if (w === TUNE.FAM2) want.push(famSid(S));
+    if (w === TUNE.FAM2 && famSid(S)) want.push(famSid(S));
     if (w === TUNE.SENIOR2) want.push("senior");
     if (w === TUNE.RACE_END) want.push("race");
     for (const sid of want) { const c = openOf(S, sid) ? close(S, sid) : null; if (c) out.push(c); }
@@ -325,6 +347,6 @@ window.W2Story = (() => {
     });
   }
 
-  return { TUNE, LIST, start, left, people, notes, autoWeek, raceWouldOpen, chapter, answered, judged, tally,
+  return { TUNE, LIST, FAM_SIDS, start, left, people, notes, autoWeek, raceWouldOpen, chapter, answered, judged, tally,
     closeDue, endAct, ends, endOf, famSid, openOf, everOpened };
 })();

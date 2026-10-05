@@ -413,3 +413,132 @@
     - `tests/winger2/clock-test.js:124`(메시지 「경기 1분 = 90ms」)
     - `tests/winger2/_act.js:359`(주석 「한 판 8초 남짓」)
   - `_check.html`의 시계 주석 셋(`town.js` · 90ms)은 `live.js` · `MIN_MS`로 고쳤어요. 같은 파일 757~787줄에는 옛 🏫 덱의 내력 주석(`town.js`)이 아직 남아 있어요.
+
+---
+
+# v2 — 1막 둘째 묶음 (engineer · 2026-10-04 · 계약 정본 `38_orchestrator_phase3-v2.md`)
+
+> ✅ **끝남(2026-10-04)** — 진행 메모 · 새 클래스 목록 뒤에 바꾼 것 · 계약 대비 · 직접 확인한 것 · 회귀 검사 · 남은 것 · director에게 전할 것. 커밋 · `git add` 하지 않았어요.
+
+## v2 진행 메모 (시간순)
+
+- [11:24 UTC] 읽음: 38 → 15(C · S · P1 · P2 · J1~J8 · 이름 교체 · 「새 판 재실측 뒤」) → 27 → 29 → 36(§16 우선) → 37 §2 · §4 → 33 · 34 R10 표 · 28 R10 표. balancer 장치(`scratchpad/winger2-bal/lib/act2.js` · `snap29/winger2/engine.js`)를 읽고 엔진 16줄 · 상황 굴림 · `q` · ρ의 모양을 그대로 옮기기로 함
+- [11:30] director 쪽 세부 다섯(판 열기 값 · null slot · 설정 · 만들기 · 중간 평가서)을 "main"에 보냄 → 38번 §6에 그대로 적힘
+- [11:35] `engine.js` — 27번 규칙 셋(최소 1 · 상한 4 · 간격 15) + 29번 `autoP` 한 줄. balancer 사본 `snap29/engine.js`와 **300 / 300 비트 같음**(포지션 넷 × 75경기 · 같은 시드 · 같은 입력) · 판 0번 경기 0 · 5번 이상 0 · 간격 15 미만 0
+- [11:45] `live.js` 새로 — 상황 굴림(🦶 ⅓ · 따로 난수원 `SALT.board`) · `odds` · `judge` 한 번 · `boards[]`(sBoard · cell · target · seen · weak · q · ms) · `first`(첫 내 순간) · 머리 없는 길도 `W2Moment.play(null, …)` · 판은 부를 때마다 전역에서 찾음
+- [11:50] `world.js`(ACT1_SPOT · RATE_B · 시작 능력치 1점 × 48 · 이름 🎲 표 교체 17 · 새 소금 둘) · `sheet.js`(n_pos · T · READ_K · 솜씨 칸 · 몸 꼭대기 · 테스트 0~4 · 수비수 가중 · 중간 평가서 `open` · `left` · 문 = 가족 이야기 · 말투 · `act1` 새 칸) · `events.js`(약속 「첫 순간」 · 가족 셋 · 2장 판돈) · `story.js`(가족 셋 고르기 · 📍 「같은 장면」 · RACE_N 0) · `achieve.js`(34번 표 + g7 귀함) · `book.js`(문 힌트)
+- [12:05] `game.js` — 만들기(🎲 능력치 · 다시 뽑기 3 · 장기 · 이름 🎲 · `winger2-create`) · 도입 말투 · 🦶 약발 훈련 · 🤝 가족 셋 · 설정 API · 🔬 boardStats · 졸업 줄(`winger2-grads` · 점수 ×10) · 지우기 epoch · HELP
+- [12:10] `film.js`(판 줄 = 평가서 솜씨 칸 글 · 마지막 줄 일곱 엔딩) · `cloud.js`(keysOf `winger2-grads` · 졸업 요약) · `sw.js`(`winger2-v3` · 그림 120 — 목록 ↔ 디스크 누락 0)
+- [12:15] 스텁 장면으로 1막 끝까지 셋(남 윙어 🤖 · 여 수비수 손 · 남 공격수 손) — 오류 0 · 중간 평가서 `open` · `left` 17 → 2 · act1 새 칸 일곱 · 졸업 줄 1(grow-hof-v1 0) · boardStats 쌓임
+
+- [12:20] director 확인 뒤 고칠 것 둘(오케스트레이터 전달) — ① 중간 평가서 「아직」 칸 `col.note`에서 앞부분 「아직 · 최대 N — 」를 뺌(값 칸이 `col.open`으로 이미 그림 → 「7월 말 전국대회」 · 「11월 공개 테스트」 · 「… 권역 리그 우승 +1 아직」만) ② 알림 띠 `stillMotion()`이 기기 설정만 보던 것 → `settingOn("still")`(기기 설정 **또는** ⚙️ 🎞️ 움직임 줄이기 — 켠 사람에게도 같은 띠)
+- [12:40] 확인 페이지(`_check.html`) 판 칸을 새 계약으로 · 🦶 약발 배수를 `live.js` `footOf` 한 곳으로 · ♿ · 🎞️는 판을 열 때마다 읽음 · 「양발」 한 줄(해설 · 필름 · 엔딩) · 📍 줄을 한 자리로 접어 셈 · 회귀 검사 34개 + 스모크 + 확인 페이지 돌림
+- [12:50] 승부차기 판의 🤖 값을 **그 경기를 시작할 때의 값**으로(경기 중에 ⚙️에서 켰다 꺼도 그 경기 · 그 승부차기는 같은 값 — 「다음 경기부터」) · 픽스처 4칸 다시 뽑음(v2 세이브 모양 · 중간 평가서 글)
+
+### v2 — `#w2` 안에서 새로 쓰는 `w2-` 클래스 (director가 꾸밈)
+
+**만들기 `#w2-entry.w2-create`**(위에서 아래 순서)
+- `w2-create-title` · 칸 머리 `w2-field-label`(「🎲 시작 능력치」 · 「🎯 포지션 — 능력치를 보고 골라요」 · 「🦶 주발」)
+- 능력치 `w2-roll`(`role=group`) > 줄 `w2-roll-row[data-k]` 여섯
+  - 안: `w2-roll-name`(「⚽ 슈팅」) · `w2-roll-grade`(등급 글자) · `w2-roll-bar`(안의 `i` 폭 = 값%) · `w2-roll-v`(값) · `w2-roll-badge`
+  - `w2-roll-badge`는 포지션을 고르기 전엔 `hidden` · 고르면 그 포지션이 쓰는 셋에만 「주 60%」 · 「25%」 · 「15%」
+- `w2-roll-sum`(「합 288 · 누구나 같아요」 · `aria-live`) · `w2-roll-best`(「⚡ 스피드가 장기예요」 · 1위 − 2위 ≥ 3이면 「…뚜렷한 장기예요」)
+- `w2-btn w2-reroll`(「🎲 다시 뽑기 (3)」 — 남은 수 · 0이면 `disabled`)
+- 포지션 `w2-seg w2-pos` · 주발 `w2-seg w2-foot` > `w2-seg-btn[aria-pressed][data-v]`(v1 그대로)
+- 이름 `w2-name-row` > `w2-field`(라벨 + `input.w2-name`) + `w2-btn w2-name-roll`(🎲 · `aria-label` 「이름 무작위로 고르기」)
+- 등번호 `w2-field` > `input.w2-no` · `w2-form-msg` · `w2-btn w2-btn-primary w2-start` · `w2-btn w2-back`(v1 그대로)
+
+**주간 `#w2-home`** — 더한 것 둘
+- `.w2-head` 안 `w2-footline`(「🦶 오른발 · 약발 1단계」 — 2단계면 「(양발)」)
+- `.w2-train` 일곱째 칸 `w2-tbtn w2-tbtn-weak[data-k="weak"]`(안은 다른 훈련 칸과 같은 `w2-tbtn-name` · `-grade`(「1단계」 · 「양발」) · `-bar` · `-eff`) — 2단계면 `disabled`
+
+**뺀 것** — 입구의 `w2-opts` · `w2-opt` · `#w2-auto` · `#wide-judge` 체크박스(⚙️ 설정 레이어로). `#btn-cloud`는 입구에 그대로.
+**오른쪽 위 고정 요소** — engineer 화면엔 없어요(⚙️와 안 겹침). 아래 고정은 `#w2-toast`(알림 띠 · 움직임 줄이기 때만 보임) 하나.
+
+## v2 — 바꾼 것
+
+| 파일 | 바꾼 것 |
+|---|---|
+| `engine.js` | 27번 15줄(장면을 킥오프에 미리 굴림 · 1~6번 카드의 마지막 장면에 내 판 하나 보장 · 상한 4 · 간격 15분) + 29번 `autoP(kind, ab)` 한 줄. **그 밖 0줄** |
+| `live.js` | 판 셋의 드라이버 — 상황 굴림(🦶 ⅓ · 상황 난수원은 엔진 열과 따로 `SALT.board`) · `odds`(정수 %) · `judge` 한 번 · `info.boards`(`kind · s · sBoard · judge · auto · cell · target · seen · weak · step · q · ms`) · `info.first`(첫 내 순간) · 머리 없는 길도 `W2Moment.play(null, …)`(부를 때마다 전역에서 찾음) · 화면 길에서 판 자리가 없으면 🤖 · `footOf(weak, step)` 내보냄 · `still` · `wide`는 함수면 판마다 읽음 · 약발 2단계 「양발」 해설 한 줄(경기당 한 번) |
+| `world.js` | `ACT1_SPOT` · `RATE_B`(38번 §5) · 시작 능력치 `rollStart(seed, k)`(40 + 1점 × 48 · 꼭대기 56) · 이름 🎲 `HERO_NAMES`(남녀 24씩 · 33번 교체 17 · 학교 · 역할 이름과 안 겹침) · `rollName` · 소금 `start` · `board` · 열쇠 `start(k)` · `heroName(n)` · 조사 「라면」 |
+| `events.js` | 약속 = 「그 경기의 내 첫 순간을 살린다」(`judge(S, first)` — 내 순간이 없으면 없던 일) · 가족 셋(`FAMILY` · `famOf`) · 2장 약속 판돈 = min(2, 6 − \|🤝\|) · 0이면 이야기만 걸린 약속 · 규칙 글 |
+| `story.js` | 가족 이야기 셋을 🤝 사람에서 고름(P1 (가) — 2~30주 세 얼굴 + 문 구간 `note` · 고르면 그 사람만) · 📍 「같은 장면」 `tally(S, boards)`(한 자리로 접어 Δ · 집계 = 경기 줄의 합) · `SLOT_LINE` 1.5 · `RACE_N` 0 · 결말에 `r1` · `ok1` |
+| `sheet.js` | 38번 §5 표 전부(`N_POS` · `T` · `READ_K` · 몸 꼭대기 · 테스트 0~4 · 수비수 가중 0.55) · 🎮 솜씨 칸(공식 경기 🧱만 · ρ = s_board − 0.5 · 바닥 8 · k) · 중간 평가서(`tier` 없음 · `open` · `T` · 몸 칸 `left`) · 문 = 가족 이야기(`doorOf`) · `waitOf`(일곱 엔딩의 마지막 줄) · 말투 `VOICE` · `voiceOf` · `freeze` 새 칸(`family` · `origin` · `doorWhy` · `stats0` · `rerolls` · `weak` · `voice`) · 엔딩 「양발」 줄 |
+| `achieve.js` | 34번 표 + **`g7` 귀함** · `family` · `next` 조건 글 |
+| `book.js` | 엔딩 힌트에 문을 여는 가족 이야기(🏭 아버지 · 🎓 엄마 · ✉️ 할머니) |
+| `film.js` | 몸 장의 판 줄 = **평가서 솜씨 칸 글 그대로** · 「훈련 N주(🦶 약발 M주)」 · 양발 줄 · 마지막 장 = `waitOf` |
+| `game.js` | 만들기(🎲 능력치 · 다시 뽑기 3 · `winger2-create` · 장기 · 배지 · 이름 🎲 · 포지션 · 주발 기본값 없음) · 카드 = 외형만(여섯 다 열림) · 도입 「우리 집」 + 한마디 셋 → `voice` · 🦶 약발 훈련(일곱째 칸 · 2.0마다 한 단계 · 2단계에서 닫힘 · 선수 칸 한 줄 · 반짝 알림) · 🤝 가족 셋 · `W2Game.settings`(`list` · `on` · `set` · `wipe` — 지운 뒤 늦게 끝나는 단계는 epoch로 멈춤) · `W2Game.boardStats()` · 경기 칸 `liveCfg`(상황 난수원 · 약발 · 민재 실력 · 설정) · 기술 테스트 · 승부차기 판(같은 계약 · 그 자리의 상황 열쇠) · `official()`(🧱만 솜씨 재료 · `f1` · 📍 줄 · 🎮 줄) · 중간 · 최종 평가서 · 졸업 줄 `winger2-grads`(점수 × 10 · `grow-hof-v1` · `submitHof` 안 부름) · 졸업생 목록은 `act1`이면 모두 · 도움말 · 내보내기 `settings` · `help` · `boardStats` |
+| `sw.js` | 캐시 `winger2-v3` · 그림 120장(새 54장) — 목록 ↔ 디스크 어긋남 0 · `focus.js` 없음 |
+| `beta/cloud.js` | `keysOf`에 `winger2-grads`(도감 키 줄은 그대로 두고 한 줄 더) · 요약 「1막 졸업 · 2막 대기」(졸업이면 모두) |
+| `beta/_check.html` | 판 칸 이름 = 판의 `WORDS` 제목(🥅 슈팅 · 🅰️ 컷백 · 🧱 슛 막기) · 「🦶 상황」 칸(주발 · 약발 0 · 1 · 2단계) · 새 계약으로 엶(`sit` · `odds` · `judge` 한 번 — 엔진 · `live.js` 함수 그대로) · 결과 줄 「판 값 × 🦶 × 🫀 = s → 승산 → 판정 · 칸 · 정답 · 흐림 · ms」 · 시나리오 덱의 내 판도 새 계약(판정은 덱이 적어 둔 결과) |
+
+## v2 — 계약 대비 (38번)
+
+| 계약 | 상태 |
+|---|---|
+| 3′ 판 열기 | ✔ `W2Moment.play(slot, { kind, sit, odds, judge, foot, keeper, fast, still, wide }, cb)` — 경기 안(`live.js`) · 기술 테스트 · 승부차기(`game.js` `board`) · 확인 페이지 셋 다 같은 모양. `judge` 두 번째 부름은 첫 결과 · 판이 던지면 🤖 · `foot` = 차는 발(약발 상황이면 드라이버가 뒤집어 넘김) |
+| 4′ 경기 한 판 | ✔ `info.boards` · `info.saved` · `info.first` · 27번 규칙(머리 없는 길 4×80경기: 0판 0 · 5판+ 0 · 경기당 2.27~2.52) |
+| 7′ 평가서 | ✔ 중간 `{ final: false, week, cols, total, tier: null, open, T, coach, memo }` · 아직 칸 `col.open` · 몸 칸 `col.left`(17주 17 → 34주 2) · 솜씨 칸 글 「🧱 막기 판 14번(🤖 2) · 읽기 +0.07 · 포지션 보정 ×1.21」(앞의 「🎮 솜씨 5.7 — 」는 화면이 붙임) |
+| 14 설정 | ✔ 38번 §6 14-a 그대로 · `wipe()`는 II 키 12개만(공유 키 · 클라우드 사본 안 지움) · 🤖 · ⏩는 경기 시작 때 · ♿ · 🎞️는 판을 열 때마다 읽음 |
+| 15 만들기 | ✔ 카드 `{ preset, gender }` → 능력치 굴림(판 시드 · k번째 뽑기 — `newState`가 화면 값을 믿지 않고 다시 굴림) · 장기 한 줄 · 이름 🎲 · 포지션은 능력치 뒤 · `intro(ctx)`의 `choices` → 고른 `k`(안 돌려주면 외형 기본 말투) |
+| 16 초상 키 | (director) — `sw.js` 목록에 54장 · engineer가 부르는 키는 `{preset}-{g}` · `dad` · `mom` · `grandma` · `bg-home-jiho`(도입 — 29번 §3 「우리 집」 한 곳) |
+| 17 베타 측정 | ✔ `boardStats()` — 손으로 둔 판만(🤖 빼고 · 경기 · 기술 테스트 · 승부차기 모두) · 이 기기 누적 `winger2-boards` · `wipe()`가 지움 · 지우기 뒤 늦게 끝난 판은 안 셈 |
+| §5 계수 | ✔ 표 그대로(코드 자리마다 「37번 §2 · 38번 §5」 주석). 🦶 2단계 0.95 꼭대기 포함 |
+| §6 3′-a~e · 14-a · 15-a · 7′-a · 사람 카드 | ✔ — 단, 🅰️ 컷백의 이모지는 판 제목(director `WORDS`)에 맞춰 화면 글 · 도움말 · 경기 줄 모두 🅰️(36번 · 38번 글의 ⚡는 ⚡ 스피드와 겹침) |
+| 29번 §7-2 `act1` | ✔ 새 칸 일곱(`family` · `origin` · `doorWhy` · `stats0` · `rerolls` · `weak` · `voice`) + 있는 칸 그대로 — `side`는 P2 (나)일 때만이라 없음 |
+
+## v2 — 직접 확인한 것
+
+- `node --check` — 내 파일 전부(`engine` · `live` · `world` · `events` · `story` · `sheet` · `achieve` · `book` · `film` · `game` · `sw` · `cloud`) + `_check.html` 인라인 스크립트
+- 엔진: balancer 사본 `snap29/engine.js`와 300 / 300 비트 같음
+- 1막 끝까지(스텁 장면 · 오류 0) 다섯 판 — 남 윙어 🤖 · 여 수비수 손 · 남 공격수 손 · 여 미드필더(도연 · 엄마 이야기 · 약발 훈련) 손 · 남 수비수(하람 · 할머니 이야기) 🤖 · 남 윙어(하람 · 약발) 손
+  - 문 = 가족 이야기: 엄마 → 🎓 univ(「상」) · `doorWhy { story: "apply", r1: "try", ok1: true }`
+  - 마지막 줄: 「🔜 이 선수는 2막을 기다려요」 · 「🎓 대학 리그에서 …」 · 「🏭 공장 팀에서 …」 · 「🎒 다시 공을 잡을 날을 기다려요」
+  - 졸업 줄 `winger2-grads` 1 · 점수 = 합 × 10(530 · 566 · 594 · 575 · 539 · 499) · `grow-hof-v1` 0
+- 진짜 `scenes.js`(director 작업 중 사본) + 진짜 `match-scene.js`로 1막 끝까지 — 오류 0 · 오버레이 일곱 종
+- 만들기 화면(남 · 여): 합 288 · 40~56 · 다시 뽑기 (3) → (0) disabled · 넷째 누름 무시 · 새로 고침 = 같은 모양 · 같은 남은 수 · 깨진 `winger2-create` → 새 시드 · 포지션 배지(미드필더: 패스 주 60% · 드리블 25% · 체력 15%) · 이름 🎲 표 안의 이름 · 주발 기본값 없음 · 빈 번호 막힘 · `newState` 능력치 = 화면 · 시작하면 `winger2-create` 지움 · 남녀 같은 시드 = 같은 능력치
+- 🦶 약발: 0 → 1(9주) → 2(18주) · 2단계 칸 `disabled` · 반짝 알림 둘 · 판의 `sit.foot` 0.75 · 0.88 · 약발 상황 몫 0.31~0.35 · 약발 상황이면 차는 발이 반대
+- 「양발」 해설: 2단계 · 약발 상황이 있던 경기 6/6에 한 줄씩 · 0 · 1단계 0줄
+- 머리 없는 길(보통 손 · 4 × 80경기): 경기당 판 fw 2.52 · wg 2.50 · mf 2.27 · df 2.42 · 🧱 몫 .36 · .35 · .46 · .61 · ρ 평균 +0.04 ~ +0.09(설계 +0.07) · `W2Moment.play` 778번 = 판 778개
+- 확인 페이지(진짜 Chromium · director의 지금 판): 판 셋 × (주발 · 약발 1단계) — 머리 「기본 승산 52 → 49%」 · 결과 줄 · 오류 0 / 시나리오 덱 일곱 끝까지 · 오류 0
+- 경기 줄: 「📍 같은 장면 4번 — 나 2번 해냄 · 민서라면 1.4번 → +0.6(번호 집계 +1.8)」 · 「🎮 🧱 막기 판 2번(🤖 1) · 읽기 +0.12 · 🥅 1번 · 🅰️ 1번」 · 받침 있는 이름은 「준혁이라면」
+- 업적 알림: 엔딩 업적 둘(grad · door)이 필름 뒤 하나씩 — 둘째는 1.85초 뒤(아래 achieve-test 참고)
+
+## v2 — 회귀 검사 (돌려 보기만 · 검사 파일은 안 고침)
+
+`tests/winger2/` 34개 + 스모크 + 확인 페이지. **engineer 탓으로 깨진 것은 하나(FE-3 — 고침)**, 나머지는 계약이 바꾼 모양 · director 작업 중인 파일 · 검사 시점 문제예요.
+
+| 검사 | 결과 | 까닭 | 누가 |
+|---|---|---|---|
+| clock · credit · engine · flow90 · fx-count · gender · hub · league · neutral · pair · pitch · seed-split · situation · 스모크(`beta/winger2` ✅) | ✅ | — | — |
+| fence FE-3 「cloud 도감 키」 | ❌ → ✅ | `keysOf`에서 도감 키 줄에 졸업 줄 키를 합쳐 정규식이 못 찾음 → 도감 줄은 그대로 두고 `winger2-grads`를 따로 한 줄 | engineer(고침) |
+| achieve AC-4c · 4d | ❌ | **검사 시점** — 엔딩 업적이 둘(grad · door)이면 알림 줄이 하나씩이라 둘째는 1.85초 뒤예요. 검사가 `hofDone` 순간에 세서 7 ≠ 8. 200ms 뒤에 세면 8 = 8(필름 뒤 「첫 졸업」 → 「두 장의 편지」). v2에서 시드 777 판이 가족 이야기를 골라 문 엔딩에 닿으며 드러남 | inspector — 알림 줄이 빌 때까지 기다린 뒤 세기 |
+| auto-mark AM-1~3 · 0 | ❌ | 솜씨 재료가 공식 경기 🧱만(36번 §16-3) · 메모 글이 계약 7′ 모양 | inspector |
+| boundary K-W2 · K-5 · K-13 · K-8 | ❌ | 그림 120장(38번 §3) · `Art` 표(director) · `w2-footline` 옷 없음(director — 클래스 목록 전달) · 필름 판 줄 = 솜씨 칸 글 | inspector · director |
+| chain A-2 · C-1 · mutation E-변이 fw · wiring 변이 ACE_V0 | ❌ | 27번 규칙(최소 1 · 상한 4 · 간격 15)이 판 수 분포를 눌러 변이의 크기가 문턱 아래로(에이스 변이 fw 1.34 · 문턱 1.35 · `COND_REF` 사슬 ±0.3%). 엔진은 balancer 사본과 비트 같음 | inspector(문턱 · 변이) |
+| wiring B-4 · 변이 M_STAKE · 0 | ❌ | B-4는 판 열기 모양이 계약 3′로 바뀜 · M_STAKE는 문구 표(director 파일) | inspector |
+| flow F-1 · F-2 · F-2b · 0 | ❌ | 카드 여섯 다 열림(38번 §1) · 졸업 줄은 `winger2-grads`(`grow-hof-v1` 0줄 — 29번 §5) · 문 = 가족 이야기(P1 (가)) · 새 문턱에서 시드 901이 「하」 · UNLOCK 정규식 | inspector |
+| save SV-3b · SV-4 | ❌ | 졸업생 목록은 `act1`이면 모두 · 졸업 줄 `winger2-grads`(29번 §5) | inspector |
+| sheet 0 · P-1 · P-3 · P-5 · P-7 · 변이 RECO | ❌ / 💥 | 38번 §5(몸 꼭대기 · 문턱) · 문 = 가족 이야기 · 솜씨 칸 `detail`이 `{ n, auto, rho, rhoHat, k }`(옛 `avg` 없음 — P-1이 `undefined.toFixed`로 죽음) | inspector |
+| story Y-4 · Y-6 · 0 | ❌ | `RACE_N` 0(38번 §5) · 약속 = 첫 순간(27번 §8) | inspector |
+| visible V-2 · V-4 · V-4b · V-4c · 0 | ❌ | 훈련 칸 일곱(🦶 약발) · 중간 평가서 `tier` 없음(계약 7′) · 화면 합계 읽기(director의 새 중간 평가서) | inspector · director |
+| ceil-perfect · minigame-tap · mirror · moment · one-grid · raf · tier-in | ❌ / 💥 | 판 셋 새로(director `winger-moment.js`) — 옛 판의 변이 정규식 · 옛 종류(cutin · killpass · oneone 움직임) | inspector |
+| 확인 페이지 | ❌ 1건 | 판 칸 이름 셋은 이제 판 제목과 같음 ✔. 남은 것: 검사가 옛 열기(`condition` · `moment` — `sit` · `odds` · `judge` 없음)로 🧱 판을 6ms 안에 세면 칸 0 · 감도 변이의 이름 정규식이 옛 「슛 코스 막기」 | inspector |
+
+## v2 — 남은 것
+
+- **`scripts/make-fixtures.js`의 winger2 안내 글**(루트 `scripts/` — 작업 규칙 밖이라 안 고침): 「🤖 입구의 자동 진행」 · 「가장 밝은 칸」 · 「🥅 상대 골문 6칸」 같은 옛 판 · 옛 입구 문구. 픽스처 자체는 새 코드로 다시 뽑음(4칸 모두 v2 세이브 — `statsAt0` 합 288 · `voice` · `weak` · 중간 평가서 `open` 글)
+- 서버 졸업 줄(`W2Online` · `hof_grad` — 29번 §5 ③)은 이번 계약에 없음 → 기기 `winger2-grads`까지만. 「이름 공개를 끈 판은 익명」은 II에 이름 공개 칸이 없어 해당 없음
+- `act1.side`(P2 (나))는 안 만듦 — P2 (가)로 정해짐
+- 검사 갱신은 inspector 몫(위 표)
+
+## v2 — director에게 전할 것
+
+- 만들기 · 주간 화면의 새 클래스는 위 「`#w2` 안에서 새로 쓰는 `w2-` 클래스」 — **`w2-footline` 옷이 아직 없어** boundary K-13이 빨간불
+- 엔딩 `ending.wait` · 필름 마지막 장 `line`은 이모지까지 든 완성 줄 — 앞에 🔜를 또 붙이지 않기
+- 내 순간 카드에 `card.weak`(🦶 약발 상황) · `card.auto`(🤖)가 달려 와요 — 🤖 판 결과 줄 꼬리표에 쓸 수 있어요
+- 도입 `ctx.lines`는 세 줄 · 마지막 한마디는 `ctx.choices`에만(`speaker` = 플레이어 이름) — 진짜 화면으로 1막 끝까지 돌려 `voice`가 고른 값(`calm`)으로 얼려지는 것 확인
+- 약발 2단계면 경기 해설에 `kind: "filler"` 한 줄(「🦶 약발 쪽으로 온 공에도 {me}는 망설이지 않아요 — 이제 양발이에요」 · 경기당 한 번 · `flow` 없음)이 내 판 카드 바로 뒤에 와요
+- 화면 글의 🅰️ 컷백 — 판 제목에 맞춰 engineer 글도 🅰️(⚡는 ⚡ 스피드와 겹침)
+- 오른쪽 위 고정 요소: engineer 화면엔 없음(⚙️와 안 겹침) · 아래 고정은 `#w2-toast` 하나

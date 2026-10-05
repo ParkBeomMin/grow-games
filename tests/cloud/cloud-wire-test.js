@@ -195,8 +195,9 @@ async function winger2Column(over) {
   /* W-4 — SAVE · 키 백업 */
   const K = w.Cloud && w.Cloud._t ? w.Cloud._t.keysOf("winger2") : [];
   const SK = w.W2Game ? w.W2Game.SAVE_KEY : null;
-  res.w4 = say(!!SK && K[0] === SK && !!savedRaw && K.indexOf(SK + "-slots") >= 0 && K.indexOf("winger2-book") >= 0 && K.indexOf("winger2-book-shadow") < 0,
-    `W-4 클라우드 백업 키 ${JSON.stringify(K)} ↔ 게임 SAVE_KEY ${JSON.stringify(SK)}(저장됨 ${!!savedRaw}) — 첫 칸 일치 · -slots · winger2-book 있음 · -shadow 없음`);
+  /* 🔄 v2(29번 §5 B5 · 30번 v2) — 🎓 1막 졸업 줄 `winger2-grads`도 백업 */
+  res.w4 = say(!!SK && K[0] === SK && !!savedRaw && K.indexOf(SK + "-slots") >= 0 && K.indexOf("winger2-book") >= 0 && K.indexOf("winger2-book-shadow") < 0 && K.indexOf("winger2-grads") >= 0,
+    `W-4 클라우드 백업 키 ${JSON.stringify(K)} ↔ 게임 SAVE_KEY ${JSON.stringify(SK)}(저장됨 ${!!savedRaw}) — 첫 칸 일치 · -slots · winger2-book · winger2-grads 있음 · -shadow 없음`);
   /* W-5 — SUMMARY: 진짜로 쓴 세이브 · 색인으로 */
   let sum1 = null, sum2 = null;
   try {
@@ -206,8 +207,18 @@ async function winger2Column(over) {
     const flat = {}; flat[SK] = obj[SK];
     sum2 = w.Cloud._t.summarize("winger2", flat);
   } catch (e) { bad.push(`W-5 요약하다 예외 — ${e.message}`); }
-  res.w5 = say(/^1막 1주/.test(String(sum1)) && /^1막 1주/.test(String(sum2)),
-    `W-5 클라우드 요약 — 색인 있음 ${JSON.stringify(sum1)} · 세이브만 ${JSON.stringify(sum2)} (둘 다 「1막 1주」로 읽혀야)`);
+  /* 🔄 v2(15번 B1 · 29번 §5) — 졸업한 세이브는 엔딩과 무관하게 「1막 졸업 · 2막 대기」(색인 있음 · 세이브만 둘 다) */
+  let sum3 = null, sum4 = null;
+  try {
+    const g = JSON.parse(w.localStorage.getItem(SK));
+    g.act1 = { ending: "leave", next: null };
+    const o3 = {}; o3[SK] = JSON.stringify(g); o3[SK + "-slots"] = JSON.stringify({ main: { name: g.name, label: "졸업", savedAt: 1 } });
+    sum3 = w.Cloud._t.summarize("winger2", o3);
+    const o4 = {}; o4[SK] = JSON.stringify(g);
+    sum4 = w.Cloud._t.summarize("winger2", o4);
+  } catch (e) { bad.push(`W-5 졸업 요약하다 예외 — ${e.message}`); }
+  res.w5 = say(/^1막 1주/.test(String(sum1)) && /^1막 1주/.test(String(sum2)) && sum3 === "1막 졸업 · 2막 대기" && sum4 === "1막 졸업 · 2막 대기",
+    `W-5 클라우드 요약 — 색인 있음 ${JSON.stringify(sum1)} · 세이브만 ${JSON.stringify(sum2)} (둘 다 「1막 1주」) · 졸업(완결 엔딩 leave) ${JSON.stringify(sum3)} · ${JSON.stringify(sum4)}(「1막 졸업 · 2막 대기」)`);
   try { if (w.Cloud) { w.Cloud.touch = () => {}; } w.fetch = () => new Promise(() => {}); } catch (e) { /* 닫힘 */ }
   setImmediate(() => { try { w.close(); } catch (e) { /* 닫힘 */ } });
   return { bad, res, msgs };
@@ -229,7 +240,9 @@ async function winger2Column(over) {
       "  }\n  /* 🏠 허브"]] }],
     ["cloud.js SAVE를 옛 v1로", "w4", { "cloud.js": [[/winger2: "winger2-save-v2",/, 'winger2: "winger2-save-v1",']] }],
     ["cloud.js 도감 백업 줄 삭제", "w4", { "cloud.js": [[/ {4}if \(game === "winger2"\) out\.push\("winger2-book"\);[^\n]*\n/, ""]] }],
-    ["SUMMARY를 옛 모양으로", "w5", { "cloud.js": [[/ {4}winger2: function \(s\) \{ return s\.label[^\n]*\n/,
+    ["cloud.js 졸업 줄 백업 삭제", "w4", { "cloud.js": [[/ {4}if \(game === "winger2"\) out\.push\("winger2-grads"\);[^\n]*\n/, ""]] }],
+    ["SUMMARY 졸업을 옛 규칙으로(2막 대기는 next일 때만)", "w5", { "cloud.js": [[/return s\.act1 \|\| s\.label === "졸업" \? "1막 졸업 · 2막 대기" :/, 'return s.act1 ? "1막 졸업" + (s.act1.next ? " · 2막 대기" : "") :']] }],
+    ["SUMMARY를 옛 모양으로", "w5", { "cloud.js": [[/ {4}winger2: function \(s\) \{ return [^\n]*\n/,
       '    winger2: function (s) { return s.phase === "winger2-pro" ? "프로 " + (s.proYear || 0) + "시즌" : "유스 " + (s.year || 1) + "년차"; },\n']] }],
   ];
   if (base.bad.length) {

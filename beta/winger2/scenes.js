@@ -3,8 +3,8 @@
  *   window.W2Scenes — engineer가 부릅니다. 오버레이는 전부 #w2-layer에 그리고
  *   **사용자 탭(click)으로만** Promise를 풉니다(pointerdown에서 화면을 갈지 않아요 — ① 교훈).
  *
- *     pick(cards)            → Promise<{ preset, gender }>   👥 카드 여섯(잠긴 카드 표시 · 기본값 없음)
- *     intro(ctx)             → Promise                       🎬 도입 — 번호를 잃은 날
+ *     pick(cards)            → Promise<{ preset, gender }>   👥 카드 여섯 = 외형만(여섯 다 열림 · 기본값 없음 — 38번 계약 15)
+ *     intro(ctx)             → Promise<k | undefined>        🎬 도입 — 번호를 잃은 날 · 마지막 한마디를 셋 중 고름(`ctx.choices`)
  *     portrait(slot, o)      → (그림)                         🗓️ 홈 위 ⅓ 초상 — o = { who, mood, bg, name?, week? }
  *     card(card)             → Promise<pickIndex>            🎲 이벤트 · 📖 이야기 · 🤝 사람 · (opts 없으면 [확인] 하나)
  *     grade({ k, label, from, to }) → Promise                📊 승급 카드 「⚽ 슈팅 C → C+」
@@ -14,11 +14,13 @@
  *     film(film)             → Promise<{ rep, word, go }>    🎬 졸업 필름(마지막 장의 🏅 · 🖊️ · 📤)
  *     book(book)             → Promise                       📖 도감
  *     drawCard(canvas, film) → Promise<canvas>  · share(film) → Promise<"share"|"download"|"image"|"fail">   📤 1080×1350
+ *     settings()             → Promise                       ⚙️ 설정 레이어(29번 §4 · 38번 계약 14 · 17) — ⚙️ 버튼은 이 파일이 스스로 붙여요
  *
  * ═══ 지키는 것 ═══
  * ① **그리기만 합니다.** 결과 · 확률 · 점수는 받은 값을 그대로 적어요. 다시 계산하지 않습니다
  *    (조각의 합 = pct를 **검산해서 보여 줄 뿐** 고치지 않아요 — 보이는 % = 판정 %).
  * ② **세이브 · 전역 상태를 읽지 않습니다**(계약 9) — 인자로 받은 객체와 `window.Art`(그림 표)만.
+ *    설정은 `W2Game.settings`(list · on · set · wipe)로만 — localStorage를 직접 읽거나 쓰지 않아요(38번 계약 14).
  * ③ **사용자 문자열(이름 · 한마디)과 받은 글자는 전부 `textContent`로** 넣습니다 — 이 파일은 innerHTML을
  *    한 번도 안 씁니다(DOM을 직접 지어요). 그림 대체 문구는 `{이름} — {표정}`(Art.alt).
  * ④ **깨진 그림 금지** — 그림이 없거나 못 받으면 초상은 이름 글자로, 배경은 테마 그라데이션으로 물러섭니다.
@@ -30,9 +32,15 @@
 
 window.W2Scenes = (() => {
   // ---------- 작은 도구 ----------
+  /* 🎞️ 움직임 줄이기 = 기기 설정 **또는** 게임 설정 `still`(29번 §4-1 · 38번 §6 14-a). 설정은 `W2Game.settings`로만 읽어요 */
+  const SET = () => { const g = window.W2Game; return g && g.settings && typeof g.settings.on === "function" ? g.settings : null; };
+  const setting = (k) => { try { const S = SET(); return !!(S && S.on(k)); } catch { return false; } };
   const reduced = () => {
-    try { return window.matchMedia("(prefers-reduced-motion: reduce)").matches; } catch { return false; }
+    try { if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return true; } catch { /* 옛 브라우저 */ }
+    return setting("still");
   };
+  /* 게임 설정으로 켠 움직임 줄이기는 CSS가 못 보니(@media는 기기만) 뿌리에 표시를 달아요 — style.css의 `html.w2-still` */
+  const syncStill = () => document.documentElement.classList.toggle("w2-still", setting("still"));
   const art = () => window.Art || null;
   function h(tag, cls, text) {
     const e = document.createElement(tag);
@@ -190,26 +198,19 @@ window.W2Scenes = (() => {
   }
 
   // ═══════════════════════════════════════════════════════════════
-  // 👥 pick — 카드 여섯(13번 §2-1). 토글 · 기본값 없음 · 잠긴 카드는 「다음 업데이트에서 만나요」
+  // 👥 pick — 카드 여섯 = **외형만**(결정 C · 38번 계약 15 · §6 15-a). 성격 줄은 뺐어요 — 말투는 도입의 마지막 한마디에서
+  //   골라요(29번 §3-5). 여섯 다 열림 · 기본값 없음. `locked`가 오면 그때만 잠근 그림(읽는 쪽 기본값)
   // ═══════════════════════════════════════════════════════════════
-  const HERO = {
-    jiho: { m: "지호", f: "지호", line: "뜨겁고 곧장 — 먼저 뛰고 나중에 생각해요" },
-    doyun: { m: "도윤", f: "도연", line: "차분하고 계산적 — 숫자로 생각해요" },
-    haram: { m: "하람", f: "하람", line: "느긋하고 장난스러워요 — 재밌으면 끝까지" },
-  };
-  const PICK_DEFAULT = [
-    { preset: "jiho", gender: "m" }, { preset: "jiho", gender: "f" },
-    { preset: "doyun", gender: "m", locked: true }, { preset: "doyun", gender: "f", locked: true },
-    { preset: "haram", gender: "m", locked: true }, { preset: "haram", gender: "f", locked: true },
-  ];
+  const HERO = { jiho: { m: "지호", f: "지호" }, doyun: { m: "도윤", f: "도연" }, haram: { m: "하람", f: "하람" } };
+  const PICK_DEFAULT = ["jiho", "doyun", "haram"].reduce((a, p) => a.concat([{ preset: p, gender: "m" }, { preset: p, gender: "f" }]), []);
   const WORLD = { m: "남자부", f: "여자부" };
   function pick(cards) {
     return run(() => new Promise((resolve) => {
       const list = Array.isArray(cards) && cards.length ? cards : PICK_DEFAULT;
       const s = shell("pick");
       const head = h("div", "w2o-head");
-      put(head, title("h2", "w2o-title", "누구의 마지막 한 해를 볼까요?", s.id),
-        h("p", "w2o-sub", "고3 한 해 36주 — 한 명을 골라요. 성별을 고르면 그 세계(남자부 · 여자부)가 열려요"));
+      put(head, title("h2", "w2o-title", "어떤 모습으로 뛸까요?", s.id),
+        h("p", "w2o-sub", "외형만 골라요 — 능력치 · 이름 · 포지션은 다음 화면에서 정해요. 성별을 고르면 그 세계(남자부 · 여자부)가 열려요"));
       const grid = h("div", "w2o-heroes");
       const toast = h("p", "w2o-toast");
       toast.setAttribute("role", "status");
@@ -224,8 +225,7 @@ window.W2Scenes = (() => {
         put(b, put(h("span", "w2o-hero-fig"), deco(face(`${c.preset}-${g}`, "base", name)),
           locked ? h("span", "w2o-lock", `🔒 ${c.lockText || "다음 업데이트에서 만나요"}`) : null),
           h("span", "w2o-hero-name", name),
-          h("span", `w2o-hero-world w-${g}`, WORLD[g]),
-          h("span", "w2o-hero-line", c.line || p.line || ""));
+          h("span", `w2o-hero-world w-${g}`, WORLD[g]));
         b.addEventListener("click", () => {
           if (done) return;
           if (locked) { toast.textContent = `🔒 ${name}(${WORLD[g]})는 다음 업데이트에서 만나요`; return; }
@@ -245,6 +245,9 @@ window.W2Scenes = (() => {
   //   steps: [{ who, mood, name, speaker, text, typed }] · 탭 하나 = 한 줄(타이핑 중이면 줄을 다 보여 줌)
   // ═══════════════════════════════════════════════════════════════
   const TYPE_MS = 45;                       // 40~60ms/자(경기 연출 스킬 §2) — 승부처 줄만 칩니다
+  /* 🗣️ 고르는 한마디 — 줄 하나가 `{ choices: [{ k, text, mood, speaker }], prompt }`이면 셋 중 고르게 그리고,
+   *    고른 줄을 그 말투의 표정으로 칩니다. 고른 `k`로 풀어요(없으면 undefined — 29번 §3-5 · 38번 §6 15-a) */
+  const SAY = { hot: "🔥", calm: "🧊", play: "😄" };
   function talk(kind, steps, o) {
     return run(() => new Promise((resolve) => {
       const s = shell(kind);
@@ -255,10 +258,13 @@ window.W2Scenes = (() => {
       const speaker = h("p", "w2o-speaker");
       const line = h("p", "w2o-line");
       line.setAttribute("aria-live", "polite");
+      const say = h("div", "w2o-say");
+      say.setAttribute("role", "group");
+      say.hidden = true;
       const next = btn("btn btn-primary w2o-next");
-      put(panel, label, head, speaker, line, next);
+      put(panel, label, head, speaker, line, say, next);
       put(s.box, sc, panel);
-      let i = -1, fg = null, key = "", timer = null, full = "";
+      let i = -1, fg = null, key = "", timer = null, full = "", said;
       const stopType = () => {
         if (timer) { clearTimeout(timer); timer = null; }
         line.textContent = full;
@@ -279,25 +285,59 @@ window.W2Scenes = (() => {
         };
         timer = setTimeout(tick, TYPE_MS);
       };
+      const setFig = (who, mood, name) => {
+        const nk = `${who || ""}|${mood || ""}`;
+        if (!who || nk === key) return;
+        const nf = fig(who, mood, name);
+        if (fg) fg.replaceWith(nf); else sc.appendChild(nf);
+        fg = nf;
+        key = nk;
+      };
+      const lastLabel = (k) => (k === steps.length - 1 ? (o.last || "▶ 시작") : "다음 ▶");
       const show = (k) => {
         const st = steps[k] || {};
-        const nk = `${st.who || ""}|${st.mood || ""}`;
-        if (st.who && nk !== key) {
-          const nf = fig(st.who, st.mood, st.name);
-          if (fg) fg.replaceWith(nf); else sc.appendChild(nf);
-          fg = nf;
-          key = nk;
+        setFig(st.who, st.mood, st.name);
+        if (Array.isArray(st.choices) && st.choices.length) {
+          speaker.hidden = true;
+          line.textContent = str(st.prompt);
+          next.hidden = true;
+          say.replaceChildren(...st.choices.map((ch) => {
+            const b = btn("w2o-say-opt");
+            put(b, h("span", "w2o-say-emo", SAY[ch.k] || "💬"), h("span", "w2o-say-text", `「${str(ch.text)}」`));
+            b.addEventListener("click", (e) => { e.stopPropagation(); pickSay(st, ch, k); });
+            return b;
+          }));
+          say.setAttribute("aria-label", str(st.prompt) || "한마디 고르기");
+          say.hidden = false;
+          const f0 = say.querySelector("button");
+          if (f0) { try { f0.focus({ preventScroll: true }); } catch { /* 옛 브라우저 */ } }
+          return;
         }
         speaker.textContent = str(st.speaker);
         speaker.hidden = !st.speaker;
-        next.textContent = k === steps.length - 1 ? (o.last || "▶ 시작") : "다음 ▶";
+        next.hidden = false;
+        next.textContent = lastLabel(k);
         typeLine(st.text, st.typed);
         if (st.fx && !reduced() && window.Fx) { try { window.Fx.celebrate(st.fx); } catch { /* 장식이에요 */ } }
       };
+      const pickSay = (st, ch, k) => {
+        if (said !== undefined) return;
+        said = ch.k;
+        say.hidden = true;
+        say.replaceChildren();
+        setFig(st.who, ch.mood || st.mood, st.name);            // 반신 표정이 고른 말투를 따라가요(결의 · 평온 · 웃음)
+        speaker.textContent = str(ch.speaker || st.name);
+        speaker.hidden = !speaker.textContent;
+        next.hidden = false;
+        next.textContent = lastLabel(k);
+        typeLine(ch.text, true);
+        try { next.focus({ preventScroll: true }); } catch { /* 옛 브라우저 */ }
+      };
       const advance = () => {
+        if (!say.hidden) return;                                // 한마디를 고르는 중엔 판을 눌러도 안 넘어가요
         if (timer) { stopType(); return; }
         i += 1;
-        if (i >= steps.length) { s.close(); resolve(); return; }
+        if (i >= steps.length) { s.close(); resolve(said); return; }
         show(i);
       };
       next.addEventListener("click", (e) => { e.stopPropagation(); advance(); });
@@ -309,35 +349,32 @@ window.W2Scenes = (() => {
   }
 
   // ═══════════════════════════════════════════════════════════════
-  // 🎬 intro — 주 1 「3년 달던 등번호가 1학년 신입에게 넘어갔다」(12번 §3-3)
-  //   ctx = { preset, gender, name, pos, no, rival?, lines? } — lines를 주면 그 줄을 씁니다
+  // 🎬 intro — 주 1 「3년 달던 등번호가 1학년 신입에게 넘어갔다」(12번 §3-3 · 29번 §3-2 P1 (가) 「우리 집」 한 곳)
+  //   ctx = { who, name, bg, place?, lines: [{ mood, text }], choices: [{ k, text, mood, speaker }] } → 고른 k
+  //   lines가 없으면(옛 화면 · 확인 페이지) 아래 기본 줄 — 마지막 한마디는 늘 `choices`에서만 와요
   // ═══════════════════════════════════════════════════════════════
-  const INTRO = {
-    jiho: { bg: "bg-home-jiho", where: "치킨집 배달 오토바이 뒤", line: "…다시 가져오면 되지." },
-    doyun: { bg: "bg-home-doyun", where: "학원 창가 — 멀리 운동장 조명이 보인다", line: "번호는 숫자일 뿐이야. …그래도." },
-    haram: { bg: "bg-home-haram", where: "할머니 댁 평상 — 바닷바람이 분다", line: "에이, 번호가 날 뛰게 하는 건 아니잖아? …아, 좀 아깝다." },
-  };
+  const HOME = { bg: "bg-home-jiho", where: "치킨집 배달 오토바이 뒤" };
   /* 도입의 **플레이 문장만** 포지션 넷으로 갈립니다 — 그림은 안 갈려요(12번 §3-3) */
   const SPOT = { fw: "골문 앞 그 자리", wg: "측면 끝 그 자리", mf: "중원 한가운데 그 자리", df: "최종 수비 라인 그 자리" };
   function intro(ctx) {
     const c = ctx || {};
     const g = c.gender === "f" ? "f" : "m";
     const who = c.who || `${c.preset || "jiho"}-${g}`;
-    const P = INTRO[c.preset] || INTRO.jiho;
     const name = c.name || (HERO[c.preset] || HERO.jiho)[g];
     remember(who, c.name);
     /* 🔒 신입의 이름은 **세계가 채우는 틀 자리** `{rival}`(13번 §4-4) — 드라이버가 안 주면 두 세계의 기본 이름 */
     const rival = (c.rival && typeof c.rival === "object" ? c.rival.name : c.rival) || (g === "f" ? "차민서" : "차민재");
     const no = fin(c.no) ? `#${Math.round(+c.no)}` : "등번호";
     const steps = Array.isArray(c.lines) && c.lines.length
-      ? c.lines.map((l) => (typeof l === "string" ? { who, name, mood: "base", text: l } : Object.assign({ who, name }, l)))
+      ? c.lines.map((l) => (typeof l === "string" ? { who, name, mood: "surprise", text: l } : Object.assign({ who, name, mood: "surprise" }, l)))
       : [
-        { who, mood: "surprise", name, text: `3월 1주 · ${P.where}.\n단톡방에 새 시즌 명단 사진이 올라왔다.` },
+        { who, mood: "surprise", name, text: `3월 1주 · ${c.place || HOME.where}.\n단톡방에 새 시즌 명단 사진이 올라왔다.` },
         { who, mood: "surprise", name, text: `3년 달던 ${no} — 그 옆에 1학년 「${rival}」.` },
-        { who, mood: "fire", name, speaker: name, text: P.line, typed: true },
         { who, mood: "fire", name, text: `${SPOT[c.pos] || "내 자리"} — 고3, 마지막 한 해가 시작된다.` },
       ];
-    return talk("intro", steps, { bg: c.bg || P.bg, label: "🎬 번호를 잃은 날", last: "▶ 36주 시작" });
+    const choices = (Array.isArray(c.choices) ? c.choices : []).filter((x) => x && x.k != null && x.text);
+    if (choices.length) steps.push({ who, name, mood: steps[steps.length - 1].mood, choices, prompt: `🗣️ ${name}의 한마디는?` });
+    return talk("intro", steps, { bg: c.bg || HOME.bg, label: "🎬 번호를 잃은 날", last: "▶ 36주 시작" });
   }
 
   // ═══════════════════════════════════════════════════════════════
@@ -512,45 +549,103 @@ window.W2Scenes = (() => {
   }
 
   // ═══════════════════════════════════════════════════════════════
-  // 📋 sheet — 평가서(계약 7). 중간 평가서는 **그 시점의 사실만**(12번 §6-4 — 11월 예측 · 확률 없음)
-  //   { cols: [{ k, label, v, max, note }], total, tier, doors?, memo?, coach?: { mood, line }, week?, mid? }
+  // 📋 sheet — 평가서(계약 7 · 7′). 중간 평가서는 **그 시점의 사실만**(12번 §6-4 — 11월 예측 · 확률 없음)
+  //   { final, cols: [{ k, label, v, max, note, open?, left? }], total, tier, T?, doors?, memo?, coach?, week? }
+  //   중간(final: false)은 구간 도장 대신 **11월 문턱 자** — 채운 칸 = 지금 합 · 빗금 = 아직 안 한 칸의 **최대**(36번 §6)
   // ═══════════════════════════════════════════════════════════════
   const COL_EMO = { body: "🏋️", skill: "🎮", record: "⚽", stage: "🏆", test: "🎯" };
+  /* 📏 11월 문턱 자(36번 §6-2) — 문턱 셋은 **규칙**(✉️ 「이 문은 「상」일 때 열려요」와 같은 종류의 사실) ·
+   *    채운 칸 = 지금 합 · 빗금 = 아직 안 한 칸의 **최대**. 🔒 예측 0 — 「보통은 몇 점」 · 「닿을 확률」을 안 적어요.
+   *    자의 양끝은 문턱 셋과 지금 합이 다 들어오게 10점 단위로 잡고 글자로 적어요(줄인 자임을 숨기지 않게) */
+  function ruler(total, open, T, max) {
+    const marks = [["mid", "중"], ["high", "상"], ["top", "최상"]].filter(([k]) => fin(T[k])).map(([k, n]) => [n, +T[k]]);
+    if (!marks.length) return null;
+    const lo = Math.max(0, Math.floor((Math.min(total, marks[0][1]) - 10) / 10) * 10);
+    const hi = Math.min(max > 0 ? max : 100, Math.ceil((Math.max(total + open, marks[marks.length - 1][1]) + 5) / 10) * 10);
+    if (!(hi > lo)) return null;
+    const at = (v) => ((Math.max(lo, Math.min(hi, v)) - lo) / (hi - lo)) * 100;
+    const box = h("div", "w2o-ruler");
+    const track = h("div", "w2o-ruler-track");
+    track.setAttribute("aria-hidden", "true");                 // 같은 말을 아래 글이 해요(보이는 값 = 들리는 값)
+    const fillEl = h("i", "w2o-ruler-fill");
+    fillEl.style.width = `${at(total).toFixed(2)}%`;
+    track.appendChild(fillEl);
+    if (open > 0) {
+      const hatch = h("b", "w2o-ruler-open");
+      hatch.style.left = `${at(total).toFixed(2)}%`;
+      hatch.style.width = `${(at(total + open) - at(total)).toFixed(2)}%`;
+      track.appendChild(hatch);
+    }
+    marks.forEach(([n, v]) => {
+      const m = h("span", "w2o-ruler-mark");
+      m.style.left = `${at(v).toFixed(2)}%`;
+      m.appendChild(h("b", null, n));
+      track.appendChild(m);
+    });
+    const ends = put(h("div", "w2o-ruler-ends"), h("span", null, String(lo)), h("span", null, String(hi)));
+    ends.setAttribute("aria-hidden", "true");
+    put(box, h("p", "w2o-ruler-k", "📏 11월 문턱 자"), track, ends,
+      h("p", "w2o-ruler-text", `지금까지 ${n1(total)}점 · 아직 안 한 칸 최대 ${n1(open)}점 · 11월 문턱 — ${marks.map(([n, v]) => `${n} ${n1(v)}`).join(" · ")}`));
+    return box;
+  }
   /* 칸 이름 — 로직이 이모지를 붙여 주면(「🏋️ 몸」) 그대로, 아니면 여기서 붙여요(두 번 안 붙게) */
   const colLabel = (c) => { const l = str(c.label), e = COL_EMO[c.k]; return e && l.indexOf(e) < 0 ? `${e} ${l}` : l; };
   function sheet(sh) {
     return run(() => new Promise((resolve) => {
       const x = sh || {};
       const mid = x.final != null ? !x.final : x.mid === true || (fin(x.week) && +x.week < 36);
-      const tk = tierKey(x.tier);
+      const tk = mid ? "" : tierKey(x.tier);              // 🔒 중간 평가서엔 구간 이름 0 — 일부 칸으로 매긴 이름은 「지금 나는 하」로 읽혀요
       const s = shell("sheet");
       const panel = h("div", "w2o-panel w2o-sheet-panel");
       put(panel,
         h("p", "w2o-kicker", x.title ? `${x.title}${mid && fin(x.week) ? ` · ${+x.week}주` : ""}` : mid ? `📋 중간 평가서${fin(x.week) ? ` · ${+x.week}주` : ""}` : "📋 스카우트 평가서"),
-        title("h2", "w2o-title", mid ? "지금까지의 기록으로 매겼어요" : "문 스카우트의 평가서", s.id));
+        title("h2", "w2o-title", mid ? "지금까지 채운 칸이에요" : "문 스카우트의 평가서", s.id));
       const cols = Array.isArray(x.cols) ? x.cols : [];
       const list = h("div", "w2o-cols");
+      const ratio = (a, b) => (b ? Math.max(0, Math.min(1, a / b)) : 0);
+      let openSum = 0, maxSum = 0;
       cols.forEach((c, i) => {
         const max = fin(c.max) && +c.max > 0 ? +c.max : 0;
         const v = fin(c.v) ? +c.v : 0;
-        const row = h("div", "w2o-col");
+        const open = mid && fin(c.open) && +c.open > 0 ? +c.open : 0;   // 아직 안 한 칸이 줄 수 있는 **최대**(규칙 — 기댓값 아님)
+        openSum += open;
+        maxSum += max;
+        const row = h("div", `w2o-col${open ? " is-open" : ""}`);
         row.style.setProperty("--d", `${i * 180}ms`);
         const bar = h("span", "w2o-bar");
         const fill = h("i");
-        fill.style.transform = `scaleX(${max ? Math.max(0, Math.min(1, v / max)).toFixed(3) : 0})`;
+        fill.style.transform = `scaleX(${ratio(v, max).toFixed(3)})`;
         bar.appendChild(fill);
+        if (open && max) {                                         // 빗금 — 0점 막대와 다르게(무늬 + 글 · 색만으로 안 가름)
+          const hatch = h("b", "w2o-hatch");
+          hatch.style.left = `${(ratio(v, max) * 100).toFixed(2)}%`;
+          hatch.style.width = `${(ratio(Math.min(open, max - v), max) * 100).toFixed(2)}%`;
+          bar.appendChild(hatch);
+        }
         bar.setAttribute("aria-hidden", "true");
-        put(row, h("span", "w2o-col-k", colLabel(c)), bar,
-          h("span", "w2o-col-v", max ? `${n1(v)} / ${max}` : n1(v)),
-          c.note ? h("span", "w2o-col-note", c.note) : null);
+        const vt = open ? (v ? `${n1(v)} / ${max} · +${n1(open)} 아직` : `아직 · 최대 ${n1(open)}`) : max ? `${n1(v)} / ${max}` : n1(v);
+        put(row, h("span", "w2o-col-k", colLabel(c)), bar, h("span", "w2o-col-v", vt),
+          c.note ? h("span", "w2o-col-note", c.note) : null,
+          /* 🗓️ 몸 칸 — 11월 공개 테스트까지 남은 훈련 주(사실 · 점수 0 — 38번 계약 7′ · 15번 R21) */
+          mid && fin(c.left) ? h("span", "w2o-col-left", +c.left > 0 ? `🗓️ 11월까지 훈련 ${Math.round(+c.left)}주 남음` : "🗓️ 이제 11월 테스트만 남았어요") : null);
         list.appendChild(row);
       });
+      if (mid && !openSum && x.open && typeof x.open === "object") openSum = Object.values(x.open).reduce((a, v) => a + (fin(v) ? +v : 0), 0);
       panel.appendChild(list);
       const sum = h("div", `w2o-total t-${tk || "none"}`);
       sum.style.setProperty("--d", `${cols.length * 180 + 150}ms`);
-      put(sum, fin(x.total) ? h("span", "w2o-total-n", `합계 ${n1(x.total)}`) : null,
-        tierName(x.tier) ? h("b", "w2o-stamp", `구간 「${tierName(x.tier)}」`) : null);
+      if (mid) {
+        put(sum, fin(x.total) ? h("span", "w2o-total-n", `지금까지 ${n1(x.total)}`) : null,
+          openSum ? h("span", "w2o-total-open", `아직 안 한 칸 최대 +${n1(openSum)}`) : null);
+      } else {
+        put(sum, fin(x.total) ? h("span", "w2o-total-n", `합계 ${n1(x.total)}`) : null,
+          tierName(x.tier) ? h("b", "w2o-stamp", `구간 「${tierName(x.tier)}」`) : null);
+      }
       panel.appendChild(sum);
+      if (mid && x.T && fin(x.total)) {
+        const r = ruler(+x.total, openSum, x.T, maxSum);
+        if (r) { r.style.setProperty("--d", `${cols.length * 180 + 300}ms`); panel.appendChild(r); }
+      }
       /* 📝 감독 의견 — 🤝은 1막 높이에 안 닿는다는 것을 **숨기지 않고** 옆에 적어요(23번 §7) */
       if (x.coach && x.coach.line) {
         const co = h("p", "w2o-coach");
@@ -564,7 +659,7 @@ window.W2Scenes = (() => {
         x.doors.forEach((d) => dl.appendChild(h("li", d.open === false ? "" : "is-open", `${d.open === false ? "🔒" : "•"} ${str(d.label)}${d.open === false ? " — 닫힌 문" : ""}`)));
         panel.appendChild(dl);
       }
-      const memo = x.memo || (mid ? "11월엔 달라질 수 있어요 — 지금까지의 기록일 뿐이에요" : "");
+      const memo = x.memo || (mid ? "11월엔 달라질 수 있어요 — 🏋️ 몸 · 🎮 솜씨 · ⚽ 기록은 지금까지의 값이고, 빗금은 아직 안 한 칸이 줄 수 있는 최대예요" : "");
       if (memo) panel.appendChild(h("p", "w2o-memo", memo));
       const ok = btn("btn btn-primary w2o-ok", "다음 ▶");
       panel.appendChild(ok);
@@ -639,7 +734,7 @@ window.W2Scenes = (() => {
     const head = h("div", "w2o-end-title");
     put(head, h("span", "w2o-end-emo", E.e), h("b", null, nm || "1막의 끝"),
       tierName(x.tier) ? h("span", "w2o-end-tier", `평가서 「${tierName(x.tier)}」`) : null,
-      x.next ? h("span", "w2o-end-next", "🔜 이 선수는 2막을 기다려요") : null);
+      x.wait ? h("span", "w2o-end-next", str(x.wait)) : x.next ? h("span", "w2o-end-next", "🔜 이 선수는 2막을 기다려요") : null);   // `wait`은 완성 줄 — 앞에 아무것도 안 붙여요
     const steps = (lines.length ? lines : ["1막이 끝났어요."]).map((t, i, a) => ({
       who: x.who || null, name: x.whoName, text: t, typed: true,
       mood: E.first && i < a.length - 1 ? E.first : x.mood || E.mood,
@@ -841,7 +936,7 @@ window.W2Scenes = (() => {
       put(lastSec, put(h("div", "w2f-last-top"), bgImg(last.bg || "bg-gate"),
         who ? fig(who, last.mood || "moved", hd.name, "w2f-fig") : null,
         h("h3", "w2f-h", last.title || "🎬 마지막 장")));
-      if (last.line) lastSec.appendChild(h("p", "w2f-next", `🔜 ${last.line}`));
+      if (last.line) lastSec.appendChild(h("p", "w2f-next", str(last.line)));   // 이모지까지 든 완성 줄(「🎓 대학 리그에서 2막을 기다려요」)
       /* 🏅 대표 업적 — 딴 업적 **목록**(이름 · 희귀도)이 와야 고를 수 있어요. 목록이 없으면 이 칸을 안 그립니다
        *    (id만으로는 이름을 모르고, 모르는 것을 지어내 그리지 않아요) */
       const achs = (Array.isArray(x.ach) ? x.ach : Array.isArray(last.ach) ? last.ach : []).filter((a) => a && a.id != null && a.name);
@@ -1246,5 +1341,195 @@ window.W2Scenes = (() => {
     return "image";
   }
 
-  return { pick, intro, portrait, card, grade, sheet, doors, ending, film, book, drawCard, share };
+  // ═══════════════════════════════════════════════════════════════
+  // ⚙️ settings — 어디서나 버튼 하나 · 한 화면(29번 §4 · 38번 계약 14 · 17 · §6 14-a)
+  //   부르는 것은 넷뿐: `W2Game.settings`(list · on · set · wipe) · `W2Game.help()` · `Cloud.openModal` ·
+  //   (베타만) `W2Game.boardStats()`. 🔒 키 이름 · 적용 시점 · 지우기 목록은 engineer 소유 — 여기는 그리기만
+  // ═══════════════════════════════════════════════════════════════
+  const SHARED_NOTE = "🔗 이 기기의 다른 그로우 게임에도 같이 적용돼요";
+  const G = () => window.W2Game || null;
+  const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
+  /* 🔬 베타 측정(계약 17 · 15번 J8) — 손으로 둔 판만(🤖 빼고) · 이 기기 누적. **베타가 아니면 칸 0**.
+   *    📋 한 줄 글 = 사람이 읽는 요약 + `raw`(boardStats 그대로 — 숫자가 어긋날 자리를 안 만들어요) */
+  function betaBox(status) {
+    const g = G();
+    if (!(window.GROW_ENV && window.GROW_ENV.beta) || !g || typeof g.boardStats !== "function") return null;
+    const box = h("section", "w2s-sec w2s-beta");
+    let st = null;
+    try { st = g.boardStats(); } catch (e) { console.error(e); }
+    const t = st && typeof st === "object" ? st : {};
+    const B = t.block || {}, Sh = t.shot || {}, C = t.cut || {};
+    const n = (v) => (fin(v) ? +v : 0);
+    const per = (a, b) => (n(b) ? `${Math.round((n(a) / n(b)) * 100)}%` : "—");
+    const avg = (sum, cnt) => (n(cnt) ? (n(sum) / n(cnt)).toFixed(3) : "—");
+    const sec = (ms, cnt) => (n(cnt) ? `${(n(ms) / n(cnt) / 1000).toFixed(2)}초` : "—");
+    const rows = [
+      ["🧱 막기", `${n(B.n)}판 · 판 값 평균 ${avg(B.sSum, B.n)} · 맞힘 잘 보임 ${n(B.clearHit)}/${n(B.clear)}(${per(B.clearHit, B.clear)}) · 흐림 ${n(B.dimHit)}/${n(B.dim)}(${per(B.dimHit, B.dim)}) · 시간 초과 ${n(B.timeout)}(${per(B.timeout, B.n)}) · 고름 ${sec(B.msSum, B.n)}`],
+      ["🥅 슈팅", `${n(Sh.n)}판 · 고름 ${sec(Sh.msSum, Sh.n)}`],
+      ["🅰️ 컷백", `${n(C.n)}판 · 고름 ${sec(C.msSum, C.n)}`],
+    ];
+    const dl = h("dl", "w2s-stats");
+    rows.forEach(([k, v]) => put(dl, put(h("div"), h("dt", null, k), h("dd", null, v))));
+    const line = `더윙어II 베타측정 ${today()} | ${rows.map(([k, v]) => `${k} ${v}`).join(" | ")} | raw ${JSON.stringify({ block: B, shot: Sh, cut: C })}`;
+    const out = h("textarea", "w2s-copytext");
+    out.readOnly = true;
+    out.rows = 4;
+    out.value = line;
+    out.hidden = true;
+    out.setAttribute("aria-label", "베타 측정 한 줄 — 골라 두었어요");
+    const copy = btn("w2-btn w2s-copy", "📋 복사");
+    copy.addEventListener("click", async () => {
+      let ok = false;
+      try { if (navigator.clipboard && navigator.clipboard.writeText) { await navigator.clipboard.writeText(line); ok = true; } } catch { ok = false; }
+      if (ok) { status.textContent = "📋 베타 측정을 복사했어요"; return; }
+      out.hidden = false;                                          // 클립보드가 막히면 글을 골라 둬요(계약 17)
+      try { out.focus({ preventScroll: true }); out.select(); } catch { /* 옛 브라우저 */ }
+      status.textContent = "📋 복사가 막혔어요 — 글을 골라 두었어요. 길게 눌러 복사해 주세요";
+    });
+    put(box, h("h3", "w2s-h", "🔬 베타 측정"),
+      h("p", "w2s-desc", "손으로 둔 판만 모아요(🤖 자동 빼고 · 이 기기 누적) — 실기기 사람의 판 값을 맞추는 데 써요"),
+      dl, copy, out);
+    return box;
+  }
+  function settings() {
+    return run(() => new Promise((resolve) => {
+      const S = SET();
+      const s = shell("settings");
+      const panel = h("div", "w2o-panel w2s-panel");
+      const closeBtn = btn("w2-btn w2s-close", "닫기");
+      const head = put(h("div", "w2s-head"), title("h2", "w2o-title", "⚙️ 설정", s.id), closeBtn);
+      const status = h("p", "w2s-status");
+      status.setAttribute("role", "status");
+      let done = false;
+      const finish = () => {
+        if (done) return;
+        done = true;
+        document.removeEventListener("keydown", onKey, true);
+        s.close();
+        resolve();
+      };
+      function onKey(e) { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); finish(); } }
+      /* 칸 — `list()`가 준 순서 · 문구 그대로. 바꾼 뒤엔 `on(k)`을 다시 읽어 실제 값을 그려요(저장이 막힌 기기) */
+      const list = h("div", "w2s-sec w2s-list");
+      const sws = [];
+      let items = [];
+      try { items = S && typeof S.list === "function" ? S.list() : []; } catch (e) { console.error(e); }
+      (Array.isArray(items) ? items : []).forEach((it, idx) => {
+        if (!it || it.k == null) return;
+        const id = `w2s-${seq}-${idx}`;
+        const row = h("label", `w2s-row${it.locked ? " is-locked" : ""}`);
+        row.htmlFor = id;
+        const txt = h("span", "w2s-text");
+        const desc = h("span", "w2s-desc", str(it.desc));
+        desc.id = `${id}-d`;
+        put(txt, h("b", "w2s-label", str(it.label)), desc,
+          it.applies ? h("span", "w2s-applies", `⏱️ ${str(it.applies)}`) : null,
+          it.shared ? h("span", "w2s-shared", SHARED_NOTE) : null,
+          it.locked ? h("span", "w2s-locked", "🔒 기기 설정으로 켜져 있어요") : null);
+        const sw = h("input", "w2s-switch");
+        sw.type = "checkbox";
+        sw.id = id;
+        sw.setAttribute("role", "switch");
+        sw.setAttribute("aria-describedby", desc.id);
+        sw.checked = !!it.on;
+        sw.disabled = !!it.locked;
+        sw.addEventListener("change", () => {
+          const want = sw.checked;
+          let ok = true;
+          try { S.set(it.k, want); } catch (e) { console.error(e); ok = false; }
+          let now = want;
+          try { now = !!S.on(it.k); } catch { /* 읽지 못하면 고른 값 그대로 */ }
+          sw.checked = now;
+          status.textContent = ok && now === want
+            ? `${str(it.label)} — ${now ? "켰어요" : "껐어요"}${it.applies ? `(${str(it.applies)})` : ""}`
+            : `${str(it.label)} — 바꾸지 못했어요(이 기기에 저장할 수 없어요)`;
+          if (it.k === "still") syncStill();
+        });
+        sws.push([it.k, sw]);
+        /* 진짜 checkbox가 56×44 누르는 칸을 덮고(투명), 보이는 막대 · 손잡이는 옆 그림이에요(어느 브라우저에서도 같은 모양) */
+        const track = h("i", "w2s-track");
+        track.setAttribute("aria-hidden", "true");
+        put(row, txt, put(h("span", "w2s-sw"), sw, track));
+        list.appendChild(row);
+      });
+      if (!sws.length) list.appendChild(h("p", "w2s-desc", "설정을 불러오지 못했어요 — 새로고침해 주세요"));
+      /* 🔗 · 🔐 · ❓ — 연동 모달 · 도움말은 이 레이어를 닫은 뒤 열어요(겹친 오버레이 아래로 숨지 않게) */
+      const links = h("div", "w2s-sec w2s-links");
+      const link = (text, sub, fn) => {
+        const b = btn("w2s-link");
+        put(b, h("b", null, text), sub ? h("span", null, sub) : null);
+        if (fn) b.addEventListener("click", () => { finish(); try { fn(); } catch (e) { console.error(e); } });
+        else { b.disabled = true; b.setAttribute("aria-disabled", "true"); }
+        return b;
+      };
+      if (window.Cloud && typeof window.Cloud.openModal === "function") links.appendChild(link("🔗 기록 연동", "다른 기기로 옮기거나 백업해요", () => window.Cloud.openModal()));
+      links.appendChild(link("🔐 로그인", "준비 중이에요(구글 로그인)", null));
+      if (G() && typeof G().help === "function") links.appendChild(link("❓ 도움말", "판 · 평가서 · 설정을 한곳에서 봐요", () => G().help()));
+      const beta = betaBox(status);
+      /* 🗑️ 지우기 — 확인 두 번 · 두 번째 버튼은 **다른 자리**(연타로 지나가지 않게 — 29번 §4-5) */
+      let wipe = null;
+      if (S && typeof S.wipe === "function") {
+        wipe = h("section", "w2s-sec w2s-wipe");
+        const first = btn("w2-btn w2s-wipe-go", "🗑️ 이 기기의 더 윙어 II 기록 지우기");
+        const ask = h("div", "w2s-ask");
+        ask.hidden = true;
+        const no = () => { ask.hidden = true; ask.replaceChildren(); first.hidden = false; try { first.focus({ preventScroll: true }); } catch { /* */ } };
+        const step = (q, yesText, yesFirst, onYes) => {
+          const yes = btn("w2-btn w2s-yes", yesText);
+          const back = btn("w2-btn w2s-no", "그만두기");
+          yes.addEventListener("click", onYes);
+          back.addEventListener("click", no);
+          const row = put(h("div", `w2s-ask-row${yesFirst ? " is-flip" : ""}`), ...(yesFirst ? [yes, back] : [back, yes]));
+          ask.replaceChildren(h("p", "w2s-q", q), row);
+          ask.hidden = false;
+          try { back.focus({ preventScroll: true }); } catch { /* */ }
+        };
+        first.addEventListener("click", () => {
+          first.hidden = true;
+          step("이 기기의 더 윙어 II 기록(진행 중인 판 · 졸업생 · 졸업 필름 · 도감)을 지울까요?", "지우기", false, () => {
+            step("되돌릴 수 없어요. 정말 지울까요?", "정말 지우기", true, () => {
+              let gone = null;
+              try { gone = S.wipe(); } catch (e) { console.error(e); }
+              ask.hidden = true;
+              ask.replaceChildren();
+              first.hidden = false;
+              status.textContent = gone ? "지웠어요 — 🔗 기록 연동에 올려 둔 사본은 남아 있어요" : "지우지 못했어요 — 이 기기에 저장할 수 없는 상태예요";
+              sws.forEach(([k, sw]) => { try { sw.checked = !!S.on(k); } catch { /* */ } });
+              syncStill();
+              const nb = betaBox(status);
+              const ob = panel.querySelector(".w2s-beta");
+              if (ob && nb) ob.replaceWith(nb);
+            });
+          });
+        });
+        put(wipe, first, ask);
+      }
+      put(panel, head, status, list, links, beta, wipe);
+      s.box.appendChild(panel);
+      closeBtn.addEventListener("click", finish);
+      s.root.addEventListener("click", (e) => { if (e.target === s.root || e.target === s.box) finish(); });   // 바깥 탭
+      document.addEventListener("keydown", onKey, true);
+      const f0 = list.querySelector("input:not([disabled])") || closeBtn;
+      try { f0.focus({ preventScroll: true }); } catch { /* 옛 브라우저 */ }
+    }));
+  }
+  /* ⚙️ 버튼 — 화면 맨 위 오른쪽 · 44px(페이지와 함께 스크롤 — 내린 화면의 버튼을 덮지 않게). 판이 열려 있거나
+   *    오버레이가 떠 있으면 숨기고(style.css) 눌러도 안 열어요. 경기 화면은 스코어보드 안 ⚙️(match-scene.js) */
+  function gear() {
+    if (!document.getElementById("w2") || document.getElementById("w2-gear")) return;
+    const b = btn("w2s-gear", "⚙️");
+    b.id = "w2-gear";
+    b.setAttribute("aria-label", "설정");
+    b.addEventListener("click", () => {
+      if (document.querySelector(".w2m-ready, .w2m-board, #w2-layer .w2o")) return;
+      try { b.focus({ preventScroll: true }); } catch { /* 옛 브라우저 */ }   // 닫으면 여기로 포커스가 돌아와요(29번 §4-5)
+      settings();
+    });
+    document.body.appendChild(b);
+    syncStill();
+  }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", gear);
+  else gear();
+
+  return { pick, intro, portrait, card, grade, sheet, doors, ending, film, book, drawCard, share, settings };
 })();

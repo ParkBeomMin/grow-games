@@ -66,7 +66,12 @@ function kM(man, html) {
     + (w1.missing.length ? `\n     🔴 없는 파일(설치가 통째로 실패해요): ${w1.missing.join(" · ")}` : "") + (w1.lack.length ? `\n     🔴 빠짐(오프라인에서만 깨져요): ${w1.lack.slice(0, 8).join(" · ")}` : ""));
   const m1 = kM(MAN, HTML);
   check(m1.ok, `K-M. 🎨 manifest \`theme_color\` ${m1.tc} == \`<meta name="theme-color">\` ${m1.meta}`);
-  check(w1.art === 66, `K-W2. 🖼️ \`art/\` 그림이 첫 베타 66장 그대로 (${w1.art}장 · 25번 §1)`);
+  check(w1.art === 120, `K-W2. 🖼️ \`art/\` 그림이 첫 묶음 66 + 54 = **120장**(${w1.art}장 · 38번 §3)`);
+  /* 🔄 v2(39번 §2 「그림」) — 옛 사본 0: `.v1.` 이름 · 옛 이름 사본 `doyun-base` · `haram-base`(지금은 `doyun-m-base` …) */
+  const stale = (names) => names.filter((f) => /\.v1\./.test(f) || /^(doyun|haram)-base\./.test(f));
+  const ART_FILES = require("fs").readdirSync(require("path").join(PAGE_DIR, "art"));
+  check(stale(ART_FILES).length === 0, `K-W3. 🧹 \`art/\`에 옛 사본 0 — \`.v1.\` · \`doyun-base\` · \`haram-base\` (${stale(ART_FILES).join(" · ") || "없음"})`);
+  check(stale(ART_FILES.concat(["doyun-base.webp", "jiho-m-base.v1.webp"])).length === 2, `변이 — 옛 사본 두 장을 목록에 끼우면 → K-W3이 빨간불`);
   /* 🧪 변이 — 읽어 온 문자열에만 */
   const swapped = HTML.replace('<script src="scenes.js"></script>', "@@").replace('<script src="live.js"></script>', '<script src="scenes.js"></script>').replace("@@", '<script src="live.js"></script>');
   check(swapped !== HTML && !kS(swapped).ok, `변이 — scenes.js · live.js 순서를 바꾸면 → K-S가 빨간불`);
@@ -89,7 +94,7 @@ function k5static(A) {
   const files = fs.readdirSync(path.join(PAGE_DIR, "art")).filter((f) => f.endsWith(".webp")).map((f) => f.replace(/\.webp$/, ""));
   const claimed = [...A.__HAVE];
   const claimNoFile = claimed.filter((k2) => files.indexOf(k2) < 0);
-  const WHO = ["jiho-m", "jiho-f", "coach", "minjae", "taeo", "seheon", "minseo", "seoa", "gaeun", "scout", "dad"];
+  const WHO = ["jiho-m", "jiho-f", "doyun-m", "doyun-f", "haram-m", "haram-f", "coach", "minjae", "taeo", "seheon", "minseo", "seoa", "gaeun", "scout", "dad", "mom", "grandma"];
   const MOODS = ["base", "smile", "fire", "tired", "down", "surprise", "moved", "stern", "worry", "smirk", "shock", "grin", "tears", "frown", "respect", "interest"];
   const POSES = ["base", "score", "block", "down"];
   const reach = new Set();
@@ -100,16 +105,19 @@ function k5static(A) {
   }
   for (const f of files.filter((f) => /^(bg|end)-/.test(f))) { const p = A.bg(f); if (p) reach.add(p); }
   const unreached = files.filter((f) => !reach.has(`art/${f}.webp`));
-  const ghosts = ["doyun-m", "doyun-f", "haram-m", "haram-f", "mom", "grandma"].filter((w) => A.src(w, "base") !== null || A.chibi(w, "base") !== null);
+  /* v2(38번 §3 · 계약 16): 도윤 · 하람 남 · 여 · 엄마 · 할머니가 이제 그림을 가짐(첫 묶음엔 null이어야 했음) — 기준 그림이 있어야 */
+  const ghosts = ["doyun-m", "doyun-f", "haram-m", "haram-f", "mom", "grandma"].filter((w) => A.src(w, "base") === null);
+  const chibiGhost = ["doyun-m", "doyun-f", "haram-m", "haram-f"].filter((w) => A.chibi(w, "base") === null);
+  ghosts.push(...chibiGhost.map((w) => `${w} 치비`));
   const fallback = A.src("coach", "tears") === A.src("coach", "base") && A.src("coach", "base") === "art/coach-base.webp";
-  const nulls = [A.src(null, "base"), A.src("", "base"), A.bg("bg-home-doyun"), A.bg(null)].every((x) => x === null);
+  const nulls = [A.src(null, "base"), A.src("", "base"), A.src("nobody-x", "base"), A.bg("bg-nowhere"), A.bg(null)].every((x) => x === null);
   bad.push(...claimNoFile.map((k2) => `표의 열쇠 ${k2} → 파일 없음`));
   return { ok: bad.length === 0 && unreached.length === 0 && ghosts.length === 0 && fallback && nulls && claimed.length === files.length, bad, unreached, ghosts, fallback, nulls, files: files.length, claimed: claimed.length };
 }
 {
   const ART = rd("art.js");
   const k = k5static(artOf(ART));
-  check(k.ok, `K-5. 🖼️ \`Art\` 표 ${k.claimed}칸 ↔ \`art/\` ${k.files}장 — 표가 가리키는데 파일 없음 ${k.bad.length} · 파일이 있는데 표가 안 닿음 ${k.unreached.length} · 다음 단계 인물(도윤 · 하람 · 엄마 · 할머니)은 null ${k.ghosts.length ? "🔴" : "✔"} · 없는 표정은 base ${k.fallback ? "✔" : "🔴"} · 빈 값 null ${k.nulls ? "✔" : "🔴"}`
+  check(k.ok, `K-5. 🖼️ \`Art\` 표 ${k.claimed}칸 ↔ \`art/\` ${k.files}장 — 표가 가리키는데 파일 없음 ${k.bad.length} · 파일이 있는데 표가 안 닿음 ${k.unreached.length} · 도윤 · 하람 · 엄마 · 할머니 그림 있음 ${k.ghosts.length ? `🔴 ${k.ghosts.join(",")}` : "✔"} · 없는 표정은 base ${k.fallback ? "✔" : "🔴"} · 빈 값 null ${k.nulls ? "✔" : "🔴"}`
     + (k.bad.length ? `\n     🔴 깨진 그림: ${k.bad.slice(0, 5).join(" · ")}` : "") + (k.unreached.length ? `\n     🔴 안 닿는 파일: ${k.unreached.slice(0, 5).join(" · ")}` : ""));
   const m = ART.replace('taeo: "base grin fire tears"', 'taeo: "base grin fire tears cry"');
   check(m !== ART && !k5static(artOf(m)).ok, `변이 — 표에 없는 파일(「taeo-cry」)을 적으면 → K-5가 빨간불(깨진 그림)`);
@@ -128,9 +136,10 @@ function k1(sceneSrc, liveSrc) {
    *    (판정: 진짜 jsdom 요소에 그 이름이 있으면 카드 칸이 아님 · 목록을 베껴 적지 않아요) */
   const domEl = (() => { const { JSDOM } = require(path.join(require("./_load.js").ROOT, "tests/cloud/jsdom.js")); return new JSDOM("<!doctype html><div></div>").window.document.querySelector("div"); })();
   const reads = uniq([...code(sceneSrc).matchAll(/\bcard\.(\w+)/g)].map((m) => m[1])).filter((f) => !(f in domEl));
-  const DRIVER = ["flow"];                                   // live.js가 흐름 줄에만 다는 칸
+  const DRIVER = ["flow", "auto", "weak"];                   // live.js가 다는 칸 — 흐름 줄 `flow` · 내 순간 카드 `auto`(🤖) · `weak`(🦶 약발 상황 · 36번 §3-3)
   const LEGACY = ["poss", "shots", "rating"];                 // 🚧 화면이 「있으면」 그리는 하프타임 통계 — 1막은 안 만듦(아래 설명)
-  const orphan = reads.filter((f) => engineKeys.indexOf(f) < 0 && DRIVER.indexOf(f) < 0 && LEGACY.indexOf(f) < 0);
+  const driverSet = uniq([...code(liveSrc).matchAll(/\bcard\.(\w+)\s*=[^=]/g)].map((m) => m[1]));   // 드라이버가 실제로 다는 칸
+  const orphan = reads.filter((f) => engineKeys.indexOf(f) < 0 && !(DRIVER.indexOf(f) >= 0 && driverSet.indexOf(f) >= 0) && LEGACY.indexOf(f) < 0);
   const lineKeys = (() => {
     const m = liveSrc.match(/const lineCard = \(min, kind, text\) => \(\{([\s\S]*?)\}\);/);
     if (!m) return null;
@@ -179,14 +188,37 @@ function k2(liveSrc, sceneSrc) {
   check(m !== LV && !k2(m, SC).ok, `변이 — 드라이버가 \`promiseLine\`을 \`promise\`로 넘기면 → K-2가 빨간불(약속 줄이 조용히 안 떠요)`);
 }
 
-/* ══════════ K-9 — 화면 쪽은 세이브 · 전역 상태를 안 읽는다 ══════════ */
-function k9(texts) { return Object.entries(texts).filter(([, t]) => /\blocalStorage\b|\bsessionStorage\b|\bW2Game\b/.test(code(t))).map(([f]) => f); }
+/* ══════════ K-9 — 화면 쪽은 세이브 · 전역 상태를 안 읽는다(v2: 계약 14 · 17로 좁힌 예외 셋) ══════════ */
+/* 🔒 `localStorage` · `sessionStorage` 0 · `W2Game`에서 읽는 이름은 **`settings` · `help` · `boardStats`만**(38번 §6 14-b —
+ *    「레이어가 부르는 것은 `W2Game.settings` · `help` · `boardStats`(베타만) · `Cloud.openModal`뿐」). 별칭(`G()`)도 같이 셉니다 */
+const K9_OK = ["settings", "help", "boardStats"];
+function k9(texts) {
+  const out = [];
+  for (const [f, t] of Object.entries(texts)) {
+    const c = code(t);
+    if (/\blocalStorage\b|\bsessionStorage\b/.test(c)) out.push(`${f}: 저장소를 직접 읽음`);
+    const names = [...c.matchAll(/\bW2Game\s*(?:&&\s*window\.W2Game)?\.(\w+)/g)].map((m) => m[1])
+      .concat([...c.matchAll(/\bG\(\)\.(\w+)/g)].map((m) => m[1]));
+    const bad = uniq(names.filter((n) => K9_OK.indexOf(n) < 0));
+    if (bad.length) out.push(`${f}: W2Game.${bad.join(" · ")}`);
+    /* `const g = G();` 같은 별칭에서 읽는 이름 */
+    for (const m of c.matchAll(/const (\w+) = G\(\);/g)) {
+      const al = m[1];
+      const body = c.slice(m.index, (c.indexOf("\n  }", m.index) + 1 || c.length));   // 별칭이 사는 함수 몸통만(다른 함수의 `g`와 섞이지 않게)
+      const bad2 = uniq([...body.matchAll(new RegExp(`\\b${al}\\.(\\w+)`, "g"))].map((x) => x[1]).filter((n) => K9_OK.indexOf(n) < 0));
+      if (bad2.length) out.push(`${f}: ${al}.${bad2.join(" · ")}`);
+    }
+  }
+  return out;
+}
 {
   const T = { "scenes.js": rd("scenes.js"), "match-scene.js": rd("match-scene.js"), "art.js": rd("art.js") };
   const hit = k9(T);
-  check(hit.length === 0, `K-9. 🔒 화면 쪽 파일(scenes · match-scene · art)이 세이브 · 전역 상태(\`localStorage\` · \`W2Game\`)를 안 읽는다${hit.length ? ` — 🔴 ${hit.join(" · ")}` : ""}`);
+  check(hit.length === 0, `K-9. 🔒 화면 쪽 파일(scenes · match-scene · art)이 세이브를 직접 안 읽고 \`W2Game\`에선 \`settings\` · \`help\` · \`boardStats\`만 부른다(계약 14 · 17 · 38번 §6 14-b)${hit.length ? ` — 🔴 ${hit.join(" · ")}` : ""}`);
   const m = Object.assign({}, T, { "scenes.js": T["scenes.js"].replace("const art = () => window.Art || null;", "const art = () => window.Art || null; const peek = () => localStorage.getItem(\"winger2-save-v2\");") });
   check(k9(m).length > 0, `변이 — scenes.js가 세이브를 엿보면 → K-9가 빨간불`);
+  const m2 = Object.assign({}, T, { "scenes.js": T["scenes.js"].replace("const G = () => window.W2Game || null;", "const G = () => window.W2Game || null; const peek2 = () => G().loadSave();") });
+  check(m2["scenes.js"] !== T["scenes.js"] && k9(m2).length > 0, `변이 — scenes.js가 \`W2Game.loadSave()\`를 부르면(예외 셋 밖) → K-9가 빨간불`);
 }
 
 (async () => {
@@ -302,25 +334,22 @@ function k9(texts) { return Object.entries(texts).filter(([, t]) => /\blocalStor
     const filmP = W.W2Scenes.film(env.seen.film[0]);
     await wait(5);
     const filmText = layer.textContent;
-    const weeks = `훈련 ${S.trainWeeks}주 · 휴식 ${S.restWeeks}주`;
-    /* 🎮 판 줄 — 25번 §8(10-03) 결정 ②: 평가서 솜씨 메모와 **같은 규칙**으로 🤖 자동을 밝힘(모두 · 섞임 · 사람만 · 0번) */
-    const bN = Number(S.record.sN) || 0, bA = Math.min(bN, Number(S.record.sAuto) || 0), bAvg = bN ? (S.record.sSum / bN).toFixed(2) : null;
-    const boards = bN === 0 ? "판 0번 — 둔 판이 없어요" : bA >= bN ? `판 ${bN}번 · 모두 🤖 자동 · 평균 s̄ ${bAvg}`
-      : `판 ${bN}번${bA > 0 ? `(🤖 ${bA})` : ""} · 평균 s̄ ${bAvg}`;
+    const weeks = `훈련 ${S.trainWeeks}주(🦶 약발 ${S.weakWeeks || 0}주) · 휴식 ${S.restWeeks}주`;
+    /* 🎮 판 줄 — v2(30번): 평가서 솜씨 칸 글 그대로에 「🎮 」(한 곳에서 나옴 · auto-mark AM-2가 규칙을 봄) */
+    const boards = `🎮 ${S.sheet.cols.find((c) => c.k === "skill").note}`;
     const filmOK = filmText.indexOf(weeks) >= 0 && filmText.indexOf(boards) >= 0 && !/undefined|NaN/.test(filmText);
     check(colsOK && zero && clean, `K-7. 📋 진짜 평가서 모델을 진짜 \`scenes.js\`가 그림 — 다섯 칸 이름 ✔ · 감독 의견 「${S.sheet.coach.line}」 옆 「점수 0」 ${zero ? "✔" : "🔴"} · undefined/NaN/null ${clean ? "0" : "🔴 있음"}`);
     check(filmOK, `K-8. 🎬 진짜 필름 모델을 그림 — 「${weeks}」 · 「${boards}」 한 줄씩 ${filmOK ? "✔" : "🔴"}`);
     W.close();
-    /* 🧪 K-8 변이 — 필름 판 줄의 사람만 갈래에서 「s̄」를 빼면(평가서 메모 글로 바뀜) 같은 세이브의 필름이 그 줄을 못 그림 */
-    const M8 = { "film.js": [[/: `판 \$\{sN\}번\$\{sAuto > 0 \? `\(🤖 \$\{sAuto\}\)` : ""\} · 평균 s̄ \$\{avg\.toFixed\(2\)\}`\] \},/,
-      ': `판 ${sN}번${sAuto > 0 ? `(🤖 ${sAuto})` : ""} · 평균 ${avg.toFixed(2)}`] },']] };
+    /* 🧪 K-8 변이 — 필름이 평가서 글 대신 따로 적으면 */
+    const M8 = { "film.js": [[/sk \? `🎮 \$\{sk\.note\}` : "🎮 평가서 전이에요"\]/, 'sk ? `🎮 🧱 막기 판 ${skd.n}번` : "🎮 평가서 전이에요"]']] };
     const bad8 = pageMutsOK({ M8 });
     if (bad8.length) check(false, `K-8 변이 정규식이 film.js에 안 걸림 — ${bad8.join(" · ")}`);
     else {
       const Wm = await sceneRender(M8);
       const line = (Wm.W2Film.build(S).ch.find((c) => c.k === "body") || { lines: [] }).lines.join(" | ");
       Wm.close();
-      check(line.indexOf(boards) < 0, `변이 — 필름 판 줄에서 「s̄」를 빼면 → K-8이 빨간불(「${line}」)`);
+      check(line.indexOf(boards) < 0, `변이 — 필름 판 줄이 평가서 글을 안 쓰면 → K-8이 빨간불(「${line}」)`);
     }
   }
   async function clickOnly(muts) {

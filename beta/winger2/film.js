@@ -1,8 +1,8 @@
 /* ⚽ 더 윙어 II 1막 — 🎬 졸업 필름(모델) · 이 기기에 저장 · 꺼내기
  *
  * 설계: 12번 §7-6 · 25번 §3 계약 8(①의 film 모양 + 1막 장 봄 · 여름 · 가을 · 장마다 `bg` ·
- *       「몸의 기록」 장에 「훈련 N주 · 휴식 M주」 · 「판 N번 · 평균 s̄ 0.00」 한 줄씩 — 23번 §8.
- *       🤖 자동이 섞이면 「판 N번(🤖 k) · …」 · 모두 자동이면 「판 N번 · 모두 🤖 자동 · …」 — 평가서 메모와 같은 규칙)
+ *       「몸의 기록」 장에 「훈련 N주 · 휴식 M주」 · 판 한 줄 — 23번 §8. 판 줄은 **평가서 🎮 솜씨 칸 글 그대로**
+ *       (🧱 막기 판 N번(🤖 k) · 읽기 ± · 포지션 보정 — 36번 §16-3 · 보이는 값 = 판정 값))
  * 그리기와 공유 이미지(`drawCard` · `share`)는 director의 `scenes.js`가 붙여요 — 여기는 **모델만**.
  * `ach` = 이 선수가 딴 업적 [{ id, name, tier }] — 🏅 대표 업적 고르기 · 공유 이미지(31번 §2). 고른 것은 `head.rep` 한 곳에만.
  *
@@ -52,9 +52,9 @@ window.W2Film = (() => {
     const st = S.stats || {}, st0 = S.statsAt0 || st;
     const ups = SH().KEYS.map((k) => ({ k, label: SH().STAT[k].name, emoji: SH().STAT[k].emoji,
       from: num(st0[k]), to: num(st[k]), g0: SH().grade(st0[k] || 0).g, g1: SH().grade(st[k] || 0).g }));
-    const sN = Number(rec.sN) || 0;
-    const avg = sN > 0 ? (Number(rec.sSum) || 0) / sN : null;
-    const sAuto = Math.min(sN, Math.max(0, Math.floor(Number(rec.sAuto)) || 0));   // 그중 🤖 자동(사람이 안 둔 판 · s = 0.5)
+    /* 🎮 판 줄 — 평가서 솜씨 칸과 **같은 글**(🧱 막기 판만 · 🤖 몫 · 읽기) — 따로 셈하지 않아요 */
+    const sk = S.sheet && Array.isArray(S.sheet.cols) ? S.sheet.cols.find((c) => c.k === "skill") : null;
+    const skd = (sk && sk.detail) || {};
     const A = window.W2Ach;
     const done = (S.story && S.story.done) || [];
     const lastLeague = league.find((x) => x.w === 33) || null;
@@ -77,14 +77,11 @@ window.W2Film = (() => {
       { k: "autumn", title: `🍂 가을 — ${S.world.league.name} 후반기`, bg: "bg-field", ...(season(league.filter((x) => x.w > 20)) || {}),
         keeper: lastLeague ? `🕯️ ${keeper}의 마지막 경기 — ${lastLeague.gf} : ${lastLeague.ga}` : null },
       { k: "body", title: "🏋️ 몸의 기록", bg: "bg-field", ups,
-        weeks: { train: Number(S.trainWeeks) || 0, rest: Number(S.restWeeks) || 0 },
-        boards: { n: sN, auto: sAuto, avg: avg == null ? null : Math.round(avg * 100) / 100 },
-        /* 🎮 판 줄 — 평가서 솜씨 메모와 같은 규칙으로 🤖 자동을 밝혀요. 테스터가 읽어 주는 사람 s̄(23번 §8)에
-         *    기계 값 0.50이 사람 값으로 섞여 들어가지 않게요 */
-        lines: [`훈련 ${Number(S.trainWeeks) || 0}주 · 휴식 ${Number(S.restWeeks) || 0}주`,
-          sN === 0 ? "판 0번 — 둔 판이 없어요"
-            : sAuto >= sN ? `판 ${sN}번 · 모두 🤖 자동 · 평균 s̄ ${avg.toFixed(2)}`
-              : `판 ${sN}번${sAuto > 0 ? `(🤖 ${sAuto})` : ""} · 평균 s̄ ${avg.toFixed(2)}`] },
+        weeks: { train: Number(S.trainWeeks) || 0, rest: Number(S.restWeeks) || 0, weak: Number(S.weakWeeks) || 0 },
+        boards: { n: num(skd.n), auto: num(skd.auto), rhoHat: num(skd.rhoHat), k: num(skd.k) },
+        lines: [`훈련 ${Number(S.trainWeeks) || 0}주(🦶 약발 ${Number(S.weakWeeks) || 0}주) · 휴식 ${Number(S.restWeeks) || 0}주`,
+          sk ? `🎮 ${sk.note}` : "🎮 평가서 전이에요"]
+          .concat((Number(S.weak) || 0) >= 2 ? ["🦶 약발 2단계 — 양발로 졸업해요"] : []) },   // 29번 §3-6 (가)
       { k: "choice", title: "🧭 선택의 기록", bg: "bg-locker",
         style: A ? A.style(S) : null, best: A ? A.bestMove(S) : null, luck: A ? A.luck(S) : null },
       { k: "story", title: "📖 이야기", bg: "bg-locker",
@@ -92,7 +89,7 @@ window.W2Film = (() => {
       { k: "sheet", title: "📋 평가서", bg: "bg-test", cols: S.sheet ? S.sheet.cols : null,
         total: S.sheet ? S.sheet.total : null, tierName: S.sheet ? S.sheet.tierName : null },
       { k: "last", title: head.ending ? `${head.ending.emoji} ${head.ending.name}` : "🎓", bg: E.id ? `end-${E.id}` : "bg-gate", who, mood: E.mood || "moved",
-        next: !!(E.id && SH().NEXT[E.id]), line: E.id && SH().NEXT[E.id] ? "이 선수는 2막을 기다려요" : null },
+        next: !!(E.id && SH().NEXT[E.id]), line: E.id ? SH().waitOf(E.id) : null },
     ].filter((c) => c.k === "cover" || c.k === "last" || c.k === "body" || c.k === "choice" || c.k === "sheet" || c.games || (c.k === "story" && c.ends.length));
     const ach = A ? A.LIST.filter((d) => S.ach && S.ach[d.id]).map((d) => ({ id: d.id, name: d.name, tier: d.tier })) : [];
     return { v: 1, id: S.id, at: Date.now(), head, ch, ach, word: null };

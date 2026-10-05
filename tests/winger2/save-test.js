@@ -6,7 +6,9 @@
  *   SV-2  `winger2-save-v2` 왕복 — 저장된 글 → `loadSave()` → 다시 글이 **같은 글**(읽는 쪽 기본값이 멀쩡한 세이브를 안 바꿈)
  *   SV-3  🧊 `act1` 얼림 — 엔딩 · 구간 · 평가서 · 능력치 · 이야기 결말 · **🤝 신뢰**가 세이브와 같고, 필름 앞에서 닫았다 이어도 같은 `act1`
  *         · 새 판을 시작하면 2막을 기다리는 졸업생(`winger2-alumni`)에 그 `act1`이 그대로 옮겨짐
- *   SV-4  🏆 기기 명전 — `grow-hof-v1`에 `{ game: "winger2", v: 2, kind: "act1" }` 한 줄 · 엔딩 · 구간 · 합계 · 업적 수가 세이브와 같음
+ *   SV-4  🏆 졸업 줄(29번 §5 B5 · 38번 v2) — **`winger2-grads`**(II 전용)에 `{ game: "winger2", v: 2, kind: "act1" }` 한 줄 · 엔딩 · 구간 · 합계 · 업적 수가 세이브와 같음
+ *         · **점수 = 평가서 합 × 10을 반올림한 정수**(0~1000 · 0이 아님) · 이름 = 캐릭터 이름 · 8종 공유 `grow-hof-v1`엔 **0줄**
+ *         (첫 묶음은 `grow-hof-v1`에 넣었음 — 29번 §5 「점수 칸 없음 → 서버로 갈 때 0」을 바로잡으며 키를 옮김)
  *   SV-5  옛 세이브 — `winger2-save-v1`(옛 열쇠)은 **읽지도 지우지도 않음**(마이그레이션 없음) · 새 열쇠에 `v: 1` 모양이 있으면 이어하기가 안 뜸
  *   + 변이(파일 안)
  * 종료 코드: 0 통과 · 1 빨간불 · 2 💥 죽음 · ⏱️ 약 1분
@@ -19,16 +21,22 @@ const DEF_CARD = defaultPolicy({}).card;          // 기본 손의 카드 답 �
 let fail = 0;
 const check = (ok, msg) => { console.log(`${ok ? "✅" : "❌"} ${msg}`); if (!ok) fail += 1; };
 const SAVE_KEY = "winger2-save-v2", OLD_KEY = "winger2-save-v1", HOF_KEY = "grow-hof-v1", ALUMNI_KEY = "winger2-alumni";   // 🔒 결정 6 · 12번 §11
+const GRADS_KEY = "winger2-grads";                                                                  // 🔒 29번 §5 · §7-1(B5)
 const MUT = {
   /* SV-1 — 이어하기가 다음 단계로 건너뜀(그 주의 남은 단계를 하나 빠뜨림) */
   SKIP: { "game.js": [[/acts\.append\(card, btn\("w2-btn-primary w2-continue", "▶️ 이어하기", \(\) => \{ S = sv; run\(\); \}\)\);/,
     'acts.append(card, btn("w2-btn-primary w2-continue", "▶️ 이어하기", () => { S = sv; S.ph += 1; run(); }));']] },
   /* SV-2 — 읽는 쪽이 컨디션을 반올림해 들임 */
   ROUND: { "game.js": [[/s\.cond = typeof s\.cond === "number" && isFinite\(s\.cond\) \? s\.cond : TUNE\.COND_START;/, 's.cond = typeof s.cond === "number" && isFinite(s.cond) ? Math.round(s.cond + 0.5) : TUNE.COND_START;']] },
-  /* SV-3 — 🤝 신뢰가 얼린 칸에서 빠짐 */
+  /* SV-3 — 🤝 신뢰가 얼린 칸에서 빠짐 · v2: 새 칸 하나를 뺌(29번 §8-0 「칸 하나를 뺌」) */
+  NOROOT: { "sheet.js": [[/family: root \? root\.family : null, origin: root \? root\.origin : null,/, "family: root ? root.family : null,"]] },
+  NOSTATS0: { "sheet.js": [[/stats0: Object\.assign\(\{\}, S\.statsAt0 \|\| S\.stats\), /, ""]] },
   NOTRUST: { "sheet.js": [[/ {6}trust: Number\(S\.trust\) \|\| 0,\n/, ""]] },
-  /* SV-4 — 명전 줄이 옛 판(v 1) */
+  /* SV-4 — 졸업 줄이 옛 판(v 1) · 점수 칸이 빠짐(서버로 가면 0) */
   HOF1: { "game.js": [[/const entry = \{ id: S\.id, at: Date\.now\(\), game: GAME, v: 2, kind: "act1",/, 'const entry = { id: S.id, at: Date.now(), game: GAME, v: 1, kind: "act1",']] },
+  NOSCORE: { "game.js": [[/ score: Math\.round\(S\.sheet\.total \* 10\),/, ""]] },
+  /* SV-3b — 졸업생 목록이 옛 규칙(프로로 이어질 때만) */
+  ALUMNI_NEXT: { "game.js": [[/if \(prev && prev\.act1\) \{\n(\s+)const al = alumni\(\)/, "if (prev && prev.act1 && prev.act1.next) {\n$1const al = alumni()"]] },
   /* SV-5 — 옛 열쇠를 읽어 옮김(마이그레이션) */
   MIGRATE: { "game.js": [[/try \{ s = JSON\.parse\(localStorage\.getItem\(SAVE_KEY\)\); \} catch \(e\) \{ return null; \}/,
     'try { s = JSON.parse(localStorage.getItem(SAVE_KEY)); if (!s && localStorage.getItem("winger2-save-v1")) { s = Object.assign(JSON.parse(localStorage.getItem("winger2-save-v1")), { v: 2 }); localStorage.removeItem("winger2-save-v1"); } } catch (e) { return null; }']] },
@@ -47,7 +55,7 @@ const full = (S) => JSON.stringify([numbersOf(S), S.stats, S.record, S.games, S.
 async function straight(muts) {
   const env = boot({ seed: SEED, pos: POS, auto: true, realScene: false, muts, policy: POL });
   const r = await runAct(env);
-  const out = { S: r.S, keys: lsDump(env.w), done: r.done, seen: env.seen };
+  const out = { S: r.S, keys: lsDump(env.w), done: r.done, seen: env.seen, fam: env.w.W2Story ? env.w.W2Story.famSid(r.S) : null };
   env.w.close();
   return out;
 }
@@ -125,8 +133,21 @@ const POINTS = [
   async function sv3(muts) {
     const b = muts ? await straight(muts) : base;
     const S = b.S, a = S.act1 || {};
+    /* 🔄 v2(29번 §5 · 38번 계약 4′) — `act1` 새 칸 여덟: family · origin · doorWhy · stats0 · rerolls · weak · voice(+ 문 있음 door)
+     *    🔒 가족 → 뿌리 표는 29번 §2-1(아빠 · 가게 / 엄마 · 아카데미 / 할머니 · 바닷가) — 박은 값 */
+    const ROOT = { father: ["dad", "shop"], apply: ["mom", "academy"], letter: ["grandma", "seaside"] };
+    const fam = b.fam;
+    const fd = (S.story.done || []).find((d) => d.sid === fam) || null;
+    const v2 = {
+      family: fam ? a.family === ROOT[fam][0] && a.origin === ROOT[fam][1] : a.family === null && a.origin === null,
+      doorWhy: S.ending.door ? !!a.doorWhy && a.doorWhy.story === fam && a.doorWhy.r1 === (fd && fd.r1 ? fd.r1 : null) : a.doorWhy === null,
+      stats0: JSON.stringify(a.stats0) === JSON.stringify(S.statsAt0), rerolls: a.rerolls === S.rerolls,
+      weak: a.weak === S.weak, voice: typeof a.voice === "string" && (S.voice == null || a.voice === S.voice), door: a.door === !!S.ending.door,
+    };
+    const v2bad = Object.keys(v2).filter((k) => !v2[k]);
     const same = a.ending === S.ending.id && a.tier === S.ending.tier && a.trust === S.trust && a.sheet && a.sheet.total === S.sheet.total
-      && JSON.stringify(a.stats) === JSON.stringify(S.stats) && JSON.stringify(a.stories) === JSON.stringify(S.story.done.map((d) => ({ sid: d.sid, end: d.end })));
+      && JSON.stringify(a.stats) === JSON.stringify(S.stats) && JSON.stringify(a.stories) === JSON.stringify(S.story.done.map((d) => ({ sid: d.sid, end: d.end })))
+      && v2bad.length === 0;
     /* 필름 앞에서 닫고 이어하기 */
     const A = boot({ seed: SEED, pos: POS, auto: true, realScene: false, muts, policy: Object.assign({ filmHang: true }, POL) });
     await runAct(A, { until: (Sx, e) => e.seen.film.length >= 1, stall: 300 });
@@ -157,24 +178,28 @@ const POINTS = [
     B.w.close();
     const al = Array.isArray(alumni) ? alumni[alumni.length - 1] : null;
     /* 옮겨진 졸업생 = 이 판(B)의 얼린 act1 그대로 + 판 id · 저장 시각 */
-    const moved = started && (!rb.S.act1.next ? alumni === null || (Array.isArray(alumni) && alumni.length === 0)
-      : !!al && al.id === rb.S.id && JSON.stringify(Object.assign({}, al, { id: undefined, savedAt: undefined })) === JSON.stringify(Object.assign({}, rb.S.act1, { id: undefined, savedAt: undefined })));
-    return { same, again: !!frozen && JSON.stringify(again) === JSON.stringify(frozen), moved, a, next: a.next, started };
+    /* 29번 §5(B1): 졸업생 목록은 `act1`이 있으면 **모두**(완결 엔딩 셋도 2막으로) — 옮겨진 줄 = 얼린 act1 그대로 + 판 id · 저장 시각 */
+    const moved = started && !!al && al.id === rb.S.id
+      && JSON.stringify(Object.assign({}, al, { id: undefined, savedAt: undefined })) === JSON.stringify(Object.assign({}, rb.S.act1, { id: undefined, savedAt: undefined }));
+    return { v2bad, same, again: !!frozen && JSON.stringify(again) === JSON.stringify(frozen), moved, a, next: a.next, started };
   }
   const s3 = await sv3(null);
-  check(s3.same && s3.again, `SV-3. 🧊 \`act1\` — 엔딩 ${s3.a.ending} · 구간 ${s3.a.tier} · 합계 ${s3.a.sheet && s3.a.sheet.total} · 🤝 ${s3.a.trust} · 능력치 · 이야기 결말이 세이브와 같고, 필름 앞에서 닫았다 이어도 같은 \`act1\``);
-  check(s3.moved, `SV-3b. 🎓 새 판을 시작하면 ${s3.next ? `2막으로 이어지는 졸업생(\`${ALUMNI_KEY}\`)에 그 \`act1\`(🤝 포함)이 옮겨짐` : "1막 완결 엔딩이라 졸업생 칸은 그대로"}`);
+  check(s3.same && s3.again, `SV-3. 🧊 \`act1\` — v2 새 칸(가족 ${s3.a.family} · 뿌리 ${s3.a.origin} · 문 이유 · 시작 능력치 · 다시 뽑기 ${s3.a.rerolls} · 약발 ${s3.a.weak} · 목소리 ${s3.a.voice})${s3.v2bad.length ? ` 🔴 ${s3.v2bad.join(",")}` : ""} · 엔딩 ${s3.a.ending} · 구간 ${s3.a.tier} · 합계 ${s3.a.sheet && s3.a.sheet.total} · 🤝 ${s3.a.trust} · 능력치 · 이야기 결말이 세이브와 같고, 필름 앞에서 닫았다 이어도 같은 \`act1\``);
+  check(s3.moved, `SV-3b. 🎓 새 판을 시작하면 졸업생(\`${ALUMNI_KEY}\`)에 그 \`act1\`(🤝 포함)이 옮겨짐 — 엔딩 ${s3.a.ending}(${s3.next ? "프로로 이어짐" : "완결 엔딩 — 29번 §5 B1로 이제 모두"})`);
 
   /* ══════════ SV-4 — 기기 명전 ══════════ */
   const sv4 = (b) => {
-    const list = JSON.parse(b.keys[HOF_KEY] || "[]");
+    const list = JSON.parse(b.keys[GRADS_KEY] || "[]");
+    const hof = JSON.parse(b.keys[HOF_KEY] || "[]");
     const mine = list.filter((x) => x && x.id === b.S.id);
     const e = mine[0] || {};
-    return { ok: mine.length === 1 && e.game === "winger2" && e.v === 2 && e.kind === "act1" && e.ending === b.S.ending.id && e.tier === b.S.sheet.tier
-      && e.total === b.S.sheet.total && e.achN === Object.keys(b.S.ach || {}).length, e };
+    const inHof = hof.filter((x) => x && x.id === b.S.id).length;
+    return { ok: mine.length === 1 && inHof === 0 && e.game === "winger2" && e.v === 2 && e.kind === "act1" && e.ending === b.S.ending.id && e.tier === b.S.sheet.tier
+      && e.total === b.S.sheet.total && e.score === Math.round(b.S.sheet.total * 10) && Number.isInteger(e.score) && e.score > 0 && e.score <= 1000
+      && e.name === b.S.name && e.achN === Object.keys(b.S.ach || {}).length, e, inHof };
   };
   const h4 = sv4(base);
-  check(h4.ok, `SV-4. 🏆 기기 명전 \`${HOF_KEY}\`에 이 판 한 줄 — game ${h4.e.game} · v ${h4.e.v} · kind ${h4.e.kind} · 엔딩 ${h4.e.ending} · 구간 ${h4.e.tier} · 합계 ${h4.e.total} · 업적 ${h4.e.achN}개`);
+  check(h4.ok, `SV-4. 🏆 졸업 줄 \`${GRADS_KEY}\`에 이 판 한 줄 — game ${h4.e.game} · v ${h4.e.v} · kind ${h4.e.kind} · 이름 ${h4.e.name} · 엔딩 ${h4.e.ending} · 구간 ${h4.e.tier} · 합계 ${h4.e.total} · **점수 ${h4.e.score}**(= 합 × 10) · 업적 ${h4.e.achN}개 · \`${HOF_KEY}\`엔 ${h4.inHof}줄`);
 
   /* ══════════ SV-5 — 옛 세이브 ══════════ */
   async function sv5(muts) {
@@ -203,8 +228,16 @@ const POINTS = [
     check(m2.bad.length > 0, `변이-ROUND(읽는 쪽이 컨디션을 반올림) → SV-2가 빨간불 (${m2.bad.join(" · ")})`);
     const m3 = await sv3(MUT.NOTRUST);
     check(!(m3.same && m3.again), `변이-NOTRUST(🤝이 얼린 칸에서 빠짐) → SV-3이 빨간불`);
+    const m3r = await sv3(MUT.NOROOT);
+    check(!(m3r.same && m3r.again), `변이-NOROOT(v2 새 칸 \`origin\`을 뺌) → SV-3이 빨간불 (${m3r.v2bad.join(",") || "?"})`);
+    const m3s = await sv3(MUT.NOSTATS0);
+    check(!(m3s.same && m3s.again), `변이-NOSTATS0(v2 새 칸 \`stats0\`을 뺌) → SV-3이 빨간불 (${m3s.v2bad.join(",") || "?"})`);
     const m4 = await straight(MUT.HOF1);
-    check(!sv4(m4).ok, `변이-HOF1(명전 줄이 v 1) → SV-4가 빨간불`);
+    check(!sv4(m4).ok, `변이-HOF1(졸업 줄이 v 1) → SV-4가 빨간불`);
+    const m4b = await straight(MUT.NOSCORE);
+    check(!sv4(m4b).ok, `변이-NOSCORE(졸업 줄에 점수 칸이 빠짐 — 서버로 가면 0) → SV-4가 빨간불`);
+    const m3b = await sv3(MUT.ALUMNI_NEXT);
+    check(!m3b.moved || s3.next, `변이-ALUMNI_NEXT(졸업생 목록이 옛 규칙 — 프로로 이어질 때만) → SV-3b가 빨간불${s3.next ? " (🚧 이 판의 엔딩이 프로라 이 변이가 안 갈림)" : ""}`);
     const m5 = await sv5(MUT.MIGRATE);
     check(!m5.ok, `변이-MIGRATE(옛 열쇠를 읽어 옮김) → SV-5가 빨간불 (이어하기 ${m5.cont1 ? "뜸" : "안 뜸"} · 옛 글 ${m5.untouched ? "그대로" : "지워짐"})`);
   }

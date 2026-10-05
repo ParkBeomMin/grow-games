@@ -31,9 +31,17 @@ const K6 = ["shoot", "pass", "dribble", "defense", "stamina", "speed"];
 const POS = ["fw", "wg", "mf", "df"];
 
 /* 🔒 문턱 — 여기 박습니다(값은 20번 §4에서) */
-const SPOT_BAND = 10;   // % — A-1 (실측 1.0% · buff를 빼면 11.0%)
+const SPOT_BAND = 10;   // % — A-1 (28번 R2 ⑤ 「같은 칸 최대 ÷ 최소 ≤ 1.2」의 관계 · v2 실측 0.49%)
+/* 🔄 v2 다시 유도 — A-2: buff를 빼면 28번 전엔 벌어짐 11%(±10% 밖)였으나 27번 규칙이 판을 눌러 **5.6%**(공격수가 가장 낮음은 그대로).
+ *    ±10%는 설계 합격선이라 A-1에 그대로 두고, A-2는 「buff가 대등을 떠받친다」를 기준선과의 관계로 봅니다:
+ *    벌어짐이 기준선(0.49%)의 **5배 넘게**(표본 잡음 σ ≈ 0.38% — 9,000판 · 판 SD ≈ 0.9) · 공격수가 가장 먼저 무너짐 · 평균이 30% 넘게 떨어짐 */
+const BUFF_SPREAD_X = 5, BUFF_DROP = 0.30;
 const NPOS_BAND = 5;    // % — R-1 (실측 2.4 · 2.5 · 3.3% · 표본 2만 4천 경기/칸)
-const CHAIN_MIN = 1.0;  // % — C-1: 머리를 옮겼을 때 공격수/미드 비가 예측한 쪽으로 이만큼은 움직여야(실측 −2.5% · +2.3% · 시드 잡음 0.1%)
+/* 🔄 v2 다시 유도(39번 §1 · 30번 v2) — 27번 규칙(최소 1 · 상한 4 · 간격 15)이 경기당 판을 2.3~2.8로 눌러 사슬의 **크기**가 줄었어요.
+ *    C-1 실측(공통 난수 · 기준 시드 셋 5000 · 6000 · 7000): 80이면 −0.34 · −0.37 · −0.81% · 30이면 +0.20 · +0.66 · +0.16% —
+ *    방향은 셋 다 예측대로 · 크기만 2.5% → 0.2~0.8%. 변이(빅찬스에서 condMul을 뺌)는 공통 난수라 **정확히 0.00%**.
+ *    → 선 0.1%: 실측 최소 0.16%보다 아래 · 변이 0보다 위(뜻 — 「머리를 옮기면 관계가 예측한 쪽으로 움직인다」 — 그대로) */
+const CHAIN_MIN = 0.1;  // %
 
 const MUT_W = { NOBUFF: [[/buff: \{ g: sp, a: sp, d: sp \} \};/, "buff: { g: 1, a: 1, d: 1 } };"]] };
 const MUT_E = {
@@ -100,7 +108,7 @@ function recProbe(E, X, SH, ab, W, M) {
   const a2 = spotProbe(E, XN, 1000, 300, 30);
   const d2 = devOf(a2);
   const minPos = POS.slice().sort((p, q) => a2[p] - a2[q])[0];
-  check(d2.max > SPOT_BAND && minPos === "fw", `A-2. 🧪 \`buff\`를 빼면 → ±${SPOT_BAND}%가 깨지고(최대 ${d2.max.toFixed(2)}%) **공격수가 가장 먼저 무너진다**(${a1.fw.toFixed(2)} → ${a2.fw.toFixed(2)} · 가장 낮은 자리 ${minPos}) — ${fmt(a2)}`);
+  check(d2.max > BUFF_SPREAD_X * d1.max && d2.mean < (1 - BUFF_DROP) * d1.mean && minPos === "fw", `A-2. 🧪 \`buff\`를 빼면 → 벌어짐 ${d1.max.toFixed(2)}% → ${d2.max.toFixed(2)}%(> ${BUFF_SPREAD_X}배) · 평균 ${d1.mean.toFixed(2)} → ${d2.mean.toFixed(2)}(−${((1 - d2.mean / d1.mean) * 100).toFixed(0)}% · > ${BUFF_DROP * 100}%) · **공격수가 가장 먼저 무너진다**(가장 낮은 자리 ${minPos}) — ${fmt(a2)}`);
 
   /* ══════════ C-1 — 사슬의 머리 ══════════ */
   async function chain(engineMuts) {

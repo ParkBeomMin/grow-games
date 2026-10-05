@@ -83,6 +83,65 @@ function stubScene(w) {
   };
 }
 
+/* 🖐️ 판 손 스텁 — 계약 3′(38번 §2 · §6 3′-a~d)과 **같은 모양**으로 판을 흉내 냅니다(그림 0 · 판이 하는 일만).
+ *   판이 하는 일: `s = clamp(sBoard × sit.foot × sit.cond)` → `judge(s)` 한 번 → `cb(judge, { s, sBoard, cell, target, seen, weak, ms })`
+ *   손(둘 중 하나)
+ *     o.hand(kind, opts) → 그 판에서 낸 **칸 값 `sBoard`**(0~1 · 숫자 그대로)
+ *     o.operator "sloppy" · "normal" · "skilled" — 37번 §0-3 자리표 그대로: 🧱만 보임(흐림 반 · 판의 `TUNE.DIM`)을 굴린 뒤
+ *       맞힘(서툰 ⅙ · ⅙ / 보통 0.48 · 0.24 / 능숙 0.86 · 0.58) · 칸 값은 판의 함수(`W2Moment._t.values`) 그대로(사본 0) · 🥅 · ⚡ 0.5
+ *     둘 다 없으면 `sBoard` 0.5
+ *   🎲 손의 난수는 판 시드에서 갈라 낸 줄기(mulberry32 — 판 · 엔진 · 상황 난수와 따로)
+ *   `slot`이 null이면 진짜 판처럼 🤖(3′-d — `sBoard` 0.5 · `ms` 0 · 손은 안 씀) */
+const OPERATOR = { sloppy: [1 / 6, 1 / 6], normal: [0.48, 0.24], skilled: [0.86, 0.58] };
+function mulberry(seed) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6D2B79F5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+function boardStub(w, o, note) {
+  const real = w.W2Moment;
+  const T = (real && real._t) || {};
+  const values = T.values || ((kind, target) => [0, 1, 2, 3, 4, 5].map((i) => (kind === "defend" ? (i === target ? 0.8 : 0.44) : 0.5)));
+  const dimP = T.TUNE && Number.isFinite(T.TUNE.DIM) ? T.TUNE.DIM : 0.5;
+  const rnd = mulberry(((o.seed == null ? 1 : o.seed) ^ 0x2C1B3C6D) >>> 0);
+  const h = OPERATOR[o.operator] || null;
+  const clamp01 = (v) => Math.min(1, Math.max(0, Number.isFinite(v) ? v : 0));
+  return Object.assign({}, real, {
+    play(slot, opts, cb) {
+      const sit = opts.sit || {};
+      const foot = Number.isFinite(sit.foot) && sit.foot > 0 ? sit.foot : 1, cond = Number.isFinite(sit.cond) && sit.cond > 0 ? sit.cond : 1;
+      let sBoard = 0.5, cell = null, target = null, seen = null, ms = 0;
+      if (slot) {
+        if (opts.kind === "defend") {
+          target = Math.min(5, Math.floor(rnd() * 6));
+          seen = rnd() < dimP ? "dim" : "clear";
+        }
+        if (typeof o.hand === "function") {
+          sBoard = clamp01(Number(o.hand(opts.kind, opts)));
+          cell = 0;
+        } else if (h) {
+          if (opts.kind === "defend") {
+            const hit = rnd() < (seen === "dim" ? h[1] : h[0]);
+            cell = hit ? target : (target + 1 + Math.floor(rnd() * 5)) % 6;
+          } else cell = Math.min(5, Math.floor(rnd() * 6));
+          sBoard = values(opts.kind, target)[cell];
+        } else { sBoard = 0.5; cell = 0; }
+        ms = 1000;
+      }
+      const s = clamp01(sBoard * foot * cond);
+      const j = opts.judge(s);
+      const b = { kind: opts.kind, s, sBoard, judge: j, cell, target, seen, weak: !!sit.weak, step: sit.step || 0, foot, cond, slot: !!slot, odds: typeof opts.odds === "function" ? opts.odds(s) : null };
+      if (note) note(b, opts, slot);
+      Promise.resolve().then(() => cb(j, { s, sBoard, cell, target, seen, weak: !!sit.weak, ms }));
+    },
+  });
+}
+
 /* ═══════════════════════════════════════════════════════════════════
  * 🚀 boot — 페이지를 띄우고 사람 쪽 자리를 갈아 끼웁니다
  *   o.seed       판 시드(필수 — 재현)
@@ -98,7 +157,7 @@ function boot(opt) {
   const o = Object.assign({ gender: "m", preset: "jiho", pos: "wg", foot: "R", no: 11, name: null }, opt || {});
   const keys = Object.assign({}, o.keys || {});
   if (o.auto) keys["grow-auto-mini"] = "1";
-  const w = bootPage({ muts: o.muts, keys, fastTimers: o.fastTimers !== false, confirm: true });
+  const w = bootPage({ muts: o.muts, keys, fastTimers: o.fastTimers === undefined ? true : o.fastTimers, confirm: true });
   const seen = { pick: [], intro: [], portrait: 0, card: [], grade: [], sheet: [], doors: [], ending: [], film: [], book: [],
     order: [], flash: [], boards: [], live: [] };
   const P = defaultPolicy(o.policy);
@@ -123,8 +182,9 @@ function boot(opt) {
         copy.__week = S() ? S().week : null;
         seen.card.push(copy);
         if (c.kind === "people") {
-          const want = o.__peopleWant;
-          const i = c.opts.findIndex((x) => x.key === want);
+          const want = String(o.__peopleWant || "");
+          const [wk, wsid] = want.split(":");
+          const i = c.opts.findIndex((x) => x.key === wk && (!wsid || x.sid === wsid));
           return Promise.resolve(i >= 0 ? i : c.opts.length - 1);
         }
         const pick = P.card(c, S());
@@ -161,16 +221,7 @@ function boot(opt) {
     w.W2Scene.mount = (h, c) => { seen.mounts.push(Object.assign({ week: w.W2Game && w.W2Game._t.S ? w.W2Game._t.S.week : null }, JSON.parse(JSON.stringify(c || {})))); return rawMount(h, c); };
   }
   if (!o.realMoment) {
-    const real = w.W2Moment;
-    const hand = typeof o.hand === "function" ? o.hand : () => 0.5;
-    w.W2Moment = Object.assign({}, real, {
-      play(slot, opts, cb) {
-        const s = Math.min(1, Math.max(0, Number(hand(opts.kind, opts))));
-        const j = opts.judge(s);
-        seen.boards.push({ kind: opts.kind, s, judge: j, week: w.W2Game && w.W2Game._t.S ? w.W2Game._t.S.week : null });
-        Promise.resolve().then(() => cb(j, { s, moment: opts.moment || "oneone", weak: false }));
-      },
-    });
+    w.W2Moment = boardStub(w, o, (b) => seen.boards.push(Object.assign(b, { week: w.W2Game && w.W2Game._t.S ? w.W2Game._t.S.week : null })));
   }
   /* ⚽ 경기 한 판의 결과(`WingerLive.play`가 돌려준 info)를 남깁니다 — 감싸기만 하고 그대로 넘겨요 */
   if (w.WingerLive) {
@@ -209,8 +260,11 @@ async function overlay(env, D, press) {
     return false;
   }
   if (kind === "intro" || kind === "ending") {
+    /* 🗣️ 도입 마지막 한마디 셋(15-a) — 정책 `voice`(0~2) · 없으면 첫째 */
+    const say = [...top.querySelectorAll(".w2o-say-opt")];
+    if (say.length) { press(say[Math.min(say.length - 1, Number(o.voice) || 0)], "도입 한마디"); return true; }
     const n = top.querySelector(".w2o-next");
-    if (n) { press(n, kind === "intro" ? "도입 대사" : "엔딩 대사"); return true; }
+    if (n && !n.hidden) { press(n, kind === "intro" ? "도입 대사" : "엔딩 대사"); return true; }
     return false;
   }
   if (kind === "card") {
@@ -221,8 +275,10 @@ async function overlay(env, D, press) {
     /* 🤝 사람 카드 — 정책이 바란 사람(🏠 가족 · 🧤 키퍼) */
     const who = opts.filter((b) => k(b) === "who");
     if (who.length) {
-      const want = o.__peopleWant === "keeper" ? "🧤" : "🏠";
-      const b = who.find((x) => x.textContent.indexOf(want) >= 0) || who[0];
+      const [wk, wsid] = String(o.__peopleWant || "").split(":");
+      const famName = wsid && env.w.W2Events && env.w.W2Events.FAMILY && env.w.W2Events.FAMILY[wsid] ? env.w.W2Events.FAMILY[wsid].name : null;
+      const b = (wk === "keeper" ? who.find((x) => x.textContent.indexOf("🧤") >= 0)
+        : who.find((x) => x.textContent.indexOf("🏠") >= 0 && (!famName || x.textContent.indexOf(famName) >= 0))) || who[0];
       press(b, "사람 고르기"); return true;
     }
     const pick = opts.find((b) => k(b) === "flag" && P.flag) || opts.find((b) => k(b) === "try" && pct(b) >= P.tryAt)
@@ -282,6 +338,12 @@ async function runAct(env, opt) {
     }
     const create = D.querySelector("#w2-entry.w2-create");
     if (create && en(D.querySelector(".w2-start"))) {
+      /* 🎲 만들기(계약 15) — 정책 `rerolls`번 다시 뽑기 · `nameRolls`번 이름 🎲(누른 수는 필수 입력에 안 셈 — 고를 수 있는 것) */
+      for (let i = 0; i < (Number(o.rerolls) || 0); i++) { const rb = D.querySelector(".w2-reroll"); if (en(rb)) tap(w, rb); }
+      for (let i = 0; i < (Number(o.nameRolls) || 0); i++) { const nb2 = D.querySelector(".w2-name-roll"); if (en(nb2)) tap(w, nb2); }
+      seen.create = { stats: Object.fromEntries([...D.querySelectorAll(".w2-roll-row")].map((r) => [r.dataset.k, Number((r.querySelector(".w2-roll-v") || {}).textContent)])),
+        sum: (D.querySelector(".w2-roll-sum") || {}).textContent, best: (D.querySelector(".w2-roll-best") || {}).textContent,
+        reroll: (D.querySelector(".w2-reroll") || {}).textContent, name: (D.querySelector(".w2-name") || {}).value };
       const nm = D.querySelector(".w2-name");
       if (o.name != null) nm.value = o.name;
       press(D.querySelector(`.w2-pos [data-v="${o.pos}"]`), "pos");
@@ -325,7 +387,8 @@ async function runAct(env, opt) {
 }
 /* 🤝 그 주의 사람 — 게임이 쓰는 표(`W2Story.people`)를 그대로 부릅니다(베끼지 않아요) */
 function peopleKeys(w, S) {
-  try { return w.W2Story.people(S, S.week).map((p) => p.key); } catch (e) { return []; }
+  /* 🏠 가족은 셋이 모두 key "family"(29번 P1 (가)) — 「family:<sid>」(father · apply · letter)로도 고를 수 있게 둘 다 적어요 */
+  try { return w.W2Story.people(S, S.week).reduce((a, p) => a.concat(p.key === "family" && p.sid ? ["family", `family:${p.sid}`] : [p.key]), []); } catch (e) { return []; }
 }
 
 /* 🔢 숫자만 — 성별 대칭 · 짝 검사가 견주는 「판의 모든 숫자」(이름 · 그림 · 문장은 뺌) */
@@ -382,16 +445,7 @@ async function liveMatch(opt) {
     Sc.summary = (r) => { log.push({ t: "summary", r }); return raw.summary(r); };
   }
   if (!o.realMoment) {
-    const real = w.W2Moment;
-    const hand = typeof o.hand === "function" ? o.hand : () => 0.5;
-    w.W2Moment = Object.assign({}, real, {
-      play(slot, opts, cb) {
-        log.push({ t: "board", kind: opts.kind, slot: !!slot, keys: Object.keys(opts).sort().join(",") });
-        const sv = Math.min(1, Math.max(0, Number(hand(opts.kind))));
-        const j = opts.judge(sv);
-        Promise.resolve().then(() => cb(j, { s: sv, moment: opts.moment, weak: false }));
-      },
-    });
+    w.W2Moment = boardStub(w, o, (b, opts, slot) => log.push(Object.assign({ t: "board", slot: !!slot, keys: Object.keys(opts).sort().join(",") }, b)));
   }
   const host = o.headless ? null : D.createElement("div");
   if (host) D.body.appendChild(host);

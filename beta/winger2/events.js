@@ -10,7 +10,8 @@
  *  · **잘리는 판돈은 내놓지 않아요** — 무작위 이벤트면 후보에서 빼고, 이야기 장이면 확정만 남겨요.
  *  · **이벤트는 문턱 · 경기력을 안 만져요**(평가서 구간 · 엔진 판정 창 · `buff`).
  *  · **약속은 다음 출전 경기의 실제 기록** — 새 난수 0 · % 기호 금지 · 한 번에 하나 · 1막이 끝나면 없던 일.
- *    조건은 하나 — 「그 경기에서 내 순간을 한 번 이상 살린다」(21번 §5).
+ *    조건은 하나 — 「그 경기의 내 첫 순간을 살린다」(27번 §5-1 — 판 수에서 떼어 냄).
+ *  · **이야기 2장의 약속은 늘 고를 수 있어요** — 판돈 = min(2, 6 − |🤝|) · 0이면 이야기만 걸린 약속(27번 §6).
  *  · **상황 조각은 컨디션 · 휴식 · 능력치와 무관** — 이벤트 난수원에서 **주마다 한 번** 굴려요(선택과 무관한
  *    소비 · 24번 §0-1). 글은 까닭으로 읽히게 · 컨디션/휴식/능력치를 말하지 않게 · 사람은 틀 자리로(23번 §2-1).
  *  · 이벤트 난수는 **판 시드에서 주마다 갈라 낸 난수원** — 엔진 `_rng` · 연출 `fxRnd`와 따로(11번 #19).
@@ -66,13 +67,15 @@ window.W2Events = (() => {
   const XLABEL = { main: "주 능력치", overall: "종합", pass: "패스", dribble: "드리블", shoot: "슈팅", speed: "스피드",
     defense: "수비", stamina: "체력", rival: "{rival}와의 차", ace: "{ace}와의 차" };
 
-  /* 사람 이름 틀 — 세계가 채워요(13번 §4-4). 짝 이름은 받침이 같아 조사가 성별로 안 갈려요 */
-  const FAMILY = { jiho: { who: "dad", name: "아버지" }, doyun: { who: "mom", name: "엄마" }, haram: { who: "grandma", name: "할머니" } };
+  /* 사람 이름 틀 — 세계가 채워요(13번 §4-4). 짝 이름은 받침이 같아 조사가 성별로 안 갈려요.
+   * 🏠 가족은 누구나 셋(29번 §3-2 · P1 (가)) — `{family}`는 **따라간 가족 이야기의 사람**, 아직이면 「가족」 */
+  const FAMILY = { father: { who: "dad", name: "아버지" }, apply: { who: "mom", name: "엄마" }, letter: { who: "grandma", name: "할머니" } };
+  const famOf = (S) => { const sid = window.W2Story ? window.W2Story.famSid(S) : null; return sid ? FAMILY[sid] || null : null; };
   function vars(S) {
     const w = W();
     const rival = S.world.ours.find((x) => x.role === "rival");
     return { me: S.name, no: S.noOrig != null ? S.noOrig : S.no, rival: w.short(rival.name), keeper: w.short(S.world.keeper.name),
-      ace: w.short(w.aceRow(S).name), family: (FAMILY[S.preset] || FAMILY.jiho).name, coach: "강 감독" };
+      ace: w.short(w.aceRow(S).name), family: (famOf(S) || { name: "가족" }).name, coach: "강 감독" };
   }
   const fillS = (S, t, extra) => W().fill(t, Object.assign(vars(S), extra || {}));
   const meWho = (S) => `${S.preset}-${S.gender === "f" ? "f" : "m"}`;
@@ -182,18 +185,23 @@ window.W2Events = (() => {
       parts: [{ k: "skill", v: skill, label: `실력(${fillS(S, XLABEL[x])})` }, { k: "sit", v: sit, label: "상황", text: sitText }],
       win, lose, chips: { win: chips(win), lose: chips(lose) } };
   }
-  /* 📋 약속 — % 기호 없이 「최근 N경기 중 M번」(사실)만(12번 §6-4) */
-  const PROMISE_TEXT = "그 경기에서 내 순간을 한 번 이상 살린다";
+  /* 📋 약속 — % 기호 없이 「최근 N경기 중 M번」(사실)만(12번 §6-4) · 조건은 **첫 순간**(27번 §5-1).
+   * 근거는 `recent[].f1`(그 경기 첫 내 순간을 살렸나)만 셉니다 — 없는 경기(옛 세이브)는 N에도 안 넣어요(27번 §8) */
+  const PROMISE_TEXT = "그 경기의 내 첫 순간을 살린다";
   function refOf(S) {
-    const rec = Array.isArray(S.recent) ? S.recent : [];
-    const hit = rec.filter((m) => (m.sv || 0) >= 1).length;
+    const rec = (Array.isArray(S.recent) ? S.recent : []).filter((m) => m && typeof m.f1 === "boolean");
+    const hit = rec.filter((m) => m.f1).length;
     return { hit, of: rec.length,
       text: rec.length ? `최근 ${rec.length}경기 중 ${hit}번 해냈어요` : "기록이 아직 없어요" };
   }
-  function promOpt(S) {
-    const win = stakeFx(S, "trust", 1), lose = stakeFx(S, "trust", -1);
+  /* `size` = 🤝 판돈의 크기(없으면 2) — 이야기 2장은 min(2, 6 − |🤝|)로 줄여 늘 고를 수 있게(27번 §6-3).
+   * 0이면 **이야기만 걸린 약속**(칩 · 효과 없음) — 보이는 칩 = 실제로 적용되는 크기 */
+  function promOpt(S, size) {
+    const sz = size == null ? TUNE.TRUST_STAKE : Math.max(0, Math.min(TUNE.TRUST_STAKE, Math.floor(size)));
+    const win = sz > 0 ? { trust: sz } : null, lose = sz > 0 ? { trust: -sz } : null;
     return { k: "promise", label: "약속한다", cond: { text: PROMISE_TEXT }, ref: refOf(S),
-      stake: "trust", win, lose, chips: { win: chips(win), lose: chips(lose) } };
+      stake: sz > 0 ? "trust" : null, win, lose, chips: { win: chips(win), lose: chips(lose) },
+      note: sz > 0 ? null : "이번 약속엔 🤝이 걸리지 않아요 — 이야기만 걸려요" };
   }
   const sitText = (S, def, v) => {
     const t = def && def[String(v)] != null ? def[String(v)] : SIT_COMMON[String(v)] || "평소의 날이에요";
@@ -204,7 +212,7 @@ window.W2Events = (() => {
     return Object.assign({ kind: "event", w: S.week, u: draws.u, sit: draws.sit }, base, { opts });
   }
   const whoOf = (S, who) => (who === "me" ? meWho(S) : who === "rival" ? S.world.rivalWho
-    : who === "family" ? (FAMILY[S.preset] || FAMILY.jiho).who : who === "keeper" ? S.world.keeper.who : who);
+    : who === "family" ? (famOf(S) || FAMILY.father).who : who === "keeper" ? S.world.keeper.who : who);   // 가족이 아직이면 아버지 그림(우리 집 — 29번 §3-2)
   function eventCard(S, d, draws) {
     const extra = {};
     if (d.id === "a_rematch") extra.opp = W().oppOf(S, S.week).name;
@@ -306,11 +314,16 @@ window.W2Events = (() => {
       chips: chips(fx), who: meWho(S), mood, bg: ev.bg, opts: [{ k: "ok", label: "확인" }] };
   }
 
-  /* ---------- 📋 약속 판정 — 공식 경기 한 판이 끝난 뒤(리그 · 대회 · 연습경기는 아님) ---------- */
-  function judge(S, saved) {
+  /* ---------- 📋 약속 판정 — 공식 경기 한 판이 끝난 뒤(리그 · 대회 · 연습경기는 아님) ----------
+   * `first` = 그 경기 첫 내 순간을 살렸나(1 · 0) · null이면(내 순간이 없던 경기) 없던 일(27번 §8) */
+  function judge(S, first) {
     const p = S.promise;
     if (!p) return null;
-    const ok = saved >= 1;
+    if (first !== 0 && first !== 1) {
+      endAct(S);
+      return { ok: null, text: "📋 약속 — 이번 경기엔 내 순간이 없어 없던 일이 됐어요", chips: [] };
+    }
+    const ok = first === 1;
     apply(S, ok ? p.win : p.lose);
     S.promise = null;
     for (let i = (S.evLog || []).length - 1; i >= 0; i--) {
@@ -338,11 +351,14 @@ window.W2Events = (() => {
     "성공 확률은 화면에 적힌 숫자 그대로예요. 이벤트가 뜰 때 0~99 중 숫자 하나를 뽑아 두고, 도전을 고르면 그 숫자가 적힌 확률보다 작을 때 성공해요. 숨은 보정은 없어요.",
     "확률은 기본 50에 실력(±10까지)과 그날의 상황(−12 · −6 · 0 · +6 · +12 중 하나)을 더한 값이에요. 상황은 이벤트가 뜰 때 한 번 정해지고 컨디션 · 휴식 · 능력치와는 상관없어요 — 아무리 잘 키워도 확실한 도전은 없어요.",
     "도전은 판돈이 늘 한 가지라 얻는 것과 잃는 것이 같은 크기예요 — 성공 확률이 50%를 넘으면 걸 만해요. 넘기면 아무 일도 없어요.",
-    "📋 약속은 확률이 아니라 다음 공식 경기가 정해요 — 그 경기에서 내 순간을 한 번 이상 살리면(골 · 골문 안 슛 · 도움 · 막음) 지킨 거예요. 적힌 숫자는 최근 경기에서 그만큼 해냈다는 기록이에요.",
+    "📋 약속은 확률이 아니라 다음 공식 경기가 정해요 — 그 경기의 내 첫 순간을 살리면(골 · 골문 안 슛 · 도움 · 막음) 지킨 거예요. 적힌 숫자는 최근 경기에서 첫 순간을 살린 기록이에요.",
+    "이야기의 약속은 늘 고를 수 있어요 — 🤝이 끝에 가까우면 판돈이 남은 만큼으로 줄어요(얻는 것과 잃는 것은 늘 같은 크기).",
+    "📍 번호 집계 — 내 판마다, 같은 장면을 {rival|가} 맡았다면 해냈을 확률을 더해 견줘요. 내가 해낸 수와의 차가 쌓이고, 번호 결정전 뒤 +1.5 이상이면 번호를 되찾아요.",
     "한 주에 카드는 한 장까지예요. 이야기의 다음 장이 먼저 자리를 잡고, 대회 주간 · 테스트 주에는 이벤트가 뜨지 않아요.",
     "🤝 감독 신뢰는 평가서 점수에 들어가지 않아요 — 감독의 얼굴과 말, 엔딩 한 줄, 그리고 다음 이야기로 이어져요.",
   ];
-  const rules = () => RULES.slice();
+  /* 판이 있으면 사람 이름을 채우고, 없으면(도감을 판 밖에서 열 때) 「경쟁자」로 */
+  const rules = (S) => RULES.map((t) => (S && S.world ? fillS(S, t) : W().fill(t, { rival: "경쟁자" })));
 
   return { TUNE, LIST, EVENTS, FAMILY, roll, answer, judge, promiseLine, endAct, rules, chips, fits, mem, draws,
     kit: { safeOpt, tryOpt, promOpt, card, fillS, meWho, whoOf, coachMood, vars, PROMISE_TEXT, sitText } };

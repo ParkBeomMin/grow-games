@@ -235,7 +235,9 @@ function pagePre(keys, opt) {
   return `window.fetch=()=>Promise.reject(new Error("off"));
 ${RAF_SHIM}window.scrollTo=()=>{};
 window.alert=()=>{};window.confirm=()=>${o.confirm ? "true" : "false"};
-`   + (o.fastTimers ? `(function(){var st=window.setTimeout;window.setTimeout=function(fn,ms){var a=[].slice.call(arguments,2);return st.apply(window,[fn,0].concat(a));};})();\n` : "")
+`   /* ⏱️ fastTimers — 기다림을 0으로 뭉갬. "keep-long"이면 3초 이상(🧱 고를 시간 4초 · ♿ 5.2초 같은 **제한**)은 그대로 둬요
+    *    — 손이 그 안에 누르면 판이 지워서 실제로 기다리는 일은 없고, 뭉개면 판이 열리자마자 시간 초과가 돼요 */
+    + (o.fastTimers ? `(function(){var st=window.setTimeout;var keep=${o.fastTimers === "keep-long" ? "true" : "false"};window.setTimeout=function(fn,ms){var a=[].slice.call(arguments,2);return st.apply(window,[fn,keep&&ms>=3000?ms:0].concat(a));};})();\n` : "")
     + `window.__errs=[];window.addEventListener("error",function(e){window.__errs.push(String(e.message||e.error));});\n`
     + Object.entries(keys || {}).map(([k, v]) => `localStorage.setItem(${JSON.stringify(k)},${JSON.stringify(v)});`).join("")
     + (o.pre || "");

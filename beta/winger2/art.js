@@ -6,12 +6,12 @@
  *   Art.alt(who, mood, name)  → "{이름} — {표정}" (♿ 대체 문구 — 12번 §9-6)
  *   Art.name(who)             → 기본 이름(주인공은 플레이어가 바꾼 이름을 부르는 쪽이 넘깁니다)
  *
- * 🔒 **파일 이름이 곧 계약 키입니다**(12번 §9-6 · 13번 §6-5). 아래 표는 `art/`의 66장과
+ * 🔒 **파일 이름이 곧 계약 키입니다**(12번 §9-6 · 13번 §6-5 · 38번 계약 16). 아래 표는 `art/`의 120장과
  *    한 글자도 달라선 안 됩니다 — 표에 없는 키는 파일이 있어도 안 부르고(null), 표에 있는데
  *    파일이 없으면 깨진 그림이 됩니다. 그래서 `<img>`를 그리는 쪽은 **`error`에서 이름 글자로
  *    물러섭니다**(scenes.js `face` · match-scene.js 치비 말) — 깨진 그림 금지.
- * 🔒 null은 「그림이 없다」는 뜻이지 오류가 아닙니다. 첫 베타에는 도윤 · 하람 · 엄마 · 할머니가
- *    없고(15번 결정 D — 다음 단계), 그 자리는 화면이 이름 글자로 그립니다.
+ * 🔒 null은 「그림이 없다」는 뜻이지 오류가 아닙니다 — 표에 없는 표정은 그 인물의 base로, base도 없으면
+ *    화면이 이름 글자로 그립니다(둘째 묶음에서 주인공 여섯 · 엄마 · 할머니가 다 들어와 지금은 그런 자리가 없어요).
  * 🔴 성별로 기본값을 두지 않습니다 — 주인공 키는 언제나 `{preset}-{m|f}`(13번 §6-5).
  *    「꼬리표 없는 키 = 남자」가 되면 카드 여섯으로 없앤 기본값이 코드에서 되살아나요. */
 "use strict";
@@ -20,16 +20,18 @@ window.Art = (() => {
   const DIR = "art/";
   const EXT = ".webp";
   const HERO = "base smile fire tired down surprise moved chibi-base chibi-score chibi-block chibi-down";
-  /* 첫 베타 66장 — 지호 남·여 22 · 공통 조연 10 · 두 세계 조연 22 · 배경 12 */
+  /* 120장 = 첫 묶음 66(지호 남·여 22 · 공통 조연 10 · 두 세계 조연 22 · 배경 12)
+   *        + 둘째 묶음 54(도윤 · 하람 남·여 44 · 엄마 · 할머니 6 · 배경 2 · 엔딩 2 — 38번 §3) */
   const MOODS = {
-    "jiho-m": HERO, "jiho-f": HERO,
+    "jiho-m": HERO, "jiho-f": HERO, "doyun-m": HERO, "doyun-f": HERO, "haram-m": HERO, "haram-f": HERO,
     coach: "base smile stern worry", scout: "base interest smile", dad: "base smile worry",
+    mom: "base smile worry", grandma: "base smile worry",
     minjae: "base smirk shock grin", minseo: "base smirk shock grin",
     taeo: "base grin fire tears", seoa: "base grin fire tears",
     seheon: "base frown respect", gaeun: "base frown respect",
   };
-  const BGS = "bg-field bg-locker bg-cup bg-test bg-dawn bg-home-jiho bg-gate "
-    + "end-pro1 end-pro2 end-trainee end-semi end-leave";
+  const BGS = "bg-field bg-locker bg-cup bg-test bg-dawn bg-home-jiho bg-home-doyun bg-home-haram bg-gate "
+    + "end-pro1 end-pro2 end-trainee end-semi end-leave end-univ end-abroad";
   const HAVE = new Set(BGS.split(" "));
   Object.keys(MOODS).forEach((who) => MOODS[who].split(" ").forEach((m) => HAVE.add(`${who}-${m}`)));
 

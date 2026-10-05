@@ -6,7 +6,7 @@
  *   B-1  `live.js`가 부르는 `W2Scene.*` 이름 ⊆ `match-scene.js`가 내보내는 함수(이름이 갈리면 화면이 **조용히** 안 그려짐)
  *   B-2  `game.js`가 부르는 `W2Scenes.*`(오버레이 열 개) ⊆ `scenes.js`가 내보내는 함수
  *   B-3  `live.js` · `game.js`가 부르는 `W2Moment.*` ⊆ `winger-moment.js`가 내보내는 것
- *   B-4  🔥 판을 부르는 **순서와 모양**(계약 3) — 열기 `push(카드)` → `play(자리, { kind, moment, condition, foot, keeper, judge })`
+ *   B-4  🔥 판을 부르는 **순서와 모양**(v2 계약 3′) — 열기 `push(카드)` → `play(자리, { kind, sit, odds, judge, foot, keeper, fast, still, wide })`
  *        → 판정은 엔진 창구(`judge(s)` = `m.judgeFor(s)`) → 닫기 `push(같은 카드)`
  *   C    엔진의 `stakeKey` 8종 ↔ 화면의 문구 표 — 종류마다 문구가 있고 · 같은 카드 종류 안에서 서로 다르다
  *   D    🚪 **게임 입구에서 첫 리그 경기까지** 진짜 버튼으로 — 경기 화면 · 스코어 숫자 둘 · 사후 집계 줄 · 결과 · 평점 · [다음] · 오류 0
@@ -27,9 +27,9 @@ const src = (f) => fs.readFileSync(path.join(PAGE_DIR, f), "utf8");
 
 const MUT = {
   /* B-4 — 판에 키퍼 이름을 안 넘김(계약 3의 모양이 빠짐) */
-  M_NOKEEPER: { "live.js": [[/foot: c\.foot === "L" \? "L" : "R", keeper: c\.keeper,/, 'foot: c.foot === "L" ? "L" : "R",']] },
+  M_NOKEEPER: { "live.js": [[/keeper: c\.keeper, fast: !!fast,/, "fast: !!fast,"]] },
   /* B-4 — 판이 낸 s를 엔진 창구 대신 폴백 판정으로(판정의 주인이 갈림) */
-  M_JUDGE: { "live.js": [[/judge: \(s\) => m\.judgeFor\(s\),/, 'judge: (s) => (s >= 0.75 ? "perfect" : s >= 0.35 ? "ok" : "miss"),']] },
+  M_JUDGE: { "live.js": [[/got\.j = m\.judgeFor\(got\.s\);/, 'got.j = got.s >= 0.75 ? "perfect" : got.s >= 0.35 ? "ok" : "miss";']] },
   /* C — 문구 표에서 한 칸을 지움(표에 없는 키는 조용히 다른 문구로 떨어져요) */
   M_STAKE: { "match-scene.js": [[/ {4}clincher: "쐐기를 박습니다",\n/, ""]] },
 };
@@ -90,7 +90,7 @@ const MUT_ENG = { ACE_V0: [
     }
     return rows;
   }
-  const WANT_KEYS = "condition,foot,judge,keeper,kind,moment";
+  const WANT_KEYS = "fast,foot,judge,keeper,kind,odds,sit,still,wide";   // 🔄 v2 계약 3′(38번 §2) — 옛 `condition` · `moment` 모양에서 옮김
   const okB4 = (rows) => { const b = rows.filter((x) => x.keys); return b.length > 0 && b.every((x) => x.keys === WANT_KEYS && x.slot && x.open && x.close); };
   const rB4 = await boardOrder(null);
   const nb = rB4.filter((x) => x.keys).length;
@@ -136,7 +136,11 @@ const MUT_ENG = { ACE_V0: [
     W.W2Scene.mount(host, { home: "솔빛고", away: "한결고", myName: "윙어" });
     W.W2Scene.fast();
     const out = [];
-    for (const { kind, stakeKey } of combos.values()) {
+    /* 🔄 v2 — 엔진이 낸 stakeKey 여덟을 **카드 종류 셋마다** 그려 봅니다(첫 묶음은 처음 만난 카드 종류 하나만 —
+     *    v2 엔진 굴림 순서가 바뀌어 clincher가 다른 종류로 먼저 나오자 「같은 종류 안의 겹침」이 안 보였어요) */
+    const all = [];
+    for (const { stakeKey } of combos.values()) for (const kind of ["goal", "assist", "defend"]) all.push({ kind, stakeKey });
+    for (const { kind, stakeKey } of all) {
       await W.W2Scene.push({ min: 30, kind, mine: true, by: "윙어", score: [1, 1], stakeKey, judge: null, text: "" });
       const bodies = host.querySelectorAll(".w2-card.mine .w2-body");
       out.push({ kind, stakeKey, text: (bodies[bodies.length - 1] || {}).textContent || "" });
@@ -146,7 +150,7 @@ const MUT_ENG = { ACE_V0: [
     return out;
   }
   const okC = (rows) => {
-    if (rows.length < 8) return false;
+    if (rows.length < 24) return false;
     if (rows.some((r) => !r.text || /undefined|NaN/.test(r.text))) return false;
     for (const k of ["goal", "assist", "defend"]) {
       const t = rows.filter((r) => r.kind === k).map((r) => r.text);
@@ -186,7 +190,10 @@ const MUT_ENG = { ACE_V0: [
   }
 
   /* ══════════ E — 카드 빈도가 계단이 아니다(1막 눈금) ══════════ */
-  const STEP_MAX = 1.35;
+  /* 🔄 v2 다시 유도(39번 §1) — 1막 눈금(40~100 · 1막 buff)에서 27번 규칙이 판을 2.3~2.8로 눌러 계단이 납작:
+   *    변이 ACE_V0 최대 인접 비 1.10~1.14(시드 31 · 77) · 기준선 1.032~1.048(시드 31 · 77 · 1234 · 1,500경기 · 잡음 σ ≈ 1.3%)
+   *    → 선 1.075 = 두 값의 기하 중간(√(1.048 × 1.102)) — 기준선 최대 위 2σ · 변이 최소 아래 2σ(뜻 그대로 · 크기만 새로) */
+  const STEP_MAX = 1.075;
   async function stair(Eng) {
     const W = bootPage({ fastTimers: true });
     const SPOT = JSON.parse(JSON.stringify(W.W2World.TUNE.ACT1_SPOT));   // 🔗 1막의 실제 `buff`(중립화 상수) — 값이 아니라 **모양**을 봐요

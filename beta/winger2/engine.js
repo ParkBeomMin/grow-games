@@ -109,6 +109,7 @@ window.WingerEngine = (() => {
    * 🚨 **경쟁자에게는 절대 걸지 마세요.** 걸면 리그 득점이 다시 11명에게 흩어져
    * 골든부츠가 무너집니다 (career.js가 적어 둔 ACE_W의 원래 목적). */
   const FLOOR_SHARE = 0.12;  // 22번 확정 — 0~0.20 전 구간이 네 조건을 통과해서 안전망으로 남깁니다
+  const MOMENT_CAP = 4, MOMENT_GAP = 15;   // 27번 §3-3 — 한 경기 내 판 상한 · 판 사이 최소 분(트레이드오프 손잡이 · 검사는 값을 직접 적어요)
   const N_MIN = 6, N_MAX = 8;
   const COND_K = 0.30;       // 컨디션 기울기
   const COND_REF = 51;       // c* — 1막 보통 판의 경기 날 컨디션 중앙값이에요(22번 R13 확정 · 21번 §2-1 — 80에서 옮김)
@@ -503,11 +504,14 @@ window.WingerEngine = (() => {
 
     let n = randInt(N_MIN, N_MAX);
     const mins = minutesFor(n);
+    const scenes = []; for (let i = 0; i < n; i++) scenes.push(sceneOf(atkW, defW));   // 27번 — 장면 종류를 킥오프에(스코어를 안 봐서 분포가 같음)
+    let slot = 0; for (let i = Math.min(6, n); i >= 1; i--) if (scenes[i - 1] !== "neu") { slot = i; break; }   // ⓐ 최소 1번 자리 = 1~6장의 마지막 장면
+    if (!slot) { scenes[5] = rnd() < atkW ? "atk" : "def"; slot = 6; }   // 1~6장이 모두 중립일 때만(약 0.05%) 6장을 장면으로
     const hits = new Map();                    // 그 경기에 각자 넣은 골 (fatigue용)
     const cards = [];
     let k = 0, us = 0, them = 0, lastMin = 90;
     let pending = null, halfDone = false, kicked = false, ended = false;
-    let mineCards = 0, mineSuccess = 0;
+    let mineCards = 0, mineSuccess = 0, lastMine = -Infinity;
     const moments = { g: { t: 0, p: 0 }, a: { t: 0, p: 0 }, d: { t: 0, p: 0 } };
 
     /* 이 경기에 누가 무엇을 했나 — **줄 객체를 열쇠로** 씁니다.
@@ -590,9 +594,20 @@ window.WingerEngine = (() => {
       }
     }
 
+    /* 🎬 27번 §3-3 — 이 장면을 누가 맡나: ⓐ 이 경기 내 판이 0이고 최소 1번 자리면 나(굴림 0) ·
+     * ⓑⓒ 상한(4) · 간격(15분)에 걸리면 나를 뺀 열 명에서 한 번(바닥 끔) · 아니면 지금과 같은 호출 */
+    function pickMine(kind, card) {
+      const me = xi.find((x) => x.me);
+      if (me && mineCards === 0 && card.k === slot) return { who: me };
+      const off = mineCards >= MOMENT_CAP || card.min - lastMine < MOMENT_GAP;
+      if (!off) return pickActor(xi, kind, hits, true);
+      const pool = xi.filter((x) => !x.me);
+      return pool.length ? pickActor(pool, kind, hits, false) : pickActor(xi, kind, hits, true);
+    }
+
     function openMine(card, kind) {
       card.mine = true;
-      mineCards += 1;
+      mineCards += 1; lastMine = card.min;
       const pool = (MINI[kind] || {})[card.pos] || (MINI[kind] || {}).mf || ["oneone"];
       card.moment = pool[Math.floor(rnd() * pool.length)];
       pending = { card, kind };
@@ -662,7 +677,7 @@ window.WingerEngine = (() => {
       const card = blankCard(k, n, clutchOn ? 90 + randInt(1, 5) : mins[k - 1], "filler");
       card.clutch = clutchOn;
       if (clutchOn) lastMin = card.min;
-      const scene = sceneOf(atkW, defW);
+      const scene = scenes[k - 1];
       if (scene === "neu") {
         card.text = FILLER[Math.floor(rnd() * FILLER.length)];
         return finishCard(card);
@@ -676,7 +691,7 @@ window.WingerEngine = (() => {
         card.kind = kind; card.big = big;
         const sa = stakeOf(kind, us, them);
         if (sa) { card.stake = sa.ko; card.stakeKey = sa.key; }
-        const { who } = pickActor(xi, kind, hits, true);   // ← 내 몫에만 바닥
+        const { who } = pickMine(kind, card);   // ← 내 몫에만 바닥(27번 규칙 셋)
         card.by = nameOf(who); card.pos = who ? who.pos : null;
         if (who && who.me) return openMine(card, kind);
         autoAttack(card, kind, who);
@@ -685,7 +700,7 @@ window.WingerEngine = (() => {
       card.kind = "defend";
       const sd = stakeOf("defend", us, them);
       if (sd) { card.stake = sd.ko; card.stakeKey = sd.key; }
-      const { who } = pickActor(xi, "defend", hits, true);   // ← 내 몫에만 바닥
+      const { who } = pickMine("defend", card);   // ← 내 몫에만 바닥(27번 규칙 셋)
       card.by = nameOf(who); card.pos = who ? who.pos : null;
       if (who && who.me) return openMine(card, "defend");
       autoDefend(card, who);
@@ -779,6 +794,7 @@ window.WingerEngine = (() => {
       /* 🎮 미니게임이 낸 조작 성공도 s(0~1)를 지금 열린 카드의 판정으로 옮겨요.
        * 화면은 `m.resolve(m.judgeFor(s))`로 부릅니다. */
       judgeFor: (s) => (pending ? judgeAt(pending.kind, s) : "miss"),
+      autoP: (kind, ab) => (kind === "defend" ? 1 - pConcede(defW, ab) : pFinish(atkW, ab)),   // 29번 §11-1 — 읽기 창구만(굴림 0 · 📍 q · 승산 줄)
       get pendingKind() { return pending ? pending.kind : null; },
       get n() { return n; },
       get score() { return [us, them]; },

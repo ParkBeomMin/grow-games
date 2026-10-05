@@ -3,12 +3,14 @@
  *   Y-1  📍 25 · 🔥 29 · 🕯️ 33 · 🏠 32 — **연 이야기의 2장이 고정 주에 못 온 판 0**(🏠은 그 주 🤝 버튼에 가족이 뜸 · 고르면 2장)
  *   Y-2  상한 — 카드 합 ≤ 18 · 무작위(기말고사 포함) ≤ 10 · 이야기 장은 상한에 **막히지 않음**(Y-1이 그 증거)
  *   Y-3  🔥 {ace}의 학교와는 **리그 3라운드(10주) · 8라운드(29주)** 에만 만남 — 세계 160벌(성별 · 포지션 돌림)
- *   Y-4  🔥은 **11주에 한 번만** 판정 — 그때 기록이 「나 M ≥ 1 · {ace} S − M ≤ 1」이면 열리고, 아니면 그 뒤로 조건이 서도 안 열림
+ *   Y-4  🔥은 **11주에 한 번만** 판정 — 그때 기록이 「나 M ≥ 1 · {ace} S − M ≤ RACE_N」이면 열리고, 아니면 그 뒤로 조건이 서도 안 열림
+ *        (v2: `RACE_N` **0** — 38번 §5 · 28번 R16 둘째 값. 첫 묶음은 1)
  *   Y-5  🔥 기록은 **리그 경기만** — 내 리그 기록(`ind.me`) == 리그 경기 기록의 합(대회 경기는 안 들어감) · 결말이 그 기록의 규칙표대로
  *   Y-6  📋 약속은 **내 판만** 셈 — 살린 순간 = ⚽ 결정 perfect·ok + 🅰️ perfect + 🧱 perfect(내 카드만 · 동료 골의 자동 도움 · 승부차기 제외)
+ *        v2: 약속의 성패 = 그 경기 **첫 내 순간**을 살렸나(27번 §5-1 — 첫 묶음은 「살린 수 ≥ 1」)
  *        약속의 성패 == 그 주 공식 경기의 살린 순간 ≥ 1 · 경기 화면의 「약속」 줄과 같은 답
  *   + 변이(파일 안): 무작위가 이야기 장보다 먼저(Y-1) · 무작위 상한 12(Y-2) · 에이스 라운드 4(Y-3) · 11주 뒤에도 판정(Y-4) ·
- *                   대회 기록이 🔥에 샘(Y-5) · 동료 판도 셈(Y-6) · 동료 골의 자동 도움을 셈(Y-6)
+ *                   대회 기록이 🔥에 샘(Y-5) · 동료 판도 셈(Y-6) · 동료 골의 자동 도움을 셈(Y-6) · 약속을 「살린 수 ≥ 1」로(Y-6)
  * 🎲 정책을 여섯 갈래로(🤝 사람을 2 · 3주 / 30 · 31주 / 한 쪽만 / 아무도) × 시드 — 이야기가 열리는 주가 고르게 퍼지게. ⏱️ 약 4분.
  * 종료 코드: 0 통과 · 1 빨간불 · 2 💥 죽음
  */
@@ -22,6 +24,7 @@ let fail = 0;
 const check = (ok, msg) => { console.log(`${ok ? "✅" : "❌"} ${msg}`); if (!ok) fail += 1; };
 const CAP_ALL = 18, CAP_RANDOM = 10;                       // 🔒 12번 §7-2 — 박은 값
 const ACE_WEEKS = [10, 29];                                // 🔒 21번 §4-1 — 박은 값
+const RACE_N = 0;                                          // 🔒 38번 §5 — 박은 값
 const SECOND = { slot: 25, race: 29, senior: 33, fam: 32 };  // 🔒 12번 §7-4 — 박은 값
 
 const MUT = {
@@ -37,10 +40,12 @@ const MUT = {
   /* Y-5 — 대회 경기 기록이 🔥 리그 기록에 샘 */
   M_CUPLEAK: { "game.js": [[/ {4}R\.apps \+= 1; R\.g \+= info\.myGoals; R\.a \+= info\.assists; R\.d \+= info\.defense;/,
     "    R.apps += 1; R.g += info.myGoals; R.a += info.assists; R.d += info.defense;\n    if (o.t === \"C\") { const c0 = S.world.league.ind.me || (S.world.league.ind.me = [0, 0, 0]); c0[0] += info.myGoals; c0[1] += info.assists; c0[2] += info.defense; }"]] },
-  /* Y-6 — 동료 판도 셈 · 동료 골의 자동 도움을 셈 */
-  M_ALL: { "live.js": [[/const savedOf = \(cards\) => \(cards \|\| \[\]\)\.filter\(\(c\) => c\.mine\n/, "const savedOf = (cards) => (cards || []).filter((c) => true\n"]] },
-  M_AST: { "live.js": [[/const savedOf = \(cards\) => \(cards \|\| \[\]\)\.filter\(\(c\) => c\.mine\n {4}&& \(c\.kind === "goal" \? c\.judge === "perfect" \|\| c\.judge === "ok" : c\.judge === "perfect"\)\)\.length;/,
-    "const savedOf = (cards) => (cards || []).filter((c) => (c.mine\n    && (c.kind === \"goal\" ? c.judge === \"perfect\" || c.judge === \"ok\" : c.judge === \"perfect\")) || (!c.mine && c.credit && c.credit.a > 0)).length;"]] },
+  /* Y-6 — 동료 판도 셈 · 동료 골의 자동 도움을 셈(살림의 정의 `isSaved` 한 곳 — 10-04 `live.js`) */
+  M_ALL: { "live.js": [[/const isSaved = \(c\) => !!c && c\.mine && /, "const isSaved = (c) => !!c && "]] },
+  M_AST: { "live.js": [[/const isSaved = \(c\) => !!c && c\.mine && \(c\.kind === "goal" \? c\.judge === "perfect" \|\| c\.judge === "ok" : c\.judge === "perfect"\);/,
+    "const isSaved = (c) => !!c && ((c.mine && (c.kind === \"goal\" ? c.judge === \"perfect\" || c.judge === \"ok\" : c.judge === \"perfect\")) || (!c.mine && c.credit && c.credit.a > 0));"]] },
+  /* Y-6 — 약속을 「살린 수 ≥ 1」로 되돌림(27번 §7-0 변이 — 첫 순간이 아니라 경기 전체) */
+  M_ANYSAVE: { "game.js": [[/const pr = EV\(\)\.judge\(S, info\.first\);/, "const pr = EV().judge(S, info.saved >= 1 ? 1 : 0);"]] },
 };
 {
   const bad = pageMutsOK(MUT);
@@ -99,10 +104,10 @@ function audit(R) {
   /* Y-4 */
   const r1 = ch("s_race1");
   const at11 = R.rec[11];
-  const want = !!at11 && at11.M >= 1 && at11.S - at11.M <= 1;
+  const want = !!at11 && at11.M >= 1 && at11.S - at11.M <= RACE_N;
   if (r1.some((w) => w !== 11)) raceBad.push(`🔥 1장이 ${r1}주`);
   if (at11 && (r1.length > 0) !== want) raceBad.push(`11주 기록 나 ${at11.M} · {ace} ${at11.S} → 열려야 ${want} · 실제 ${r1.length > 0}`);
-  const lateTrue = !want && Object.entries(R.rec).some(([w, v]) => +w > 11 && +w <= 33 && v.M >= 1 && v.S - v.M <= 1);
+  const lateTrue = !want && Object.entries(R.rec).some(([w, v]) => +w > 11 && +w <= 33 && v.M >= 1 && v.S - v.M <= RACE_N);
   /* Y-5 */
   const L = S.games.filter((g) => g.t === "L"), C = S.games.filter((g) => g.t === "C");
   const me = S.world.league.ind.me || [0, 0, 0];
@@ -128,7 +133,9 @@ function audit(R) {
     const g = S.games.find((x) => x.w === l.w && (x.t === "L" || x.t === "C"));
     const m = R.live.find((x) => x.week === l.w && x.info && x.info.promise);
     if (!g) { promBad.push(`${l.w}주 약속인데 그 주 공식 경기가 없음`); continue; }
-    if (l.ok !== (g.sv >= 1)) promBad.push(`${l.w}주 약속 ${l.ok} ↔ 살린 순간 ${g.sv}`);
+    const fm = m ? ((m.info.cards || []).find((c) => c.mine) || null) : null;   // 그 경기 첫 내 순간(카드 순서 = 분 순서)
+    const firstOk = !!fm && savedMine([fm]) === 1;
+    if (!fm || l.ok !== firstOk) promBad.push(`${l.w}주 약속 ${l.ok} ↔ 첫 내 순간 ${fm ? `${fm.kind} ${fm.judge}` : "없음"}`);
     if (!m || m.info.promise.ok !== l.ok) promBad.push(`${l.w}주 경기 화면의 약속 줄 ${m ? m.info.promise.ok : "없음"} ↔ ${l.ok}`);
   }
   return { miss, capBad, raceBad, leagueBad, promBad, lateTrue, opened: r1.length > 0, cupStat, judged, shown, evRnd: S.evRnd || 0,
@@ -181,14 +188,14 @@ const agg = (res, k) => res.filter((r) => !r.dead).reduce((a, r) => a.concat(r[k
 
   const r4 = agg(base, "raceBad");
   const late = ok.filter((r) => r.lateTrue).length;
-  check(r4.length === 0 && nOpen.race > 0 && ok.length - nOpen.race > 0, `Y-4. 🔥 11주에 한 번 판정 — 연 판 ${nOpen.race} · 안 연 판 ${ok.length - nOpen.race}이 전부 11주 기록의 규칙(M ≥ 1 · S − M ≤ 1)대로 · 「11주엔 안 섰다가 뒤에 선」 판 ${late}개도 안 열림 (어긋남 ${r4.length})`
+  check(r4.length === 0 && nOpen.race > 0 && ok.length - nOpen.race > 0, `Y-4. 🔥 11주에 한 번 판정 — 연 판 ${nOpen.race} · 안 연 판 ${ok.length - nOpen.race}이 전부 11주 기록의 규칙(M ≥ 1 · S − M ≤ ${RACE_N})대로 · 「11주엔 안 섰다가 뒤에 선」 판 ${late}개도 안 열림 (어긋남 ${r4.length})`
     + (r4.length ? `\n     🔴 ${r4.slice(0, 3).join(" · ")}` : "") + (late === 0 ? "\n     🚧 「뒤에 조건이 선」 판이 없어 「한 번만」은 Y-4 변이로만 확인돼요" : ""));
   const l5 = agg(base, "leagueBad");
   const withCup = ok.filter((r) => r.cupStat > 0).length;
   check(l5.length === 0 && withCup > 0, `Y-5. 🔥 기록은 리그 경기만 — 내 리그 기록 == 리그 경기 기록의 합 · 🔥 결말이 규칙표대로 (대회에서 기록을 낸 판 ${withCup}개 · 어긋남 ${l5.length})` + (l5.length ? `\n     🔴 ${l5.slice(0, 3).join(" · ")}` : ""));
   const p6 = agg(base, "promBad");
   const judged = ok.reduce((a, r) => a + r.judged, 0), notMine = ok.reduce((a, r) => a + r.notMine, 0);
-  check(p6.length === 0 && judged >= 20 && notMine > 0, `Y-6. 📋 약속은 내 판만 — 경기마다 살린 순간 == 내 카드의 ⚽ perfect·ok + 🅰️ perfect + 🧱 perfect · 약속 ${judged}건의 성패 == 그 주 살린 순간 ≥ 1 == 화면의 약속 줄 (동료 골에 붙은 내 자동 도움 ${notMine}번은 안 셈 · 어긋남 ${p6.length})`
+  check(p6.length === 0 && judged >= 20 && notMine > 0, `Y-6. 📋 약속은 내 판만 — 경기마다 살린 순간 == 내 카드의 ⚽ perfect·ok + 🅰️ perfect + 🧱 perfect · 약속 ${judged}건의 성패 == 그 경기 **첫 내 순간**의 살림 == 화면의 약속 줄 (동료 골에 붙은 내 자동 도움 ${notMine}번은 안 셈 · 어긋남 ${p6.length})`
     + (p6.length ? `\n     🔴 ${p6.slice(0, 3).join(" · ")}` : ""));
 
   /* ══════════ 🧪 변이 ══════════ */
@@ -199,7 +206,8 @@ const agg = (res, k) => res.filter((r) => !r.dead).reduce((a, r) => a.concat(r[k
     const mc = await sweep(MUT.M_CAP, few);
     check(agg(mc, "capBad").length > 0, `변이-M_CAP(무작위 상한 12) → Y-2가 빨간불 (넘친 판 ${agg(mc, "capBad").length})`);
     check(y3(MUT.M_ACE).length > 0, `변이-M_ACE(에이스 학교를 4라운드로) → Y-3이 빨간불`);
-    const ml = await sweep(MUT.M_LATE, few);
+    /* RACE_N 0이면 「11주엔 안 섰다가 뒤에 선」 판이 드물어(60판 중 6) 판 전부로 */
+    const ml = await sweep(MUT.M_LATE, SEEDS);
     check(agg(ml, "raceBad").length > 0, `변이-M_LATE(11주 뒤에도 판정) → Y-4가 빨간불 (어긋남 ${agg(ml, "raceBad").length})`);
     const mk = await sweep(MUT.M_CUPLEAK, few);
     check(agg(mk, "leagueBad").length > 0, `변이-M_CUPLEAK(대회 기록이 🔥에 샘) → Y-5가 빨간불 (어긋남 ${agg(mk, "leagueBad").length})`);
@@ -207,6 +215,8 @@ const agg = (res, k) => res.filter((r) => !r.dead).reduce((a, r) => a.concat(r[k
     check(agg(ma, "promBad").length > 0, `변이-M_ALL(동료 판도 셈) → Y-6이 빨간불 (어긋남 ${agg(ma, "promBad").length})`);
     const ms = await sweep(MUT.M_AST, few);
     check(agg(ms, "promBad").length > 0, `변이-M_AST(동료 골의 자동 도움을 셈) → Y-6이 빨간불 (어긋남 ${agg(ms, "promBad").length})`);
+    const mn = await sweep(MUT.M_ANYSAVE, few);
+    check(agg(mn, "promBad").length > 0, `변이-M_ANYSAVE(약속을 「살린 수 ≥ 1」로 되돌림 — 27번 §7-0) → Y-6이 빨간불 (어긋남 ${agg(mn, "promBad").length})`);
   }
   console.log(fail ? `\n❌ ${fail}건 실패` : "\n✅ 통과");
   process.exit(fail ? 1 : 0);

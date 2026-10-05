@@ -131,9 +131,21 @@ async function scan(targets, budget, muts, opt) {
   }
 
   /* ══════════ AC-4 — 알림 ══════════ */
+  /* 🔔 알림 줄 세우기(`game.js` `flash` → `noteQ` · `drainNotes` — 첫 묶음 커밋 cc01d2e)는 알림을 **하나씩** 띄워요.
+   *    판정 · 개수는 그대로고 띄우는 때만 줄을 서요 → 셈은 **줄이 빈 뒤에**(알림 수가 더 안 늘 때까지 기다림).
+   *    🔒 판정 시점은 AC-4b가 따로 봐요(엔딩 장면이 뜰 때 이미 세이브에) — 세는 때를 옮겨도 판정 시점 검사는 그대로 */
+  async function settle(env) {
+    let last = -1, same = 0;
+    for (let i = 0; i < 4000 && same < 80; i++) {
+      await new Promise((r) => setTimeout(r, 5));
+      const n = env.seen.flash.length;
+      if (n === last) same += 1; else { same = 0; last = n; }
+    }
+  }
   async function alerts(muts) {
     const one = boot({ seed: 777, pos: "wg", auto: true, realScene: false, muts });
     const r = await runAct(one);
+    await settle(one);
     const S = r.S;
     const seen = one.seen;
     one.w.close();
@@ -149,11 +161,13 @@ async function scan(targets, budget, muts, opt) {
     const reopen = async (hang) => {
       const A1 = boot({ seed: 777, pos: "wg", auto: true, realScene: false, muts, policy: { [hang]: true } });
       await runAct(A1, { until: (Sx, e) => (hang === "filmHang" ? e.seen.film.length : e.seen.ending.length) >= 1, stall: 300 });
+      await settle(A1);
       const n1 = A1.seen.flash.filter((f) => /^🏅/.test(f.t)).length;
       const keys = lsDump(A1.w);
       A1.w.close();
       const B1 = boot({ seed: 777, pos: "wg", auto: true, realScene: false, muts, keys });
       const rb = await runAct(B1, { entry: "continue" });
+      await settle(B1);
       const n2 = B1.seen.flash.filter((f) => /^🏅/.test(f.t)).length;
       const nAch2 = Object.keys((rb.S && rb.S.ach) || {}).length;
       B1.w.close();

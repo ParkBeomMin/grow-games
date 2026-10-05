@@ -188,7 +188,8 @@ guard("🟩 W2 시나리오 표", () => {
  * 🔄 1막에서 🧱 수비도 판을 엽니다(12번 §4 · 결정 A) — 옛 문장 「🧱은 목록에 없어야」가 **뒤집혔어요.**
  *    지금 계약: ① 목록의 모든 칸이 **진짜로 판을 연다**(화면 0조각인 칸 없음) ② 칸의 이름 = 판이 스스로 말하는
  *    이름(`W2Moment.WORDS[kind].title`) ③ 목록의 종류 = **판을 여는 종류 전부**(`opens` — 빠진 종류 없음)
- *    ④ 설명에 폐기한 낱말 없음. 🔒 확인 페이지가 부르는 그대로(`play(box, { kind, moment: id, condition, foot, keeper })`) 엽니다. */
+ *    ④ 설명에 폐기한 낱말 없음. 🔒 확인 페이지가 부르는 그대로 — v2 계약 3′(`play(box, { kind, sit, odds, judge, foot, keeper, fast, still, wide })` ·
+ *    38번 §2 · `_check.html` 판 칸)로 엽니다. 🧱의 4초 제한은 뭉개지 않아요(뭉개면 6ms 안에 시간 초과로 닫혀 칸 0으로 보임). */
 async function w2BoardList(htmlOverride) {
   const { momentDom, pressDom, loadMoment } = require(path.join(ROOT, "tests/winger2/_load.js"));
   const html = htmlOverride || CHECK_SRC;
@@ -200,9 +201,10 @@ async function w2BoardList(htmlOverride) {
   const rows = [];
   for (const e of list) {
     const W = momentDom(null);
-    const st = W.setTimeout; W.setTimeout = (fn) => st(fn, 0);
+    const st = W.setTimeout; W.setTimeout = (fn, ms, ...a) => st(fn, Number(ms) >= 3000 ? ms : 0, ...a);
     const host = W.document.getElementById("host");
-    W.W2Moment.play(host, { kind: e.kind, moment: e.id, condition: 80, foot: "R", keeper: e.kind === "defend" ? "태오" : null }, () => {});
+    W.W2Moment.play(host, { kind: e.kind, sit: { weak: false, step: 0, foot: 1, cond: 1 }, odds: (sv) => Math.round(100 * sv), judge: () => "ok",
+      foot: "R", keeper: e.kind === "defend" ? "태오" : null, fast: false, still: false, wide: false }, () => {});
     await new Promise((r) => setTimeout(r, 6));
     const go = host.querySelector(".w2m-go");
     if (go) { pressDom(W, go); await new Promise((r) => setTimeout(r, 6)); }
@@ -234,7 +236,7 @@ async function w2BoardCheck() {
   /* 🧪 감도 — 읽어 온 문자열에서 🧱 칸을 지우면 「빠진 종류」로, 이름을 바꾸면 「이름 어긋남」으로 잡히는가 */
   if (ok(v)) {
     const noCover = CHECK_SRC.replace(/\n\s*\{ id: "cover", emoji: "🧱"[\s\S]*?foot: true \},/, "");
-    const rename = CHECK_SRC.replace(/name: "슛 코스 막기", kind: "defend"/, 'name: "차단", kind: "defend"');
+    const rename = CHECK_SRC.replace(/name: "슛 막기", kind: "defend"/, 'name: "차단", kind: "defend"');
     const m1 = noCover !== CHECK_SRC ? await w2BoardList(noCover) : null;
     const m2 = rename !== CHECK_SRC ? await w2BoardList(rename) : null;
     check(!!m1 && m1.missing.indexOf("defend") >= 0 && !!m2 && m2.misname.some((r) => r.kind === "defend"),

@@ -21,18 +21,19 @@ window.W2Ach = (() => {
     /* 🧭 성향 문턱 — 24번 §2 */
     STYLE: { MIN_DEC: 10, MIN_TRY: 7, BOTH: 3, LUCK: 2.28, ONE: 25, EVEN: 12, READ: 0.8, BOLD: 0.65, CAUTIOUS: 0.30 },
     BEST_PCT: 40,             // ① §5-4 — 🎯 최고의 한 수(성공한 도전 중 표시 % ≤ 40)
-    /* 희귀도 — 24번 R10(새 격자 16칸 평균 달성률 %) · 문턱 흔함 ≥ 35 · 드묾 12~35 · 귀함 3~12 · 전설 < 3(12번 §7-5).
-     * 흔함 grad · story1 · family 100 · g1 84.7 · winner 69.9 · next 52.6 · number 44.1
-     * 드묾 mom10 34.6 · s1 · onething · rested 25.0 · door 23.7 · allc 19.5 · gift 12.7
-     * 귀함 race 11.8 · cs5 10.4 · longshot 8.9 · qf 8.7 · pk 6.0 · r9 5.8 · g7 4.8 · league · a7 4.1 · promise3 · wall3 3.8
-     * 전설 crown 2.3 · hat 0.7 · cup 0.2
+    /* 희귀도 — 문턱 흔함 ≥ 35 · 드묾 12~35 · 귀함 3~12 · 전설 < 3(12번 §7-5) · 판 2.5 · 새 집계 · 시작 랜덤 뒤의 표:
+     *   28번 R10 표 → 34번(`number` 흔함 → 드묾 · `allc` 드묾 → 귀함) → 37번 §2 · 38번 §5(`g7` 드묾 → 귀함 하나만)
+     * 흔함 grad · story1 · family · g1 · mom10 · winner · next
+     * 드묾 s1 · onething · rested · a7 · door · race · gift · number
+     * 귀함 r9 · cs5 · wall3 · qf · longshot · crown · pk · promise3 · league · allc · g7
+     * 전설 hat · cup
      * 기기 장부 업적 셋(`trio` · `all7` · `six`)은 판 하나로 못 재서(R10 밖) 전설로 둬요. */
     TIER: {
-      grad: "흔함", story1: "흔함", family: "흔함", g1: "흔함", winner: "흔함", next: "흔함", number: "흔함",
-      mom10: "드묾", door: "드묾", allc: "드묾", gift: "드묾", s1: "드묾", onething: "드묾", rested: "드묾",
-      race: "귀함", cs5: "귀함", longshot: "귀함", qf: "귀함", pk: "귀함", promise3: "귀함", r9: "귀함", g7: "귀함",
-      league: "귀함", wall3: "귀함", a7: "귀함",
-      crown: "전설", hat: "전설", cup: "전설", trio: "전설", all7: "전설", six: "전설",
+      grad: "흔함", story1: "흔함", family: "흔함", g1: "흔함", mom10: "흔함", winner: "흔함", next: "흔함",
+      s1: "드묾", onething: "드묾", rested: "드묾", a7: "드묾", door: "드묾", race: "드묾", gift: "드묾", number: "드묾",
+      r9: "귀함", cs5: "귀함", wall3: "귀함", qf: "귀함", longshot: "귀함", crown: "귀함", pk: "귀함", promise3: "귀함",
+      league: "귀함", allc: "귀함", g7: "귀함",
+      hat: "전설", cup: "전설", trio: "전설", all7: "전설", six: "전설",
     },
   });
   const T = TUNE;
@@ -69,10 +70,10 @@ window.W2Ach = (() => {
     { id: "promise3", group: "이야기", name: "세 번 지킨 약속", cond: "약속 3번 지키기", test: (S) => (Number(S.promKept) || 0) >= T.PROMISE3 },
     { id: "longshot", group: "이야기", name: "한 수", cond: `표시 % ${T.LONGSHOT} 이하 도전 성공`,
       test: (S) => (S.evLog || []).some((l) => l.k === "try" && l.ok === true && l.pct != null && l.pct <= T.LONGSHOT) },
-    { id: "family", group: "이야기", name: "집으로 가는 길", cond: "개인 이야기 2장까지",
+    { id: "family", group: "이야기", name: "집으로 가는 길", cond: "가족 이야기 2장까지",
       test: (S) => done(S).some((d) => ["father", "apply", "letter"].indexOf(d.sid) >= 0 && d.ch >= 2) },
     { id: "grad", group: "엔딩", name: "첫 졸업", cond: "1막을 마침", test: (S) => !!S.ending },
-    { id: "next", group: "엔딩", name: "이어지는 이야기", cond: "2막으로 이어지는 엔딩", test: (S) => !!S.ending && NEXT_ENDS.indexOf(S.ending.id) >= 0 },
+    { id: "next", group: "엔딩", name: "이어지는 이야기", cond: "프로로 이어지는 엔딩", test: (S) => !!S.ending && NEXT_ENDS.indexOf(S.ending.id) >= 0 },
     { id: "door", group: "엔딩", name: "두 장의 편지", cond: "문을 골라 들어감", test: (S) => !!S.ending && DOOR_ENDS.indexOf(S.ending.id) >= 0 },
     { id: "trio", group: "엔딩", name: "세 사람의 졸업", cond: "주인공 셋 모두 1막을 마침(이 기기)",
       test: () => { const g = grads(); return ["jiho", "doyun", "haram"].every((p) => g[`${p}-m`] || g[`${p}-f`]); } },

@@ -32,8 +32,10 @@ window.W2World = (() => {
     ACE_PLUS: 12,                        // 12번 §8-3 · 24번 §2 — 🔥 {ace} = 학교 전력 + 12
     /* 🔗 중립화 상수 — 포지션 넷의 경기당 내 순간 수를 맞춰요(내 줄의 `buff`로 실림 · 12번 §8-5).
      * 기준 능력치 56.0 · `COND_REF` 51 · FORMATION · 포지션 무게 · SPOT…에 종속(바뀌면 다시 잼). */
-    ACT1_SPOT: { fw: 1.275, wg: 1.120, mf: 0.904, df: 1.071 },   // 24번 §2(22번 그대로)
-    RATE_B: { fw: 64, wg: 64, mf: 64, df: 65 },                   // 24번 §2(22번 그대로) — 평점 기본 b
+    ACT1_SPOT: { fw: 8.151, wg: 6.910, mf: 4.637, df: 7.642 },   // 37번 §2 · 38번 §5 — 판 2.5(27번 규칙 셋 위에서 잰 값)
+    RATE_B: { fw: 62, wg: 61, mf: 62, df: 62 },                   // 37번 §2 · 38번 §5 — 평점 기본 b
+    /* 🎲 시작 능력치(29번 §3-3 · J6 — 37번 §2 · 38번 §5) — 여섯 모두 40에서 1점씩 48번(한 칸 최대 56 · 합 288) */
+    START_BASE: 40, START_STEP: 1, START_N: 48, START_CAP: 56,
     PK_P: 0.75,                          // 12번 §5-3 승부차기 중심(동료 · 상대 킥도 같은 값)
   });
 
@@ -76,6 +78,8 @@ window.W2World = (() => {
   const SALT = Object.freeze({
     engine: 0x9e3779b9, event: 0x85ebca6b, world: 0x27d4eb2f, rate: 0x165667b1,
     test: 0xd3a2646c, pk: 0xfd7046c5, sit: 0x2545f491, name: 0x5bd1e995,
+    start: 0x3c6ef372,   // 🎲 시작 능력치(29번 §3-3 — 새 소금)
+    board: 0x1b873593,   // 🦶 판의 상황(36번 §3-2 — 엔진 열 밖 · 경기 열쇠마다)
   });
   /* 한 자리의 난수원 — `key`는 그 자리의 고유 번호(주 · 경기)예요. 다시 열어도 같은 자리는 같은 값이에요. */
   const rngOf = (seed, key, salt) => mulberry32(mix(seed, key) ^ salt);
@@ -95,6 +99,8 @@ window.W2World = (() => {
     test: 400, tech: (i) => 401 + i, testXI: 450,
     pkKick: (k) => 5000 + k, pk: (k) => 6000 + k, rate: (k) => 7000 + k,
     groupTie: (g) => 800 + g, leagueTie: 900,
+    start: (k) => 910 + k,                               // 🎲 시작 능력치 k번째 뽑기(0 = 첫 모양 · 1~3 = 다시 뽑기)
+    heroName: (k) => 930 + k,                            // 🎲 이름 버튼 k번째
   };
 
   /* ---------- ✏️ 글 — 이름 뒤 조사 ----------
@@ -104,7 +110,7 @@ window.W2World = (() => {
    * 🔒 돌려주는 것은 **평문**이에요 — 그리는 쪽이 `textContent`로 넣거나 이스케이프합니다. */
   const JOSA = { 가: ["이", "가"], 이: ["이", "가"], 는: ["은", "는"], 은: ["은", "는"], 를: ["을", "를"], 을: ["을", "를"],
     와: ["과", "와"], 과: ["과", "와"], 로: ["으로", "로"], 으로: ["으로", "로"], 야: ["아", "야"], 아: ["아", "야"],
-    랑: ["이랑", "랑"], 이랑: ["이랑", "랑"], 이에요: ["이에요", "예요"], 예요: ["이에요", "예요"] };
+    랑: ["이랑", "랑"], 이랑: ["이랑", "랑"], 이에요: ["이에요", "예요"], 예요: ["이에요", "예요"], 라면: ["이라면", "라면"] };
   const DIGIT_JONG = [21, 8, 0, 16, 0, 0, 1, 8, 8, 0];   // 영 일 이 삼 사 오 육 칠 팔 구 — 끝소리(ㄹ = 8)
   function jongOf(word) {
     const s = String(word == null ? "" : word).trim();
@@ -178,6 +184,31 @@ window.W2World = (() => {
     const giv = GIVEN[g][Math.floor(r() * GIVEN[g].length)];
     const nm = sur + giv;
     return FORBID.has(nm) || giv[0] === sur ? "" : nm;
+  }
+  /* 🎲 플레이어 이름 표(29번 §3-4) — 남 · 여 각 24 · 두 글자. 33번 대조로 실존 유명인 · 선수와 겹친 17개를
+   *    바꾼 표(15번 「이름 🎲 표 대조」 — 남 11 · 여 6). 세계의 다른 이름(`GIVEN`) · 자리 이름 · 학교 이름과 안 겹쳐요. */
+  const HERO_NAMES = {
+    m: ["태언", "주안", "해준", "시헌", "태찬", "윤헌", "시겸", "은후", "서후", "도결", "무진", "강윤",
+      "하겸", "건율", "준율", "준원", "은결", "태건", "태온", "민결", "예겸", "현율", "도율", "도건"],
+    f: ["하율", "서하", "은재", "채아", "예채", "라희", "단아", "새봄", "채하", "서율", "채온", "예솔",
+      "주율", "서림", "하랑", "수하", "세아", "채윤", "예솜", "예봄", "시하", "채율", "서빈", "연지"],
+  };
+  /* 🎲 이름 하나 — 고른 카드의 성별 표에서 고르게 · 바로 앞 이름은 다시 안 냄 */
+  function rollName(g, prev, r) {
+    const list = HERO_NAMES[g2(g)].filter((x) => x !== prev);
+    return list[Math.floor(r() * list.length)];
+  }
+  /* 🎲 시작 능력치 k번째 모양 — 판 시드에서(포지션 · 주발 · 성별 · 외형과 무관 · 29번 §3-3) */
+  function rollStart(seed, k) {
+    const T = TUNE;
+    const r = rngOf(seed, KEY.start(k), SALT.start);
+    const st = {};
+    for (const key of STAT_KEYS) st[key] = T.START_BASE;
+    for (let t = 0; t < T.START_N; t++) {
+      const ok = STAT_KEYS.filter((key) => st[key] + T.START_STEP <= T.START_CAP);
+      st[ok[Math.floor(r() * ok.length)]] += T.START_STEP;
+    }
+    return st;
   }
   /* 부르는 이름 — 문장에선 두 글자(세헌 · 가은), 명단 · 순위표에선 성까지(12번 §12-1 · 13번 §12-1) */
   const short = (full) => (String(full).length >= 3 ? String(full).slice(1) : String(full));
@@ -506,5 +537,6 @@ window.W2World = (() => {
     cupTeam, cupGroupsAuto, ourGroupGames, groupTable, bracket, autoCup,
     rngOf, engineSeed, mix, mulberry32, randInt, shuffle, clamp,
     fill, josa, clean, short, ROLE_NAME, ROLE_WHO, WORLD_NAME, OUR_SCHOOL,
+    HERO_NAMES, rollName, rollStart,
   };
 })();

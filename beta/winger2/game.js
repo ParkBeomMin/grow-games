@@ -1,10 +1,11 @@
 /* ⚽ 더 윙어 II 1막 「마지막 한 해」 — 입구 · 세이브 · 36주 · 주간 고르기 · 성장 · 컨디션 · 경기 · 공개 테스트 · 졸업
  *
- * 설계 정본: 12번(`[1차 수정]`·`[2차 수정]` 반영본) · 13번(두 세계) · 계약 정본: 25번(파일 담당 · 경계면 · 수치)
- * 확정 계수: 24번 §2 — 조정될 값은 파일마다 맨 위 `TUNE` 한 블록(25번 §5).
+ * 설계 정본: 12번(`[1차]`~`[3차 수정]` · `[판 횟수]` · `[판 수정]` · `[J5]` · `[J6]` 반영본) · 13번(두 세계) · 27번 · 29번 · 36번
+ * 계약 정본: 38번(둘째 묶음 — 25번을 잇고 부딪히면 38번) · 확정 계수: 37번 §2 · 38번 §5 — 조정될 값은 파일마다 맨 위 `TUNE` 한 블록.
  *
- * ── 한 판의 흐름(12번 §2-1) ────────────────────────────────
- *   입구 → 👥 카드 고르기(W2Scenes.pick) → ✏️ 이름 · 🎯 포지션 · 🦶 주발 · 🔢 번호 → 🎬 도입(W2Scenes.intro)
+ * ── 한 판의 흐름(12번 §2-1 · 29번 §3-7) ───────────────────────
+ *   입구 → 👥 카드 고르기(외형만 · W2Scenes.pick) → ✏️ 만들기(🎲 시작 능력치 · 다시 뽑기 3 → 🎯 포지션 → 🦶 주발 →
+ *   이름 🎲 → 🔢 번호) → 🎬 도입(마지막 한마디 = 말투 · W2Scenes.intro)
  *   → 36주[ 🗓️ 고르기 한 번 → (그 주의) 🎲 이벤트 · 📖 이야기 장 한 장까지 → (경기 주) ⚽ 90분 ]
  *   → 20·21주 🏆 대회 주간 → 35주 🎯 공개 테스트 → 36주 📋 평가서 → ✉️ 문 → 🎓 엔딩 → 🎬 졸업 필름
  *
@@ -29,7 +30,9 @@
 window.W2Game = (() => {
   /* 🎚️ 조정될 수 있는 상수 — 이 블록만 고칩니다(25번 §5). */
   const TUNE = Object.freeze({
-    START_STAT: 48,          // 12번 §8-2 — 시작 능력치(여섯 모두 · 주인공 · 포지션 · 성별 무관)
+    START_STAT: 48,          // 12번 §8-2 — 깨진 세이브의 빈 칸만 채움(새 판은 🎲 1점 × 48 — `W2World.rollStart`)
+    REROLLS: 3,              // 29번 §3-3 · J6 · 37번 §2 — 🎲 다시 뽑기(처음 것까지 네 모양)
+    WEAK_XP: 2.0, WEAK_MAX: 2,   // 29번 §3-6(P2 (가)) · 37번 §2 — 🦶 약발 경험 2.0마다 한 단계 · 최대 2단계
     STAT_MAX: 100,           // 12번 §5-2 — 1막 상한
     COND_START: 80,          // 12번 §11-1 — 컨디션 시작값
     TRAIN_UP: 4.0,           // 24번 §2 — 훈련 한 번 +4.0 × 효율
@@ -48,8 +51,11 @@ window.W2Game = (() => {
   const SAVE_KEY = "winger2-save-v2";         // 결정 6 — 세이브 키만 새로(게임 키 `winger2`는 그대로)
   const ALUMNI_KEY = "winger2-alumni";        // 12번 §11-3 — 2막을 기다리는 졸업생(최근 10명 · `act1`만)
   const SLOTS_KEY = SAVE_KEY + "-slots";      // 🏠 허브 이어하기 색인 — 허브(`beta/index.html`)는 `<세이브 키>-slots`만 읽어요
-  const HOF_KEY = "grow-hof-v1";              // 8종 공유 명예의 전당 — 1막 졸업 항목 `v: 2` · `kind: "act1"`
-  const AUTO_KEY = "grow-auto-mini", WIDE_KEY = "grow-wide-judge";   // 8종 공유 기기 키 — 그대로
+  const GRADS_KEY = "winger2-grads";          // 29번 §5(B5) — 1막 졸업 줄(II 전용 · `grow-hof-v1`엔 안 넣음 · 점수 = 합 × 10)
+  const CREATE_KEY = "winger2-create";        // 29번 §3-3 — 만들기 화면의 시드 · 쓴 다시 뽑기 `{ seed, k }`(새로 고침으로 다시 뽑기 막기)
+  const BOARDS_KEY = "winger2-boards";        // 38번 §2-17 — 🔬 베타 측정(손으로 둔 판 · 이 기기 누적 · 새 판에도 남음)
+  const AUTO_KEY = "grow-auto-mini", WIDE_KEY = "grow-wide-judge";   // 8종 공유 기기 키 — 이름 그대로(29번 §4-1)
+  const FAST_KEY = "winger2-fast", STILL_KEY = "winger2-still", BUZZ_KEY = "winger2-buzz";   // 29번 §4-1 — II 기기 키
   const GAME = "winger2";
 
   const E = () => window.WingerEngine;
@@ -68,7 +74,8 @@ window.W2Game = (() => {
   const noteQ = [];
   let noteRun = false;
   const pause = (ms) => new Promise((r) => setTimeout(r, ms));
-  const stillMotion = () => { try { return window.matchMedia("(prefers-reduced-motion: reduce)").matches; } catch (e) { return false; } };
+  /* 🎞️ 움직임 줄이기 — 기기 설정 **또는** ⚙️ 게임 설정(`still` · 접근성이라 둘 다 같은 띠로) */
+  const stillMotion = () => settingOn("still");
   const overScene = () => !!document.querySelector("#w2-layer .w2o-ending, #w2-layer .w2o-film");
   function toastEl() {
     let el = document.getElementById("w2-toast");
@@ -118,11 +125,12 @@ window.W2Game = (() => {
     drainNotes().catch((e) => console.error(e));
   };
 
-  /* ---------- 👥 주인공 카드 여섯(13번 §2-1) — 첫 베타는 지호 남 · 여 둘만(25번 §1) ---------- */
+  /* ---------- 👥 주인공 카드 여섯 — **외형만**(결정 C · 29번 §3-1) · 여섯 다 열림(38번 §1) ----------
+   * 성격 줄 · 가족 · 문 · 말투가 카드에서 떨어졌어요 — 카드는 그림(외형)과 기본 이름만 정해요 */
   const PRESETS = {
-    jiho: { name: { m: "지호", f: "지호" }, line: "뜨겁고 곧장 — 먼저 뛰고 나중에 생각해요", open: true },
-    doyun: { name: { m: "도윤", f: "도연" }, line: "차분하고 계산적 — 숫자로 생각하는 선수예요", open: false },
-    haram: { name: { m: "하람", f: "하람" }, line: "느긋하고 장난스러움 — 재밌으면 끝까지 가요", open: false },
+    jiho: { name: { m: "지호", f: "지호" } },
+    doyun: { name: { m: "도윤", f: "도연" } },
+    haram: { name: { m: "하람", f: "하람" } },
   };
   const POS_NO = { fw: 9, wg: 7, mf: 8, df: 4 };      // 12번 §3-3 — 포지션 기본 번호
 
@@ -139,21 +147,23 @@ window.W2Game = (() => {
   }
   function newState(o) {
     const seed = Number.isInteger(o.seed) ? o.seed >>> 0 : seedNew();
-    const stats = {};
-    for (const k of SH().KEYS) stats[k] = TUNE.START_STAT;
+    /* 🎲 시작 능력치 — 만들기 화면이 보여 준 그 모양(판 시드 · k번째 뽑기 — 29번 §3-3)을 다시 굴려 받아요(화면 값을 믿지 않음) */
+    const k = Math.min(TUNE.REROLLS, Math.max(0, Math.floor(Number(o.rerolls)) || 0));
+    const stats = X().rollStart(seed, k);
     const now = Date.now();
     const st = {
       v: 2, id: `w2-${now.toString(36)}${(seed % 1296).toString(36)}`, createdAt: now, savedAt: now, act: 1, seed,
       preset: o.preset, gender: o.gender === "f" ? "f" : "m", name: o.name, pos: o.pos, foot: o.foot === "L" ? "L" : "R",
       no: o.no, noOrig: o.no,
-      stats, statsAt0: Object.assign({}, stats), cond: TUNE.COND_START, week: 1, ph: 0, choice: null,
+      stats, statsAt0: Object.assign({}, stats), rerolls: k, voice: null, weak: 0, weakXp: 0,
+      cond: TUNE.COND_START, week: 1, ph: 0, choice: null,
       world: X().create(seed, o.pos, o.gender),
       record: blankRecord(), recent: [], games: [], trust: 0,
       ev: null, evCount: 0, evRnd: 0, chCount: 0, evIds: [], evMem: { last: null, scout: [false, false] }, evLog: [], evSeen: {},
       promise: null, promKept: 0,
       story: { open: [], done: [], seen: {}, door: null },
       ach: {}, rep: null, mid: [], sheet: null, ending: null, age: 18, act1: null,
-      trainWeeks: 0, restWeeks: 0, peopleWeeks: 0, cupGames: 0, cupFirstCond: null, test: null,
+      trainWeeks: 0, restWeeks: 0, peopleWeeks: 0, weakWeeks: 0, cupGames: 0, cupFirstCond: null, test: null,
       leagueChamp: false, crown: false, q: [],
     };
     ST().start(st);
@@ -172,6 +182,11 @@ window.W2Game = (() => {
     for (const k of SH().KEYS) if (!(typeof s.stats[k] === "number" && isFinite(s.stats[k]))) s.stats[k] = TUNE.START_STAT;
     s.statsAt0 = s.statsAt0 || Object.assign({}, s.stats);
     s.cond = typeof s.cond === "number" && isFinite(s.cond) ? s.cond : TUNE.COND_START;
+    s.rerolls = Math.min(TUNE.REROLLS, Math.max(0, Math.floor(Number(s.rerolls)) || 0));
+    s.weakXp = Math.max(0, Number(s.weakXp) || 0);
+    s.weak = Math.min(TUNE.WEAK_MAX, Math.floor(s.weakXp / TUNE.WEAK_XP + 1e-9));
+    s.weakWeeks = Math.max(0, Math.floor(Number(s.weakWeeks)) || 0);
+    if (["hot", "calm", "play"].indexOf(s.voice) < 0) s.voice = null;   // 옛 세이브 — 말투는 프리셋으로 읽어요(sheet.voiceOf)
     s.recent = Array.isArray(s.recent) ? s.recent : [];
     s.games = Array.isArray(s.games) ? s.games : [];
     s.q = Array.isArray(s.q) ? s.q : [];
@@ -196,6 +211,94 @@ window.W2Game = (() => {
     } catch (e) {
       try { localStorage.removeItem(SLOTS_KEY); } catch (e2) { /* 다음 저장 때 맞춰요 */ }
     }
+  }
+
+  /* ---------- ⚙️ 설정(계약 14 · 29번 §4) — director의 ⚙️ 레이어는 `settings`의 넷만 불러요(키를 직접 안 읽음) ----------
+   * 🔒 8종 공유 키(🤖 · ♿)는 이름 그대로 · `shared`면 레이어가 「이 기기의 다른 그로우 게임에도 같이 적용돼요」를 붙여요.
+   * 🤖 · ⏩는 **다음 경기부터**(경기를 시작할 때 읽어요 — 판 사이에서 켰다 껐다 고르는 길을 막음 · 29번 §4-3). */
+  const reducedDevice = () => { try { return window.matchMedia("(prefers-reduced-motion: reduce)").matches; } catch (e) { return false; } };
+  const SETTINGS = [
+    { k: "auto", key: AUTO_KEY, def: false, shared: true, applies: "다음 경기부터", label: "🤖 판 자동 진행",
+      desc: "미니게임을 열지 않고 보통의 한 수로 판정해요. 경기는 그대로 굴러가고 내 판도 그대로 결과가 나요 — 벌은 없고, 평가서 🎮 솜씨 칸에 🤖로 표시돼요." },
+    { k: "fast", key: FAST_KEY, def: false, shared: false, applies: "다음 경기부터", label: "⏩ 빨리 감기로 시작",
+      desc: "경기를 ⏩ 빨리 감기로 시작해요 — 연출만 짧아지고 판은 그대로 열려요." },
+    { k: "wide", key: WIDE_KEY, def: false, shared: true, applies: "다음 판부터", label: "♿ 고를 시간 넉넉히(+30%)",
+      desc: "🧱 막기 판에서 고를 시간이 30% 늘어요 — 성적에 불이익은 없어요." },
+    { k: "still", key: STILL_KEY, def: false, shared: false, applies: "바로", label: "🎞️ 움직임 줄이기",
+      desc: "타이핑 · 등장 · 파티클을 끄고 글을 바로 보여요." },
+    { k: "buzz", key: BUZZ_KEY, def: true, shared: false, applies: "바로", label: "📳 진동",
+      desc: "골 · 막음 때 짧게 떨려요(되는 기기만)." },
+  ];
+  const settingOf = (k) => SETTINGS.find((x) => x.k === k) || null;
+  function settingOn(k) {
+    const d = settingOf(k);
+    if (!d) return false;
+    if (k === "still" && reducedDevice()) return true;
+    try {
+      const v = localStorage.getItem(d.key);
+      return v === "1" ? true : v === "0" ? false : d.def;
+    } catch (e) { return d.def; }
+  }
+  /* 🗑️ 이 기기의 더 윙어 II 기록 — II 키만(29번 §4-1). 🔒 8종 공유 키 · 클라우드 사본은 안 지워요 */
+  const WIPE_KEYS = [SAVE_KEY, SLOTS_KEY, ALUMNI_KEY, "winger2-films", "winger2-book", "winger2-book-shadow", GRADS_KEY,
+    CREATE_KEY, FAST_KEY, STILL_KEY, BUZZ_KEY, BOARDS_KEY];
+  const settings = {
+    list: () => SETTINGS.map((d) => {
+      const locked = d.k === "still" && reducedDevice();
+      return { k: d.k, label: d.label, desc: locked ? `${d.desc} 기기 설정으로 켜져 있어요.` : d.desc,
+        on: settingOn(d.k), shared: d.shared, applies: d.applies, locked };
+    }),
+    on: settingOn,
+    set(k, v) {
+      const d = settingOf(k);
+      if (!d || (k === "still" && reducedDevice())) return false;
+      try { localStorage.setItem(d.key, v ? "1" : "0"); return true; } catch (e) { return false; }
+    },
+    wipe() {
+      const gone = [];
+      for (const key of WIPE_KEYS) {
+        try { if (localStorage.getItem(key) != null) { localStorage.removeItem(key); gone.push(key); } } catch (e) { /* 못 지운 키는 목록에서 빠져요 */ }
+      }
+      epoch += 1;                       // 진행 중이던 단계가 지운 세이브를 다시 쓰지 않게(아래 `fresh`)
+      S = null;
+      running = false;
+      renderEntry();
+      return gone;
+    },
+  };
+  /* 🧭 epoch — 🗑️ 지우기 뒤에 끝나는 await는 이어 가지 않아요(풀리지 않는 약속으로 멈춤 · 화면은 이미 입구) */
+  let epoch = 0;
+  const fresh = (p) => { const e = epoch; return Promise.resolve(p).then((v) => (e === epoch ? v : new Promise(() => {}))); };
+
+  /* ---------- 🔬 베타 측정(38번 §2-17 · 15번 J8) — 손으로 둔 판만(🤖 빼고 · 경기 종류 무관) 판 종류마다 · 이 기기 누적 ----------
+   * `sSum` = Σ s_board(상황 배수 전 판 값) · 새 판을 시작해도 남고 `settings.wipe()`만 지워요 */
+  const blankBoards = () => ({ block: { n: 0, clear: 0, clearHit: 0, dim: 0, dimHit: 0, timeout: 0, sSum: 0, msSum: 0 },
+    shot: { n: 0, msSum: 0 }, cut: { n: 0, msSum: 0 } });
+  function boardStats() {
+    const out = blankBoards();
+    let raw = null;
+    try { raw = JSON.parse(localStorage.getItem(BOARDS_KEY)); } catch (e) { raw = null; }
+    if (raw && typeof raw === "object") {
+      for (const g of Object.keys(out)) for (const f of Object.keys(out[g])) {
+        const v = raw[g] && Number(raw[g][f]);
+        if (Number.isFinite(v) && v >= 0) out[g][f] = v;
+      }
+    }
+    return out;
+  }
+  function noteBoard(b) {
+    if (!b || b.auto) return;
+    const st = boardStats();
+    const x = st[b.kind === "defend" ? "block" : b.kind === "assist" ? "cut" : "shot"];
+    x.n += 1;
+    x.msSum += Number.isFinite(b.ms) ? Math.min(60000, Math.max(0, b.ms)) : 0;
+    if (b.kind === "defend") {
+      const hit = b.cell != null && b.target != null && b.cell === b.target;
+      if (b.seen === "dim") { x.dim += 1; if (hit) x.dimHit += 1; } else if (b.seen === "clear") { x.clear += 1; if (hit) x.clearHit += 1; }
+      if (b.cell == null) x.timeout += 1;
+      x.sSum = Math.round((x.sSum + (typeof b.sBoard === "number" ? b.sBoard : 0)) * 1e6) / 1e6;
+    }
+    try { localStorage.setItem(BOARDS_KEY, JSON.stringify(st)); } catch (e) { /* 측정은 덤이에요 */ }
   }
 
   /* ---------- 🫀 컨디션 · 🏋️ 훈련 효율 — 판정과 같은 표 하나 ---------- */
@@ -223,7 +326,7 @@ window.W2Game = (() => {
       fail(`화면 조각(${name})을 불러오지 못했어요 — 새로고침해 주세요`);
       return new Promise(() => {});
     }
-    try { return Promise.resolve(f.apply(W2, args)); } catch (e) {
+    try { return fresh(f.apply(W2, args)); } catch (e) {
       console.error(e);
       fail("화면을 그리다 문제가 생겼어요 — 새로고침해 주세요");
       return new Promise(() => {});
@@ -299,8 +402,9 @@ window.W2Game = (() => {
       acts.append(card, btn("w2-btn-primary w2-continue", "▶️ 이어하기", () => { S = sv; run(); }));
     } else if (done) {
       const card = h("div", "w2-save w2-save-grad");
-      card.append(h("b", "w2-save-name", `🎓 ${sv.name}`), h("span", "w2-save-meta",
-        `${SH().endName(sv.act1.ending, sv.gender)}${sv.act1.next ? " · 2막을 기다리는 선수" : " · 1막으로 완결"}`));
+      /* 일곱 엔딩 모두 2막으로 이어져요(15번 B1 · 29번 §5) — 프로 넷 · 대학 · 공장 팀 · 다시 공을 잡을 날 */
+      const way = sv.act1.next ? " · 2막을 기다리는 선수" : sv.act1.ending === "leave" ? " · 다시 공을 잡을 수 있어요" : " · 2막에서 다른 길로";
+      card.append(h("b", "w2-save-name", `🎓 ${sv.name}`), h("span", "w2-save-meta", `${SH().endName(sv.act1.ending, sv.gender)}${way}`));
       acts.append(card);
       const f = window.W2Film.get(sv.id);
       if (f) acts.append(btn("w2-film-again", "🎬 졸업 필름 다시 보기", () => sc("film", f)));
@@ -312,59 +416,128 @@ window.W2Game = (() => {
     s.appendChild(acts);
     const al = alumni();
     if (al.length) s.appendChild(h("p", "w2-alumni", `🎓 2막을 기다리는 선수 ${al.length}명 — 2막이 열리면 여기서 이어가요`));
-    s.appendChild(optsBox());
-  }
-  /* ⚙️ 기기 설정 두 칸 — 🤖 경기 판 자동(`s = 0.5` · 편의 기능이지 벌이 아니에요) · ♿ 판정 넓게(성적 페널티 없음) */
-  function optsBox() {
-    const box = h("div", "w2-opts");
-    const mk = (id, key, text) => {
-      const lab = h("label", "w2-opt");
-      const c = h("input", null, null, { type: "checkbox", id });
-      try { c.checked = localStorage.getItem(key) === "1"; } catch (e) { c.checked = false; }
-      c.addEventListener("change", () => { try { localStorage.setItem(key, c.checked ? "1" : "0"); } catch (e) { /* 못 써도 넘어가요 */ } });
-      lab.append(c, h("span", null, text));
-      return lab;
-    };
-    box.append(mk("w2-auto", AUTO_KEY, "🤖 경기 판을 자동으로(조작 없이 중립)"), mk("wide-judge", WIDE_KEY, "♿ 판정 창 넓게(+30%)"));
-    return box;
+    /* 🤖 · ♿ 같은 기기 설정은 ⚙️ 설정 레이어로 옮겼어요(29번 §4-5 — director의 ⚙️ 버튼이 `W2Game.settings`를 불러요) */
   }
   function alumni() {
     try { const a = JSON.parse(localStorage.getItem(ALUMNI_KEY)); return Array.isArray(a) ? a : []; } catch (e) { return []; }
   }
 
-  /* 🆕 새 판 — 2막을 기다리는 졸업생은 `winger2-alumni`로 옮겨요(`act1`만 · 12번 §11-3) */
+  /* 🆕 새 판 — 졸업생은 `winger2-alumni`로 옮겨요(`act1`이 있으면 모두 — 일곱 엔딩 다 2막으로 · 15번 B1 · 29번 §5) */
   async function startNew(prev) {
     if (prev && !(prev.act1 && prev.hofDone) && window.confirm && !window.confirm("진행 중인 1막을 지우고 새로 시작할까요?")) return;
     const cards = [];
     for (const p of ["jiho", "doyun", "haram"]) for (const g of ["m", "f"]) {
-      const P = PRESETS[p];
-      cards.push({ preset: p, gender: g, who: `${p}-${g}`, name: P.name[g], line: P.line, locked: !P.open,
-        lockText: P.open ? null : "다음 업데이트에서 만나요" });
+      cards.push({ preset: p, gender: g, who: `${p}-${g}`, name: PRESETS[p].name[g], locked: false });
     }
     const got = await sc("pick", cards);
-    const ok = got && PRESETS[got.preset] && PRESETS[got.preset].open && (got.gender === "m" || got.gender === "f");
+    const ok = got && Object.prototype.hasOwnProperty.call(PRESETS, got.preset) && (got.gender === "m" || got.gender === "f");
     if (!ok) { renderEntry(); fail("고를 수 있는 카드가 아니었어요 — 다시 골라 주세요"); return; }
     const made = await renderCreate(got.preset, got.gender);
     if (!made) { renderEntry(); return; }
-    if (prev && prev.act1 && prev.act1.next) {
+    if (prev && prev.act1) {
       const al = alumni().concat([Object.assign({ id: prev.id, savedAt: prev.savedAt }, prev.act1)]).slice(-10);
       try { localStorage.setItem(ALUMNI_KEY, JSON.stringify(al)); } catch (e) { /* 못 써도 새 판은 시작해요 */ }
     }
     S = newState(made);
+    try { localStorage.removeItem(CREATE_KEY); } catch (e) { /* 다음 만들기에서 새 시드를 못 받을 뿐이에요 */ }
     save();
     if (window.Match && window.Match.register) window.Match.register(GAME, S.name);
     if (window.Stats && window.Stats.log) window.Stats.log("new_player", { preset: S.preset, g: S.gender, pos: S.pos });
     run();
   }
-  /* ✏️ 이름 · 🎯 포지션 · 🦶 주발 · 🔢 번호 — 포지션 · 주발은 **기본값 없이** 고르게 해요(고른 게 판을 가르니까요) */
+  /* 🎲 만들기 화면의 시드 · 쓴 다시 뽑기 — 새로 고침해도 같은 모양 · 같은 남은 수(29번 §3-3) */
+  function createSeed() {
+    let c = null;
+    try { c = JSON.parse(localStorage.getItem(CREATE_KEY)); } catch (e) { c = null; }
+    const ok = c && Number.isInteger(c.seed) && c.seed >= 0 && c.seed <= 0xffffffff
+      && Number.isInteger(c.k) && c.k >= 0 && c.k <= TUNE.REROLLS;
+    const out = ok ? { seed: c.seed, k: c.k } : { seed: seedNew(), k: 0 };
+    try { localStorage.setItem(CREATE_KEY, JSON.stringify(out)); } catch (e) { /* 못 쓰면 새로 고침 때 새 시드 — 그래도 판은 시작해요 */ }
+    return out;
+  }
+  /* 「장기」 한 줄(J6 · 36번 §16-7) — 가장 높은 칸(같으면 앞 칸) · 1위 − 2위 ≥ 3이면 「뚜렷한 장기」 · 점수 0 */
+  function bestOf(st) {
+    const keys = SH().KEYS;
+    let top = keys[0];
+    for (const k of keys) if (st[k] > st[top]) top = k;
+    const second = Math.max(...keys.filter((k) => k !== top).map((k) => st[k]));
+    const d = SH().STAT[top];
+    return X().fill(st[top] - second >= 3 ? "{s|가} 뚜렷한 장기예요" : "{s|가} 장기예요", { s: `${d.emoji} ${d.name}` });
+  }
+  /* ✏️ 만들기(29번 §3-7 · 계약 15) — 🎲 능력치(다시 뽑기 3) → 🎯 포지션(능력치를 보고 · 배지) → 🦶 주발 → 이름 🎲 → 🔢 번호.
+   * 포지션 · 주발은 **기본값 없이** 고르게 해요(고른 게 판을 가르니까요). 굴림은 판 시드에서 — 화면 값을 믿지 않고 `newState`가 다시 굴려요 */
   function renderCreate(preset, gender) {
     const s = screen("w2-entry");
     s.classList.add("w2-create");
     s.appendChild(h("h2", "w2-create-title", "✏️ 선수 만들기"));
+    const cs = createSeed();
+    const KEYS = SH().KEYS;
+    /* 🎲 시작 능력치 — 여섯 막대 + 등급 + 「합 288 · 누구나 같아요」 + 장기 + 다시 뽑기 */
+    const roll = h("div", "w2-roll", null, { role: "group", "aria-label": "시작 능력치" });
+    const rows = {};
+    for (const k of KEYS) {
+      const d = SH().STAT[k];
+      const row = h("div", "w2-roll-row", null, { "data-k": k });
+      const bar = h("span", "w2-roll-bar");
+      const fillBar = h("i");
+      bar.appendChild(fillBar);
+      const badge = h("span", "w2-roll-badge");
+      badge.hidden = true;
+      const v = h("b", "w2-roll-v");
+      const gr = h("span", "w2-roll-grade");
+      row.append(h("span", "w2-roll-name", `${d.emoji} ${d.name}`), gr, bar, v, badge);
+      roll.appendChild(row);
+      rows[k] = { row, fillBar, v, gr, badge };
+    }
+    const sum = h("p", "w2-roll-sum", "", { "aria-live": "polite" });
+    const best = h("p", "w2-roll-best");
+    const reroll = btn("w2-reroll", "");
+    let pos = null, foot = null, noTouched = false, stats = null;
+    const paint = () => {
+      stats = X().rollStart(cs.seed, cs.k);
+      for (const k of KEYS) {
+        const r = rows[k];
+        const g = SH().grade(stats[k]).g;
+        r.fillBar.style.width = `${stats[k]}%`;
+        r.v.textContent = String(stats[k]);
+        r.gr.textContent = g;
+        r.row.setAttribute("aria-label", `${SH().STAT[k].name} ${stats[k]} · ${g}`);
+      }
+      sum.textContent = `합 ${KEYS.reduce((a, k) => a + stats[k], 0)} · 누구나 같아요`;
+      best.textContent = bestOf(stats);
+      const left = TUNE.REROLLS - cs.k;
+      reroll.textContent = `🎲 다시 뽑기 (${left})`;
+      reroll.disabled = left <= 0;
+      reroll.setAttribute("aria-label", left > 0 ? `시작 능력치 다시 뽑기 — 남은 ${left}번 · 앞 모양으로는 못 돌아가요` : "다시 뽑기를 다 썼어요");
+    };
+    reroll.addEventListener("click", () => {
+      if (cs.k >= TUNE.REROLLS) return;
+      cs.k += 1;
+      try { localStorage.setItem(CREATE_KEY, JSON.stringify(cs)); } catch (e) { /* 새로 고침 땐 앞 모양으로 — 판은 그대로 */ }
+      paint();
+    });
+    paint();
+    /* 🎯 포지션을 고르면 그 포지션이 쓰는 셋에 배지(주 60% · 25% · 15% — 엔진 `BLEND`) — 새 숫자는 안 띄워요 */
+    const badges = () => {
+      const K = E().K;
+      const keys = pos ? K.BLEND[pos] : [];
+      for (const k of KEYS) {
+        const i = keys.indexOf(k);
+        rows[k].badge.hidden = i < 0;
+        rows[k].badge.textContent = i < 0 ? "" : `${i === 0 ? "주 " : ""}${Math.round(K.BLEND_W[i] * 100)}%`;
+      }
+    };
     const nameLab = h("label", "w2-field");
     const name = h("input", "w2-name", null, { type: "text", maxlength: String(TUNE.NAME_MAX), autocomplete: "off" });
     name.value = PRESETS[preset].name[gender];
+    let nameN = 0;
+    const nameRoll = btn("w2-name-roll", "🎲", () => {
+      const r = X().rngOf(cs.seed, X().KEY.heroName(nameN++), X().SALT.name);
+      name.value = X().rollName(gender, name.value, r);
+    }, { "aria-label": "이름 무작위로 고르기" });
     nameLab.append(h("span", null, "이름"), name);
+    const nameRow = h("div", "w2-name-row");
+    nameRow.append(nameLab, nameRoll);
     const posBox = h("div", "w2-seg w2-pos", null, { role: "group", "aria-label": "포지션" });
     const footBox = h("div", "w2-seg w2-foot", null, { role: "group", "aria-label": "주발" });
     const noLab = h("label", "w2-field");
@@ -373,7 +546,6 @@ window.W2Game = (() => {
     const msg = h("p", "w2-form-msg", "", { "aria-live": "polite" });
     const go = btn("w2-btn-primary w2-start", "🎬 시작");
     const back = btn("w2-back", "← 다시 고르기");
-    let pos = null, foot = null, noTouched = false;
     no.addEventListener("input", () => { noTouched = true; });
     const seg = (box, list, onPick) => list.forEach(([v, text]) => {
       const b = btn("w2-seg-btn", text, () => {
@@ -384,10 +556,13 @@ window.W2Game = (() => {
     });
     seg(posBox, [["fw", "⚽ 공격수"], ["wg", "🌀 윙어"], ["mf", "🎯 미드필더"], ["df", "🧱 수비수"]], (v) => {
       pos = v;
+      badges();
       if (!noTouched) no.value = String(POS_NO[v]);
     });
     seg(footBox, [["L", "🦶 왼발"], ["R", "🦶 오른발"]], (v) => { foot = v; });
-    s.append(nameLab, h("p", "w2-field-label", "🎯 포지션"), posBox, h("p", "w2-field-label", "🦶 주발"), footBox, noLab, msg, go, back);
+    s.append(h("p", "w2-field-label", "🎲 시작 능력치"), roll, sum, best, reroll,
+      h("p", "w2-field-label", "🎯 포지션 — 능력치를 보고 골라요"), posBox, h("p", "w2-field-label", "🦶 주발"), footBox,
+      nameRow, noLab, msg, go, back);
     return new Promise((resolve) => {
       back.addEventListener("click", () => resolve(null));
       go.addEventListener("click", () => {
@@ -399,7 +574,7 @@ window.W2Game = (() => {
         if (!foot) { msg.textContent = "주발을 골라 주세요"; return; }
         if (!(Number.isInteger(n) && n >= 1 && n <= 99)) { msg.textContent = "등번호는 1~99 사이 숫자예요"; no.focus(); return; }
         go.disabled = true;
-        resolve({ preset, gender, name: nm, pos, foot, no: n });
+        resolve({ preset, gender, name: nm, pos, foot, no: n, seed: cs.seed, rerolls: cs.k });
       });
     });
   }
@@ -466,35 +641,46 @@ window.W2Game = (() => {
   const achCheck = () => { announce(window.W2Ach.check(S)); save(); };
 
   const STEP = {
-    /* 🎬 도입 — 같은 사건(3년 달던 번호가 1학년 {rival}에게)을 주인공마다 다른 자리에서(12번 §3-3) */
+    /* 🎬 도입 — 같은 사건(3년 달던 번호가 1학년 {rival}에게)을 「우리 집」에서 · 마지막 한마디를 셋 중 고름 → 말투(29번 §3-5) */
     async intro() {
-      await sc("intro", introCtx());
+      const ctx = introCtx();
+      const got = await sc("intro", ctx);
+      S.voice = ctx.choices.some((c) => c.k === got) ? got : SH().voiceOf(S);   // 고른 게 없으면(옛 화면) 외형의 기본 말투
       S.no = null;                       // 번호를 잃었어요 — 📍 「번호를 되찾은 날」이면 돌아와요(`noOrig`는 그대로)
       S.ph += 1; save();
     },
-    /* 📋 중간 평가서 — **그 시점의 사실**만(12번 §6-4) · 한 번 얼려 두고 다시 열면 같은 장 */
+    /* 📋 중간 평가서 — **그 시점의 사실**만(12번 §6-4 · 36번 §6) · 구간 이름 없음 · 아직 안 한 칸은 `open` · 한 번 얼려 두고
+     *    다시 열면 같은 장(옛 세이브의 `tier`는 화면이 안 씀 — 계약 7′) */
     async mid() {
       let m = (S.mid || []).find((x) => x.week === S.week);
       if (!m) {
         const c = SH().compute(S, false);
-        m = { week: S.week, cols: c.cols, total: c.total, tier: c.tier, coach: c.coach, memo: c.memo };
+        m = { week: S.week, cols: c.cols, total: c.total, open: c.open, T: c.T, tier: null, coach: c.coach, memo: c.memo };
         S.mid = (S.mid || []).concat([m]);
         save();
       }
-      await sc("sheet", Object.assign({ final: false, doors: [], who: who() }, m, { tierName: SH().TIER_NAME[m.tier],
+      await sc("sheet", Object.assign({ final: false, doors: [], who: who() }, m, { tier: null, tierName: null,
         title: `📋 중간 평가서 ${S.week === 17 ? "①" : "②"}` }));
       S.ph += 1; save();
     },
-    /* 🗓️ 고르기 한 번 — 훈련(여섯) · 🛌 휴식 · 🤝 사람 */
+    /* 🗓️ 고르기 한 번 — 훈련(여섯) · 🦶 약발 · 🛌 휴식 · 🤝 사람 */
     async choose() {
       const choice = await renderHome();
       if (!choice) return;
       const before = choice.k === "train" ? SH().grade(S.stats[choice.stat]).g : null;
+      const weakBefore = S.weak;
       if (choice.k === "train") {
         const e = effOf(S.cond);                                   // 🔒 −10 **전**의 컨디션 · 버튼에 적힌 그 값
         S.stats[choice.stat] = r2(Math.min(TUNE.STAT_MAX, S.stats[choice.stat] + TUNE.TRAIN_UP * e));
         S.cond = clamp(S.cond + TUNE.COND_TRAIN, 0, 100);
         S.trainWeeks += 1;
+      } else if (choice.k === "weak") {
+        /* 🦶 약발 — 그 주 능력치 대신 약발 경험(훈련 효율 그대로) · 경험 2.0마다 한 단계(29번 §3-6 · 37번 장치와 같은 셈) */
+        const e = effOf(S.cond);
+        S.weakXp = r2(S.weakXp + e);
+        S.weak = Math.min(TUNE.WEAK_MAX, Math.floor(S.weakXp / TUNE.WEAK_XP + 1e-9));
+        S.cond = clamp(S.cond + TUNE.COND_TRAIN, 0, 100);
+        S.trainWeeks += 1; S.weakWeeks += 1;
       } else if (choice.k === "rest") {
         S.cond = clamp(S.cond + TUNE.COND_REST, 0, 100);
         S.restWeeks += 1;
@@ -505,6 +691,7 @@ window.W2Game = (() => {
       S.choice = choice;
       S.ph += 1; save();
       if (choice.k === "train") await gradeCard(choice.stat, before);
+      if (S.weak > weakBefore) flash(`🦶 약발 ${S.weak}단계 — 약발 상황에서 승산이 덜 떨어져요${S.weak >= TUNE.WEAK_MAX ? " · 이제 양발이에요" : ""}`);
       achCheck();
     },
     /* 🎲📖 그 주의 카드 한 장 — 이야기 장이 먼저(12번 §7-2) · 🔒 굴림과 「다음 단계」가 한 덩어리로 저장돼요 */
@@ -538,12 +725,11 @@ window.W2Game = (() => {
       const ri = X().roundOf(w);
       const key = X().KEY.league(ri, 0);
       const head = `🏟️ ${S.world.league.name} ${ri + 1}라운드 · ${o.home ? "홈" : "원정"} — vs ${o.name}${o.ace ? " 🔥" : ""}`;
-      const { info, rr, host } = await playLive(key, { oppName: o.name, oppStr: o.str, head });
+      const { info, host } = await playLive(key, { oppName: o.name, oppStr: o.str, head });
       if (!info) return;
-      const rivalR = rivalRating(info, rr);
       X().afterOurLeague(S, w, info);                              // 🔒 엔진 난수원을 이어 써요 — 남의 경기보다 먼저
       const others = X().otherLeague(S, w);
-      const lines = official(info, { t: "L", opp: o.name, rivalR });
+      const lines = official(info, { t: "L", opp: o.name });
       S.cond = clamp(S.cond + TUNE.COND_MATCH, 0, 100);
       S.ph += 1; save();
       achCheck();
@@ -563,7 +749,7 @@ window.W2Game = (() => {
         const r = await cupLive(gm.engineKey, gm.opp, head);
         if (!r.info) return;
         const info = r.info;
-        const lines = official(info, { t: "C", opp: gm.opp.name, rivalR: rivalRating(info, r.rr) });
+        const lines = official(info, { t: "C", opp: gm.opp.name });
         C.res[gm.key] = gm.usFirst ? { a: "US", b: gm.opp.id, ga: info.teamGoals, gb: info.oppGoals, winA: info.teamGoals > info.oppGoals }
           : { a: gm.opp.id, b: "US", ga: info.oppGoals, gb: info.teamGoals, winA: info.oppGoals > info.teamGoals };
         save();
@@ -597,10 +783,10 @@ window.W2Game = (() => {
         const r = await cupLive(key, opp, `🏆 ${C.name} ${X().KO_NAME[rd]} — vs ${opp.name}`);
         if (!r.info) return;
         const info = r.info;
-        const lines = official(info, { t: "C", opp: opp.name, rivalR: rivalRating(info, r.rr) });
+        const lines = official(info, { t: "C", opp: opp.name });
         let win = info.teamGoals > info.oppGoals, pk = null;
         if (info.teamGoals === info.oppGoals) {
-          pk = await shootout(r.host, key);
+          pk = await shootout(r.host, key, r.auto);
           win = pk.winA;
           lines.push(`🥅 승부차기 ${pk.a} : ${pk.b} — ${win ? "이겼어요!" : "졌어요"} · 내 킥 ${pk.mine ? "⚽ 성공" : "😣 실패"}`);
         }
@@ -641,23 +827,24 @@ window.W2Game = (() => {
         const kind = kinds[i];
         const center = SH().techCenter(kind, blend);
         E()._t.seed(X().engineSeed(S.seed, X().KEY.tech(i)));
-        const got = await board(at, kind, (s) => E().judgeAtP(kind, center, blend, s));
+        const got = await fresh(board(at, kind, center, blend, X().KEY.tech(i)));
+        noteBoard(got);
         const p = got.judge === "perfect" ? 2 : got.judge === "ok" ? 1 : 0;
         pts += p;
-        techBoards.push({ kind, s: got.s, judge: got.judge });
+        techBoards.push({ kind, s: got.s, sBoard: got.sBoard, judge: got.judge, auto: got.auto, weak: got.weak });
         slot.appendChild(h("p", `w2-tech-res w2-tech-${got.judge}`,
           `${got.judge === "perfect" ? "✨ 완벽" : got.judge === "ok" ? "🙂 괜찮아요" : "😣 아쉬워요"} +${p}점`));
         await tapNext(slot, i + 1 < kinds.length ? "다음 판 →" : "연습경기로 →");
       }
       slot.remove();
       const rr = X().rngOf(S.seed, X().KEY.rate(X().KEY.test), X().SALT.rate);
-      const info = await window.WingerLive.play(host, {
+      const info = await fresh(window.WingerLive.play(host, liveCfg(X().KEY.test, {
         xi: X().testXI(S), teamStr: X().TUNE.TEST_STR, oppStr: X().TUNE.TEST_STR, condition: S.cond,
-        homeName: "선발팀 A", oppName: "선발팀 B", myName: S.name, pos: S.pos, foot: S.foot, keeper: null,
-        chibi: chibiOf(who()), promiseLine: null, scout: scoutArt(),
-        seed: X().engineSeed(S.seed, X().KEY.test), auto: autoOn(), rate: (res) => X().rate(res, S.pos, rr),
-      });
+        homeName: "선발팀 A", oppName: "선발팀 B", keeper: null, promiseLine: null, scout: scoutArt(), rivalAb: null,
+        rate: (res) => X().rate(res, S.pos, rr),
+      })));
       if (!info) return;
+      for (const b of info.boards) noteBoard(b);
       const R = S.record;                                         // 연습경기 — 공식 기록 밖(업적 g1 · g7 · a7 · hat · r9 · mom10만)
       R.gAll += info.myGoals; R.aAll += info.assists; R.momP += info.mineSuccess;
       if (info.rating > R.rMax) R.rMax = info.rating;
@@ -705,7 +892,7 @@ window.W2Game = (() => {
           pick = doors.some((d) => d.id === got && d.open) ? got : doors[0].id;
         }
         const end = SH().ending(S, S.sheet.tier, pick);
-        const d = SH().DOOR[S.preset];
+        const d = SH().doorOf(S);
         S.ending = Object.assign({}, end, { door: !!(d && end.id === d.id) });
         if (window.W2Book) { window.W2Book.mark("end", end.id, S.gender); window.W2Book.mark("grad", who()); }
         save();
@@ -748,16 +935,28 @@ window.W2Game = (() => {
     s.appendChild(live);
     return live;
   }
+  /* 경기 한 판의 공통 칸 — 판 시드 · 상황 난수원(경기 열쇠마다 · 엔진 열 밖) · 약발 단계 · 설정(🤖 · ⏩ · 움직임 · ♿)은 **지금** 읽어요 */
+  function liveCfg(key, o) {
+    return Object.assign({
+      myName: S.name, pos: S.pos, foot: S.foot, chibi: chibiOf(who()),
+      seed: X().engineSeed(S.seed, key), sitRng: X().rngOf(S.seed, key, X().SALT.board), weak: S.weak,
+      auto: autoOn(), fast: settingOn("fast"),                          // 🤖 · ⏩ — 경기를 시작할 때 한 번(다음 경기부터)
+      still: () => settingOn("still"), wide: () => settingOn("wide"),   // 🎞️ · ♿ — 판을 열 때마다(바로 · 다음 판부터)
+    }, o);
+  }
+  /* 📍 {rival}의 실력 — 「같은 장면, {rival}라면」의 q(29번 §2-2) · 엔진 `blendOf`의 같은 자 */
+  const rivalAb = () => { const r = S.world.ours.find((x) => x.role === "rival"); return r ? E().blendOf(X().npc(r)) : null; };
   async function playLive(key, o) {
     const host = matchShell(o.head);
     const rr = X().rngOf(S.seed, X().KEY.rate(key), X().SALT.rate);
-    const info = await window.WingerLive.play(host, {
+    const cfg = liveCfg(key, {
       xi: X().ourXI(S), teamStr: X().TUNE.US_STR, oppStr: o.oppStr, condition: o.condition != null ? o.condition : S.cond,
-      homeName: S.world.school.name, oppName: o.oppName, myName: S.name, pos: S.pos, foot: S.foot, keeper: keeperShort(),
-      chibi: chibiOf(who()), promiseLine: EV().promiseLine(S), scout: null,
-      seed: X().engineSeed(S.seed, key), auto: autoOn(), rate: (res) => X().rate(res, S.pos, rr),
+      homeName: S.world.school.name, oppName: o.oppName, keeper: keeperShort(),
+      promiseLine: EV().promiseLine(S), scout: null, rivalAb: rivalAb(), rate: (res) => X().rate(res, S.pos, rr),
     });
-    return { info, rr, host };
+    const info = await fresh(window.WingerLive.play(host, cfg));
+    if (info) for (const b of info.boards) noteBoard(b);
+    return { info, rr, host, auto: cfg.auto };      // 🤖은 그 경기의 승부차기까지 같은 값(⚙️ 「다음 경기부터」)
   }
   /* 🏆 대회 경기 — 🔒 회복(+10)은 **두 번째 경기부터** · 경기가 끝나야 반영(원자적 — 다시 열면 회복 전 컨디션에서 다시) */
   async function cupLive(key, opp, head) {
@@ -769,12 +968,9 @@ window.W2Game = (() => {
     S.cond = clamp(cond + TUNE.COND_MATCH, 0, 100);
     return r;
   }
-  /* 📍 {rival}의 평점 — 같은 경기 · 같은 평점 난수원의 **두 번째** 값(내 평점 다음) */
-  function rivalRating(info, rr) {
-    const m = (info.mates || []).find((x) => x.row && x.row.id === "R") || { g: 0, a: 0, d: 0 };
-    return X().rate({ myGoals: m.g, assists: m.a, defense: m.d, res: info.res, oppGoals: info.oppGoals }, S.pos, rr);
-  }
   /* 공식 경기 한 판의 뒤처리(리그 · 대회) — 기록 · 최근 10경기 · 약속 · 📍 집계 · 직전 경기 메모 · 판 */
+  const sign2 = (v) => (v >= 0 ? "+" : "−") + Math.abs(v).toFixed(2);
+  const sign1 = (v) => (v >= 0 ? "+" : "−") + Math.abs(v).toFixed(1);
   function official(info, o) {
     const R = S.record;
     R.apps += 1; R.g += info.myGoals; R.a += info.assists; R.d += info.defense;
@@ -786,38 +982,78 @@ window.W2Game = (() => {
     if (info.defense >= 3) R.wall3 += 1;
     if (info.rating >= 10) R.perfect += 1;
     for (const k of ["g", "a", "d"]) { R.moments[k].t += info.moments[k].t; R.moments[k].p += info.moments[k].p; }
-    for (const b of info.boards) { R.sSum = Math.round((R.sSum + b.s) * 1e6) / 1e6; R.sN += 1; if (b.auto) R.sAuto += 1; }   // 🤖 = 사람이 안 둔 판
+    /* 🎮 솜씨 칸 재료 — **공식 경기의 🧱 막기 판만**(36번 §16-3) · `sSum` = Σ s_board(🤖 0.5 · 시간 초과 0) · 🥅 · 🅰️는 감의 판이라 안 셈 */
+    const blk = info.boards.filter((b) => b.kind === "defend");
+    for (const b of blk) {
+      R.sSum = Math.round((R.sSum + (typeof b.sBoard === "number" ? b.sBoard : 0.5)) * 1e6) / 1e6;
+      R.sN += 1;
+      if (b.auto) R.sAuto += 1;
+    }
     const dec = (info.cards || []).find((c) => c.decisive);
     if (dec && (dec.credit.g || dec.credit.a)) R.winner += 1;
     const un = (info.cards || []).filter((c) => c.mine).length - info.saved;
-    S.recent = S.recent.concat([{ g: info.myGoals, a: info.assists, d: info.defense, ga: info.oppGoals, res: info.res, r: info.rating, sv: info.saved }]).slice(-10);
+    const rec = { g: info.myGoals, a: info.assists, d: info.defense, ga: info.oppGoals, res: info.res, r: info.rating, sv: info.saved };
+    if (info.first === 0 || info.first === 1) rec.f1 = info.first === 1;   // 📋 약속의 근거 — 첫 내 순간(27번 §8)
+    S.recent = S.recent.concat([rec]).slice(-10);
     S.games.push({ w: S.week, t: o.t, opp: o.opp, gf: info.teamGoals, ga: info.oppGoals, res: info.res,
-      g: info.myGoals, a: info.assists, d: info.defense, r: info.rating, sv: info.saved, rv: o.rivalR });
+      g: info.myGoals, a: info.assists, d: info.defense, r: info.rating, sv: info.saved });
     EV().mem(S).last = { res: info.res, un };
     const lines = [];
-    const pr = EV().judge(S, info.saved);
+    const pr = EV().judge(S, info.first);
     if (pr) lines.push(`${pr.text}${pr.chips.length ? ` · ${pr.chips.map((c) => `${c.emoji} ${c.text}`).join(" ")}` : ""}`);
-    const d = ST().tally(S, info.rating, o.rivalR);
-    const slot = ST().openOf(S, "slot");
-    if (slot && slot.f.on) {
+    /* 📍 「같은 장면, {rival}라면」 — 경기 줄의 숫자를 더하면 집계와 같아요(보이는 값 = 판정 값 · 29번 §2-2) */
+    const t = ST().tally(S, info.boards);
+    if (t && t.n) {
       const rn = X().short(S.world.ours.find((x) => x.role === "rival").name);
-      lines.push(`📍 ${rn} 평점 ${o.rivalR.toFixed(1)} — ${d > 0 ? "이번엔 내가 앞섰어요" : d < 0 ? "이번엔 뒤졌어요" : "같았어요"}(번호 집계 ${slot.f.d > 0 ? "+" : ""}${slot.f.d})`);
+      lines.push(`📍 같은 장면 ${t.n}번 — 나 ${t.made}번 해냄 · ${X().fill("{r|라면}", { r: rn })} ${t.exp.toFixed(1)}번 → ${sign1(t.d)}(번호 집계 ${sign1(t.D)})`);
     }
+    /* 🎮 경기 끝 줄 — 평가서 솜씨 칸과 같은 말(🧱 막기 판 · 🤖 몫 · 읽기 = s_board − 0.5의 평균) + 감의 판 수(36번 §5-1 → §16) */
     if (info.boards.length) {
-      const avg = info.boards.reduce((a, b) => a + b.s, 0) / info.boards.length;
-      lines.push(`🎮 판 ${info.boards.length}번 · 평균 ${avg.toFixed(2)}`);
+      const bAuto = blk.filter((b) => b.auto).length;
+      const reads = blk.length ? blk.reduce((a, b) => a + ((typeof b.sBoard === "number" ? b.sBoard : 0.5) - 0.5), 0) / blk.length : 0;
+      const nOf = (k) => info.boards.filter((b) => b.kind === k).length;
+      const sense = [["goal", "🥅"], ["assist", "🅰️"]].filter(([k]) => nOf(k)).map(([k, e]) => `${e} ${nOf(k)}번`);
+      lines.push(`🎮 🧱 막기 판 ${blk.length}번${bAuto ? `(🤖 ${bAuto})` : ""}${blk.length ? ` · 읽기 ${sign2(reads)}` : ""}${sense.length ? ` · ${sense.join(" · ")}` : ""}`);
     }
     return lines;
   }
-  /* 🎮 판 하나(경기 밖 — 🎯 기술 테스트 · 🥅 승부차기 내 킥) — 🤖 자동이면 중립 s = 0.5 */
-  function board(at, kind, judge) {
+  /* 🎮 판 하나(경기 밖 — 🎯 기술 테스트 · 🥅 승부차기 내 킥) — 경기 안과 같은 규칙: 상황(따로 난수원 · 그 자리의 열쇠) ·
+   *    승산 줄 = 엔진 `cardP(그 판의 중심, 능력치, s)` · 판정 **한 번** · 🤖면 `0.5 × 🦶 × 🫀`(36번 §8-3) */
+  function board(at, kind, center, ability, key, auto0) {
+    const L = window.WingerLive;
+    const sr = X().rngOf(S.seed, key, X().SALT.board);
+    const weak = sr() < L.TUNE.WEAK_P;
+    const step = S.weak;
+    const sit = { weak, step, foot: L.footOf(weak, step), cond: E().condMul(S.cond) };
+    let got = null;
+    const judge = (sv) => {
+      if (!got) { const v = clamp(Number(sv) || 0, 0, 1); got = { s: v, j: E().judgeAtP(kind, center, ability, v) }; }
+      return got.j;
+    };
+    const auto = () => {
+      const v = clamp(0.5 * sit.foot * sit.cond, 0, 1);
+      return { s: v, sBoard: 0.5, judge: E().judgeAtP(kind, center, ability, v), auto: true, cell: null, target: null, seen: null, weak, ms: 0, kind };
+    };
     const M = window.W2Moment;
-    if (autoOn() || !M || !M.play || (M.opens && !M.opens(kind))) return Promise.resolve({ s: 0.5, judge: judge(0.5), auto: true });
-    return new Promise((done) => M.play(at, { kind, moment: "oneone", condition: S.cond, foot: S.foot, keeper: keeperShort(), judge },
-      (j, d) => done({ s: d && Number.isFinite(d.s) ? d.s : 0.5, judge: j })));
+    const autoNow = typeof auto0 === "boolean" ? auto0 : autoOn();   // 승부차기는 그 경기를 시작할 때의 🤖 값
+    if (autoNow || !M || typeof M.play !== "function" || (M.opens && !M.opens(kind))) return Promise.resolve(auto());
+    const odds = (sv) => Math.round(100 * E().cardP(center, ability, clamp(Number(sv) || 0, 0, 1)));
+    return new Promise((done) => {
+      try {
+        M.play(at, { kind, sit, odds, judge, foot: weak ? (S.foot === "L" ? "R" : "L") : S.foot, keeper: keeperShort(),
+          fast: false, still: settingOn("still"), wide: settingOn("wide") }, (j, d) => done(d || {}));
+      } catch (e) { console.error(e); done(null); }
+    }).then((d) => {
+      if (!got) return auto();
+      const dd = d || {};
+      const b = { s: got.s, sBoard: typeof dd.sBoard === "number" ? clamp(dd.sBoard, 0, 1) : null, judge: got.j, auto: false,
+        cell: dd.cell == null ? null : dd.cell, target: dd.target == null ? null : dd.target,
+        seen: dd.seen === "clear" || dd.seen === "dim" ? dd.seen : null, weak, ms: Number.isFinite(dd.ms) ? dd.ms : null, kind };
+      return b;                          // 🔬 측정은 부른 쪽이 `fresh` 뒤에(지우기 뒤 늦게 끝난 판이 측정을 다시 쓰지 않게)
+    });
   }
-  /* 🥅 승부차기 — 양 팀 5명씩 · 내 킥은 첫 번째 한 번만 판(12번 §5-3) · 🎮 솜씨에 들어가요(22번 §0-1) */
-  async function shootout(host, key) {
+  /* 🥅 승부차기 — 양 팀 5명씩 · 내 킥은 첫 번째 한 번만 판(12번 §5-3) · 🥅 감의 판이라 🎮 솜씨 칸엔 안 더해요(36번 §4-4) */
+  async function shootout(host, key, auto) {
     const box = h("div", "w2-pk");
     box.appendChild(h("p", "w2-pk-head", "🥅 승부차기 — 첫 번째 키커는 나예요"));
     const at = h("div", "w2-pk-board");
@@ -825,12 +1061,12 @@ window.W2Game = (() => {
     host.appendChild(box);
     const blend = E().blendOf({ pos: S.pos, stats: S.stats });
     E()._t.seed(X().engineSeed(S.seed, X().KEY.pkKick(key)));
-    const got = await board(at, "goal", (s) => E().judgeAtP("goal", X().TUNE.PK_P, blend, s));
+    const got = await fresh(board(at, "goal", X().TUNE.PK_P, blend, X().KEY.pkKick(key), auto));
+    noteBoard(got);
     at.remove();
     const mine = got.judge === "perfect";
     const R = S.record;
     R.pkN += 1; if (mine) R.pkGoal += 1;
-    R.sSum = Math.round((R.sSum + got.s) * 1e6) / 1e6; R.sN += 1; if (got.auto) R.sAuto += 1;
     const pk = X().shootout(X().rngOf(S.seed, X().KEY.pk(key), X().SALT.pk), () => mine);
     const ol = h("ol", "w2-pk-list");
     for (const k of pk.kicks) {
@@ -932,6 +1168,8 @@ window.W2Game = (() => {
     bar.style.width = `${g.v}%`;
     gz.append(bar, h("span", "w2-gauge-text", `🫀 컨디션 ${g.v} · ${g.label} · 경기 ×${g.mul.toFixed(2)}`));
     head.appendChild(gz);
+    /* 🦶 선수 칸 한 줄 — 주발 · 약발 단계(29번 §3-6) */
+    head.appendChild(h("p", "w2-footline", `🦶 ${S.foot === "L" ? "왼발" : "오른발"} · 약발 ${S.weak}단계${S.weak >= TUNE.WEAK_MAX ? "(양발)" : ""}`));
     const notes = [];
     if (S.week === 1) notes.push("훈련은 컨디션이 좋을수록 크게 늘어요 — 버튼의 「효율 ×」가 곧 늘어나는 양이에요");
     for (const t of ST().notes(S, S.week)) notes.push(t);
@@ -950,6 +1188,19 @@ window.W2Game = (() => {
       grid.appendChild(b);
       pairs.push([b, { k: "train", stat: t.k }]);
     }
+    /* 🦶 약발 — 일곱째 칸(그 주 능력치 대신 약발 경험 + 훈련 효율 · 경험 2.0마다 한 단계 · 2단계 「양발」이면 닫힘) */
+    const wMax = S.weak >= TUNE.WEAK_MAX;
+    const wb = btn("w2-tbtn w2-tbtn-weak", null, null, { "data-k": "weak",
+      "aria-label": wMax ? "약발 — 2단계 양발이에요(더 키울 게 없어요)" : `약발 훈련 — 지금 ${S.weak}단계 · 효율 ×${g.eff.toFixed(2)}` });
+    const wBar = h("span", "w2-tbtn-bar");
+    const wFill = h("i");
+    wFill.style.width = `${wMax ? 100 : Math.round(((S.weakXp % TUNE.WEAK_XP) / TUNE.WEAK_XP) * 100)}%`;
+    wBar.appendChild(wFill);
+    wb.append(h("span", "w2-tbtn-name", "🦶 약발"), h("b", "w2-tbtn-grade", wMax ? "양발" : `${S.weak}단계`), wBar,
+      h("span", "w2-tbtn-eff", wMax ? "다 키웠어요" : `효율 ×${g.eff.toFixed(2)}`));
+    if (wMax) wb.disabled = true;
+    grid.appendChild(wb);
+    if (!wMax) pairs.push([wb, { k: "weak" }]);
     s.appendChild(grid);
     const acts = h("div", "w2-acts");
     const rest = btn("w2-rest", null, null, { "aria-label": `휴식 — 컨디션 +${TUNE.COND_REST}` });
@@ -979,12 +1230,16 @@ window.W2Game = (() => {
       for (const [b, v] of pairs) b.addEventListener("click", () => take(v));
       if (pplBtn) pplBtn.addEventListener("click", async () => {
         if (done) return;
-        const opts = ppl.map((p) => ({ k: "who", who: p.who, key: p.key, label: `${p.key === "keeper" ? "🧤" : "🏠"} ${p.name}` }))
+        /* 🏠 가족 셋(아직 안 골랐으면) — 얼굴 밑에 그 이야기의 문이 열리는 구간(`note`) · 🧤 {keeper} */
+        const opts = ppl.map((p) => ({ k: "who", who: p.who, key: p.key, sid: p.sid, note: p.note || null,
+          label: `${p.key === "keeper" ? "🧤" : "🏠"} ${p.name}` }))
           .concat([{ k: "back", label: "돌아가기" }]);
+        const famPick = ppl.filter((p) => p.key === "family").length > 1;
         const i = await sc("card", { kind: "people", id: "people", title: "🤝 누구와 시간을 보낼까요?",
-          body: `그 사람의 이야기가 열려요 · 컨디션 ${TUNE.COND_PEOPLE}`, who: who(), name: S.name, mood: "base", bg: "bg-field", opts });
+          body: `${famPick ? "올해 끝까지 함께할 가족 이야기 — 하나만 고를 수 있어요 · " : "그 사람의 이야기가 열려요 · "}컨디션 ${TUNE.COND_PEOPLE}`,
+          who: who(), name: S.name, mood: "base", bg: "bg-field", opts });
         const o = Number.isInteger(i) ? opts[i] : null;
-        if (o && o.k === "who") take({ k: "people", who: o.key });
+        if (o && o.k === "who") take(o.key === "family" ? { k: "people", who: "family", fam: o.sid } : { k: "people", who: o.key });
       });
     });
   }
@@ -1013,35 +1268,34 @@ window.W2Game = (() => {
     return d;
   }
 
-  /* ---------- 🎬 도입 ctx(12번 §3-3) — 플레이 문장만 포지션 넷으로 갈려요 ---------- */
-  /* 표정은 놀람 → 결의(지호) · 평온(도윤) · 웃음(하람) — 12번 §3-3. 마지막 줄이 주인공의 말투예요 */
-  const INTRO = {
-    jiho: { bg: "bg-home-jiho", place: "치킨집 배달 오토바이 뒤", after: "fire",
-      lines: ["배달 오토바이 뒤에서 단톡방을 열었어요. 새 명단 사진이 올라와 있어요.", "{no}번 옆에 적힌 이름 — 1학년 {rival}.", "{posLine}", "…다시 가져오면 되지."] },
-    doyun: { bg: "bg-home-doyun", place: "학원 창가", after: "base",
-      lines: ["학원 창가, 멀리 운동장 조명이 보여요. 휴대폰에 명단 사진이 떠요.", "{no}번 옆에 적힌 이름 — 1학년 {rival}.", "{posLine}", "번호는 숫자일 뿐이야. …그래도."] },
-    haram: { bg: "bg-home-haram", place: "할머니 댁 평상", after: "smile",
-      lines: ["할머니 댁 평상, 바닷바람이 불어요. 명단 사진이 늦게 도착했어요.", "{no}번 옆에 적힌 이름 — 1학년 {rival}.", "{posLine}", "에이, 번호가 날 뛰게 하는 건 아니잖아? …아, 좀 아깝다."] },
-  };
+  /* ---------- 🎬 도입 ctx(12번 §3-3 · 29번 §3-5) — 「우리 집」 한 곳(치킨집 배달 오토바이 뒤 · P1 (가)) ----------
+   * 플레이 문장만 포지션 넷으로 갈리고, **마지막 한마디를 셋 중 고름** → 말투(`voice` — 엔딩의 말투 줄 · 2막 대사 틀 · 숫자 0) */
+  const INTRO = { bg: "bg-home-jiho", place: "치킨집 배달 오토바이 뒤",
+    lines: ["배달 오토바이 뒤에서 단톡방을 열었어요. 새 명단 사진이 올라와 있어요.", "{no}번 옆에 적힌 이름 — 1학년 {rival}.", "{posLine}"] };
+  const VOICES = [
+    { k: "hot", text: "…다시 가져오면 되지.", mood: "fire" },
+    { k: "calm", text: "번호는 숫자일 뿐이야. …그래도.", mood: "base" },
+    { k: "play", text: "에이, 번호가 날 뛰게 하는 건 아니잖아? …아, 좀 아깝다.", mood: "smile" },
+  ];
   const POS_LINE = { fw: "3년 동안 골문 앞 그 자리에서 달던 번호예요.", wg: "3년 동안 측면을 가르며 달던 번호예요.",
     mf: "3년 동안 한가운데 그 자리에서 달던 번호예요.", df: "3년 동안 최종 수비 라인 그 자리에서 달던 번호예요." };
   function introCtx() {
-    const I = INTRO[S.preset] || INTRO.jiho;
     const rival = S.world.ours.find((x) => x.role === "rival");
     const vars = { no: S.noOrig, rival: X().short(rival.name), me: S.name, posLine: POS_LINE[S.pos] };
     const text = (t) => X().fill(X().fill(t, { posLine: vars.posLine }), vars);
-    const last = I.lines.length - 1;
     return { who: who(), preset: S.preset, gender: S.gender, name: S.name, no: S.noOrig, pos: S.pos, posName: SH().POS[S.pos],
-      rival: X().short(rival.name), rivalWho: S.world.rivalWho, bg: I.bg, place: I.place,
-      /* 줄마다 { mood, text } — 마지막 줄은 주인공이 말하는 줄(`speaker` · 타이핑) */
-      lines: I.lines.map((t, i) => (i === last ? { mood: I.after, text: text(t), speaker: S.name, typed: true }
-        : { mood: "surprise", text: text(t) })),
+      rival: X().short(rival.name), rivalWho: S.world.rivalWho, bg: INTRO.bg, place: INTRO.place,
+      /* 줄마다 { mood, text } — 마지막 한마디는 `choices`에서 플레이어가 골라요(화면이 고른 `k`로 풀어요) */
+      lines: INTRO.lines.map((t) => ({ mood: "surprise", text: text(t) })),
+      choices: VOICES.map((v) => ({ k: v.k, text: v.text, mood: v.mood, speaker: S.name })),
       school: S.world.school.team, league: S.world.league.name };
   }
 
-  /* ---------- 🏛️ 명예의 전당 — 1막 졸업 항목(`v: 2` · `kind: "act1"` · 한 번의 INSERT · 결정 6) ----------
+  /* ---------- 🎓 졸업 줄 — `winger2-grads`(II 전용 · 29번 §5 B5) · 한 번의 INSERT ----------
+   * 🔒 점수 = 평가서 합 × 10을 반올림한 정수(0~1000 · 화면엔 한 자리 합) · 이름 = 캐릭터 이름(결정 L) ·
+   *    `grow-hof-v1`(8종 공유 명전)엔 안 넣고 `Match.submitHof`도 안 불러요(서버 졸업 줄은 2막 묶음의 `hof_grad` — 아직 없음).
    * 🔒 필름 화면이 `{ word, rep }`로 풀리면 한마디 · 대표 업적을 담아 **한 번에** 올려요(UPDATE 없음).
-   *    한마디는 받는 길목에서 씻어요 — 남의 브라우저에서 그려지는 값이에요(원칙 ⑦). 베타는 원격이 꺼져 있어요. */
+   *    한마디는 받는 길목에서 씻어요 — 남의 브라우저에서 그려질 값이에요(원칙 ⑦). */
   function enshrine(out) {
     running = false;
     if (S.hofDone) { renderEntry(); return; }
@@ -1050,29 +1304,19 @@ window.W2Game = (() => {
     const entry = { id: S.id, at: Date.now(), game: GAME, v: 2, kind: "act1",
       name: X().clean(S.name, TUNE.NAME_MAX), pos: S.pos, g: S.gender, preset: S.preset,
       no: Number.isInteger(S.no) ? S.no : Number.isInteger(S.noOrig) ? S.noOrig : null,
-      ending: S.ending.id, tier: S.sheet.tier, total: S.sheet.total, team: S.world.school.name,
+      ending: S.ending.id, tier: S.sheet.tier, total: S.sheet.total, score: Math.round(S.sheet.total * 10), team: S.world.school.name,
       rep: window.W2Ach.repOf(S), achN: Object.keys(S.ach || {}).length, word, sent: false };
     /* 🎬 고른 대표 업적 · 한마디를 저장해 둔 필름에도 — 「다시 보기」가 고른 그대로 보여요 */
     const film = window.W2Film.get(S.id);
     if (film) { film.head.rep = entry.rep; film.word = word || null; window.W2Film.put(film); }
     try {
-      const list = JSON.parse(localStorage.getItem(HOF_KEY) || "[]");
+      const list = JSON.parse(localStorage.getItem(GRADS_KEY) || "[]");
       const arr = Array.isArray(list) ? list.filter((x) => !(x && x.id === entry.id)) : [];
       arr.push(entry);
-      localStorage.setItem(HOF_KEY, JSON.stringify(arr));
-    } catch (e) { /* 명전은 기념이에요 — 못 써도 판은 끝나요 */ }
+      localStorage.setItem(GRADS_KEY, JSON.stringify(arr));
+    } catch (e) { /* 졸업 줄은 기념이에요 — 못 써도 판은 끝나요 */ }
     S.hofDone = true;
     save();
-    if (window.Match && window.Match.submitHof) {
-      window.Match.submitHof(GAME, entry).then((ok) => {
-        if (!ok) return;
-        try {
-          const list = JSON.parse(localStorage.getItem(HOF_KEY) || "[]");
-          const e = Array.isArray(list) ? list.find((x) => x && x.id === entry.id) : null;
-          if (e) { e.sent = true; localStorage.setItem(HOF_KEY, JSON.stringify(list)); }
-        } catch (e) { /* 다음에 다시 올라가요 */ }
-      }).catch(() => {});
-    }
     renderEntry();
     if (out && out.go === "new") startNew(loadSave());      // 🎬 필름의 「🔁 새 선수 키우기」
   }
@@ -1082,21 +1326,23 @@ window.W2Game = (() => {
     const B = window.W2Book ? window.W2Book.load() : { ev: {}, end: {}, ach: {}, grad: {} };
     return sc("book", {
       events: EV().LIST.map((e) => Object.assign({}, e, { n: (B.ev[e.id] && B.ev[e.id].n) || 0 })),
-      stories: ST().LIST.map((x) => ({ sid: x.sid, emoji: x.emoji, name: x.name, preset: x.preset || null, ends: ST().ends(x.sid) })),
+      stories: ST().LIST.map((x) => ({ sid: x.sid, emoji: x.emoji, name: x.name, family: !!x.family, ends: ST().ends(x.sid) })),
       endings: window.W2Book ? window.W2Book.endings() : [],
       ach: window.W2Ach.LIST.map((a) => Object.assign({}, a, { got: !!B.ach[a.id], n: (B.ach[a.id] && B.ach[a.id].n) || 0 })),
       grads: Object.keys(B.grad || {}),
-      rules: EV().rules(),
+      rules: EV().rules(S),
     });
   }
 
   /* ---------- ❓ 도움말(공유 help.js) ---------- */
   const HELP = [
-    { emoji: "🗓️", title: "한 해 36주", body: "고3의 한 해예요. 매주 한 번 — 훈련(여섯 중 하나) · 🛌 휴식 · 🤝 사람 중 하나를 골라요.\n경기가 있는 주는 고른 뒤 주말에 경기를 해요. 7월 말엔 전국대회, 11월엔 공개 테스트가 있어요." },
-    { emoji: "🫀", title: "컨디션과 훈련 효율", body: "훈련은 컨디션을 10 쓰고, 컨디션이 좋을수록 크게 늘어요.\n버튼에 적힌 「효율 ×」가 곧 늘어나는 양이에요 — 지친 채 훈련하면 거의 안 늘어요. 쉬어야 커요.\n경기 날 컨디션은 찬스가 오는 빈도와 판의 판정 창에도 닿아요." },
-    { emoji: "🥅", title: "경기의 판", body: "내 순간이 오면 판이 열려요. 골문 6칸 중 가장 밝은 칸을 한 번 누르세요.\n⚽ 결정 · 🅰️ 전개는 상대 골문, 🧱 수비는 우리 골문이에요 — 우리 키퍼가 가까운 쪽을 막으니 먼 쪽 빈 곳으로 몸을 던져요.\n판은 손의 정확도만 재고, 골이 들어갔는지는 경기가 정해요." },
-    { emoji: "🎲", title: "이벤트와 약속", body: "화면에 적힌 확률이 곧 판정이에요. 도전은 얻는 것과 잃는 것이 같아서 50%를 넘으면 걸 만해요.\n📋 약속은 다음 공식 경기에서 내 순간을 한 번 이상 살리면 지킨 거예요." },
-    { emoji: "📋", title: "평가서와 엔딩", body: "11월에 스카우트 평가서가 나와요 — 몸 · 솜씨 · 기록 · 무대 · 테스트 다섯 칸.\n키운 만큼 높은 구간에 서고, 구간이 엔딩을 정해요. 주인공마다 가족 이야기가 여는 「문」이 하나 있어요." },
+    { emoji: "🗓️", title: "한 해 36주", body: "고3의 한 해예요. 매주 한 번 — 훈련(여섯 중 하나) · 🦶 약발 · 🛌 휴식 · 🤝 사람 중 하나를 골라요.\n경기가 있는 주는 고른 뒤 주말에 경기를 해요. 7월 말엔 전국대회, 11월엔 공개 테스트가 있어요." },
+    { emoji: "🫀", title: "컨디션과 훈련 효율", body: "훈련은 컨디션을 10 쓰고, 컨디션이 좋을수록 크게 늘어요.\n버튼에 적힌 「효율 ×」가 곧 늘어나는 양이에요 — 지친 채 훈련하면 거의 안 늘어요. 쉬어야 커요.\n경기 날 컨디션은 찬스가 오는 빈도와 판의 승산에도 닿아요." },
+    { emoji: "🥅", title: "경기의 판", body: "내 순간이 오면 판이 열려요 — 여섯 칸 중 하나를 한 번 골라요(경기당 2~3번 · 적어도 한 번).\n🥅 슈팅 · 🅰️ 컷백은 감의 판이에요 — 어느 칸이든 승산은 같고, 키운 만큼(능력치 · 약발 · 컨디션) 올라가요.\n🧱 막기는 읽는 판이에요 — 슈터의 디딤발이 가리키는 길로 몸을 던지면 승산이 올라가요.\n판은 고른 칸만 재고, 들어갔는지는 경기가 정해요. 🦶 약발 상황 · 🫀 컨디션은 🤖 자동에도 같게 걸려요." },
+    { emoji: "🦶", title: "주발과 약발", body: "판의 ⅓쯤은 공이 약발 쪽으로 떨어진 「🦶 약발 상황」이에요 — 그때는 승산이 조금 내려가요.\n주간 훈련의 🦶 약발로 0 → 1 → 2단계(양발)까지 키우면 약발 상황에서 승산이 덜 떨어져요." },
+    { emoji: "🎲", title: "이벤트와 약속", body: "화면에 적힌 확률이 곧 판정이에요. 도전은 얻는 것과 잃는 것이 같아서 50%를 넘으면 걸 만해요.\n📋 약속은 다음 공식 경기의 내 첫 순간을 살리면 지킨 거예요." },
+    { emoji: "📋", title: "평가서와 엔딩", body: "11월에 스카우트 평가서가 나와요 — 몸 · 솜씨 · 기록 · 무대 · 테스트 다섯 칸. 🎮 솜씨 칸은 🧱 막기 판에서 디딤발을 얼마나 읽었나예요.\n키운 만큼 높은 구간에 서고, 구간이 엔딩을 정해요. 🤝 사람에서 고른 가족 이야기가 「문」을 하나 열어요." },
+    { emoji: "⚙️", title: "설정", body: "오른쪽 위 ⚙️에서 🤖 판 자동 진행 · ⏩ 빨리 감기로 시작 · ♿ 고를 시간 넉넉히 · 🎞️ 움직임 줄이기 · 📳 진동을 바꿀 수 있어요.\n🤖 · ⏩는 다음 경기부터 적용돼요." },
     /* 💾 8종 표준 문구 그대로(베타는 `env.js`가 원격을 꺼도 — 운영에서의 실제 동작과 같은 말) + 이 게임의 한 줄 */
     { emoji: "💾", title: "기록 보관", body: "기록은 이 기기의 브라우저에 저장되고, 서버에도 자동 백업돼요.\n"
       + "기기를 바꾸거나 브라우저 데이터를 지우면 이 기기의 기록은 사라져요.\n"
@@ -1118,5 +1364,6 @@ window.W2Game = (() => {
   }
 
   return { TUNE, ZONES, SAVE_KEY, gauge, effOf, stepsOf, newState, loadSave,
+    settings, help: openHelp, boardStats,
     _t: { get S() { return S; }, set S(v) { S = v; }, run, save, official, STEP, trainButtons, renderEntry } };
 })();

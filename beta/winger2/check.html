@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <!-- 🧪 더 윙어 II 확인 페이지 — 진짜 세이브를 안 건드려요: 아래 첫 스크립트가 이 페이지의 저장소를 **메모리**로 갈아 끼워요
+       (env.js · 게임 파일보다 먼저). 새로 고치면 다 비어요. 서비스워커 등록 · 원격 기록(match · cloud · stats · ads)은 안 실어요. -->
+  <script>
+    (function () {
+      var st = {};
+      Object.defineProperties(st, {
+        getItem: { value: function (k) { return Object.prototype.hasOwnProperty.call(st, String(k)) ? st[String(k)] : null; } },
+        setItem: { value: function (k, v) { st[String(k)] = String(v); } },
+        removeItem: { value: function (k) { delete st[String(k)]; } },
+        clear: { value: function () { Object.keys(st).forEach(function (k) { delete st[k]; }); } },
+        key: { value: function (i) { var ks = Object.keys(st); return i < ks.length ? ks[i] : null; } },
+        length: { get: function () { return Object.keys(st).length; } },
+      });
+      try { Object.defineProperty(window, "localStorage", { value: st, configurable: true }); window.__w2mem = st; }
+      catch (e) { window.__w2memFail = true; }
+    })();
+  </script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="noindex" />
+  <title>더 윙어 II 확인 페이지</title>
+  <meta name="theme-color" content="#0f1830" />
+  <link href="https://fonts.googleapis.com/css2?family=Jua&family=Gowun+Dodum&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../base.css" />
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    .ck { padding-bottom: 60px; word-break: keep-all; overflow-wrap: anywhere; }
+    .ck h1 { font-family: "Jua", sans-serif; font-weight: 400; font-size: 1.5rem; color: var(--accent); margin: 16px 52px 4px 0; }
+    .ck h2 { font-family: "Jua", sans-serif; font-weight: 400; font-size: 1.2rem; color: var(--cream); margin: 22px 0 8px; }
+    .ck p, .ck li { font-size: .86rem; line-height: 1.6; color: var(--text); }
+    .ck-warn { padding: 8px 12px; border-radius: 12px; border: 1px dashed var(--accent); background: var(--accent-a10); }
+    .ck-warn.bad { border-color: var(--accent2); color: var(--accent2); }
+    .ck-sec { padding: 12px; border-radius: 14px; border: 1px solid var(--line); background: linear-gradient(180deg, var(--field), var(--bg2)); }
+    .ck-row { margin: 10px 0 0; }
+    .ck-k { display: block; font-size: .8rem; color: var(--dim); margin-bottom: 4px; }
+    .ck-seg { display: flex; flex-wrap: wrap; gap: 6px; }
+    .ck-b {
+      min-height: 44px; min-width: 44px; padding: 8px 12px; border-radius: 12px; border: 1px solid var(--line);
+      background: rgba(0, 0, 0, .2); color: var(--text); font: inherit; font-size: .9rem; cursor: pointer;
+      touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+    }
+    .ck-b[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-a14); color: var(--cream); }
+    .ck-b:focus-visible, .ck-range:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+    .ck-go { width: 100%; margin-top: 12px; }
+    .ck-chk { display: flex; align-items: center; gap: 10px; min-height: 44px; font-size: .9rem; color: var(--text); cursor: pointer; }
+    .ck-chk input { flex: none; width: 44px; height: 44px; margin: 0; accent-color: var(--accent); }
+    .ck-range { width: 100%; min-height: 44px; accent-color: var(--accent); }
+    .ck-out { margin-top: 10px; font-size: .84rem; line-height: 1.7; color: var(--text); }
+    .ck-out dl { display: grid; grid-template-columns: 7.2em 1fr; gap: 2px 8px; }
+    .ck-out dt { color: var(--dim); }
+    .ck-out dd { margin: 0; font-variant-numeric: tabular-nums; }
+    .ck-list { display: flex; flex-direction: column; gap: 8px; }
+    .ck-item { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; width: 100%; }
+    .ck-item b { font-family: "Jua", sans-serif; font-weight: 400; font-size: 1rem; color: var(--sky); }
+    .ck-item span { font-size: .78rem; line-height: 1.5; color: var(--dim); }
+    .ck-stage { margin-top: 10px; }
+    .ck-stage:empty { display: none; }
+    #ck-w2wrap[hidden] { display: none; }
+    #w2 { margin-top: 8px; padding: 8px; border-radius: 14px; border: 1px dashed var(--line); }
+  </style>
+</head>
+<body>
+  <main id="app" class="ck">
+    <h1>🧪 더 윙어 II 확인 페이지</h1>
+    <p>미니게임을 조건을 바꿔 가며 해 보고, 확인할 장면을 처음부터 플레이하지 않고 바로 열어요. 👉 <a href="index.html">⚽ 게임 열기</a> · <a href="../_check.html">공용 확인 페이지</a></p>
+    <p class="ck-warn" id="ck-safe">🔒 이 페이지의 저장은 <b>메모리</b>에만 해요 — 진짜 세이브(<code>winger2-save-v2</code>) · 베타 측정 누적 · 준비 화면 횟수를 안 건드리고, 새로 고치면 비어요.</p>
+
+    <h2>🎮 미니게임 연습</h2>
+    <section class="ck-sec" aria-label="미니게임 연습">
+      <div class="ck-row"><span class="ck-k">판</span><div class="ck-seg" id="ck-kind" role="group" aria-label="판"></div></div>
+      <div class="ck-row"><span class="ck-k">🧱 디딤발 보임</span><div class="ck-seg" id="ck-seen" role="group" aria-label="디딤발 보임"></div></div>
+      <div class="ck-row"><span class="ck-k">🦶 약발 상황</span><div class="ck-seg" id="ck-weak" role="group" aria-label="약발 상황"></div></div>
+      <div class="ck-row"><span class="ck-k">능력치(여섯 칸 같은 값)</span><div class="ck-seg" id="ck-ab" role="group" aria-label="능력치"></div></div>
+      <div class="ck-row">
+        <label class="ck-k" for="ck-cond">🫀 컨디션 <b id="ck-condv"></b></label>
+        <input class="ck-range" id="ck-cond" type="range" min="0" max="100" step="1" value="51" />
+      </div>
+      <div class="ck-row">
+        <label class="ck-chk"><input type="checkbox" id="ck-wide" /> ♿ 고를 시간 넉넉히(+30% · 🧱 5.2초)</label>
+        <label class="ck-chk"><input type="checkbox" id="ck-still" /> 🎞️ 움직임 줄이기</label>
+        <label class="ck-chk"><input type="checkbox" id="ck-fast" /> ⏩ 빨리 감기(드러남 0.4초)</label>
+      </div>
+      <button type="button" class="ck-b ck-go btn-primary" id="ck-play">▶️ 판 열기</button>
+      <div class="ck-stage" id="ck-board"></div>
+      <div class="ck-out" id="ck-out" role="status" aria-live="polite"></div>
+      <div class="ck-out" id="ck-tally"></div>
+    </section>
+
+    <h2>👁️ 상황 바로 보기</h2>
+    <section class="ck-sec" aria-label="상황 바로 보기">
+      <div class="ck-row"><span class="ck-k">외형(그림 · 기본 이름만 — 숫자 0)</span><div class="ck-seg" id="ck-who" role="group" aria-label="외형"></div></div>
+      <p class="ck-row">항목마다 「볼 것」은 31번 v2-4 실기기 확인 목록의 번호예요.</p>
+      <div class="ck-list ck-row" id="ck-scenes"></div>
+      <div id="ck-w2wrap" hidden>
+        <p class="ck-row" id="ck-w2note"></p>
+        <div id="w2"></div>
+      </div>
+      <div class="ck-stage" id="ck-match"></div>
+      <div class="ck-out" id="ck-sout" role="status" aria-live="polite"></div>
+    </section>
+  </main>
+  <div id="w2-layer"></div>
+
+  <script src="../env.js"></script>
+  <script src="../radar.js"></script>
+  <script src="../timing.js"></script>
+  <script src="../fx.js"></script>
+  <script src="../help.js"></script>
+  <script src="engine.js"></script>
+  <script src="../winger-moment.js"></script>
+  <script src="match-scene.js"></script>
+  <script src="art.js"></script>
+  <script src="scenes.js"></script>
+  <script src="live.js"></script>
+  <script src="world.js"></script>
+  <script src="events.js"></script>
+  <script src="story.js"></script>
+  <script src="achieve.js"></script>
+  <script src="book.js"></script>
+  <script src="sheet.js"></script>
+  <script src="film.js"></script>
+  <script src="game.js"></script>
+  <script src="check.js"></script>
+</body>
+</html>

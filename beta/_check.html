@@ -189,21 +189,22 @@
           </div>
         </div>
 
-        <!-- 🎮 판 셋(⚽ 결정 · 🅰️ 전개 · 🧱 수비 — 같은 골문 6칸)만 따로. 위 시나리오는 경기 화면 안에서 순서대로 만나고,
-             여기서는 한 판씩 반복해서 **손맛**을 봅니다 — 그게 폰으로만 보이는 것이라서요. -->
-        <h4 class="ck-sub">🎮 판 셋 바로 해보기 — 🥅 · ⚡ · 🧱</h4>
+        <!-- 🎮 판 셋(🥅 슈팅 · 🅰️ 컷백 — 감의 판 · 🧱 슛 막기 — 디딤발을 읽는 판 · 36번 §16)만 따로. 위 시나리오는 경기 화면 안에서
+             순서대로 만나고, 여기서는 한 판씩 반복해서 **손맛**을 봅니다 — 그게 폰으로만 보이는 것이라서요. -->
+        <h4 class="ck-sub">🎮 판 셋 바로 해보기 — 🥅 · 🅰️ · 🧱</h4>
         <p class="mg-safe">
-          🧱 <b>슛 코스 막기는 우리 골문</b>이에요 — 🧤 우리 키퍼가 🏃 상대 슈터 쪽 기둥을 막고, <b>먼 쪽 빈 곳</b>이 밝아요.
-          <b>🥅와 한눈에 갈리는지</b>(우리 색 · 차가운 밝은색 · 키퍼 이름)가 확인 대상입니다 — 산식은 🥅와 한 글자도 같아요.<br />
-          🦶 <b>주발을 바꿔 가며 눌러 보세요</b> — 세 판 다 주발 쪽 판정 창이 <b>＋25%</b>,
-          약발 쪽이 <b>−25%</b>예요. <b>화면에 좌우가 다르게 그려지는지</b>가 확인 대상입니다.<br />
-          🫀 컨디션은 판정 창에 <code>× condMul</code>로 걸려요 (칸 안에서 engine.js가 계산해요).<br />
+          🥅 <b>슈팅</b> · 🅰️ <b>컷백</b>은 <b>감의 판</b>이에요 — 여섯 칸 어디든 판 값이 같아요(단서 없음).
+          🧱 <b>슛 막기</b>는 <b>읽는 판</b>이에요 — 슈터의 디딤발이 가리키는 길이 정답이고, 가끔 흐리게 가려져요.<br />
+          🦶 <b>상황을 바꿔 가며 눌러 보세요</b> — 약발 상황이면 판 위에 「🦶 약발 상황」이 뜨고 승산 줄이 내려가요(단계가 오르면 덜 내려가요).
+          약발로 성공하면 「🦶 약발로!」가 떠야 해요.<br />
+          🫀 컨디션 · 🦶 배수는 칸 안에 실린 <code>engine.js</code> · <code>live.js</code>의 함수를 그대로 써요(여기 베껴 적지 않아요).<br />
           ✅ <b>세이브를 한 글자도 안 건드려요</b> — 준비 화면 횟수까지 되돌려 놓습니다.<br />
-          ⚠️ 판정(perfect/ok/miss)은 여기서 <b>임시 산식</b>이에요. 진짜 판정은 경기 전력·능력치가
-          들어간 엔진이 만듭니다 — 여기서 보는 건 <b>조작 성공도 s</b>까지예요.
+          ⚠️ 승산 · 판정은 여기서 <b>확인용 자리값</b>(중심 50% · 능력치 60)이에요. 진짜는 경기 전력 · 능력치가
+          들어간 엔진이 만듭니다 — 여기서 보는 건 <b>판 값 → s → 승산</b>의 흐름과 화면이에요.
         </p>
         <div class="mg-row">
           <b>🦶 주발</b><span class="mg-seg" id="w2m-foot"></span>
+          <b>🦶 상황</b><span class="mg-seg" id="w2m-weak"></span>
           <b>🫀 컨디션</b>
           <input class="mg-range" id="w2m-cond" type="range" min="40" max="100" step="5" value="80"
                  aria-label="컨디션" />
@@ -222,6 +223,7 @@
 
         <!-- ⚽ 더 윙어 II 1막 — 옛 II의 주발 화면 · 동네 지도 · 초1 · 조립대 · HUD 유니폼 칸은 **1막으로 새로 지으면서 없어졌어요**
              (2026-09-30 · 25번). 세이브를 만드는 흐름이라 여기서 못 띄워요 — 게임 입구로 들어가서 봐 주세요. -->
+        <p class="mg-safe">🧪 <a href="winger2/check.html">더 윙어 II 전용 확인 페이지</a> — 판 셋 연습(조건 바꿔 가며) · 평가서 · 문 · 엔딩 · 설정 같은 장면을 처음부터 안 하고 바로 열어요(메모리 저장소 — 진짜 세이브 안 건드림)</p>
         <h4 class="ck-sub">🗓️ 1막 한 판 — 입구에서 졸업까지 (390px에서 봐 주세요)</h4>
         <p class="mg-safe">
           👉 <a href="winger2/index.html">⚽ 더 윙어 II 열기</a> →
@@ -891,19 +893,21 @@
     };
     /* 🎮 판 셋만 따로 돌리는 칸의 상태예요. 위 시나리오 칸도 여기 주발·컨디션을
      * 그대로 씁니다 — 두 칸이 다른 값을 쓰면 "아까랑 다른데요"가 됩니다. */
-    /* 🔒 **판은 골문 6칸 하나, 배역이 셋입니다**(더 윙어 II 1막 · 12번 §4) — ⚽ 결정 · 🅰️ 전개는 상대 골문,
-     * 🧱 수비는 **우리 골문**(같은 `runShotGrid` · 산식 0줄). 판을 여는가는 `W2Moment.opens(kind)` 하나가 정해요 —
-     * 낱말(`WORDS`)이 없는 종류는 판을 안 열어요. 🏃 컷인·🎯 킬패스·옛 🧱 차단은 없어진 판이에요.
+    /* 🔒 **판 셋**(36번 §16 · 38번 §2-3′) — 🥅 슈팅 · 🅰️ 컷백은 감의 판(여섯 칸 같은 값), 🧱 슛 막기는 디딤발을 읽는 판.
+     * 판을 여는가는 `W2Moment.opens(kind)` 하나가 정해요 — 낱말(`WORDS`)이 없는 종류는 판을 안 열어요.
      * 🔒 여기 이름은 `W2Moment.WORDS[kind].title`과 **같아야** 합니다(이모지 뺀 글자). */
     const W2M_LIST = [
-      { id: "oneone", emoji: "🥅", name: "일대일 슈팅", kind: "goal",
-        desc: "🧤 키퍼가 미끄러진 반대쪽 — 가장 밝은 칸으로 차요", foot: true },
-      { id: "cutback", emoji: "⚡", name: "컷백 연결", kind: "assist",
-        desc: "🧤 키퍼가 비운 쪽으로 굴려 주면 동료가 밀어 넣어요", foot: true },
-      { id: "cover", emoji: "🧱", name: "슛 코스 막기", kind: "defend",
-        desc: "🧤 우리 키퍼가 가까운 쪽을 막아요 — 먼 쪽 빈 곳으로 몸을 던져요(우리 골문)", foot: true },
+      { id: "oneone", emoji: "🥅", name: "슈팅", kind: "goal",
+        desc: "골문 여섯 칸 중 한 곳으로 차요 — 단서 없이 감으로(어느 칸이든 판 값이 같아요)", foot: true },
+      { id: "cutback", emoji: "🅰️", name: "컷백", kind: "assist",
+        desc: "문전 여섯 칸 중 한 곳으로 굴려요 — 동료가 어디로 달려들지 감으로", foot: true },
+      { id: "cover", emoji: "🧱", name: "슛 막기", kind: "defend",
+        desc: "슛 길 여섯 중 한 곳으로 몸을 던져요 — 슈터의 디딤발이 가리키는 길로(우리 골문)", foot: true },
     ];
-    const W2M = { foot: "R", cond: 80, id: null };
+    /* `weak` — null = 주발 상황 · 0 · 1 · 2 = 약발 상황의 약발 단계 */
+    const W2M = { foot: "R", cond: 80, weak: null, id: null };
+    /* 확인용 자리값 — 경기 전력이 없는 칸이라 엔진 `cardP` · `judgeAtP`에 넣을 중심 · 능력치를 고정해요(산식은 엔진 그대로) */
+    const W2M_C = 0.5, W2M_AB = 60;
     let w2mFrame = null, w2mFit = 0, w2mRun = 0;
     /* 🔒 condMul을 여기 베껴 적지 않아요 — 상수를 바꿔도 확인 페이지가 따라가서
      * 안 잡히는, 이 저장소가 여덟 번 겪은 그 검사가 됩니다. 칸 안에 실린 engine.js의
@@ -973,22 +977,25 @@
               if (g) g.decisive = true;
             }
             if (card.mine) {
-              /* 🎮 판(winger-moment.js)을 **여기서 진짜로 돌립니다.** 판은 하나 · 배역 셋 —
-               * 카드의 `kind`가 🥅 · ⚡ · 🧱을 정해요(`moment` 이름은 되돌려 줄 뿐 판을 안 고릅니다).
+              /* 🎮 판(winger-moment.js)을 **여기서 진짜로 돌립니다**(38번 §2-3′ 그대로 — `sit` · `odds` · `judge`).
+               * 카드의 `kind`가 🥅 · 🅰️ · 🧱을 정해요.
                *
-               * ⚠️ 판정(골이냐 아니냐)은 이 칸에서 **시나리오가 미리 적어 둔 값**이에요.
-               *    엔진(autoP)을 안 부르니까요 — 여기는 연출 확인 칸이라 그게 맞습니다.
-               *    손맛과 화면만 봅니다. 조작 성공도 s는 아래 줄에 찍어 드려요.
+               * ⚠️ 판정(골이냐 아니냐)은 이 칸에서 **시나리오가 미리 적어 둔 값**이에요(`judge`가 카드의 `result`를 돌려줌).
+               *    엔진(autoP)을 안 부르니까요 — 여기는 연출 확인 칸이라 그게 맞습니다. 승산 줄은 확인용 자리값이에요.
                * 🔑 준비 화면 횟수(grow-mech-ready)는 mgKeep이 감싸서 진짜 세이브를 안 건드려요. */
               const slot = (await Sc.push(card)) || Sc.momentSlot();
               if (slot) {
+                const E = W.WingerEngine;
+                const kind = card.kind === "defend" ? "defend" : card.kind === "assist" ? "assist" : "goal";
+                const scripted = ["goal", "assist", "save"].indexOf(card.result) >= 0 ? "perfect" : card.result === "shot" ? "ok" : "miss";
                 const got = await new Promise((done) => mgKeep(W, () => W.W2Moment.play(slot, {
-                  kind: card.kind === "defend" ? "defend" : card.kind === "assist" ? "assist" : "goal",
-                  moment: card.moment, condition: W2M.cond, foot: W2M.foot,
-                }, (j, d) => done({ j, d }))));
+                  kind, sit: { weak: false, step: 0, foot: 1, cond: E.condMul(W2M.cond) },
+                  odds: (sv) => Math.round(100 * E.cardP(W2M_C, W2M_AB, Math.min(1, Math.max(0, Number(sv) || 0)))),
+                  judge: () => scripted, foot: W2M.foot, keeper: kind === "defend" ? "태오" : null, fast: false, still: false, wide: false,
+                }, (j, d) => done({ j, d: d || {} }))));
                 if (w2Frame !== ifr || mine !== w2Run) return;
-                $("w2-now").textContent = `${m.emoji} ${m.name} · 🎮 ${card.moment} → ${got.j}`
-                  + ` (조작 s ${got.d.s.toFixed(2)}${got.d.weak ? " · 🦶 약발 쪽" : ""})`;
+                $("w2-now").textContent = `${m.emoji} ${m.name} · 🎮 ${kind} → ${got.j}`
+                  + ` (판 값 ${Number.isFinite(got.d.sBoard) ? got.d.sBoard.toFixed(2) : "—"} · s ${Number.isFinite(got.d.s) ? got.d.s.toFixed(2) : "—"})`;
               }
               if (w2Frame !== ifr || mine !== w2Run) return;
               await Sc.push(card);
@@ -1050,7 +1057,8 @@
       $("w2m-stage").hidden = false;
       $("w2m-res").textContent = "";
       $("w2m-now").textContent = `${g.emoji} ${g.name} · 🫀 컨디션 ${W2M.cond}`
-        + (g.foot ? ` · 🦶 ${W2M.foot === "R" ? "오른발" : "왼발"}잡이` : " · 🦶 주발은 이 판에 안 걸려요");
+        + ` · 🦶 ${W2M.foot === "R" ? "오른발" : "왼발"}잡이`
+        + (W2M.weak == null ? " · 주발 상황" : ` · 🦶 약발 상황(약발 ${W2M.weak}단계)`);
       w2mTeardown();
       renderW2m();
       const mine = w2mRun;
@@ -1082,19 +1090,32 @@
         });
         /* engine.js는 🫀 컨디션(condMul)을 계산하는 자리라 같이 실어요 — DOM을 안 건드리는
          * 조각이라 칸 안에서 그냥 상수처럼 씁니다. fx.js는 판정 파티클용이에요. */
-        Promise.all([load("fx.js"), load("winger2/engine.js"), load("winger-moment.js")]).then(() => {
+        Promise.all([load("fx.js"), load("winger2/engine.js"), load("winger2/live.js"), load("winger-moment.js")]).then(() => {
           if (w2mFrame !== ifr || mine !== w2mRun) return;
-          if (W.WingerEngine && W.WingerEngine.condMul) { w2mCondMul = W.WingerEngine.condMul; renderW2m(); }
+          const E = W.WingerEngine, L = W.WingerLive;
+          if (E && E.condMul) { w2mCondMul = E.condMul; renderW2m(); }
+          /* 🦶 · 🫀 상황 — 게임의 드라이버(`live.js` · `game.js`)와 같은 모양 · 같은 함수(`footOf` · `condMul`) */
+          const weak = W2M.weak != null, step = weak ? W2M.weak : 0;
+          const sit = { weak, step, foot: L.footOf(weak, step), cond: E.condMul(W2M.cond) };
+          const c01 = (v) => Math.min(1, Math.max(0, Number(v) || 0));
+          let first = null;                                  // 판정은 한 번 — 두 번째 부름은 첫 결과(38번 §6 3′-c)
+          const judge = (sv) => first || (first = E.judgeAtP(g.kind, W2M_C, W2M_AB, c01(sv)));
+          const odds = (sv) => Math.round(100 * E.cardP(W2M_C, W2M_AB, c01(sv)));
           mgKeep(W, () => W.W2Moment.play(box, {
-            kind: g.kind, moment: g.id, condition: W2M.cond, foot: W2M.foot,
+            kind: g.kind, sit, odds, judge,
+            foot: weak ? (W2M.foot === "L" ? "R" : "L") : W2M.foot,   // 차는 발 — 약발 상황이면 반대 발(판은 다시 안 뒤집음)
             keeper: g.kind === "defend" ? "태오" : null,          // 🧱 우리 키퍼 이름(글자만 — 산식 0)
-          }, (judge, d) => {
+            fast: false, still: false, wide: false,
+          }, (j, d0) => {
             if (w2mFrame !== ifr || mine !== w2mRun) return;
-            /* 조작 s가 **먼저**예요 — 미니게임이 실제로 내는 값이 그거고, 판정은 여기서만
-             * 임시 산식(loneJudge)이에요. 순서를 바꾸면 "미니게임이 판정을 만든다"로 읽힙니다. */
-            $("w2m-res").textContent = `조작 성공도 s ${d.s.toFixed(3)}`
-              + (d.weak ? " · 🦶 약발 쪽으로 갔어요" : "")
-              + ` → (확인용 임시 판정) ${judge}`;
+            const d = d0 || {};
+            /* 판 값이 **먼저**예요 — 판이 실제로 내는 값이 그거고, 🦶 · 🫀를 곱한 s가 승산 줄을 정해요. */
+            $("w2m-res").textContent = `판 값 ${Number.isFinite(d.sBoard) ? d.sBoard.toFixed(2) : "—"}`
+              + ` × 🦶 ${sit.foot.toFixed(2)} × 🫀 ${sit.cond.toFixed(3)} = s ${Number.isFinite(d.s) ? d.s.toFixed(3) : "—"}`
+              + ` → 승산 ${Number.isFinite(d.s) ? odds(d.s) : "—"}% → (확인용 판정) ${j}`
+              + (d.cell == null ? " · ⏱️ 시간 초과" : ` · 고른 칸 ${d.cell}`)
+              + (d.target != null ? ` · 정답 ${d.target}${d.seen === "dim" ? " · 흐림" : d.seen === "clear" ? " · 잘 보임" : ""}` : "")
+              + (Number.isFinite(d.ms) ? ` · ${d.ms}ms` : "");
             w2mFitTo(ifr, D);
           }));
           w2mFitTo(ifr, D);
@@ -1124,8 +1145,18 @@
         b.onclick = () => { W2M.foot = f.v; renderW2m(); };
         seg.appendChild(b);
       }
+      const ws = $("w2m-weak");
+      ws.innerHTML = "";
+      for (const f of [{ v: null, label: "주발" }, { v: 0, label: "약발 0단계" }, { v: 1, label: "1단계" }, { v: 2, label: "2단계" }]) {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.textContent = f.label;
+        if (W2M.weak === f.v) b.className = "on";
+        b.onclick = () => { W2M.weak = f.v; renderW2m(); };
+        ws.appendChild(b);
+      }
       $("w2m-cond-out").textContent = W2M.cond
-        + (w2mCondMul ? ` → 판정 창 ×${w2mCondMul(W2M.cond).toFixed(3)}` : " (한 판 돌리면 배수가 보여요)");
+        + (w2mCondMul ? ` → 🫀 ×${w2mCondMul(W2M.cond).toFixed(3)}` : " (한 판 돌리면 배수가 보여요)");
       const list = $("w2m-list");
       list.innerHTML = "";
       for (const g of W2M_LIST) {

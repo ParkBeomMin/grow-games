@@ -56,8 +56,18 @@
 "use strict";
 
 window.W2Scene = (() => {
+  /* 🎞️ 움직임 줄이기 = 기기 설정 **또는** 게임 설정 `still` · 📳 진동 = 게임 설정 `buzz`(기본 켜짐)
+   *    — 29번 §4-1 · 38번 §6 14-a. 설정은 `W2Game.settings.on`으로만 읽어요(localStorage를 직접 안 봄) */
+  const setting = (k, dflt) => {
+    try { const G = window.W2Game && window.W2Game.settings; return G && typeof G.on === "function" ? !!G.on(k) : dflt; } catch { return dflt; }
+  };
   const reduced = () => {
-    try { return window.matchMedia("(prefers-reduced-motion: reduce)").matches; } catch { return false; }
+    try { if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return true; } catch { /* 옛 브라우저 */ }
+    return setting("still", false);
+  };
+  const buzz = (ms) => {
+    if (!setting("buzz", true)) return;
+    try { if (navigator.vibrate) navigator.vibrate(ms); } catch { /* 지원 안 하는 기기 */ }
   };
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -530,10 +540,8 @@ window.W2Scene = (() => {
       }
     }
     if (kind === "mine" || kind === "decisive") burst(S.topEl, ["⚽"], 12, 1);
-    // 진동은 우리 골에만 40ms 한 번. 실점·동료 골에는 안 울려요
-    if (kind === "mine" || kind === "decisive") {
-      try { if (navigator.vibrate) navigator.vibrate(40); } catch { /* 지원 안 하는 기기 */ }
-    }
+    // 📳 진동은 우리 골에 40ms 한 번(내 막음은 closeMoment에서 25ms). 실점 · 동료 골에는 안 울려요 · 설정 `buzz`를 따라요
+    if (kind === "mine" || kind === "decisive") buzz(40);
   }
 
   /* 🎆 **굴림 0의 파티클** — 공용 `Fx.burst` · `Fx.confetti`를 여기서 안 부르는 까닭:
@@ -711,6 +719,7 @@ window.W2Scene = (() => {
           <div class="w2-meta">
             <span class="w2-clock">⏱ 0'</span>
             <span class="w2-mine-count" hidden></span>
+            <button type="button" class="w2-gear-in" aria-label="설정">⚙️</button>
           </div>
           ${promise ? `<p class="w2-promise"></p>` : ""}
           ${pitchHTML(me, chibi)}
@@ -733,6 +742,14 @@ window.W2Scene = (() => {
         if (S && S.root && S.root.contains(dot)) S.chibi = null;   // 결과 줄 치비도 같은 파일 계열이라 같이 접어요
       });
     }
+    /* ⚙️ 경기 화면의 설정 — 떠 있는 ⚙️(scenes.js)가 스코어보드 오른쪽 위(상대 학교 이름)를 덮어서, 경기 화면에선
+     *    스코어보드 안 이 자리로 옮겨 와요(떠 있는 것은 style.css가 숨김). 판이 열려 있으면 안 열어요(29번 §4-5) */
+    q(".w2-gear-in").addEventListener("click", (e) => {
+      if (document.querySelector(".w2m-ready, .w2m-board, #w2-layer .w2o")) return;
+      try { e.currentTarget.focus({ preventScroll: true }); } catch { /* 옛 브라우저 */ }   // 닫으면 여기로 돌아와요
+      const W = window.W2Scenes;
+      if (W && typeof W.settings === "function") W.settings();
+    });
     const scoutImg = q(".w2-scout img");
     if (scoutImg) { scoutImg.addEventListener("error", () => scoutImg.remove()); scoutImg.src = scout; }
     S = {
@@ -740,7 +757,7 @@ window.W2Scene = (() => {
       clockEl: q(".w2-clock"), mineEl: q(".w2-mine-count"),
       pitchEl: q(".w2-pitch"), ballEl: q(".w2-ball"), feed: q(".w2-feed"),
       h: 0, a: 0, mine: 0, fast: false, myName: c.myName || "나", chibi,
-      slot: null, pending: null, myGoals: [], slots: slotsOf(host, me),
+      slot: null, pending: null, myGoals: [], slots: slotsOf(host, me), promise: !!promise,
       /* 🔬 ⏱️ 이 경기의 **시계 수열** — 검사 전용입니다 (`_t.clocks()`).
        * 🔒 **경기 하나의 값이라 여기서 비웁니다.** `_drops`가 누적인 것과 성격이 달라요:
        *    drops는 *"확률이 아니라 수로"* 보려고 단조 증가였고, clocks는 **단계마다
@@ -857,6 +874,9 @@ window.W2Scene = (() => {
     const c = add(lineCard("mine", card.min > 90 ? `90+${card.min - 90}'` : card.min + "'", ""));
     await type(c.querySelector(".w2-body"), stakeLine(card));
     if (!alive(my)) return null;
+    /* 📋 약속은 「그 경기의 **내 첫 순간**」(27번 §5-1) — 약속이 걸린 경기의 첫 판 머리에 한 줄(효과가 걸린 자리가 보이게).
+     *    판정을 보여 주는 때는 지금처럼 경기 뒤(결과 줄)예요. 🤖 판도 같은 자리에 붙어요 */
+    if (S.promise && S.mine === 1) c.appendChild(txt("span", "w2-tag w2-tag-promise", "📋 약속이 걸린 순간"));
 
     return momentSlot();
   }
@@ -876,8 +896,12 @@ window.W2Scene = (() => {
     const cls = card.result === "goal" || card.result === "assist" || card.result === "save" ? "good"
       : card.result === "concede" ? "bad" : "";
     const line = add(lineCard(cls, card.min > 90 ? `90+${card.min - 90}'` : card.min + "'", card.text || resultLine(card)));
+    /* 🦶 🤖 판엔 판 머리가 없으니 **결과 줄에 꼬리표 하나**(36번 §3-3 「🧱 막음 · 🦶 약발」) — 자동으로 하는 사람에게도
+     *    약발 훈련의 값이 보이게. 손으로 둔 판은 판 머리가 이미 말했어요 */
+    if (card.auto && card.weak) line.appendChild(txt("span", "w2-tag w2-tag-weak", "🦶 약발"));
     const pose = poseOf(card);
     if (pose) react(line, pose);
+    if (card.result === "save") buzz(25);                      // 📳 내 막음 — 골보다 짧게(위계)
     const fx = fxOf(card);
     if (fx) {
       if (fx === "mine" || fx === "decisive") banner(bannerText(card));
