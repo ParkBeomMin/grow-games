@@ -1,9 +1,9 @@
 /* winger2 서비스워커 — 네트워크 우선, 실패 시 캐시 (오프라인 플레이)
  * ⚽ 더 윙어 II 1막 — 옛 II 파일(career · town · squad · prospect · char3d · vendor …)을 걷어내고 새로 지었어요. */
-const CACHE = "winger2-v3";   // ⚽ 1막 둘째 묶음(38번) — 접두사 `winger2-`가 activate의 startsWith와 짝이에요
+const CACHE = "winger2-v4";   // ⚽ 1막 둘째 묶음(38번) — 접두사 `winger2-`가 activate의 startsWith와 짝이에요
 /* 🔒 이 목록은 **자동 생성이 없습니다.** 전용 js를 더하면 여기 손으로 넣으세요 — 빠뜨리면 온라인에선 멀쩡하고
  *    **오프라인에서만** 깨져요. 🔴 `focus.js`는 다른 세션의 미커밋 파일이라 넣지 않아요(결정 8).
- * 🖼️ 그림 120장 — 첫 베타 66장 + 둘째 묶음 54장(도윤 · 하람 남 · 여 · 엄마 · 할머니 · 집 배경 둘 · 엔딩 둘 — 38번 §3)은
+ * 🖼️ 그림 147장 — 첫 베타 66장 + 둘째 묶음 54장 + 판 그림 27장(41번)(도윤 · 하람 남 · 여 · 엄마 · 할머니 · 집 배경 둘 · 엔딩 둘 — 38번 §3)은
  *    설치 때 한 번 받아 둬요. 그림이 하나라도 404면 설치가 통째로 실패하니 목록 ↔ `art/`를 늘 맞춰요. */
 const ASSETS = [
   "./", "./index.html", "./style.css", "./engine.js", "./match-scene.js", "./art.js", "./scenes.js",
@@ -48,6 +48,8 @@ const ASSETS = [
   "./art/seheon-frown.webp", "./art/seheon-respect.webp", "./art/seoa-base.webp",
   "./art/seoa-fire.webp", "./art/seoa-grin.webp", "./art/seoa-tears.webp", "./art/taeo-base.webp",
   "./art/taeo-fire.webp", "./art/taeo-grin.webp", "./art/taeo-tears.webp",
+  /* 🎮 판 그림 27장(41번 · director가 넣음) */
+  "./art/m-ball.webp", "./art/m-boot.webp", "./art/m-def-f-tackle.webp", "./art/m-def-m-tackle.webp", "./art/m-gk-f-crouch.webp", "./art/m-gk-f-dive-high.webp", "./art/m-gk-f-dive-low.webp", "./art/m-gk-f-jump.webp", "./art/m-gk-f-ready.webp", "./art/m-gk-m-crouch.webp", "./art/m-gk-m-dive-high.webp", "./art/m-gk-m-dive-low.webp", "./art/m-gk-m-jump.webp", "./art/m-gk-m-ready.webp", "./art/m-leg.webp", "./art/m-mate-f-cheer.webp", "./art/m-mate-f-ready.webp", "./art/m-mate-f-run.webp", "./art/m-mate-f-shoot.webp", "./art/m-mate-m-cheer.webp", "./art/m-mate-m-ready.webp", "./art/m-mate-m-run.webp", "./art/m-mate-m-shoot.webp", "./art/m-seoa-stand.webp", "./art/m-shooter-f.webp", "./art/m-shooter-m.webp", "./art/m-taeo-stand.webp",
 ];
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));

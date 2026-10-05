@@ -25,6 +25,13 @@ const { boot, runAct, liveMatch, tap } = require("./_act.js");
 let fail = 0;
 const check = (ok, msg) => { console.log(`${ok ? "✅" : "❌"} ${msg}`); if (!ok) fail += 1; };
 const rd = (f) => fs.readFileSync(path.join(PAGE_DIR, f), "utf8");
+/* 🔒 41번 §2 판 그림 키 27(박은 값 — 표를 읽지 않음) */
+const M_KEYS = ["m-ball", "m-boot", "m-leg", "m-taeo-stand", "m-seoa-stand"];
+for (const g of ["m", "f"]) {
+  for (const x of ["ready", "dive-high", "dive-low", "jump", "crouch"]) M_KEYS.push(`m-gk-${g}-${x}`);
+  for (const x of ["ready", "run", "shoot", "cheer"]) M_KEYS.push(`m-mate-${g}-${x}`);
+  M_KEYS.push(`m-def-${g}-tackle`, `m-shooter-${g}`);
+}
 const code = (s) => s.replace(/\/\*[\s\S]*?\*\//g, "").split("\n").filter((l) => !/^\s*\/\//.test(l)).join("\n");
 const uniq = (a) => [...new Set(a)];
 
@@ -66,7 +73,11 @@ function kM(man, html) {
     + (w1.missing.length ? `\n     🔴 없는 파일(설치가 통째로 실패해요): ${w1.missing.join(" · ")}` : "") + (w1.lack.length ? `\n     🔴 빠짐(오프라인에서만 깨져요): ${w1.lack.slice(0, 8).join(" · ")}` : ""));
   const m1 = kM(MAN, HTML);
   check(m1.ok, `K-M. 🎨 manifest \`theme_color\` ${m1.tc} == \`<meta name="theme-color">\` ${m1.meta}`);
-  check(w1.art === 120, `K-W2. 🖼️ \`art/\` 그림이 첫 묶음 66 + 54 = **120장**(${w1.art}장 · 38번 §3)`);
+  /* 🔄 v2 판 그림 배선(41번) — 66 + 54 + 판 그림 27 = 147 · 판 그림은 41번 키와 1:1 · 모두 sw `ASSETS`에 */
+  const mFiles = fs.readdirSync(path.join(PAGE_DIR, "art")).filter((f) => /^m-.*\.webp$/.test(f)).map((f) => f.replace(/\.webp$/, "")).sort();
+  const mInSw = M_KEYS.filter((k2) => w1.assets.indexOf(`./art/${k2}.webp`) >= 0).length;
+  check(w1.art === 147 && JSON.stringify(mFiles) === JSON.stringify([...M_KEYS].sort()) && mInSw === 27,
+    `K-W2. 🖼️ \`art/\` 그림이 첫 묶음 66 + 54 + 판 그림 27 = **147장**(${w1.art}장) · 판 그림 파일 ${mFiles.length}장이 41번 키 27과 1:1 · sw \`ASSETS\`에 ${mInSw}/27`);
   /* 🔄 v2(39번 §2 「그림」) — 옛 사본 0: `.v1.` 이름 · 옛 이름 사본 `doyun-base` · `haram-base`(지금은 `doyun-m-base` …) */
   const stale = (names) => names.filter((f) => /\.v1\./.test(f) || /^(doyun|haram)-base\./.test(f));
   const ART_FILES = require("fs").readdirSync(require("path").join(PAGE_DIR, "art"));
@@ -85,14 +96,15 @@ function kM(man, html) {
 
 /* ══════════ K-5 — 그림 표 ↔ 파일 · 없는 조합 ══════════ */
 /* 🔬 계측 — 표가 「있다」고 아는 열쇠(`HAVE`)를 꺼내는 창 하나만 냅니다(동작은 안 바꿔요). 💥 안 걸리면 죽어요 */
-const ART_INS = [/ {2}return \{ src, chibi, bg, alt, name \};/, "  return { src, chibi, bg, alt, name, __HAVE: HAVE };"];
+/* 🔄 v2 판 그림(41번 · 31번 「v2 판 그림 배선」) — 돌려주는 칸에 `sprite`가 더해짐 · 판 그림 표(`SPR`)도 꺼냄 */
+const ART_INS = [/ {2}return \{ src, chibi, bg, alt, name, sprite \};/, "  return { src, chibi, bg, alt, name, sprite, __HAVE: HAVE, __SPR: SPR };"];
 function artOf(srcText) {
   if (!ART_INS[0].test(srcText)) { console.log(`💥 art.js 계측 정규식이 안 걸려요 — ${ART_INS[0]}`); process.exit(2); }
   return new Function("window", `${srcText.replace(ART_INS[0], ART_INS[1])}\nreturn window.Art;`)({});
 }
 function k5static(A) {
   const files = fs.readdirSync(path.join(PAGE_DIR, "art")).filter((f) => f.endsWith(".webp")).map((f) => f.replace(/\.webp$/, ""));
-  const claimed = [...A.__HAVE];
+  const claimed = [...A.__HAVE, ...A.__SPR];
   const claimNoFile = claimed.filter((k2) => files.indexOf(k2) < 0);
   const WHO = ["jiho-m", "jiho-f", "doyun-m", "doyun-f", "haram-m", "haram-f", "coach", "minjae", "taeo", "seheon", "minseo", "seoa", "gaeun", "scout", "dad", "mom", "grandma"];
   const MOODS = ["base", "smile", "fire", "tired", "down", "surprise", "moved", "stern", "worry", "smirk", "shock", "grin", "tears", "frown", "respect", "interest"];
@@ -104,6 +116,11 @@ function k5static(A) {
     for (const po of POSES) { const p = A.chibi(w, po); if (p) reach.add(p); }
   }
   for (const f of files.filter((f) => /^(bg|end)-/.test(f))) { const p = A.bg(f); if (p) reach.add(p); }
+  /* 🎮 판 그림 27장 — 41번 키 표(박은 값)로 `sprite`가 닿는 것 */
+  for (const k2 of M_KEYS) { const p = A.sprite(k2); if (p) reach.add(p); if (p && !files.includes(p.replace(/^art\//, "").replace(/\.webp$/, ""))) bad.push(`판 그림 ${k2} → ${p}`); }
+  const sprSame = JSON.stringify([...A.__SPR].sort()) === JSON.stringify([...M_KEYS].sort());
+  if (!sprSame) bad.push(`판 그림 표 ${A.__SPR.size}칸 ≠ 41번 ${M_KEYS.length}칸`);
+  if (A.sprite("m-grass") !== null || A.sprite("m-gk-m-fly") !== null) bad.push("41번에 없는 판 그림 키가 null이 아님");
   const unreached = files.filter((f) => !reach.has(`art/${f}.webp`));
   /* v2(38번 §3 · 계약 16): 도윤 · 하람 남 · 여 · 엄마 · 할머니가 이제 그림을 가짐(첫 묶음엔 null이어야 했음) — 기준 그림이 있어야 */
   const ghosts = ["doyun-m", "doyun-f", "haram-m", "haram-f", "mom", "grandma"].filter((w) => A.src(w, "base") === null);
@@ -123,6 +140,8 @@ function k5static(A) {
   check(m !== ART && !k5static(artOf(m)).ok, `변이 — 표에 없는 파일(「taeo-cry」)을 적으면 → K-5가 빨간불(깨진 그림)`);
   const m2 = ART.replace('taeo: "base grin fire tears"', 'taeo: "base grin fire"');
   check(m2 !== ART && !k5static(artOf(m2)).ok, `변이 — 표에서 표정 하나를 빼면 → K-5가 빨간불(그 파일에 안 닿음)`);
+  const m3 = ART.replace('"ready dive-high dive-low jump crouch"', '"ready dive-high dive-low crouch"');
+  check(m3 !== ART && !k5static(artOf(m3)).ok, `변이 — 판 그림 표에서 키퍼 「jump」를 빼면 → K-5가 빨간불(41번과 1:1이 깨짐)`);
 }
 
 /* ══════════ K-1 — 카드 칸 ══════════ */

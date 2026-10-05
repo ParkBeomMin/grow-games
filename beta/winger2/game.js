@@ -1040,7 +1040,7 @@ window.W2Game = (() => {
     const odds = (sv) => Math.round(100 * E().cardP(center, ability, clamp(Number(sv) || 0, 0, 1)));
     return new Promise((done) => {
       try {
-        M.play(at, { kind, sit, odds, judge, foot: weak ? (S.foot === "L" ? "R" : "L") : S.foot, keeper: keeperShort(),
+        M.play(at, { kind, sit, odds, judge, foot: weak ? (S.foot === "L" ? "R" : "L") : S.foot, keeper: keeperShort(), me: who(), world: S.gender,
           fast: false, still: settingOn("still"), wide: settingOn("wide") }, (j, d) => done(d || {}));
       } catch (e) { console.error(e); done(null); }
     }).then((d) => {

@@ -6,7 +6,7 @@
  *   Art.alt(who, mood, name)  → "{이름} — {표정}" (♿ 대체 문구 — 12번 §9-6)
  *   Art.name(who)             → 기본 이름(주인공은 플레이어가 바꾼 이름을 부르는 쪽이 넘깁니다)
  *
- * 🔒 **파일 이름이 곧 계약 키입니다**(12번 §9-6 · 13번 §6-5 · 38번 계약 16). 아래 표는 `art/`의 120장과
+ * 🔒 **파일 이름이 곧 계약 키입니다**(12번 §9-6 · 13번 §6-5 · 38번 계약 16 · 41번). 아래 표(120장) + 판 그림 표 `SPR`(27장)이 `art/`의 147장과
  *    한 글자도 달라선 안 됩니다 — 표에 없는 키는 파일이 있어도 안 부르고(null), 표에 있는데
  *    파일이 없으면 깨진 그림이 됩니다. 그래서 `<img>`를 그리는 쪽은 **`error`에서 이름 글자로
  *    물러섭니다**(scenes.js `face` · match-scene.js 치비 말) — 깨진 그림 금지.
@@ -48,6 +48,16 @@ window.Art = (() => {
   };
 
   const path = (k) => (HAVE.has(k) ? DIR + k + EXT : null);
+  /* 🎮 판 그림 27장(41번 — `m-*` · 판 셋의 키퍼 · 동료 · 수비 · 슈터 · 다리 · 우리 키퍼 · 공 · 축구화) + 주인공 치비 —
+   *    판(`winger-moment.js`)만 불러요. 성별은 키에(`{g}`), 좌우는 CSS 뒤집기. 표에 없는 키는 null(판이 지금 조각으로 물러섬) */
+  const SPR = new Set(["m-ball", "m-boot", "m-leg", "m-taeo-stand", "m-seoa-stand"]);
+  ["m", "f"].forEach((g) => {
+    "ready dive-high dive-low jump crouch".split(" ").forEach((x) => SPR.add(`m-gk-${g}-${x}`));
+    "ready run shoot cheer".split(" ").forEach((x) => SPR.add(`m-mate-${g}-${x}`));
+    SPR.add(`m-def-${g}-tackle`);
+    SPR.add(`m-shooter-${g}`);
+  });
+  const sprite = (k) => (SPR.has(k) ? DIR + k + EXT : /^(jiho|doyun|haram)-[mf]-chibi-[a-z]+$/.test(String(k)) ? path(k) : null);
   const ok = (w) => typeof w === "string" && w !== "";
 
   function src(who, mood) {
@@ -72,5 +82,5 @@ window.Art = (() => {
     return `${nm || NAME[who] || "선수"} — ${MOOD[shown] || MOOD.base}`;
   }
 
-  return { src, chibi, bg, alt, name };
+  return { src, chibi, bg, alt, name, sprite };
 })();

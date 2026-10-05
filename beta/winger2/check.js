@@ -95,7 +95,7 @@
     $("ck-out").textContent = "";
     const d = await new Promise((done) => {
       try {
-        M.play(slot, { kind, sit, odds, judge, foot: weak ? "L" : "R", keeper: "태오",
+        M.play(slot, { kind, sit, odds, judge, foot: weak ? "L" : "R", keeper: WHO.gender === "f" ? "서아" : "태오", world: WHO.gender, me: who(),
           fast: $("ck-fast").checked, still: $("ck-still").checked, wide: $("ck-wide").checked }, (j, dd) => done(dd || {}));
       } catch (e) { console.error(e); done({ err: String(e && e.message || e) }); }
     });

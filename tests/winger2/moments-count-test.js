@@ -5,7 +5,7 @@
  *   MC-2  보통 칸(58:58 · 능력치 56 · 컨디션 51 · 1막 buff)의 경기당 판 **2~3**(15번 J · 27번 R2 ②)
  *   MC-3  진짜 1막 한 판(리그 · 대회 · 연습경기) — 판 0번인 경기 0 · 상한 · 간격 위반 0
  *   MC-4  엔진 바뀐 줄 = 27번 §3-3 표 아홉 자리(새 11 · 바꿈 4 — `pickMine` 줄 나눔은 engineer 몫) + 29번 `autoP` 한 줄 — **그 밖 0줄**
- *         (`git diff HEAD -- engine.js`의 주석 · 빈 줄을 뺀 줄이 모두 허용 목록에 · 허용 목록 항목이 모두 나타남 · 판정 함수 0줄)
+ *         (`git diff cc01d2e -- engine.js` — v2 이전 엔진 원본과의 비교 · 주석 · 빈 줄을 뺀 줄이 모두 허용 목록에 · 허용 목록 항목이 모두 나타남 · 판정 함수 0줄)
  *   + 변이: `MOMENT_CAP` 99 · `MOMENT_GAP` 0 · 최소 1번 줄을 지움(27번 §7-0 변이 칸 그대로)
  * 🔒 상한 4 · 간격 15 · 2~3은 27번 · 15번 J의 숫자 — 박은 값(엔진 상수를 읽지 않음)
  * 종료 코드: 0 통과 · 1 빨간불 · 2 💥 죽음 · ⏱️ 약 1분
@@ -98,7 +98,9 @@ function mc1(E, n) {
     const missing = ALLOW.filter(([re]) => !lines.some((l) => re.test(l))).map(([, n]) => n);
     return { n: lines.length, stray, missing };
   };
-  const DIFF = execSync("git diff HEAD -- beta/winger2/engine.js", { cwd: path.join(PAGE_DIR, "..", ".."), encoding: "utf8" });
+  /* 🔄 v2가 `a715e40`으로 커밋된 뒤 — 기준은 작업 트리 diff가 아니라 **v2 이전 엔진 원본 `cc01d2e`**(첫 묶음 커밋)와의 비교 */
+  const ENGINE_BASE = "cc01d2e";
+  const DIFF = execSync(`git diff ${ENGINE_BASE} -- beta/winger2/engine.js`, { cwd: path.join(PAGE_DIR, "..", ".."), encoding: "utf8" });
   {
     const r = mc4(DIFF);
     check(r.stray.length === 0 && r.missing.length === 0, `MC-4. ✂️ 엔진 바뀐 줄(주석 · 빈 줄 빼고) ${r.n}줄이 모두 27번 §3-3 아홉 자리 + 29번 autoP — 그 밖 ${r.stray.length}줄 · 빠진 자리 ${r.missing.length}` + (r.stray.length || r.missing.length ? `\n     🔴 ${r.stray.slice(0, 3).concat(r.missing).join(" · ")}` : ""));

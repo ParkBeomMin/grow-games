@@ -495,9 +495,34 @@ body:has(.w2m-ready, .w2m-board) .w2-gear-in { visibility: hidden; }
 .w2m-pc {
   position: absolute; display: flex; align-items: center; justify-content: center;
   font-style: normal; line-height: 1;
-  transform: translate(-50%, -50%) rotate(var(--rot, 0deg)) scale(var(--sc, 1));
+  transform: translate(-50%, var(--ay, -50%)) rotate(var(--rot, 0deg)) scale(var(--sc, 1)) scaleX(var(--fx, 1));
   transition: transform 0ms cubic-bezier(.3, .9, .35, 1);
 }
+/* 🖼️ 판 그림(41번) — 그림이 서면(`has-img` — 받은 뒤에만 붙음) 아래 CSS 조각의 옷을 벗어요. 못 받으면 옷 그대로(깨진 그림 0).
+ *    크기는 판 폭의 % — 그림은 정사각이라 높이 = 폭. 서 있는 그림은 발끝이 그림 아래라 `--ay`로 발을 자리에 맞춰요 */
+.w2m-img { display: block; width: 100%; height: 100%; object-fit: contain; pointer-events: none; -webkit-user-drag: none; }
+.w2m-pc.has-img { background: none; box-shadow: none; border: 0; border-radius: 0; font-size: 0; height: auto; aspect-ratio: 1 / 1; }
+.w2m-pc.has-img::before, .w2m-pc.has-img::after { display: none; }
+.w2m-gk.has-img { width: 30%; }
+.w2m-gk-top.has-img { width: 12%; --ay: -30%; }
+.w2m-ball.has-img { width: 15px; height: 15px; }
+.w2m-kick.has-img { width: 12%; }
+.w2m-f-assist .w2m-mate.has-img, .w2m-f-assist .w2m-me.has-img, .w2m-def.has-img { width: 16%; }
+.w2m-f-assist .w2m-me.has-img { --ay: -25%; }
+/* 🧱 슈터 — 무릎 아래를 잘라요(발 · 정강이가 두 번째 단서가 안 되게 · 41번 §3-2) · SVG 밑(디딤발이 늘 위) */
+.w2m-shooter-img { width: 26%; --ay: -100%; }
+.w2m-shooter-img .w2m-img { clip-path: inset(0 0 24% 0); }
+.w2m-f-defend.has-shooter .a-opp { display: none; }
+.w2m-ourgk.has-img { width: 15%; --ay: -100%; }
+/* 🧱 「나」 — 발끝을 자리에(우리 키퍼 머리 위로 안 겹치게) · 물러선 원형 말도 같은 자리 */
+.w2m-f-defend .w2m-me { --ay: -100%; }
+.w2m-f-defend .w2m-me.has-img { width: 15%; }
+.w2m-f-defend .w2m-me.is-dive { --ay: -50%; }
+/* 🦶 디딤발 그림 — 받으면 벡터 밑창 · 끈을 숨겨요(앰버 앞코 점은 그대로 — 앞 · 뒤가 한눈에). 흰 테두리로 어두운 잔디 위에서 또렷하게 */
+.w2m-f-defend.has-boot .a-sole, .w2m-f-defend.has-boot .a-lace { display: none; }
+.w2m-art .a-bootimg { filter: drop-shadow(0 0 .6px rgba(255, 255, 255, .95)) drop-shadow(0 0 .6px rgba(255, 255, 255, .95)); }
+.w2m-f-defend .w2m-me.is-dive.has-img { width: 24%; }
+.w2m-mv.is-held { visibility: hidden; }
 .w2m-ball {
   width: 13px; height: 13px; border-radius: 50%;
   background: radial-gradient(circle at 35% 30%, var(--cream) 55%, var(--dim));

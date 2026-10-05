@@ -132,8 +132,8 @@ window.W2Moment = (() => {
       cell: (i) => ({ x: 22 + 28 * (i % 3), y: 15.5 + 19 * Math.floor(i / 3), w: 28, h: 19 }) },
     assist: { H: 62, ball: [84, 8], gk: [50, 5], me: [88, 6], mates: [[34, 50], [60, 54]],
       cell: (i) => ({ x: 30 + 20 * (i % 3), y: 13.5 + 17 * Math.floor(i / 3), w: 20, h: 17 }) },
-    defend: { H: 60, ball: [50, 12], heel: [39, 8], shoe: 16, line: 52.8, me: [50, 47], ours: [50, 56.5],
-      cell: (i) => ({ x: (i + 0.5) * 100 / 6, y: 44, w: 100 / 6, h: 32 }) },
+    defend: { H: 68, ball: [50, 25], heel: [39, 21], shoe: 16, line: 60.8, me: [50, 52], ours: [50, 68],
+      cell: (i) => ({ x: (i + 0.5) * 100 / 6, y: 52, w: 100 / 6, h: 32 }) },
   };
   /* 🧱 길 i의 각도(아래 방향에서 잰 도) — 공에서 골라인의 길 끝까지. 디딤발은 이 각도와 **나란합니다** */
   const laneDeg = (i) => {
@@ -150,6 +150,34 @@ window.W2Moment = (() => {
     layer.appendChild(pc);
     return { el: layer, pc, x0: x, y0: y, H };
   }
+  /* 🖼️ 판 그림(41번 — `art/m-*.webp` · 주인공 치비) — `Art.sprite(key)`가 길을 주면 <img>를 얹고, 못 받거나 깨지면
+   *    **지금 조각(CSS · 이모지) 그대로**예요(깨진 그림 0). 그림은 장식(aria-hidden) — 정보는 글이 말해요.
+   * 🔒 프레임을 바꾸는 것(다이브 · 달려듦 · 세리머니)은 **판정을 받은 뒤**(`reveal`)뿐 — 고르기 전 그림은 정답과 무관하게 같아요 */
+  const sprite = (key) => { try { return window.Art && window.Art.sprite ? window.Art.sprite(key) : null; } catch (e) { return null; } };
+  const keep = [];                                    // 미리 받은 그림(바꾸는 순간 깜빡임 0)
+  const preload = (keys) => keys.forEach((k) => { const u = sprite(k); if (u) { const i = new Image(); i.src = u; keep.push(i); if (keep.length > 60) keep.shift(); } });
+  function skin(m, key, flip, onload) {
+    const url = sprite(key);
+    if (!url) return false;
+    let img = m.img;
+    if (!img) {
+      img = document.createElement("img");
+      img.className = "w2m-img";
+      img.alt = "";
+      img.setAttribute("aria-hidden", "true");
+      img.draggable = false;
+      img.addEventListener("load", () => { m.pc.classList.add("has-img"); if (m.onload) m.onload(); });
+      img.addEventListener("error", () => { img.remove(); m.img = null; m.pc.classList.remove("has-img"); });
+      m.pc.appendChild(img);
+      m.img = img;
+    }
+    m.onload = onload || m.onload || null;
+    if (img.getAttribute("src") !== url) img.src = url;
+    m.pc.style.setProperty("--fx", flip ? "-1" : "1");
+    return true;
+  }
+  const hasImg = (m) => !!(m && m.img && m.pc.classList.contains("has-img"));
+
   function moveTo(m, x, y, ms) {
     m.el.style.transitionDuration = `${ms}ms`;
     m.el.style.transform = `translate(${(x - m.x0).toFixed(2)}%, ${(((y - m.y0) / m.H) * 100).toFixed(2)}%)`;
@@ -175,7 +203,7 @@ window.W2Moment = (() => {
   const rect = (x, y, w, h, cls, rx) => sv("rect", Object.assign({ x, y, width: w, height: h }, rx ? { rx } : {}), cls);
 
   /* 🥅 상대 골문 정면 — 키퍼는 늘 같은 대칭 준비 자세(단서처럼 읽힐 기울기 0 — 36번 §2-2) */
-  function drawGoal(foot) {
+  function drawGoal(foot, gw) {
     const g = G.goal, f = frame("goal"), kids = [rect(0, 44, 100, g.H - 44, "a-ground")];
     for (let x = 15; x < 92; x += 7) kids.push(line(x, 7, x, 44, "a-net"));
     for (let y = 12.3; y < 44; y += 6.3) kids.push(line(9, y, 91, y, "a-net"));
@@ -186,11 +214,14 @@ window.W2Moment = (() => {
     const ball = mover("w2m-ball", g.ball[0], g.ball[1], g.H);
     /* 🦶 차는 발 — 공 옆 신발 한 짝(그림만 · 판정 0). 오른발이면 공 오른쪽 */
     const kick = mover(`w2m-kick w2m-kick-${foot === "L" ? "L" : "R"}`, g.ball[0] + (foot === "L" ? -6 : 6), g.ball[1] + 2.5, g.H);
+    skin(gk, `m-gk-${gw}-ready`);
+    skin(ball, "m-ball");
+    skin(kick, "m-boot", foot === "L");
     put(f, gk.el, kick.el, ball.el);
     return { f, gk, ball, kick };
   }
   /* ⚡ 문전 부감 — 🔒 고르기 전엔 수비를 안 그립니다(빈칸이 정답처럼 읽히면 보이는 값 ≠ 판정 값 — 36번 §16-5) */
-  function drawCut() {
+  function drawCut(gw, meKey) {
     const g = G.assist, f = frame("assist");
     f.appendChild(artOf("assist", [
       rect(40, 0, 20, 3, "a-mouth"), line(0, 3, 100, 3, "a-line"),
@@ -201,13 +232,18 @@ window.W2Moment = (() => {
     const me = mover("w2m-me", g.me[0], g.me[1], g.H, "🏃");
     const mates = g.mates.map(([x, y]) => mover("w2m-mate", x, y, g.H, "🏃"));
     const ball = mover("w2m-ball", g.ball[0], g.ball[1], g.H);
+    skin(gk, `m-gk-${gw}-ready`);
+    if (meKey) skin(me, `${meKey}-chibi-base`);
+    mates.forEach((m) => skin(m, `m-mate-${gw}-ready`));
+    skin(ball, "m-ball");
     put(f, gk.el, ...mates.map((m) => m.el), me.el, ball.el);
     return { f, gk, me, mates, ball };
   }
   /* 🧱 우리 골문 앞 — 위에 마주 선 슈터 · 공 · 공 옆 디딤발(앞코가 길 하나와 나란함) · 공에서 우리 골문으로 길 여섯.
    * 🔒 슈터의 어깨 · 시선 · 기울기는 늘 중립(그리지 않음) — 단서는 하나(폐기 형태 ⑴ 「칩 둘」 금지).
    * 🔒 흐림 = 우리 수비의 다리가 디딤발 뒤쪽 반을 가림 — 다리는 **늘 같은 자리**(뒤꿈치 위)라 그 자체로는 0정보예요 */
-  function drawBlock(target, seen) {
+  let clipSeq = 0;
+  function drawBlock(target, seen, gw, meKey) {
     const g = G.defend, f = frame("defend");
     const lanes = [0, 1, 2, 3, 4, 5].map((i) => line(g.ball[0], g.ball[1], g.cell(i).x, g.line, "a-lane"));
     const shoe = sv("g", { transform: `translate(${g.heel[0]} ${g.heel[1]}) rotate(${(-laneDeg(target)).toFixed(2)})` },
@@ -215,17 +251,47 @@ window.W2Moment = (() => {
     const L = g.shoe;
     put(shoe,
       sv("path", { d: `M-2.7 0.4 Q-2.9 -2 0 -2.2 Q2.9 -2 2.7 0.4 L2.5 ${L - 4} Q2.7 ${L} 0 ${L + 0.4} Q-2.7 ${L} -2.5 ${L - 4} Z` }, "a-sole"),
-      sv("path", { d: `M-2.3 ${L - 5} Q0 ${L - 6.3} 2.3 ${L - 5}` }, "a-lace"),
-      sv("circle", { cx: 0, cy: L - 2, r: 1.25 }, "a-toe"));
-    const kids = [rect(0, g.line, 100, 60 - g.line, "a-netzone"), ...lanes,
+      sv("path", { d: `M-2.3 ${L - 5} Q0 ${L - 6.3} 2.3 ${L - 5}` }, "a-lace"));
+    /* 🦶 디딤발 그림(`m-boot` — 위에서 본 축구화 · 좌우 대칭 처리 · 그림은 앞코가 위) — 같은 `rotate(−laneDeg)` 안에서 180° 돌려
+     *    앞코가 길 쪽(+y)으로. 🔒 각도의 주인은 여전히 `laneDeg` 하나(벡터와 그림이 같은 변환) · 그림을 받으면 벡터 밑창을 숨겨요 */
+    const bootUrl = sprite("m-boot");
+    if (bootUrl) {
+      const bi = sv("image", { x: -8.6, y: -0.8, width: 17.2, height: 17.2, transform: "rotate(180 0 7.8)", preserveAspectRatio: "xMidYMid meet" }, "a-bootimg");
+      bi.addEventListener("load", () => f.classList.add("has-boot"));
+      bi.setAttribute("href", bootUrl);
+      shoe.appendChild(bi);
+    }
+    shoe.appendChild(sv("circle", { cx: 0, cy: L - 2, r: 1.25 }, "a-toe"));
+    const kids = [rect(0, g.line, 100, g.H - g.line, "a-netzone"), ...lanes,
       line(0, g.line, 100, g.line, "a-goalline"), rect(0.6, g.line, 1.6, 6, "a-post"), rect(97.8, g.line, 1.6, 6, "a-post"),
-      sv("circle", { cx: 50, cy: 3.4, r: 2.6 }, "a-opp"), sv("path", { d: "M43.5 11.5 Q43.5 6.4 50 6.4 Q56.5 6.4 56.5 11.5 Z" }, "a-opp"),
+      sv("circle", { cx: 50, cy: 16.4, r: 2.6 }, "a-opp"), sv("path", { d: "M43.5 24.5 Q43.5 19.4 50 19.4 Q56.5 19.4 56.5 24.5 Z" }, "a-opp"),
       shoe];
-    if (seen === "dim") kids.push(sv("path", { d: `M${g.heel[0] - 6.4} -1 V${g.heel[1] + 1} A6.4 6.4 0 0 0 ${g.heel[0] + 6.4} ${g.heel[1] + 1} V-1 Z` }, "a-leg"));
+    if (seen === "dim") {
+      /* 🔒 가리는 범위 = 지금 캡슐 그대로(늘 같은 자리) — 다리 그림은 그 캡슐로 **잘라** 얹어요(그림 폭이 달라도 가리는 몫이 안 바뀜) */
+      const d = `M${g.heel[0] - 6.4} -1 V${g.heel[1] + 1} A6.4 6.4 0 0 0 ${g.heel[0] + 6.4} ${g.heel[1] + 1} V-1 Z`;
+      kids.push(sv("path", { d }, "a-leg"));
+      const url = sprite("m-leg");
+      if (url) {
+        const id = `w2m-legclip-${++clipSeq}`;
+        const cp = sv("clipPath", { id });
+        cp.appendChild(sv("path", { d }));
+        /* 그림 아래쪽(축구화)은 캡슐 밖으로 내려 잘라요 — 축구화가 디딤발 옆에 보이면 「가운데를 가리키는 발」로 읽힐 수 있어서(거짓 단서 0) */
+        const im = sv("image", { x: g.heel[0] - 19.2, y: g.heel[1] + 7.4 - 38.4 + 13, width: 38.4, height: 38.4, preserveAspectRatio: "xMidYMax meet", "clip-path": `url(#${id})` }, "a-legimg");
+        im.setAttribute("href", url);
+        kids.push(cp, im);
+      }
+    }
+    /* 🏃 슈터 그림 — SVG(디딤발 · 길) **밑**에 깔아요(디딤발이 늘 위). 무릎 아래는 잘라요(발이 두 번째 단서가 안 되게 — 41번 §3-2) */
+    const shooter = mover("w2m-shooter-img", g.ball[0], g.ball[1] + 3.2, g.H);
+    f.appendChild(shooter.el);
+    skin(shooter, `m-shooter-${gw}`, false, () => f.classList.add("has-shooter"));
     f.appendChild(artOf("defend", kids));
     const ours = mover("w2m-ourgk", g.ours[0], g.ours[1], g.H, "🧤");
+    skin(ours, gw === "f" ? "m-seoa-stand" : "m-taeo-stand");
     const me = mover("w2m-me", g.me[0], g.me[1], g.H, "🏃");
+    if (meKey) skin(me, `${meKey}-chibi-base`);
     const ball = mover("w2m-ball", g.ball[0], g.ball[1], g.H);
+    skin(ball, "m-ball");
     put(f, ours.el, me.el, ball.el);
     return { f, me, ball, lanes };
   }
@@ -282,11 +348,11 @@ window.W2Moment = (() => {
     const wrap = el("div", "w2m-ex");
     wrap.setAttribute("aria-hidden", "true");
     if (B.kind === "defend") {
-      const d = drawBlock(3, "clear");
+      const d = drawBlock(3, "clear", B.g, B.me);
       d.lanes[3].classList.add("is-target");
       put(wrap, d.f, el("p", "w2m-ex-cap", "🦶 디딤발 앞코 → 넷째 길"));
     } else {
-      wrap.appendChild(B.kind === "goal" ? drawGoal(B.foot).f : drawCut().f);
+      wrap.appendChild(B.kind === "goal" ? drawGoal(B.foot, B.g).f : drawCut(B.g, B.me).f);
     }
     return wrap;
   }
@@ -354,18 +420,19 @@ window.W2Moment = (() => {
   }
   function planBlock(j, c, t, r) {
     const g = G.defend, xt = g.cell(t).x;
-    const over = [g.ball[0] + (xt - g.ball[0]) * (64 - g.ball[1]) / (g.line - g.ball[1]), 64];
+    const over = [g.ball[0] + (xt - g.ball[0]) * (g.H + 4 - g.ball[1]) / (g.line - g.ball[1]), g.H + 4];
+    const net = g.line + 4.7;                           // 그물 안(골라인 아래)
     const note = `🦶 디딤발은 ${LANE(t)}을 가리켰어요`;
     if (c == null) {
       return j === "perfect" ? { ball: over, up: true, text: "⏳ 슈터가 먼저 찼어요 — 다행히 크로스바 위로", note }
-        : { ball: [xt, 57.5], text: "⏳ 슈터가 먼저 찼어요", note };
+        : { ball: [xt, net], text: "⏳ 슈터가 먼저 찼어요", note };
     }
     if (c === t && j === "perfect") {
-      return { ball: [xt, g.me[1]], rebound: [xt + (r[2] < 0.5 ? -12 : 12), 33], text: "🧱 막았어요! 디딤발을 읽었어요", note };
+      return { ball: [xt, g.me[1]], rebound: [xt + (r[2] < 0.5 ? -12 : 12), g.me[1] - 14], text: "🧱 막았어요! 디딤발을 읽었어요", note };
     }
-    if (c === t) return { ball: [xt + (xt < 50 ? -3.5 : 3.5), 57.5], text: "😣 읽었는데 — 발끝을 스치고 들어갔어요", note };
+    if (c === t) return { ball: [xt + (xt < 50 ? -3.5 : 3.5), net], text: "😣 읽었는데 — 발끝을 스치고 들어갔어요", note };
     if (j === "perfect") return { ball: over, up: true, text: "🧱 막았어요 — 압박에 서두른 슛이 크로스바 위로", note };
-    return { ball: [xt, 57.5], text: Math.abs(c - t) === 1 ? "😣 한 길 차이로 빠졌어요" : "😣 비운 길로 들어갔어요", note };
+    return { ball: [xt, net], text: Math.abs(c - t) === 1 ? "😣 한 길 차이로 빠졌어요" : "😣 비운 길로 들어갔어요", note };
   }
   const DIVE_ROT = [-70, 0, 70, -70, 0, 70];
   const BODY_ROT = [-65, -40, -15, 15, 40, 65];
@@ -375,7 +442,7 @@ window.W2Moment = (() => {
     const W = WORDS[B.kind];
     const box = el("div", `tm-box w2m-box w2m-board w2m-k-${B.kind}${B.still || B.fast ? " w2m-still" : ""}`);
     const clueId = `w2m-clue-${++seq}`;                       // 🔒 연출 난수를 안 씀(판 하나에 4번 고정)
-    const d = B.kind === "goal" ? drawGoal(B.foot) : B.kind === "assist" ? drawCut() : drawBlock(B.target, B.seen);
+    const d = B.kind === "goal" ? drawGoal(B.foot, B.g) : B.kind === "assist" ? drawCut(B.g, B.me) : drawBlock(B.target, B.seen, B.g, B.me);
     const group = el("div", "w2m-cells");
     group.setAttribute("role", "group");
     group.setAttribute("aria-label", `${W.what} — 키보드 1~6`);
@@ -467,13 +534,23 @@ window.W2Moment = (() => {
     const plan = B.kind === "goal" ? planGoal(j, i, r) : B.kind === "assist" ? planCut(j, i, r) : planBlock(j, i, B.target, r);
     const [m1, m2] = T.MOVE[B.kind];
     const fast = B.fast;
+    const later2 = (ms2, fn) => (fast ? fn() : setTimeout(fn, ms2));
     const ms = (v) => (fast ? 0 : v);
     const move1 = () => {
       if (B.kind === "goal") {
         const c = G.goal.cell(plan.gkCell), row = Math.floor(plan.gkCell / 3);
         const gx = G.goal.gk[0] + (c.x - G.goal.gk[0]) * plan.reach, gy = plan.gkCell === 4 ? G.goal.gk[1] + 2 : row === 0 ? 20 : G.goal.gk[1] + 6;
         moveTo(d.gk, gx, gy, ms(m1));
-        pose(d.gk, DIVE_ROT[plan.gkCell], plan.gkCell === 4 ? 0.94 : 1, ms(m1));
+        if (hasImg(d.gk)) {
+          /* 그림 프레임 — 옆 칸은 다이브(오른쪽은 뒤집기) · 가운데 위 · 아래는 공을 안은 그림이라 **선방일 때만**(골 · 빗나감엔 준비 자세로 그 자리) */
+          const c = plan.gkCell, held = j === "ok";
+          const fr = c === 0 || c === 2 ? "dive-high" : c === 3 || c === 5 ? "dive-low" : c === 1 ? (held ? "jump" : "ready") : (held ? "crouch" : "ready");
+          skin(d.gk, `m-gk-${B.g}-${fr}`, c === 2 || c === 5);
+          pose(d.gk, 0, 1, ms(m1));
+          if (held && (c === 1 || c === 4)) plan.caught = true;
+        } else {
+          pose(d.gk, DIVE_ROT[plan.gkCell], plan.gkCell === 4 ? 0.94 : 1, ms(m1));
+        }
         moveTo(d.ball, plan.ball[0], plan.ball[1], ms(m1));
         pose(d.ball, 0, 0.62, ms(m1));
         pose(d.kick, B.foot === "L" ? 28 : -28, 1, ms(160));
@@ -482,7 +559,9 @@ window.W2Moment = (() => {
         moveTo(d.ball, z.x, z.y, ms(m1));
       } else if (i != null) {
         moveTo(d.me, G.defend.cell(i).x, G.defend.me[1], ms(m1));
-        pose(d.me, BODY_ROT[i], 1, ms(m1));
+        /* 몸 던짐 — 주인공 `chibi-block`(오른쪽으로 날아가는 그림 · 왼쪽 길이면 뒤집기). 못 받으면 원형 말을 기울임 */
+        if (B.me && skin(d.me, `${B.me}-chibi-block`, i < 3)) { d.me.pc.classList.add("is-dive"); pose(d.me, 0, 1, ms(m1)); }
+        else pose(d.me, BODY_ROT[i], 1, ms(m1));
       }
     };
     const move2 = () => {
@@ -491,10 +570,15 @@ window.W2Moment = (() => {
         if (plan.def) {
           const df = mover("w2m-def", plan.def[0], plan.def[1], G.assist.H);
           df.el.classList.add("is-new");
+          skin(df, `m-def-${B.g}-tackle`, plan.def[0] < G.assist.cell(i).x);   // 그림은 오른쪽에서 왼쪽으로 미끄러짐
           d.f.insertBefore(df.el, d.ball.el);
         }
+        const toRight = plan.run[0] > G.assist.mates[plan.runner][0];        // 달리기 그림은 왼쪽으로 — 오른쪽이면 뒤집기
+        skin(m, `m-mate-${B.g}-run`, toRight);
         moveTo(m, plan.run[0], plan.run[1], ms(m2));
         moveTo(d.gk, plan.gk[0], plan.gk[1], ms(m2));
+        if (j === "ok") skin(d.gk, `m-gk-${B.g}-dive-low`, plan.gk[0] > 50);
+        if (!plan.def) later2(Math.round(ms(m2) * 0.55), () => skin(m, `m-mate-${B.g}-shoot`, toRight));
         moveTo(d.ball, plan.shot[0], plan.shot[1], ms(m2));
       } else if (B.kind === "defend") {
         moveTo(d.ball, plan.ball[0], plan.ball[1], ms(m2));
@@ -502,7 +586,9 @@ window.W2Moment = (() => {
       }
     };
     const result = () => {
-      if (plan.rebound) moveTo(d.ball, plan.rebound[0], plan.rebound[1], ms(260));
+      if (plan.caught) d.ball.el.classList.add("is-held");                // 키퍼가 공을 안은 그림 — 날아온 공은 숨김
+      else if (plan.rebound) moveTo(d.ball, plan.rebound[0], plan.rebound[1], ms(260));
+      if (B.kind === "assist" && j === "perfect") skin(d.mates[plan.runner], `m-mate-${B.g}-cheer`);
       if (B.kind === "defend") d.lanes[B.target].classList.add("is-target");   // 해설 점선 — 디딤발이 가리킨 길
       const res = el("p", `w2m-res ${j === "perfect" ? "w2m-good" : j === "ok" ? "w2m-mid" : "w2m-bad"}`, plan.text);
       if (B.sit.weak && j === "perfect") res.appendChild(el("b", "w2m-win-weak", "🦶 약발로!"));
@@ -533,6 +619,16 @@ window.W2Moment = (() => {
   /* 엔진 밖(확인 페이지 · 손 시연)에서만 쓰는 되받이 — 실제 경기에선 늘 `opts.judge`가 와요 */
   const loneJudge = (s) => (s >= 0.75 ? "perfect" : s >= 0.35 ? "ok" : "miss");
   const opens = (kind) => Object.prototype.hasOwnProperty.call(WORDS, kind);
+  /* 「나」(주인공 치비 키) — 부르는 쪽이 `me`를 주면 그것, 아니면 경기 화면의 「나」 말 그림에서(그림 고르기에만 · 판정 0) */
+  function meOf(o) {
+    if (/^(jiho|doyun|haram)-[mf]$/.test(String(o.me || ""))) return o.me;
+    try {
+      const i = document.querySelector(".w2-dot.me img");
+      const m = i && /((?:jiho|doyun|haram)-[mf])-chibi/.exec(i.getAttribute("src") || "");
+      if (m) return m[1];
+    } catch (e) { /* 화면 없음 */ }
+    return null;
+  }
   const setting = (k) => {
     try { const S = window.W2Game && window.W2Game.settings; return !!(S && S.on(k)); } catch (e) { return false; }
   };
@@ -549,6 +645,7 @@ window.W2Moment = (() => {
       kind: o.kind, odds: o.odds, foot: o.foot === "L" ? "L" : "R",
       sit: { weak: !!sit.weak, step: Number.isInteger(+sit.step) && +sit.step > 0 ? +sit.step : 0, foot: num(sit.foot), cond: num(sit.cond) },
       fast: !!o.fast,
+      me: meOf(o),
       still: typeof o.still === "boolean" ? o.still : (deviceStill() || setting("still")),
       wide: typeof o.wide === "boolean" ? o.wide : setting("wide"),
       cb: done,
@@ -569,6 +666,10 @@ window.W2Moment = (() => {
       done(B.judge(s), { s, sBoard: TUNE.FLAT, cell: null, target: null, seen: null, weak: B.sit.weak, ms: 0 });
       return;
     }
+    B.g = o.world === "m" || o.world === "f" ? o.world : B.me ? B.me.slice(-1) : /서아/.test(String(o.keeper || "")) ? "f" : "m";
+    preload(B.kind === "goal" ? ["ready", "dive-high", "dive-low", "jump", "crouch"].map((x) => `m-gk-${B.g}-${x}`).concat(["m-ball", "m-boot"])
+      : B.kind === "assist" ? ["ready", "run", "shoot", "cheer"].map((x) => `m-mate-${B.g}-${x}`).concat([`m-gk-${B.g}-ready`, `m-gk-${B.g}-dive-low`, `m-def-${B.g}-tackle`, "m-ball"], B.me ? [`${B.me}-chibi-base`] : [])
+        : [`m-shooter-${B.g}`, "m-leg", "m-ball", "m-boot", B.g === "f" ? "m-seoa-stand" : "m-taeo-stand"].concat(B.me ? [`${B.me}-chibi-base`, `${B.me}-chibi-block`] : []));
     /* 🎲 판 하나에 연출 난수 **4번 고정** — 정답 길 · 보임 · 그림 갈래 둘(결과 · 종류를 안 탐) */
     B.r = [fx(), fx(), fx(), fx()];
     B.target = B.kind === "defend" ? Math.min(5, Math.floor(B.r[0] * 6)) : null;
