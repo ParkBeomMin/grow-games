@@ -1,13 +1,15 @@
 /* ⚽ 더 윙어 II 1막 v2 — 🦶🫀 **판의 상황 · 승산 줄 · 📍 q** (드라이버 `live.js` · 37번 §4 #5 · #6 · #8 · #10 · 38번 §5 · §6 3′-a · b)
  *
- *   ST-1  🦶 약발 상황 — 판마다 ⅓(독립) · 배수 `min(0.95, 0.75 + 0.13 × 단계)` → 0 · 1 · 2단계 0.75 · 0.88 · 0.95 · 아니면 1
+ *   ST-1  🦶 약발 상황 — 판마다 **0.4**(v3 · 44번 §1 · 43번 §4 #5 — 🤖 1,200경기로 몫을 봄) · 배수 `min(0.95, 0.75 + 0.13 × 단계)` → 0 · 1 · 2단계 0.75 · 0.88 · 0.95 · 아니면 1
  *         🫀 = `condMul(그 경기 날 컨디션)` · 판이 받는 `sit`이 이 값 그대로(판은 셈하지 않음)
  *   ST-2  상황 같음(#5) — 같은 시드면 🤖 · 손이 **같은 판에서 같은 상황**(약발 여부 열이 같음 — 둘 다 있는 판끼리) · 🤖 판의 `s` = clamp(0.5 × 🦶 × 🫀)
  *   ST-3  상황 난수 따로(#6) — 배수를 1로 묶으면 「상황을 뽑는 🤖」과 「상황을 안 뽑는 🤖」의 경기가 **비트 같음**(300 / 300)
  *   ST-4  승산 줄 = 판정 확률(#8 · 3′-b) — 판이 받은 `odds(s)` == round(100 × `cardP(autoP(kind, 내 능력치), 내 능력치, s)`)
  *   ST-5  📍 `q`(#10) = `cardP(autoP(kind, 민재), 민재, 0.5 × (약발 상황 ? 0.75 : 1))` · 민재 🫀 1
  *   + 변이: 🤖에서 🫀 빼기 · 상황 굴림이 엔진 열을 건드림 · 승산을 `sBoard`로 · q에서 상황 뺌 · 약발 꼭대기 없음
- * 🔒 0.75 · 0.13 · 0.95 · ⅓ · 0.75(민재)는 38번 §5 — 박은 값
+ *   ST-6  🦶 약발 한 단계 = 경험 **1.5**(43번 §4 #5) — 세이브의 `weakXp` 1.4 · 1.5 · 2.9 · 3.0 · 9 → 단계 0 · 1 · 1 · 2 · 2
+ *   ST-7  손 ≡ 🤖(43번 §4 #1) — 판 셋이 모두 감이라 진짜 판 값(`_t.values` · 아무 칸)으로 둔 경기와 🤖 경기가 비트 같음(300 / 300)
+ * 🔒 0.75 · 0.13 · 0.95 · 0.4 · 1.5 · 0.75(민재)는 38번 §5 · 44번 §1 — 박은 값
  * 종료 코드: 0 통과 · 1 빨간불 · 2 💥 죽음 · ⏱️ 약 1분
  */
 "use strict";
@@ -23,6 +25,9 @@ const MUT = {
   ODDS_SB: { "live.js": [[/const odds = \(sv\) => Math\.round\(100 \* E\.cardP\(m\.autoP\(kind, abMe\), abMe, num01\(Number\(sv\)\) \|\| 0\)\);/, "const odds = (sv) => Math.round(100 * (num01(Number(sv)) || 0));"]] },
   Q_NOSIT: { "live.js": [[/0\.5 \* \(s\.weak \? T\.RIVAL_WEAK : 1\)/, "0.5"]] },
   NOTOP: { "live.js": [[/WEAK_TOP: 0\.95,/, "WEAK_TOP: 1.5,"]] },
+  THIRD: { "live.js": [[/WEAK_P: 0\.4,/, "WEAK_P: 1 / 3,"]] },
+  XP2: { "game.js": [[/WEAK_XP: 1\.5,/, "WEAK_XP: 2.0,"]] },
+  BLK80: { "winger-moment.js": [[/const values = \(\) => \[0, 1, 2, 3, 4, 5\]\.map\(\(\) => TUNE\.FLAT\);/, 'const values = (k) => [0, 1, 2, 3, 4, 5].map((i) => (k === "defend" ? (i === 0 ? 0.80 : 0.44) : TUNE.FLAT));']] },
   /* ST-3의 두 판 — 배수 1(뽑기는 함) · 배수 1(뽑기도 안 함) */
   ONE_DRAW: { "live.js": [[/return \{ weak, step, foot: footOf\(weak, step\), cond: heart \};/, "return { weak, step, foot: 1, cond: 1 };"]] },
   ONE_NODRAW: { "live.js": [[/return \{ weak, step, foot: footOf\(weak, step\), cond: heart \};/, "return { weak, step, foot: 1, cond: 1 };"], [/const weak = sr\(\) < T\.WEAK_P;/, "const weak = false;"]] },
@@ -40,8 +45,10 @@ async function matches(muts, list, hand) {
   const E = W.WingerEngine, X = W.W2World, out = [];
   let got = [];
   if (hand) {
+    const vals = W.W2Moment._t.values;
+    let pickN = 0;
     W.W2Moment = Object.assign({}, W.W2Moment, { play(slot, o, cb) {
-      const sB = 0.6, s = Math.min(1, Math.max(0, sB * o.sit.foot * o.sit.cond));
+      const sB = hand === "real" ? vals(o.kind)[(pickN++ * 7) % 6] : 0.6, s = Math.min(1, Math.max(0, sB * o.sit.foot * o.sit.cond));
       got.push({ kind: o.kind, sit: Object.assign({}, o.sit), odds: o.odds(s), odds0: o.odds(0.5 * o.sit.foot * o.sit.cond), s });
       const j = o.judge(s);
       Promise.resolve().then(() => cb(j, { s, sBoard: sB, cell: 0, target: null, seen: null, weak: o.sit.weak, ms: 1 }));
@@ -83,8 +90,11 @@ const sig = (info) => JSON.stringify([info.teamGoals, info.oppGoals, (info.cards
       if (b.q == null || Math.abs(b.q - wantQ) > 1e-12) b5.push(`${r.c.seed}#${i}: q ${b.q} ≠ ${wantQ}`);
     });
   }
-  const frac = nW / nB, se = Math.sqrt((1 / 3) * (2 / 3) / nB);
-  check(b1.length === 0 && Math.abs(frac - 1 / 3) <= 3 * se, `ST-1. 🦶 판 ${nB}번 — 약발 상황 ${nW}(${(frac * 100).toFixed(1)}% · ⅓ ± 3σ ${(3 * se * 100).toFixed(1)}%p) · 🦶 = min(0.95, 0.75 + 0.13 × 단계)(0 · 1 · 2단계) · 🫀 = condMul(30 · 51 · 80) · 판이 받은 sit이 그 값 그대로` + (b1.length ? `\n     🔴 ${b1.slice(0, 3).join(" · ")}` : ""));
+  /* 몫은 🤖 1,200경기로(손 판 216번은 ⅓ · 0.4를 못 가름) */
+  const LW = []; for (let i = 0; i < 1200; i++) LW.push({ seed: 20000 + i, pos: ["fw", "wg", "mf", "df"][i % 4], cond: 51, weak: 1 });
+  const share = async (muts) => { const r = await matches(muts, LW, false); let n = 0, w = 0; for (const x of r) for (const b of x.info.boards) { n += 1; if (b.weak) w += 1; } return { n, w, f: w / n, se: Math.sqrt(0.4 * 0.6 / n) }; };
+  const sh = await share(null);
+  check(b1.length === 0 && Math.abs(sh.f - 0.4) <= 3 * sh.se, `ST-1. 🦶 🤖 판 ${sh.n}번 — 약발 상황 ${sh.w}(${(sh.f * 100).toFixed(1)}% · 0.4 ± 3σ ${(3 * sh.se * 100).toFixed(1)}%p) · 손 판 ${nB}번(약발 ${nW}) · 🦶 = min(0.95, 0.75 + 0.13 × 단계)(0 · 1 · 2단계) · 🫀 = condMul(30 · 51 · 80) · 판이 받은 sit이 그 값 그대로` + (b1.length ? `\n     🔴 ${b1.slice(0, 3).join(" · ")}` : ""));
   check(b4.length === 0 && nB > 100, `ST-4. 🎯 승산 줄 = 판정 확률 — 판 ${nB}번의 \`odds(s)\` == round(100 × cardP(autoP(kind, 내 능력치), 내 능력치, s))` + (b4.length ? `\n     🔴 ${b4.slice(0, 3).join(" · ")}` : ""));
   check(b5.length === 0, `ST-5. 📍 q — 판 ${nB}번이 cardP(autoP(kind, 민재 64), 64, 0.5 × (약발 상황 ? 0.75 : 1))` + (b5.length ? `\n     🔴 ${b5.slice(0, 3).join(" · ")}` : ""));
   /* ST-2 — 🤖 */
@@ -109,6 +119,31 @@ const sig = (info) => JSON.stringify([info.teamGoals, info.oppGoals, (info.cards
   };
   const same = await st3(null);
   check(same === 300, `ST-3. 🎲 상황 난수 따로 — 배수를 1로 묶으면 「상황을 뽑는 🤖」 = 「안 뽑는 🤖」 경기 ${same} / 300`);
+  /* ST-6 — 약발 경험 1.5 */
+  async function st6(muts) {
+    const W = bootPage({ fastTimers: true, muts });
+    for (let i = 0; i < 400 && !W.document.querySelector("#w2-entry"); i++) await wait(5);
+    const X = W.W2World;
+    const base = { v: 2, act: 1, seed: 5, preset: "jiho", gender: "m", name: "나", pos: "wg", foot: "R", no: 11, week: 5, ph: 0,
+      stats: Object.fromEntries(K6.map((k) => [k, 50])), world: X.create(5, "wg", "m") };
+    const got = [];
+    for (const xp of [1.4, 1.5, 2.9, 3.0, 9]) {
+      W.localStorage.setItem("winger2-save-v2", JSON.stringify(Object.assign({}, base, { weakXp: xp })));
+      const sv = W.W2Game.loadSave();
+      got.push(sv ? sv.weak : null);
+    }
+    W.close();
+    return { ok: JSON.stringify(got) === "[0,1,1,2,2]", got };
+  }
+  const s6 = await st6(null);
+  check(s6.ok, `ST-6. 🦶 약발 한 단계 = 경험 1.5 — weakXp 1.4 · 1.5 · 2.9 · 3.0 · 9 → 단계 ${s6.got.join(" · ")}(0 · 1 · 1 · 2 · 2)`);
+  /* ST-7 — 손 ≡ 🤖 */
+  async function st7(muts) {
+    const a = await matches(muts, L3, "real"), b = await matches(muts, L3, false);
+    return a.filter((r, i) => sig(r.info) === sig(b[i].info)).length;
+  }
+  const s7 = await st7(null);
+  check(s7 === 300, `ST-7. 🤝 손 ≡ 🤖 — 진짜 판 값(\`_t.values\` · 아무 칸)으로 둔 경기 = 🤖 경기 ${s7} / 300`);
   /* 🧪 변이 */
   if (fail === 0) {
     const m1 = await matches(MUT.NOHEART, L.slice(0, 12), false);
@@ -121,6 +156,11 @@ const sig = (info) => JSON.stringify([info.teamGoals, info.oppGoals, (info.cards
     check(m4.some((r) => r.info.boards.some((b) => b.weak && Math.abs(b.q - r.cardP(r.autoP(b.kind, 64), 64, 0.375)) > 1e-12)), `변이-Q_NOSIT(q에서 상황 뺌) → ST-5가 빨간불`);
     const m5 = await matches(MUT.NOTOP, L.filter((c) => c.weak === 2).slice(0, 12), true);
     check(m5.some((r) => r.got.some((g) => g.sit.weak && Math.abs(g.sit.foot - FOOT(2)) > 1e-12)), `변이-NOTOP(약발 꼭대기 0.95를 뺌 — 2단계 1.01) → ST-1이 빨간불`);
+    const m6 = await share(MUT.THIRD);
+    check(Math.abs(m6.f - 0.4) > 3 * m6.se, `변이-THIRD(상황 몫 ⅓ 남김 — 43번 §4 #5) → ST-1이 빨간불 (${(m6.f * 100).toFixed(1)}%)`);
+    check(!(await st6(MUT.XP2)).ok, "변이-XP2(한 단계 경험 2.0) → ST-6이 빨간불");
+    const m7 = await st7(MUT.BLK80);
+    check(m7 < 300, `변이-BLK80(🧱만 정답 0.80 — 43번 §4 #1) → ST-7이 빨간불 (같은 경기 ${m7} / 300)`);
   }
   console.log(fail ? `\n❌ ${fail}건 실패` : "\n✅ 통과");
   process.exit(fail ? 1 : 0);

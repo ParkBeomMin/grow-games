@@ -553,7 +553,7 @@ window.W2Scenes = (() => {
   //   { final, cols: [{ k, label, v, max, note, open?, left? }], total, tier, T?, doors?, memo?, coach?, week? }
   //   중간(final: false)은 구간 도장 대신 **11월 문턱 자** — 채운 칸 = 지금 합 · 빗금 = 아직 안 한 칸의 **최대**(36번 §6)
   // ═══════════════════════════════════════════════════════════════
-  const COL_EMO = { body: "🏋️", skill: "🎮", record: "⚽", stage: "🏆", test: "🎯" };
+  const COL_EMO = { body: "🏋️", care: "🫀", skill: "🎮", record: "⚽", stage: "🏆", test: "🎯" };   // 🫀 관리 — 옛 🎮 솜씨 자리(44번 7′) · 옛 세이브의 얼린 평가서는 `skill` 그대로라 둘 다 받아요
   /* 📏 11월 문턱 자(36번 §6-2) — 문턱 셋은 **규칙**(✉️ 「이 문은 「상」일 때 열려요」와 같은 종류의 사실) ·
    *    채운 칸 = 지금 합 · 빗금 = 아직 안 한 칸의 **최대**. 🔒 예측 0 — 「보통은 몇 점」 · 「닿을 확률」을 안 적어요.
    *    자의 양끝은 문턱 셋과 지금 합이 다 들어오게 10점 단위로 잡고 글자로 적어요(줄인 자임을 숨기지 않게) */
@@ -659,7 +659,7 @@ window.W2Scenes = (() => {
         x.doors.forEach((d) => dl.appendChild(h("li", d.open === false ? "" : "is-open", `${d.open === false ? "🔒" : "•"} ${str(d.label)}${d.open === false ? " — 닫힌 문" : ""}`)));
         panel.appendChild(dl);
       }
-      const memo = x.memo || (mid ? "11월엔 달라질 수 있어요 — 🏋️ 몸 · 🎮 솜씨 · ⚽ 기록은 지금까지의 값이고, 빗금은 아직 안 한 칸이 줄 수 있는 최대예요" : "");
+      const memo = x.memo || (mid ? "11월엔 달라질 수 있어요 — 🏋️ 몸 · 🫀 관리 · ⚽ 기록은 지금까지의 값이고, 빗금은 아직 안 한 칸이 줄 수 있는 최대예요" : "");
       if (memo) panel.appendChild(h("p", "w2o-memo", memo));
       const ok = btn("btn btn-primary w2o-ok", "다음 ▶");
       panel.appendChild(ok);
@@ -1349,7 +1349,8 @@ window.W2Scenes = (() => {
   const SHARED_NOTE = "🔗 이 기기의 다른 그로우 게임에도 같이 적용돼요";
   const G = () => window.W2Game || null;
   const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
-  /* 🔬 베타 측정(계약 17 · 15번 J8) — 손으로 둔 판만(🤖 빼고) · 이 기기 누적. **베타가 아니면 칸 0**.
+  /* 🔬 베타 측정(44번 §2-17 · 42번 §5) — 손으로 둔 판만(🤖 빼고) · 이 기기 누적 · 판 종류마다 `{ n, msSum, cells[6] }`만.
+   *    판정 0 — 판 시간 · 고른 칸의 쏠림을 보는 칸이에요. **베타가 아니면 칸 0**.
    *    📋 한 줄 글 = 사람이 읽는 요약 + `raw`(boardStats 그대로 — 숫자가 어긋날 자리를 안 만들어요) */
   function betaBox(status) {
     const g = G();
@@ -1360,14 +1361,15 @@ window.W2Scenes = (() => {
     const t = st && typeof st === "object" ? st : {};
     const B = t.block || {}, Sh = t.shot || {}, C = t.cut || {};
     const n = (v) => (fin(v) ? +v : 0);
-    const per = (a, b) => (n(b) ? `${Math.round((n(a) / n(b)) * 100)}%` : "—");
-    const avg = (sum, cnt) => (n(cnt) ? (n(sum) / n(cnt)).toFixed(3) : "—");
     const sec = (ms, cnt) => (n(cnt) ? `${(n(ms) / n(cnt) / 1000).toFixed(2)}초` : "—");
-    const rows = [
-      ["🧱 막기", `${n(B.n)}판 · 판 값 평균 ${avg(B.sSum, B.n)} · 맞힘 잘 보임 ${n(B.clearHit)}/${n(B.clear)}(${per(B.clearHit, B.clear)}) · 흐림 ${n(B.dimHit)}/${n(B.dim)}(${per(B.dimHit, B.dim)}) · 시간 초과 ${n(B.timeout)}(${per(B.timeout, B.n)}) · 고름 ${sec(B.msSum, B.n)}`],
-      ["🥅 슈팅", `${n(Sh.n)}판 · 고름 ${sec(Sh.msSum, Sh.n)}`],
-      ["🅰️ 컷백", `${n(C.n)}판 · 고름 ${sec(C.msSum, C.n)}`],
-    ];
+    /* 고른 칸 여섯(1~6번) — 가장 많이 고른 칸은 같은 수면 앞 번호(쏠림이 없으면 「고르게」) */
+    const cellsOf = (x) => [0, 1, 2, 3, 4, 5].map((i) => n(Array.isArray(x.cells) ? x.cells[i] : 0));
+    const row = (x) => {
+      const c = cellsOf(x), top = Math.max(...c);
+      const most = !n(x.n) ? "" : c.every((v) => v === top) ? " · 고르게" : ` · 가장 많이 ${c.indexOf(top) + 1}번`;
+      return `${n(x.n)}판 · 고름 평균 ${sec(x.msSum, x.n)} · 칸 ${c.join("·")}${most}`;
+    };
+    const rows = [["🥅 슈팅", row(Sh)], ["🅰️ 컷백", row(C)], ["🧱 막기", row(B)]];
     const dl = h("dl", "w2s-stats");
     rows.forEach(([k, v]) => put(dl, put(h("div"), h("dt", null, k), h("dd", null, v))));
     const line = `더윙어II 베타측정 ${today()} | ${rows.map(([k, v]) => `${k} ${v}`).join(" | ")} | raw ${JSON.stringify({ block: B, shot: Sh, cut: C })}`;
@@ -1387,7 +1389,7 @@ window.W2Scenes = (() => {
       status.textContent = "📋 복사가 막혔어요 — 글을 골라 두었어요. 길게 눌러 복사해 주세요";
     });
     put(box, h("h3", "w2s-h", "🔬 베타 측정"),
-      h("p", "w2s-desc", "손으로 둔 판만 모아요(🤖 자동 빼고 · 이 기기 누적) — 실기기 사람의 판 값을 맞추는 데 써요"),
+      h("p", "w2s-desc", "손으로 둔 판만 모아요(🤖 자동 빼고 · 이 기기 누적) — 고르는 시간과 고른 칸(1~6번)만 세요. 결과엔 안 닿아요"),
       dl, copy, out);
     return box;
   }
@@ -1415,7 +1417,7 @@ window.W2Scenes = (() => {
       let items = [];
       try { items = S && typeof S.list === "function" ? S.list() : []; } catch (e) { console.error(e); }
       (Array.isArray(items) ? items : []).forEach((it, idx) => {
-        if (!it || it.k == null) return;
+        if (!it || it.k == null || it.applies === false) return;   // `applies: false` — 이 게임엔 닿는 곳이 없는 칸(♿ 판정 넓게 — 44번 §2-14) · 공유 키 값은 안 건드려요
         const id = `w2s-${seq}-${idx}`;
         const row = h("label", `w2s-row${it.locked ? " is-locked" : ""}`);
         row.htmlFor = id;

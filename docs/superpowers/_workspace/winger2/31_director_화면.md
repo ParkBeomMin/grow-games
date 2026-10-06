@@ -503,3 +503,35 @@ W2Scenes.film(/* W2Film.build 모양 — head + ch[] */);  W2Scenes.book(/* open
 4. 🥅 내 축구화를 판 폭 8 → 12%로 키웠어요.
 - 🟡 🧱 준비 자세의 `chibi-base`는 한 발로 공을 밟은 그림이라 공이 하나 더 보여요. 늘 같은 자리라 0정보지만 거슬리면 공 없는 「나」 그림 한 장(정면 · 대칭)이 필요해요.
 - 결과: `smoke-test beta` 0 · `check-page-test` 0 · `tests/winger2/` **41종 모두 0**(inspector가 옮긴 boundary · moments-count · 판 그림 검사 포함) · 캡처 `scratchpad/winger2-art/qa/board-*-0.png`(고르기 전) · `-1.png`(결과) 12장면(「나」 없는 🧱 `block-nome` 물러섬 장면 포함)
+
+## reach · spread 배선 마무리 · 🧱 감의 판 목업(10-05)
+
+- `sw.js` `ASSETS`에 `m-gk-{m,f}-{reach,spread}` 4장 · `CACHE` `winger2-v4 → v5`. `art/` 151장이 전부 `ASSETS`에 있어요(빠진 것 0).
+- 캡처: `qa/board-goal-reach(-320).png`(서아 · 가운데 위 · 크로스바 위) · `qa/board-goal-spread(-320).png`(태오 · 가운데 아래 버팀).
+- 🧱 감의 판 목업 `qa/block-chance-1 · 2 · 3(-320).png` — 41번 §9. 코드는 42번 뒤.
+- 테스트: smoke 0 · check-page 0 · `tests/winger2/` 44개 중 43개 0(anchor · story · flow는 부하로 시간 초과 → 하나씩 다시 돌려 0) · **boundary-test 1** — 41번 키 27을 박아 둔 K-W2 · K-5가 reach · spread 4장을 「표가 안 닿는 파일」로 봄(키퍼 7자세 = 31). 검사기가 고칠 곳은 `M_KEYS`의 gk 자세 목록 · 숫자 147 → 151 · 27 → 31.
+
+## v3 — 판 셋 모두 감 · 🧱 안 C · 🫀 관리 칸(10-06 · 44번 계약)
+
+**판(`beta/winger-moment.js`)**
+- 🧱도 여섯 칸 0.5 · 시간 제한 없음. 퇴역: 디딤발(`m-boot` 벡터 · 그림) · 길 부채꼴 · 흐림 다리(`m-leg`) · 4초 · ⏳ · 시간 초과 · `_t.pin` · `laneDeg` · `TUNE.READ_*` · `DIM` · `PICK_MS` · `WIDE` · `WARN_MS`. `opts.wide`는 받지 않아요(넘겨도 무시).
+- `values()` — 판 셋 모두 `[0.5 × 6]`. cb `{ s, sBoard: 0.5, cell, target: null, seen: null, weak, ms }`(3′).
+- 🧱 장면 안 C(41번 §9): 슈터 등 뒤에서 본 우리 골문. 위 골문(기둥을 판 끝까지 — 길 하나 = 판 폭 ⅙ · 320px에서 45 × 106px) · 골라인에 우리 키퍼(태오 · 서아) · 골문 앞 오른쪽에 「나」 `{preset}-{g}-chibi-guard`(정면 · 공 없음) · 아래 왼쪽에 슈터 뒷모습 `m-shooter-{g}-back` · 공. 「나」가 없으면 지금의 원형 말 · 슈터 그림을 못 받으면 뒷모습 실루엣.
+- 결과(42번 §2 · 🥅와 같은 문법 · 연출 난수 `r[2]` · `r[3]`만 — 판 하나에 4번 고정은 그대로):
+  - 막음: 고른 길로 몸 던짐(`chibi-block`) + 공이 몸에 맞고 튕김 · 15%는 다른 길 → 「압박에 서두른 슛이 크로스바 위로」
+  - 실점: 다른 길로 그물(이웃이면 「한 길 차이로」) · 15%는 같은 길 → 「발끝을 스치고 들어갔어요」
+  - 해설 한 줄 「⚽ 슛은 왼쪽에서 N째 길로 왔어요」(고른 뒤에만)
+- 문구: 왜 줄 「🎲 감으로 — 어느 길이든 승산은 같아요」 · 안내 「👆 여섯 길 중 한 곳을 눌러요」 · 고른 뒤 「🎯 52% — 슈터는 어디로?」 · 처음 세 번 전문은 새 열쇠 `w2v5-block`(42번 §2 전문 그대로 · 예시 그림은 본 판과 같은 그리기 함수).
+
+**그림 · 캐시** — `art.js` 주인공 표에 `chibi-guard`(대체 문구 「막을 준비」) · 판 그림 표에 `m-shooter-{g}-back`. 표 126 + 33 = `art/` 159장. `sw.js` `ASSETS` 8장 · `CACHE` `winger2-v6`. 그 뒤 오케스트레이터 지시로 부르는 판이 없는 `m-leg` · 앞모습 `m-shooter-{m,f}` 3장을 `art/` · 표 · `ASSETS`에서 지움 → 156장(표 126 + 30) · `CACHE` `winger2-v7`(`m-boot`는 🥅 차는 발이라 남김).
+
+**평가서 · 설정 · 베타 측정(`scenes.js` · `style.css`)**
+- 평가서 칸 이모지에 `care 🫀`를 더함(옛 세이브의 얼린 평가서 `skill 🎮`도 그대로 받음). 칸 글 · 자세히는 `sheet.js`(engineer)가 주는 그대로 그려요(42번 §3-3 문구는 그쪽). 중간 평가서 메모 「🏋️ 몸 · 🫀 관리 · ⚽ 기록은 지금까지의 값」.
+- ⚙️ 설정: `list()`에서 `applies: false`인 줄은 그리지 않아요(♿ 판정 넓게 — 공유 키 값은 안 건드림).
+- 🔬 베타 측정: 판 종류마다 「N판 · 고름 평균 X초 · 칸 a·b·c·d·e·f · 가장 많이 N번(같으면 고르게)」. 맞힌 몫 · 흐림 · 시간 초과 · `sSum` 글은 뺐어요. 📋 한 줄의 `raw`는 `boardStats()` 그대로.
+
+**확인 페이지(`check.html` · `check.js`)** — 「🧱 디딤발 보임」 손잡이 · 「♿ 고를 시간 넉넉히」 칸 · 맞힌 몫 세기를 뺐어요. 결과 표의 「정답 칸」 줄은 「단서 — 없음 · target null · seen null」로(계약 3′을 눈으로 봄). 그 아래에 판 셋의 고른 칸 분포(1~6번). 「한 해를 뛴 판」 가짜 기록은 `sN` · `sSum` 대신 `cN` · `cSum`(경기 날 컨디션 평균 62 · 58).
+
+**캡처** — `scratchpad/winger2-art/qa/board-v3-*.png`(390 · `-320`, `-0` 고르기 전 · `-1` 결과): 🥅 `goal` · `goal-save` · ⚡ `cut` · `cut-miss` · 🧱 `block-m` · `block-f` · `block-haram-f` · `block-doyun-m` · `block-nome`(「나」 없음). 그림 다 섬 · 칸 44px 이상 · cb 모양 확인(`scratchpad/v2/v3-render.js` 18/18).
+
+**테스트(v3 · engineer 몫이 들어간 뒤)** — smoke 0 · check-page 0 · `tests/winger2/` 42개 중 28개 0 · 14개 빨강이고 모두 44번 계약 바뀜 탓(검사는 손대지 않음): 🧱 시간 초과 · `pin` · 디딤발 단서 · 정답 0.80/0.44 퇴역(ceil-perfect B-5 · mirror B-1 · one-grid B-4 · raf B-6) · `skill` → `care` · 새 T · `n_pos`(sheet P-4 · P-5 · visible V-4c · rev3 R3-2 · anchor · tech TT-4 · flow F-2b) · 약발 몫 0.4(sit ST-1) · 업적 라벨(rev3 R3-4) · `boardStats` 새 모양(settings BM-1) · 그림 159장 · 41번 키 27 박은 값(boundary K-W2 · K-5) · 변이 정규식이 옛 소스 문장을 찾음(「0.」 줄 여럿).

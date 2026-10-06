@@ -39,10 +39,11 @@ const MUT_S = {
   /* V-5 — 🤝 신뢰가 합계에 들어감 */
   M_TRUST: [[/const total = t10\.reduce\(\(a, b\) => a \+ b, 0\) \/ 10;/, "const total = t10.reduce((a, b) => a + b, 0) / 10 + (Number(S.trust) || 0) * 0.5;"]],
   /* V-4b — 10-03 전으로: 칸마다 따로 반올림 · 합계는 원래 합의 반올림(칸 합과 0.1 갈릴 수 있음) */
-  M_EACH: [[/const t10 = tenths\(\[body, skill, record, stagePt, test\]\);/, "const t10 = [body, skill, record, stagePt, test].map((v) => Math.round(v * 10));"],
-    [/const total = t10\.reduce\(\(a, b\) => a \+ b, 0\) \/ 10;/, "const total = Math.round((body + skill + record + stagePt + test) * 10) / 10;"]],
+  /* 🔄 v3: 🎮 솜씨 칸 → 🫀 관리 칸(`care` — 44번 §1) */
+  M_EACH: [[/const t10 = tenths\(\[body, care, record, stagePt, test\]\);/, "const t10 = [body, care, record, stagePt, test].map((v) => Math.round(v * 10));"],
+    [/const total = t10\.reduce\(\(a, b\) => a \+ b, 0\) \/ 10;/, "const total = Math.round((body + care + record + stagePt + test) * 10) / 10;"]],
   /* V-4c — 구간을 원래 합(두 자리 · 24번 문턱)으로 */
-  M_RAWTIER: [[/const tier = final \? tierOf\(total\) : null;/, 'const tier = final ? ((x) => (x >= 64.43 ? "top" : x >= 57.44 ? "high" : x >= 50.82 ? "mid" : "low"))(body + skill + record + stagePt + test) : null;']],
+  M_RAWTIER: [[/const tier = final \? tierOf\(total\) : null;/, 'const tier = final ? ((x) => (x >= 66.36 ? "top" : x >= 59.40 ? "high" : x >= 52.77 ? "mid" : "low"))(body + care + record + stagePt + test) : null;']],
 };
 const SSRC = fs.readFileSync(path.join(PAGE_DIR, "sheet.js"), "utf8");
 {
@@ -224,7 +225,7 @@ async function v1(muts, seeds) {
   check(d.bad4.length === 0, `V-4. 📋 평가서 120장(중간 · 최종) — 칸 합 == \`total\` · 구간 == 문턱표 (어긋남 ${d.bad4.length})` + (d.bad4.length ? `\n     🔴 ${d.bad4.slice(0, 3).join(" · ")}` : ""));
   check(d.bad5.length === 0, `V-5. 📝 감독 의견은 **점수 0** — 🤝 −6 · 0 · +6에서 칸 · 합계가 같고 의견 한 줄만 바뀜 (60판 · 어긋남 ${d.bad5.length})` + (d.bad5.length ? `\n     🔴 ${d.bad5.slice(0, 3).join(" · ")}` : ""));
   /* ══════════ V-4b · V-4c — 진짜 화면에 그려진 숫자로 ══════════ */
-  const T1 = { top: 644, high: 574, mid: 508 };       // 🔒 38번 §5 — 한 자리 문턱 64.4 · 57.4 · 50.8을 0.1 단위 정수로 · 박은 값(중간 평가서엔 도장 없음 — 7′)
+  const T1 = { top: 664, high: 594, mid: 528 };       // 🔒 44번 §1 — 한 자리 문턱 66.4 · 59.4 · 52.8을 0.1 단위 정수로 · 박은 값(중간 평가서엔 도장 없음 — 7′)
   const TNAME = { top: "최상", high: "상", mid: "중", low: "하" };
   const tierOfShown = (t10) => (t10 >= T1.top ? "top" : t10 >= T1.high ? "high" : t10 >= T1.mid ? "mid" : "low");
   /* 문턱 바로 위 · 0.1 아래 판 — 속도 하나를 이분 탐색으로 움직여 **화면 합계가 문턱을 막 넘는 자리**를 찾아요.

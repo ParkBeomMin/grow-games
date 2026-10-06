@@ -1,6 +1,6 @@
 /* ⚽ 더 윙어 II 1막 v2 — 🎮 **새 판 셋**(🥅 슈팅 · 🅰️ 컷백 · 🧱 막기) 검사 장치 · 절 묶음 (2026-10-05 · inspector)
  *
- * 정본: 38번 §2 계약 3′ · §5(칸 값) · §6 3′-a~f · 37번 §4(1~4 · 7 · 12) · 36번 §16-5 · 31번 v2-5(검사 창구 `W2Moment._t`)
+ * 정본: 44번(v3 — 38번보다 우선) · 38번 §2 계약 3′ · §6 3′-a~f · 37번 §4(1~4 · 7 · 12) · 43번 §4 #1 · #2 · 31번 v2-5(검사 창구 `W2Moment._t`)
  * 진짜 `beta/winger-moment.js`를 jsdom에 싣고(엔진 함께) **가상 시계**로 돌립니다 — `setTimeout` · `performance.now`를 검사가 쥠
  * (4초 · 5.2초 같은 제한을 실제로 기다리지 않고, 「몇 ms 뒤에 끝났나」를 그대로 잽니다).
  * 옛 판 검사 일곱(mirror · one-grid · ceil-perfect · tier-in · moment · minigame-tap · raf)이 이 파일의 절을 나눠 부릅니다.
@@ -9,7 +9,10 @@
 "use strict";
 const { momentDom, pressDom, momentMutsOK } = require("./_load.js");
 
-const HIT = 0.80, MISS = 0.44, FLAT = 0.5, PICK_MS = 4000, WIDE_MS = 5200, FAST_MS = 400;   // 🔒 38번 §5 · 36번 §7-1
+const FLAT = 0.5, FAST_MS = 400;   // 🔒 44번 §1(판 셋 모두 여섯 칸 0.5 · 시간 제한 없음) · 36번 §7-1
+/* 🪦 v3 퇴역(44번 §1 · J9 「🧱도 감」): 🧱 정답 0.80 · 나머지 0.44 · 흐림 50% · 4초(♿ 5.2초) · 시간 초과 · 디딤발 단서 —
+ *    그 뜻을 지키던 절(B-1의 0.80/0.44 · B-3 보임 · B-4 거짓 0 = 공의 길 = 디딤발 · B-6 시간 초과)은 아래 새 뜻으로 바꿈 */
+const ORD = ["첫째", "둘째", "셋째", "넷째", "다섯째", "여섯째"];
 const KINDS = ["goal", "assist", "defend"];
 const close9 = (a, b) => Math.abs(a - b) < 1e-9;
 
@@ -65,48 +68,41 @@ function boardEnv(muts) {
 
 /* ══════════════════ 절 ══════════════════ */
 const SECTIONS = {};
+const BLOCK4S = [[/const opened = nowMs\(\);\n(\s+)let picked = false;/, 'const opened = nowMs();\n$1let picked = false; if (B.kind === "defend") setTimeout(() => choose(0), 4000);']];
 
-/* B-1 여섯 칸 평균(37번 §4 #1) — 판이 쓰는 칸 값 함수(`_t.values`)와 실제로 고른 칸의 `sBoard` */
+/* B-1 여섯 칸 0.5(37번 §4 #1 → 44번 §1) — 판 셋 모두 여섯 칸 0.5 · 실제로 고른 칸의 `sBoard` */
 SECTIONS["B-1"] = {
-  title: "여섯 칸 평균 0.5 — 🥅 · 🅰️ 여섯 칸 0.5 · 🧱 정답 0.80 + 나머지 0.44 × 5",
-  muts: { MISS45: [[/READ_MISS: 0\.44,/, "READ_MISS: 0.45,"]] },
+  title: "여섯 칸 0.5 — 🥅 · 🅰️ · 🧱 판 셋 모두 여섯 칸 0.5(v3 · 🧱 0.80 / 0.44 퇴역)",
+  muts: { BLK80: [[/const values = \(\) => \[0, 1, 2, 3, 4, 5\]\.map\(\(\) => TUNE\.FLAT\);/, "const values = () => [0, 1, 2, 3, 4, 5].map((i) => (i === 0 ? 0.80 : 0.44));"]] },
   run(muts) {
     const E = boardEnv(muts);
     const V = E.W.W2Moment._t.values;
     const bad = [];
-    for (const kind of KINDS) for (let t = 0; t < 6; t++) {
-      const v = V(kind, t);
-      const mean = v.reduce((a, b) => a + b, 0) / 6;
-      if (!close9(mean, 0.5)) bad.push(`${kind}/${t}: 평균 ${mean}`);
-      const want = kind === "defend" ? v.map((x, i) => (i === t ? HIT : MISS)) : v.map(() => FLAT);
-      if (JSON.stringify(v) !== JSON.stringify(want)) bad.push(`${kind}/${t}: ${v.join(",")}`);
-    }
-    /* 실제 판 — 칸마다 눌러 `sBoard` == 표 */
+    const v = V("defend", 0);
+    if (JSON.stringify(v) !== JSON.stringify([FLAT, FLAT, FLAT, FLAT, FLAT, FLAT])) bad.push(`values ${v.join(",")}`);
     for (const kind of KINDS) for (let i = 0; i < 6; i++) {
       E.W.W2Moment._t.seed(100 + i);
       const b = E.open(kind);
       b.pick(i);
       const r = b.finish();
-      const want = kind === "defend" ? (r && r.d.target === i ? HIT : MISS) : FLAT;
-      if (!r || !close9(r.d.sBoard, want)) bad.push(`${kind} 칸 ${i}: sBoard ${r && r.d.sBoard} ≠ ${want}`);
+      if (!r || !close9(r.d.sBoard, FLAT)) bad.push(`${kind} 칸 ${i}: sBoard ${r && r.d.sBoard}`);
     }
-    return { ok: bad.length === 0, msg: `칸 값 표 3종 × 정답 6 · 실제 판 18번 — 평균 0.5 · 🧱 0.80 / 0.44`, bad };
+    return { ok: bad.length === 0, msg: "칸 값 표 · 실제 판 18번(판 셋 × 칸 여섯) — 모두 0.5", bad };
   },
 };
 
-/* B-2 🥅 · 🅰️ 평평(37번 §4 #2 · 36번 §16-5) — 손 · 🤖 같은 `s` · 시간 제한 없음 · 🅰️ 고르기 전 수비 0 */
+/* B-2 손 ≡ 🤖 · 시간 제한 없음(37번 §4 #2 · 43번 §4 #1 · #2) — 판 셋 모두 */
 SECTIONS["B-2"] = {
-  title: "🥅 · 🅰️ 평평 — 같은 상황이면 손 · 🤖의 `s` 비트 같음 · 시간 제한 없음 · 🅰️ 고르기 전 그림에 수비 0",
+  title: "손 ≡ 🤖 — 판 셋 모두 같은 상황이면 손 · 🤖의 `s` 비트 같음 · 시간 제한 없음(🧱 포함) · 🅰️ 고르기 전 그림에 수비 0",
   muts: {
-    ONE55: [[/\.map\(\(i\) => \(kind === "defend" \? \(i === target \? TUNE\.READ_HIT : TUNE\.READ_MISS\) : TUNE\.FLAT\)\);/,
-      '.map((i) => (kind === "defend" ? (i === target ? TUNE.READ_HIT : TUNE.READ_MISS) : (i === 2 ? 0.55 : TUNE.FLAT)));']],
-    CUT4S: [[/B\.limit = B\.kind === "defend" \?/, 'B.limit = B.kind !== "goal" ?'], [/if \(B\.kind === "defend"\) \{\n(\s+)\/\* ⏳/, 'if (B.kind !== "goal") {\n$1/* ⏳']],
+    ONE55: [[/const values = \(\) => \[0, 1, 2, 3, 4, 5\]\.map\(\(\) => TUNE\.FLAT\);/, "const values = () => [0, 1, 2, 3, 4, 5].map((i) => (i === 2 ? 0.55 : TUNE.FLAT));"]],
+    BLOCK4S,
   },
   run(muts) {
     const E = boardEnv(muts);
     const bad = [];
     const sit = { weak: true, step: 1, foot: 0.88, cond: 0.93 };
-    for (const kind of ["goal", "assist"]) {
+    for (const kind of KINDS) {
       const auto = (() => { const b = E.open(kind, { slot: null, sit }); return b.res; })();
       for (let i = 0; i < 6; i++) {
         const b = E.open(kind, { sit });
@@ -123,88 +119,89 @@ SECTIONS["B-2"] = {
       const def = b.host.querySelectorAll(".w2m-def, .w2m-opp, [class*='def'], .a-opp").length;
       if (def) bad.push(`🅰️ 고르기 전 그림에 수비 ${def}`);
     }
-    return { ok: bad.length === 0, msg: "🥅 · 🅰️ 칸 여섯 × 상황(약발 1단계 · 🫀 0.93)에서 손 s == 🤖 s · 60초 기다려도 판이 안 끝남 · 🅰️ 수비 그림 0", bad };
+    return { ok: bad.length === 0, msg: "판 셋 × 칸 여섯 × 상황(약발 1단계 · 🫀 0.93)에서 손 s == 🤖 s · 60초 기다려도 판이 안 끝남 · 🅰️ 수비 그림 0", bad };
   },
 };
 
-/* B-3 보임이 값을 안 바꿈(37번 §4 #3) — 🧱 정답 칸이면 `clear` · `dim` 같은 `sBoard` */
+/* B-3 🧱 감(43번 §4 #2 · 44번 3′) — 단서 0: 디딤발 · 흐림 그림 0 · 단서 글 「없음」 · cb `target` · `seen` 늘 null · 안내 열쇠 `w2v5-block` */
 SECTIONS["B-3"] = {
-  title: "보임이 값을 안 바꿈 — 🧱 정답 칸 `sBoard`가 `clear` · `dim`에서 같음 · 흐림은 반쯤",
-  muts: { DIM70: [[/const sBoard = timeout \? 0 : B\.vals\[i\];/, 'const sBoard = timeout ? 0 : (B.seen === "dim" && i === B.target ? 0.70 : B.vals[i]);']] },
+  title: "🧱 감 — 고르기 전 디딤발 · 흐림 · 길 표시 0 · 단서 글 「단서 없음」 · cb `target` · `seen` 늘 null(판 셋) · 처음 세 번 안내 열쇠 `w2v5-block`",
+  muts: {
+    TARGET: [[/B\.cb\(j, \{ s, sBoard, cell: i, target: null, seen: null, weak: B\.sit\.weak, ms \}\);/, 'B.cb(j, { s, sBoard, cell: i, target: i, seen: "clear", weak: B.sit.weak, ms });']],
+    OLDKEY: [[/key: "w2v5-block",/, 'key: "w2v4-block",']],
+  },
   run(muts) {
     const E = boardEnv(muts);
-    const by = { clear: new Set(), dim: new Set() }, miss = { clear: new Set(), dim: new Set() };
-    let dim = 0, n = 0;
-    for (let seed = 1; seed <= 120; seed++) {
+    const bad = [];
+    for (let seed = 1; seed <= 24; seed++) for (const kind of KINDS) {
       E.W.W2Moment._t.seed(seed * 7919);
-      const b = E.open("defend");
-      const clue = b.host.querySelector(".w2m-clue").textContent;
-      const tgt = ["첫째", "둘째", "셋째", "넷째", "다섯째", "여섯째"].findIndex((w) => clue.indexOf(`${w} 길`) >= 0);
-      const pickHit = seed % 2 === 0;
-      b.pick(pickHit ? tgt : (tgt + 1) % 6);
+      const b = E.open(kind);
+      const H = b.host;
+      const clue = (H.querySelector(".w2m-clue") || {}).textContent || "";
+      if (clue.indexOf("단서 없음") < 0) bad.push(`${kind} 단서 「${clue}」`);
+      const stud = H.querySelectorAll(".a-leg, .a-legimg, .a-boot, .w2m-dim, [data-lane], .is-target").length;
+      if (stud) bad.push(`${kind} 고르기 전 단서 그림 ${stud}`);
+      if (kind === "defend" && ORD.some((w) => H.textContent.indexOf(`${w} 길`) >= 0)) bad.push("🧱 고르기 전 글에 길 이름");
+      b.pick(seed % 6);
       const r = b.finish();
-      n += 1; if (r.d.seen === "dim") dim += 1;
-      (pickHit ? by : miss)[r.d.seen].add(r.d.sBoard);
+      if (!r || r.d.target !== null || r.d.seen !== null) bad.push(`${kind}: target ${r && r.d.target} · seen ${r && r.d.seen}`);
     }
-    const bad = [];
-    if ([...by.clear].join() !== String(HIT) || [...by.dim].join() !== String(HIT)) bad.push(`정답 칸 clear ${[...by.clear]} · dim ${[...by.dim]}`);
-    if ([...miss.clear].join() !== String(MISS) || [...miss.dim].join() !== String(MISS)) bad.push(`다른 칸 clear ${[...miss.clear]} · dim ${[...miss.dim]}`);
-    if (dim < n * 0.35 || dim > n * 0.65) bad.push(`흐림 ${dim}/${n}`);
-    return { ok: bad.length === 0, msg: `🧱 판 ${n}번 — 정답 칸 0.80 · 다른 칸 0.44가 보임과 무관 · 흐림 ${dim}/${n}(≈ 반 · 38번 §5 50%)`, bad };
+    const key = E.W.W2Moment.WORDS && E.W.W2Moment.WORDS.defend && E.W.W2Moment.WORDS.defend.key;
+    if (key !== "w2v5-block") bad.push(`🧱 안내 열쇠 ${key}`);
+    return { ok: bad.length === 0, msg: "판 셋 × 시드 24 — 단서 그림 · 길 이름 0 · target · seen null · 🧱 열쇠 w2v5-block", bad: [...new Set(bad)] };
   },
 };
 
-/* B-4 거짓 0(37번 §4 #4) — 🧱 모든 결과에서 공의 길(`data-lane`) = 디딤발 길 = 단서 글 */
+/* B-4 🧱 결과 그림 = 판정(거짓 0의 새 뜻 · 42번 §2) — 막음은 「막았어요」 · 실점은 「들어갔어요」 · 해설의 길이 문장과 맞음
+ *    (옛 뜻 「공의 길 = 디딤발 = 단서」는 디딤발 퇴역으로 사라짐 · 남는 거짓의 자리는 「그림 · 글이 판정과 어긋남」) */
 SECTIONS["B-4"] = {
-  title: "거짓 0(🧱) — 맞힘 · 틀림 · 시간 초과 모든 결과에서 공의 길(`data-lane`) = 디딤발 길(`target`) = 단서 글",
-  muts: { LIE: [[/d\.ball\.el\.dataset\.lane = String\(B\.target\);/, 'd.ball.el.dataset.lane = String(j === "miss" ? (B.target + 1) % 6 : B.target);']] },
+  title: "거짓 0(🧱 v3) — 막음 = 「🧱 막았어요」 · 실점 = 「😣 …들어갔어요」 · 해설 「슛은 N째 길」이 문장과 맞음(몸으로 막음 · 같은 길 = 고른 길 / 다른 길 · 한 길 차이 ≠ 고른 길)",
+  muts: { LIE: [[/const lane = j === "perfect" \? \(alt \? other : c\) : \(alt \? c : other\);/, "const lane = c;"]] },
   run(muts) {
     const E = boardEnv(muts);
     const bad = [];
-    const ORD = ["첫째", "둘째", "셋째", "넷째", "다섯째", "여섯째"];
     let n = 0;
-    for (let seed = 1; seed <= 36; seed++) {
+    for (let seed = 1; seed <= 60; seed++) {
       E.W.W2Moment._t.seed(seed * 104729);
-      const judge = (s) => ["perfect", "ok", "miss"][seed % 3];
-      const b = E.open("defend", { judge });
-      const clue = b.host.querySelector(".w2m-clue").textContent;
-      const mode = seed % 3;
-      if (mode < 2) b.pick(mode === 0 ? 0 : 5);          // 아무 칸 · 시간 초과(아래)
-      let lane = null;
-      for (let k = 0; k < 400 && !b.res; k++) {
-        E.advance(25);
-        const ball = b.host.querySelector(".w2m-ball[data-lane], [data-lane]");
-        if (ball && lane == null) lane = Number(ball.dataset.lane);
+      const out = ["perfect", "ok", "miss"][seed % 3];
+      const b = E.open("defend", { judge: () => out });
+      const c = seed % 6;
+      b.pick(c);
+      let res = "", note = "";
+      for (let k = 0; k < 800 && !b.res; k++) {
+        E.advance(10);
+        const rt = b.host.querySelector(".w2m-res"); if (rt) res = rt.textContent;
+        const nt = b.host.querySelector(".w2m-note"); if (nt) note = nt.textContent;
       }
-      const r = b.res;
       n += 1;
-      if (!r) { bad.push(`#${seed} 판이 안 끝남`); continue; }
-      if (lane !== r.d.target) bad.push(`#${seed} ${r.j}: 공의 길 ${lane} ≠ 디딤발 ${r.d.target}`);
-      if (clue.indexOf(`${ORD[r.d.target]} 길`) < 0) bad.push(`#${seed}: 단서 「${clue}」 ≠ 길 ${r.d.target}`);
+      const lane = ORD.findIndex((w) => note.indexOf(`${w} 길`) >= 0);
+      const okText = out === "perfect" ? /^🧱 막았어요/.test(res) : /^😣 .*들어갔어요/.test(res);
+      if (!okText) bad.push(`#${seed} ${out}: 「${res}」`);
+      if (lane < 0) { bad.push(`#${seed}: 해설 「${note}」`); continue; }
+      if (/몸으로 막아|같은 길이었는데/.test(res) && lane !== c) bad.push(`#${seed}: 「${res}」인데 길 ${lane} ≠ 고른 ${c}`);
+      if (/다른 길로|한 길 차이/.test(res) && lane === c) bad.push(`#${seed}: 「${res}」인데 길 ${lane} = 고른 ${c}`);
+      if (/한 길 차이/.test(res) && Math.abs(lane - c) !== 1) bad.push(`#${seed}: 한 길 차이인데 ${lane} · ${c}`);
     }
-    return { ok: bad.length === 0 && n === 36, msg: `🧱 판 ${n}번(완벽 · 괜찮음 · 놓침 × 고름 · 시간 초과) — 공의 길 = 디딤발 길 = 단서`, bad };
+    return { ok: bad.length === 0 && n === 60, msg: `🧱 판 ${n}번(완벽 · 괜찮음 · 놓침) — 결과 글이 판정과 같고 해설의 길이 문장과 맞음`, bad };
   },
 };
 
-/* B-5 굴림 한 번(37번 §4 #7 · 3′-c) — 판마다 `judge` 1번(시간 초과도) · cb의 판정 == judge가 낸 것 */
+/* B-5 굴림 한 번(37번 §4 #7 · 3′-c) — 판마다 `judge` 1번 · cb의 판정 == judge가 낸 것(v3: 시간 초과 길 퇴역) */
 SECTIONS["B-5"] = {
-  title: "굴림 한 번 — 판마다 `judge` 정확히 1번(고른 순간 · 시간 초과도 1번) · 판정은 드라이버가 낸 그대로",
+  title: "굴림 한 번 — 판마다 `judge` 정확히 1번 · 판정은 드라이버가 낸 그대로(머리 없는 길 포함)",
   muts: { TWICE: [[/if \(first\) return first;\n/, ""], [/const j = B\.judge\(s\); {0,}(\/\/[^\n]*)?\n/, "const j0 = B.judge(s); const j = B.judge(s);\n"]] },
   run(muts) {
     const E = boardEnv(muts);
     const bad = [];
     let n = 0;
-    for (const kind of KINDS) for (const mode of ["pick", "timeout"]) {
-      if (mode === "timeout" && kind !== "defend") continue;
-      for (let k = 0; k < 4; k++) {
-        const calls = [];
-        const out = ["perfect", "miss", "ok", "perfect"][k];
-        const b = E.open(kind, { judge: (s) => { calls.push(s); return out; } });
-        if (mode === "pick") b.pick(k);
-        const r = b.finish();
-        n += 1;
-        if (calls.length !== 1 || !r || r.j !== out) bad.push(`${kind} ${mode} #${k}: judge ${calls.length}번 · 결과 ${r && r.j} ≠ ${out}`);
-      }
+    for (const kind of KINDS) for (let k = 0; k < 4; k++) {
+      const calls = [];
+      const out = ["perfect", "miss", "ok", "perfect"][k];
+      const b = E.open(kind, { judge: (s) => { calls.push(s); return out; } });
+      b.pick(k);
+      const r = b.finish();
+      n += 1;
+      if (calls.length !== 1 || !r || r.j !== out) bad.push(`${kind} #${k}: judge ${calls.length}번 · 결과 ${r && r.j} ≠ ${out}`);
     }
     const nullCalls = [];
     E.open("goal", { slot: null, judge: (s) => { nullCalls.push(s); return "ok"; } });
@@ -213,42 +210,33 @@ SECTIONS["B-5"] = {
   },
 };
 
-/* B-6 시간 · ⏩ · 움직임 줄이기(37번 §4 #12) */
+/* B-6 시간 · ⏩ · 움직임 줄이기(37번 §4 #12 → v3: 시간 초과 퇴역) */
 SECTIONS["B-6"] = {
-  title: "시간 · ⏩ · 움직임 줄이기 — 🧱 4초(♿ 5.2초) 뒤 `s` 0 · `cell` null · judge 1번 · 🥅 · 🅰️는 시간 초과 없음 · ⏩ 0.4초 · 글 정보 같음",
+  title: "시간 · ⏩ · 움직임 줄이기 — 판 셋 모두 시간 초과 없음(`wide`를 넘겨도 무시) · ⏩ 0.4초 · 움직임 줄이기는 같은 시각표 · 결과 글 같음",
   muts: {
-    GOAL4S: [[/B\.limit = B\.kind === "defend" \?/, "B.limit = true ?"], [/if \(B\.kind === "defend"\) \{\n(\s+)\/\* ⏳/, 'if (true) {\n$1/* ⏳']],
+    BLOCK4S,
     FASTSKIP: [[/const res = el\("p", `w2m-res \$\{j === "perfect" \? "w2m-good" : j === "ok" \? "w2m-mid" : "w2m-bad"\}`, plan\.text\);/,
       'const res = el("p", `w2m-res ${j === "perfect" ? "w2m-good" : j === "ok" ? "w2m-mid" : "w2m-bad"}`, B.fast ? "" : plan.text);']],
   },
   run(muts) {
     const E = boardEnv(muts);
     const bad = [];
-    for (const [wide, lim] of [[false, PICK_MS], [true, WIDE_MS]]) {
-      const calls = [];
-      const b = E.open("defend", { wide, judge: (s) => { calls.push(s); return "miss"; } });
-      const before = b.finish(lim - 10);
-      if (before) bad.push(`🧱 ${lim}ms 전에 끝남`);
-      const r = b.finish(30000);
-      if (!r || r.d.cell !== null || r.d.sBoard !== 0 || r.d.s !== 0 || calls.length !== 1 || r.d.ms !== lim) bad.push(`🧱 시간 초과(${lim}): ${JSON.stringify(r && r.d)} · judge ${calls.length}`);
-    }
-    for (const kind of ["goal", "assist"]) { const b = E.open(kind); if (b.finish(60000)) bad.push(`${kind}: 시간 초과로 끝남`); }
+    for (const kind of KINDS) for (const wide of [false, true]) { const b = E.open(kind, { wide }); if (b.finish(60000)) bad.push(`${kind}${wide ? " · wide" : ""}: 시간 초과로 끝남`); }
     const texts = {};
     for (const mode of ["norm", "fast", "still"]) {
       E.W.W2Moment._t.seed(424242);
       const b = E.open("defend", { fast: mode === "fast", still: mode === "still", judge: () => "perfect" });
       b.pick(2);
-      let resText = null, doneAt = null;
+      let resText = null;
       const t1 = E.now;
       for (let k = 0; k < 2000 && !b.res; k++) { E.advance(5); const rt = b.host.querySelector(".w2m-res"); if (rt) resText = rt.textContent; }
-      doneAt = E.now - t1;
-      texts[mode] = { resText, doneAt };
+      texts[mode] = { resText, doneAt: E.now - t1 };
     }
     if (!(texts.fast.doneAt <= FAST_MS + 30)) bad.push(`⏩ ${texts.fast.doneAt}ms(≤ ${FAST_MS})`);
     if (!(texts.norm.doneAt > FAST_MS * 2)) bad.push(`보통 ${texts.norm.doneAt}ms`);
     if (!texts.norm.resText || texts.fast.resText !== texts.norm.resText || texts.still.resText !== texts.norm.resText) bad.push(`결과 글 — 보통 「${texts.norm.resText}」 · ⏩ 「${texts.fast.resText}」 · 움직임 줄이기 「${texts.still.resText}」`);
-    if (Math.abs(texts.still.doneAt - texts.norm.doneAt) > 30) bad.push(`움직임 줄이기 시간 ${texts.still.doneAt} ≠ 보통 ${texts.norm.doneAt}(같은 시각표에서 모션만 0)`);
-    return { ok: bad.length === 0, msg: `🧱 4000 · 5200ms 정확히 끝남 · 🥅 · 🅰️ 60초에도 안 끝남 · ⏩ ${texts.fast.doneAt}ms · 보통 ${texts.norm.doneAt}ms = 움직임 줄이기 ${texts.still.doneAt}ms · 결과 글 셋 같음`, bad };
+    if (Math.abs(texts.still.doneAt - texts.norm.doneAt) > 30) bad.push(`움직임 줄이기 시간 ${texts.still.doneAt} ≠ 보통 ${texts.norm.doneAt}`);
+    return { ok: bad.length === 0, msg: `판 셋 × (wide 없음 · 있음) 60초에도 안 끝남 · ⏩ ${texts.fast.doneAt}ms · 보통 ${texts.norm.doneAt}ms = 움직임 줄이기 ${texts.still.doneAt}ms · 결과 글 셋 같음`, bad };
   },
 };
 
@@ -276,6 +264,7 @@ SECTIONS["B-7"] = {
       if (!r || Object.keys(r.d).sort().join() !== KEYS) { bad.push(`${kind}: cb 칸 ${r && Object.keys(r.d).sort().join()}`); continue; }
       if (!close9(r.d.s, Math.min(1, Math.max(0, r.d.sBoard * sit.foot * sit.cond)))) bad.push(`${kind}: s ${r.d.s} ≠ ${r.d.sBoard} × ${sit.foot} × ${sit.cond}`);
       if (r.d.weak !== sit.weak) bad.push(`${kind}: weak`);
+      if (r.d.target !== null || r.d.seen !== null) bad.push(`${kind}: target · seen이 null이 아님(44번 3′)`);
     }
     const nb = E.open("defend", { slot: null, sit: sits[1] });
     const d = nb.res && nb.res.d;
@@ -301,29 +290,30 @@ SECTIONS["B-8"] = {
   },
 };
 
-/* B-9 연출 난수 — 판 전용 `fx` · `Math.random` 0 · 판 하나에 4번 고정(결과 · 종류를 안 탐) */
+/* B-9 연출 난수 — 판 전용 `fx` · `Math.random` 0 · 같은 씨앗 · 같은 고름 · 같은 판정이면 같은 결과 그림 */
 SECTIONS["B-9"] = {
-  title: "연출 난수 — `Math.random` 0 · 판 전용 `fx`(같은 씨앗이면 같은 정답 길 · 보임 — 고른 칸 · 결과와 무관 · 판 하나 4번)",
-  muts: { RND: [[/B\.r = \[fx\(\), fx\(\), fx\(\), fx\(\)\];/, "B.r = [Math.random(), fx(), fx(), fx()];"]] },
+  title: "연출 난수 — `Math.random` 0 · 판 전용 `fx`(같은 씨앗 · 고름 · 판정이면 결과 글 · 해설 같음)",
+  muts: { RND: [[/B\.r = \[fx\(\), fx\(\), fx\(\), fx\(\)\];/, "B.r = [Math.random(), fx(), Math.random(), Math.random()];"]] },
   run(muts) {
     const E = boardEnv(muts);
     const bad = [];
     const r0 = E.randomCalls;
-    const seq = (judgeOut, cell) => {
+    const seq = () => {
       E.W.W2Moment._t.seed(31337);
       const out = [];
-      for (let k = 0; k < 4; k++) {
-        const b = E.open(k % 3 === 0 ? "goal" : "defend", { judge: () => judgeOut });
-        b.pick(cell);
-        const r = b.finish();
-        out.push(r.d.target == null ? "-" : `${r.d.target}${r.d.seen}`);
+      for (let k = 0; k < 6; k++) {
+        const b = E.open(KINDS[k % 3], { judge: () => ["perfect", "miss"][k % 2] });
+        b.pick(k);
+        let t = "";
+        for (let q = 0; q < 800 && !b.res; q++) { E.advance(10); const rt = b.host.querySelector(".w2m-res"); const nt = b.host.querySelector(".w2m-note"); if (rt) t = rt.textContent + "|" + (nt ? nt.textContent : ""); }
+        out.push(t);
       }
-      return out.join(",");
+      return out.join(" / ");
     };
-    const a = seq("perfect", 0), b2 = seq("miss", 4);
-    if (a !== b2) bad.push(`같은 씨앗인데 결과 · 고른 칸에 따라 정답 길이 갈림: ${a} ↔ ${b2}`);
+    const a = seq(), b2 = seq();
+    if (a !== b2) bad.push("같은 씨앗 · 같은 고름인데 결과 그림이 갈림");
     if (E.randomCalls !== r0) bad.push(`Math.random ${E.randomCalls - r0}번`);
-    return { ok: bad.length === 0, msg: `판 8번 — Math.random ${E.randomCalls - r0}번 · 같은 씨앗 → 같은 정답 길 · 보임(${a})`, bad };
+    return { ok: bad.length === 0, msg: `판 12번 — Math.random ${E.randomCalls - r0}번 · 같은 씨앗 → 같은 결과`, bad };
   },
 };
 
@@ -355,4 +345,4 @@ async function runSections(ids, label) {
   process.exit(fail ? 1 : 0);
 }
 
-module.exports = { boardEnv, SECTIONS, runSections, HIT, MISS, FLAT, PICK_MS, WIDE_MS };
+module.exports = { boardEnv, SECTIONS, runSections, FLAT };

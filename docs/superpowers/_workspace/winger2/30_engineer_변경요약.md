@@ -542,3 +542,38 @@
 - 약발 2단계면 경기 해설에 `kind: "filler"` 한 줄(「🦶 약발 쪽으로 온 공에도 {me}는 망설이지 않아요 — 이제 양발이에요」 · 경기당 한 번 · `flow` 없음)이 내 판 카드 바로 뒤에 와요
 - 화면 글의 🅰️ 컷백 — 판 제목에 맞춰 engineer 글도 🅰️(⚡는 ⚡ 스피드와 겹침)
 - 오른쪽 위 고정 요소: engineer 화면엔 없음(⚙️와 안 겹침) · 아래 고정은 `#w2-toast` 하나
+
+---
+
+# v3 — 판 셋 모두 감 · 🫀 관리 칸 (engineer · 2026-10-05~06 · 계약 정본 `44_orchestrator_phase3-v3.md`)
+
+## v3 — 바꾼 것
+
+| 파일 | 바꾼 것 |
+|---|---|
+| `sheet.js` | 🎮 솜씨 칸 → **🫀 관리 칸**(키 `care` · 라벨 「🫀 관리」 · `clamp((c̄ − 20) ÷ 50, 0, 1) × 10 × λ` · `CARE_LO` 20 · `CARE_SPAN` 50 · 0경기 0) · 글 「공식 경기 13번 · 경기 날 컨디션 평균 56(70이면 가득)」 · `detail { games, avg, full }` · **퇴역** `SKILL_*` · `READ_K` · ρ · 바닥 8 · `N_POS` 41.27 · 37.68 · 35.70 · 38.58 · `T` 66.4 · 59.4 · 52.8(🔶 뗌) · 중간 평가서 메모 「몸 · 관리 · 기록」 |
+| `game.js` | `record.cSum` · `cN` — **공식 경기(리그 + 대회)** 날 엔진에 넘긴 컨디션(`playLive`가 `info.cond`로 붙임 · 연습경기 · 기술 테스트 · 승부차기는 안 셈) · `sSum` · `sN` · `sAuto`는 더 안 씀(칸만 남김) · 경기 끝 줄 「🫀 경기 날 컨디션 64」(🎮 줄 뺌) · `WEAK_XP` 1.5 · 설정 `wide`는 `list()`에서 `applies: false`(공유 키 · `on("wide")` · 지우기 목록 그대로) · `boardStats()` → 판 종류마다 `{ n, msSum, cells[6] }`(옛 모양이 남아 있어도 `n` · `msSum`만 읽음) · 도움말(판 셋 모두 감 · 「이 게임의 판엔 시간 제한이 없어요」 · 평가서 다섯 칸 · 설정 줄에서 ♿ 뺌) · 🤖 설명 글 |
+| `live.js` | 🦶 약발 상황 몫 **0.4**(배수 그대로) |
+| `achieve.js` | `promise3` · `league` → 전설 · `gift` → 귀함 |
+| `film.js` | 몸 장의 둘째 줄 = 평가서 관리 칸 글(「🫀 …」) · `body.boards` → `body.care { games, avg }` |
+
+## v3 — 세이브 `skill` → `care` (engineer가 정함)
+
+- **다시 셈하지 않고 0에서 차오름.** 옛 v2 세이브엔 경기 날 컨디션 기록이 없어(`games`에 `cond` 없음) 되짚을 수 없어요. `loadSave`가 `blankRecord()`로 `cSum` · `cN`을 0으로 채우고, **다음 공식 경기부터** 셉니다(42번 §3-4 「섞임 대신 비어 있다 차오름」).
+  - 공식 경기를 이미 뛴 옛 판이 `cN` 0이면 칸 글은 「다음 공식 경기부터 셈해요 — 이 판의 앞 경기엔 경기 날 컨디션 기록이 없어요」(0점이 왜 0인지 보이게).
+- **이미 얼린 것은 그대로**: 옛 판의 `S.mid[]` · `S.sheet` · `act1.sheet`의 `skill` 칸은 고치지 않아요(그 시점의 사실 · `act1`은 한 번 얼림). 필름은 `care`가 없으면 `skill` 칸 글을 그대로 써요(🎮).
+- `record.sSum` · `sN` · `sAuto`는 지우지 않고 안 읽어요. 옛 세이브의 `weakXp`는 새 1.5로 다시 나눠 단계를 읽어요(베타 — 오를 수만 있음).
+- 베타 측정의 옛 `winger2-boards`(clear · sSum …)는 읽을 때 `n` · `msSum`만 살리고 `cells`는 0에서.
+
+## v3 — 직접 확인한 것
+
+- `node --check` — `sheet` · `game` · `live` · `achieve` · `film`
+- 1막 끝까지(스텁 장면 · 오류 0) 둘 — 여 수비수 손 · 남 윙어 🤖: 관리 칸 7.3 = (56.38 − 20) ÷ 50 × 10 · `cN` 13 = 공식 경기 수 · 필름 「🫀 공식 경기 13번 · 경기 날 컨디션 평균 56(70이면 가득)」 · `boardStats` = `{ n, msSum, cells }`(손 판만 · 🤖 판 0)
+- 픽스처 4칸 다시 뽑음(v3 세이브 — `cSum` · `cN`) · 회귀 검사 ✅ engine · gender · hub · fence · league · seed-split · situation · pair · fx-count · 스모크(`beta/winger2`)
+
+## v3 — 남은 것 · director에게
+
+- **director**: `scenes.js`의 `COL_EMO`에 `care: "🫀"`가 없어요(지금 `skill: "🎮"`만) — 평가서 칸 이모지 · 🔬 베타 측정 칸이 새 모양(`cells[6]` — 「가장 많이 고른 칸」)을 읽게 · ⚙️ 레이어가 `applies === false` 칸을 숨기게
+- `sw.js`는 지시대로 안 만짐(새 그림 8장과 함께)
+- 판의 `target` · `seen` 늘 `null`(3′)은 director 판의 몫 — 드라이버는 받은 그대로 기록
+- 검사: 솜씨 칸 · `READ_K` · ρ · `sSum`을 보던 검사(auto-mark · sheet · boundary K-8 등)와 `boardStats` 옛 모양은 inspector 갱신 몫(43번 §4 목록)

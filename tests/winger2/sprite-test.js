@@ -1,7 +1,7 @@
 /* ⚽ 더 윙어 II 1막 v2 — 🖼️ **판 그림**(41번 · 31번 「v2 판 그림 배선」) — 그림이 판을 바꾸지 않는가
  *
- *   SG-1  대칭 그림 일곱(`m-gk-{m,f}-ready` · `m-shooter-{m,f}` · `m-mate-{m,f}-ready` · `m-leg`)이 **좌우 뒤집기와 거의 같다**
- *         — 잔디색 바탕에 얹어 뒤집은 것과의 RMSE ≤ 1%(손실 압축 잡음 수준 · 실측 0.40~0.57%). 41번 §3: 기울면 그 자체가 「어느 쪽」 단서
+ *   SG-1  대칭 그림 넷(`m-gk-{m,f}-ready` · `m-mate-{m,f}-ready` — v3에서 슈터 앞모습 · 다리 퇴역)이 **좌우 뒤집기와 거의 같다**
+ *         — 잔디색 바탕에 얹어 뒤집은 것과의 RMSE ≤ 1%(손실 압축 잡음 수준 · 실측 0.51~0.55%). 41번 §3: 기울면 그 자체가 「어느 쪽」 단서
  *         (대조: 한쪽으로 뜨는 그림 `m-gk-m-dive-high` · `m-mate-m-run`은 20% 넘음 — 자가 갈림을 보임)
  *   SG-2  그림을 못 받으면 옛 조각으로 물러섬 — 판 셋 각각: `Art`가 없을 때와 그림이 깨졌을 때(`error`) 조각(`.w2m-pc`) 수가 같고
  *         `<img>` · `.has-img`가 0 · 그림이 받아졌을 땐(`load`) `.has-img`가 섬
@@ -19,7 +19,10 @@ const { boardEnv } = require("./_board.js");
 
 let fail = 0;
 const check = (ok, msg) => { console.log(`${ok ? "✅" : "❌"} ${msg}`); if (!ok) fail += 1; };
-const SYM = ["m-gk-m-ready", "m-gk-f-ready", "m-shooter-m", "m-shooter-f", "m-mate-m-ready", "m-mate-f-ready", "m-leg"];
+/* 🔄 v3(44번 · J9 · 41번 §9): 🧱 앞모습 슈터 `m-shooter-{m,f}` · 흐림 다리 `m-leg`는 디딤발 단서와 함께 퇴역 · 파일도 지움 → 대칭 넷만 남음.
+ *    새 준비 그림(「나」 `chibi-guard` 6 · `m-shooter-{g}-back` 2)은 「대칭 처리(반을 뒤집어 붙임)」를 안 한 그림이라 픽셀 자가 맞지 않아요
+ *    (머리 · 꽁지 · 주름 비대칭으로 RMSE 5~17% — 자세는 정면 · 두 팔 같은 높이). 자세 대칭은 👁️ 눈으로(40번 v3 절) */
+const SYM = ["m-gk-m-ready", "m-gk-f-ready", "m-mate-m-ready", "m-mate-f-ready"];
 const ASYM = ["m-gk-m-dive-high", "m-mate-m-run"];
 const RMSE_MAX = 0.01;
 const ART = path.join(PAGE_DIR, "art");
@@ -49,7 +52,7 @@ const sg1 = (files) => files.map(([k, f]) => ({ k, r: flipRmse(f) }));
   const r = sg1(SYM.map((k) => [k, path.join(ART, `${k}.webp`)]));
   const c = sg1(ASYM.map((k) => [k, path.join(ART, `${k}.webp`)]));
   check(r.every((x) => x.r <= RMSE_MAX) && c.every((x) => x.r > 10 * RMSE_MAX),
-    `SG-1. 🪞 대칭 그림 일곱의 뒤집기 RMSE ${r.map((x) => `${x.k.replace(/^m-/, "")} ${(x.r * 100).toFixed(2)}%`).join(" · ")} (≤ 1%) · 대조 ${c.map((x) => `${x.k.replace(/^m-/, "")} ${(x.r * 100).toFixed(1)}%`).join(" · ")}`);
+    `SG-1. 🪞 대칭 그림 넷의 뒤집기 RMSE ${r.map((x) => `${x.k.replace(/^m-/, "")} ${(x.r * 100).toFixed(2)}%`).join(" · ")} (≤ 1%) · 대조 ${c.map((x) => `${x.k.replace(/^m-/, "")} ${(x.r * 100).toFixed(1)}%`).join(" · ")}`);
 }
 /* SG-2 · SG-3 — 진짜 판 */
 const KINDS = ["goal", "assist", "defend"];

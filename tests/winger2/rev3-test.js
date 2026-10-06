@@ -2,10 +2,10 @@
  *
  *   R3-1  📍 「같은 장면, {rival}라면」 집계 — 경기마다 `tally`가 받은 판에서: n = q가 있는 판 수 · 해냄 = `perfect` 판 수 ·
  *         「{rival}라면」 = round(Σq, 한 자리) · d = 해냄 − 그 값 · 집계 D가 경기 d의 합(보이는 값 = 판정 값) · 결말이 D와 `SLOT_LINE` 1.5로 갈림
- *   R3-2  ⚽ 기록 칸 = min(40, n_pos × (g·g축 + a·a축 + d·d축) ÷ 경기) — **n_pos 39.83 · 36.36 · 34.46 · 37.24** · **수비수 가중 0.55 × 3**(29번 §2-3)
+ *   R3-2  ⚽ 기록 칸 = min(40, n_pos × (g·g축 + a·a축 + d·d축) ÷ 경기) — **n_pos 41.27 · 37.68 · 35.70 · 38.58**(v3 44번 §1) · **수비수 가중 0.55 × 3**(29번 §2-3)
  *         · 공격수 1.0 · 0.5 · 0.15 / 윙어 0.8 · 0.8 · 0.15 / 미드 0.5 · 1.0 · 0.30(22번 · 그대로) — 네 포지션 판의 평가서에서
  *   R3-3  🎯 테스트 칸 0~4 = 기술(맞힌 판 ÷ 6 × 1.6) + 연습경기 clamp((평점 − 1) × 2.4 ÷ 9, 0, 2.4) · 칸 최대 4
- *   R3-4  🏅 업적 희귀도 = 28번 R10 표 → 34번(`number` 드묾 · `allc` 귀함) → 38번 §5(`g7` 귀함 **하나만**) — 33칸 전부
+ *   R3-4  🏅 업적 희귀도 = 28번 R10 표 → 34번(`number` 드묾 · `allc` 귀함) → 38번 §5(`g7` 귀함) → 44번 §1(`promise3` · `league` 전설 · `gift` 귀함) — 33칸 전부
  *   보이는 칸은 최대 나머지 반올림(한 자리 · 칸 합 = 보이는 총점)이라 다시 셈과 **0.1 미만** 차이를 허용
  *   (T · READ_K · 몸 꼭대기는 sheet-test P-1 · P-3 · P-4가 봄 · 졸업 줄 · act1 새 칸은 save-test SV-3 · SV-4)
  *   + 변이: 해냄을 ok까지 셈 · 수비수 가중 옛 값(2.0 · 1.0 · 0.55) · n_pos 옛 값(34번) · 연습경기 몫 2.0 · `g7` 드묾
@@ -20,18 +20,19 @@ const { boot, runAct } = require("./_act.js");
 
 let fail = 0;
 const check = (ok, msg) => { console.log(`${ok ? "✅" : "❌"} ${msg}`); if (!ok) fail += 1; };
-const NPOS = { fw: 39.83, wg: 36.36, mf: 34.46, df: 37.24 };
+const NPOS = { fw: 41.27, wg: 37.68, mf: 35.70, df: 38.58 };   // 🔄 v3 44번 §1(38번 39.83 · 36.36 · 34.46 · 37.24에서)
 const AX = { fw: [1.0, 0.5, 0.15], wg: [0.8, 0.8, 0.15], mf: [0.5, 1.0, 0.30], df: [0.55, 0.55, 0.55] };
 const TIER = {
-  흔함: "grad story1 family g1 mom10 winner next", 드묾: "s1 onething rested a7 door race gift number",
-  귀함: "r9 cs5 wall3 qf longshot crown pk promise3 league allc g7", 전설: "hat cup trio all7 six",
+  /* 🔄 v3 44번 §1 — promise3 · league → 전설 · gift → 귀함 */
+  흔함: "grad story1 family g1 mom10 winner next", 드묾: "s1 onething rested a7 door race number",
+  귀함: "r9 cs5 wall3 qf longshot crown pk allc g7 gift", 전설: "hat cup trio all7 six promise3 league",
 };
 const MUT = {
   MADE_OK: { "story.js": [[/const made = bs\.filter\(\(x\) => x\.judge === "perfect"\)\.length;/, 'const made = bs.filter((x) => x.judge !== "miss").length;']] },
   DF_OLD: { "sheet.js": [[/df: \{ g: 0\.55, a: 0\.55, d: 0\.55 \}/, "df: { g: 2.0, a: 1.0, d: 0.55 }"]] },
-  NPOS_OLD: { "sheet.js": [[/N_POS: \{ fw: 39\.83, wg: 36\.36, mf: 34\.46, df: 37\.24 \}/, "N_POS: { fw: 36.50, wg: 33.40, mf: 31.71, df: 34.11 }"]] },
+  NPOS_OLD: { "sheet.js": [[/N_POS: \{ fw: 41\.27, wg: 37\.68, mf: 35\.70, df: 38\.58 \}/, "N_POS: { fw: 39.83, wg: 36.36, mf: 34.46, df: 37.24 }"]] },
   TESTM: { "sheet.js": [[/TEST_TECH: 1\.6, TEST_MATCH: 2\.4,/, "TEST_TECH: 1.6, TEST_MATCH: 2.0,"]] },
-  G7: { "achieve.js": [[/allc: "귀함", g7: "귀함",/, 'allc: "귀함", g7: "드묾",']] },
+  G7: { "achieve.js": [[/allc: "귀함", g7: "귀함", gift: "귀함",/, 'allc: "귀함", g7: "귀함", gift: "드묾",']] },
 };
 {
   const bad = pageMutsOK(MUT);
@@ -112,7 +113,7 @@ function r33(S) {
     return bad;
   };
   const tb = tierOk(runs[0].tierTbl);
-  check(tb.length === 0, `R3-4. 🏅 업적 희귀도 33칸 = 28번 R10 → 34번(number 드묾 · allc 귀함) → 38번 §5(g7 귀함 하나만)` + (tb.length ? `\n     🔴 ${tb.join(" · ")}` : ""));
+  check(tb.length === 0, `R3-4. 🏅 업적 희귀도 33칸 = 28번 R10 → 34번 → 38번 §5(g7 귀함) → 44번 §1(promise3 · league 전설 · gift 귀함)` + (tb.length ? `\n     🔴 ${tb.join(" · ")}` : ""));
   if (fail === 0) {
     const m1 = await run(4101, "fw", MUT.MADE_OK);
     check(r31([m1]).bad.length > 0, "변이-MADE_OK(해냄을 ok까지 셈) → R3-1이 빨간불");
@@ -121,12 +122,12 @@ function r33(S) {
     check(Math.abs(x2.got - x2.want) >= 0.1, `변이-DF_OLD(수비수 가중 2.0 · 1.0 · 0.55) → R3-2가 빨간불 (${x2.got} ≠ ${x2.want.toFixed(2)})`);
     const m3 = await run(4102, "wg", MUT.NPOS_OLD);
     const x3 = r32(m3.S);
-    check(Math.abs(x3.got - x3.want) >= 0.1, `변이-NPOS_OLD(n_pos 34번 값) → R3-2가 빨간불 (${x3.got} ≠ ${x3.want.toFixed(2)})`);
+    check(Math.abs(x3.got - x3.want) >= 0.1, `변이-NPOS_OLD(n_pos 38번 옛 값) → R3-2가 빨간불 (${x3.got} ≠ ${x3.want.toFixed(2)})`);
     const m4 = await run(4101, "fw", MUT.TESTM);
     const x4 = r33(m4.S);
     check(Math.abs(x4.got - x4.want) >= 0.1 || x4.max !== 4, `변이-TESTM(연습경기 몫 2.0) → R3-3이 빨간불 (${x4.got} · 최대 ${x4.max})`);
     const m5 = await run(4101, "fw", MUT.G7);
-    check(tierOk(m5.tierTbl).length > 0, "변이-G7(g7 드묾) → R3-4가 빨간불");
+    check(tierOk(m5.tierTbl).length > 0, "변이-G7(gift를 옛 드묾으로) → R3-4가 빨간불");
   }
   console.log(fail ? `\n❌ ${fail}건 실패` : "\n✅ 통과");
   process.exit(fail ? 1 : 0);

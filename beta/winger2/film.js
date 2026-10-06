@@ -1,7 +1,7 @@
 /* ⚽ 더 윙어 II 1막 — 🎬 졸업 필름(모델) · 이 기기에 저장 · 꺼내기
  *
  * 설계: 12번 §7-6 · 25번 §3 계약 8(①의 film 모양 + 1막 장 봄 · 여름 · 가을 · 장마다 `bg` ·
- *       「몸의 기록」 장에 「훈련 N주 · 휴식 M주」 · 판 한 줄 — 23번 §8. 판 줄은 **평가서 🎮 솜씨 칸 글 그대로**
+ *       「몸의 기록」 장에 「훈련 N주 · 휴식 M주」 · 관리 한 줄 — 23번 §8. 관리 줄은 **평가서 🫀 관리 칸 글 그대로**(44번 · 42번 §3)
  *       (🧱 막기 판 N번(🤖 k) · 읽기 ± · 포지션 보정 — 36번 §16-3 · 보이는 값 = 판정 값))
  * 그리기와 공유 이미지(`drawCard` · `share`)는 director의 `scenes.js`가 붙여요 — 여기는 **모델만**.
  * `ach` = 이 선수가 딴 업적 [{ id, name, tier }] — 🏅 대표 업적 고르기 · 공유 이미지(31번 §2). 고른 것은 `head.rep` 한 곳에만.
@@ -52,8 +52,8 @@ window.W2Film = (() => {
     const st = S.stats || {}, st0 = S.statsAt0 || st;
     const ups = SH().KEYS.map((k) => ({ k, label: SH().STAT[k].name, emoji: SH().STAT[k].emoji,
       from: num(st0[k]), to: num(st[k]), g0: SH().grade(st0[k] || 0).g, g1: SH().grade(st[k] || 0).g }));
-    /* 🎮 판 줄 — 평가서 솜씨 칸과 **같은 글**(🧱 막기 판만 · 🤖 몫 · 읽기) — 따로 셈하지 않아요 */
-    const sk = S.sheet && Array.isArray(S.sheet.cols) ? S.sheet.cols.find((c) => c.k === "skill") : null;
+    /* 🫀 관리 줄 — 평가서 관리 칸과 **같은 글** — 따로 셈하지 않아요(옛 v2 세이브의 평가서면 `skill` 칸 글 그대로) */
+    const sk = S.sheet && Array.isArray(S.sheet.cols) ? S.sheet.cols.find((c) => c.k === "care" || c.k === "skill") : null;
     const skd = (sk && sk.detail) || {};
     const A = window.W2Ach;
     const done = (S.story && S.story.done) || [];
@@ -78,9 +78,9 @@ window.W2Film = (() => {
         keeper: lastLeague ? `🕯️ ${keeper}의 마지막 경기 — ${lastLeague.gf} : ${lastLeague.ga}` : null },
       { k: "body", title: "🏋️ 몸의 기록", bg: "bg-field", ups,
         weeks: { train: Number(S.trainWeeks) || 0, rest: Number(S.restWeeks) || 0, weak: Number(S.weakWeeks) || 0 },
-        boards: { n: num(skd.n), auto: num(skd.auto), rhoHat: num(skd.rhoHat), k: num(skd.k) },
+        care: { games: num(skd.games), avg: num(skd.avg) },
         lines: [`훈련 ${Number(S.trainWeeks) || 0}주(🦶 약발 ${Number(S.weakWeeks) || 0}주) · 휴식 ${Number(S.restWeeks) || 0}주`,
-          sk ? `🎮 ${sk.note}` : "🎮 평가서 전이에요"]
+          sk ? `${sk.k === "care" ? "🫀" : "🎮"} ${sk.note}` : "🫀 평가서 전이에요"]
           .concat((Number(S.weak) || 0) >= 2 ? ["🦶 약발 2단계 — 양발로 졸업해요"] : []) },   // 29번 §3-6 (가)
       { k: "choice", title: "🧭 선택의 기록", bg: "bg-locker",
         style: A ? A.style(S) : null, best: A ? A.bestMove(S) : null, luck: A ? A.luck(S) : null },

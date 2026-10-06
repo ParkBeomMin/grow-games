@@ -106,8 +106,9 @@ function mulberry(seed) {
 function boardStub(w, o, note) {
   const real = w.W2Moment;
   const T = (real && real._t) || {};
-  const values = T.values || ((kind, target) => [0, 1, 2, 3, 4, 5].map((i) => (kind === "defend" ? (i === target ? 0.8 : 0.44) : 0.5)));
-  const dimP = T.TUNE && Number.isFinite(T.TUNE.DIM) ? T.TUNE.DIM : 0.5;
+  /* 🔄 v3(44번 3′ · J9): 판 셋 모두 여섯 칸 0.5 · `target` · `seen` 늘 null — 조작자 자리표(맞힌 몫 · 흐림)는 뜻이 사라져
+   *    「아무 칸이나 고름」만 남아요(`operator`는 칸을 고르는 난수만 씀). `hand`는 검사가 판 값을 일부러 줄 때 그대로 */
+  const values = T.values || (() => [0.5, 0.5, 0.5, 0.5, 0.5, 0.5]);
   const rnd = mulberry(((o.seed == null ? 1 : o.seed) ^ 0x2C1B3C6D) >>> 0);
   const h = OPERATOR[o.operator] || null;
   const clamp01 = (v) => Math.min(1, Math.max(0, Number.isFinite(v) ? v : 0));
@@ -117,19 +118,12 @@ function boardStub(w, o, note) {
       const foot = Number.isFinite(sit.foot) && sit.foot > 0 ? sit.foot : 1, cond = Number.isFinite(sit.cond) && sit.cond > 0 ? sit.cond : 1;
       let sBoard = 0.5, cell = null, target = null, seen = null, ms = 0;
       if (slot) {
-        if (opts.kind === "defend") {
-          target = Math.min(5, Math.floor(rnd() * 6));
-          seen = rnd() < dimP ? "dim" : "clear";
-        }
         if (typeof o.hand === "function") {
           sBoard = clamp01(Number(o.hand(opts.kind, opts)));
           cell = 0;
         } else if (h) {
-          if (opts.kind === "defend") {
-            const hit = rnd() < (seen === "dim" ? h[1] : h[0]);
-            cell = hit ? target : (target + 1 + Math.floor(rnd() * 5)) % 6;
-          } else cell = Math.min(5, Math.floor(rnd() * 6));
-          sBoard = values(opts.kind, target)[cell];
+          cell = Math.min(5, Math.floor(rnd() * 6));
+          sBoard = values(opts.kind, null)[cell];
         } else { sBoard = 0.5; cell = 0; }
         ms = 1000;
       }

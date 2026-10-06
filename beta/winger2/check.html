@@ -72,7 +72,6 @@
     <section class="ck-sec" aria-label="미니게임 연습">
       <p class="ck-row">판 그림의 남자부 · 여자부 · 「나」는 아래 「상황 바로 보기」의 외형 단추를 따라요.</p>
       <div class="ck-row"><span class="ck-k">판</span><div class="ck-seg" id="ck-kind" role="group" aria-label="판"></div></div>
-      <div class="ck-row"><span class="ck-k">🧱 디딤발 보임</span><div class="ck-seg" id="ck-seen" role="group" aria-label="디딤발 보임"></div></div>
       <div class="ck-row"><span class="ck-k">🦶 약발 상황</span><div class="ck-seg" id="ck-weak" role="group" aria-label="약발 상황"></div></div>
       <div class="ck-row"><span class="ck-k">능력치(여섯 칸 같은 값)</span><div class="ck-seg" id="ck-ab" role="group" aria-label="능력치"></div></div>
       <div class="ck-row">
@@ -80,14 +79,13 @@
         <input class="ck-range" id="ck-cond" type="range" min="0" max="100" step="1" value="51" />
       </div>
       <div class="ck-row">
-        <label class="ck-chk"><input type="checkbox" id="ck-wide" /> ♿ 고를 시간 넉넉히(+30% · 🧱 5.2초)</label>
         <label class="ck-chk"><input type="checkbox" id="ck-still" /> 🎞️ 움직임 줄이기</label>
         <label class="ck-chk"><input type="checkbox" id="ck-fast" /> ⏩ 빨리 감기(드러남 0.4초)</label>
       </div>
       <button type="button" class="ck-b ck-go btn-primary" id="ck-play">▶️ 판 열기</button>
       <div class="ck-stage" id="ck-board"></div>
       <div class="ck-out" id="ck-out" role="status" aria-live="polite"></div>
-      <div class="ck-out" id="ck-tally"></div>
+      <div class="ck-out" id="ck-tally" role="status"></div>
     </section>
 
     <h2>👁️ 상황 바로 보기</h2>

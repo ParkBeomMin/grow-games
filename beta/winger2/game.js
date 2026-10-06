@@ -32,7 +32,7 @@ window.W2Game = (() => {
   const TUNE = Object.freeze({
     START_STAT: 48,          // 12번 §8-2 — 깨진 세이브의 빈 칸만 채움(새 판은 🎲 1점 × 48 — `W2World.rollStart`)
     REROLLS: 3,              // 29번 §3-3 · J6 · 37번 §2 — 🎲 다시 뽑기(처음 것까지 네 모양)
-    WEAK_XP: 2.0, WEAK_MAX: 2,   // 29번 §3-6(P2 (가)) · 37번 §2 — 🦶 약발 경험 2.0마다 한 단계 · 최대 2단계
+    WEAK_XP: 1.5, WEAK_MAX: 2,   // 29번 §3-6(P2 (가)) · 43번 §2-2 · 44번 §1 — 🦶 약발 경험 1.5마다 한 단계 · 최대 2단계
     STAT_MAX: 100,           // 12번 §5-2 — 1막 상한
     COND_START: 80,          // 12번 §11-1 — 컨디션 시작값
     TRAIN_UP: 4.0,           // 24번 §2 — 훈련 한 번 +4.0 × 효율
@@ -137,7 +137,7 @@ window.W2Game = (() => {
   /* ---------- 💾 세이브 — `winger2-save-v2`(12번 §11) · 마이그레이션 없음 · 읽는 쪽 기본값 ---------- */
   let S = null;
   const blankRecord = () => ({ apps: 0, g: 0, a: 0, d: 0, cs: 0, rSum: 0, moments: { g: { t: 0, p: 0 }, a: { t: 0, p: 0 }, d: { t: 0, p: 0 } },
-    hat: 0, perfect: 0, sSum: 0, sN: 0, sAuto: 0, gAll: 0, aAll: 0, momP: 0, rMax: 0, wall3: 0, winner: 0, pkN: 0, pkGoal: 0 });
+    hat: 0, perfect: 0, sSum: 0, sN: 0, sAuto: 0, cSum: 0, cN: 0, gAll: 0, aAll: 0, momP: 0, rMax: 0, wall3: 0, winner: 0, pkN: 0, pkGoal: 0 });
   function seedNew() {
     try {
       const a = new Uint32Array(1);
@@ -219,7 +219,7 @@ window.W2Game = (() => {
   const reducedDevice = () => { try { return window.matchMedia("(prefers-reduced-motion: reduce)").matches; } catch (e) { return false; } };
   const SETTINGS = [
     { k: "auto", key: AUTO_KEY, def: false, shared: true, applies: "다음 경기부터", label: "🤖 판 자동 진행",
-      desc: "미니게임을 열지 않고 보통의 한 수로 판정해요. 경기는 그대로 굴러가고 내 판도 그대로 결과가 나요 — 벌은 없고, 평가서 🎮 솜씨 칸에 🤖로 표시돼요." },
+      desc: "미니게임을 열지 않고 판정해요. 판 셋은 모두 감이라 결과는 손으로 둔 것과 같아요 — 벌은 없어요." },
     { k: "fast", key: FAST_KEY, def: false, shared: false, applies: "다음 경기부터", label: "⏩ 빨리 감기로 시작",
       desc: "경기를 ⏩ 빨리 감기로 시작해요 — 연출만 짧아지고 판은 그대로 열려요." },
     { k: "wide", key: WIDE_KEY, def: false, shared: true, applies: "다음 판부터", label: "♿ 고를 시간 넉넉히(+30%)",
@@ -246,7 +246,7 @@ window.W2Game = (() => {
     list: () => SETTINGS.map((d) => {
       const locked = d.k === "still" && reducedDevice();
       return { k: d.k, label: d.label, desc: locked ? `${d.desc} 기기 설정으로 켜져 있어요.` : d.desc,
-        on: settingOn(d.k), shared: d.shared, applies: d.applies, locked };
+        on: settingOn(d.k), shared: d.shared, applies: d.k === "wide" ? false : d.applies, locked };   // ♿ — II의 판엔 시간 · 창이 없어 숨김(44번 §2-14 · 공유 키 값은 그대로)
     }),
     on: settingOn,
     set(k, v) {
@@ -270,18 +270,23 @@ window.W2Game = (() => {
   let epoch = 0;
   const fresh = (p) => { const e = epoch; return Promise.resolve(p).then((v) => (e === epoch ? v : new Promise(() => {}))); };
 
-  /* ---------- 🔬 베타 측정(38번 §2-17 · 15번 J8) — 손으로 둔 판만(🤖 빼고 · 경기 종류 무관) 판 종류마다 · 이 기기 누적 ----------
-   * `sSum` = Σ s_board(상황 배수 전 판 값) · 새 판을 시작해도 남고 `settings.wipe()`만 지워요 */
-  const blankBoards = () => ({ block: { n: 0, clear: 0, clearHit: 0, dim: 0, dimHit: 0, timeout: 0, sSum: 0, msSum: 0 },
-    shot: { n: 0, msSum: 0 }, cut: { n: 0, msSum: 0 } });
+  /* ---------- 🔬 베타 측정(44번 §2-17 · 42번 §5) — 손으로 둔 판만(🤖 빼고 · 경기 종류 무관) 판 종류마다 · 이 기기 누적 ----------
+   * `{ n, msSum, cells[6] }` — 판 시간 · 고른 칸의 쏠림만(판정 0) · 새 판을 시작해도 남고 `settings.wipe()`만 지워요.
+   *   옛 모양(`clear` · `sSum` …)이 남아 있어도 `n` · `msSum`만 읽고 나머지는 버려요 */
+  const blankBoards = () => ({ block: { n: 0, msSum: 0, cells: [0, 0, 0, 0, 0, 0] },
+    shot: { n: 0, msSum: 0, cells: [0, 0, 0, 0, 0, 0] }, cut: { n: 0, msSum: 0, cells: [0, 0, 0, 0, 0, 0] } });
+  const okNum = (v) => Number.isFinite(v) && v >= 0;
   function boardStats() {
     const out = blankBoards();
     let raw = null;
     try { raw = JSON.parse(localStorage.getItem(BOARDS_KEY)); } catch (e) { raw = null; }
     if (raw && typeof raw === "object") {
-      for (const g of Object.keys(out)) for (const f of Object.keys(out[g])) {
-        const v = raw[g] && Number(raw[g][f]);
-        if (Number.isFinite(v) && v >= 0) out[g][f] = v;
+      for (const g of Object.keys(out)) {
+        const r = raw[g];
+        if (!r || typeof r !== "object") continue;
+        if (okNum(r.n)) out[g].n = r.n;
+        if (okNum(r.msSum)) out[g].msSum = r.msSum;
+        if (Array.isArray(r.cells)) for (let i = 0; i < 6; i++) if (okNum(r.cells[i])) out[g].cells[i] = r.cells[i];
       }
     }
     return out;
@@ -292,12 +297,7 @@ window.W2Game = (() => {
     const x = st[b.kind === "defend" ? "block" : b.kind === "assist" ? "cut" : "shot"];
     x.n += 1;
     x.msSum += Number.isFinite(b.ms) ? Math.min(60000, Math.max(0, b.ms)) : 0;
-    if (b.kind === "defend") {
-      const hit = b.cell != null && b.target != null && b.cell === b.target;
-      if (b.seen === "dim") { x.dim += 1; if (hit) x.dimHit += 1; } else if (b.seen === "clear") { x.clear += 1; if (hit) x.clearHit += 1; }
-      if (b.cell == null) x.timeout += 1;
-      x.sSum = Math.round((x.sSum + (typeof b.sBoard === "number" ? b.sBoard : 0)) * 1e6) / 1e6;
-    }
+    if (Number.isInteger(b.cell) && b.cell >= 0 && b.cell < 6) x.cells[b.cell] += 1;
     try { localStorage.setItem(BOARDS_KEY, JSON.stringify(st)); } catch (e) { /* 측정은 덤이에요 */ }
   }
 
@@ -955,7 +955,7 @@ window.W2Game = (() => {
       promiseLine: EV().promiseLine(S), scout: null, rivalAb: rivalAb(), rate: (res) => X().rate(res, S.pos, rr),
     });
     const info = await fresh(window.WingerLive.play(host, cfg));
-    if (info) for (const b of info.boards) noteBoard(b);
+    if (info) { info.cond = cfg.condition; for (const b of info.boards) noteBoard(b); }   // 🫀 관리 칸 재료 — 엔진에 넘긴 그 값
     return { info, rr, host, auto: cfg.auto };      // 🤖은 그 경기의 승부차기까지 같은 값(⚙️ 「다음 경기부터」)
   }
   /* 🏆 대회 경기 — 🔒 회복(+10)은 **두 번째 경기부터** · 경기가 끝나야 반영(원자적 — 다시 열면 회복 전 컨디션에서 다시) */
@@ -969,7 +969,6 @@ window.W2Game = (() => {
     return r;
   }
   /* 공식 경기 한 판의 뒤처리(리그 · 대회) — 기록 · 최근 10경기 · 약속 · 📍 집계 · 직전 경기 메모 · 판 */
-  const sign2 = (v) => (v >= 0 ? "+" : "−") + Math.abs(v).toFixed(2);
   const sign1 = (v) => (v >= 0 ? "+" : "−") + Math.abs(v).toFixed(1);
   function official(info, o) {
     const R = S.record;
@@ -982,13 +981,11 @@ window.W2Game = (() => {
     if (info.defense >= 3) R.wall3 += 1;
     if (info.rating >= 10) R.perfect += 1;
     for (const k of ["g", "a", "d"]) { R.moments[k].t += info.moments[k].t; R.moments[k].p += info.moments[k].p; }
-    /* 🎮 솜씨 칸 재료 — **공식 경기의 🧱 막기 판만**(36번 §16-3) · `sSum` = Σ s_board(🤖 0.5 · 시간 초과 0) · 🥅 · 🅰️는 감의 판이라 안 셈 */
-    const blk = info.boards.filter((b) => b.kind === "defend");
-    for (const b of blk) {
-      R.sSum = Math.round((R.sSum + (typeof b.sBoard === "number" ? b.sBoard : 0.5)) * 1e6) / 1e6;
-      R.sN += 1;
-      if (b.auto) R.sAuto += 1;
-    }
+    /* 🫀 관리 칸 재료 — 공식 경기(리그 + 대회) 날 엔진에 넘긴 컨디션(42번 §3 · 44번 §1) · 연습경기 · 기술 테스트는 여기 안 옴.
+     *    `sSum` · `sN` · `sAuto`(옛 솜씨 칸)는 더 안 써요 — 옛 세이브 호환으로 칸만 남김 */
+    const cond = Number(info.cond);
+    const dayCond = Number.isFinite(cond) ? clamp(cond, 0, 100) : null;
+    if (dayCond != null) { R.cSum = Math.round((R.cSum + dayCond) * 1e6) / 1e6; R.cN += 1; }
     const dec = (info.cards || []).find((c) => c.decisive);
     if (dec && (dec.credit.g || dec.credit.a)) R.winner += 1;
     const un = (info.cards || []).filter((c) => c.mine).length - info.saved;
@@ -1007,14 +1004,8 @@ window.W2Game = (() => {
       const rn = X().short(S.world.ours.find((x) => x.role === "rival").name);
       lines.push(`📍 같은 장면 ${t.n}번 — 나 ${t.made}번 해냄 · ${X().fill("{r|라면}", { r: rn })} ${t.exp.toFixed(1)}번 → ${sign1(t.d)}(번호 집계 ${sign1(t.D)})`);
     }
-    /* 🎮 경기 끝 줄 — 평가서 솜씨 칸과 같은 말(🧱 막기 판 · 🤖 몫 · 읽기 = s_board − 0.5의 평균) + 감의 판 수(36번 §5-1 → §16) */
-    if (info.boards.length) {
-      const bAuto = blk.filter((b) => b.auto).length;
-      const reads = blk.length ? blk.reduce((a, b) => a + ((typeof b.sBoard === "number" ? b.sBoard : 0.5) - 0.5), 0) / blk.length : 0;
-      const nOf = (k) => info.boards.filter((b) => b.kind === k).length;
-      const sense = [["goal", "🥅"], ["assist", "🅰️"]].filter(([k]) => nOf(k)).map(([k, e]) => `${e} ${nOf(k)}번`);
-      lines.push(`🎮 🧱 막기 판 ${blk.length}번${bAuto ? `(🤖 ${bAuto})` : ""}${blk.length ? ` · 읽기 ${sign2(reads)}` : ""}${sense.length ? ` · ${sense.join(" · ")}` : ""}`);
-    }
+    /* 🫀 경기 끝 줄 — 평가서 관리 칸의 재료 그대로(42번 §6) */
+    if (dayCond != null) lines.push(`🫀 경기 날 컨디션 ${Math.round(dayCond)}`);
     return lines;
   }
   /* 🎮 판 하나(경기 밖 — 🎯 기술 테스트 · 🥅 승부차기 내 킥) — 경기 안과 같은 규칙: 상황(따로 난수원 · 그 자리의 열쇠) ·
@@ -1052,7 +1043,7 @@ window.W2Game = (() => {
       return b;                          // 🔬 측정은 부른 쪽이 `fresh` 뒤에(지우기 뒤 늦게 끝난 판이 측정을 다시 쓰지 않게)
     });
   }
-  /* 🥅 승부차기 — 양 팀 5명씩 · 내 킥은 첫 번째 한 번만 판(12번 §5-3) · 🥅 감의 판이라 🎮 솜씨 칸엔 안 더해요(36번 §4-4) */
+  /* 🥅 승부차기 — 양 팀 5명씩 · 내 킥은 첫 번째 한 번만 판(12번 §5-3) · 관리 칸과 무관(연습 · 승부차기 컨디션은 안 셈) */
   async function shootout(host, key, auto) {
     const box = h("div", "w2-pk");
     box.appendChild(h("p", "w2-pk-head", "🥅 승부차기 — 첫 번째 키커는 나예요"));
@@ -1338,11 +1329,11 @@ window.W2Game = (() => {
   const HELP = [
     { emoji: "🗓️", title: "한 해 36주", body: "고3의 한 해예요. 매주 한 번 — 훈련(여섯 중 하나) · 🦶 약발 · 🛌 휴식 · 🤝 사람 중 하나를 골라요.\n경기가 있는 주는 고른 뒤 주말에 경기를 해요. 7월 말엔 전국대회, 11월엔 공개 테스트가 있어요." },
     { emoji: "🫀", title: "컨디션과 훈련 효율", body: "훈련은 컨디션을 10 쓰고, 컨디션이 좋을수록 크게 늘어요.\n버튼에 적힌 「효율 ×」가 곧 늘어나는 양이에요 — 지친 채 훈련하면 거의 안 늘어요. 쉬어야 커요.\n경기 날 컨디션은 찬스가 오는 빈도와 판의 승산에도 닿아요." },
-    { emoji: "🥅", title: "경기의 판", body: "내 순간이 오면 판이 열려요 — 여섯 칸 중 하나를 한 번 골라요(경기당 2~3번 · 적어도 한 번).\n🥅 슈팅 · 🅰️ 컷백은 감의 판이에요 — 어느 칸이든 승산은 같고, 키운 만큼(능력치 · 약발 · 컨디션) 올라가요.\n🧱 막기는 읽는 판이에요 — 슈터의 디딤발이 가리키는 길로 몸을 던지면 승산이 올라가요.\n판은 고른 칸만 재고, 들어갔는지는 경기가 정해요. 🦶 약발 상황 · 🫀 컨디션은 🤖 자동에도 같게 걸려요." },
+    { emoji: "🥅", title: "경기의 판", body: "내 순간이 오면 판이 열려요 — 여섯 칸 중 하나를 한 번 골라요(경기당 2~3번 · 적어도 한 번).\n판 셋(🥅 슈팅 · 🅰️ 컷백 · 🧱 막기) 모두 감이에요 — 고른 칸은 공의 길만 정하고, 승산은 능력치 · 약발 · 컨디션이 정해요. 🤖 자동도 결과가 같아요.\n들어갔는지는 경기가 정해요. 이 게임의 판엔 시간 제한이 없어요." },
     { emoji: "🦶", title: "주발과 약발", body: "판의 ⅓쯤은 공이 약발 쪽으로 떨어진 「🦶 약발 상황」이에요 — 그때는 승산이 조금 내려가요.\n주간 훈련의 🦶 약발로 0 → 1 → 2단계(양발)까지 키우면 약발 상황에서 승산이 덜 떨어져요." },
     { emoji: "🎲", title: "이벤트와 약속", body: "화면에 적힌 확률이 곧 판정이에요. 도전은 얻는 것과 잃는 것이 같아서 50%를 넘으면 걸 만해요.\n📋 약속은 다음 공식 경기의 내 첫 순간을 살리면 지킨 거예요." },
-    { emoji: "📋", title: "평가서와 엔딩", body: "11월에 스카우트 평가서가 나와요 — 몸 · 솜씨 · 기록 · 무대 · 테스트 다섯 칸. 🎮 솜씨 칸은 🧱 막기 판에서 디딤발을 얼마나 읽었나예요.\n키운 만큼 높은 구간에 서고, 구간이 엔딩을 정해요. 🤝 사람에서 고른 가족 이야기가 「문」을 하나 열어요." },
-    { emoji: "⚙️", title: "설정", body: "오른쪽 위 ⚙️에서 🤖 판 자동 진행 · ⏩ 빨리 감기로 시작 · ♿ 고를 시간 넉넉히 · 🎞️ 움직임 줄이기 · 📳 진동을 바꿀 수 있어요.\n🤖 · ⏩는 다음 경기부터 적용돼요." },
+    { emoji: "📋", title: "평가서와 엔딩", body: "11월에 스카우트 평가서가 나와요 — 몸 · 관리 · 기록 · 무대 · 테스트 다섯 칸. 🫀 관리 칸은 공식 경기 날 컨디션의 평균이에요(70이면 가득) — 휴식으로 관리해요.\n키운 만큼 높은 구간에 서고, 구간이 엔딩을 정해요. 🤝 사람에서 고른 가족 이야기가 「문」을 하나 열어요." },
+    { emoji: "⚙️", title: "설정", body: "오른쪽 위 ⚙️에서 🤖 판 자동 진행 · ⏩ 빨리 감기로 시작 · 🎞️ 움직임 줄이기 · 📳 진동을 바꿀 수 있어요.\n🤖 · ⏩는 다음 경기부터 적용돼요." },
     /* 💾 8종 표준 문구 그대로(베타는 `env.js`가 원격을 꺼도 — 운영에서의 실제 동작과 같은 말) + 이 게임의 한 줄 */
     { emoji: "💾", title: "기록 보관", body: "기록은 이 기기의 브라우저에 저장되고, 서버에도 자동 백업돼요.\n"
       + "기기를 바꾸거나 브라우저 데이터를 지우면 이 기기의 기록은 사라져요.\n"

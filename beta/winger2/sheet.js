@@ -2,8 +2,8 @@
  *
  * 설계: 12번 §6(평가서 · 문 · 엔딩) · §10 · §11-2(`act1`) · 13번 §4-3(여자부 이름) · 23번 §7(감독 의견) ·
  *       29번 §2(수비수 가중 · 몸 꼭대기 · 테스트 칸) · §3(문 = 가족 이야기 · 말투) · §7-2(`act1` 새 칸) ·
- *       36번 §6(중간 평가서 「아직」) · §16-3(🎮 솜씨 칸 — 🧱 막기 판의 읽기)
- * 확정 계수: 37번 §2 · 38번 §5 — 조정될 값은 맨 위 `TUNE` 한 블록.
+ *       36번 §6(중간 평가서 「아직」) · 42번 §3(🫀 관리 칸 — 🎮 솜씨 칸 자리 · J10)
+ * 확정 계수: 37번 §2 · 38번 §5 · 43번 §2 · 44번 §1 — 조정될 값은 맨 위 `TUNE` 한 블록.
  *
  * ── 🔒 지키는 것 ────────────────────────────────────────────
  *  · **보이는 값 = 판정 값** — 칸마다 재료를 그대로 펼쳐요(`detail`). 합과 내역이 **같은 함수**에서 나와요.
@@ -22,17 +22,16 @@ window.W2Sheet = (() => {
     /* 🏋️ 몸 — 한 능력치의 점수를 문턱 사이에서 **선으로** 이음(40 밑 0 · **88 위는 S 값으로 평평**) */
     BODY_PTS: [[40, 0], [45, 1.2], [52, 2.6], [60, 3.5], [68, 4.2], [77, 5.06], [88, 6.10]],   // 34번 · 37번 §2(R15 둘째 값 — 60 위 기울기 0.095 · 88 위 평평)
     BODY_MUL: 1.5,                                   // 21번 §3-3 — 여섯 점수 합 × 1.5(칸 폭 45 설계)
-    LAMBDA: 1,                                       // 37번 §2 — 품질 배율 λ(몸 · 솜씨 칸을 함께)
-    /* 🎮 솜씨 — clamp(4.0 + 20 × k × Σρ ÷ max(n, 8), 0, 10) · ρ = s_board − 0.5(공식 경기 🧱 판만 · 🤖 0 · 시간 초과 −0.5)
-     *    36번 §16-3 · 37번 §2 · 38번 §5 — 🤖만이면 어느 포지션이든 4.0 · 막기 판이 8번보다 적으면 모자란 만큼 🤖로 채움 */
-    SKILL_BASE: 4.0, SKILL_GAIN: 20, SKILL_FLOOR_N: 8, SKILL_MAX: 10,
-    READ_K: { fw: 1.2045, wg: 1.2412, mf: 0.9942, df: 0.7360 },   // 37번 §2 — 🔗 포지션 보정 k = r̄ ÷ r(🧱 몫) 🔶
-    N_POS: { fw: 39.83, wg: 36.36, mf: 34.46, df: 37.24 },   // 37번 §2 · 38번 §5 — ⚽ 기록 경기당 원점수에 곱함(🔗 중립화)
+    LAMBDA: 1,                                       // 37번 §2 — 품질 배율 λ(몸 · 관리 칸을 함께)
+    /* 🫀 관리 — clamp((c̄ − 20) ÷ 50, 0, 1) × 10 × λ · c̄ = **공식 경기 날**(리그 + 대회) 엔진에 넘긴 컨디션 평균 · 0경기 0
+     *    42번 §3 · 43번 §2 · 44번 §1(J10 — 🎮 솜씨 칸 · `READ_K` · ρ · 바닥 8은 퇴역 · 판 셋이 모두 감이라 손의 몫 0) */
+    CARE_LO: 20, CARE_SPAN: 50, CARE_MAX: 10,
+    N_POS: { fw: 41.27, wg: 37.68, mf: 35.70, df: 38.58 },   // 43번 §2-1 · 44번 §1 — ⚽ 기록 경기당 원점수에 곱함(🔗 중립화)
     REC_MAX: 40,                                     // 21번 §3-3 — 기록 칸 상한
     STAGE_PTS: [0, 3, 5, 7, 8, 10],                  // 21번 §3-3 — 조별 · 16강 · 8강 · 4강 · 준우승 · 우승
     LEAGUE_WIN_PT: 1, STAGE_MAX: 10,                 // 〃 — 권역 리그 우승 +1 · 상한 10
     TEST_TECH: 1.6, TEST_MATCH: 2.4,                 // 34번 · 37번 §2(R9 둘째 값) — 🎯 테스트 0~4(기술 0~1.6 · 연습경기 0~2.4)
-    T: { top: 64.4, high: 57.4, mid: 50.8 },         // 37번 §2 · 38번 §5(64.43 · 57.44 · 50.82를 화면 한 자리로) — 구간은 **화면의 합계**로 🔶
+    T: { top: 66.4, high: 59.4, mid: 52.8 },         // 43번 §2-1 · 44번 §1(66.36 · 59.40 · 52.77을 화면 한 자리로) — 구간은 **화면의 합계**로
     TRUST_LINE: 4,                                   // 23번 §7 — 감독 의견 한 줄이 갈리는 🤝(±4)
     TEST_REF: 56.0,                                  // 24번 §2 — 기술 판 중심의 능력치 기준선
     TEST_P: { goal: 1 / 3, assist: 1 / 3, defend: 1 / 2 },   // 12번 §5-4 — 🔗 판 한 번 기댓값 1점(포지션 무관)
@@ -108,13 +107,10 @@ window.W2Sheet = (() => {
     const bodySum = parts.reduce((a, p) => a + bodyPt(Number(S.stats[p.k]) || 0), 0);
     const body = bodySum * T.BODY_MUL * lam;
     const bodyMax = KEYS.length * T.BODY_PTS[T.BODY_PTS.length - 1][1] * T.BODY_MUL * lam;
-    // 🎮 솜씨 — 공식 경기의 🧱 막기 판만(`sN` · `sSum` = Σ s_board · `sAuto` = 그중 🤖) · ρ = s_board − 0.5
-    const sN = Math.max(0, Math.floor(Number(rec.sN)) || 0);
-    const sAuto = Math.min(sN, Math.max(0, Math.floor(Number(rec.sAuto)) || 0));
-    const rho = (Number(rec.sSum) || 0) - 0.5 * sN;                        // Σρ(🤖 0 · 시간 초과 −0.5)
-    const rhoHat = rho / Math.max(sN, T.SKILL_FLOOR_N);                      // 8번 밑이면 모자란 만큼 🤖(ρ 0)로
-    const kPos = T.READ_K[S.pos] || 1;
-    const skill = Math.min(T.SKILL_MAX, Math.max(0, T.SKILL_BASE + T.SKILL_GAIN * kPos * rhoHat)) * lam;
+    // 🫀 관리 — 공식 경기 날 컨디션(`cSum` · `cN`) 평균 · 70이면 가득 · 0경기 0(옛 세이브는 다음 공식 경기부터 차오름)
+    const cN = Math.max(0, Math.floor(Number(rec.cN)) || 0);
+    const cAvg = cN > 0 ? (Number(rec.cSum) || 0) / cN : null;
+    const care = cAvg == null ? 0 : Math.min(1, Math.max(0, (cAvg - T.CARE_LO) / T.CARE_SPAN)) * T.CARE_MAX * lam;
     // ⚽ 기록 — 포지션 축 원점수의 **경기당** 평균(리그 + 대회) × n_pos · 상한 40
     const ax = AXIS[S.pos] || AXIS.fw;
     const games = Number(rec.apps) || 0;
@@ -137,7 +133,7 @@ window.W2Sheet = (() => {
     const W = window.W2World;
     const stageName = W ? W.STAGE_NAME[cup.stage || 0] : "";
     /* 🔢 칸 · 합계 · 구간을 **화면 한 자리**로 — 화면에 보이는 합계가 곧 구간을 가르는 값이에요 */
-    const t10 = tenths([body, skill, record, stagePt, test]);
+    const t10 = tenths([body, care, record, stagePt, test]);
     const total = t10.reduce((a, b) => a + b, 0) / 10;
     /* 📋 아직 안 한 칸의 남은 최대(중간 평가서 — 규칙이지 예측이 아님 · 36번 §6-2) */
     const open = final ? null : {
@@ -145,15 +141,15 @@ window.W2Sheet = (() => {
       test: tested ? 0 : T.TEST_TECH + T.TEST_MATCH,
     };
     const fmt = (v) => (Number.isInteger(v) ? String(v) : v.toFixed(1));
-    const sign = (v) => (v >= 0 ? "+" : "−") + Math.abs(v).toFixed(2);
-    const skillNote = sN === 0 ? `아직 막기 판이 없어요 — 🤖 값 ${T.SKILL_BASE.toFixed(1)}`
-      : `🧱 막기 판 ${sN}번${sAuto >= sN ? " · 모두 🤖 자동" : sAuto > 0 ? `(🤖 ${sAuto})` : ""} · 읽기 ${sign(rhoHat)} · 포지션 보정 ×${kPos.toFixed(2)}`
-        + (sN < T.SKILL_FLOOR_N ? ` · ${T.SKILL_FLOOR_N}번까지는 모자란 판을 🤖로 채워 셈` : "");
+    const full = T.CARE_LO + T.CARE_SPAN;
+    const careNote = cN === 0 ? ((Number(rec.apps) || 0) > 0 ? "다음 공식 경기부터 셈해요 — 이 판의 앞 경기엔 경기 날 컨디션 기록이 없어요"
+      : "아직 공식 경기가 없어요 — 경기 날 컨디션이 좋을수록 차요")
+      : `공식 경기 ${cN}번 · 경기 날 컨디션 평균 ${Math.round(cAvg)}(${full}이면 가득)`;
     const cols = [
       { k: "body", label: "🏋️ 몸", v: t10[0] / 10, max: r2(bodyMax),
         note: `여섯 능력치 점수 합 ${r2(bodySum)} × ${T.BODY_MUL}`, detail: { parts } },
-      { k: "skill", label: "🎮 솜씨", v: t10[1] / 10, max: T.SKILL_MAX * lam, note: skillNote,
-        detail: { n: sN, auto: sAuto, rho: r2(rho), rhoHat: r2(rhoHat), k: kPos } },
+      { k: "care", label: "🫀 관리", v: t10[1] / 10, max: T.CARE_MAX * lam, note: careNote,
+        detail: { games: cN, avg: cAvg == null ? null : r2(cAvg), full } },
       { k: "record", label: "⚽ 기록", v: t10[2] / 10, max: T.REC_MAX,
         note: games > 0 ? `${games}경기 · 경기당 ${perGame.toFixed(2)}` : "아직 공식 경기가 없어요",
         detail: { games, g: Number(rec.g) || 0, a: Number(rec.a) || 0, d: Number(rec.d) || 0, perGame: r2(perGame) } },
@@ -176,7 +172,7 @@ window.W2Sheet = (() => {
     return { final: !!final, week: S.week, cols, total, tier, tierName: tier ? TIER_NAME[tier] : null,
       open, T: final ? null : Object.assign({}, T.T),
       coach: coachOf(S), doors: final ? doorsOf(S, tier) : [],
-      memo: final ? "" : "11월엔 달라질 수 있어요 — 🏋️ 몸 · 🎮 솜씨 · ⚽ 기록은 지금까지의 값이고, 빗금은 아직 안 한 칸이 줄 수 있는 최대예요",
+      memo: final ? "" : "11월엔 달라질 수 있어요 — 🏋️ 몸 · 🫀 관리 · ⚽ 기록은 지금까지의 값이고, 빗금은 아직 안 한 칸이 줄 수 있는 최대예요",
       who: S.preset && S.gender ? `${S.preset}-${S.gender}` : null };
   }
   const TIER_NAME = { top: "최상", high: "상", mid: "중", low: "하" };

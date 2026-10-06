@@ -1,11 +1,12 @@
 /* ⚽ 더 윙어 II 1막 — 📋 **스카우트 평가서** (22번 §4-2 · 3 · 24번 §4-4 · 12번 §6 · 25번 계약 7 · 26번 §2)
  *
- *   P-1  🎮 솜씨 칸(v2 · 36번 §16-3 · 38번 §5) = `clamp(4.0 + 20 × k × Σρ ÷ max(n, 8), 0, 10)` · ρ = s_board − 0.5 · **공식 경기의 🧱 막기 판만**
- *        (🥅 · 🅰️ · 승부차기 킥 · 🎯 기술 판 · 연습경기는 안 셈) · k = READ_K 포지션 보정 · 🤖만이면 어느 포지션이든 4.0
+ *   P-1  🫀 관리 칸(v3 · 44번 §1 · 43번 §4 #3 · J10) = `10 × clamp((c̄ − 20) ÷ 50, 0, 1) × λ` · c̄ = **공식 경기(리그 + 대회) 날 엔진에 넘긴 컨디션** 평균
+ *        (연습경기 · 기술 테스트 뺌) · 0경기 0 — 산식 칸(표) + 진짜 한 판(엔진에 넘긴 값에서 다시 셈)
+ *        🪦 옛 P-1(🎮 솜씨 칸 · READ_K · ρ · 바닥 8)과 P-1b(🤖만이면 4.0)는 44번 §1 퇴역 — 판 셋이 모두 감이라 손의 몫이 0(J9)
  *   P-2  ⚽ 기록 칸은 **경기당** — 같은 경기당 기록이면 경기 수가 두 배여도 칸이 같다(누적으로 되돌리면 🏆 대회 운이 기록 칸에 새요)
  *   P-3  🏋️ 몸 점수표(v2 · 34번 R15 둘째 값 · 38번 §5) — **88 위는 6.10으로 평평** · 77 = 5.06 · 문턱 사이는 선으로 · 줄지 않음
- *   P-4  칸은 **다섯**(몸 · 솜씨 · 기록 · 무대 · 테스트) — **추천서 칸 없음**(22번 R8 둘째 값)
- *   P-5  📏 구간 문턱 **64.4 · 57.4 · 50.8**(38번 §5 · 37번 §2 — 화면 한 자리 · 박은 값) · 문턱은 그 구간 · **0.1 아래**는 한 칸 아래
+ *   P-4  칸은 **다섯**(몸 · 관리 · 기록 · 무대 · 테스트 — v3 `skill` → `care` · 43번 §4 #4 솜씨 칸 퇴역) — **추천서 칸 없음**(22번 R8 둘째 값)
+ *   P-5  📏 구간 문턱 **66.4 · 59.4 · 52.8**(44번 §1 · 43번 §2 — 화면 한 자리 · 박은 값) · 문턱은 그 구간 · **0.1 아래**는 한 칸 아래
  *   P-6  📋 중간 평가서는 **그 시점의 사실만** — 17주엔 무대 · 테스트 0(대회 · 테스트 전) · 34주엔 무대가 대회 결과 · 테스트 0 · 다시 열어도 같은 장(얼림)
  *   P-7  ✉️ 문 · 엔딩 규칙표(v2 · 29번 §3-2 P1 (가)) — 문은 **따라간 가족 이야기**에 붙음(🏭 아버지 「중」 · 🎓 엄마 「상」 · ✉️ 할머니 「최상」 · 외형과 무관)
  *        · **그 구간에서만** 나오고 **깃발을 세웠을 때만** 열림 · 가족 이야기가 없으면 문 0 · 정확히 한 엔딩 · 숨은 굴림 0
@@ -25,16 +26,17 @@ const check = (ok, msg) => { console.log(`${ok ? "✅" : "❌"} ${msg}`); if (!o
 const SSRC = fs.readFileSync(path.join(PAGE_DIR, "sheet.js"), "utf8");
 const sheetOf = (src) => new Function("window", `${src}\nreturn window.W2Sheet;`)({});
 const K6 = ["shoot", "pass", "dribble", "defense", "stamina", "speed"];
-const T = { top: 64.4, high: 57.4, mid: 50.8 };   // 🔒 38번 §5 · 37번 §2(64.43 · 57.44 · 50.82를 화면 한 자리로) · 박은 값
-const READ_K = { fw: 1.2045, wg: 1.2412, mf: 0.9942, df: 0.7360 };   // 🔒 38번 §5 — 박은 값
-const COLS = ["body", "skill", "record", "stage", "test"];
+const T = { top: 66.4, high: 59.4, mid: 52.8 };   // 🔒 44번 §1 · 43번 §2(66.36 · 59.40 · 52.77을 화면 한 자리로) · 박은 값
+const COLS = ["body", "care", "record", "stage", "test"];
+const CARE = (avg, n) => (n > 0 ? 10 * Math.min(1, Math.max(0, (avg - 20) / 50)) : 0);   // 🔒 44번 §1 산식 — 박은 꼴(λ 1)
 
 const MUT_S = {
   CUMUL: [[/const perGame = games > 0 \? raw \/ games : 0;/, "const perGame = games > 0 ? raw / 14 : 0;"]],
   BODYUP: [[/\[77, 5\.06\], \[88, 6\.10\]\]/, "[77, 5.06], [88, 6.10], [100, 6.6]]"]],
   RECO: [[/ {4}const tier = final \? tierOf\(total\) : null;/, '    cols.push({ k: "reco", label: "✉️ 추천서", v: 0, max: 5, note: "" });\n    const tier = final ? tierOf(total) : null;']],
-  TIER: [[/T: \{ top: 64\.4, high: 57\.4, mid: 50\.8 \},/, "T: { top: 64.4, high: 57.0, mid: 50.8 },"]],
-  KFLAT: [[/READ_K: \{ fw: 1\.2045, wg: 1\.2412, mf: 0\.9942, df: 0\.7360 \},/, "READ_K: { fw: 1.2045, wg: 1.2412, mf: 0.9942, df: 1 },"]],
+  TIER: [[/T: \{ top: 66\.4, high: 59\.4, mid: 52\.8 \},/, "T: { top: 66.4, high: 59.0, mid: 52.8 },"]],
+  SPAN60: [[/CARE_LO: 20, CARE_SPAN: 50,/, "CARE_LO: 20, CARE_SPAN: 60,"]],
+  SKILLBACK: [[/\{ k: "care", label: "🫀 관리"/, '{ k: "skill", label: "🎮 솜씨"']],
   MIDTIER: [[/const tier = final \? tierOf\(total\) : null;/, "const tier = tierOf(total);"]],
   MIDOPEN0: [[/for \(const c of cols\) if \(open\[c\.k\] > 0\) c\.open = open\[c\.k\];/, "/* 아직 칸 안 적음 */"]],
   DOOR: [[/open: !!\(S\.story && S\.story\.door\)/, "open: true"]],
@@ -42,9 +44,8 @@ const MUT_S = {
 const MUT_G = {
   STAGE_TBL: { "sheet.js": [[/STAGE_PTS: \[0, 3, 5, 7, 8, 10\],/, "STAGE_PTS: [0, 2, 4, 6, 8, 10],"]] },
   MID_NOFREEZE: { "game.js": [[/let m = \(S\.mid \|\| \[\]\)\.find\(\(x\) => x\.week === S\.week\);/, "let m = null;"]] },
-  TECH_LEAK: { "game.js": [[/ {8}techBoards\.push\(\{ kind, s: got\.s, sBoard: got\.sBoard, judge: got\.judge, auto: got\.auto, weak: got\.weak \}\);/,
-    "        techBoards.push({ kind, s: got.s, sBoard: got.sBoard, judge: got.judge, auto: got.auto, weak: got.weak });\n        if (kind === \"defend\") { S.record.sSum = Math.round((S.record.sSum + got.sBoard) * 1e6) / 1e6; S.record.sN += 1; }"]] },
-  SHOT_IN: { "game.js": [[/const blk = info\.boards\.filter\(\(b\) => b\.kind === "defend"\);/, "const blk = info.boards;"]] } };
+  /* 43번 §4 #3 변이 — 연습경기 날 컨디션도 관리 칸에 */
+  PRACTICE_IN: { "game.js": [[/const R = S\.record; {2,}(\/\/ 연습경기)/, "const R = S.record; R.cSum += S.cond; R.cN += 1; $1"]] } };
 {
   const bad = mutsOKIn(SSRC, MUT_S, "sheet.js").concat(pageMutsOK(MUT_G));
   check(bad.length === 0, `0. 변이 정규식이 지금 소스에 전부 걸린다` + (bad.length ? bad.map((b) => `\n       · ${b}`).join("") : ""));
@@ -88,12 +89,30 @@ const mkS = (o) => Object.assign({ pos: "wg", preset: "jiho", gender: "m", trust
   const p4 = (Sh) => JSON.stringify(Sh.compute(mkS({}), true).cols.map((c) => c.k)) === JSON.stringify(COLS) && JSON.stringify(Sh.compute(mkS({}), false).cols.map((c) => c.k)) === JSON.stringify(COLS);
   check(p4(SH), `P-4. 📋 칸은 다섯 — ${COLS.join(" · ")} · **추천서 칸 없음**(중간 · 최종 둘 다)`);
   check(!p4(sheetOf(apply(SSRC, MUT_S.RECO))), `변이-RECO(추천서 칸을 되살림) → P-4가 빨간불`);
+  check(!p4(sheetOf(apply(SSRC, MUT_S.SKILLBACK))), `변이-SKILLBACK(🎮 솜씨 칸을 남김 — 43번 §4 #4) → P-4가 빨간불`);
+  /* P-4b — 퇴역한 재료를 안 읽음(43번 §4 #4): 평가서 소스(주석 밖)에 READ_K · SKILL_ · sSum · sN · sAuto 0 */
+  const code = (src) => src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+  const p4b = (src) => (code(src).match(/READ_K|SKILL_[A-Z]+|\bsSum\b|\bsN\b|\bsAuto\b/g) || []);
+  check(p4b(SSRC).length === 0, `P-4b. 🪦 솜씨 칸 퇴역 — sheet.js 코드에 READ_K · SKILL_* · sSum · sN · sAuto 읽기 0 (${p4b(SSRC).join(",") || "없음"})`);
+  check(p4b(SSRC.replace("const cN = Math.max(0,", "const sN = Number(rec.sN) || 0; const cN = Math.max(0,")).length > 0, `변이 — 평가서가 옛 \`rec.sN\`을 다시 읽으면 → P-4b가 빨간불`);
+  /* P-1 산식 칸 — c̄ · 경기 수를 넣어 */
+  const p1 = (Sh) => {
+    const bad = [];
+    for (const [avg, n] of [[10, 5], [20, 5], [45, 13], [56.38, 13], [70, 9], [95, 14], [60, 0]]) {
+      const v = Sh.compute(mkS({ record: { apps: Math.max(n, 3), g: 1, a: 1, d: 1, cN: n, cSum: avg * n } }), true).cols.find((c) => c.k === "care").v;
+      if (Math.abs(v - CARE(avg, n)) >= 0.1) bad.push(`c̄ ${avg} · ${n}경기: ${v} ≠ ${CARE(avg, n).toFixed(2)}`);
+    }
+    return bad;
+  };
+  const b1 = p1(SH);
+  check(b1.length === 0, `P-1. 🫀 관리 칸 산식 — c̄ 10 · 20 · 45 · 56.38 · 70 · 95 · 0경기 → 0 · 0 · 5 · 7.3 · 10 · 10 · 0 = 10 × clamp((c̄ − 20) ÷ 50, 0, 1)` + (b1.length ? `\n     🔴 ${b1.join(" · ")}` : ""));
+  check(p1(sheetOf(apply(SSRC, MUT_S.SPAN60))).length > 0, `변이-SPAN60(가득 문턱 70 → 80) → P-1이 빨간불`);
   /* 합계는 늘 0.1 단위라 문턱과 「0.1 아래」를 0.1 단위 정수로 만들어 넣어요(부동소수 69.80000000000001 없이) */
   const down = (x) => (Math.round(x * 10) - 1) / 10;
   const p5 = (Sh) => [[T.top, "top"], [down(T.top), "high"], [T.high, "high"], [down(T.high), "mid"], [T.mid, "mid"], [down(T.mid), "low"], [0, "low"], [100, "top"]]
     .every(([v, want]) => Sh.tierOf(v) === want);
   check(p5(SH), `P-5. 📏 구간 문턱 ${T.top} · ${T.high} · ${T.mid}(화면 한 자리) — 문턱은 그 구간 · 0.1 아래(${down(T.top)} · ${down(T.high)} · ${down(T.mid)})는 한 칸 아래`);
-  check(!p5(sheetOf(apply(SSRC, MUT_S.TIER))), `변이-TIER(「상」 문턱을 57.0으로) → P-5가 빨간불`);
+  check(!p5(sheetOf(apply(SSRC, MUT_S.TIER))), `변이-TIER(「상」 문턱을 59.0으로) → P-5가 빨간불`);
 
   /* ══════════ P-7 — 문 · 엔딩 규칙표(가족 이야기) ══════════ */
   /* 가족 이야기 sid는 `W2Story.famSid(S)`가 줘요 — 표만 보게 그 자리를 갈아 끼움(`S.__fam`) */
@@ -166,44 +185,21 @@ const mkS = (o) => Object.assign({ pos: "wg", preset: "jiho", gender: "m", trust
     return { S, official, test, sheet: S.sheet };
   }
   {
-    /* 🎯 테스트 주의 판만 0.9로 — 새면 평균이 움직여요(주는 `W2Moment.play`가 불린 그 주의 세이브에서) */
-    const r = await (async () => {
-      const env = boot({ seed: 515, pos: "df", gender: "f", hand: (k) => (env2Week() === 35 ? 0.9 : 0.4) });
-      function env2Week() { return env.w.W2Game && env.w.W2Game._t.S ? env.w.W2Game._t.S.week : null; }
+    /* P-1r — 진짜 한 판: 엔진에 넘긴 컨디션(공식 경기 = 연습경기 주 35 밖)에서 다시 셈 */
+    const careRun = async (muts) => {
+      const env = boot({ seed: 515, pos: "df", gender: "f", operator: "normal", muts });
       const rr = await runAct(env);
-      const out = { S: rr.S, boards: env.seen.boards.slice() };
+      const off = env.seen.live.filter((m) => m.week !== 35);
+      const avg = off.reduce((a2, m) => a2 + m.cfg.condition, 0) / off.length;
+      const c = rr.S.sheet.cols.find((x) => x.k === "care");
       env.w.close();
-      return out;
-    })();
-    const S = r.S;
-    const off = r.boards.filter((b) => b.week !== 35 && b.slot), tst = r.boards.filter((b) => b.week === 35 && b.slot);
-    const blk = off.filter((b) => b.kind === "defend");
-    const sk = S.sheet.cols.find((c) => c.k === "skill");
-    const k = READ_K[S.pos];
-    const rho = blk.reduce((a2, x) => a2 + (x.sBoard - 0.5), 0);
-    const wantV = Math.min(10, Math.max(0, 4.0 + 20 * k * rho / Math.max(blk.length, 8)));   // 🔒 38번 §5 산식 — 박은 꼴
-    const ok = blk.length > 0 && off.length > blk.length && tst.length >= 1 && sk.detail.n === blk.length && sk.detail.auto === 0
-      && Math.abs(sk.v - Math.round(wantV * 10) / 10) <= 0.1 + 1e-9;
-    check(ok, `P-1. 🎮 솜씨 칸 = 공식 경기의 🧱 막기 판만 — 공식 판 ${off.length}번 중 🧱 ${blk.length}번(s_board 0.4) · 🥅 · 🅰️ ${off.length - blk.length}번 · 🎯 테스트 주 판 ${tst.length}번(0.9 · 안 셈) → 평가서 「${sk.note}」 · ${sk.v}점 = clamp(4 + 20 × ${k} × ${rho.toFixed(2)} ÷ max(${blk.length}, 8)) = ${wantV.toFixed(2)}(화면 한 자리 · 최대 나머지 ±0.1)`);
-    /* 🤖 자동 — 판이 안 열리면 ρ 0 → 4.0(어느 포지션이든 · 38번 §5) */
-    const a = await oneAct(null, true);
-    const ska = a.sheet.cols.find((c) => c.k === "skill");
-    check(a.official.filter((x) => x.slot).length === 0 && ska.v === 4 && ska.detail.n > 0 && ska.detail.auto === ska.detail.n, `P-1b. 🤖 자동 판 — 열린 판 0번 · 🧱 ${ska.detail.n}번 모두 🤖 → 솜씨 **4.0** (실제 ${ska.v} · 「${ska.note}」)`);
-    /* 변이 — 기술 판이 솜씨에 샘 · 🥅 · 🅰️가 솜씨에 들어감 */
-    for (const [name, mut] of [["TECH_LEAK(기술 테스트 🧱 판을 솜씨에 더함)", MUT_G.TECH_LEAK], ["SHOT_IN(🥅 · 🅰️ 판도 솜씨에 — 37번 §4 #9)", MUT_G.SHOT_IN]]) {
-      const env = boot({ seed: 515, pos: "df", gender: "f", muts: mut, hand: () => 0.4 });
-      const rr = await runAct(env);
-      const skm = rr.S.sheet.cols.find((c) => c.k === "skill");
-      const blkm = env.seen.boards.filter((x) => x.week !== 35 && x.slot && x.kind === "defend").length;
-      env.w.close();
-      check(skm.detail.n !== blkm, `변이-${name} → P-1이 빨간불 (평가서 판 ${skm.detail.n}번 ↔ 공식 🧱 판 ${blkm}번)`);
-    }
-    {
-      const SHk = sheetOf(apply(SSRC, MUT_S.KFLAT));
-      const v1 = SHk.compute(mkS({ pos: "df", record: { apps: 14, g: 0, a: 0, d: 3, sN: 20, sSum: 20 * 0.62, sAuto: 0 } }), true).cols.find((c) => c.k === "skill").v;
-      const want1 = Math.round(Math.min(10, 4 + 20 * READ_K.df * 20 * 0.12 / 20) * 10) / 10;
-      check(Math.abs(v1 - want1) > 0.1, `변이-KFLAT(수비수 k 1 — 37번 §4 #9) → 솜씨 칸이 표의 k와 갈림 (${v1} ≠ ${want1})`);
-    }
+      return { off: off.length, avg, c, want: CARE(avg, off.length) };
+    };
+    const cr = await careRun(null);
+    check(cr.c.detail.games === cr.off && Math.abs(cr.c.v - cr.want) < 0.1 && cr.off > 0,
+      `P-1r. 🫀 진짜 한 판 — 공식 경기 ${cr.off}번에 엔진이 받은 컨디션 평균 ${cr.avg.toFixed(2)} → 관리 칸 ${cr.c.v} ≈ ${cr.want.toFixed(2)} · 칸 경기 수 ${cr.c.detail.games} · 글 「${cr.c.note}」`);
+    const cm = await careRun(MUT_G.PRACTICE_IN);
+    check(cm.c.detail.games !== cm.off, `변이-PRACTICE_IN(연습경기 날도 셈 — 43번 §4 #3) → P-1r이 빨간불 (칸 경기 수 ${cm.c.detail.games} ≠ 공식 ${cm.off})`);
     /* P-6 — 중간 평가서(대회가 조별을 넘은 판을 찾아서 — 무대 0끼리 견주면 「같다」가 공짜예요) */
     const STAGE = [0, 3, 5, 7, 8, 10];        // 🔒 21번 §3-3 — 박은 값
     let P6 = null;

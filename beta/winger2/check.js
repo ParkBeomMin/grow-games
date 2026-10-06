@@ -47,12 +47,17 @@
   }
 
   // ═══════════════════════════════ 🎮 미니게임 연습 ═══════════════════════════════
-  const P = { kind: "defend", seen: "rand", weak: "off", ab: "mid", seed: 7000 };
+  const P = { kind: "defend", weak: "off", ab: "mid", seed: 7000 };
   const AB = { low: 40, mid: 55, high: 75 };
   const POS_OF = { goal: "fw", assist: "mf", defend: "df" };
-  const T = { clear: { n: 0, hit: 0 }, dim: { n: 0, hit: 0 }, timeout: 0, n: 0 };
-  seg($("ck-kind"), [["goal", "🥅 슈팅"], ["assist", "🅰️ 컷백"], ["defend", "🧱 막기"]], () => P.kind, (v) => { P.kind = v; });
-  seg($("ck-seen"), [["rand", "무작위(반반)"], ["clear", "잘 보임"], ["dim", "흐림"]], () => P.seen, (v) => { P.seen = v; });
+  /* 고른 칸 분포 — 판 셋 모두 감이라 「맞힌 몫」은 없어요. 이 자리에서 고른 칸(1~6번)만 세요(베타 측정 `cells`와 같은 뜻) */
+  const KINDS = [["goal", "🥅 슈팅"], ["assist", "🅰️ 컷백"], ["defend", "🧱 막기"]];
+  const T = { goal: [0, 0, 0, 0, 0, 0], assist: [0, 0, 0, 0, 0, 0], defend: [0, 0, 0, 0, 0, 0] };
+  const tally = () => {
+    $("ck-tally").textContent = `고른 칸(1~6번) — ${KINDS.map(([k, t]) => `${t} ${T[k].join("·")}`).join(" | ")}`;
+  };
+  seg($("ck-kind"), KINDS, () => P.kind, (v) => { P.kind = v; });
+  tally();
   seg($("ck-weak"), [["off", "끔"], ["0", "0단계"], ["1", "1단계"], ["2", "2단계"]], () => P.weak, (v) => { P.weak = v; });
   seg($("ck-ab"), [["low", `낮음 ${AB.low}`], ["mid", `보통 ${AB.mid}`], ["high", `높음 ${AB.high}`]], () => P.ab, (v) => { P.ab = v; });
   const condEl = $("ck-cond");
@@ -89,14 +94,13 @@
       return got.j;
     };
     const odds = (sv) => Math.round(100 * E.cardP(center, ab, clamp01(Number(sv))));
-    if (kind === "defend" && P.seen !== "rand") M._t.pin({ seen: P.seen });
     const slot = $("ck-board");
     slot.textContent = "";
     $("ck-out").textContent = "";
     const d = await new Promise((done) => {
       try {
         M.play(slot, { kind, sit, odds, judge, foot: weak ? "L" : "R", keeper: WHO.gender === "f" ? "서아" : "태오", world: WHO.gender, me: who(),
-          fast: $("ck-fast").checked, still: $("ck-still").checked, wide: $("ck-wide").checked }, (j, dd) => done(dd || {}));
+          fast: $("ck-fast").checked, still: $("ck-still").checked }, (j, dd) => done(dd || {}));
       } catch (e) { console.error(e); done({ err: String(e && e.message || e) }); }
     });
     const out = $("ck-out");
@@ -108,24 +112,16 @@
         ["시드", `${seed} — 같은 시드 · 같은 s면 같은 결과(엔진 judgeAtP)`],
         ["중심 autoP", `${(center * 100).toFixed(1)}% · 능력치 ${ab.toFixed(1)}(${pos})`],
         ["기본 승산", `${odds(0.5 * sit.foot * sit.cond)}%${weak ? ` (약발 아니면 ${odds(0.5 * sit.cond)}%)` : ""}`],
-        ["고른 칸", d.cell == null ? "— (시간 초과)" : `${d.cell + 1}번 → ${odds(got.s)}%`],
+        ["고른 칸", Number.isInteger(d.cell) ? `${d.cell + 1}번 → ${odds(got.s)}%(어느 칸이든 같아요)` : "—"],
         ["s", `${f3(d.sBoard)} × 🦶 ${f3(sit.foot)} × 🫀 ${f3(sit.cond)} = ${f3(got.s)}${Math.abs((d.s || 0) - got.s) > 1e-12 ? " ⚠️ cb s 다름" : ""}`],
-        ["정답 칸", kind === "defend" ? `${d.target + 1}번 · ${d.seen === "dim" ? "흐림" : "잘 보임"}` : "없음(감의 판)"],
+        ["단서", `없음(감의 판) · target ${d.target} · seen ${d.seen}`],
         ["결과", `${got.j}${d.weak && got.j === "perfect" ? " · 🦶 약발로!" : ""}`],
         ["고름", `${d.ms}ms`],
       ];
       const dl = el("dl");
       rows.forEach(([k, v]) => { dl.appendChild(el("dt", null, k)); dl.appendChild(el("dd", null, v)); });
       out.appendChild(dl);
-      if (kind === "defend") {
-        T.n += 1;
-        if (d.cell == null) T.timeout += 1;
-        const b = T[d.seen === "dim" ? "dim" : "clear"];
-        b.n += 1;
-        if (d.cell === d.target) b.hit += 1;
-        const pct = (x) => (x.n ? `${x.hit}/${x.n}(${Math.round((x.hit / x.n) * 100)}%)` : "0/0");
-        $("ck-tally").textContent = `🧱 이 자리에서 맞힌 몫 — 잘 보임 ${pct(T.clear)} · 흐림 ${pct(T.dim)} · 시간 초과 ${T.timeout}/${T.n}`;
-      }
+      if (Number.isInteger(d.cell) && d.cell >= 0 && d.cell < 6) { T[kind][d.cell] += 1; tally(); }
     }
     go.textContent = "🔁 다시";
     go.disabled = false;
@@ -154,7 +150,7 @@
   /* 🏁 한 해를 뛴 판처럼 — 기록 · 대회 · 테스트를 얹고 몸(여섯 칸 같은 값)만 바꿔 **진짜 compute**가 그 구간을 내는 값을 찾아요 */
   function seasonS(week) {
     const S = fakeS({ week });
-    Object.assign(S.record, { apps: 14, g: 3, a: 3, d: 18, sN: 14, sSum: 7.9, sAuto: 1 });
+    Object.assign(S.record, { apps: 14, g: 3, a: 3, d: 18, cN: 14, cSum: 14 * 62 });
     S.world.cup = Object.assign({}, S.world.cup || {}, { done: true, stage: 2 });
     if (week >= 36) S.test = { tech: 4, rating: 7.1 };
     return S;
@@ -266,7 +262,7 @@
     ["📋 중간 평가서 ① 17주", "#12 11월 문턱 자(중 · 상 · 최상 글자) · 빗금 · 「11월까지 훈련 N주 남음」", () => {
       const S = seasonS(17);
       S.world.cup = Object.assign({}, S.world.cup, { done: false });
-      Object.assign(S.record, { apps: 6, g: 1, a: 1, d: 7, sN: 6, sSum: 3.4 });
+      Object.assign(S.record, { apps: 6, g: 1, a: 1, d: 7, cN: 6, cSum: 6 * 58 });
       const c = SH.compute(S, false);
       return Sc.sheet(Object.assign({ final: false, doors: [], who: who() }, { week: S.week, cols: c.cols, total: c.total, open: c.open, T: c.T, coach: c.coach, memo: c.memo },
         { tier: null, tierName: null, title: "📋 중간 평가서 ①" }));

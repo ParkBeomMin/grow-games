@@ -5,7 +5,7 @@
  *   F-1  👥 카드 여섯 — v2: **여섯 다 열림 · 외형만**(38번 §1 · 15-a — 첫 묶음은 지호 남 · 여만 열렸음) · 카드가 돌려주는 것은 `{ preset, gender }`
  *   F-1b ✏️ 만들기 — 진짜 만들기 화면에서 능력치 · 「합 288」 · 장기 한 줄 · 다시 뽑기 (3)을 보고 포지션 · 주발 · 번호를 고름 · 도입 한마디 셋에서 하나
  *   F-2  🏁 입구 → 카드 → 만들기 → 🎬 도입 → 36주 → 🎯 테스트 → 📋 평가서 → (✉️ 문) → 🎓 엔딩 → 🎬 필름 → 입구 → 📖 도감을 **완주**
- *   F-2b ✉️ 문 — 「중」 구간에 깃발을 세운 판에서 진짜 봉투 화면(고르기 → [이 길로 간다])을 눌러 문 엔딩으로
+ *   F-2b ✉️ 문 — 따라간 가족 이야기의 문 구간(v3: 🎓 엄마 · 「상」)에 닿은 판에서 진짜 봉투 화면(고르기 → [이 길로 간다])을 눌러 문 엔딩으로
  *        — 세이브에 졸업(`act1` · `hofDone`) · 필름이 저장됨 · 졸업 줄(`winger2-grads`) 한 줄 · 도감 다섯 칸 · 본 엔딩이 도감에 「본 것」으로
  *   F-3  🔢 **필수 입력 수를 셉니다** — 누른 것 전부(사람이 안 누르면 안 넘어가는 것만 누름) · 설계 어림(12번 §5-5 「약 150~200」) · 첫 묶음 **196번**과 나란히 보고
  *   + 변이: 도윤 · 하람 카드가 잠김(F-1) · 필름 [닫기]가 안 닫힘(F-2 — 멈춤)
@@ -31,7 +31,10 @@ const MUT = {
 
 async function flow(muts, stall, opt) {
   /* ⏱️ "keep-long" — 🧱 판의 4초 제한은 그대로(뭉개면 판이 열리자마자 시간 초과) · 나머지 기다림은 0 */
-  const env = boot(Object.assign({ seed: 909, pos: "wg", gender: "f", realScenes: true, realMoment: true, muts, fastTimers: "keep-long", voice: 1 }, opt || {}));
+  const env = boot(Object.assign({ seed: 909, pos: "wg", gender: "f", realScenes: true, realMoment: true, muts, fastTimers: "keep-long", voice: 1,
+    /* 🔄 v3 — 44번 새 T(66.4 · 59.4 · 52.8)에서 시드 909는 「상」(59.5)에 닿아 🏭 아버지 문(「중」)이 안 열려요(엔딩 pro2 · 문 없음 = 규칙대로).
+     *    문 구간이 「상」인 🎓 엄마 이야기를 따라가게 바꿈 — 59.5는 T2 59.4 바로 위라 T가 다시 바뀌면 여기부터 봐요 */
+    policy: { people: { 2: "family:apply", 3: "keeper", 32: "family:apply" } } }, opt || {}));
   const r = await runAct(env, { stall: stall || 3000 });
   const S = r.S, w = env.w, D = w.document;
   const out = { r, S, pick: env.pickSeen || [], lockToast: env.lockToast || "", lockStill: !!env.lockStill, clicks: Object.assign({}, r.clicks) };
@@ -75,15 +78,15 @@ async function flow(muts, stall, opt) {
   check(f.r.done && S.hofDone === true && !!S.act1 && S.week === 36 && !!S.test && !!S.sheet && !!S.ending && f.film && f.hof === 1 && f.hof8 === 0 && f.tabs === 5 && f.endSeen >= 1 && f.bookClosed,
     `F-2. 🏁 진짜 화면으로 완주 — 36주 · 테스트(기술 ${S.test ? S.test.tech : "?"}/6) · 평가서 「${S.sheet ? S.sheet.tierName || S.sheet.tier : "?"}」 · 엔딩 ${S.ending ? S.ending.id : "?"} · 필름 저장 ${f.film ? "됨" : "안 됨"} · 졸업 줄 ${f.hof}줄(8종 명전 ${f.hof8}줄) · 도감 ${f.tabs}칸 · 본 엔딩 ${f.endSeen}개 · 도감 닫힘 ${f.bookClosed ? "✓" : "✗"}`
     + (f.r.done ? "" : `\n     🔴 멈춤: ${f.r.stuck}`));
-  /* F-2b — ✉️ 문까지 — 같은 완주 판(시드 909 · 2주 🤝 아버지 이야기 · 32주 깃발)이 「중」에 닿아 진짜 봉투 화면을 지남
-   *    (v2: 문은 외형이 아니라 따라간 가족 이야기에 붙음 — 29번 §3-2 P1 (가). 시드가 「중」을 벗어나면 이 줄이 알려 줘요 — 시드를 다시 고를 자리) */
+  /* F-2b — ✉️ 문까지 — 같은 완주 판(시드 909 · 2주 🤝 엄마 이야기 · 32주 깃발)이 문 구간(「상」)에 닿아 진짜 봉투 화면을 지남
+   *    (v2: 문은 외형이 아니라 따라간 가족 이야기에 붙음 — 29번 §3-2 P1 (가). v3: 아버지(「중」) → 엄마(「상」)로 옮김 — 위 `flow` 주석) */
   {
     const doorClicks = (f.clicks["문 고르기"] || 0) + (f.clicks["문 확정"] || 0);
-    check(f.r.done && doorClicks === 2 && S.ending && S.ending.door === true && S.ending.id === "semi" && S.sheet && S.sheet.tier === "mid"
-      && (S.story.done || []).some((d) => d.sid === "father")
-      /* 🔄 v2 — 얼린 `act1`의 문 이유(29번 §5 · 38번 계약 4′): 가족 dad · 뿌리 shop · doorWhy.story = father(SV-3 판은 문이 없어 여기서 봄) */
-      && !!S.act1 && S.act1.family === "dad" && S.act1.origin === "shop" && !!S.act1.doorWhy && S.act1.doorWhy.story === "father",
-      `F-2b. ✉️ 문 — 🏭 아버지 이야기를 따라간 판이 평가서 「${S.sheet ? S.sheet.tierName || S.sheet.tier : "?"}」 · 진짜 봉투 화면을 골라 누르고 [이 길로 간다](${doorClicks}번) → 문 엔딩 ${S.ending ? S.ending.id : "?"}${S.ending && S.ending.door ? "(문)" : ""} · act1 문 이유 ${S.act1 && S.act1.doorWhy ? JSON.stringify(S.act1.doorWhy) : "없음 🔴"}`);
+    check(f.r.done && doorClicks === 2 && S.ending && S.ending.door === true && S.ending.id === "univ" && S.sheet && S.sheet.tier === "high"
+      && (S.story.done || []).some((d) => d.sid === "apply")
+      /* 얼린 `act1`의 문 이유(29번 §5 · 38번 계약 4′): 가족 mom · 뿌리 academy · doorWhy.story = apply */
+      && !!S.act1 && S.act1.family === "mom" && S.act1.origin === "academy" && !!S.act1.doorWhy && S.act1.doorWhy.story === "apply",
+      `F-2b. ✉️ 문 — 🎓 엄마 이야기를 따라간 판이 평가서 「${S.sheet ? S.sheet.tierName || S.sheet.tier : "?"}」(${S.sheet ? S.sheet.total : "?"}) · 진짜 봉투 화면을 골라 누르고 [이 길로 간다](${doorClicks}번) → 문 엔딩 ${S.ending ? S.ending.id : "?"}${S.ending && S.ending.door ? "(문)" : ""} · act1 문 이유 ${S.act1 && S.act1.doorWhy ? JSON.stringify(S.act1.doorWhy) : "없음 🔴"}`);
   }
   /* F-3 */
   const total = Object.values(f.clicks).reduce((a, b) => a + b, 0);

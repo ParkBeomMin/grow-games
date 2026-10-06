@@ -25,12 +25,13 @@ const { boot, runAct, liveMatch, tap } = require("./_act.js");
 let fail = 0;
 const check = (ok, msg) => { console.log(`${ok ? "✅" : "❌"} ${msg}`); if (!ok) fail += 1; };
 const rd = (f) => fs.readFileSync(path.join(PAGE_DIR, f), "utf8");
-/* 🔒 41번 §2 판 그림 키 27(박은 값 — 표를 읽지 않음) */
-const M_KEYS = ["m-ball", "m-boot", "m-leg", "m-taeo-stand", "m-seoa-stand"];
+/* 🔒 판 그림 키(박은 값 — 표를 읽지 않음) · 41번 §2 27 → reach · spread 4(31번 「reach · spread 배선」) →
+ *    v3(44번 · 41번 §9 안 C): 슈터 뒷모습 `m-shooter-{g}-back` 2 더함 · 앞모습 `m-shooter-{g}` · 흐림 다리 `m-leg` 3 퇴역 = **30** */
+const M_KEYS = ["m-ball", "m-boot", "m-taeo-stand", "m-seoa-stand"];
 for (const g of ["m", "f"]) {
-  for (const x of ["ready", "dive-high", "dive-low", "jump", "crouch"]) M_KEYS.push(`m-gk-${g}-${x}`);
+  for (const x of ["ready", "dive-high", "dive-low", "jump", "crouch", "reach", "spread"]) M_KEYS.push(`m-gk-${g}-${x}`);
   for (const x of ["ready", "run", "shoot", "cheer"]) M_KEYS.push(`m-mate-${g}-${x}`);
-  M_KEYS.push(`m-def-${g}-tackle`, `m-shooter-${g}`);
+  M_KEYS.push(`m-def-${g}-tackle`, `m-shooter-${g}-back`);
 }
 const code = (s) => s.replace(/\/\*[\s\S]*?\*\//g, "").split("\n").filter((l) => !/^\s*\/\//.test(l)).join("\n");
 const uniq = (a) => [...new Set(a)];
@@ -73,11 +74,11 @@ function kM(man, html) {
     + (w1.missing.length ? `\n     🔴 없는 파일(설치가 통째로 실패해요): ${w1.missing.join(" · ")}` : "") + (w1.lack.length ? `\n     🔴 빠짐(오프라인에서만 깨져요): ${w1.lack.slice(0, 8).join(" · ")}` : ""));
   const m1 = kM(MAN, HTML);
   check(m1.ok, `K-M. 🎨 manifest \`theme_color\` ${m1.tc} == \`<meta name="theme-color">\` ${m1.meta}`);
-  /* 🔄 v2 판 그림 배선(41번) — 66 + 54 + 판 그림 27 = 147 · 판 그림은 41번 키와 1:1 · 모두 sw `ASSETS`에 */
+  /* 🔄 v3(44번 · 31번 v3) — 초상 · 치비 · 배경 126(첫 묶음 66 + 54 + 🧱 「나」 `chibi-guard` 6) + 판 그림 30 = 156 · 판 그림은 키 표와 1:1 · 모두 sw `ASSETS`에 */
   const mFiles = fs.readdirSync(path.join(PAGE_DIR, "art")).filter((f) => /^m-.*\.webp$/.test(f)).map((f) => f.replace(/\.webp$/, "")).sort();
   const mInSw = M_KEYS.filter((k2) => w1.assets.indexOf(`./art/${k2}.webp`) >= 0).length;
-  check(w1.art === 147 && JSON.stringify(mFiles) === JSON.stringify([...M_KEYS].sort()) && mInSw === 27,
-    `K-W2. 🖼️ \`art/\` 그림이 첫 묶음 66 + 54 + 판 그림 27 = **147장**(${w1.art}장) · 판 그림 파일 ${mFiles.length}장이 41번 키 27과 1:1 · sw \`ASSETS\`에 ${mInSw}/27`);
+  check(w1.art === 156 && JSON.stringify(mFiles) === JSON.stringify([...M_KEYS].sort()) && mInSw === 30,
+    `K-W2. 🖼️ \`art/\` 그림이 126 + 판 그림 30 = **156장**(${w1.art}장) · 판 그림 파일 ${mFiles.length}장이 키 30과 1:1 · sw \`ASSETS\`에 ${mInSw}/30`);
   /* 🔄 v2(39번 §2 「그림」) — 옛 사본 0: `.v1.` 이름 · 옛 이름 사본 `doyun-base` · `haram-base`(지금은 `doyun-m-base` …) */
   const stale = (names) => names.filter((f) => /\.v1\./.test(f) || /^(doyun|haram)-base\./.test(f));
   const ART_FILES = require("fs").readdirSync(require("path").join(PAGE_DIR, "art"));
@@ -108,7 +109,7 @@ function k5static(A) {
   const claimNoFile = claimed.filter((k2) => files.indexOf(k2) < 0);
   const WHO = ["jiho-m", "jiho-f", "doyun-m", "doyun-f", "haram-m", "haram-f", "coach", "minjae", "taeo", "seheon", "minseo", "seoa", "gaeun", "scout", "dad", "mom", "grandma"];
   const MOODS = ["base", "smile", "fire", "tired", "down", "surprise", "moved", "stern", "worry", "smirk", "shock", "grin", "tears", "frown", "respect", "interest"];
-  const POSES = ["base", "score", "block", "down"];
+  const POSES = ["base", "score", "block", "down", "guard"];   // v3: 🧱 「나」 막을 준비(44번 · 41번 §9)
   const reach = new Set();
   const bad = [];
   for (const w of WHO) {
@@ -116,7 +117,7 @@ function k5static(A) {
     for (const po of POSES) { const p = A.chibi(w, po); if (p) reach.add(p); }
   }
   for (const f of files.filter((f) => /^(bg|end)-/.test(f))) { const p = A.bg(f); if (p) reach.add(p); }
-  /* 🎮 판 그림 27장 — 41번 키 표(박은 값)로 `sprite`가 닿는 것 */
+  /* 🎮 판 그림 30장 — 키 표(박은 값)로 `sprite`가 닿는 것 */
   for (const k2 of M_KEYS) { const p = A.sprite(k2); if (p) reach.add(p); if (p && !files.includes(p.replace(/^art\//, "").replace(/\.webp$/, ""))) bad.push(`판 그림 ${k2} → ${p}`); }
   const sprSame = JSON.stringify([...A.__SPR].sort()) === JSON.stringify([...M_KEYS].sort());
   if (!sprSame) bad.push(`판 그림 표 ${A.__SPR.size}칸 ≠ 41번 ${M_KEYS.length}칸`);
@@ -140,7 +141,7 @@ function k5static(A) {
   check(m !== ART && !k5static(artOf(m)).ok, `변이 — 표에 없는 파일(「taeo-cry」)을 적으면 → K-5가 빨간불(깨진 그림)`);
   const m2 = ART.replace('taeo: "base grin fire tears"', 'taeo: "base grin fire"');
   check(m2 !== ART && !k5static(artOf(m2)).ok, `변이 — 표에서 표정 하나를 빼면 → K-5가 빨간불(그 파일에 안 닿음)`);
-  const m3 = ART.replace('"ready dive-high dive-low jump crouch"', '"ready dive-high dive-low crouch"');
+  const m3 = ART.replace('"ready dive-high dive-low jump crouch reach spread"', '"ready dive-high dive-low crouch reach spread"');
   check(m3 !== ART && !k5static(artOf(m3)).ok, `변이 — 판 그림 표에서 키퍼 「jump」를 빼면 → K-5가 빨간불(41번과 1:1이 깨짐)`);
 }
 
@@ -354,14 +355,14 @@ function k9(texts) {
     await wait(5);
     const filmText = layer.textContent;
     const weeks = `훈련 ${S.trainWeeks}주(🦶 약발 ${S.weakWeeks || 0}주) · 휴식 ${S.restWeeks}주`;
-    /* 🎮 판 줄 — v2(30번): 평가서 솜씨 칸 글 그대로에 「🎮 」(한 곳에서 나옴 · auto-mark AM-2가 규칙을 봄) */
-    const boards = `🎮 ${S.sheet.cols.find((c) => c.k === "skill").note}`;
+    /* 🫀 관리 줄 — v3(44번 · 30번 v3): 평가서 관리 칸 글 그대로에 「🫀 」(한 곳에서 나옴 · auto-mark AM-2가 규칙을 봄) */
+    const boards = `🫀 ${S.sheet.cols.find((c) => c.k === "care").note}`;
     const filmOK = filmText.indexOf(weeks) >= 0 && filmText.indexOf(boards) >= 0 && !/undefined|NaN/.test(filmText);
     check(colsOK && zero && clean, `K-7. 📋 진짜 평가서 모델을 진짜 \`scenes.js\`가 그림 — 다섯 칸 이름 ✔ · 감독 의견 「${S.sheet.coach.line}」 옆 「점수 0」 ${zero ? "✔" : "🔴"} · undefined/NaN/null ${clean ? "0" : "🔴 있음"}`);
     check(filmOK, `K-8. 🎬 진짜 필름 모델을 그림 — 「${weeks}」 · 「${boards}」 한 줄씩 ${filmOK ? "✔" : "🔴"}`);
     W.close();
     /* 🧪 K-8 변이 — 필름이 평가서 글 대신 따로 적으면 */
-    const M8 = { "film.js": [[/sk \? `🎮 \$\{sk\.note\}` : "🎮 평가서 전이에요"\]/, 'sk ? `🎮 🧱 막기 판 ${skd.n}번` : "🎮 평가서 전이에요"]']] };
+    const M8 = { "film.js": [[/sk \? `\$\{sk\.k === "care" \? "🫀" : "🎮"\} \$\{sk\.note\}` : "🫀 평가서 전이에요"\]/, 'sk ? `🫀 경기 날 컨디션 ${skd.avg}` : "🫀 평가서 전이에요"]']] };
     const bad8 = pageMutsOK({ M8 });
     if (bad8.length) check(false, `K-8 변이 정규식이 film.js에 안 걸림 — ${bad8.join(" · ")}`);
     else {

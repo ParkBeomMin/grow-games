@@ -58,9 +58,7 @@
   --m-hover: rgba(255, 255, 255, .07);
   --m-line: rgba(255, 255, 255, .55);       /* 경기장 선 */
   --m-net: rgba(233, 238, 255, .16);        /* 그물 실 */
-  --m-lane: rgba(233, 238, 255, .30);       /* 🧱 슛 길 여섯 */
   --m-opp: rgba(150, 165, 210, .38);        /* 🧱 상대 슈터 실루엣 */
-  --m-leg: rgba(30, 43, 88, .97);           /* 🧱 흐림 — 디딤발을 가리는 우리 수비 다리 */
   --keeper-ours: rgba(190, 236, 96, .74);   /* 🧤 태오 · 서아의 라임색 골키퍼 상의(그림과 같은 색) */
   --keeper-ours-2: rgba(120, 170, 40, .55);
 
@@ -410,9 +408,9 @@ body:has(.w2m-ready, .w2m-board) .w2-gear-in { visibility: hidden; }
 /* ═══════════════════════════════════════════════════════════════════
  * 2. 🔥 순간 판 (beta/winger-moment.js) — 판 셋 · 문법 하나: 🥅 슈팅 · 🅰️ 컷백 · 🧱 슛 막기
  * ═══════════════════════════════════════════════════════════════════
- * 셋 다 「여섯 칸 → 한 탭 → 모션 → 결과 + 해설」이고, 첫 화면이 한눈에 다르게 생겼어요(정면 골문 · 위에서 본 문전 ·
- * 마주 선 슈터). 종류는 `w2m-k-goal` · `w2m-k-assist` · `w2m-k-defend`, 그림은 `w2m-f-*`(SVG + 움직이는 조각).
- * ① **판정을 그리지 않습니다** — 칸은 늘 같은 모양이에요(🧱 정답 길에도 밝기 · 테두리 · 화살표 0 — 36번 §2-6).
+ * 셋 다 「여섯 칸 → 한 탭 → 모션 → 결과 + 해설」이고, 첫 화면이 한눈에 다르게 생겼어요(상대 골문 정면 · 위에서 본 문전 ·
+ * 슈터 등 뒤에서 본 우리 골문). 종류는 `w2m-k-goal` · `w2m-k-assist` · `w2m-k-defend`, 그림은 `w2m-f-*`(SVG + 움직이는 조각).
+ * ① **판정을 그리지 않습니다** — 칸은 늘 같은 모양이에요(셋 다 감 — 여섯 칸 같은 값 · 44번).
  *    `.w2m-cell*` 선택자 안에 opacity를 쓰지 마세요(G-2a — 칸의 모양이 값처럼 읽히는 자리).
  * ② 조각의 자리 · 각도는 JS가 정해요(`--rot` · `--sc` · translate). 여기는 **옷과 속도 곡선**만.
  * ③ 위계: 판 연출은 골 세리머니보다 늘 작아요(상자 안 .28 · 흔들림 2px · 반짝이 6 · 진동 없음). */
@@ -453,7 +451,6 @@ body:has(.w2m-ready, .w2m-board) .w2-gear-in { visibility: hidden; }
 .w2m-ready-full { margin: 8px auto 4px; max-width: 24rem; text-align: left; font-size: .86rem; line-height: 1.6; color: var(--text); }
 .w2m-ex { width: min(240px, 78%); margin: 2px auto 0; }
 .w2m-ex .w2m-field { border-width: 1px; }
-.w2m-ex-cap { margin: 4px 0 0; font-size: .76rem; color: var(--sky); }
 .w2m-go { min-height: 48px; }
 
 /* ---------- 🟩 판 그림 — 폭 대 높이는 JS가 `padding-bottom`으로 못 박음(SVG viewBox와 같은 자) ---------- */
@@ -467,7 +464,7 @@ body:has(.w2m-ready, .w2m-board) .w2-gear-in { visibility: hidden; }
 .w2m-board .w2m-field { margin-inline: -6px; }
 .w2m-f-goal { background: linear-gradient(180deg, var(--m-face) 0 75.86%, var(--turf) 75.86% 100%); }
 .w2m-f-assist { background: repeating-linear-gradient(180deg, var(--turf) 0 11%, var(--turf2) 11% 22%); }
-.w2m-f-defend { background: repeating-linear-gradient(180deg, var(--turf2) 0 12%, var(--turf) 12% 24%); }
+.w2m-f-defend { background: linear-gradient(180deg, var(--m-face-def) 0 70.97%, var(--turf) 70.97% 100%); }   /* 골라인 44 ÷ 62 */
 .w2m-art { position: absolute; left: 0; top: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
 .w2m-art * { vector-effect: non-scaling-stroke; }
 .w2m-art .a-ground { fill: transparent; }
@@ -476,18 +473,8 @@ body:has(.w2m-ready, .w2m-board) .w2-gear-in { visibility: hidden; }
 .w2m-art .a-goalline, .w2m-art .a-line { fill: none; stroke: var(--m-line); stroke-width: 1.5px; }
 .w2m-art .a-spot { fill: var(--m-line); }
 .w2m-art .a-mouth { fill: var(--m-face); stroke: var(--cream); stroke-width: 2px; }
-.w2m-art .a-netzone { fill: var(--m-face-def); }
-.w2m-art .a-post { fill: var(--cream); }
-/* 🧱 길 여섯 — 옅은 부채꼴. 해설 점선은 결과 **뒤에만**(디딤발이 가리킨 길 — 36번 §7-3) */
-.w2m-art .a-lane { stroke: var(--m-lane); stroke-width: 1.5px; }
-.w2m-art .a-lane.is-target { stroke: var(--sky); stroke-width: 2.5px; stroke-dasharray: 7 5; }
-/* 🏃 슈터 — 정면 실루엣(어깨 · 시선 · 기울기 0 — 단서는 디딤발 하나) */
+/* 🏃 🧱 슈터 — 그림을 못 받았을 때의 뒷모습 실루엣(머리 · 어깨) */
 .w2m-art .a-opp { fill: var(--m-opp); stroke: var(--dim); stroke-width: 1.5px; }
-/* 🦶 디딤발 — 흰 축구화 한 짝 + 앰버 앞코(앞뒤가 바로 읽히게). 흐림이면 우리 수비 다리가 뒤쪽 반을 가려요 */
-.w2m-art .a-sole { fill: var(--cream); stroke: rgba(0, 0, 0, .72); stroke-width: 1.5px; }
-.w2m-art .a-lace { fill: none; stroke: rgba(0, 0, 0, .55); stroke-width: 1.2px; }
-.w2m-art .a-toe { fill: var(--accent); stroke: rgba(0, 0, 0, .5); stroke-width: 1px; }
-.w2m-art .a-leg { fill: var(--m-leg); stroke: var(--line); stroke-width: 1.5px; }
 
 /* ---------- 🧍 움직이는 조각 — 판과 같은 크기의 겹(`.w2m-mv`)을 밀어 판의 %로 옮겨요(경기 판 `.w2-slot`과 같은 수).
  * 속도는 JS가 단계마다 `transition-duration`으로 줘요(36번 §7-1). 곡선만 여기 ---------- */
@@ -509,19 +496,14 @@ body:has(.w2m-ready, .w2m-board) .w2-gear-in { visibility: hidden; }
 .w2m-kick.has-img { width: 12%; }
 .w2m-f-assist .w2m-mate.has-img, .w2m-f-assist .w2m-me.has-img, .w2m-def.has-img { width: 16%; }
 .w2m-f-assist .w2m-me.has-img { --ay: -25%; }
-/* 🧱 슈터 — 무릎 아래를 잘라요(발 · 정강이가 두 번째 단서가 안 되게 · 41번 §3-2) · SVG 밑(디딤발이 늘 위) */
-.w2m-shooter-img { width: 26%; --ay: -100%; }
-.w2m-shooter-img .w2m-img { clip-path: inset(0 0 24% 0); }
+/* 🧱 슈터 뒷모습(아래 · 카메라 쪽 — 발은 판 밖으로 잘림) · 우리 키퍼(골라인) · 「나」(골문 앞 — 막을 준비) 모두 발끝을 자리에 */
+.w2m-shooter-img { width: 30%; --ay: -100%; }
 .w2m-f-defend.has-shooter .a-opp { display: none; }
-.w2m-ourgk.has-img { width: 15%; --ay: -100%; }
-/* 🧱 「나」 — 발끝을 자리에(우리 키퍼 머리 위로 안 겹치게) · 물러선 원형 말도 같은 자리 */
+.w2m-ourgk.has-img { width: 18%; --ay: -100%; }
 .w2m-f-defend .w2m-me { --ay: -100%; }
-.w2m-f-defend .w2m-me.has-img { width: 15%; }
+.w2m-f-defend .w2m-me.has-img { width: 21%; }
 .w2m-f-defend .w2m-me.is-dive { --ay: -50%; }
-/* 🦶 디딤발 그림 — 받으면 벡터 밑창 · 끈을 숨겨요(앰버 앞코 점은 그대로 — 앞 · 뒤가 한눈에). 흰 테두리로 어두운 잔디 위에서 또렷하게 */
-.w2m-f-defend.has-boot .a-sole, .w2m-f-defend.has-boot .a-lace { display: none; }
-.w2m-art .a-bootimg { filter: drop-shadow(0 0 .6px rgba(255, 255, 255, .95)) drop-shadow(0 0 .6px rgba(255, 255, 255, .95)); }
-.w2m-f-defend .w2m-me.is-dive.has-img { width: 24%; }
+.w2m-f-defend .w2m-me.is-dive.has-img { width: 26%; }
 .w2m-mv.is-held { visibility: hidden; }
 .w2m-ball {
   width: 13px; height: 13px; border-radius: 50%;
@@ -567,7 +549,7 @@ body:has(.w2m-ready, .w2m-board) .w2-gear-in { visibility: hidden; }
   box-shadow: inset 0 0 0 1px var(--cream);
 }
 
-/* ---------- 👆 칸 여섯 — 버튼(키보드 1~6 · 44px 이상 — 🥅 80×55 · ⚡ 58×46 · 🧱 48×92px @ 320px) ---------- */
+/* ---------- 👆 칸 여섯 — 버튼(키보드 1~6 · 44px 이상 — 🥅 80×55 · ⚡ 58×46 · 🧱 45×106px @ 320px) ---------- */
 .w2m-cells { position: absolute; left: 0; top: 0; width: 100%; height: 100%; outline: none; }
 .w2m-cell {
   position: absolute; margin: 0; padding: 0;
@@ -587,9 +569,8 @@ body:has(.w2m-ready, .w2m-board) .w2-gear-in { visibility: hidden; }
   position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden;
   clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; border: 0;
 }
-/* 칸 아래 한 줄 — 고르기 전엔 안내(🧱 ⏱️ · 남은 3초부터 ⏳), 고른 뒤엔 그 칸의 승산(J4 — 「🎯 이 길이면 50%」) */
+/* 칸 아래 한 줄 — 고르기 전엔 안내, 고른 뒤엔 승산(J4 — 「🎯 52% — 슈터는 어디로?」) */
 .w2m-tip { font-size: .82rem; color: var(--dim); margin: 7px 0 0; min-height: 1.3em; }
-.w2m-tip.urgent { color: var(--accent2); font-weight: 600; }
 .w2m-tip.w2m-pick { font-size: .92rem; color: var(--cream); }
 .w2m-after { min-height: 2.6em; }
 
@@ -613,7 +594,7 @@ body:has(.w2m-ready, .w2m-board) .w2-gear-in { visibility: hidden; }
 .w2m-res.w2m-good { color: var(--good); font-family: "Jua", sans-serif; font-size: 1.02rem; }
 .w2m-res.w2m-mid { color: var(--cream); }
 .w2m-res.w2m-bad { color: var(--accent2); }
-/* 💬 해설 한 줄 — 판이 스스로 가르치는 자리(🧱 디딤발 길 · 🥅 키퍼가 뜬 쪽) */
+/* 💬 해설 한 줄(🥅 키퍼가 뜬 쪽 · 🧱 슛이 온 길) */
 .w2m-note { margin: 3px 0 0; font-size: .86rem; line-height: 1.45; color: var(--sky); }
 /* 🎖️ 「🦶 약발로!」는 훈장 — 색이 아니라 모양(테두리 알약)으로 */
 .w2m-win-weak {
@@ -638,17 +619,9 @@ body:has(.w2m-ready, .w2m-board) .w2-gear-in { visibility: hidden; }
 .w2m-ready.w2m-k-defend { border-color: var(--sky); }
 .w2m-k-defend.w2m-t-perfect { --m-hit: var(--sky); border-color: var(--sky); }
 .w2m-k-defend.w2m-t-ok { --m-hit: var(--cream); border-color: var(--cream); }
-/* 🧱 칸 = 길 하나의 세로 띠(누르는 자리). 보이는 건 골라인의 입 여섯뿐 — 부채꼴 길과 겹쳐 시끄럽지 않게 */
-.w2m-k-defend .w2m-cell { border: 0; border-radius: 0; }
-.w2m-k-defend .w2m-cell::before {
-  content: ""; position: absolute; left: 7%; right: 7%; bottom: 0; height: 22.5%;
-  border: 1px dashed var(--m-cell-line); border-bottom: 0; border-radius: 6px 6px 0 0;
-}
-.w2m-k-defend .w2m-cell.is-pick { border: 0; background: var(--accent-a10); }
-.w2m-k-defend .w2m-cell.is-pick::before { border: 2px solid var(--accent); border-bottom: 0; }
 
 /* ---------- ♿ 순간 판 — 움직임 줄이기(기기 · 설정 `still`) · ⏩ ----------
- * 🔴 끄더라도 판은 할 수 있어야 하고, **글 정보는 그대로**예요(승산 · 결과 · 해설 · 점선). 모션만 0 —
+ * 🔴 끄더라도 판은 할 수 있어야 하고, **글 정보는 그대로**예요(승산 · 결과 · 해설). 모션만 0 —
  *    조각은 같은 시각에 마지막 자리로 바로 갑니다(36번 §7-5 「마지막 장면 한 장」) */
 .w2m-still .w2m-mv, .w2m-still .w2m-pc { transition: none !important; }
 .w2m-still.w2m-box, .w2m-still .w2m-res, .w2m-still.w2m-t-miss, .w2m-still .w2m-def { animation: none !important; }

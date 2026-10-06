@@ -6,7 +6,7 @@
  *   Art.alt(who, mood, name)  → "{이름} — {표정}" (♿ 대체 문구 — 12번 §9-6)
  *   Art.name(who)             → 기본 이름(주인공은 플레이어가 바꾼 이름을 부르는 쪽이 넘깁니다)
  *
- * 🔒 **파일 이름이 곧 계약 키입니다**(12번 §9-6 · 13번 §6-5 · 38번 계약 16 · 41번). 아래 표(120장) + 판 그림 표 `SPR`(27장)이 `art/`의 147장과
+ * 🔒 **파일 이름이 곧 계약 키입니다**(12번 §9-6 · 13번 §6-5 · 38번 계약 16 · 41번). 아래 표(126장) + 판 그림 표 `SPR`(30장)이 `art/`의 156장과
  *    한 글자도 달라선 안 됩니다 — 표에 없는 키는 파일이 있어도 안 부르고(null), 표에 있는데
  *    파일이 없으면 깨진 그림이 됩니다. 그래서 `<img>`를 그리는 쪽은 **`error`에서 이름 글자로
  *    물러섭니다**(scenes.js `face` · match-scene.js 치비 말) — 깨진 그림 금지.
@@ -19,9 +19,10 @@
 window.Art = (() => {
   const DIR = "art/";
   const EXT = ".webp";
-  const HERO = "base smile fire tired down surprise moved chibi-base chibi-score chibi-block chibi-down";
-  /* 120장 = 첫 묶음 66(지호 남·여 22 · 공통 조연 10 · 두 세계 조연 22 · 배경 12)
-   *        + 둘째 묶음 54(도윤 · 하람 남·여 44 · 엄마 · 할머니 6 · 배경 2 · 엔딩 2 — 38번 §3) */
+  const HERO = "base smile fire tired down surprise moved chibi-base chibi-score chibi-block chibi-down chibi-guard";
+  /* 126장 = 첫 묶음 66(지호 남·여 22 · 공통 조연 10 · 두 세계 조연 22 · 배경 12)
+   *        + 둘째 묶음 54(도윤 · 하람 남·여 44 · 엄마 · 할머니 6 · 배경 2 · 엔딩 2 — 38번 §3)
+   *        + 🧱 막을 준비 치비 6(`chibi-guard` — 44번 · 41번 §9 안 C) */
   const MOODS = {
     "jiho-m": HERO, "jiho-f": HERO, "doyun-m": HERO, "doyun-f": HERO, "haram-m": HERO, "haram-f": HERO,
     coach: "base smile stern worry", scout: "base interest smile", dad: "base smile worry",
@@ -44,18 +45,19 @@ window.Art = (() => {
     base: "평온", smile: "웃음", fire: "결의", tired: "지침", down: "아쉬움", surprise: "놀람", moved: "벅참",
     stern: "엄한 얼굴", worry: "걱정", smirk: "도발하는 미소", shock: "당황", grin: "활짝 웃음",
     tears: "눈물", frown: "찌푸림", respect: "인정하는 미소", interest: "관심",
-    "chibi-base": "준비 자세", "chibi-score": "환호", "chibi-block": "몸을 던져 막기", "chibi-down": "낙담",
+    "chibi-base": "준비 자세", "chibi-score": "환호", "chibi-block": "몸을 던져 막기", "chibi-down": "낙담", "chibi-guard": "막을 준비",
   };
 
   const path = (k) => (HAVE.has(k) ? DIR + k + EXT : null);
-  /* 🎮 판 그림 27장(41번 — `m-*` · 판 셋의 키퍼 · 동료 · 수비 · 슈터 · 다리 · 우리 키퍼 · 공 · 축구화) + 주인공 치비 —
+  /* 🎮 판 그림 30장(41번 — `m-*` · 판 셋의 키퍼 · 동료 · 수비 · 슈터 뒷모습 · 우리 키퍼 · 공 · 축구화) + 주인공 치비 —
+   *    🧱 안 C(44번)는 슈터 뒷모습 `m-shooter-{g}-back`을 써요(디딤발 판의 `m-leg` · 앞모습 `m-shooter-{g}`는 지움) —
    *    판(`winger-moment.js`)만 불러요. 성별은 키에(`{g}`), 좌우는 CSS 뒤집기. 표에 없는 키는 null(판이 지금 조각으로 물러섬) */
-  const SPR = new Set(["m-ball", "m-boot", "m-leg", "m-taeo-stand", "m-seoa-stand"]);
+  const SPR = new Set(["m-ball", "m-boot", "m-taeo-stand", "m-seoa-stand"]);
   ["m", "f"].forEach((g) => {
-    "ready dive-high dive-low jump crouch".split(" ").forEach((x) => SPR.add(`m-gk-${g}-${x}`));
+    "ready dive-high dive-low jump crouch reach spread".split(" ").forEach((x) => SPR.add(`m-gk-${g}-${x}`));
     "ready run shoot cheer".split(" ").forEach((x) => SPR.add(`m-mate-${g}-${x}`));
     SPR.add(`m-def-${g}-tackle`);
-    SPR.add(`m-shooter-${g}`);
+    SPR.add(`m-shooter-${g}-back`);
   });
   const sprite = (k) => (SPR.has(k) ? DIR + k + EXT : /^(jiho|doyun|haram)-[mf]-chibi-[a-z]+$/.test(String(k)) ? path(k) : null);
   const ok = (w) => typeof w === "string" && w !== "";
