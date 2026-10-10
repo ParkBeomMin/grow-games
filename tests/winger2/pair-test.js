@@ -1,7 +1,9 @@
 /* ⚽ 더 윙어 II 1막 — 👯 **짝 검사** R8 · R9 (22번 §4-6 · R8 · R9 · 24번 §4-6 · 26번 §2)
  *
  * 같은 판 번호(시드)로 **한 가지만** 바꾼 두 판을 견줍니다 — 바꾼 것 밖의 점수가 **비트 같아야** 해요(실측 어긋남 0).
- *   R8  🎲 **선택만** — 「늘 안전」 ↔ 「🤝 판돈 도전은 걸고 · 약속은 늘 · 깃발은 늘」.
+ *   R8  🎲 **선택만** — 「늘 안전」 ↔ 「🤝 판돈 도전은 걸고 · 약속은 늘 · 깃발은 늘 · 🌿 🤝 +1도 받음」.
+ *       🔄 v4(47번 · J13): 「넘긴다(효과 0)」 칸이 없어짐 — 「늘 안전」 쪽은 **몫을 안 받는 검사용 손**(🌿 · 💬를 고르되 고르기 직전에
+ *       그 칸을 옛 「넘긴다」로 바꿈 · zero-test와 같은 손 · 46번 §4 #1)으로 잼. 🌿 확정의 🫀 몫은 컨디션을 움직여 「밖」이라 안 받음
  *       능력치 판돈이 걸린 도전은 둘 다 안 걸어요(그건 선택이 **직접** 움직이는 칸이라 「밖」이 아니에요).
  *       → 능력치 · 기록 · 경기 · 테스트 · 평가서 칸 다섯 · 합계 · 구간이 비트 같음(🤝 · 이야기 결말 · 엔딩 문만 달라도 됨)
  *   R9  🎯 **테스트만** — 11월 테스트 주의 손만 0.95 ↔ 0.05(나머지 주는 같은 손)
@@ -31,12 +33,28 @@ const MUT = {
   const bad = pageMutsOK(MUT);
   check(bad.length === 0, `0. 변이 정규식이 지금 소스에 전부 걸린다` + (bad.length ? bad.map((b) => `\n       · ${b}`).join("") : ""));
 }
-const SAFE = (c) => { const i = (c.opts || []).findIndex((o) => o.k === "safe" || o.k === "ok"); return i >= 0 ? i : 0; };
+/* 0️⃣ 몫을 안 받는 손 — 🌿 · 💬를 고르고(`zero` 표시) 답하기 직전에 그 칸을 옛 「넘긴다」로 */
+let wantZero = false;
+const SAFE = (c) => {
+  const o = c.opts || [];
+  const s = o.findIndex((x) => x.k === "safe" || x.k === "ok"); if (s >= 0) return s;
+  const z = o.findIndex((x) => x.k === "cert" || x.k === "talk"); if (z >= 0) { wantZero = true; return z; }
+  return 0;
+};
+const zeroHand = (env) => {
+  const EV = env.w.W2Events, raw = EV.answer;
+  EV.answer = (S, i) => {
+    if (wantZero && S.ev && S.ev.opts[i]) { S.ev.opts = S.ev.opts.slice(); S.ev.opts[i] = { k: "safe", label: S.ev.opts[i].label }; }
+    wantZero = false;
+    return raw(S, i);
+  };
+};
 const TRUSTY = (c) => {
   const o = c.opts || [];
   const f = o.findIndex((x) => x.k === "flag"); if (f >= 0) return f;
   const p = o.findIndex((x) => x.k === "promise"); if (p >= 0) return p;
   const t = o.findIndex((x) => x.k === "try" && x.stake === "trust"); if (t >= 0) return t;
+  const ct = o.findIndex((x) => x.k === "cert" && x.fx && Object.keys(x.fx).join() === "trust"); if (ct >= 0) return ct;   // 🌿 🤝 +1만
   return SAFE(c);
 };
 const core = (S) => ({ stats: S.stats, rec: ["apps", "g", "a", "d", "cs", "sN", "sSum"].map((k) => S.record[k]), games: S.games.filter((g) => g.t !== "T"),
@@ -44,6 +62,7 @@ const core = (S) => ({ stats: S.stats, rec: ["apps", "g", "a", "d", "cs", "sN", 
 
 async function one(seed, opt) {
   const env = boot(Object.assign({ seed, pos: ["fw", "wg", "mf", "df"][seed % 4], gender: seed % 3 ? "m" : "f", realScene: false }, opt));
+  zeroHand(env);
   const r = await runAct(env);
   const S = r.S, seen = env.seen;
   env.w.close();
@@ -60,7 +79,7 @@ async function one(seed, opt) {
       const a = await one(seed, { auto: true, muts, policy: { card: SAFE } });
       const b = await one(seed, { auto: true, muts, policy: { card: TRUSTY } });
       if (!a.done || !b.done) { dead += 1; continue; }
-      cards += b.S.evLog.filter((l) => l.k === "promise" || (l.k === "try")).length;
+      cards += b.S.evLog.filter((l) => l.k === "promise" || l.k === "try" || l.k === "cert").length;
       if (a.S.trust !== b.S.trust) trustDiff += 1;
       const A = core(a.S), B = core(b.S);
       for (const k of Object.keys(A)) if (JSON.stringify(A[k]) !== JSON.stringify(B[k])) bad.push(`#${seed} ${k}`);

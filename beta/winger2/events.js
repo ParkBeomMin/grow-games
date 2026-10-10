@@ -6,7 +6,10 @@
  * ── 🔒 지키는 것 ────────────────────────────────────────────
  *  · **보이는 % = 판정 %** — 조각을 정수로 만들어 더해 `pct`를 **뜰 때 한 번** 얼리고, 판정 난수 `u`도
  *    뜰 때 한 번 얼려요(`u × 100 < pct`면 성공). 화면 조각(`parts`)의 합 + 50 = `pct`. 숨은 손 0.
- *  · **판돈은 한 축, W = L** → p* = 50%가 구성으로 서요. **안전(확정) = 효과 0**.
+ *  · **판돈은 한 축, W = L** → p* = 50%가 구성으로 서요. 🎲 작게 = 같은 축 · 판돈 ½ · 확률 +5(조각 「작게」).
+ *  · **선택지 셋~넷**(45번 · 47번 · J11~J13) — 🎲 크게 · 🎲 작게 · 🌿 확정 · 💬 이야기. 「넘긴다(효과 0)」는 없앰.
+ *    🌿 · 💬의 몫은 판돈 축 밖의 작은 것 하나(🫀 +3 · 🤝 +1 · 약발 경험 +0.2 · 🔖 깃발) — **능력치 몫 없음**(J13).
+ *    🔖 깃발은 수치 0(`S.evFlags` → `act1.evFlags`) — 엔딩 한 줄 · 필름 · 이야기 결말 문장에만.
  *  · **잘리는 판돈은 내놓지 않아요** — 무작위 이벤트면 후보에서 빼고, 이야기 장이면 확정만 남겨요.
  *  · **이벤트는 문턱 · 경기력을 안 만져요**(평가서 구간 · 엔진 판정 창 · `buff`).
  *  · **약속은 다음 출전 경기의 실제 기록** — 새 난수 0 · % 기호 금지 · 한 번에 하나 · 1막이 끝나면 없던 일.
@@ -33,6 +36,8 @@ window.W2Events = (() => {
     SKILL_CAP: 10,           // 23번 §2-2 · 24번 §2 — 실력 조각 상한 ±10(원칙 ④의 천장)
     K_MUL: 2,                // 22번 · 24번 §2 — k′ = 표의 k × 2
     SIT: [-12, -6, 0, 6, 12],// 23번 §2 · 24번 §2 — 상황 조각 다섯 칸 · 각 ⅕
+    SMALL_BONUS: 5, SMALL_MUL: 0.5,                    // 46번 §2-2 · 47번 §1 — 🎲 작게: 확률 +5(상한 90) · 판돈 ½
+    CERT: { cond: 3, trust: 1, weak: 0.2 },            // 46번 §2-2(R8-b 둘째 값 ② 판) · 47번 §1 — 🌿 · 💬 몫 · 능력치 없음(J13)
     /* 🔗 Mₑ — **보통 판에서 그 카드가 뜬 순간 k′·X의 평균**(24번 §2 새 정의). 확률 식의 다른 항이 바뀌면 다시 잼.
      * 🔒 `s_slot1`만 **포지션별**이에요(24번 §2-4 계수 패치 — X가 {rival}와의 차라 포지션마다 자리가 달라요).
      *    나머지 12장은 포지션 사이 차이가 ±0.05 안이거나 기준 밖이라 한 값이에요. */
@@ -147,6 +152,69 @@ window.W2Events = (() => {
       },
       body: "이번 상대는 전반기에 졌던 {opp}예요." },
   ];
+  /* ---------- 🎲 선택지 셋~넷(45번 §4 표 · 47번 §1) ----------
+   * `big`: 크게 문구(없으면 이벤트의 `try`) · `small`: 작게 문구(null이면 작게 없음) · `cert`: 🌿 확정 목록 · `talk`: 💬 이야기
+   * 몫 `fx`: "c" 🫀 컨디션 · "t" 🤝 · "wx" 🦶 약발 경험 · null = 깃발만 — 크기는 `TUNE.CERT`.
+   * 🔒 45번에서 「능력치 +0.2」였던 몫(도우미 · 주발 · 태클 💬 · 재대결 🌿)은 **깃발만**(J13 — 46번 최종 판의 「능력치 몫 없음」과 같은 높이) */
+  const CH = {
+    a_call: { small: "한 경기만 맡아 보겠다고 한다", cert: [{ label: "무난하게 가겠다고 한다", fx: "c" }],
+      talk: { label: "왜 저인지 여쭌다", fx: "t", flag: "call_why" } },
+    a_video: { small: "한 장면만 짚는다", cert: [{ label: "끝까지 듣는다", fx: "t" }],
+      talk: { label: "{keeper|와} 따로 다시 본다", fx: "c", flag: "video_keeper" } },
+    a_helper: { small: "시범만 한 번 보인다", cert: [{ label: "사양하고 내 훈련을 한다", fx: null, flag: "helper_own" }],
+      talk: { label: "{rival}에게 같이 하자고 한다", fx: "c", flag: "helper_rival" } },
+    a_weakfoot: { small: null, cert: [{ label: "훈련 끝나고 30분만 반대발", fx: "wx" }, { label: "주발을 더 다듬는다", fx: null, flag: "weak_main" }],
+      talk: { label: "코치에게 이유를 묻는다", fx: "t", flag: "weak_why" } },
+    a_night: { big: "남아서 백 개", small: "오십 개만", cert: [{ label: "들어가서 쉰다", fx: "c" }],
+      talk: { label: "{rival}에게 같이 하자고 한다", fx: "t", flag: "night_rival" } },
+    a_boots: { small: "가볍게 조깅으로 길들인다", cert: [{ label: "경기 날까지 아껴 둔다", fx: "c", flag: "boots_saved" }], talk: null },
+    a_tackle: { small: "열 번만 더", cert: [{ label: "정리하고 들어간다", fx: "c" }],
+      talk: { label: "{keeper}에게 상대를 부탁한다", fx: null, flag: "tackle_keeper" } },
+    a_exam: { small: "시험 끝난 날만 훈련", cert: [{ label: "시험에 집중한다", fx: "c", flag: "exam_study" }], talk: null },
+    a_camp: { small: "아침만 먼저 나간다", cert: [{ label: "따라간다", fx: "t" }],
+      talk: { label: "{rival|와} 같은 방을 쓴다", fx: "c", flag: "camp_rival" } },
+    a_scout: { small: "한 번은 보여 주겠다고만 한다", cert: [{ label: "평소대로 뛴다", fx: "c" }], talk: null },
+    a_family: { small: "한 번은 보여 주겠다고만 한다", cert: [],
+      talk: { label: "경기 끝나고 같이 밥 먹자고 한다", fx: "c", flag: "family_meal" } },
+    a_rematch: { small: "한 번은 갚겠다고만 한다", cert: [{ label: "지난 경기 영상을 본다", fx: null, flag: "rematch_film" }], talk: null },
+    s_slot1: { small: "📌 훈련으로만 보여 준다", cert: [{ label: "🙂 신경 쓰지 않는다", fx: "c" }],
+      talk: { label: "🤝 {rival}에게 잘 어울린다고 말한다", fx: "t", flag: "slot_congrats" } },
+    s_slot2: { small: "한 번은 해 보이겠다고만 한다", cert: [],
+      talk: { label: "💬 「번호는 감독님이 정할 일이에요」", fx: "c", flag: "slot2_calm" } },
+    s_senior2: { small: "한 번은 해 보이겠다고만 한다", cert: [],
+      talk: { label: "🧤 {keeper}에게 장갑을 건넨다", fx: "c", flag: "senior_glove" } },
+    s_race2: { small: "한 번은 해 보이겠다고만 한다", cert: [],
+      talk: { label: "🤝 {ace}에게 경기 뒤 인사를 청한다", fx: "c", flag: "race_greet" } },
+    s_senior1: { big: "🌅 매일 따라 나간다", small: "🌅 주말 새벽만 따라 나간다", cert: [{ label: "🏠 내 방식대로 한다", fx: "c" }], talk: null },
+    s_race1: { big: "📼 {ace}의 경기를 다 돌려 본다", small: "📼 한 경기만 본다", cert: [{ label: "🙂 내 경기에 집중한다", fx: "c" }],
+      talk: { label: "🤝 {ace}에게 먼저 인사한다", fx: "t", flag: "race_hello" } },
+    /* 🏠 가족 — 1장 · 2장 문구는 이야기마다 달라서 `story.js`가 이 모양으로 넘겨요(`famChoice`) */
+  };
+  /* 🔖 깃발 — 수치 0 · 「있었던 일」(45번 §3-2). `year`: 엔딩 · 필름 한 줄(「그해, …」) · `sid`: 그 이야기 결말 문장에 붙는 한 줄 */
+  const FLAGS = {
+    call_why: { year: "그해, {me|는} 감독에게 「왜 저인가요」라고 물을 줄 아는 선수가 됐어요." },
+    video_keeper: { year: "그해, {me|는} {keeper|와} 분석실 불이 꺼질 때까지 영상을 돌려 봤어요." },
+    helper_own: { year: "그해, {me|는} 남의 훈련보다 내 훈련을 먼저 챙겼어요." },
+    helper_rival: { year: "그해, {me|는} {rival|와} 나란히 1학년들 앞에 섰어요." },
+    weak_main: { year: "그해, {me|는} 주발 하나를 끝까지 갈았어요." },
+    weak_why: { year: "그해, {me|는} 코치에게 반대발을 쓰는 까닭부터 물었어요." },
+    night_rival: { year: "그해, 불 꺼진 운동장에는 {me|와} {rival|가} 함께 남아 있었어요." },
+    boots_saved: { year: "그해, {me|는} 새 축구화를 경기 날까지 아껴 신었어요." },
+    tackle_keeper: { year: "그해, {keeper|가} {me|의} 태클 연습 상대가 되어 줬어요." },
+    exam_study: { year: "그해, {me|는} 시험 주간엔 책상 앞을 지켰어요.", sid: "apply", end: "시험 주간을 지킨 노트도 서랍 한쪽에 남았어요." },
+    camp_rival: { year: "그해 여름, {me|와} {rival|는} 전지훈련 한 방을 썼어요." },
+    family_meal: { year: "그해, 경기 뒤엔 {family|와} 늦은 밥을 먹었어요.", sid: "family", end: "경기 뒤 늦은 밥상이 그해의 한 장면으로 남았어요." },
+    rematch_film: { year: "그해, {me|는} 진 경기 영상을 끝까지 다시 봤어요." },
+    slot_congrats: { year: "그해, {me|는} {rival}에게 그 번호가 잘 어울린다고 먼저 말했어요.", sid: "slot", end: "번호 앞에서 먼저 건넨 한마디를 {rival|는} 잊지 않았어요." },
+    slot2_calm: { year: "그해, {me|는} 번호를 감독의 몫으로 두고 뛰었어요.", sid: "slot", end: "번호는 감독이 정할 일 — {me|는} 끝까지 그렇게 말했어요." },
+    senior_glove: { year: "그해, {me|는} {keeper}에게 장갑을 건넸어요.", sid: "senior", end: "{me|가} 건넨 장갑이 {keeper}의 마지막 경기 가방에 들어 있었어요." },
+    race_greet: { year: "그해, {me|는} {ace}에게 경기 뒤 먼저 손을 내밀었어요.", sid: "race", end: "두 번째 맞대결 뒤 나눈 인사가 남았어요." },
+    race_hello: { year: "그해, {me|는} {ace}에게 먼저 인사했어요.", sid: "race", end: "첫 인사를 먼저 건넨 쪽은 {me}였어요." },
+    fam_shop: { year: "그해 주말, {me|는} 아버지 가게 일을 도왔어요.", sid: "father", end: "주말 가게 일을 도운 날들도 함께 남았어요." },
+    fam_quiet: { year: "그해, {me|는} 엄마에게 말할 때를 기다렸어요.", sid: "apply", end: "말하지 않고 기다린 저녁도 있었어요." },
+    fam_sea: { year: "그해, {me|는} 할머니의 바닷일을 도왔어요.", sid: "letter", end: "할머니와 함께한 바닷일도 그해의 한 장면이에요." },
+    fam_talk: { year: "그해, {me|는} {family|와} 밤늦게까지 이야기했어요.", sid: "family", end: "정하지 않고 함께 고민한 해였어요." },
+  };
   const byId = (id) => EVENTS.find((e) => e.id === id) || null;
   /* 📖 도감이 읽는 목록 — cat: slot 📍 자리와 감독 · body 🦶 몸과 기술 · school 🏫 학교 · promise 🏟️ 경기 앞 약속 */
   const LIST = EVENTS.map((e) => ({ id: e.id, name: e.name, emoji: e.emoji, cat: e.cat }));
@@ -161,18 +229,94 @@ window.W2Events = (() => {
   function stakeFx(S, stake, sign) {
     return stake === "trust" ? { trust: sign * TUNE.TRUST_STAKE } : { stat: stake, v: sign * TUNE.STAT_STAKE };
   }
+  const sg = (v) => `${v > 0 ? "+" : "−"}${Math.abs(v)}`;
   function chips(fx) {
     if (!fx) return [];
-    if (fx.trust) return [{ emoji: "🤝", text: `감독 신뢰 ${fx.trust > 0 ? "+" : "−"}${Math.abs(fx.trust)}`, good: fx.trust > 0 }];
-    if (fx.stat) {
-      const d = SH().STAT[fx.stat];
-      return [{ emoji: d.emoji, text: `${d.name} ${fx.v > 0 ? "+" : "−"}${Math.abs(fx.v)}`, good: fx.v > 0 }];
-    }
-    return [];
+    const out = [];
+    if (fx.trust) out.push({ emoji: "🤝", text: `감독 신뢰 ${sg(fx.trust)}`, good: fx.trust > 0 });
+    if (fx.stat) { const d = SH().STAT[fx.stat]; out.push({ emoji: d.emoji, text: `${d.name} ${sg(fx.v)}`, good: fx.v > 0 }); }
+    if (fx.cond) out.push({ emoji: "🫀", text: `컨디션 ${sg(fx.cond)}`, good: fx.cond > 0 });
+    if (fx.weak) out.push({ emoji: "🦶", text: `약발 경험 ${sg(fx.weak)}`, good: true });
+    if (fx.flag) out.push({ emoji: "🔖", text: "이야기 한 줄", good: true });
+    return out;
   }
 
   /* ---------- 선택지 ---------- */
-  const safeOpt = (label) => ({ k: "safe", label });
+  const safeOpt = (label) => ({ k: "safe", label });   // 옛 카드(진행 중 세이브) · 효과 0
+  /* 🎲 작게 — 크게와 같은 일 · 같은 축 · 판돈 ½ · 확률 +5(상한 90) · 판돈이 안 맞으면 안 냄 */
+  function smallOpt(S, t, label) {
+    if (!t || !label) return null;
+    const T = TUNE;
+    const sz = t.stake === "trust" ? T.TRUST_STAKE * T.SMALL_MUL : T.STAT_STAKE * T.SMALL_MUL;
+    if (t.stake === "trust") { const v = Number(S.trust) || 0; if (v + sz > T.TRUST_CAP || v - sz < -T.TRUST_CAP) return null; }
+    else { const v = S.stats[t.stake]; if (v + sz > 100 || v - sz < 0) return null; }
+    const win = t.stake === "trust" ? { trust: sz } : { stat: t.stake, v: sz };
+    const lose = t.stake === "trust" ? { trust: -sz } : { stat: t.stake, v: -sz };
+    return { k: "small", label: fillS(S, label), pct: Math.min(T.PCT_HI, t.pct + T.SMALL_BONUS), stake: t.stake,
+      parts: t.parts.concat([{ k: "small", v: T.SMALL_BONUS, label: "작게" }]), win, lose, chips: { win: chips(win), lose: chips(lose) } };
+  }
+  /* 📋 작게 약속 — 무작위 약속은 🤝 ±1(🤝 ±1이 맞을 때만) · 이야기 2장은 ⌊판돈 ÷ 2⌋ · 0이면 안 냄(46번 §4-6) */
+  function promSmall(S, p, label, ch2) {
+    if (!p || !label) return null;
+    const T = TUNE;
+    const big = p.win ? p.win.trust : 0;
+    const sz = ch2 ? Math.floor(big / 2) : T.TRUST_STAKE * T.SMALL_MUL;
+    if (sz <= 0) return null;
+    const v = Number(S.trust) || 0;
+    if (!ch2 && (v + sz > T.TRUST_CAP || v - sz < -T.TRUST_CAP)) return null;
+    const win = { trust: sz }, lose = { trust: -sz };
+    return Object.assign({}, p, { k: "promise_small", label: fillS(S, label), win, lose, chips: { win: chips(win), lose: chips(lose) }, note: null });
+  }
+  /* 🌿 확정 · 💬 이야기 — 몫 하나 · 🔒 잘리는 몫은 내놓지 않음(🤝 끝 · 컨디션 가득 · 약발 다 키움이면 깃발만 · 그 까닭을 `note`로) */
+  function sureOpt(S, k, c) {
+    const T = TUNE.CERT;
+    const fx = {};
+    let note = null;
+    if (c.fx === "c") { if ((Number(S.cond) || 0) + T.cond <= 100) fx.cond = T.cond; else note = "컨디션은 이미 가득해요"; }
+    if (c.fx === "t") { if ((Number(S.trust) || 0) + T.trust <= TUNE.TRUST_CAP) fx.trust = T.trust; else note = "감독은 이미 {me|를} 믿어요"; }
+    if (c.fx === "wx") {
+      const G = window.W2Game ? window.W2Game.TUNE : null;
+      if (!G || (Number(S.weak) || 0) < G.WEAK_MAX) fx.weak = T.weak; else note = "약발은 이미 다 키웠어요";
+    }
+    if (c.flag) fx.flag = c.flag;
+    return { k, label: fillS(S, c.label), fx, chips: { win: chips(fx), lose: [] }, note: note ? fillS(S, note) : null };
+  }
+  /* 한 장의 선택지 — 맨 앞의 크게(도전 · 약속 · 문 깃발) 뒤에 작게 · 🌿 · 💬(화면 위에서 아래 — 45번 §4) */
+  function withChoices(S, id, head, ch2) {
+    const C = CH[id] || {};
+    const out = [];
+    const t = head.find((o) => o && o.k === "try"), p = head.find((o) => o && o.k === "promise");
+    for (const o of head) if (o) out.push(o);
+    if (t) { const sm = smallOpt(S, t, C.small); if (sm) out.push(sm); }
+    if (p) { const sm = promSmall(S, p, C.small, ch2); if (sm) out.push(sm); }
+    for (const c of C.cert || []) out.push(sureOpt(S, "cert", c));
+    if (C.talk) out.push(sureOpt(S, "talk", C.talk));
+    return out;
+  }
+  /* 🖼️ 카드 모양(47번 §2) — `card.choices[i]`가 `card.opts[i]`와 같은 자리(고른 결과는 인덱스) ·
+   *   `win` · `lose`: [{ stat: 키, v } · { trust: true, v } · { cond: true, v } · { weak: true, v } · { flag: 이름, v: 0 }] */
+  const KIND = { try: "big", promise: "big", small: "small", promise_small: "small", cert: "sure", talk: "talk", flag: "sure", safe: "sure" };
+  function fxList(fx) {
+    if (!fx) return [];
+    const out = [];
+    if (fx.stat) out.push({ stat: fx.stat, v: fx.v });
+    if (fx.trust) out.push({ trust: true, v: fx.trust });
+    if (fx.cond) out.push({ cond: true, v: fx.cond });
+    if (fx.weak) out.push({ weak: true, v: fx.weak });
+    if (fx.flag) out.push({ flag: fx.flag, v: 0 });
+    return out;
+  }
+  function choiceOf(o) {
+    const k = o.k;
+    const bet = k === "try" || k === "small";
+    const prom = k === "promise" || k === "promise_small";
+    return { k, kind: KIND[k] || "sure", label: o.label,
+      desc: bet ? (k === "small" ? "작게 — 판돈 반" : "크게") : prom ? (o.ref ? o.ref.text : "") : k === "talk" ? "확정 · 이야기" : k === "flag" ? "확정 · 문" : "확정",
+      p: bet ? o.pct : null,
+      parts: bet ? o.parts.map((x) => ({ name: x.label, v: x.v })) : [],
+      win: bet || prom ? fxList(o.win) : fxList(o.fx), lose: bet || prom ? fxList(o.lose) : null,
+      chips: o.chips && o.chips.win ? o.chips : { win: [], lose: [] }, note: o.note || null };
+  }
   /* 도전 — `pct = clamp(50 + 실력 + 상황, 10, 90)` · 실력 = clamp(round(k′·X − Mₑ), ±10)(23번 §2 · 24번 §2) */
   function tryOpt(S, id, label, x, k, stake, sit, sitText) {
     const Mv = TUNE.M[id];
@@ -209,7 +353,7 @@ window.W2Events = (() => {
   };
   /* 카드 한 장 — 🔒 `u`와 `pct`를 여기서 얼려요. 그리는 쪽이 읽는 모양(25번 §3 계약 6) */
   function card(S, base, opts, draws) {
-    return Object.assign({ kind: "event", w: S.week, u: draws.u, sit: draws.sit }, base, { opts });
+    return Object.assign({ kind: "event", w: S.week, u: draws.u, sit: draws.sit }, base, { opts, choices: opts.map(choiceOf) });
   }
   const whoOf = (S, who) => (who === "me" ? meWho(S) : who === "rival" ? S.world.rivalWho
     : who === "family" ? (famOf(S) || FAMILY.father).who : who === "keeper" ? S.world.keeper.who : who);   // 가족이 아직이면 아버지 그림(우리 집 — 29번 §3-2)
@@ -219,9 +363,10 @@ window.W2Events = (() => {
     const who = whoOf(S, d.who);
     const mood = who === "coach" ? coachMood(S) : who === meWho(S) ? (d.promise ? "fire" : "base") : "base";
     const base = { id: d.id, title: `${d.emoji} ${d.name}`, body: fillS(S, d.body, extra), who, mood, bg: d.bg };
-    if (d.promise) return card(S, base, [safeOpt("넘긴다"), promOpt(S)], draws);
-    return card(S, base, [safeOpt(d.safe || "넘긴다"),
-      tryOpt(S, d.id, d.try, d.x, d.k, d.stake, draws.sit, sitText(S, d.sit, draws.sit))], draws);
+    if (d.promise) return card(S, base, withChoices(S, d.id, [promOpt(S)], false), draws);
+    const C = CH[d.id] || {};
+    return card(S, base, withChoices(S, d.id,
+      [tryOpt(S, d.id, fillS(S, C.big || d.try), d.x, d.k, d.stake, draws.sit, sitText(S, d.sit, draws.sit))], false), draws);
   }
 
   /* ---------- 🎲 이 주의 카드 — 이야기 장이 먼저, 남는 자리에서 무작위(12번 §7-2) ----------
@@ -278,6 +423,16 @@ window.W2Events = (() => {
     if (!fx) return;
     if (fx.trust) S.trust = clamp((Number(S.trust) || 0) + fx.trust, -TUNE.TRUST_CAP, TUNE.TRUST_CAP);
     if (fx.stat) S.stats[fx.stat] = clamp(S.stats[fx.stat] + fx.v, 0, 100);
+    if (fx.cond) S.cond = clamp((Number(S.cond) || 0) + fx.cond, 0, 100);
+    if (fx.weak) {
+      const G = window.W2Game.TUNE;
+      S.weakXp = Math.round(((Number(S.weakXp) || 0) + fx.weak) * 1e6) / 1e6;
+      S.weak = Math.min(G.WEAK_MAX, Math.floor(S.weakXp / G.WEAK_XP + 1e-9));
+    }
+    if (fx.flag) {
+      if (!Array.isArray(S.evFlags)) S.evFlags = [];
+      if (S.evFlags.indexOf(fx.flag) < 0) S.evFlags.push(fx.flag);   // 같은 이름 한 번
+    }
   }
   function answer(S, i) {
     const ev = S.ev;
@@ -286,20 +441,28 @@ window.W2Events = (() => {
     S.ev = null;
     if (!Array.isArray(S.evLog)) S.evLog = [];
     if (!S.evSeen || typeof S.evSeen !== "object") S.evSeen = {};
-    const log = { id: ev.id, w: ev.w, k: o.k, pct: o.k === "try" ? o.pct : null, ok: null, sit: ev.sit };
+    /* 🔒 작게도 기록은 「도전」(`k: "try"` · `small`) · 작게 약속도 「약속」 — 업적 · 이야기 결말이 같은 갈래로 셈(45번 §3-3) */
+    const bet = o.k === "try" || o.k === "small";
+    const log = { id: ev.id, w: ev.w, k: bet ? "try" : o.k === "promise_small" ? "promise" : o.k, pct: bet ? o.pct : null, ok: null, sit: ev.sit };
+    if (o.k === "small" || o.k === "promise_small") log.small = true;
     const t = ev.opts.find((x) => x.k === "try");
-    if (o.k !== "try" && t) log.alt = t.pct;
+    if (!bet && t) log.alt = t.pct;
     S.evLog.push(log);
     S.evSeen[ev.id] = (S.evSeen[ev.id] || 0) + 1;
     let ok = null, fx = null, line = "", mood = "base";
-    if (o.k === "try") {
+    if (bet) {
       ok = ev.u * 100 < o.pct;
       log.ok = ok;
       fx = ok ? o.win : o.lose;
       apply(S, fx);
       line = ok ? "도전이 통했어요" : "이번엔 뜻대로 안 됐어요";
       mood = ok ? "smile" : "down";
-    } else if (o.k === "promise") {
+    } else if (o.k === "cert" || o.k === "talk") {
+      fx = o.fx || null;
+      apply(S, fx);
+      line = o.note ? `확정 — ${o.note}` : "확정 — 적힌 몫을 그대로 받았어요";
+      mood = "smile";
+    } else if (o.k === "promise" || o.k === "promise_small") {
       S.promise = { id: ev.id, w: ev.w, win: o.win, lose: o.lose };
       line = "다음 경기에서 정해져요";
       mood = "fire";
@@ -350,7 +513,7 @@ window.W2Events = (() => {
   const RULES = [
     "성공 확률은 화면에 적힌 숫자 그대로예요. 이벤트가 뜰 때 0~99 중 숫자 하나를 뽑아 두고, 도전을 고르면 그 숫자가 적힌 확률보다 작을 때 성공해요. 숨은 보정은 없어요.",
     "확률은 기본 50에 실력(±10까지)과 그날의 상황(−12 · −6 · 0 · +6 · +12 중 하나)을 더한 값이에요. 상황은 이벤트가 뜰 때 한 번 정해지고 컨디션 · 휴식 · 능력치와는 상관없어요 — 아무리 잘 키워도 확실한 도전은 없어요.",
-    "도전은 판돈이 늘 한 가지라 얻는 것과 잃는 것이 같은 크기예요 — 성공 확률이 50%를 넘으면 걸 만해요. 넘기면 아무 일도 없어요.",
+    "도전은 판돈이 늘 한 가지라 얻는 것과 잃는 것이 같은 크기예요 — 성공 확률이 50%를 넘으면 걸 만해요. 🎲 작게는 판돈이 반이고 확률이 +5예요. 🌿 확정 · 💬 이야기를 고르면 적힌 몫을 그대로 받아요.",
     "📋 약속은 확률이 아니라 다음 공식 경기가 정해요 — 그 경기의 내 첫 순간을 살리면(골 · 골문 안 슛 · 도움 · 막음) 지킨 거예요. 적힌 숫자는 최근 경기에서 첫 순간을 살린 기록이에요.",
     "이야기의 약속은 늘 고를 수 있어요 — 🤝이 끝에 가까우면 판돈이 남은 만큼으로 줄어요(얻는 것과 잃는 것은 늘 같은 크기).",
     "📍 번호 집계 — 내 판마다, 같은 장면을 {rival|가} 맡았다면 해냈을 확률을 더해 견줘요. 내가 해낸 수와의 차가 쌓이고, 번호 결정전 뒤 +1.5 이상이면 번호를 되찾아요.",
@@ -360,6 +523,18 @@ window.W2Events = (() => {
   /* 판이 있으면 사람 이름을 채우고, 없으면(도감을 판 밖에서 열 때) 「경쟁자」로 */
   const rules = (S) => RULES.map((t) => (S && S.world ? fillS(S, t) : W().fill(t, { rival: "경쟁자" })));
 
-  return { TUNE, LIST, EVENTS, FAMILY, roll, answer, judge, promiseLine, endAct, rules, chips, fits, mem, draws,
-    kit: { safeOpt, tryOpt, promOpt, card, fillS, meWho, whoOf, coachMood, vars, PROMISE_TEXT, sitText } };
+  /* 🔖 깃발 문장 — 엔딩 · 필름(「그해, …」 — 가장 늦게 세운 것) · 이야기 결말(그 이야기의 깃발) */
+  function flagYear(S) {
+    const fl = Array.isArray(S.evFlags) ? S.evFlags.filter((f) => FLAGS[f]) : [];
+    return fl.length ? fillS(S, FLAGS[fl[fl.length - 1]].year) : null;
+  }
+  function flagEnd(S, sid) {
+    const fam = window.W2Story ? window.W2Story.famSid(S) : null;
+    const fl = (Array.isArray(S.evFlags) ? S.evFlags : []).filter((f) => FLAGS[f] && FLAGS[f].end
+      && (FLAGS[f].sid === sid || (FLAGS[f].sid === "family" && sid === fam)));
+    return fl.length ? fillS(S, FLAGS[fl[fl.length - 1]].end) : null;
+  }
+
+  return { TUNE, LIST, EVENTS, FAMILY, FLAGS, CH, flagYear, flagEnd, roll, answer, judge, promiseLine, endAct, rules, chips, fits, mem, draws,
+    kit: { safeOpt, tryOpt, promOpt, smallOpt, promSmall, sureOpt, withChoices, choiceOf, card, fillS, meWho, whoOf, coachMood, vars, PROMISE_TEXT, sitText } };
 })();

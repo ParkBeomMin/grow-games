@@ -74,11 +74,11 @@ function kM(man, html) {
     + (w1.missing.length ? `\n     🔴 없는 파일(설치가 통째로 실패해요): ${w1.missing.join(" · ")}` : "") + (w1.lack.length ? `\n     🔴 빠짐(오프라인에서만 깨져요): ${w1.lack.slice(0, 8).join(" · ")}` : ""));
   const m1 = kM(MAN, HTML);
   check(m1.ok, `K-M. 🎨 manifest \`theme_color\` ${m1.tc} == \`<meta name="theme-color">\` ${m1.meta}`);
-  /* 🔄 v3(44번 · 31번 v3) — 초상 · 치비 · 배경 126(첫 묶음 66 + 54 + 🧱 「나」 `chibi-guard` 6) + 판 그림 30 = 156 · 판 그림은 키 표와 1:1 · 모두 sw `ASSETS`에 */
+  /* 🔄 v4(31번 v3 「🧱 슬라이딩 블록」) — 초상 · 치비 · 배경 132(66 + 54 + 🧱 「나」 `chibi-guard` 6 + `chibi-slide` 6) + 판 그림 30 = 162 · 판 그림은 키 표와 1:1 · 모두 sw `ASSETS`에 */
   const mFiles = fs.readdirSync(path.join(PAGE_DIR, "art")).filter((f) => /^m-.*\.webp$/.test(f)).map((f) => f.replace(/\.webp$/, "")).sort();
   const mInSw = M_KEYS.filter((k2) => w1.assets.indexOf(`./art/${k2}.webp`) >= 0).length;
-  check(w1.art === 156 && JSON.stringify(mFiles) === JSON.stringify([...M_KEYS].sort()) && mInSw === 30,
-    `K-W2. 🖼️ \`art/\` 그림이 126 + 판 그림 30 = **156장**(${w1.art}장) · 판 그림 파일 ${mFiles.length}장이 키 30과 1:1 · sw \`ASSETS\`에 ${mInSw}/30`);
+  check(w1.art === 162 && JSON.stringify(mFiles) === JSON.stringify([...M_KEYS].sort()) && mInSw === 30,
+    `K-W2. 🖼️ \`art/\` 그림이 132 + 판 그림 30 = **162장**(${w1.art}장) · 판 그림 파일 ${mFiles.length}장이 키 30과 1:1 · sw \`ASSETS\`에 ${mInSw}/30`);
   /* 🔄 v2(39번 §2 「그림」) — 옛 사본 0: `.v1.` 이름 · 옛 이름 사본 `doyun-base` · `haram-base`(지금은 `doyun-m-base` …) */
   const stale = (names) => names.filter((f) => /\.v1\./.test(f) || /^(doyun|haram)-base\./.test(f));
   const ART_FILES = require("fs").readdirSync(require("path").join(PAGE_DIR, "art"));
@@ -109,7 +109,7 @@ function k5static(A) {
   const claimNoFile = claimed.filter((k2) => files.indexOf(k2) < 0);
   const WHO = ["jiho-m", "jiho-f", "doyun-m", "doyun-f", "haram-m", "haram-f", "coach", "minjae", "taeo", "seheon", "minseo", "seoa", "gaeun", "scout", "dad", "mom", "grandma"];
   const MOODS = ["base", "smile", "fire", "tired", "down", "surprise", "moved", "stern", "worry", "smirk", "shock", "grin", "tears", "frown", "respect", "interest"];
-  const POSES = ["base", "score", "block", "down", "guard"];   // v3: 🧱 「나」 막을 준비(44번 · 41번 §9)
+  const POSES = ["base", "score", "block", "down", "guard", "slide"];   // v3: 🧱 「나」 막을 준비(44번 · 41번 §9) · v4: 슬라이딩으로 막기(31번 v3)
   const reach = new Set();
   const bad = [];
   for (const w of WHO) {

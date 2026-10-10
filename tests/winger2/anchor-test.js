@@ -9,6 +9,9 @@
  *        A-4 🫀 관리 칸 평균 대충 1.91 · 보통 7.23 · 잘함 10.0(허용 max(3.5 SE, 0.1))
  *   (n_pos 41.27 · 37.68 · 35.70 · 38.58 · T 66.4 · 59.4 · 52.8은 sheet-test P-5 · rev3-test R3-2가 박은 값으로 봄)
  *   🪦 v2 닻 「판정 s̄ 0.49~0.51」 · 「솜씨 칸 평균 5.66 · 5.71 · 5.38 · 5.02」는 44번 §1 퇴역(판 값이 늘 0.5 · 솜씨 칸 없음)
+ *   🔄 v4(47번 · J13): 43번 닻은 「넘긴다(효과 0)」 기준 판에서 잰 값 — v4의 기준 판(늘 🌿 확정)은 🫀 +3이 쉼 · 훈련을 바꿔(46번 §3 ② — 관리 칸 −0.27)
+ *        닻이 옮겨 가요. 그래서 이 닻은 **몫을 안 받는 검사용 손**(zero-test와 같은 손 — 그 손이 v3 판과 300판 비트 같음)으로 잽니다.
+ *        v4 자체의 닻(T · 🧮 최선 종류 · 이벤트 장 수)은 choices-test CH-9 · sheet-test P-5
  *   🔎 시범 측정(문턱마다 32판): 중앙값 34 · 52 · 77 · 89 · 90 · 관리 칸 1.91 · 7.25 · 10 · 10 · 10 · 판 2.46~2.53
  *   + 변이: `CARE_LO` 20 → 25 → A-4가 빨간불(보통)
  * 종료 코드: 0 통과 · 1 빨간불 · 2 💥 죽음 · ⏱️ 약 12분
@@ -31,10 +34,28 @@ const MUT = { LO25: { "sheet.js": [[/CARE_LO: 20, CARE_SPAN: 50,/, "CARE_LO: 25,
   const bad = pageMutsOK(MUT);
   check(bad.length === 0, `0. 변이 정규식이 지금 소스에 전부 걸린다` + (bad.length ? bad.map((b) => `\n       · ${b}`).join("") : ""));
 }
+/* 0️⃣ 몫을 안 받는 손(zero-test와 같음) — 기본 정책대로 고르되 🌿 · 💬는 답하기 직전에 옛 「넘긴다」로 */
+const ZERO_CARD = (c) => {
+  if (!c.opts || !c.opts.length) return 0;
+  const f = c.opts.findIndex((x) => x.k === "flag"); if (f >= 0) return f;
+  const t = c.opts.findIndex((x) => x.k === "try"); if (t >= 0 && c.opts[t].pct >= 50) return t;
+  const p = c.opts.findIndex((x) => x.k === "promise"); if (p >= 0) return p;
+  const z = ["cert", "talk", "safe", "ok"].map((k) => c.opts.findIndex((x) => x.k === k)).find((i) => i >= 0);
+  return z != null ? z : 0;
+};
+function zeroHand(env) {
+  const EV = env.w.W2Events, raw = EV.answer;
+  EV.answer = (S, i) => {
+    const o = S.ev && S.ev.opts && S.ev.opts[i];
+    if (o && (o.k === "cert" || o.k === "talk")) { S.ev.opts = S.ev.opts.slice(); S.ev.opts[i] = { k: "safe", label: o.label }; }
+    return raw(S, i);
+  };
+}
 async function measure(pos, N, th, muts) {
   const per = [], conds = [];
   for (let i = 0; i < N; i++) {
-    const env = boot({ seed: 91001 + i * 7 + pos.charCodeAt(0) + th * 1000, pos, gender: i % 2 ? "f" : "m", operator: "normal", realScene: false, muts, policy: { restTh: th } });
+    const env = boot({ seed: 91001 + i * 7 + pos.charCodeAt(0) + th * 1000, pos, gender: i % 2 ? "f" : "m", operator: "normal", realScene: false, muts, policy: { restTh: th, card: ZERO_CARD } });
+    zeroHand(env);
     const r = await runAct(env);
     const off = env.seen.live.filter((m) => m.week !== 35);          // 공식 경기(리그 · 대회) — 연습경기 뺌
     let boards = 0, blk = 0;

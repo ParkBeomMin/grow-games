@@ -6,7 +6,10 @@
  *   SG-2  그림을 못 받으면 옛 조각으로 물러섬 — 판 셋 각각: `Art`가 없을 때와 그림이 깨졌을 때(`error`) 조각(`.w2m-pc`) 수가 같고
  *         `<img>` · `.has-img`가 0 · 그림이 받아졌을 땐(`load`) `.has-img`가 섬
  *   SG-3  그림은 판정에 0 — 판 셋 × 칸 여섯(같은 시드)에서 `Art` 있음 · 없음의 `judge` · `sBoard` · `s` · 칸 · 정답 칸 · 연출 난수 쓴 수가 비트 같음
- *   + 변이: 대칭 그림 자리에 다이브 그림 · `error` 손잡이 삭제 · 그림을 얹을 때 난수 한 번
+ *   SG-4  🧱 슬라이딩은 공중으로 안 뜸(v4 · 31번 v3 「🧱 슬라이딩 블록」) — 고른 길 여섯 × 「나」 그림 있음 · 없음: 「나」의 마지막 자리 y가
+ *         **길과 무관하게 한 값**(땅 줄)이고 움직임은 한 번(공중으로 올랐다 내려오는 길 0) · 그 줄은 준비 자리 발끝에서 8% 안 ·
+ *         그림이 서면 `chibi-slide` · 길이 「나」 왼쪽이면 뒤집기
+ *   + 변이: 대칭 그림 자리에 다이브 그림 · `error` 손잡이 삭제 · 그림을 얹을 때 난수 한 번 · 슬라이딩이 길마다 공중으로 뜸
  * 종료 코드: 0 통과 · 1 빨간불 · 2 💥 죽음 · ⏱️ 몇 초
  */
 "use strict";
@@ -29,6 +32,7 @@ const ART = path.join(PAGE_DIR, "art");
 const ART_JS = fs.readFileSync(path.join(PAGE_DIR, "art.js"), "utf8");
 const MUT = {
   NOERR: [[/img\.addEventListener\("error", \(\) => \{ img\.remove\(\); m\.img = null; m\.pc\.classList\.remove\("has-img"\); \}\);/, ""]],
+  AIR: [[/moveTo\(d\.me, lx \+ \(left \? g\.reach : -g\.reach\), g\.slide, ms\(m1\)\);/, "moveTo(d.me, lx + (left ? g.reach : -g.reach), g.slide - 18 + Math.abs(i - 3) * 3, ms(m1));"]],
   RND: [[/function skin\(m, key, flip, onload\) \{\n(\s+)const url = sprite\(key\);/, "function skin(m, key, flip, onload) {\n$1const url = sprite(key); if (url) Math.random();"]],
 };
 {
@@ -101,6 +105,41 @@ function sg3(muts) {
   }
   return bad;
 }
+/* SG-4 — 슬라이딩 높이 */
+function sg4(muts) {
+  const bad = [];
+  for (const withMe of [true, false]) {
+    const ys = [];
+    for (let i = 0; i < 6; i++) {
+      const E = env(muts, true);
+      E.W.W2Moment._t.seed(500 + i);
+      const b = E.open("defend", { judge: () => "perfect", extra: withMe ? { me: "jiho-m", world: "m" } : {} });
+      const meEl = b.host.querySelector(".w2m-me");
+      const layer = meEl && meEl.parentNode;
+      const seen = [];
+      b.pick(i, 600);
+      for (let k = 0; k < 400 && !b.res; k++) { E.advance(10); const t = layer && layer.style.transform; if (t && seen[seen.length - 1] !== t) seen.push(t); }
+      const yOf = (t) => { const m = /translate\([-\d.]+%, ([-\d.]+)%\)/.exec(t || ""); return m ? Number(m[1]) : null; };
+      const yy = seen.map(yOf).filter((v) => v != null);
+      if (!yy.length) { bad.push(`${withMe ? "그림" : "말"} 길 ${i}: 움직임 없음`); continue; }
+      if (new Set(yy).size !== 1) bad.push(`${withMe ? "그림" : "말"} 길 ${i}: 높이가 ${[...new Set(yy)].join("→")}로 바뀜(뜸)`);
+      ys.push(yy[yy.length - 1]);
+      if (withMe) {
+        const img = meEl.querySelector("img");
+        const src = img ? img.getAttribute("src") || "" : "";
+        const flip = meEl.style.getPropertyValue("--fx");
+        if (!/chibi-slide/.test(src)) bad.push(`길 ${i}: 그림 ${src}`);
+        const left = (i + 0.5) * 100 / 6 < 67;
+        if ((flip === "-1") !== left) bad.push(`길 ${i}: 뒤집기 ${flip}`);
+      }
+    }
+    if (new Set(ys.map((v) => v.toFixed(3))).size !== 1) bad.push(`${withMe ? "그림" : "말"}: 길마다 높이 ${ys.map((v) => v.toFixed(1)).join(",")}`);
+    if (ys.length && Math.abs(ys[0]) > 8) bad.push(`땅 줄이 준비 자리에서 ${ys[0].toFixed(1)}%`);
+  }
+  return bad;
+}
+const b4 = sg4(null);
+check(b4.length === 0, `SG-4. 🧱 슬라이딩은 공중으로 안 뜸 — 고른 길 여섯 × 그림 있음 · 없음: 「나」 높이가 길과 무관한 한 값 · 움직임 한 번 · 준비 자리 발끝에서 8% 안 · chibi-slide · 왼쪽 길이면 뒤집기` + (b4.length ? `\n     🔴 ${b4.slice(0, 3).join(" · ")}` : ""));
 const b2 = sg2(null);
 check(b2.length === 0, `SG-2. 🧩 그림을 못 받으면 옛 조각 — 판 셋(🧱은 시드 둘)에서 깨진 그림 뒤 \`<img>\` · \`.has-img\` 0 · 조각 수 = 그림 없는 판 · 받아지면 \`.has-img\`` + (b2.length ? `\n     🔴 ${b2.slice(0, 3).join(" · ")}` : ""));
 const b3 = sg3(null);
@@ -109,6 +148,7 @@ if (fail === 0) {
   const m1 = sg1([["m-gk-m-ready(← dive-high)", path.join(ART, "m-gk-m-dive-high.webp")]]);
   check(m1[0].r > RMSE_MAX, `변이-SWAP(대칭 그림 자리에 다이브 그림) → SG-1이 빨간불 (${(m1[0].r * 100).toFixed(1)}%)`);
   check(sg2(MUT.NOERR).length > 0, "변이-NOERR(그림 `error` 손잡이 삭제 — 깨진 그림이 남음) → SG-2가 빨간불");
+  check(sg4(MUT.AIR).length > 0, "변이-AIR(슬라이딩이 길마다 공중으로 뜸) → SG-4가 빨간불");
   check(sg3(MUT.RND).length > 0, "변이-RND(그림을 얹을 때 난수 한 번) → SG-3이 빨간불");
 }
 fs.rmSync(tmp, { recursive: true, force: true });

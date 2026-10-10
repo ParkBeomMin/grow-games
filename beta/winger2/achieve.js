@@ -24,16 +24,17 @@ window.W2Ach = (() => {
     /* 희귀도 — 문턱 흔함 ≥ 35 · 드묾 12~35 · 귀함 3~12 · 전설 < 3(12번 §7-5) · 판 2.5 · 새 집계 · 시작 랜덤 뒤의 표:
      *   28번 R10 표 → 34번(`number` 흔함 → 드묾 · `allc` 드묾 → 귀함) → 37번 §2 · 38번 §5(`g7` 드묾 → 귀함 하나만)
      *   → 43번 §2-2 · 44번 §1(`promise3` · `league` 귀함 → 전설 · `gift` 드묾 → 귀함)
+     *   → 46번 §2-2 · 47번 §1(`allc` 귀함 → 드묾 · `rested` 드묾 → 귀함 · `gift` 귀함 → 드묾)
      * 흔함 grad · story1 · family · g1 · mom10 · winner · next
-     * 드묾 s1 · onething · rested · a7 · door · race · number
-     * 귀함 r9 · cs5 · wall3 · qf · longshot · crown · pk · allc · g7 · gift
+     * 드묾 s1 · onething · a7 · door · race · number · allc · gift
+     * 귀함 r9 · cs5 · wall3 · qf · longshot · crown · pk · g7 · rested
      * 전설 hat · cup · promise3 · league
      * 기기 장부 업적 셋(`trio` · `all7` · `six`)은 판 하나로 못 재서(R10 밖) 전설로 둬요. */
     TIER: {
       grad: "흔함", story1: "흔함", family: "흔함", g1: "흔함", mom10: "흔함", winner: "흔함", next: "흔함",
-      s1: "드묾", onething: "드묾", rested: "드묾", a7: "드묾", door: "드묾", race: "드묾", number: "드묾",
+      s1: "드묾", onething: "드묾", a7: "드묾", door: "드묾", race: "드묾", number: "드묾", allc: "드묾", gift: "드묾",
       r9: "귀함", cs5: "귀함", wall3: "귀함", qf: "귀함", longshot: "귀함", crown: "귀함", pk: "귀함",
-      allc: "귀함", g7: "귀함", gift: "귀함",
+      g7: "귀함", rested: "귀함",
       hat: "전설", cup: "전설", promise3: "전설", league: "전설", trio: "전설", all7: "전설", six: "전설",
     },
   });

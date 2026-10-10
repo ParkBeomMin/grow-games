@@ -62,8 +62,10 @@ function defaultPolicy(over) {
     if (t >= 0 && c.opts[t].pct >= P.tryAt) return t;
     const p = c.opts.findIndex((x) => x.k === "promise");
     if (p >= 0 && P.promise) return p;
-    const s = c.opts.findIndex((x) => x.k === "safe" || x.k === "ok");
-    return s >= 0 ? s : 0;
+    /* 🔄 v4(47번 · J13): 「넘긴다」가 없어짐 — 걸지 않는 손은 🌿 확정 → 💬 이야기(옛 카드면 넘긴다)로. 안 고치면 첫 칸(🎲 크게)으로 떨어져
+     *    「보통 판」이 늘 도전하는 판이 돼요 */
+    const s = ["cert", "talk", "safe", "ok"].map((k) => c.opts.findIndex((x) => x.k === k)).find((i) => i >= 0);
+    return s != null ? s : 0;
   });
   P.doors = P.doors || ((d) => d[d.length - 1].id);
   P.film = P.film || (() => ({ word: "", go: "close" }));
@@ -151,7 +153,7 @@ function boot(opt) {
   const o = Object.assign({ gender: "m", preset: "jiho", pos: "wg", foot: "R", no: 11, name: null }, opt || {});
   const keys = Object.assign({}, o.keys || {});
   if (o.auto) keys["grow-auto-mini"] = "1";
-  const w = bootPage({ muts: o.muts, keys, fastTimers: o.fastTimers === undefined ? true : o.fastTimers, confirm: true });
+  const w = bootPage({ muts: o.muts, keys, fastTimers: o.fastTimers === undefined ? true : o.fastTimers, confirm: true, pageDir: o.pageDir });
   const seen = { pick: [], intro: [], portrait: 0, card: [], grade: [], sheet: [], doors: [], ending: [], film: [], book: [],
     order: [], flash: [], boards: [], live: [] };
   const P = defaultPolicy(o.policy);

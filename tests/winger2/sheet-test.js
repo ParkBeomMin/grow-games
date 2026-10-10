@@ -6,7 +6,7 @@
  *   P-2  ⚽ 기록 칸은 **경기당** — 같은 경기당 기록이면 경기 수가 두 배여도 칸이 같다(누적으로 되돌리면 🏆 대회 운이 기록 칸에 새요)
  *   P-3  🏋️ 몸 점수표(v2 · 34번 R15 둘째 값 · 38번 §5) — **88 위는 6.10으로 평평** · 77 = 5.06 · 문턱 사이는 선으로 · 줄지 않음
  *   P-4  칸은 **다섯**(몸 · 관리 · 기록 · 무대 · 테스트 — v3 `skill` → `care` · 43번 §4 #4 솜씨 칸 퇴역) — **추천서 칸 없음**(22번 R8 둘째 값)
- *   P-5  📏 구간 문턱 **66.4 · 59.4 · 52.8**(44번 §1 · 43번 §2 — 화면 한 자리 · 박은 값) · 문턱은 그 구간 · **0.1 아래**는 한 칸 아래
+ *   P-5  📏 구간 문턱 **67.4 · 60.3 · 53.7**(47번 §1 · 46번 §2 — 화면 한 자리 · 박은 값) · 문턱은 그 구간 · **0.1 아래**는 한 칸 아래
  *   P-6  📋 중간 평가서는 **그 시점의 사실만** — 17주엔 무대 · 테스트 0(대회 · 테스트 전) · 34주엔 무대가 대회 결과 · 테스트 0 · 다시 열어도 같은 장(얼림)
  *   P-7  ✉️ 문 · 엔딩 규칙표(v2 · 29번 §3-2 P1 (가)) — 문은 **따라간 가족 이야기**에 붙음(🏭 아버지 「중」 · 🎓 엄마 「상」 · ✉️ 할머니 「최상」 · 외형과 무관)
  *        · **그 구간에서만** 나오고 **깃발을 세웠을 때만** 열림 · 가족 이야기가 없으면 문 0 · 정확히 한 엔딩 · 숨은 굴림 0
@@ -26,7 +26,7 @@ const check = (ok, msg) => { console.log(`${ok ? "✅" : "❌"} ${msg}`); if (!o
 const SSRC = fs.readFileSync(path.join(PAGE_DIR, "sheet.js"), "utf8");
 const sheetOf = (src) => new Function("window", `${src}\nreturn window.W2Sheet;`)({});
 const K6 = ["shoot", "pass", "dribble", "defense", "stamina", "speed"];
-const T = { top: 66.4, high: 59.4, mid: 52.8 };   // 🔒 44번 §1 · 43번 §2(66.36 · 59.40 · 52.77을 화면 한 자리로) · 박은 값
+const T = { top: 67.4, high: 60.3, mid: 53.7 };   // 🔒 47번 §1 · 46번 §2(새 기준 판 「늘 확정」 · 화면 한 자리) · 박은 값
 const COLS = ["body", "care", "record", "stage", "test"];
 const CARE = (avg, n) => (n > 0 ? 10 * Math.min(1, Math.max(0, (avg - 20) / 50)) : 0);   // 🔒 44번 §1 산식 — 박은 꼴(λ 1)
 
@@ -34,7 +34,7 @@ const MUT_S = {
   CUMUL: [[/const perGame = games > 0 \? raw \/ games : 0;/, "const perGame = games > 0 ? raw / 14 : 0;"]],
   BODYUP: [[/\[77, 5\.06\], \[88, 6\.10\]\]/, "[77, 5.06], [88, 6.10], [100, 6.6]]"]],
   RECO: [[/ {4}const tier = final \? tierOf\(total\) : null;/, '    cols.push({ k: "reco", label: "✉️ 추천서", v: 0, max: 5, note: "" });\n    const tier = final ? tierOf(total) : null;']],
-  TIER: [[/T: \{ top: 66\.4, high: 59\.4, mid: 52\.8 \},/, "T: { top: 66.4, high: 59.0, mid: 52.8 },"]],
+  TIER: [[/T: \{ top: 67\.4, high: 60\.3, mid: 53\.7 \},/, "T: { top: 67.4, high: 60.0, mid: 53.7 },"]],
   SPAN60: [[/CARE_LO: 20, CARE_SPAN: 50,/, "CARE_LO: 20, CARE_SPAN: 60,"]],
   SKILLBACK: [[/\{ k: "care", label: "🫀 관리"/, '{ k: "skill", label: "🎮 솜씨"']],
   MIDTIER: [[/const tier = final \? tierOf\(total\) : null;/, "const tier = tierOf(total);"]],
@@ -112,7 +112,7 @@ const mkS = (o) => Object.assign({ pos: "wg", preset: "jiho", gender: "m", trust
   const p5 = (Sh) => [[T.top, "top"], [down(T.top), "high"], [T.high, "high"], [down(T.high), "mid"], [T.mid, "mid"], [down(T.mid), "low"], [0, "low"], [100, "top"]]
     .every(([v, want]) => Sh.tierOf(v) === want);
   check(p5(SH), `P-5. 📏 구간 문턱 ${T.top} · ${T.high} · ${T.mid}(화면 한 자리) — 문턱은 그 구간 · 0.1 아래(${down(T.top)} · ${down(T.high)} · ${down(T.mid)})는 한 칸 아래`);
-  check(!p5(sheetOf(apply(SSRC, MUT_S.TIER))), `변이-TIER(「상」 문턱을 59.0으로) → P-5가 빨간불`);
+  check(!p5(sheetOf(apply(SSRC, MUT_S.TIER))), `변이-TIER(「상」 문턱을 60.0으로) → P-5가 빨간불`);
 
   /* ══════════ P-7 — 문 · 엔딩 규칙표(가족 이야기) ══════════ */
   /* 가족 이야기 sid는 `W2Story.famSid(S)`가 줘요 — 표만 보게 그 자리를 갈아 끼움(`S.__fam`) */

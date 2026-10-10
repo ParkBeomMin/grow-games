@@ -7,6 +7,7 @@
  *     intro(ctx)             → Promise<k | undefined>        🎬 도입 — 번호를 잃은 날 · 마지막 한마디를 셋 중 고름(`ctx.choices`)
  *     portrait(slot, o)      → (그림)                         🗓️ 홈 위 ⅓ 초상 — o = { who, mood, bg, name?, week? }
  *     card(card)             → Promise<pickIndex>            🎲 이벤트 · 📖 이야기 · 🤝 사람 · (opts 없으면 [확인] 하나)
+ *                                                             v4: `card.choices`(셋~넷 — 47번 §2)가 있으면 그것을, 없으면 `opts`
  *     grade({ k, label, from, to }) → Promise                📊 승급 카드 「⚽ 슈팅 C → C+」
  *     sheet(sheet)           → Promise                       📋 평가서(중간 · 최종)
  *     doors(doors)           → Promise<doorId>               ✉️ 문 — 같은 높이의 두 제안
@@ -465,11 +466,97 @@ window.W2Scenes = (() => {
     if (o.disabled) { b.disabled = true; b.classList.add("is-off"); }
     return b;
   }
+  /* 🎲 v4 선택지 셋~넷(47번 §2 · 45번 §5) — 버튼마다 2줄 · 52px: 줄 1 = 종류 + 태도 · 줄 2 = 숫자(% · 몫).
+   *    확률 조각은 🎲 둘이 함께 쓰는 바탕을 카드에 **한 줄**, 그 바탕에 없는 조각(🎲 작게의 「작게 +5」)은 그 버튼 안에 —
+   *    보이는 조각의 합 = 판정 %. 합이 `p`와 다르면(10~90으로 잘림) 글로 적어요. 종류는 **글 + 테두리 무늬**로(색만으로 안 가름) */
+  const CKIND = { big: ["🎲", "크게"], small: ["🎲", "작게"], sure: ["🌿", "확정"], talk: ["💬", "이야기"] };
+  const FXN = { cond: ["🫀", "컨디션"], trust: ["🤝", "감독 신뢰"], weak: ["🦶", "약발 경험"] };
+  const amt = (v) => `${v > 0 ? "+" : "−"}${Math.abs(v)}`;
+  const partName = (p) => str(p.name || p.label || PART[p.k] || p.k);
+  /* 몫 칩 — 로직이 글자로 준 `chips.win/lose`가 먼저. 안 왔으면 효과 객체 `{ stat|cond|trust|weak|flag, v }`의 **이름과 값만**
+   *    옮겨 적어요(값을 셈하지 않음) */
+  function fxChips(o, side) {
+    if (o.chips && Array.isArray(o.chips[side])) return o.chips[side];
+    const list = o[side] == null ? [] : Array.isArray(o[side]) ? o[side] : [o[side]];
+    return list.map((f) => {
+      if (!f || typeof f !== "object") return null;
+      if (f.flag) return { emoji: "🔖", text: "이야기 한 줄", good: true };
+      if (f.stat && STAT[f.stat] && fin(f.v)) return { emoji: STAT[f.stat][0], text: `${STAT[f.stat][1]} ${amt(+f.v)}`, good: +f.v > 0 };
+      const k = Object.keys(FXN).find((n) => n in f);
+      if (!k) return null;
+      const v = fin(f.v) ? +f.v : typeof f[k] === "number" ? f[k] : null;   // `{ trust: true, v }` — 값은 `v`(true를 1로 읽지 않게)
+      return v == null ? null : { emoji: FXN[k][0], text: `${FXN[k][1]} ${amt(v)}`, good: v > 0 };
+    }).filter(Boolean);
+  }
+  const chipText = (list) => chips(list).map((c) => `${str(c.emoji)}${c.emoji ? " " : ""}${str(c.text)}`).join(" · ");
+  const isDice = (o) => o && (o.kind === "big" || o.kind === "small");
+  const isOdds = (o) => isDice(o) && fin(o.p);                 // 🎲 % 판정
+  const isProm = (o) => isDice(o) && !fin(o.p);                // 📋 약속(`p` null — 다음 경기의 기록이 정함 · % 기호 없음)
+  const goodParts = (o) => (Array.isArray(o.parts) ? o.parts : []).filter((p) => p && fin(p.v));
+  /* 바탕 조각 줄 — 첫 🎲 크게(없으면 첫 🎲)의 조각 중 「작게」가 아닌 것 · 그날의 상황 글이 있으면 같이 */
+  function baseParts(list) {
+    const src = list.find((o) => isOdds(o) && o.kind === "big" && goodParts(o).length) || list.find((o) => isOdds(o) && goodParts(o).length);
+    if (!src) return { names: [], el: null };
+    const ps = goodParts(src).filter((p) => !/작게|small/.test(partName(p)));
+    const sum = ps.reduce((a, p) => a + +p.v, 50);
+    /* 「→ N%」는 그 합이 **어느 선택지의 %와 같을 때만**(🎲 크게가 없거나 잘렸으면 바탕 조각만) — 카드에 없는 % 숫자 0 */
+    const shown = list.some((o) => isOdds(o) && +o.p === sum);
+    const box = h("p", "w2o-cparts");
+    box.appendChild(h("span", "w2o-parts", `🎲 ${["기본 50"].concat(ps.map((p) => `${partName(p)} ${sign(+p.v)}`)).join(" · ")}${shown ? ` → ${sum}%` : ""}`));
+    const sit = goodParts(src).find((p) => p.text);
+    if (sit) box.appendChild(h("span", "w2o-sit", ` · ${str(sit.text)}`));
+    return { names: ps.map(partName), el: box };
+  }
+  function choiceEl(o, i, base) {
+    const kind = CKIND[o.kind] ? o.kind : "sure";
+    const prom = isProm(o);
+    const [emo, word] = prom ? ["📋", kind === "small" ? "약속 · 작게" : "약속"] : CKIND[kind];
+    const b = btn(`w2o-opt w2o-ch c-${kind}${prom ? " c-prom" : ""}`);
+    b.dataset.i = String(i);
+    const l1 = h("span", "w2o-ch-l1");
+    put(l1, h("span", "w2o-ch-tag", `${emo} ${word}`), h("span", "w2o-opt-label", o.label));
+    const l2 = h("span", "w2o-ch-l2");
+    let spoken = "";
+    if (isDice(o) && fin(o.p)) {
+      const ps = goodParts(o);
+      const extra = ps.filter((p) => base.names.indexOf(partName(p)) < 0);
+      const sum = ps.reduce((a, p) => a + +p.v, 50);
+      const pe = h("b", "w2o-ch-p", `${+o.p}%`);
+      l2.appendChild(pe);
+      const ex = extra.map((p) => `${partName(p)} ${sign(+p.v)}`).join(" · ");
+      if (ex) l2.appendChild(h("span", "w2o-ch-ex", `(${ex})`));
+      if (ps.length && sum !== +o.p) l2.appendChild(h("span", "w2o-cut", `(조각 합 ${sum} · 10~90 사이로 잘림)`));
+      const win = chipText(fxChips(o, "win")), lose = chipText(fxChips(o, "lose"));
+      /* 「⚽ 슈팅 +1 / −1」 — 같은 칸이면 이름을 한 번만(45번 §5 · 두 줄에 들어가게) */
+      const head = /^(.*\S)\s[+−][\d.]+$/.exec(win), tail = /^(.*\S)\s([+−][\d.]+)$/.exec(lose);
+      const both = head && tail && head[1] === tail[1] ? `${win} / ${tail[2]}` : `${win || "—"} / ${lose || "—"}`;
+      if (win || lose) l2.appendChild(h("span", "w2o-ch-fx", both));
+      spoken = `${word} · 성공 ${+o.p}%${ex ? `(${ex})` : ""} · 성공하면 ${win || "변화 없음"} · 실패하면 ${lose || "변화 없음"}`;
+    } else if (prom) {
+      /* 📋 약속 — % 기호 0(12번 §6-4) · 근거는 `desc`(「최근 N경기 중 M번 해냈어요」) · 판돈은 지키면 / 못 지키면 */
+      const win = chipText(fxChips(o, "win")), lose = chipText(fxChips(o, "lose"));
+      const head = /^(.*\S)\s[+−][\d.]+$/.exec(win), tail = /^(.*\S)\s([+−][\d.]+)$/.exec(lose);
+      if (win || lose) l2.appendChild(h("span", "w2o-ch-fx", head && tail && head[1] === tail[1] ? `${win} / ${tail[2]}` : `${win || "—"} / ${lose || "—"}`));
+      spoken = `${word} · 다음 경기의 기록이 정해요 · 지키면 ${win || "변화 없음"} · 못 지키면 ${lose || "변화 없음"}`;
+    } else {
+      const got = chipText(fxChips(o, "win"));
+      if (!/^확정/.test(str(o.desc))) l2.appendChild(h("b", "w2o-ch-sure", "확정"));   // `desc`가 「확정 · 문」이면 두 번 안 적어요
+      if (got) l2.appendChild(h("span", "w2o-ch-fx", got));
+      spoken = `${word} · 확정${got ? ` · ${got}` : ""}`;
+    }
+    /* `desc` — 약속(「최근 N경기 중 M번」) · 확정(「확정 · 문」)은 둘째 줄 앞에. 🎲 %는 꼬리표 · 숫자가 이미 말해서 낭독에만 */
+    if (o.desc && !isOdds(o)) l2.insertBefore(h("span", "w2o-ch-desc", `${prom ? "📊 " : ""}${str(o.desc)}`), l2.firstChild);
+    put(b, l1, l2, o.note ? h("span", "w2o-note", o.note) : null);
+    b.setAttribute("aria-label", `${i + 1}번 — ${str(o.label)} · ${o.desc ? `${str(o.desc)} · ` : ""}${spoken}${o.note ? ` · ${str(o.note)}` : ""}`);
+    if (o.disabled) { b.disabled = true; b.classList.add("is-off"); }
+    return b;
+  }
   function card(c) {
     return run(() => new Promise((resolve) => {
       const x = c || {};
       remember(x.who, x.name);
-      const s = shell("card");
+      const choices = Array.isArray(x.choices) ? x.choices.filter((o) => o && o.label) : [];
+      const s = shell(choices.length >= 3 ? "card w2o-many" : "card");
       const panel = h("div", "w2o-panel");
       const opts = Array.isArray(x.opts) ? x.opts : [];
       const result = x.ok === true ? " is-ok" : x.ok === false ? " is-bad" : "";
@@ -480,7 +567,7 @@ window.W2Scenes = (() => {
       put(panel,
         kicker ? h("p", "w2o-kicker", kicker) : null,
         title("h2", "w2o-title", x.title || kicker || "이번 주", s.id),
-        x.body ? h("p", "w2o-body", x.body) : null,
+        x.body ? h("p", `w2o-body${choices.length >= 3 ? " w2o-clamp" : ""}`, x.body) : null,
         x.line ? h("p", "w2o-body w2o-line2", x.line) : null,        // 📖 결말 글(story-end)
         chipRow("", x.chips, "w2o-result-fx"));                       // 결과로 받은 것(「⚽ 슈팅 +1」)
       const box = h("div", "w2o-opts");
@@ -494,20 +581,35 @@ window.W2Scenes = (() => {
       };
       /* [확인] 하나(`{ k: "ok" }`)는 선택지가 아니라 **닫는 버튼**으로 — 카드처럼 그리면 고를 것이 있는 줄 알아요 */
       const lone = opts.length === 1 && opts[0] && opts[0].k === "ok";
-      if (opts.length && !lone) {
-        opts.forEach((o, i) => {
-          const b = optEl(o || {}, i, x);
-          b.addEventListener("click", () => finish(i));
-          box.appendChild(b);
+      if (choices.length) {
+        const base = baseParts(choices);
+        if (base.el) panel.appendChild(base.el);
+        box.setAttribute("role", "group");
+        box.setAttribute("aria-label", `선택지 ${choices.length}개 — 키보드 1~${choices.length}`);
+        choices.forEach((o, i) => box.appendChild(choiceEl(o, i, base)));
+        /* ⌨️ 1~N — 카드가 떠 있는 동안만(입력 칸이 없는 레이어라 숫자 키를 빼앗을 곳이 없어요) */
+        s.root.addEventListener("keydown", (e) => {
+          if (e.repeat || e.altKey || e.ctrlKey || e.metaKey || !/^[1-9]$/.test(e.key)) return;
+          const t = box.querySelectorAll("button")[Number(e.key) - 1];
+          if (t && !t.disabled) { e.preventDefault(); t.click(); }
         });
+      } else if (opts.length && !lone) {
+        opts.forEach((o, i) => box.appendChild(optEl(o || {}, i, x)));
       } else {
         const b = btn("btn btn-primary w2o-ok", (lone && opts[0].label) || x.okLabel || "확인");
         b.addEventListener("click", () => finish(0));
         box.appendChild(b);
       }
+      /* 👆 선택지는 `click`으로만 풀려요(새 · 옛 모양 같은 한 줄 — pointerdown에서 화면을 갈지 않음 · ① 교훈) */
+      if (choices.length || (opts.length && !lone)) {
+        box.querySelectorAll("button.w2o-opt").forEach((b) => {
+          const i = Number(b.dataset.i);
+          b.addEventListener("click", () => finish(i));
+        });
+      }
       panel.appendChild(box);
-      const hasTry = opts.some((o) => o && o.k === "try");
-      const hasPromise = opts.some((o) => o && o.k === "promise");
+      const hasTry = opts.some((o) => o && o.k === "try") || choices.some(isOdds);
+      const hasPromise = opts.some((o) => o && o.k === "promise") || choices.some(isProm);
       if (hasTry || hasPromise) {
         const foot = h("p", "w2o-foot");
         if (hasTry) foot.appendChild(h("span", null, "📐 적힌 확률이 그대로 판정이에요 — 숨은 보정은 없어요"));
@@ -515,6 +617,15 @@ window.W2Scenes = (() => {
         panel.appendChild(foot);
       }
       put(s.box, scene(x.bg || "bg-field", x.who, x.mood, x.name), panel);
+      /* 본문 두 줄 — 넘칠 때만 「…더 보기」(누르면 펼침 · 낭독은 늘 전문) */
+      const body = panel.querySelector(".w2o-clamp");
+      if (body && body.scrollHeight > body.clientHeight + 1) {
+        const more = btn("w2o-more", "…더 보기");
+        more.setAttribute("aria-hidden", "true");
+        more.tabIndex = -1;
+        more.addEventListener("click", () => { body.classList.remove("w2o-clamp"); more.remove(); });
+        body.after(more);
+      }
       s.focus();
     }));
   }
@@ -937,6 +1048,7 @@ window.W2Scenes = (() => {
         who ? fig(who, last.mood || "moved", hd.name, "w2f-fig") : null,
         h("h3", "w2f-h", last.title || "🎬 마지막 장")));
       if (last.line) lastSec.appendChild(h("p", "w2f-next", str(last.line)));   // 이모지까지 든 완성 줄(「🎓 대학 리그에서 2막을 기다려요」)
+      if (last.year) lastSec.appendChild(h("p", "w2f-year", str(last.year)));   // 🔖 「그해, …」 한 줄(v4 깃발 — 없으면 null)
       /* 🏅 대표 업적 — 딴 업적 **목록**(이름 · 희귀도)이 와야 고를 수 있어요. 목록이 없으면 이 칸을 안 그립니다
        *    (id만으로는 이름을 모르고, 모르는 것을 지어내 그리지 않아요) */
       const achs = (Array.isArray(x.ach) ? x.ach : Array.isArray(last.ach) ? last.ach : []).filter((a) => a && a.id != null && a.name);

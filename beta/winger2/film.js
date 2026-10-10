@@ -89,7 +89,9 @@ window.W2Film = (() => {
       { k: "sheet", title: "📋 평가서", bg: "bg-test", cols: S.sheet ? S.sheet.cols : null,
         total: S.sheet ? S.sheet.total : null, tierName: S.sheet ? S.sheet.tierName : null },
       { k: "last", title: head.ending ? `${head.ending.emoji} ${head.ending.name}` : "🎓", bg: E.id ? `end-${E.id}` : "bg-gate", who, mood: E.mood || "moved",
-        next: !!(E.id && SH().NEXT[E.id]), line: E.id ? SH().waitOf(E.id) : null },
+        next: !!(E.id && SH().NEXT[E.id]), line: E.id ? SH().waitOf(E.id) : null,
+        /* 🔖 그해의 한 장면 — 가장 늦게 세운 깃발 한 줄(45번 §3-2 ② · 수치 0 · 없으면 null) */
+        year: window.W2Events && window.W2Events.flagYear ? window.W2Events.flagYear(S) : null },
     ].filter((c) => c.k === "cover" || c.k === "last" || c.k === "body" || c.k === "choice" || c.k === "sheet" || c.games || (c.k === "story" && c.ends.length));
     const ach = A ? A.LIST.filter((d) => S.ach && S.ach[d.id]).map((d) => ({ id: d.id, name: d.name, tier: d.tier })) : [];
     return { v: 1, id: S.id, at: Date.now(), head, ch, ach, word: null };

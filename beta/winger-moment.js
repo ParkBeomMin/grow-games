@@ -123,7 +123,7 @@ window.W2Moment = (() => {
       cell: (i) => ({ x: 22 + 28 * (i % 3), y: 15.5 + 19 * Math.floor(i / 3), w: 28, h: 19 }) },
     assist: { H: 62, ball: [84, 8], gk: [50, 5], me: [88, 6], mates: [[34, 50], [60, 54]],
       cell: (i) => ({ x: 30 + 20 * (i % 3), y: 13.5 + 17 * Math.floor(i / 3), w: 20, h: 17 }) },
-    defend: { H: 62, ball: [40, 58], ours: [50, 44], me: [67, 56], shooter: [29, 74], dive: 38,
+    defend: { H: 62, ball: [40, 58], ours: [50, 44], me: [67, 56], shooter: [29, 74], slide: 52, reach: 10,   // 슬라이딩 — 발끝 y · 뻗은 발까지의 폭(그림 26%)
       cell: (i) => ({ x: (i + 0.5) * 100 / 6, y: 25, w: 100 / 6, h: 38 }) },
   };
 
@@ -369,7 +369,7 @@ window.W2Moment = (() => {
     }
     return { runner, run: [z.x, z.y + 3], shot: [z.x < 50 ? 33 : 67, -4], gk: [50 + side * 3, 5], text: "💨 동료의 슛이 골대 밖으로" };
   }
-  /* 🧱 결과 그림(42번 §2 — 🥅와 같은 문법 · 연출 난수). 막음 = 내가 던진 길로 와서 몸에 맞고 튕김(가끔 다른 길 → 서두른
+  /* 🧱 결과 그림(42번 §2 — 🥅와 같은 문법 · 연출 난수). 막음 = 내가 미끄러져 들어간 길로 와서 뻗은 발에 맞고 튕김(가끔 다른 길 → 서두른
    *    슛이 크로스바 위) · 실점 = 다른 길로 그물(가끔 같은 길 → 발끝을 스침). 판정은 엔진 — 그림은 결과를 따라요 */
   function planBlock(j, c, r) {
     const g = G.defend, alt = r[3] < TUNE.BLOCK_ALT;
@@ -377,7 +377,7 @@ window.W2Moment = (() => {
     const lane = j === "perfect" ? (alt ? other : c) : (alt ? c : other);
     const x = g.cell(lane).x, note = `⚽ 슛은 ${LANE(lane)}로 왔어요`;
     if (j === "perfect" && !alt) {
-      return { ball: [x, g.dive], rebound: [Math.min(94, Math.max(6, x + (r[2] < 0.5 ? -14 : 14))), g.H - 6], text: "🧱 막았어요! 몸으로 막아 냈어요", note };
+      return { ball: [x, g.slide - 3], rebound: [Math.min(94, Math.max(6, x + (r[2] < 0.5 ? -14 : 14))), g.H - 6], text: "🧱 막았어요! 슬라이딩으로 막아 냈어요", note };
     }
     if (j === "perfect") return { ball: [x, -6], text: "🧱 막았어요 — 압박에 서두른 슛이 크로스바 위로", note };
     if (alt) return { ball: [x + (x < 50 ? -5 : 5), 28], text: "😣 같은 길이었는데 — 발끝을 스치고 들어갔어요", note };
@@ -492,10 +492,17 @@ window.W2Moment = (() => {
         const z = G.assist.cell(i);
         moveTo(d.ball, z.x, z.y, ms(m1));
       } else {
-        moveTo(d.me, G.defend.cell(i).x, G.defend.dive, ms(m1));
-        /* 몸 던짐 — 주인공 `chibi-block`(오른쪽으로 날아가는 그림 · 왼쪽 길이면 뒤집기). 못 받으면 원형 말을 기울임 */
-        if (B.me && skin(d.me, `${B.me}-chibi-block`, i < 3)) { d.me.pc.classList.add("is-dive"); pose(d.me, 0, 1, ms(m1)); }
-        else pose(d.me, BODY_ROT[i], 1, ms(m1));
+        /* 슬라이딩 블록 — 땅을 따라 옆으로(공중 0). 주인공 `chibi-slide`는 오른쪽으로 미끄러지며 오른발을 뻗는 그림 · 고른 길이
+         *    「나」보다 왼쪽이면 뒤집기. 뻗은 발끝이 길 위에 오게 몸을 발 폭만큼 덜 보내요(가운데 길은 짧게 · 거의 제자리).
+         *    그림을 못 받으면 원형 말이 그 길로 가서 기울어요 */
+        const g = G.defend, lx = g.cell(i).x, left = lx < g.me[0];
+        if (B.me && skin(d.me, `${B.me}-chibi-slide`, left)) {
+          d.me.pc.classList.add("is-slide");
+          moveTo(d.me, lx + (left ? g.reach : -g.reach), g.slide, ms(m1));
+        } else {
+          moveTo(d.me, lx, g.slide, ms(m1));
+          pose(d.me, BODY_ROT[i], 1, ms(m1));
+        }
       }
     };
     const move2 = () => {
@@ -601,7 +608,7 @@ window.W2Moment = (() => {
     B.g = o.world === "m" || o.world === "f" ? o.world : B.me ? B.me.slice(-1) : /서아/.test(String(o.keeper || "")) ? "f" : "m";
     preload(B.kind === "goal" ? ["ready", "dive-high", "dive-low", "jump", "crouch", "reach", "spread"].map((x) => `m-gk-${B.g}-${x}`).concat(["m-ball", "m-boot"])
       : B.kind === "assist" ? ["ready", "run", "shoot", "cheer"].map((x) => `m-mate-${B.g}-${x}`).concat([`m-gk-${B.g}-ready`, `m-gk-${B.g}-dive-low`, `m-def-${B.g}-tackle`, "m-ball"], B.me ? [`${B.me}-chibi-base`] : [])
-        : [`m-shooter-${B.g}-back`, "m-ball", B.g === "f" ? "m-seoa-stand" : "m-taeo-stand"].concat(B.me ? [`${B.me}-chibi-guard`, `${B.me}-chibi-block`] : []));
+        : [`m-shooter-${B.g}-back`, "m-ball", B.g === "f" ? "m-seoa-stand" : "m-taeo-stand"].concat(B.me ? [`${B.me}-chibi-guard`, `${B.me}-chibi-slide`] : []));
     /* 🎲 판 하나에 연출 난수 **4번 고정**(결과 · 종류를 안 탐) — 그림 갈래에 [2] · [3]만 써요 */
     B.r = [fx(), fx(), fx(), fx()];
     B.vals = values();

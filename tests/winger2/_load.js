@@ -256,12 +256,14 @@ function bootPage(opts) {
   const { JSDOM } = require(path.join(ROOT, "tests/cloud/jsdom.js"));
   const muts = o.muts || {};
   const applied = {};
-  let rawHtml = fs.readFileSync(path.join(PAGE_DIR, "index.html"), "utf8");
+  /* 🗂️ `o.pageDir` — 다른 판(예: 옛 커밋을 `git archive`로 푼 사본)의 페이지를 같은 장치로 띄울 때(v4 · 46번 §4 #1 「옛 판과 비트 같음」) */
+  const DIR = o.pageDir || PAGE_DIR;
+  let rawHtml = fs.readFileSync(path.join(DIR, "index.html"), "utf8");
   if (muts["index.html"]) { rawHtml = applyMuts(rawHtml, muts["index.html"], "index.html"); applied["index.html"] = muts["index.html"].length; }
   const html = rawHtml
     .replace(/<script[^>]*src="https?:[^"]*"[^>]*><\/script>/g, "")
     .replace(/<script src="([^"]+)"><\/script>/g, (m0, src) => {
-      const f = path.resolve(PAGE_DIR, src.split("?")[0]);
+      const f = path.resolve(DIR, src.split("?")[0]);
       if (!fs.existsSync(f)) return "";
       const base = path.basename(f);
       let code = fs.readFileSync(f, "utf8");

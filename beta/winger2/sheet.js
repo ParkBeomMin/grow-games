@@ -31,7 +31,7 @@ window.W2Sheet = (() => {
     STAGE_PTS: [0, 3, 5, 7, 8, 10],                  // 21번 §3-3 — 조별 · 16강 · 8강 · 4강 · 준우승 · 우승
     LEAGUE_WIN_PT: 1, STAGE_MAX: 10,                 // 〃 — 권역 리그 우승 +1 · 상한 10
     TEST_TECH: 1.6, TEST_MATCH: 2.4,                 // 34번 · 37번 §2(R9 둘째 값) — 🎯 테스트 0~4(기술 0~1.6 · 연습경기 0~2.4)
-    T: { top: 66.4, high: 59.4, mid: 52.8 },         // 43번 §2-1 · 44번 §1(66.36 · 59.40 · 52.77을 화면 한 자리로) — 구간은 **화면의 합계**로
+    T: { top: 67.4, high: 60.3, mid: 53.7 },         // 46번 §2-1 · 47번 §1(67.37 · 60.29 · 53.65 — 새 기준 판 「늘 확정」) — 구간은 **화면의 합계**로
     TRUST_LINE: 4,                                   // 23번 §7 — 감독 의견 한 줄이 갈리는 🤝(±4)
     TEST_REF: 56.0,                                  // 24번 §2 — 기술 판 중심의 능력치 기준선
     TEST_P: { goal: 1 / 3, assist: 1 / 3, defend: 1 / 2 },   // 12번 §5-4 — 🔗 판 한 번 기댓값 1점(포지션 무관)
@@ -286,7 +286,9 @@ window.W2Sheet = (() => {
     if (id !== "leave") lines.push(W ? W.fill(POS_LINE[S.pos] || POS_LINE.fw, vars) : POS_LINE[S.pos]);
     const done = (S.story && S.story.done) || [];
     if (done.some((d) => d.sid === "senior" && d.end === "gift")) lines.push(W ? W.fill("관중석 맨 앞줄에서 {keeper|가} 두 손을 흔들어요.", vars) : "");
-    if ((Number(S.weak) || 0) >= 2) lines.push("🦶 왼발도 오른발도 — 이제 양발이에요.");   // 29번 §3-6 (가) — 약발 2단계 한 줄
+    if ((Number(S.weak) || 0) >= 2) lines.push("🦶 왼발도 오른발도 — 이제 양발이에요.");
+    const fy = window.W2Events && window.W2Events.flagYear ? window.W2Events.flagYear(S) : null;   // 🔖 그해의 한 장면(45번 §3-2 ①)
+    if (fy) lines.push(fy);   // 29번 §3-6 (가) — 약발 2단계 한 줄
     lines.push(COACH_BYE[coachOf(S).mood]);
     lines.push(VOICE[voiceOf(S)]);
     return { id, tier, tierName: TIER_NAME[tier], next: NEXT[id] || null, wait: waitOf(id), name: endName(id, g, true), emoji: END_EMO[id] || "🎓", gender: g, bg: `end-${id}`,
@@ -310,6 +312,7 @@ window.W2Sheet = (() => {
         ok1: famDone && typeof famDone.ok1 === "boolean" ? famDone.ok1 : null } : null,
       stats0: Object.assign({}, S.statsAt0 || S.stats), rerolls: Math.max(0, Math.floor(Number(S.rerolls)) || 0),
       weak: Math.max(0, Math.min(2, Math.floor(Number(S.weak)) || 0)), voice: voiceOf(S),
+      evFlags: Array.isArray(S.evFlags) ? S.evFlags.slice() : [],   // 🔖 2막으로(47번 · 45번 §3-2)
       ending: S.ending.id, next: NEXT[S.ending.id] || null, tier: S.ending.tier, door: !!S.ending.door,
       preset: S.preset, gender: gOf(S), name: S.name, pos: S.pos, foot: S.foot, no: S.no,
       trust: Number(S.trust) || 0,

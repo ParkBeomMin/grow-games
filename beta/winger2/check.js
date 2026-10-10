@@ -238,7 +238,70 @@
     }
   }
 
+  /* 🎲 v4 이벤트 카드(47번 §2 `card.choices`) — ① 견본: 45번 §4 표의 문구 · 숫자를 그대로 옮긴 모양 시험(판정 0 · 고르면 닫힘만)
+   *    ② 엔진: 진짜 `W2Events.roll`을 주마다 돌려 선택지가 셋 이상인 카드가 처음 뜨는 판을 보여 줘요(engineer 데이터가 들어온 뒤) */
+  const part = (name, v, text) => (text ? { name, v, text } : { name, v });
+  const SAMPLE = {
+    night: { title: "🦶 불 꺼진 운동장", body: "다들 돌아간 운동장에 골대 하나에만 불이 남아 있다. 공 자루가 발밑에 있다.", who: "me", mood: "fire", bg: "bg-dawn",
+      choices: [
+        { k: "try", kind: "big", label: "남아서 백 개", p: 60, parts: [part("실력(슈팅)", 4), part("상황", 6, "바람이 잔잔한 밤이에요")], win: [{ stat: "shoot", v: 1 }], lose: [{ stat: "shoot", v: -1 }] },
+        { k: "small", kind: "small", label: "오십 개만", p: 65, parts: [part("실력(슈팅)", 4), part("상황", 6, "바람이 잔잔한 밤이에요"), part("작게", 5)], win: [{ stat: "shoot", v: 0.5 }], lose: [{ stat: "shoot", v: -0.5 }] },
+        { k: "cert", kind: "sure", label: "들어가서 쉰다", p: null, win: [{ cond: true, v: 3 }] },
+        { k: "talk", kind: "talk", label: "{rival}에게 같이 하자고 한다", p: null, win: [{ trust: true, v: 1 }, { flag: "night_rival", v: 0 }] },
+      ] },
+    boots: { title: "🦶 새 축구화 길들이기", body: "새 축구화가 아직 발에 딱딱하다. 경기까지는 나흘.", who: "me", mood: "base", bg: "bg-field",
+      choices: [
+        { k: "try", kind: "big", label: "전력 질주를 두 배로", p: 41, parts: [part("실력(스피드)", -3), part("상황", -6)], win: [{ stat: "speed", v: 1 }], lose: [{ stat: "speed", v: -1 }] },
+        { k: "small", kind: "small", label: "가볍게 조깅으로 길들인다", p: 46, parts: [part("실력(스피드)", -3), part("상황", -6), part("작게", 5)], win: [{ stat: "speed", v: 0.5 }], lose: [{ stat: "speed", v: -0.5 }] },
+        { k: "cert", kind: "sure", label: "경기 날까지 아껴 둔다", p: null, win: [{ cond: true, v: 3 }, { flag: "boots_saved", v: 0 }] },
+      ] },
+    weak: { title: "🦶 반대발 주간", body: "코치가 이번 주는 반대발 주간이라고 했다. 주발을 쓰면 휘슬이 울린다. 다들 공이 엉뚱한 데로 간다.", who: "coach", mood: "stern", bg: "bg-field",
+      choices: [
+        { k: "try", kind: "big", label: "한 주 반대발로만", p: 72, parts: [part("실력(드리블)", 10), part("상황", 12)], win: [{ stat: "dribble", v: 1 }], lose: [{ stat: "dribble", v: -1 }] },
+        { k: "cert", kind: "sure", label: "훈련 끝나고 30분만 반대발", p: null, win: [{ weak: true, v: 0.2 }] },
+        { k: "cert2", kind: "sure", label: "주발을 더 다듬는다", p: null, win: [{ cond: true, v: 3 }] },
+        { k: "talk", kind: "talk", label: "코치에게 이유를 묻는다", p: null, win: [{ trust: true, v: 1 }, { flag: "weak_why", v: 0 }] },
+      ] },
+    promise: { title: "🏟️ 다시 만난 상대", body: "지난번에 진 상대와 다음 경기에서 다시 만난다. 감독이 한마디를 기다린다.", who: "coach", mood: "base", bg: "bg-locker",
+      choices: [
+        { k: "promise", kind: "big", label: "약속한다", p: null, desc: "최근 3경기 중 2번 해냈어요", win: [{ trust: true, v: 2 }], lose: [{ trust: true, v: -2 }] },
+        { k: "promise_small", kind: "small", label: "할 수 있는 만큼 해 보겠다고 한다", p: null, desc: "최근 3경기 중 2번 해냈어요", win: [{ trust: true, v: 1 }], lose: [{ trust: true, v: -1 }] },
+        { k: "cert", kind: "sure", label: "평소처럼 준비한다", p: null, win: [], note: "감독은 이미 너를 믿어요" },
+      ] },
+  };
+  function sampleCard(k) {
+    const S = fakeS({ week: 9 });
+    const c = JSON.parse(JSON.stringify(SAMPLE[k]));
+    c.kind = "event";
+    c.who = c.who === "me" ? who() : c.who;
+    c.choices.forEach((o) => { o.label = o.label.replace("{rival}", S.world && S.world.rivalWho === "minseo" ? "차민서" : "차민재"); });
+    return Sc.card(named(S, c)).then((i) => say(`고른 칸: ${i + 1}번(${c.choices[i].kind}) — 견본이라 판정 0`));
+  }
+  function engineCard() {
+    for (let seed = 1; seed < 40; seed++) {
+      const S = G.newState({ preset: WHO.preset, gender: WHO.gender, name: nm(), pos: "wg", foot: "R", no: 7, seed });
+      for (let w = 2; w < 35; w++) {
+        S.week = w;
+        let c = null;
+        try { c = EV.roll(S); } catch (e) { say(`❌ 엔진 카드 — ${e.message}`); return null; }
+        if (c && Array.isArray(c.choices) && c.choices.length >= 3) {
+          const shown = Object.assign({}, c);
+          delete shown.u;
+          say(`🎲 엔진 카드 — 시드 ${seed} · ${w}주 · ${c.id || ""} · 선택지 ${c.choices.length}개`);
+          return Sc.card(named(S, shown));
+        }
+      }
+    }
+    say("엔진 카드에 선택지 셋 이상(`choices`)이 아직 없어요 — engineer의 v4 데이터가 들어오면 떠요");
+    return null;
+  }
+
   const SCENES = [
+    ["🎲 이벤트 카드 — 선택지 넷(견본)", "v4 · 🎲 크게 · 🎲 작게(「작게 +5」) · 🌿 확정 · 💬 이야기 · 각 2줄 · 320 × 568에서 스크롤 없음 · 키보드 1~4", () => sampleCard("night")],
+    ["🎲 이벤트 카드 — 선택지 셋(견본)", "v4 · 🎲 둘 + 🌿 확정(🫀 · 🔖) · 확률 조각 줄 합 = %", () => sampleCard("boots")],
+    ["🎲 이벤트 카드 — 반대발 주간(견본)", "v4 · 🎲 하나 · 🌿 둘 · 💬 · 본문 두 줄 넘치면 「…더 보기」", () => sampleCard("weak")],
+    ["🏟️ 이벤트 카드 — 약속 셋(견본)", "v4 · 📋 약속(% 없음 · 「최근 N경기 중 M번」) · 작게 · 잘린 몫(🌿 몫 없이 note만)", () => sampleCard("promise")],
+    ["🎲 이벤트 카드 — 엔진(진짜 데이터)", "v4 · `W2Events.roll`이 낸 첫 셋~넷 카드 그대로", () => engineCard()],
     ["✏️ 캐릭터 만들기", "#13 능력치 배지 줄 · 「장기」 · 🎲 다시 뽑기 · 이름 🎲가 엄지 자리", () => gameEntry(false)],
     ["🗣️ 도입 한마디 셋", "#14 세 버튼이 한 화면에 · 고른 말투로 표정이 바뀜", () => gameEntry(true)],
     ["🤝 가족 카드", "#15 아버지 · 엄마 · 할머니 얼굴 · 「이 이야기의 문은 …에서 열려요」", () => {

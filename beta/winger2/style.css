@@ -502,8 +502,7 @@ body:has(.w2m-ready, .w2m-board) .w2-gear-in { visibility: hidden; }
 .w2m-ourgk.has-img { width: 18%; --ay: -100%; }
 .w2m-f-defend .w2m-me { --ay: -100%; }
 .w2m-f-defend .w2m-me.has-img { width: 21%; }
-.w2m-f-defend .w2m-me.is-dive { --ay: -50%; }
-.w2m-f-defend .w2m-me.is-dive.has-img { width: 26%; }
+.w2m-f-defend .w2m-me.is-slide.has-img { width: 26%; }   /* 슬라이딩 — 발끝은 그대로 땅에(--ay -100%) */
 .w2m-mv.is-held { visibility: hidden; }
 .w2m-ball {
   width: 13px; height: 13px; border-radius: 50%;
@@ -781,6 +780,42 @@ body:has(.w2m-ready, .w2m-board) .w2-gear-in { visibility: hidden; }
 .w2o-opt-face img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 0; transform: scale(1.7); transform-origin: 50% 8%; }
 .w2o-opt-face .w2-glyph { font-size: 1.1rem; border-radius: 50%; }
 .w2o-foot { display: flex; flex-direction: column; gap: 2px; margin-top: 10px; font-size: .72rem; line-height: 1.6; color: var(--dim); }
+
+/* ---------- 🎲 v4 선택지 셋~넷(47번 · 45번 §5) — 각 2줄 · 52px · 320 × 568에서 스크롤 없이 ----------
+ * 종류는 **글(🎲 크게 · 🎲 작게 · 🌿 확정 · 💬 이야기) + 테두리 무늬**: 크게 = 앰버 실선 · 작게 = 앰버 점선 ·
+ * 확정 = 초록 실선 + 빗금 바탕 · 이야기 = 하늘빛 점점선. 색만으로 가르지 않아요 */
+.w2o-many .w2o-scene { min-height: 18vh; }
+.w2o-many .w2o-panel { max-height: 82vh; padding-top: 12px; }
+.w2o-many .w2o-title { font-size: 1.12rem; margin-bottom: 2px; }
+.w2o-many .w2o-body { font-size: .86rem; line-height: 1.55; margin-bottom: 6px; }
+.w2o-many .w2o-foot { margin-top: 6px; }
+.w2o-clamp { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
+.w2o-more {
+  display: block; margin: -4px 0 6px auto; min-height: 32px; padding: 0 6px;
+  border: 0; background: none; color: var(--sky); font: inherit; font-size: .76rem; cursor: pointer;
+}
+.w2o-cparts { margin: 0 0 6px; font-size: .76rem; line-height: 1.45; }
+.w2o-many .w2o-opts { gap: 6px; }
+.w2o-ch { gap: 1px; padding: 6px 10px; justify-content: center; }
+.w2o-ch-l1, .w2o-ch-l2 { display: flex; align-items: baseline; gap: 6px; width: 100%; min-width: 0; }
+.w2o-ch-l1 .w2o-opt-label { flex: 1 1 auto; min-width: 0; font-size: .96rem; line-height: 1.3; }
+.w2o-ch-tag { flex: none; font-size: .72rem; line-height: 1.5; padding: 0 7px; border-radius: 999px; border: 1px solid currentColor; }
+.w2o-ch-l2 { flex-wrap: wrap; column-gap: 6px; row-gap: 0; font-size: .76rem; line-height: 1.45; color: var(--dim); font-variant-numeric: tabular-nums; }
+.w2o-ch-p { font-family: "Jua", sans-serif; font-weight: 400; font-size: .98rem; color: var(--accent); }
+.w2o-ch-sure { font-weight: 600; color: var(--good2); }
+.w2o-ch-fx { color: var(--text); }
+.w2o-ch-desc { color: var(--dim); }
+.w2o-ch .w2o-note { font-size: .72rem; }
+.w2o-ch.c-big { border-color: var(--accent); }
+.w2o-ch.c-big .w2o-ch-tag { color: var(--accent); }
+.w2o-ch.c-small { border: 1px dashed var(--accent); }
+.w2o-ch.c-small .w2o-ch-tag { color: var(--accent); border-style: dashed; }
+.w2o-ch.c-sure { border-color: var(--good); background: repeating-linear-gradient(135deg, rgba(255, 255, 255, .035) 0 6px, transparent 6px 12px), rgba(0, 0, 0, .24); }
+.w2o-ch.c-sure .w2o-ch-tag { color: var(--good2); }
+.w2o-ch.c-talk { border: 2px dotted var(--sky); }
+.w2o-ch.c-talk .w2o-ch-tag { color: var(--sky); }
+.w2o-ch.c-prom { border: 1px dashed var(--sky); }
+.w2o-ch.c-prom .w2o-ch-tag { color: var(--sky); border-style: dashed; }
 /* 결과 카드 — 결말 글(📖 story-end) · 받은 것 칩 */
 .w2o-line2 { color: var(--cream); }
 .w2o-result-fx { margin: -4px 0 8px; font-size: .84rem; }
@@ -1025,6 +1060,7 @@ body:has(.w2m-ready, .w2m-board) .w2-gear-in { visibility: hidden; }
 .w2f-word:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
 .w2f-note, .w2f-empty { margin-top: 4px; font-size: .74rem; line-height: 1.5; color: var(--dim); }
 .w2f-next { margin-top: 8px; font-size: .84rem; color: var(--sky); }
+.w2f-year { margin-top: 6px; font-size: .86rem; line-height: 1.6; color: var(--cream); font-style: italic; }
 .w2f-acts { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
 .w2f-acts .btn { width: 100%; }
 .w2f-share-st { min-height: 1.4em; margin-top: 6px; font-size: .8rem; text-align: center; color: var(--accent); }

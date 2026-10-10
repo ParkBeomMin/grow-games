@@ -159,7 +159,7 @@ window.W2Game = (() => {
       cond: TUNE.COND_START, week: 1, ph: 0, choice: null,
       world: X().create(seed, o.pos, o.gender),
       record: blankRecord(), recent: [], games: [], trust: 0,
-      ev: null, evCount: 0, evRnd: 0, chCount: 0, evIds: [], evMem: { last: null, scout: [false, false] }, evLog: [], evSeen: {},
+      ev: null, evCount: 0, evRnd: 0, chCount: 0, evIds: [], evMem: { last: null, scout: [false, false] }, evLog: [], evSeen: {}, evFlags: [],
       promise: null, promKept: 0,
       story: { open: [], done: [], seen: {}, door: null },
       ach: {}, rep: null, mid: [], sheet: null, ending: null, age: 18, act1: null,
@@ -190,6 +190,7 @@ window.W2Game = (() => {
     s.recent = Array.isArray(s.recent) ? s.recent : [];
     s.games = Array.isArray(s.games) ? s.games : [];
     s.q = Array.isArray(s.q) ? s.q : [];
+    s.evFlags = Array.isArray(s.evFlags) ? s.evFlags.filter((f) => typeof f === "string") : [];   // 🔖 옛 세이브는 빈 목록
     s.trust = Number(s.trust) || 0;
     s.noOrig = s.noOrig != null ? s.noOrig : s.no;
     return s;
@@ -707,15 +708,17 @@ window.W2Game = (() => {
       let i = await sc("card", named(shown));
       if (!(Number.isInteger(i) && i >= 0 && i < ev.opts.length)) {
         console.error("W2Scenes.card(): 고른 칸이 이상해요 — 확정으로 받아요", i);
-        i = Math.max(0, ev.opts.findIndex((o) => o.k === "safe"));
+        i = Math.max(0, ev.opts.findIndex((o) => o.k === "cert" || o.k === "talk" || o.k === "safe"));
       }
       const o = ev.opts[i];
-      const stat = o.k === "try" && o.stake !== "trust" ? o.stake : null;
+      const stat = (o.k === "try" || o.k === "small") && o.stake !== "trust" ? o.stake : null;
+      const weakBefore = S.weak;
       const before = stat ? SH().grade(S.stats[stat]).g : null;
       const res = EV().answer(S, i);
       S.ph += 1; save();
       if (res) await sc("card", named(res));
       if (stat) await gradeCard(stat, before);
+      if (S.weak > weakBefore) flash(`🦶 약발 ${S.weak}단계 — 약발 상황에서 승산이 덜 떨어져요${S.weak >= TUNE.WEAK_MAX ? " · 이제 양발이에요" : ""}`);
       achCheck();
     },
     /* ⚽ 권역 리그 한 판 */

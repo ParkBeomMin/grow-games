@@ -43,7 +43,7 @@ const MUT_S = {
   M_EACH: [[/const t10 = tenths\(\[body, care, record, stagePt, test\]\);/, "const t10 = [body, care, record, stagePt, test].map((v) => Math.round(v * 10));"],
     [/const total = t10\.reduce\(\(a, b\) => a \+ b, 0\) \/ 10;/, "const total = Math.round((body + care + record + stagePt + test) * 10) / 10;"]],
   /* V-4c — 구간을 원래 합(두 자리 · 24번 문턱)으로 */
-  M_RAWTIER: [[/const tier = final \? tierOf\(total\) : null;/, 'const tier = final ? ((x) => (x >= 66.36 ? "top" : x >= 59.40 ? "high" : x >= 52.77 ? "mid" : "low"))(body + care + record + stagePt + test) : null;']],
+  M_RAWTIER: [[/const tier = final \? tierOf\(total\) : null;/, 'const tier = final ? ((x) => (x >= 67.36 ? "top" : x >= 60.26 ? "high" : x >= 53.66 ? "mid" : "low"))(body + care + record + stagePt + test) : null;']],
 };
 const SSRC = fs.readFileSync(path.join(PAGE_DIR, "sheet.js"), "utf8");
 {
@@ -98,16 +98,17 @@ async function v1(muts, seeds) {
       await wait(4);
       const layer = W.document.getElementById("w2-layer");
       const t = layer.textContent;
-      const o = c.opts.find((x) => x.k === "try");
-      if (t.indexOf(`${o.pct}%`) < 0) bad.push(`${c.id}: ${o.pct}%가 화면에 없음`);
-      const other = [...t.matchAll(/(\d+)%/g)].map((m) => +m[1]).filter((n) => n !== o.pct);
+      /* 🔄 v4(47번 §2): 🎲 칸이 둘(크게 · 작게 p + 5)일 수 있어요 — 그려진 %는 🎲 칸들의 `p`뿐이어야(그 밖의 % 0) */
+      const ps = (c.choices || c.opts).filter((x) => x.k === "try" || x.k === "small").map((x) => (x.p != null ? x.p : x.pct));
+      for (const pv of ps) if (t.indexOf(`${pv}%`) < 0) bad.push(`${c.id}: ${pv}%가 화면에 없음`);
+      const other = [...t.matchAll(/(\d+)%/g)].map((m) => +m[1]).filter((n) => ps.indexOf(n) < 0);
       if (other.length) bad.push(`${c.id}: 다른 % ${other.join(",")}가 그려짐`);
       const btn = [...layer.querySelectorAll("button")].find((b) => /넘긴다|신경 쓰지|무난|듣기만|사양|따라간다|집중|내 방식|가게|말하지|돕는다/.test(b.textContent)) || layer.querySelector("button");
       if (btn) btn.dispatchEvent(new W.MouseEvent("click", { bubbles: true }));
       await p;
     }
     W.close();
-    check(a.shown.length >= 3 && bad.length === 0, `V-1b. 🖼️ 진짜 \`scenes.js\`가 카드의 %를 그대로 그린다 — 카드 ${a.shown.length}장 (다른 % 숫자 0)` + (bad.length ? `\n     🔴 ${bad.join(" · ")}` : ""));
+    check(a.shown.length >= 3 && bad.length === 0, `V-1b. 🖼️ 진짜 \`scenes.js\`가 카드의 🎲 %(크게 · 작게)를 그대로 그린다 — 카드 ${a.shown.length}장 (다른 % 숫자 0)` + (bad.length ? `\n     🔴 ${bad.join(" · ")}` : ""));
   }
 
   /* ══════════ V-2 — 훈련 효율 ══════════ */
@@ -225,7 +226,7 @@ async function v1(muts, seeds) {
   check(d.bad4.length === 0, `V-4. 📋 평가서 120장(중간 · 최종) — 칸 합 == \`total\` · 구간 == 문턱표 (어긋남 ${d.bad4.length})` + (d.bad4.length ? `\n     🔴 ${d.bad4.slice(0, 3).join(" · ")}` : ""));
   check(d.bad5.length === 0, `V-5. 📝 감독 의견은 **점수 0** — 🤝 −6 · 0 · +6에서 칸 · 합계가 같고 의견 한 줄만 바뀜 (60판 · 어긋남 ${d.bad5.length})` + (d.bad5.length ? `\n     🔴 ${d.bad5.slice(0, 3).join(" · ")}` : ""));
   /* ══════════ V-4b · V-4c — 진짜 화면에 그려진 숫자로 ══════════ */
-  const T1 = { top: 664, high: 594, mid: 528 };       // 🔒 44번 §1 — 한 자리 문턱 66.4 · 59.4 · 52.8을 0.1 단위 정수로 · 박은 값(중간 평가서엔 도장 없음 — 7′)
+  const T1 = { top: 674, high: 603, mid: 537 };       // 🔒 47번 §1 — 한 자리 문턱 67.4 · 60.3 · 53.7을 0.1 단위 정수로 · 박은 값(중간 평가서엔 도장 없음 — 7′)
   const TNAME = { top: "최상", high: "상", mid: "중", low: "하" };
   const tierOfShown = (t10) => (t10 >= T1.top ? "top" : t10 >= T1.high ? "high" : t10 >= T1.mid ? "mid" : "low");
   /* 문턱 바로 위 · 0.1 아래 판 — 속도 하나를 이분 탐색으로 움직여 **화면 합계가 문턱을 막 넘는 자리**를 찾아요.

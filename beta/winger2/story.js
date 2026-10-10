@@ -129,6 +129,23 @@ window.W2Story = (() => {
 
   /* ---------- 장 카드 ---------- */
   const storyCard = (S, dr, base, opts) => Object.assign(K().card(S, base, opts, dr), { kind: "story" });
+  /* 선택지 셋~넷(45번 §4-5 · 47번) — 크게(있으면) 뒤에 작게 · 🌿 · 💬. `ch2`면 약속 작게 = ⌊판돈 ÷ 2⌋ */
+  const choicesOf = (S, id, head, ch2) => K().withChoices(S, id, head, ch2);
+  /* 🏠 가족 1장 · 2장의 🌿 · 💬(이야기마다 문구가 달라 여기서 · 몫은 events의 같은 규칙) */
+  function famChoices(S, FT, ch, head) {
+    const E = K();
+    const out = head.filter(Boolean);
+    if (ch === 1) {
+      const t = out.find((o) => o.k === "try");
+      const sm = t ? E.smallOpt(S, t, FT.small1) : null;
+      if (sm) out.push(sm);
+      out.push(E.sureOpt(S, "cert", { label: FT.safe1, fx: "c", flag: FT.flag1 }));
+    } else {
+      out.push(E.sureOpt(S, "cert", { label: FT.safe2, fx: "c" }));
+      out.push(E.sureOpt(S, "talk", { label: "🤝 {family|와} 밤늦게까지 이야기한다 — 정하지 않는다", fx: null, flag: "fam_talk" }));
+    }
+    return out;
+  }
   /* 도전 칸 — 🔒 판돈이 잘리면 **이야기 장은 확정만** 남겨요(무작위 이벤트는 후보에서 빼는 것과 달라요 · 22번 §0-1) */
   function tryChapter(S, dr, id, label, x, k, stake, sit) {
     const st = stake === "main" ? window.WingerEngine.K.BLEND[S.pos][0] : stake;
@@ -144,7 +161,7 @@ window.W2Story = (() => {
   const FAM_TEXT = {
     father: {
       t1: "주말 조기축구", b1: "아버지가 가게 문을 일찍 닫았어요. 「조기축구에 한 명이 비는데, 올래?」",
-      try1: "⚽ 아버지 팀 아저씨들과 뛴다", safe1: "🍗 가게를 돕는다", x: "overall", k: 0.6, stake: "main",
+      try1: "⚽ 아버지 팀 아저씨들과 뛴다", small1: "⚽ 전반만 뛴다", safe1: "🍗 가게를 돕는다", flag1: "fam_shop", x: "overall", k: 0.6, stake: "main",
       sit: { "-12": "비 온 뒤라 동네 운동장이 진흙밭이에요", 0: "평소의 주말 아침이에요", 12: "아저씨들이 {me|를} 가운데 세워 줘요" },
       t2: "아버지의 부탁",
       b2: { m: "「공장 팀 감독이 네 얘기를 하더라. 테스트 날짜를 받아 둘까?」", f: "「그 공장에 여자팀이 새로 생겼대. 테스트 날짜를 받아 둘까?」" },
@@ -153,7 +170,7 @@ window.W2Story = (() => {
     },
     apply: {
       t1: "노트 한 권", b1: "엄마가 책상 위에 펼쳐 둔 경기 노트를 발견했어요.",
-      try1: "📓 밤새 정리한 경기 노트를 보여 드린다", safe1: "🏃 오늘은 말하지 않는다", x: "pass", k: 0.5, stake: "pass",
+      try1: "📓 밤새 정리한 경기 노트를 보여 드린다", small1: "📓 노트 한 장만 보여 드린다", safe1: "🏃 오늘은 말하지 않는다", flag1: "fam_quiet", x: "pass", k: 0.5, stake: "pass",
       sit: { "-12": "엄마가 학원 일로 몹시 바쁜 밤이에요", 0: "평소의 저녁이에요", 12: "엄마가 먼저 노트를 넘겨 봐요" },
       t2: "원서 마감", b2: { m: "「원서 마감이 이번 주야. 한 장 써 둘래?」", f: "「원서 마감이 이번 주야. 한 장 써 둘래?」" },
       flag: "🎓 원서를 쓴다", safe2: "⚽ 프로 테스트에만 건다", tierName: "상", bg: "bg-home-doyun",
@@ -161,7 +178,7 @@ window.W2Story = (() => {
     },
     letter: {
       t1: "영상 한 편 더", b1: "바다 건너 아카데미에서 편지가 왔대요. 「영상을 더 보내 줄 수 있나요?」",
-      try1: "🎥 새 영상을 찍어 보낸다", safe1: "🌊 할머니 일을 돕는다", x: "dribble", k: 0.5, stake: "dribble",
+      try1: "🎥 새 영상을 찍어 보낸다", small1: "🎥 짧은 영상 하나만", safe1: "🌊 할머니 일을 돕는다", flag1: "fam_sea", x: "dribble", k: 0.5, stake: "dribble",
       sit: { "-12": "바닷바람이 거세 공이 자꾸 떠요", 0: "평소의 노을이에요", 12: "동네 아이들이 공을 주워 와 줘요" },
       t2: "답장", b2: { m: "「그쪽에서 답장을 기다린다더라.」", f: "「그쪽에서 답장을 기다린다더라.」" },
       flag: "✉️ 답장을 보낸다", safe2: "📦 편지를 접어 둔다", tierName: "최상", bg: "bg-home-haram",
@@ -183,7 +200,7 @@ window.W2Story = (() => {
       if (!everOpened(S, fsid) && w >= TUNE.FAM_FROM && w <= TUNE.FAM_LAST) {
         b.open.push({ sid: fsid, ch: 1, at: w, f: {} });
         return storyCard(S, dr, { id: "s_fam1", sid: fsid, ch: 1, title: `${def(fsid).emoji} ${FT.t1}`, body: fill(FT.b1),
-          who: F.who, mood: "base", bg: FT.bg }, [K().safeOpt(FT.safe1), tryChapter(S, dr, "s_fam1", FT.try1, FT.x, FT.k, FT.stake, FT.sit)].filter(Boolean));
+          who: F.who, mood: "base", bg: FT.bg }, famChoices(S, FT, 1, [tryChapter(S, dr, "s_fam1", FT.try1, FT.x, FT.k, FT.stake, FT.sit)]));
       }
       const fam = openOf(S, fsid);
       if (fam && fam.ch === 1 && w === TUNE.FAM2) {
@@ -191,7 +208,7 @@ window.W2Story = (() => {
         const note = `이 문은 평가서가 「${FT.tierName}」일 때 열려요`;
         return storyCard(S, dr, { id: "s_fam2", sid: fsid, ch: 2, title: `${def(fsid).emoji} ${FT.t2}`,
           body: FT.b2[S.gender === "f" ? "f" : "m"], who: F.who, mood: "worry", bg: FT.bg },
-        [{ k: "flag", label: FT.flag, note }, K().safeOpt(FT.safe2)]);
+        famChoices(S, FT, 2, [{ k: "flag", label: FT.flag, note }]));
       }
     }
     if (who === "keeper" && !everOpened(S, "senior") && w >= TUNE.SENIOR_FROM && w <= TUNE.SENIOR_LAST) {
@@ -199,8 +216,8 @@ window.W2Story = (() => {
       return storyCard(S, dr, { id: "s_senior1", sid: "senior", ch: 1, title: "🕯️ 새벽 운동장",
         body: fill("{keeper|가} 새벽마다 혼자 운동장을 돈대요. 「마지막 해니까.」"),
         who: S.world.keeper.who, mood: "base", bg: "bg-dawn" },
-      [K().safeOpt("🏠 내 방식대로 한다"), tryChapter(S, dr, "s_senior1", "🌅 따라 나간다", "stamina", 0.5, "stamina",
-        { "-12": "새벽 공기가 유난히 차가워요", 0: "평소의 새벽이에요", 12: "{keeper|가} 보온병을 두 개 챙겨 왔어요" })].filter(Boolean));
+      choicesOf(S, "s_senior1", [tryChapter(S, dr, "s_senior1", "🌅 매일 따라 나간다", "stamina", 0.5, "stamina",
+        { "-12": "새벽 공기가 유난히 차가워요", 0: "평소의 새벽이에요", 12: "{keeper|가} 보온병을 두 개 챙겨 왔어요" })], false));
     }
     const slot = openOf(S, "slot");
     if (w === TUNE.SLOT1 && slot && slot.ch === 0) {
@@ -208,21 +225,21 @@ window.W2Story = (() => {
       return storyCard(S, dr, { id: "s_slot1", sid: "slot", ch: 1, title: "📍 번호 앞에서",
         body: fill("3년 달던 {no}번이 {rival}의 등에 붙어 있어요. {rival|가} 한쪽 입꼬리만 올려요."),
         who: S.world.rivalWho, mood: "smirk", bg: "bg-locker" },
-      [K().safeOpt("🙂 신경 쓰지 않는다"), tryChapter(S, dr, "s_slot1", "📌 실력으로 되찾겠다고 말한다", "rival", 2, "trust",
-        { "-12": "감독이 {rival}의 훈련을 칭찬한 날이에요", 0: "평소의 라커룸이에요", 12: "{keeper|가} 옆에서 네 편을 들어 줘요" })].filter(Boolean));
+      choicesOf(S, "s_slot1", [tryChapter(S, dr, "s_slot1", "📌 실력으로 되찾겠다고 말한다", "rival", 2, "trust",
+        { "-12": "감독이 {rival}의 훈련을 칭찬한 날이에요", 0: "평소의 라커룸이에요", 12: "{keeper|가} 옆에서 네 편을 들어 줘요" })], false));
     }
     if (w === TUNE.SLOT2 && slot && slot.ch === 1) {
       slot.ch = 2;
       return storyCard(S, dr, { id: "s_slot2", sid: "slot", ch: 2, title: "📍 번호 결정전",
         body: fill("후반기 첫 경기 — 감독이 번호를 두고 한마디 했어요. 「오늘 보고 정한다.」 {rival|도} 이 말을 들었어요."),
-        who: S.world.rivalWho, mood: "base", bg: "bg-locker" }, [K().safeOpt("넘긴다"), promChapter(S)].filter(Boolean));
+        who: S.world.rivalWho, mood: "base", bg: "bg-locker" }, choicesOf(S, "s_slot2", [promChapter(S)], true));
     }
     const senior = openOf(S, "senior");
     if (w === TUNE.SENIOR2 && senior && senior.ch === 1) {
       senior.ch = 2;
       return storyCard(S, dr, { id: "s_senior2", sid: "senior", ch: 2, title: fill("🕯️ {keeper}의 마지막 경기"),
         body: fill("오늘이 {keeper}의 마지막 리그 경기예요. 장갑을 맞부딪치는 소리가 라커룸에 울려요. 「{keeper}에게 바치는 경기」로 할까요?"),
-        who: S.world.keeper.who, mood: "fire", bg: "bg-field" }, [K().safeOpt("넘긴다"), promChapter(S)].filter(Boolean));
+        who: S.world.keeper.who, mood: "fire", bg: "bg-field" }, choicesOf(S, "s_senior2", [promChapter(S)], true));
     }
     const race = openOf(S, "race");
     if (w === TUNE.RACE2 && race && race.ch === 1) {
@@ -230,7 +247,7 @@ window.W2Story = (() => {
       const r = recLine(S);
       return storyCard(S, dr, { id: "s_race2", sid: "race", ch: 2, title: "🔥 두 번째 맞대결",
         body: fill(`{ace}의 학교와 다시 만나는 날이에요. 리그 ${r.cat} 기록은 {ace} ${r.S} · {me} ${r.M}.`),
-        who: S.world.aceWho, mood: "base", bg: "bg-field" }, [K().safeOpt("넘긴다"), promChapter(S)].filter(Boolean));
+        who: S.world.aceWho, mood: "base", bg: "bg-field" }, choicesOf(S, "s_race2", [promChapter(S)], true));
     }
     if (w === TUNE.RACE_OPEN && raceWouldOpen(S)) {
       const r = recLine(S);
@@ -238,8 +255,8 @@ window.W2Story = (() => {
       return storyCard(S, dr, { id: "s_race1", sid: "race", ch: 1, title: "🔥 첫 맞대결 다음 날",
         body: fill(`어제 {ace|는} 우리 골문 앞에서도 여유로웠어요. 리그 ${r.cat} 기록은 {ace} ${r.S} · {me} ${r.M} — 한 끗 차예요.`),
         who: S.world.aceWho, mood: "base", bg: "bg-field" },
-      [K().safeOpt("🙂 내 경기에 집중한다"), tryChapter(S, dr, "s_race1", "📼 {ace}의 경기를 돌려 본다", "ace", 1, "main",
-        { "-12": "{ace}의 학교가 경기 영상을 잠가 뒀대요", 0: "평소의 비디오실이에요", 12: "{rival|가} 영상 파일을 구해 왔어요" })].filter(Boolean));
+      choicesOf(S, "s_race1", [tryChapter(S, dr, "s_race1", "📼 {ace}의 경기를 다 돌려 본다", "ace", 1, "main",
+        { "-12": "{ace}의 학교가 경기 영상을 잠가 뒀대요", 0: "평소의 비디오실이에요", 12: "{rival|가} 영상 파일을 구해 왔어요" })], false));
     }
     return null;
   }
@@ -248,7 +265,8 @@ window.W2Story = (() => {
   function answered(S, ev, o, ok) {
     const st = openOf(S, ev.sid);
     if (!st) return;
-    if (ev.id === "s_senior1" || ev.id === "s_fam1") { st.f.r1 = o.k; st.f.ok = ok; }
+    /* 🔒 🎲 작게도 「도전」(45번 §3-3 · 46번 §4-5) — `r1`은 "try" · "safe" 두 값 그대로(2막이 읽음 · 29번 §7-2) · 고른 종류는 `r1k` */
+    if (ev.id === "s_senior1" || ev.id === "s_fam1") { st.f.r1 = o.k === "try" || o.k === "small" ? "try" : "safe"; st.f.r1k = o.k; st.f.ok = ok; }
     if (ev.id === "s_fam2") { st.f.flag = o.k === "flag"; if (st.f.flag) book(S).door = true; }
   }
   /* 📋 이야기 약속의 판정 — 🕯️ 2장만 결말이 읽어요 */
@@ -321,7 +339,8 @@ window.W2Story = (() => {
     const T = END_TEXT[`${sid}:${end}`] || { mood: "base", t: "" };
     const who = sid === "slot" ? S.world.rivalWho : sid === "race" ? S.world.aceWho : sid === "senior" ? S.world.keeper.who
       : (EV().FAMILY[sid] || EV().FAMILY.father).who;
-    return { kind: "story-end", sid, end, title: `${d.emoji} ${d.name}`, body: `「${name}」`, line: K().fillS(S, T.t),
+    const fl = EV().flagEnd(S, sid);   // 🔖 그 이야기에 붙은 깃발 한 줄(수치 0 · 45번 §3-2 ③)
+    return { kind: "story-end", sid, end, title: `${d.emoji} ${d.name}`, body: `「${name}」`, line: K().fillS(S, T.t) + (fl ? ` ${fl}` : ""),
       who, mood: T.mood, bg: sid === "race" ? "bg-cup" : sid === "senior" ? "bg-field" : sid === "slot" ? "bg-locker" : (FAM_TEXT[sid] || {}).bg,
       opts: [{ k: "ok", label: "확인" }] };
   }
