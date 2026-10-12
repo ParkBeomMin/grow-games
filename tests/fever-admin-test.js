@@ -13,6 +13,9 @@
  *   ④ 0은 안 보낸다 — 효과가 0인 칸은 아예 빠져요
  *   ⑤ 그 값이 게임 쪽 상한(FEVER_CAP) 안이면 그대로 붙는다
  *   ⑥ 변이 검증 — 두 자를 어긋나게 하면 ②가 무너진다
+ *   ⑦ 기록이 남는다 — 새 이벤트는 저장할 때마다 **새 id**, 수정은 **같은 id**,
+ *      「지금 끄기」는 지우지 않고 종료만 당긴다(fever_set), 예약 취소만 지운다(fever_clear)
+ *   ⑧ 게임은 **안 끝난 줄만 이른 순으로** 받는다 — 예약이 쌓여도 가장 가까운 게 안 잘린다
  *
  * 실제 페이지를 띄워 **폼에 입력하고 저장 버튼을 눌러**, 서버로 나가는 몸통을 읽어요.
  */
@@ -88,10 +91,11 @@ const $ = (id) => w.document.getElementById(id);
   console.log("=== ② 저장한 걸 다시 열면 ===");
   /* 서버가 방금 저장한 그 줄을 돌려주는 상황을 만들어요 — 화면을 다시 그립니다. */
   w.__get_reload = null;
-  w.eval(`FEVER_ROW = ${JSON.stringify({
-    id: "soccer-fever", game: "soccer", emoji: "🎉", title: "테스트", note: null,
+  w.eval(`FEVER_ROWS = [${JSON.stringify({
+    id: body.p_id, game: "soccer", emoji: "🎉", title: "테스트", note: null,
     starts_at: body.p_starts, ends_at: body.p_ends, boost: body.p_boost,
-  })}; renderPanel();`);
+  })}]; FEVER_EDIT = null; renderPanel();`);
+  w.document.querySelector(".fv-edit").click();         // 목록에서 「수정」을 눌러 폼에 불러와요
   const back = {};
   for (const [k] of EFFS) back[k] = Number($(`fv-e-${k}`).value);
   console.log(`   다시 읽은 값 — ${EFFS.map(([k, l]) => `${l} ${back[k]}`).join(" · ")}`);
@@ -123,6 +127,91 @@ const $ = (id) => w.document.getElementById(id);
     check(toField(badBoost(30, 100), 100) !== 30,
       `옛 판이면 30이 ${toField(badBoost(30, 100), 100)}로 돌아온다 — ②가 그걸 잡아요`);
     check(!/\/ \(mul \* 100\)/.test(SRC), "소스에 옛 나눗셈이 안 남아 있다");
+  }
+
+  // ---------- ⑦ 기록이 남는다 ----------
+  console.log("=== ⑦ 새 이벤트 · 수정 · 끄기 · 예약 취소 ===");
+  {
+    const now = Date.now(), iso = (t) => new Date(t).toISOString();
+    const row = (id, from, to) => ({ id, game: "soccer", emoji: "🎉", title: id, note: null,
+      starts_at: iso(from), ends_at: iso(to), boost: { train: 1 } });
+    const H = 3600e3;
+    w.eval(`FEVER_ROWS = ${JSON.stringify([
+      row("soon1", now + 48 * H, now + 50 * H), row("live1", now - H, now + H), row("past1", now - 9 * H, now - 8 * H),
+    ])}; FEVER_EDIT = null; renderPanel();`);
+    const q = (sel) => [...w.document.querySelectorAll(sel)].map((b) => b.dataset.id);
+    check(w.document.querySelectorAll(".fv-list tr").length === 3, "목록에 지난 것까지 세 줄이 다 보인다");
+    check(JSON.stringify(q(".fv-stop")) === '["live1"]', `「지금 끄기」는 진행 중인 줄에만 (${q(".fv-stop")})`);
+    check(JSON.stringify(q(".fv-del")) === '["soon1"]', `「예약 취소」는 예약 줄에만 (${q(".fv-del")})`);
+
+    // 새 이벤트 두 번 → id 둘이 달라야 해요. 예전엔 같은 id를 덮어써서 기록이 사라졌어요
+    const a = await save({ train: 10 });
+    await new Promise((r) => setTimeout(r, 5));
+    w.eval("FEVER_EDIT = null; renderPanel();");
+    const b = await save({ train: 10 });
+    check(!!a && !!b && a.p_id !== b.p_id, `새 이벤트는 저장마다 새 id (${a && a.p_id} · ${b && b.p_id})`);
+    check(a.p_id !== "soccer-fever" && /^soccer-/.test(a.p_id), `옛 고정 id를 안 쓴다 (${a.p_id})`);
+
+    // 수정은 같은 id
+    w.eval(`FEVER_ROWS = ${JSON.stringify([row("soon1", now + 48 * H, now + 50 * H)])}; FEVER_EDIT = null; renderPanel();`);
+    w.document.querySelector('.fv-edit[data-id="soon1"]').click();
+    w.__sent.length = 0;
+    $("fv-pw").value = "아무비번";
+    $("fv-save").click();
+    for (let i = 0; i < 60 && !w.__sent.length; i++) await new Promise((r) => setTimeout(r, 10));
+    const ed = (w.__sent.find((x) => /rpc\/fever_set/.test(x.url)) || {}).body;
+    check(!!ed && ed.p_id === "soon1", `수정하면 같은 id로 저장 (${ed && ed.p_id})`);
+
+    // 지금 끄기 — fever_set으로 종료만 당기고, fever_clear는 안 불러요
+    w.eval(`FEVER_ROWS = ${JSON.stringify([row("live1", now - H, now + H)])}; FEVER_EDIT = null; renderPanel();`);
+    w.__sent.length = 0;
+    $("fv-pw").value = "아무비번";
+    w.document.querySelector(".fv-stop").click();
+    for (let i = 0; i < 60 && !w.__sent.length; i++) await new Promise((r) => setTimeout(r, 10));
+    const st = (w.__sent.find((x) => /rpc\/fever_set/.test(x.url)) || {}).body;
+    check(!w.__sent.some((x) => /fever_clear/.test(x.url)), "「지금 끄기」는 줄을 지우지 않는다 (fever_clear 0번)");
+    check(!!st && st.p_id === "live1" && Math.abs(Date.parse(st.p_ends) - Date.now()) < 60e3
+      && st.p_starts === iso(now - H) && st.p_boost.train === 1,
+      `「지금 끄기」는 종료만 지금으로 당긴다 (종료 ${st && st.p_ends})`);
+
+    // 예약 취소 — 이것만 지워요
+    w.eval(`FEVER_ROWS = ${JSON.stringify([row("soon1", now + 48 * H, now + 50 * H)])}; FEVER_EDIT = null; renderPanel();`);
+    w.__sent.length = 0;
+    $("fv-pw").value = "아무비번";
+    w.document.querySelector(".fv-del").click();
+    for (let i = 0; i < 60 && !w.__sent.length; i++) await new Promise((r) => setTimeout(r, 10));
+    const del = (w.__sent.find((x) => /rpc\/fever_clear/.test(x.url)) || {}).body;
+    check(!!del && del.p_id === "soon1", `예약 취소는 그 줄만 지운다 (${del && del.p_id})`);
+  }
+
+  // ---------- ⑧ 게임이 받는 줄 ----------
+  console.log("=== ⑧ 게임은 무엇을 받아 가나 ===");
+  {
+    /* 실제 refresh()를 돌려 나가는 주소를 붙잡아요. 예약 여섯 + 진행 중 하나를 서버처럼
+     * 그 주소의 조건대로 걸러 돌려주고, 진행 중인 게 붙는지 봐요. */
+    const now = Date.now(), H = 3600e3, iso = (t) => new Date(t).toISOString();
+    const all = [{ id: "live", starts_at: iso(now - H), ends_at: iso(now + H), boost: { train: 1 } }];
+    for (let i = 1; i <= 6; i++) all.push({ id: `soon${i}`, starts_at: iso(now + i * 24 * H), ends_at: iso(now + i * 24 * H + H), boost: { train: 1 } });
+    all.push({ id: "old", starts_at: iso(now - 50 * H), ends_at: iso(now - 49 * H), boost: { train: 1 } });
+    const g = new JSDOM(`<body></body>`, { runScripts: "outside-only", url: "https://x.test/soccer/" }).window;
+    let asked = "";
+    g.Match = { cfg: { url: "https://db.test", key: "k" } };
+    g.fetch = (url) => {
+      asked = decodeURIComponent(String(url));
+      const p = new URL(String(url)).searchParams;
+      let rows = all.slice();
+      const gt = (p.get("ends_at") || "").replace(/^gt\./, "");
+      if (gt) rows = rows.filter((r) => Date.parse(r.ends_at) > Date.parse(gt));
+      const [col, dir] = (p.get("order") || "starts_at.asc").split(".");
+      rows.sort((x, y) => (Date.parse(x[col]) - Date.parse(y[col])) * (dir === "desc" ? -1 : 1));
+      rows = rows.slice(0, Number(p.get("limit") || 1e9));
+      return Promise.resolve({ ok: true, json: () => Promise.resolve(rows) });
+    };
+    g.eval(FEVER_JS);
+    const got = await g.WingerFever.refresh();
+    console.log(`   보낸 조건 — ${asked.replace(/^.*\?/, "")}`);
+    check(!!got && got.id === "live", `예약이 여섯 개여도 진행 중인 이벤트가 붙는다 (${got && got.id})`);
+    g.close();
   }
 
   console.log(fail ? `\n❌ ${fail}건 실패` : "\n✅ 통과");

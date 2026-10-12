@@ -191,7 +191,10 @@ window.WingerFever = (() => {
     if (rd(TEST_KEY)) return Promise.resolve(cache());   // 🧪 확인용이 켜져 있으면 안 물어봐요
     const c = cfg();
     if (!c || !c.url || !c.key) return Promise.resolve(null);
-    return fetch(`${c.url}/rest/v1/fever?game=eq.${GAME}&select=*&order=starts_at.desc&limit=5`,
+    /* **안 끝난 것만, 이른 순으로** 받아요. 예전엔 늦게 시작하는 순 5개라, 예약이 여섯 개를
+     * 넘으면 정작 가장 가까운 이벤트가 잘려 안 떴어요. 지난 기록은 관리 화면만 봅니다. */
+    const since = encodeURIComponent(new Date().toISOString());
+    return fetch(`${c.url}/rest/v1/fever?game=eq.${GAME}&ends_at=gt.${since}&select=*&order=starts_at.asc&limit=5`,
       { headers: { apikey: c.key, Authorization: `Bearer ${c.key}` } })
       .then((r) => (r.ok ? r.json() : null))
       .then((arr) => {
