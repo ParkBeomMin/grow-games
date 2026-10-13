@@ -16,6 +16,7 @@
  *   ⑦ 기록이 남는다 — 새 이벤트는 저장할 때마다 **새 id**, 수정은 **같은 id**,
  *      「지금 끄기」는 지우지 않고 종료만 당긴다(fever_set), 예약 취소만 지운다(fever_clear)
  *   ⑧ 게임은 **안 끝난 줄만 이른 순으로** 받는다 — 예약이 쌓여도 가장 가까운 게 안 잘린다
+ *   ⑨ 🔁 반복은 그날그날 한 줄씩 — 요일 규칙 · 횟수 · 같은 길이 · 상한 · 회끼리 겹침
  *
  * 실제 페이지를 띄워 **폼에 입력하고 저장 버튼을 눌러**, 서버로 나가는 몸통을 읽어요.
  */
@@ -24,6 +25,7 @@ const fs = require("fs");
 const { JSDOM } = require("/workspace/grow-games/tests/cloud/jsdom.js");
 
 let fail = 0;
+const toLocal = (iso) => { const d = new Date(iso); return `${d.getMonth() + 1}/${d.getDate()}(${"일월화수목금토"[d.getDay()]}) ${d.getHours()}:${String(d.getMinutes()).padStart(2, "0")}`; };
 const check = (ok, msg) => { console.log(`${ok ? "✅" : "❌"} ${msg}`); if (!ok) fail++; };
 
 const PAGE = "/workspace/grow-games/beta/stats/index.html";
@@ -182,6 +184,60 @@ const $ = (id) => w.document.getElementById(id);
     for (let i = 0; i < 60 && !w.__sent.length; i++) await new Promise((r) => setTimeout(r, 10));
     const del = (w.__sent.find((x) => /rpc\/fever_clear/.test(x.url)) || {}).body;
     check(!!del && del.p_id === "soon1", `예약 취소는 그 줄만 지운다 (${del && del.p_id})`);
+  }
+
+  // ---------- ⑨ 반복 ----------
+  console.log("=== ⑨ 🔁 반복 예약 ===");
+  {
+    /* 폼에서 반복을 고르고 저장을 눌러, 나가는 fever_set을 **전부** 붙잡아요.
+     * 첫 회는 2026-10-17(토) 13:00 ~ 14:00 — 평일 규칙이면 월요일부터 세야 해요. */
+    const rep = async (rule, n, from = "2026-10-17T13:00", to = "2026-10-17T14:00") => {
+      w.eval("FEVER_ROWS = []; FEVER_EDIT = null; renderPanel();");
+      w.__sent.length = 0;
+      $("fv-pw").value = "아무비번";
+      $("fv-from").value = from; $("fv-to").value = to;
+      $("fv-rep").value = rule; $("fv-n").value = n;
+      $("fv-save").click();
+      let last = -1;
+      for (let i = 0; i < 100 && w.__sent.length !== last; i++) {   // 더 안 늘어날 때까지 — 한 회씩 차례로 나가요
+        last = w.__sent.length;
+        await new Promise((r) => setTimeout(r, 30));
+      }
+      return w.__sent.filter((x) => /rpc\/fever_set/.test(x.url)).map((x) => x.body);
+    };
+    const day = (b) => new Date(b.p_starts).getDay();
+    const hm = (b) => { const d = new Date(b.p_starts); return d.getHours() * 60 + d.getMinutes(); };
+
+    const wd = await rep("weekday", 5);
+    console.log(`   평일 5회 — ${wd.map((b) => toLocal(b.p_starts)).join(" · ")}`);
+    check(wd.length === 5, `평일 5회면 다섯 줄이 나간다 (${wd.length})`);
+    check(wd.every((b) => day(b) >= 1 && day(b) <= 5), "전부 평일이다 — 토요일 첫 회는 건너뛴다");
+    check(wd.length && day(wd[0]) === 1, "토요일에서 시작하면 월요일부터 센다");
+    check(new Set(wd.map((b) => b.p_id)).size === 5, "줄마다 id가 다르다");
+    check(wd.every((b) => Date.parse(b.p_ends) - Date.parse(b.p_starts) === 3600e3 && hm(b) === 13 * 60),
+      "모든 회가 13:00 · 1시간 그대로다");
+
+    const wk = await rep("weekly", 3);
+    check(wk.length === 3 && wk.every((b) => day(b) === 6)
+      && Date.parse(wk[2].p_starts) - Date.parse(wk[0].p_starts) === 14 * 864e5,
+      `매주 3회 — 같은 요일 · 7일 간격 (${wk.map((b) => toLocal(b.p_starts)).join(" · ")})`);
+
+    const we = await rep("weekend", 4);
+    check(we.length === 4 && we.every((b) => day(b) === 0 || day(b) === 6), `주말 4회 — 토·일만 (${we.length})`);
+
+    const one = await rep("none", 7);
+    check(one.length === 1, `반복 안 함이면 몇 번을 넣어도 한 줄 (${one.length})`);
+
+    const tooMany = await rep("daily", 31);
+    check(tooMany.length === 0, `상한(30)을 넘으면 아무것도 안 보낸다 (${tooMany.length})`);
+    check(/1~30/.test($("fv-msg").textContent), `이유를 알려 준다 (${$("fv-msg").textContent})`);
+
+    const lap = await rep("daily", 3, "2026-10-17T13:00", "2026-10-18T14:00");
+    check(lap.length === 0, `매일인데 하루보다 길면 아무것도 안 보낸다 (${lap.length})`);
+
+    // 수정 중에는 반복 칸이 없어요 — 한 줄을 고치는 거라서요
+    w.eval(`FEVER_ROWS = [{ id: "e1", title: "e1", starts_at: "2026-10-20T04:00:00Z", ends_at: "2026-10-20T05:00:00Z", boost: {} }]; FEVER_EDIT = "e1"; renderPanel();`);
+    check(!$("fv-rep"), "수정 중에는 🔁 반복 칸이 안 보인다");
   }
 
   // ---------- ⑧ 게임이 받는 줄 ----------

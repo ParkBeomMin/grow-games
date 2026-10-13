@@ -70,6 +70,7 @@
     /* 🎉 피버 타임 — 유일하게 **쓰는** 화면이에요 (그 밖은 전부 읽기 전용) */
     .fv-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
     .fv-f { display: flex; flex-direction: column; gap: 4px; font-size: .78rem; color: var(--dim); }
+    .fv-f select { background: #0a0f18; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; color: var(--text); font-size: .86rem; font-family: inherit; }
     .fv-f input { background: #0a0f18; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; color: var(--text); font-size: .86rem; font-family: inherit; }
     .fv-now { font-size: .84rem; margin-bottom: 12px; padding: 10px 12px; border-radius: 10px; background: #0a0f18; border: 1px solid var(--line); }
     .fv-now.on { border-color: var(--accent); color: var(--accent); }
@@ -80,8 +81,8 @@
     .fv-msg { font-size: .8rem; margin-top: 8px; }
     .fv-list { width: 100%; border-collapse: collapse; margin-bottom: 12px; font-size: .82rem; }
     .fv-list td { padding: 8px 6px; border-top: 1px solid var(--line); vertical-align: middle; }
-    .fv-list td:first-child { white-space: nowrap; }
-    .fv-list tr.live td:first-child { color: var(--accent); }
+    .fv-st { font-size: .74rem; color: var(--dim); }
+    .fv-list tr.live .fv-st { color: var(--accent); font-weight: 700; }
     .fv-list tr.past { color: var(--dim); }
     .fv-row-btns { text-align: right; white-space: nowrap; }
     .fv-row-btns button, #fv-new { border-radius: 8px; padding: 5px 10px; cursor: pointer; font-size: .76rem; font-family: inherit; margin-left: 4px; }
@@ -675,7 +676,29 @@ grant select on public.stats_summary, public.stats_choices, public.stats_daily, 
      * 종료 시각만 당겨서 기록으로 남겨요. 게임은 안 끝난 줄만 받아 가요(fever.js). */
     let FEVER_ROWS = [];
     let FEVER_EDIT = null;          // 수정 중인 줄의 id — null이면 새 이벤트
-    const FEVER_LIST_MAX = 30;      // 목록에 보일 최근 이벤트 수
+    const FEVER_LIST_MAX = 60;      // 목록에 보일 최근 이벤트 수
+    /* 🔁 반복 — 규칙을 저장하지 않고 **그날그날 한 줄씩** 만들어요. 하루만 빼려면 그 줄만
+     * 예약 취소하면 되고, 게임과 DB는 반복을 몰라도 돼요. [값, 이름, 그 요일이 맞나(일=0)] */
+    const FEVER_REPEAT = [
+      ["none", "반복 안 함", () => true],
+      ["daily", "매일", () => true],
+      ["weekday", "평일(월~금)", (d) => d >= 1 && d <= 5],
+      ["weekend", "주말(토·일)", (d) => d === 0 || d === 6],
+      ["weekly", "매주 같은 요일", (d, d0) => d === d0],
+    ];
+    const FEVER_REPEAT_MAX = 30;    // 한 번에 만드는 줄 수 상한 — 실수로 수백 줄 안 생기게
+    /* 첫 회의 시작·종료에서 n회분 구간을 만들어요. 첫 회가 규칙에 안 맞는 요일이면
+     * 그다음 맞는 날부터 세요. 하루씩 **로컬 날짜로** 밀어서 서머타임이 없어도 시각이 그대로예요. */
+    function feverOccurrences(from, to, rule, n) {
+      const R = FEVER_REPEAT.find((x) => x[0] === rule);
+      if (!R || rule === "none") return [[from, to]];
+      const len = to - from, d0 = from.getDay(), out = [];
+      for (let i = 0; out.length < n && i < 366; i++) {
+        const s = new Date(from); s.setDate(s.getDate() + i);
+        if (R[2](s.getDay(), d0)) out.push([s, new Date(s.getTime() + len)]);
+      }
+      return out;
+    }
     const feverState = (r, now) => {
       const from = Date.parse(r.starts_at), to = Date.parse(r.ends_at);
       return now >= from && now < to ? "live" : now < from ? "soon" : "past";
@@ -706,8 +729,8 @@ grant select on public.stats_summary, public.stats_choices, public.stats_daily, 
         ? `<table class="fv-list"><tbody>${FEVER_ROWS.map((x) => {
             const st = feverState(x, now);
             return `<tr class="${st}">
-              <td>${FEVER_STATE_LABEL[st]}</td>
-              <td><b>${esc(x.emoji || "🎉")} ${esc(x.title || "")}</b><br/>${fmtWhen(x.starts_at)} ~ ${fmtWhen(x.ends_at)}</td>
+              <td><span class="fv-st">${FEVER_STATE_LABEL[st]}</span><br/>
+                <b>${esc(x.emoji || "🎉")} ${esc(x.title || "")}</b><br/>${fmtWhen(x.starts_at)} ~ ${fmtWhen(x.ends_at)}</td>
               <td class="fv-row-btns">
                 <button type="button" class="fv-ghost fv-edit" data-id="${esc(x.id)}">수정</button>
                 ${st === "live" ? `<button type="button" class="fv-ghost fv-stop" data-id="${esc(x.id)}">지금 끄기</button>` : ""}
@@ -729,6 +752,9 @@ grant select on public.stats_summary, public.stats_choices, public.stats_daily, 
           ${field("fv-note", "한 줄 설명", esc((r && r.note) || ""), "text")}
           ${field("fv-from", "시작", toLocalInput((r && r.starts_at) || new Date().toISOString()), "datetime-local")}
           ${field("fv-to", "종료", toLocalInput((r && r.ends_at) || new Date(Date.now() + 864e5).toISOString()), "datetime-local")}
+          ${r ? "" : `<label class="fv-f">🔁 반복<select id="fv-rep">${FEVER_REPEAT.map(([v, l]) =>
+            `<option value="${v}">${l}</option>`).join("")}</select></label>
+          ${field("fv-n", `몇 번 (최대 ${FEVER_REPEAT_MAX})`, 1, "number")}`}
         </div>
         <div class="fv-grid" style="margin-top:10px">
           ${FEVER_EFFS.map(([k, label, unit, mul]) =>
@@ -854,31 +880,46 @@ grant select on public.stats_summary, public.stats_choices, public.stats_daily, 
         const from = new Date($("fv-from").value), to = new Date($("fv-to").value);
         if (isNaN(from) || isNaN(to)) return msg("시작과 종료를 정해주세요", true);
         if (to <= from) return msg("종료가 시작보다 뒤여야 해요", true);
-        const id = FEVER_EDIT || newFeverId();
+        const rule = FEVER_EDIT || !$("fv-rep") ? "none" : $("fv-rep").value;
+        const n = rule === "none" ? 1 : Math.floor(Number($("fv-n").value));
+        if (!(n >= 1 && n <= FEVER_REPEAT_MAX)) return msg(`몇 번은 1~${FEVER_REPEAT_MAX} 사이로 넣어주세요`, true);
+        const occ = feverOccurrences(from, to, rule, n);
+        // 반복이면 한 회끼리도 겹치면 안 돼요(매일인데 25시간짜리 같은 것)
+        for (let i = 1; i < occ.length; i++) {
+          if (occ[i][0] < occ[i - 1][1]) return msg("반복하면 앞 회와 시간이 겹쳐요 — 길이를 줄여주세요", true);
+        }
+        const base = FEVER_EDIT || newFeverId();
+        const ids = occ.map((_, i) => (occ.length > 1 ? `${base}-${i + 1}` : base));
         /* 겹치면 게임은 먼저 시작한 하나만 붙여요 — 모르고 겹치게 두지 않게 물어봐요 */
-        const clash = FEVER_ROWS.filter((x) => x.id !== id
-          && Date.parse(x.starts_at) < to.getTime() && from.getTime() < Date.parse(x.ends_at));
+        const clash = FEVER_ROWS.filter((x) => x.id !== FEVER_EDIT && occ.some(([f, t]) =>
+          Date.parse(x.starts_at) < t.getTime() && f.getTime() < Date.parse(x.ends_at)));
         if (clash.length && !confirm(`시간이 겹치는 이벤트가 있어요 — ${clash.map((x) => x.title).join(", ")}\n`
           + "겹치는 동안은 먼저 시작한 이벤트 하나만 붙어요. 그래도 저장할까요?")) return;
+        if (occ.length > 1 && !confirm(`${occ.length}개를 예약해요 — ${fmtWhen(occ[0][0].toISOString())}부터 `
+          + `${fmtWhen(occ[occ.length - 1][0].toISOString())}까지. 저장할까요?`)) return;
         const boost = {};
         for (const [k, , , mul] of FEVER_EFFS) {
           const v = toBoost($(`fv-e-${k}`).value, mul);
           if (Number.isFinite(v) && v > 0) boost[k] = v;
         }
-        msg("저장하는 중…");
-        const err = await feverRpc("fever_set", {
-          p_pw: pw, p_id: id, p_game: FEVER_GAME,
+        const one = {
+          p_pw: pw, p_game: FEVER_GAME,
           p_emoji: $("fv-emoji").value || "🎉", p_title: $("fv-title").value || "피버 타임",
-          p_note: $("fv-note").value || null,
-          p_starts: from.toISOString(), p_ends: to.toISOString(),
-          p_boost: boost,
-        });
-        if (err) return msg(`저장 못 했어요 — ${err}`, true);
+          p_note: $("fv-note").value || null, p_boost: boost,
+        };
+        /* 하나씩 보내요. 중간에 실패하면 거기서 멈추고 몇 개까지 됐는지 알려요 */
+        for (let i = 0; i < occ.length; i++) {
+          msg(`저장하는 중… ${i + 1}/${occ.length}`);
+          const err = await feverRpc("fever_set", { ...one, p_id: ids[i],
+            p_starts: occ[i][0].toISOString(), p_ends: occ[i][1].toISOString() });
+          if (err) { await redraw(pw, ""); return msg(`${i}/${occ.length}개까지 저장했어요 — ${err}`, true); }
+        }
         await loadFever();
         /* 서버가 "됐어요"라고 해도 줄이 실제로 생겼는지 다시 읽어서 봐요 */
-        if (!rowOf(id)) return msg("서버는 받았다는데 목록에 안 보여요 — 새로고침해서 확인해 주세요", true);
+        const missing = ids.filter((id) => !rowOf(id)).length;
+        if (missing) return msg(`서버는 받았다는데 ${missing}개가 목록에 안 보여요 — 새로고침해서 확인해 주세요`, true);
         FEVER_EDIT = null;
-        await redraw(pw, "✅ 저장했어요");
+        await redraw(pw, occ.length > 1 ? `✅ ${occ.length}개를 예약했어요` : "✅ 저장했어요");
       };
 
       for (const b of document.querySelectorAll(".fv-stop")) {
