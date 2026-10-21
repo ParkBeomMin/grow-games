@@ -16,7 +16,7 @@
  *   「난수원이 **셋**인 세계」입니다 — ① 판정 `_rng` ② 화면·동네의 `Math.random()`
  *   ③ 연출 전용 `fxRnd`(`match-scene.js`의 32bit 카운터). 연출은 ③만 씁니다.
  *   · **`fxRnd`를 없애고 `Math.random()`으로 돌아가는 판정이 나오면** X-1부터 다시 보세요.
- *   · **포메이션이 바뀌면**(선발 11명이 아니게 되면) X-4의 값 20이 먼저 빨간불입니다 —
+ *   · **포메이션이 바뀌면**(선발 11명이 아니게 되면) X-4의 값(v5: 42 · 겹 22)이 먼저 빨간불입니다 —
  *     그때 고칠 곳은 이 검사이지 `dotShift`가 아니에요.
  *
  * 🔒 소스 문자열을 세지 않습니다. engineer가 146번 §4-2 ⑨에서 못 박은 자리예요 —
@@ -32,9 +32,10 @@ let fail = 0;
 const check = (ok, msg) => { console.log(`${ok ? "✅" : "❌"} ${msg}`); if (!ok) fail += 1; };
 
 /* 🔒 **문턱·계약은 검사에 박습니다** (소스에서 읽어 오면 값을 바꿔도 검사가 따라가요) */
-const FX_PER_PITCH = 22;   // ⚽ 공 2 (`rx`·`ry`) + 🏃 점 20
-const FX_PER_DOTS = 20;    // 🧤 키퍼 2명 × 1 + 필드 9명 × 2 (선발 11명)
-const SLOTS = 11;          // `HOME_ROWS` 6(나 포함) + `AWAY_ROWS` 5
+/* 🔄 v5(15번 끝 「오케스트레이터 몫(v5 화면)」 · 52번 · 48번 §4): 11 대 11 세로 판 — 키퍼 2 × 1 + 필드 20 × 2 + 공 2 = **44**(옛 규칙 「키퍼 1번 · 필드 2번」 그대로) */
+const FX_PER_PITCH = 44;   // ⚽ 공 2 (`rx`·`ry`) + 🏃 점 42
+const FX_PER_DOTS = 42;    // 🧤 키퍼 2명 × 1 + 필드 20명 × 2(양 팀 11명씩)
+const SLOTS = 22;          // 🔄 v5: 11 대 11 — 우리 11(나 포함) + 상대 11 (옛 `HOME_ROWS` 6 + `AWAY_ROWS` 5)
 
 /* 격자 — 🔴 **한 칸으로 재지 않습니다.** `kind`·`result`·`flow`·`phase`가
  * 각각 다른 `if`를 지나가서, 한 조합만 보면 다른 갈래의 굴림이 안 보입니다. */
@@ -79,9 +80,9 @@ const MUT = {
     [/const y = at\[1\] == null \? 26 \+ ry \* 48 : at\[1\];/,
       "const y = at[1] == null ? 26 + fxRnd() * 48 : at[1];"]] },
   /* 🔴 ⓑ 점 자리 뽑기에 **결과를 타는 굴림**을 한 줄 넣습니다 (다음 사람이 저지를 실수 그대로) */
-  "M-DOTROLL": { "match-scene.js": [[/^      const \[dx, dy\] = dotShift\(sl\.x, sl\.y, sl\.role, sl\.home, at\[0\], y, dir\);$/m,
+  "M-DOTROLL": { "match-scene.js": [[/^      const \[dx0, dy0\] = dotShift\(sl\.x, sl\.y, sl\.role, sl\.home, at\[0\], y, dir\);$/m,
     '      if (card.result === "goal") fxRnd();\n'
-    + "      const [dx, dy] = dotShift(sl.x, sl.y, sl.role, sl.home, at[0], y, dir);"]] },
+    + "      const [dx0, dy0] = dotShift(sl.x, sl.y, sl.role, sl.home, at[0], y, dir);"]] },
   /* 🔴 ⓒ 흔들림 하나를 `Math.random()`으로 — 🎲 **①번 난수원**을 건드립니다 */
   "M-MATHRND": { "match-scene.js": [[/^    dx \+= \(fxRnd\(\) \* 2 - 1\) \* JX;$/m,
     "    dx += (Math.random() * 2 - 1) * JX;"]] },

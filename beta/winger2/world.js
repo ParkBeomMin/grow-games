@@ -28,19 +28,71 @@ window.W2World = (() => {
     CUP_REST: [50, 69],                  // 〃 — 나머지 23교
     TEST_STR: 62,                        // 12번 §8-3 공개 테스트 선발팀(62 대 62)
     JITTER: 8,                           // 12번 §8-3 선수 흔들림 ±8
-    RIVAL_PLUS: 6,                       // 12번 §8-3 · 24번 §2 — 📍 {rival} = 학교 전력 + 6
+    /* `RIVAL_PLUS` 퇴역(51번 v4-3 · J16 · J17) — {rival}(번호를 가져간 1학년)은 또래 곡선을 따라요 */
     ACE_PLUS: 12,                        // 12번 §8-3 · 24번 §2 — 🔥 {ace} = 학교 전력 + 12
+    ACE_PLUS_POS: { wg: 2 },             // 51번 v4-3 — 윙어만 +2(🔗 결말 분포를 포지션마다 맞춤)
     /* 🔗 중립화 상수 — 포지션 넷의 경기당 내 순간 수를 맞춰요(내 줄의 `buff`로 실림 · 12번 §8-5).
      * 기준 능력치 56.0 · `COND_REF` 51 · FORMATION · 포지션 무게 · SPOT…에 종속(바뀌면 다시 잼). */
-    ACT1_SPOT: { fw: 8.151, wg: 6.910, mf: 4.637, df: 7.642 },   // 37번 §2 · 38번 §5 — 판 2.5(27번 규칙 셋 위에서 잰 값)
+    ACT1_SPOT: { fw: 7.598, wg: 6.532, mf: 4.343, df: 6.948 },   // 51번 v4-3 — 필드 10 · ⚖️ 58:58에서 경기당 판 2.50
     RATE_B: { fw: 62, wg: 61, mf: 62, df: 62 },                   // 37번 §2 · 38번 §5 — 평점 기본 b
     /* 🎲 시작 능력치(29번 §3-3 · J6 — 37번 §2 · 38번 §5) — 여섯 모두 40에서 1점씩 48번(한 칸 최대 56 · 합 288) */
     START_BASE: 40, START_STEP: 1, START_N: 48, START_CAP: 56,
     PK_P: 0.75,                          // 12번 §5-3 승부차기 중심(동료 · 상대 킥도 같은 값)
+    /* 🧩 포메이션(48번 §2 · §12 · 51번 v4-3) — 상성 c · 감독 「줄의 폼」이 이 안이면 ⚖️ */
+    FORM_C: 0.03, FORM_TIE: 1.0,
+    /* 🔁 또래(내 포지션 · 50번 §2 · §11 · §12 · 51번 v4-3) — 수 · 흩어짐 · 학년 기울기 · 빠르기 · 그 주 컨디션 폭 */
+    PEER_N: { fw: 2, wg: 2, mf: 5, df: 5 }, PEER_SPREAD: 3,
+    PEER_GRADE_D: { 1: -3, 2: 0, 3: 2 }, PEER_PACE: { 1: 1.30, 2: 1.00, 3: 0.75 }, PEER_COND_W: 1.5,
+    /* 🎯 감독의 선발 판단(48번 §12-2 · 50번 §11-3 · §12-4 · 51번 v4-3) */
+    W_TRUST: 0.5, W_COND: 0.1, W_WEAK: 1.5, BENCH_GAP: 3.5, SUB_MIN: 60, CHANCE_N: 1,
   });
+  /* 📈 보통 판 곡선 G(주) — 주 능력치 blend가 그 주까지 자란 양(51번 v4-3 · `out/g50w.json` — 🔗 중립화 표 · 0~36주) */
+  const PEER_G = {
+    fw: [0, 2.4, 2.4, 2.4, 2.4, 2.8, 2.8, 2.8, 2.8, 2.8, 3.5, 3.5, 5.42, 5.42, 5.42, 5.74, 5.84, 5.84, 5.84, 6.34, 6.34, 6.34, 6.41, 7.32, 8.17, 8.17, 8.28, 8.58, 8.58, 8.58, 8.58, 8.8, 8.8, 9.06, 9.167, 10.85, 10.85],
+    wg: [0, 0, 0, 0, 0.5, 2.1, 2.1, 2.1, 2.1, 2.1, 2.8, 2.8, 2.8, 2.8, 3.32, 4.62, 4.82, 4.82, 4.82, 5.32, 5.32, 5.32, 5.39, 5.41, 5.41, 5.89, 6.31, 7.88, 7.88, 7.88, 7.88, 7.96, 7.96, 8.427, 8.45, 8.45, 8.45],
+    mf: [0, 0, 0, 0, 2, 2.667, 2.667, 2.667, 3.057, 3.057, 3.057, 3.057, 3.057, 3.057, 5.097, 5.147, 5.8, 5.8, 6.2, 6.2, 6.2, 6.2, 6.2, 6.2, 6.2, 8, 8.027, 8.8, 8.8, 8.807, 9.16, 9.17, 9.17, 9.17, 9.17, 9.17, 9.17],
+    df: [0, 0, 0, 0, 0, 0, 1.32, 1.32, 1.97, 1.97, 2.39, 2.39, 2.39, 2.39, 2.39, 2.39, 2.39, 4.34, 5.057, 5.357, 5.357, 5.357, 5.357, 5.357, 5.357, 5.357, 5.357, 5.357, 6.497, 6.917, 7.493, 7.667, 7.667, 7.883, 7.903, 7.903, 7.903],
+  };
+  /* 🫀 또래의 그 주 컨디션 — 보통 판 경기 날 컨디션 분포의 21 분위(`out/peercond50.json`) · 중앙(55) 기준 `PEER_COND_W` 배 */
+  const PEER_CQ = [28, 38, 40, 43, 43, 46, 47, 49, 52, 53, 55, 56, 58, 60, 61, 63, 65, 67, 69, 72, 77];
+
+  /* ---------- 🧩 포메이션 넷(48번 §2 · 52번 §2) — 필드 10 + 키퍼 ----------
+   * `FORMS[이름]` = [[x, y, role], …] 11개(키퍼 첫 줄) · x 0~100(왼 → 오) · y 0~50(우리 골라인 → 하프라인 · 우리 골문 아래) ·
+   *   role ∈ gk · def · wb · mid · wing · fwd — 상대는 화면이 뒤집어요(원정이어도 우리 = 아래 · 48번 §11).
+   * `FORM_W[이름]` = { fa, fd, n }(엔진 배수 · 엔진이 보는 포지션 머릿수 — 윙백은 3-5-2 미드 · 5-3-2 수비) */
+  const FORMS = Object.freeze({
+    "4-4-2": [[50, 4, "gk"], [14, 14, "def"], [38, 13, "def"], [62, 13, "def"], [86, 14, "def"],
+      [38, 28, "mid"], [62, 28, "mid"], [12, 32, "wing"], [88, 32, "wing"], [38, 42, "fwd"], [62, 42, "fwd"]],
+    "4-3-3": [[50, 4, "gk"], [14, 14, "def"], [38, 13, "def"], [62, 13, "def"], [86, 14, "def"],
+      [28, 27, "mid"], [50, 25, "mid"], [72, 27, "mid"], [14, 40, "wing"], [86, 40, "wing"], [50, 44, "fwd"]],
+    "3-5-2": [[50, 4, "gk"], [26, 13, "def"], [50, 12, "def"], [74, 13, "def"],
+      [10, 26, "wb"], [90, 26, "wb"], [32, 28, "mid"], [50, 26, "mid"], [68, 28, "mid"], [38, 42, "fwd"], [62, 42, "fwd"]],
+    "5-3-2": [[50, 4, "gk"], [8, 18, "wb"], [92, 18, "wb"], [28, 12, "def"], [50, 11, "def"], [72, 12, "def"],
+      [30, 28, "mid"], [50, 27, "mid"], [70, 28, "mid"], [38, 42, "fwd"], [62, 42, "fwd"]],
+  });
+  const FORM_W = Object.freeze({
+    "4-4-2": { fa: 1.00, fd: 1.00, n: { fw: 2, wg: 2, mf: 2, df: 4 }, name: "⚖️ 균형 4-4-2" },
+    "4-3-3": { fa: 1.05, fd: 0.95, n: { fw: 1, wg: 2, mf: 3, df: 4 }, name: "↔️ 측면 4-3-3" },
+    "3-5-2": { fa: 1.03, fd: 0.97, n: { fw: 2, wg: 0, mf: 5, df: 3 }, name: "🎯 중앙 3-5-2" },
+    "5-3-2": { fa: 0.94, fd: 1.06, n: { fw: 2, wg: 0, mf: 3, df: 5 }, name: "🧱 수비 5-3-2" },
+  });
+  const FORM_NAMES = Object.keys(FORMS);
+  /* 상성 고리 — 측면 > 중앙 > 수비 > 측면 · 균형은 누구와도 1 */
+  const BEATS = { "4-3-3": "3-5-2", "3-5-2": "5-3-2", "5-3-2": "4-3-3" };
+  const formM = (a, b) => (BEATS[a] === b ? 1 + TUNE.FORM_C : BEATS[b] === a ? 1 - TUNE.FORM_C : 1);
+  /* 엔진에 넘기는 배수 — 내 경기(`createMatch`) · 남의 경기(`autoMatch`) 같은 값 */
+  const formCfg = (us, them) => { const A = FORM_W[us], B = FORM_W[them];
+    return { fa: A.fa, fd: A.fd, fa2: B.fa, fd2: B.fd, m: formM(us, them), m2: formM(them, us) }; };
+  const autoForm = (a, b) => { const A = FORM_W[a || "4-4-2"], B = FORM_W[b || "4-4-2"];
+    return { faA: A.fa, fdA: A.fd, faB: B.fa, fdB: B.fd, mA: formM(a || "4-4-2", b || "4-4-2"), mB: formM(b || "4-4-2", a || "4-4-2") }; };
+  /* 이웃 자리(48번 §3 · §12-2) — ② · ③에서 내가 서는 자리 */
+  const NEIGH = { fw: "wg", wg: "fw", mf: "df", df: "mf" };
+  /* 그 포메이션에 이웃 자리가 없으면 다음으로 가까운 자리(공격수 · 3-5-2 · 5-3-2 → 미드필더) — 늘 10명이 서게 */
+  const NEIGH_ALT = { fw: ["wg", "mf"], wg: ["fw", "mf"], mf: ["df", "wg"], df: ["mf", "wg"] };
+  const neighIn = (pos, f) => NEIGH_ALT[pos].find((p) => FORM_W[f].n[p] > 0) || NEIGH[pos];
 
   const STAT_KEYS = ["shoot", "pass", "dribble", "defense", "stamina", "speed"];
-  const FORMATION = { fw: 2, wg: 2, mf: 4, df: 3 };
+  const FORMATION = { fw: 2, wg: 2, mf: 4, df: 3 };   // 세계를 만들 때 굴리는 11줄(옛 판과 같은 소비) — 경기에 서는 줄은 `FORMS`(필드 10)
   const POS_ORDER = ["fw", "wg", "mf", "df"];
   const LEAGUE_WEEKS = [6, 8, 10, 12, 14, 25, 27, 29, 31, 33];   // 12번 §5-1 — 전반기 5 · 후반기 5
   const ACE_ROUND = 2;                 // 🔥 에이스의 학교와는 3라운드(10주 · 29주)에 고정(21번 §4-1)
@@ -79,6 +131,8 @@ window.W2World = (() => {
     engine: 0x9e3779b9, event: 0x85ebca6b, world: 0x27d4eb2f, rate: 0x165667b1,
     test: 0xd3a2646c, pk: 0xfd7046c5, sit: 0x2545f491, name: 0x5bd1e995,
     start: 0x3c6ef372,   // 🎲 시작 능력치(29번 §3-3 — 새 소금)
+    form: 0x2f6b9a1d,    // 🧩 상대 포메이션(52번 — 새 소금)
+    peer: 0x6a09e667,    // 🔁 또래 곡선 · 그 주 컨디션(50번 — 새 소금)
     board: 0x1b873593,   // 🦶 판의 상황(36번 §3-2 — 엔진 열 밖 · 경기 열쇠마다)
   });
   /* 한 자리의 난수원 — `key`는 그 자리의 고유 번호(주 · 경기)예요. 다시 열어도 같은 자리는 같은 값이에요. */
@@ -101,6 +155,8 @@ window.W2World = (() => {
     groupTie: (g) => 800 + g, leagueTie: 900,
     start: (k) => 910 + k,                               // 🎲 시작 능력치 k번째 뽑기(0 = 첫 모양 · 1~3 = 다시 뽑기)
     heroName: (k) => 930 + k,                            // 🎲 이름 버튼 k번째
+    peerCond: (w) => 1000 + w,                           // 🔁 또래의 그 주 컨디션(주마다)
+    peerName: 1100,                                      // 🔁 또래 이름(새로 더한 줄만)
   };
 
   /* ---------- ✏️ 글 — 이름 뒤 조사 ----------
@@ -227,7 +283,7 @@ window.W2World = (() => {
     let u = 0, rivalPut = false;
     for (const p of POS_ORDER) for (let j = 0; j < FORMATION[p]; j++) {
       if (p === pos && j === 0) continue;                         // 내 칸
-      if (p === pos && !rivalPut) { ours.push({ id: "R", pos: p, str: T.US_STR + T.RIVAL_PLUS, role: "rival" }); rivalPut = true; continue; }
+      if (p === pos && !rivalPut) { ours.push({ id: "R", pos: p, str: T.US_STR, role: "rival" }); rivalPut = true; continue; }   // 전력은 `upgrade`가 또래 곡선으로
       ours.push({ id: `U${u++}`, pos: p, str: jitter(T.US_STR), role: "" });
     }
     // 권역 리그 5교 — 11명씩(흔들림을 먼저 굴린 뒤 에이스 칸을 갈아 끼워요 — 소비량이 늘 같게)
@@ -317,12 +373,200 @@ window.W2World = (() => {
     for (const k of STAT_KEYS) stats[k] = S.stats[k];
     return { id: "me", name: S.name, pos: S.pos, slot: {}, me: true, stats, foot: 1, buff: { g: sp, a: sp, d: sp } };
   }
-  const ourXI = (S) => [meRow(S)].concat(S.world.ours.map(npc));
+  /* 대회 학교 — 굴려 둔 11명 중 그 학교 포메이션의 10자리(POS_ORDER 차례로) */
   function strsXI(t) {
+    const n = (FORM_W[t.form] || FORM_W["4-4-2"]).n;
     const out = [];
     let i = 0;
-    for (const p of POS_ORDER) for (let j = 0; j < FORMATION[p]; j++) { out.push({ id: `${t.id}_${i}`, pos: p, slot: {}, me: false, str: t.xs[i] }); i++; }
+    for (const p of POS_ORDER) for (let j = 0; j < n[p]; j++) { out.push({ id: `${t.id}_${i}`, pos: p, slot: {}, me: false, str: t.xs[i] }); i++; }
     return out;
+  }
+
+  /* ================================================================
+   * 🧩🔁 v5 — 포메이션 · 또래 · 감독의 선발 판단(48번 §12 · 50번 §11 · §12 · 51번 v4-3 · 52번)
+   * 🔒 굴림은 모두 판 시드에서(새 소금 `form` · `peer`) · 경기 중 굴림 0 · 같은 입력이면 같은 판단
+   * ================================================================ */
+  const lineOf = (p) => (p === "fw" || p === "wg" ? "atk" : p === "mf" ? "mid" : "def");
+  const LINE_NAME = { atk: "공격 줄", mid: "미드 줄", def: "수비 줄" };
+  const LINE_FORM = { atk: "4-3-3", mid: "3-5-2", def: "5-3-2" };
+  const LINE_TOP = { atk: 3, mid: 5, def: 5 };       // 줄 = 그 줄을 살리는 포메이션의 선발 수만큼 센 사람
+  const t10 = (v) => Math.round(v * 10);              // 0.1 단위 정수 — 조각을 먼저 접어 더함(보이는 값 = 판정 값)
+  /* 리그 학교의 10자리 — 굴려 둔 11명의 `pos`를 포메이션에 맞춰 다시 붙이고 남는 한 명은 `off`(기록 · 이름은 그대로) ·
+   *   🔥 에이스는 늘 내 포지션 자리 — 포메이션에 그 자리가 없으면 이웃 자리를 내 포지션 이름으로(51번 v4-3) */
+  function lineup(t, myPos) {
+    const need = Object.assign({}, FORM_W[t.form].n);
+    for (const x of t.xi) { if (x.pos0 == null) x.pos0 = x.pos; x.off = true; }
+    const ace = t.xi.find((x) => x.role === "ace");
+    if (ace) { const at = need[myPos] > 0 ? myPos : NEIGH[myPos]; need[at] -= 1; ace.pos = myPos; ace.off = false; }
+    const rest = t.xi.filter((x) => x.role !== "ace");
+    for (const p of POS_ORDER) for (const x of rest) { if (need[p] <= 0) break; if (x.off && x.pos0 === p) { x.pos = p; x.off = false; need[p] -= 1; } }
+    for (const p of POS_ORDER) for (const x of rest) { if (need[p] <= 0) break; if (x.off) { x.pos = p; x.off = false; need[p] -= 1; } }
+  }
+  const teamXI = (t) => t.xi.filter((x) => !x.off).map(npc);
+  /* 🔁 판을 v5 세계로 — 새 판(`newState`)과 옛 세이브(`loadSave`)가 같은 길(한 번만 · `world.v` 2) ·
+   *   상대 포메이션 · 리그 10자리 · {rival} → 번호의 1학년(또래) · 내 포지션 또래 · 또래 출발선 = 내 시작 blend */
+  function upgrade(S) {
+    const Wd = S.world;
+    if (!Wd || Wd.v >= 2) return false;
+    const T = TUNE, E = window.WingerEngine;
+    const pos = S.pos;
+    const fr = rngOf(S.seed, 0, SALT.form);
+    const deal = (k) => { const bag = []; while (bag.length < k) bag.push(...shuffle(fr, FORM_NAMES.slice())); return bag; };
+    const lg = deal(Wd.league.teams.length - 1);
+    Wd.league.teams.slice(1).forEach((t, i) => {
+      t.form = lg[i];
+      const ace = t.xi.find((x) => x.role === "ace");
+      if (ace) ace.str = t.str + T.ACE_PLUS + (T.ACE_PLUS_POS[pos] || 0);
+      lineup(t, pos);
+    });
+    const cupT = [];
+    for (const g of Wd.cup.groups) for (const t of g) if (!t.us) cupT.push(t);
+    const cb = deal(cupT.length);
+    cupT.forEach((t, i) => { t.form = cb[i]; });
+    // 우리 학교 — 내 포지션 동료를 또래로(번호의 1학년 = 첫 또래 · 1학년)
+    const num = Wd.ours.find((x) => x.role === "rival" || x.role === "number");
+    Wd.ours = Wd.ours.filter((x) => x.pos !== pos);
+    const pr = rngOf(S.seed, 0, SALT.peer);
+    const nr = rngOf(S.seed, KEY.peerName, SALT.name);
+    const g = g2(S.gender);
+    const used = new Set([Wd.keeper.name].concat(Wd.ours.map((x) => x.name)));
+    for (const t of Wd.league.teams.slice(1)) for (const x of t.xi) used.add(x.name);
+    const nameOne = () => { for (let k = 0; k < 50; k++) { const nm = pickName(nr, g); if (nm && !used.has(nm)) { used.add(nm); return nm; } } return `선수${used.size}`; };
+    for (let k = 0; k < T.PEER_N[pos]; k++) {
+      const row = k === 0 && num ? num : { id: `P${k}`, pos, role: "", name: nameOne() };
+      const grade = k === 0 ? 1 : 1 + Math.floor(pr() * 3);
+      pr();                                                   // 빠르기 칸 굴림(옛 장치와 같은 소비 — 학년이 빠르기를 정해요)
+      const d = -T.PEER_SPREAD + 2 * T.PEER_SPREAD * pr() + T.PEER_GRADE_D[grade];
+      Object.assign(row, { pos, role: k === 0 ? "number" : "", peer: { grade, d: Math.round(d * 1000) / 1000, pace: T.PEER_PACE[grade] } });
+      Wd.ours.push(row);
+    }
+    /* 🧍 자리 채우기 — 어떤 포메이션이든 10명이 서게: 다른 포지션 동료가 모자라면(미드필더 · 4-4-2에서 하나) 같은 흔들림의 동료를 더해요
+     *    (51번 장치는 이 자리를 9명으로 잼 — 30번 v5에 적음) */
+    const xr = rngOf(S.seed, 1, SALT.form);
+    for (const f of FORM_NAMES) {
+      if (FORM_W[f].n[pos] === 0) continue;
+      for (const p of POS_ORDER) {
+        if (p === pos) continue;
+        const have = Wd.ours.filter((x) => !x.peer && x.pos === p).length;
+        const short = FORM_W[f].n[p] - have - Math.max(0, Wd.ours.filter((x) => !x.peer && x.pos !== p).length - POS_ORDER.filter((q) => q !== pos && q !== p).reduce((a, q) => a + FORM_W[f].n[q], 0));
+        for (let k = 0; k < short; k++) Wd.ours.push({ id: `X${Wd.ours.length}`, pos: p, str: T.US_STR + randInt(xr, -T.JITTER, T.JITTER), role: "", name: nameOne() });
+      }
+    }
+    Wd.peerStart = Math.round(E.blendOf({ pos, stats: S.statsAt0 || S.stats }) * 1000) / 1000;
+    Wd.form = Wd.form || { h1: null, h2: null };
+    Wd.v = 2;
+    return true;
+  }
+  const peers = (S) => S.world.ours.filter((x) => x.peer);
+  const numberRow = (S) => S.world.ours.find((x) => x.role === "number" || x.role === "rival") || null;
+  const wk = (w) => Math.max(0, Math.min(36, Math.floor(Number(w)) || 0));
+  /* 또래 i의 그 주 능력 — 내 시작 blend + δ + 빠르기 × G(주) */
+  const peerA = (S, q, w) => S.world.peerStart + q.peer.d + q.peer.pace * PEER_G[S.pos][wk(w)];
+  /* 또래의 그 주 — { row, a, cond, score } · 컨디션은 (판 시드 · 주)에서 또래 차례로 한 번씩 */
+  function peersAt(S, w) {
+    const r = rngOf(S.seed, KEY.peerCond(wk(w)), SALT.peer);
+    const med = PEER_CQ[10];
+    return peers(S).map((q) => {
+      const u = r() * 20, i = Math.min(19, Math.floor(u));
+      const c0 = PEER_CQ[i] + (PEER_CQ[i + 1] - PEER_CQ[i]) * (u - i);
+      const cond = Math.round(clamp(med + TUNE.PEER_COND_W * (c0 - med), 0, 100));
+      const a = peerA(S, q, w);
+      return { row: q, a, cond, score: a + TUNE.W_COND * (cond - 51) };
+    });
+  }
+  /* 내 선발 점수의 조각(0.1 정수) — 능력(blend) · 🤝 · 컨디션 · 🦶 약발 */
+  function myScore10(S, cond) {
+    const E = window.WingerEngine;
+    const cd = cond != null ? cond : S.cond;                 // 경기 날 컨디션(대회 회복이 붙으면 그 값)
+    return { a: t10(E.blendOf({ pos: S.pos, stats: S.stats })), t: t10(TUNE.W_TRUST * Math.round(Number(S.trust) || 0)),
+      c: t10(TUNE.W_COND * (Math.round(Number(cd) || 0) - 51)), wk: t10(TUNE.W_WEAK * (Math.floor(Number(S.weak)) || 0)) };
+  }
+  /* 🧠 감독의 포메이션 — 반기마다(1주 · 20주) 「요즘 좋은 줄」(줄의 폼 = 선발 점수 − 평소 수준)을 살림 ·
+   *   셋이 `FORM_TIE` 안이면 ⚖️ · 내 포지션 자리 0인 포메이션은 고르지 않음(50번 §11-1 · 51번 v4-3) */
+  function chooseForm(S, half) {
+    const w = half === 1 ? 1 : 20;
+    const base0 = S.world.peerStart + PEER_G[S.pos][w];
+    const pa = new Map(peersAt(S, w).map((x) => [x.row, x]));
+    const m = myScore10(S);
+    const mine = (m.a + m.t + m.c + m.wk) / 10;
+    const ln = { atk: [], mid: [], def: [] };
+    ln[lineOf(S.pos)].push(mine - base0);
+    for (const x of S.world.ours) ln[lineOf(x.pos0 || x.pos)].push(x.peer ? pa.get(x).score - base0 : x.str - TUNE.US_STR);
+    const st = {};
+    for (const k of Object.keys(ln)) { const top = ln[k].slice().sort((a, b) => b - a).slice(0, LINE_TOP[k]); st[k] = t10(top.reduce((a, b) => a + b, 0) / top.length) / 10; }
+    const order = Object.keys(st).sort((a, b) => st[b] - st[a]);
+    let f = "4-4-2", why;
+    if (t10(st[order[0]] - st[order[2]]) > t10(TUNE.FORM_TIE)) {
+      const l = order.find((k) => FORM_W[LINE_FORM[k]].n[S.pos] > 0);
+      if (l) { f = LINE_FORM[l]; why = `강 감독: 「요즘 ${LINE_NAME[l]}이 좋다 — ${f}」`; }
+    }
+    if (!why) why = `강 감독: 「줄마다 큰 차가 없다 — ${f} 균형으로 간다」`;
+    return { name: f, why, lines: ["atk", "mid", "def"].map((k) => ({ name: LINE_NAME[k], v: st[k] })) };
+  }
+  /* 지금 반기의 우리 포메이션 — 그 반기에 처음 물을 때 한 번 정해 얼려요(세이브) */
+  function formNow(S, w) {
+    const h = (Number(w) || S.week) < 20 ? "h1" : "h2";
+    if (!S.world.form) S.world.form = { h1: null, h2: null };
+    if (!S.world.form[h]) S.world.form[h] = chooseForm(S, h === "h1" ? 1 : 2);
+    return S.world.form[h];
+  }
+  /* 🎯 감독의 선발 판단 — 경계 = 또래를 선발 점수로 줄 세운 s번째 · Δ = 내 점수 − 그의 점수(조각을 먼저 접어 더함) ·
+   *   ① Δ ≥ 0 선발 · ② −BENCH_GAP < Δ < 0 이웃 자리 선발 · ③ 벤치 → SUB_MIN′ 교체(이웃 자리) ·
+   *   기회 주기: 앞 공식 경기가 ③이면 ③ 대신 ② · 또래가 자리보다 적으면 ① */
+  function pickFor(S, w, formName, prevK, cond) {
+    const T = TUNE;
+    const f = formName || formNow(S, w).name;
+    const sN = FORM_W[f].n[S.pos];
+    const srt = peersAt(S, w).sort((a, b) => (b.score - a.score) || (a.row.name < b.row.name ? -1 : a.row.name > b.row.name ? 1 : 0));
+    if (!srt.length || sN > srt.length) return { k: 1, at: S.pos, d: null, parts: [], rival: null, onMin: 0, on: srt.slice(0, Math.max(0, sN - 1)).map((x) => x.row.id), chance: false };
+    const tr = srt[sN - 1];
+    const m = myScore10(S, cond);
+    const parts = [
+      { name: "능력", v: (m.a - t10(tr.a)) / 10 },
+      { name: "🤝 감독 신뢰", v: m.t / 10 },
+      { name: "🫀 컨디션", v: (m.c - t10(T.W_COND * (tr.cond - 51))) / 10 },
+      { name: "🦶 약발", v: m.wk / 10 },
+    ];
+    const d10 = parts.reduce((a, x) => a + t10(x.v), 0);
+    const d = d10 / 10;
+    let k = d10 >= 0 ? 1 : d10 > -t10(T.BENCH_GAP) ? 2 : 3;
+    let chance = false;
+    if (k === 3 && prevK === 3) { k = 2; chance = true; }   // 기회 주기 — 연속 벤치 `CHANCE_N`(1)번이면 다음은 적어도 ②
+    const on = (k === 1 ? srt.slice(0, sN - 1) : srt.slice(0, sN)).map((x) => x.row.id);
+    return { k, at: k === 1 ? S.pos : neighIn(S.pos, f), d, parts, rival: { id: tr.row.id, name: tr.row.name, grade: tr.row.peer.grade, a: t10(tr.a) / 10, cond: tr.cond },
+      onMin: k === 3 ? T.SUB_MIN : 0, on, chance };
+  }
+  /* 우리 팀 10명 — 나(선 자리) · 선발 또래 · 나머지는 전력 순으로 자리마다(같은 포지션 먼저 · 모자라면 아무나) */
+  function ourXI(S, opt) {
+    const o = opt || {};
+    const w = o.w != null ? o.w : S.week;
+    const f = o.form || (S.world.form && S.world.form[(w < 20 ? "h1" : "h2")] ? S.world.form[w < 20 ? "h1" : "h2"].name : "4-4-2");
+    const at = o.at || S.pos;
+    const need = Object.assign({}, FORM_W[f].n);
+    const me = meRow(S);
+    me.pos = at; need[at] -= 1;
+    const rows = [me];
+    const pa = peersAt(S, w);
+    const onIds = o.on || pa.slice().sort((a, b) => b.score - a.score).slice(0, Math.max(0, need[S.pos])).map((x) => x.row.id);
+    for (const x of pa) if (onIds.indexOf(x.row.id) >= 0 && need[S.pos] > 0) { need[S.pos] -= 1; rows.push(Object.assign(npc(x.row), { pos: S.pos, str: x.a })); }
+    const rest = S.world.ours.filter((x) => !x.peer).slice().sort((a, b) => b.str - a.str);
+    const used = new Set();
+    for (const p of POS_ORDER) for (const u of rest) { if (need[p] <= 0) break; if (!used.has(u) && (u.pos0 || u.pos) === p) { used.add(u); need[p] -= 1; rows.push(Object.assign(npc(u), { pos: p })); } }
+    for (const p of POS_ORDER) for (const u of rest) { if (need[p] <= 0) break; if (!used.has(u)) { used.add(u); need[p] -= 1; rows.push(Object.assign(npc(u), { pos: p })); } }
+    return rows;
+  }
+  /* 🔁 팀 내 라이벌(그 주 · 지금 포메이션) · 🏁 리그 내 라이벌(부문 순위 바로 위 · 1위면 바로 아래 · 우리 학교 빼고) */
+  function teamRival(S, w) {
+    const p = pickFor(S, w, null, null);
+    return p.rival;
+  }
+  function leagueRival(S) {
+    const all = ranking(S).filter((x) => x.me || x.team !== OUR_SCHOOL);
+    const i = all.findIndex((x) => x.me);
+    if (i < 0 || all.length < 2) return null;
+    const x = i > 0 ? all[i - 1] : all[1];
+    const aceId = (aceRow(S) || {}).id;
+    return { id: x.id, name: x.name, team: x.team, v: x.v, me: all[i].v, above: i > 0, ace: x.id === aceId };
   }
 
   /* ---------- ⭐ 평점 — 엔진 밖(12번 §8-4) ----------
@@ -386,7 +630,7 @@ window.W2World = (() => {
     const pr = S.world.league.rounds[ri % 5].find(([x, y]) => x === 0 || y === 0);
     const oid = pr[0] === 0 ? pr[1] : pr[0];
     const t = S.world.league.teams[oid];
-    return { oid, name: t.name, str: t.str, home: ri < 5 ? pr[0] === 0 : pr[1] === 0, ace: oid === TUNE.LEAGUE_STR.length };
+    return { oid, name: t.name, str: t.str, form: t.form || "4-4-2", home: ri < 5 ? pr[0] === 0 : pr[1] === 0, ace: oid === TUNE.LEAGUE_STR.length };
   }
   const addInd = (ind, id, g, a, d) => {
     if (!id) return;
@@ -408,7 +652,7 @@ window.W2World = (() => {
     if (info.res === "L" && roundOf(w) < 5 && L.lostTo.indexOf(o.oid) < 0) L.lostTo.push(o.oid);
     addInd(L.ind, "me", info.myGoals, info.assists, info.defense);
     for (const mt of info.mates) addInd(L.ind, mt.row && mt.row.id, mt.g, mt.a, mt.d);
-    const xo = L.teams[o.oid].xi.map(npc);
+    const xo = teamXI(L.teams[o.oid]);
     const so = o.str;
     for (const { scorer, assister } of E.shareByWeight(xo, info.oppGoals, "goal", so / (so + TUNE.US_STR))) {
       addInd(L.ind, scorer && scorer.id, 1, 0, 0);
@@ -425,7 +669,8 @@ window.W2World = (() => {
     L.rounds[ri % 5].forEach(([x, y], j) => {
       if (x === 0 || y === 0) return;
       E._t.seed(engineSeed(S.seed, KEY.league(ri, j + 1)));
-      const r = E.autoMatch({ xiA: L.teams[x].xi.map(npc), xiB: L.teams[y].xi.map(npc), strA: L.teams[x].str, strB: L.teams[y].str });
+      const r = E.autoMatch({ xiA: teamXI(L.teams[x]), xiB: teamXI(L.teams[y]), strA: L.teams[x].str, strB: L.teams[y].str,
+        form: autoForm(L.teams[x].form, L.teams[y].form) });
       tally(L.table, x, y, r.gf, r.ga);
       for (const { scorer, assister } of r.goalsA.concat(r.goalsB)) {
         addInd(L.ind, scorer && scorer.id, 1, 0, 0);
@@ -464,7 +709,7 @@ window.W2World = (() => {
   function autoCup(S, a, b, key, ko) {
     const E = window.WingerEngine;
     E._t.seed(engineSeed(S.seed, key));
-    const r = E.autoMatch({ xiA: strsXI(a), xiB: strsXI(b), strA: a.str, strB: b.str });
+    const r = E.autoMatch({ xiA: strsXI(a), xiB: strsXI(b), strA: a.str, strB: b.str, form: autoForm(a.form, b.form) });
     let winA = r.gf > r.ga, pk = null;
     if (ko && r.gf === r.ga) { pk = shootout(rngOf(S.seed, KEY.pk(key), SALT.pk), null); winA = pk.winA; }
     return { a: a.id, b: b.id, ga: r.gf, gb: r.ga, winA, pk: pk ? [pk.a, pk.b] : null };
@@ -519,7 +764,7 @@ window.W2World = (() => {
     const g = g2(S.gender);
     const xi = [meRow(S)];
     let n = 0;
-    for (const p of POS_ORDER) for (let j = 0; j < FORMATION[p]; j++) {
+    for (const p of POS_ORDER) for (let j = 0; j < FORM_W["4-4-2"].n[p]; j++) {   // 공개 테스트는 양쪽 ⚖️ 4-4-2 · 필드 10
       if (p === S.pos && j === 0) continue;
       const str = TUNE.TEST_STR + randInt(tr, -TUNE.JITTER, TUNE.JITTER);
       let nm = "";
@@ -532,6 +777,8 @@ window.W2World = (() => {
   return {
     TUNE, STAT_KEYS, FORMATION, POS_ORDER, LEAGUE_WEEKS, KEY, SALT, KO_NAME, STAGE_NAME, GROUP_PAIRS,
     create, ourXI, meRow, strsXI, testXI, npc,
+    FORMS, FORM_W, FORM_NAMES, NEIGH, neighIn, formM, formCfg, autoForm, upgrade, peers, numberRow, peerA, peersAt, chooseForm, formNow,
+    pickFor, teamRival, leagueRival, teamXI, PEER_G,
     rate, ratingParts, shootout,
     roundOf, oppOf, afterOurLeague, otherLeague, table, ranking, recOf, catOf, aceRow,
     cupTeam, cupGroupsAuto, ourGroupGames, groupTable, bracket, autoCup,

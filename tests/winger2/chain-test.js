@@ -35,7 +35,10 @@ const SPOT_BAND = 10;   // % — A-1 (28번 R2 ⑤ 「같은 칸 최대 ÷ 최�
 /* 🔄 v2 다시 유도 — A-2: buff를 빼면 28번 전엔 벌어짐 11%(±10% 밖)였으나 27번 규칙이 판을 눌러 **5.6%**(공격수가 가장 낮음은 그대로).
  *    ±10%는 설계 합격선이라 A-1에 그대로 두고, A-2는 「buff가 대등을 떠받친다」를 기준선과의 관계로 봅니다:
  *    벌어짐이 기준선(0.49%)의 **5배 넘게**(표본 잡음 σ ≈ 0.38% — 9,000판 · 판 SD ≈ 0.9) · 공격수가 가장 먼저 무너짐 · 평균이 30% 넘게 떨어짐 */
-const BUFF_SPREAD_X = 5, BUFF_DROP = 0.30;
+/* 🔄 v5 다시 유도(52번 · ACT1_SPOT 7.598 · 6.532 · 4.343 · 6.948): 이 판(배수 없는 엔진 · 진짜 명단)의 기준선 벌어짐이 0.49 → **1.17%**로 커져
+ *    「5배」(5.85%)가 buff를 뺀 판(5.63%)을 못 가름 — 비율이 아니라 **잡음 대비 넓어짐**으로 옮김: 두 자리 평균 차의 잡음 σ ≈ 0.54%p
+ *    (자리마다 9,000판 · 판 SD ≈ 0.9 · 평균 2.5) → buff를 빼면 벌어짐이 기준선보다 **7σ(3.8%p) 넘게** 넓어짐(실측 +4.46%p) · 평균 −30% · 공격수 가장 낮음 */
+const BUFF_WIDEN = 3.8, BUFF_DROP = 0.30;
 const NPOS_BAND = 5;    // % — R-1 (실측 2.4 · 2.5 · 3.3% · 표본 2만 4천 경기/칸)
 /* 🔄 v2 다시 유도(39번 §1 · 30번 v2) — 27번 규칙(최소 1 · 상한 4 · 간격 15)이 경기당 판을 2.3~2.8로 눌러 사슬의 **크기**가 줄었어요.
  *    C-1 실측(공통 난수 · 기준 시드 셋 5000 · 6000 · 7000): 80이면 −0.34 · −0.37 · −0.81% · 30이면 +0.20 · +0.66 · +0.16% —
@@ -51,8 +54,9 @@ const MUT_E = {
 };
 const MUT_S = {
   NPOS_FLAT: [[/N_POS: \{ fw: [\d.]+, wg: [\d.]+, mf: [\d.]+, df: [\d.]+ \},/, "N_POS: { fw: 55, wg: 55, mf: 55, df: 55 },"]],
-  WCS: [[/const raw = \(Number\(rec\.g\) \|\| 0\) \* ax\.g \+ \(Number\(rec\.a\) \|\| 0\) \* ax\.a \+ \(Number\(rec\.d\) \|\| 0\) \* ax\.d;/,
-    "const raw = (Number(rec.g) || 0) * ax.g + (Number(rec.a) || 0) * ax.a + (Number(rec.d) || 0) * ax.d + (Number(rec.cs) || 0) * 0.5;"]],
+  /* 🔄 v5: 기록은 경기마다 `gameScore` — 무실점 항을 그 줄에 넣음 */
+  WCS: [[/\(Number\(x\.a\) \|\| 0\) \* w\.a \+ \(Number\(x\.d\) \|\| 0\) \* w\.d\); \};/,
+    "(Number(x.a) || 0) * w.a + (Number(x.d) || 0) * w.d + (x.ga === 0 ? 0.5 : 0)); };"]],
 };
 {
   const bad = mutsOK(MUT_E).concat(mutsOKIn(WSRC, MUT_W, "world.js"), mutsOKIn(SSRC, MUT_S, "sheet.js"));
@@ -81,16 +85,16 @@ const fmt = (o, d) => POS.map((p) => `${p} ${o[p].toFixed(d || 3)}`).join(" · "
 function recProbe(E, X, SH, ab, W, M) {
   const out = {};
   for (const pos of POS) {
-    let g = 0, a = 0, d = 0, n = 0;
+    const games = [];   // 🔄 v5(J19 · 51번 v4-3): 기록 칸은 `S.games[]`의 경기마다 점수 평균 — 경기 줄로 넣음(선 자리 = 등록 포지션)
     for (let w = 0; w < W; w++) {
       const S = { pos, name: "나", stats: Object.fromEntries(K6.map((k) => [k, ab])), world: X.create(3000 + w, pos, "m") };
       E._t.seed(91 + w * 17); E._t.skill = 0.5;
       for (let i = 0; i < M; i++) {
         const r = E._t.playMatch({ xi: X.ourXI(S), teamStr: 58, oppStr: [52, 55, 58, 61, 66][i % 5], condition: 51 });
-        g += r.myGoals; a += r.assists; d += r.defense; n += 1;
+        games.push({ t: "L", g: r.myGoals, a: r.assists, d: r.defense, ga: r.oppGoals });
       }
     }
-    const sheet = SH.compute({ pos, stats: Object.fromEntries(K6.map((k) => [k, ab])), record: { apps: n, g, a, d, cs: 0, sN: 0 }, world: { cup: {} }, trust: 0 }, true);
+    const sheet = SH.compute({ pos, stats: Object.fromEntries(K6.map((k) => [k, ab])), record: { apps: games.length }, games, world: { cup: {} }, trust: 0 }, true);
     out[pos] = sheet.cols.find((c) => c.k === "record").v;
   }
   return out;
@@ -108,7 +112,7 @@ function recProbe(E, X, SH, ab, W, M) {
   const a2 = spotProbe(E, XN, 1000, 300, 30);
   const d2 = devOf(a2);
   const minPos = POS.slice().sort((p, q) => a2[p] - a2[q])[0];
-  check(d2.max > BUFF_SPREAD_X * d1.max && d2.mean < (1 - BUFF_DROP) * d1.mean && minPos === "fw", `A-2. 🧪 \`buff\`를 빼면 → 벌어짐 ${d1.max.toFixed(2)}% → ${d2.max.toFixed(2)}%(> ${BUFF_SPREAD_X}배) · 평균 ${d1.mean.toFixed(2)} → ${d2.mean.toFixed(2)}(−${((1 - d2.mean / d1.mean) * 100).toFixed(0)}% · > ${BUFF_DROP * 100}%) · **공격수가 가장 먼저 무너진다**(가장 낮은 자리 ${minPos}) — ${fmt(a2)}`);
+  check(d2.max - d1.max > BUFF_WIDEN && d2.mean < (1 - BUFF_DROP) * d1.mean && minPos === "fw", `A-2. 🧪 \`buff\`를 빼면 → 벌어짐 ${d1.max.toFixed(2)}% → ${d2.max.toFixed(2)}%(+${(d2.max - d1.max).toFixed(2)}%p > ${BUFF_WIDEN}%p = 7σ) · 평균 ${d1.mean.toFixed(2)} → ${d2.mean.toFixed(2)}(−${((1 - d2.mean / d1.mean) * 100).toFixed(0)}% · > ${BUFF_DROP * 100}%) · **공격수가 가장 먼저 무너진다**(가장 낮은 자리 ${minPos}) — ${fmt(a2)}`);
 
   /* ══════════ C-1 — 사슬의 머리 ══════════ */
   async function chain(engineMuts) {
@@ -143,8 +147,10 @@ function recProbe(E, X, SH, ab, W, M) {
   }
   {
     /* 🔒 기록 칸이 **상한(40) 밑**인 판이어야 움직임을 볼 수 있어요 — 상한에 붙은 판은 무엇을 넣어도 40이라 R-2가 공짜로 참이 됩니다 */
-    const S0 = { pos: "df", stats: Object.fromEntries(K6.map((k) => [k, 60])), record: { apps: 14, g: 1, a: 2, d: 8, cs: 0, sN: 0 }, world: { cup: {} }, trust: 0 };
-    const vOf = (SHx, cs) => SHx.compute(Object.assign({}, S0, { record: Object.assign({}, S0.record, { cs }) }), true).cols.find((c) => c.k === "record").v;
+    /* 🔄 v5: 경기 줄 14개(골 1 · 도움 2 · 막음 8을 나눠 둠) — 무실점 수만 0 · 3 · 7 · 14로 바꿈(`ga`) */
+    const base = Array.from({ length: 14 }, (_, i) => ({ t: "L", g: i === 0 ? 1 : 0, a: i < 2 ? 1 : 0, d: i < 8 ? 1 : 0, ga: 1 }));
+    const S0 = { pos: "df", stats: Object.fromEntries(K6.map((k) => [k, 60])), record: { apps: 14 }, world: { cup: {} }, trust: 0 };
+    const vOf = (SHx, cs) => SHx.compute(Object.assign({}, S0, { games: base.map((x, i) => Object.assign({}, x, { ga: i < cs ? 0 : 1 })) }), true).cols.find((c) => c.k === "record").v;
     const same = [0, 3, 7, 14].map((cs) => vOf(SH, cs));
     check(same.every((v) => v === same[0]) && same[0] < 40, `R-2. ⛓️ \`w_cs\` = 0 — 무실점 수만 0 · 3 · 7 · 14로 바꿔도 기록 칸이 ${same.join(" · ")} (한 톨도 안 움직임 · 상한 40 밑의 판)`);
     const SHw = sheetOf(apply(SSRC, MUT_S.WCS));

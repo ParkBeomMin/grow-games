@@ -498,15 +498,24 @@ window.WingerEngine = (() => {
     const them0 = c.oppStr == null ? us0 : c.oppStr;
     /* 전력만 봐요 — 내 능력치는 STEP 3(pMe)과 sc()에 이미 실려 있어요.
      * 여기에 또 얹으면 이중 계상입니다. */
-    const atkW = us0 / (us0 + them0);
-    const defW = them0 / (them0 + us0);
+    /* 🧩 포메이션(48번 §2-2 · §2-3 · 52번) — `form = { fa, fd, fa2, fd2, m, m2 }` · 없으면 옛 식과 비트 같음 */
+    const F = c.form || null;
+    const atkW = F ? (us0 * F.fa * F.m) / (us0 * F.fa * F.m + them0 * F.fd2) : us0 / (us0 + them0);
+    const defW = F ? (them0 * F.fa2 * F.m2) / (them0 * F.fa2 * F.m2 + us0 * F.fd) : them0 / (them0 + us0);
+    const onMin = c.onMin || 0;   // 🔁 교체 투입 분(48번 §12-3) — 그 전 카드는 내 후보에서 뺌 · 없으면 0(옛 판)
     const cond = c.condition;
 
     let n = randInt(N_MIN, N_MAX);
     const mins = minutesFor(n);
     const scenes = []; for (let i = 0; i < n; i++) scenes.push(sceneOf(atkW, defW));   // 27번 — 장면 종류를 킥오프에(스코어를 안 봐서 분포가 같음)
-    let slot = 0; for (let i = Math.min(6, n); i >= 1; i--) if (scenes[i - 1] !== "neu") { slot = i; break; }   // ⓐ 최소 1번 자리 = 1~6장의 마지막 장면
-    if (!slot) { scenes[5] = rnd() < atkW ? "atk" : "def"; slot = 6; }   // 1~6장이 모두 중립일 때만(약 0.05%) 6장을 장면으로
+    let slot = 0;
+    if (!onMin) {
+      for (let i = Math.min(6, n); i >= 1; i--) if (scenes[i - 1] !== "neu") { slot = i; break; }   // ⓐ 최소 1번 자리 = 1~6장의 마지막 장면
+      if (!slot) { scenes[5] = rnd() < atkW ? "atk" : "def"; slot = 6; }   // 1~6장이 모두 중립일 때만(약 0.05%) 6장을 장면으로
+    } else {   // 교체 경기 — 내가 뛴 구간(투입 뒤)의 마지막 장면
+      for (let i = n; i >= 1; i--) if (mins[i - 1] >= onMin && scenes[i - 1] !== "neu") { slot = i; break; }
+      if (!slot) { slot = n; scenes[n - 1] = rnd() < atkW ? "atk" : "def"; }
+    }
     const hits = new Map();                    // 그 경기에 각자 넣은 골 (fatigue용)
     const cards = [];
     let k = 0, us = 0, them = 0, lastMin = 90;
@@ -532,7 +541,7 @@ window.WingerEngine = (() => {
       cards.push(card);
       /* |스코어차| ≥ 3이면 6장에서 끊어요 — 이미 끝난 경기예요.
        * 이미 6장을 넘겼으면 지금 카드에서 끊습니다. */
-      if (Math.abs(us - them) >= GOAL_GAP) n = Math.min(n, Math.max(N_MIN, card.k));
+      if (Math.abs(us - them) >= GOAL_GAP && !onMin) n = Math.min(n, Math.max(N_MIN, card.k));   // 교체 경기는 6장 끊기 없음(15번 F8)
       return card;
     }
 
@@ -599,7 +608,7 @@ window.WingerEngine = (() => {
     function pickMine(kind, card) {
       const me = xi.find((x) => x.me);
       if (me && mineCards === 0 && card.k === slot) return { who: me };
-      const off = mineCards >= MOMENT_CAP || card.min - lastMine < MOMENT_GAP;
+      const off = mineCards >= MOMENT_CAP || card.min - lastMine < MOMENT_GAP || (onMin && card.min < onMin);
       if (!off) return pickActor(xi, kind, hits, true);
       const pool = xi.filter((x) => !x.me);
       return pool.length ? pickActor(pool, kind, hits, false) : pickActor(xi, kind, hits, true);
@@ -818,7 +827,9 @@ window.WingerEngine = (() => {
     for (const x of A) x._ab = null;
     for (const x of B) x._ab = null;
     const sA = c.strA == null ? 70 : c.strA, sB = c.strB == null ? 70 : c.strB;
-    const atkW = sA / (sA + sB), defW = sB / (sA + sB);
+    const G = c.form || null;   // 🧩 남의 경기도 같은 식 — `{ faA, fdA, faB, fdB, mA, mB }` · 없으면 옛 식
+    const atkW = G ? (sA * G.faA * G.mA) / (sA * G.faA * G.mA + sB * G.fdB) : sA / (sA + sB);
+    const defW = G ? (sB * G.faB * G.mB) / (sB * G.faB * G.mB + sA * G.fdA) : sB / (sA + sB);
     let n = randInt(N_MIN, N_MAX);
     const hitsA = new Map(), hitsB = new Map();
     const goalsA = [], goalsB = [];

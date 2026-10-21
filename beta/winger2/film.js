@@ -21,6 +21,20 @@ window.W2Film = (() => {
   /* 🗓️ 주 → 달(12번 §5-1 달력: 3월 1~5 · 4월 6~9 · 5월 10~13 · 6월 14~16 · 7월 17~20 · 8월 21~24 ·
    *    9월 25~28 · 10월 29~33 · 11월 34~36) */
   const MONTHS = [[3, 1], [4, 6], [5, 10], [6, 14], [7, 17], [8, 21], [9, 25], [10, 29], [11, 34]];
+  /* 🎯🔁 선 자리 · 라이벌 한 줄씩(52번 · 50번 §12-1 · §6) — 등록 포지션 밖으로 뛴 경기 · 후반 교체 · 바뀐 팀 내 라이벌 */
+  const POS_KO = { fw: "공격수", wg: "윙어", mf: "미드필더", df: "수비수" };
+  function seatLines(S) {
+    const out = [];
+    const offi = (Array.isArray(S.games) ? S.games : []).filter((x) => x && x.t !== "T");
+    const away = {};
+    for (const x of offi) if (x.at && x.at !== S.pos) away[x.at] = (away[x.at] || 0) + 1;
+    const subs = offi.filter((x) => x.pick === 3).length;
+    const ks = Object.keys(away);
+    if (ks.length || subs) out.push(`🎯 ${ks.map((p) => `${POS_KO[p]}로 뛴 경기 ${away[p]}`).join(" · ")}${ks.length && subs ? " · " : ""}${subs ? `후반 교체 ${subs}` : ""}`);
+    const tl = S.rivalLog && Array.isArray(S.rivalLog.team) ? S.rivalLog.team : [];
+    if (tl.length) out.push(`🔁 팀 내 라이벌 ${tl.length > 1 ? `${tl.length - 1}번 바뀜 — 마지막은 ${tl[tl.length - 1].name}` : `— ${tl[0].name}`}`);
+    return out;
+  }
   function dateOf(w) {
     let m = MONTHS[0];
     for (const x of MONTHS) if (w >= x[1]) m = x;
@@ -81,7 +95,8 @@ window.W2Film = (() => {
         care: { games: num(skd.games), avg: num(skd.avg) },
         lines: [`훈련 ${Number(S.trainWeeks) || 0}주(🦶 약발 ${Number(S.weakWeeks) || 0}주) · 휴식 ${Number(S.restWeeks) || 0}주`,
           sk ? `${sk.k === "care" ? "🫀" : "🎮"} ${sk.note}` : "🫀 평가서 전이에요"]
-          .concat((Number(S.weak) || 0) >= 2 ? ["🦶 약발 2단계 — 양발로 졸업해요"] : []) },   // 29번 §3-6 (가)
+          .concat((Number(S.weak) || 0) >= 2 ? ["🦶 약발 2단계 — 양발로 졸업해요"] : [])   // 29번 §3-6 (가)
+          .concat(seatLines(S)) },
       { k: "choice", title: "🧭 선택의 기록", bg: "bg-locker",
         style: A ? A.style(S) : null, best: A ? A.bestMove(S) : null, luck: A ? A.luck(S) : null },
       { k: "story", title: "📖 이야기", bg: "bg-locker",

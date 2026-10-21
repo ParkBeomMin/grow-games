@@ -4,7 +4,7 @@
  *         (포지션 넷 × 전력 58:58 · 58:78(약) · 78:58(강 · 대승으로 일찍 끊김) · 능력치 40 · 56 · 90 · 컨디션 30 · 51 · 80)
  *   MC-2  보통 칸(58:58 · 능력치 56 · 컨디션 51 · 1막 buff)의 경기당 판 **2~3**(15번 J · 27번 R2 ②)
  *   MC-3  진짜 1막 한 판(리그 · 대회 · 연습경기) — 판 0번인 경기 0 · 상한 · 간격 위반 0
- *   MC-4  엔진 바뀐 줄 = 27번 §3-3 표 아홉 자리(새 11 · 바꿈 4 — `pickMine` 줄 나눔은 engineer 몫) + 29번 `autoP` 한 줄 — **그 밖 0줄**
+ *   MC-4  엔진 바뀐 줄 = 27번 §3-3 표 아홉 자리(새 11 · 바꿈 4 — `pickMine` 줄 나눔은 engineer 몫) + 29번 `autoP` 한 줄 + v5 52번 §2(`form` 배수 · `onMin` 교체 · 교체 경기 끊기 없음) — **그 밖 0줄**
  *         (`git diff cc01d2e -- engine.js` — v2 이전 엔진 원본과의 비교 · 주석 · 빈 줄을 뺀 줄이 모두 허용 목록에 · 허용 목록 항목이 모두 나타남 · 판정 함수 0줄)
  *   + 변이: `MOMENT_CAP` 99 · `MOMENT_GAP` 0 · 최소 1번 줄을 지움(27번 §7-0 변이 칸 그대로)
  * 🔒 상한 4 · 간격 15 · 2~3은 27번 · 15번 J의 숫자 — 박은 값(엔진 상수를 읽지 않음)
@@ -82,14 +82,30 @@ function mc1(E, n) {
   const ALLOW = [
     [/^\+\s*const MOMENT_CAP = 4, MOMENT_GAP = 15;/, "1 계수"],
     [/^\+\s*const scenes = \[\]; for \(let i = 0; i < n; i\+\+\) scenes\.push\(sceneOf\(atkW, defW\)\);/, "2 장면 미리"],
-    [/^\+\s*let slot = 0; for \(let i = Math\.min\(6, n\); i >= 1; i--\)/, "3 최소 1번 자리"],
+    /* 3 · 4 — v5에서 교체 경기 갈래(아래 v5-c) 안으로 들어가 줄이 나뉨(뜻 그대로) */
+    [/^\+\s*(let slot = 0; )?for \(let i = Math\.min\(6, n\); i >= 1; i--\)/, "3 최소 1번 자리"],
     [/^\+\s*if \(!slot\) \{ scenes\[5\] = rnd\(\) < atkW \? "atk" : "def"; slot = 6; \}/, "4 빈틈"],
     [/^-\s*let mineCards = 0, mineSuccess = 0;$/, "5 −"], [/^\+\s*let mineCards = 0, mineSuccess = 0, lastMine = -Infinity;$/, "5 +"],
     [/^-\s*const scene = sceneOf\(atkW, defW\);$/, "6 −"], [/^\+\s*const scene = scenes\[k - 1\];$/, "6 +"],
     [/^-\s*const \{ who \} = pickActor\(xi, (kind|"defend"), hits, true\);/, "7 −"], [/^\+\s*const \{ who \} = pickMine\((kind|"defend"), card\);/, "7 +"],
-    [/^\+\s*(function pickMine\(kind, card\) \{|const me = xi\.find\(\(x\) => x\.me\);|if \(me && mineCards === 0 && card\.k === slot\) return \{ who: me \};|const off = mineCards >= MOMENT_CAP \|\| card\.min - lastMine < MOMENT_GAP;|if \(!off\) return pickActor\(xi, kind, hits, true\);|const pool = xi\.filter\(\(x\) => !x\.me\);|return pool\.length \? pickActor\(pool, kind, hits, false\) : pickActor\(xi, kind, hits, true\);|\})$/, "8 pickMine"],
+    [/^\+\s*(function pickMine\(kind, card\) \{|const me = xi\.find\(\(x\) => x\.me\);|if \(me && mineCards === 0 && card\.k === slot\) return \{ who: me \};|const off = mineCards >= MOMENT_CAP \|\| card\.min - lastMine < MOMENT_GAP( \|\| \(onMin && card\.min < onMin\))?;|if \(!off\) return pickActor\(xi, kind, hits, true\);|const pool = xi\.filter\(\(x\) => !x\.me\);|return pool\.length \? pickActor\(pool, kind, hits, false\) : pickActor\(xi, kind, hits, true\);|\})$/, "8 pickMine"],
     [/^-\s*mineCards \+= 1;$/, "9 −"], [/^\+\s*mineCards \+= 1; lastMine = card\.min;$/, "9 +"],
     [/^\+\s*autoP: \(kind, ab\) => \(kind === "defend" \? 1 - pConcede\(defW, ab\) : pFinish\(atkW, ab\)\),/, "29 autoP"],
+    /* 🔄 v5(52번 §2 — 엔진 `form` · `onMin`을 엶 · 51번 v4-3 「교체 경기 6장 끊기 없음」) */
+    [/^-\s*const atkW = us0 \/ \(us0 \+ them0\);$/, "v5-a 내 경기 배수 −"], [/^-\s*const defW = them0 \/ \(them0 \+ us0\);$/, "v5-a 내 경기 배수 −"],
+    [/^\+\s*const F = c\.form \|\| null;$/, "v5-a form"],
+    [/^\+\s*const atkW = F \? \(us0 \* F\.fa \* F\.m\) \/ \(us0 \* F\.fa \* F\.m \+ them0 \* F\.fd2\) : us0 \/ \(us0 \+ them0\);$/, "v5-a atkW"],
+    [/^\+\s*const defW = F \? \(them0 \* F\.fa2 \* F\.m2\) \/ \(them0 \* F\.fa2 \* F\.m2 \+ us0 \* F\.fd\) : them0 \/ \(them0 \+ us0\);$/, "v5-a defW"],
+    [/^\+\s*const onMin = c\.onMin \|\| 0;/, "v5-b onMin"],
+    [/^\+\s*let slot = 0;$/, "v5-c 갈래"], [/^\+\s*if \(!onMin\) \{$/, "v5-c 갈래"], [/^\+\s*\} else \{/, "v5-c 갈래"],
+    [/^\+\s*for \(let i = n; i >= 1; i--\) if \(mins\[i - 1\] >= onMin && scenes\[i - 1\] !== "neu"\) \{ slot = i; break; \}$/, "v5-c 교체 뒤 마지막 장면"],
+    [/^\+\s*if \(!slot\) \{ slot = n; scenes\[n - 1\] = rnd\(\) < atkW \? "atk" : "def"; \}$/, "v5-c 교체 빈틈"],
+    [/^-\s*if \(Math\.abs\(us - them\) >= GOAL_GAP\) n = Math\.min\(n, Math\.max\(N_MIN, card\.k\)\);$/, "v5-d 끊기 −"],
+    [/^\+\s*if \(Math\.abs\(us - them\) >= GOAL_GAP && !onMin\) n = Math\.min\(n, Math\.max\(N_MIN, card\.k\)\);/, "v5-d 교체 경기 끊기 없음"],
+    [/^-\s*const atkW = sA \/ \(sA \+ sB\), defW = sB \/ \(sA \+ sB\);$/, "v5-e 남의 경기 −"],
+    [/^\+\s*const G = c\.form \|\| null;/, "v5-e form"],
+    [/^\+\s*const atkW = G \? \(sA \* G\.faA \* G\.mA\) \/ \(sA \* G\.faA \* G\.mA \+ sB \* G\.fdB\) : sA \/ \(sA \+ sB\);$/, "v5-e atkW"],
+    [/^\+\s*const defW = G \? \(sB \* G\.faB \* G\.mB\) \/ \(sB \* G\.faB \* G\.mB \+ sA \* G\.fdA\) : sB \/ \(sA \+ sB\);$/, "v5-e defW"],
   ];
   const mc4 = (diff) => {
     const lines = diff.split("\n").filter((l) => /^[+-]/.test(l) && !/^(\+\+\+|---)/.test(l))

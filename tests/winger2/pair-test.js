@@ -6,6 +6,9 @@
  *       그 칸을 옛 「넘긴다」로 바꿈 · zero-test와 같은 손 · 46번 §4 #1)으로 잼. 🌿 확정의 🫀 몫은 컨디션을 움직여 「밖」이라 안 받음
  *       능력치 판돈이 걸린 도전은 둘 다 안 걸어요(그건 선택이 **직접** 움직이는 칸이라 「밖」이 아니에요).
  *       → 능력치 · 기록 · 경기 · 테스트 · 평가서 칸 다섯 · 합계 · 구간이 비트 같음(🤝 · 이야기 결말 · 엔딩 문만 달라도 됨)
+ *       🔄 v5(52번 · 51번 v4-3): 선발 점수에 🤝(`W_TRUST` 0.5)이 들어가 「🤝만 바꾼 선택」도 선발(①②③ · 선 자리)을 바꿔요(구조).
+ *       그래서 R8은 **선발 판단의 🤝 몫을 0으로 둔 판**(검사 설정 — 구현 파일은 그대로)에서 「🤝이 성적에 닿는 길은 선발 판단 하나뿐」을 잼 ·
+ *       R8b(진짜 판): 짝의 선발 기록(경기마다 `at` · `pick.k`)이 같으면 나머지도 비트 같음 · 갈린 짝이 있어야(🤝 → 선발 길이 살아 있음)
  *   R9  🎯 **테스트만** — 11월 테스트 주의 손만 0.95 ↔ 0.05(나머지 주는 같은 손)
  *       → 능력치 · 공식 기록이 비트 같음 · A 판에 B 판 테스트만 갈아 끼우면 B 평가서와 비트 같음 · 보이는 테스트 밖 칸은 0.1 안
  *       (10-03 결정 ①의 최대 나머지법 — 남는 0.1이 칸 사이를 옮겨 갈 수 있어 「보이는 값 비트 같음」 대신 이 셋으로)
@@ -20,6 +23,9 @@ const { boot, runAct } = require("./_act.js");
 
 let fail = 0;
 const check = (ok, msg) => { console.log(`${ok ? "✅" : "❌"} ${msg}`); if (!ok) fail += 1; };
+/* 🔧 검사 설정(변이 아님) — R8은 선발 점수의 🤝 몫 0인 판에서 */
+const NO_TRUST_PICK = { "world.js": [[/W_TRUST: 0\.5,/, "W_TRUST: 0,"]] };
+const joinM = (...ms) => { const o = {}; for (const m of ms) for (const [f, l] of Object.entries(m || {})) o[f] = (o[f] || []).concat(l); return o; };
 const MUT = {
   /* R8 — 약속을 지키면 컨디션 +5(선택의 효과가 🤝 밖으로 샘) */
   PROM_COND: { "events.js": [[/if \(ok\) S\.promKept = \(Number\(S\.promKept\) \|\| 0\) \+ 1;/, "if (ok) { S.promKept = (Number(S.promKept) || 0) + 1; S.cond = Math.min(100, S.cond + 5); }"]] },
@@ -76,8 +82,8 @@ async function one(seed, opt) {
     const bad = [];
     let trustDiff = 0, cards = 0, dead = 0;
     for (const seed of SEEDS) {
-      const a = await one(seed, { auto: true, muts, policy: { card: SAFE } });
-      const b = await one(seed, { auto: true, muts, policy: { card: TRUSTY } });
+      const a = await one(seed, { auto: true, muts: joinM(NO_TRUST_PICK, muts), policy: { card: SAFE } });
+      const b = await one(seed, { auto: true, muts: joinM(NO_TRUST_PICK, muts), policy: { card: TRUSTY } });
       if (!a.done || !b.done) { dead += 1; continue; }
       cards += b.S.evLog.filter((l) => l.k === "promise" || l.k === "try" || l.k === "cert").length;
       if (a.S.trust !== b.S.trust) trustDiff += 1;
@@ -91,6 +97,22 @@ async function one(seed, opt) {
     `R8. 🎲 선택만 바꾼 짝 ${SEEDS.length}쌍 — 능력치 · 공식 기록 · 경기 · 테스트 · 평가서 칸 · 합계 · 구간이 비트 같다 (🤝 판돈 도전 · 약속을 건 수 ${b8.cards} · 🤝이 갈린 짝 ${b8.trustDiff} · 어긋남 ${b8.bad.length})`
     + (b8.bad.length ? `\n     🔴 ${b8.bad.slice(0, 4).join(" · ")}` : ""));
 
+  /* ══════════ R8b — 진짜 판(🤝 → 선발) ══════════ */
+  {
+    const picks = (S) => JSON.stringify((S.games || []).filter((g) => g.t !== "T").map((g) => [g.at || null, g.pick == null ? null : g.pick]));
+    let same = 0, diff = 0;
+    const bad = [];
+    for (const seed of SEEDS) {
+      const a = await one(seed, { auto: true, policy: { card: SAFE } });
+      const b = await one(seed, { auto: true, policy: { card: TRUSTY } });
+      if (picks(a.S) === picks(b.S)) {
+        same += 1;
+        const A = core(a.S), B = core(b.S);
+        for (const k of Object.keys(A)) if (JSON.stringify(A[k]) !== JSON.stringify(B[k])) bad.push(`#${seed} ${k}`);
+      } else diff += 1;
+    }
+    check(bad.length === 0 && diff > 0, `R8b. 🎯 진짜 판 — 선발 기록이 같은 짝 ${same}쌍은 나머지도 비트 같음 · 🤝이 선발을 바꾼 짝 ${diff}쌍(길이 살아 있음 · 52번)` + (bad.length ? `\n     🔴 ${bad.slice(0, 4).join(" · ")}` : ""));
+  }
   /* ══════════ R9 ══════════ */
   /* R9 — 25번 §8(10-03) 결정 ① 뒤: 칸 값은 **최대 나머지법**으로 0.1을 나눠요. 테스트 칸의 원래 값이 바뀌면 남는 0.1이
    *    다른 칸으로 옮겨 갈 수 있어서(그 칸의 원래 값은 그대로) 「보이는 칸 값의 비트 같음」은 결정과 함께 못 서요.

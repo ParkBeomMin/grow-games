@@ -4,7 +4,8 @@
  *     cfg  = { xi, teamStr, oppStr, condition, homeName, oppName, myName, foot: "L"|"R", keeper,
  *              pos, chibi, promiseLine, scout, seed, auto, rate(result) → 평점,
  *              weak(약발 단계 0~2), rivalAb(📍 민재 실력), sitRng(상황 난수원 — 균등 [0,1) 함수),
- *              fast(⏩로 시작), still(움직임 줄이기), wide(♿ 고를 시간 넉넉히) }
+ *              fast(⏩로 시작), still(움직임 줄이기), wide(♿ 고를 시간 넉넉히),
+ *              form({ us, them, why, lines, cfg: 엔진 배수 } · 52번), onMin(③ 교체 투입 분), pick(감독의 판단 — info로 그대로) }
  *            `still` · `wide`는 참 · 거짓이나 함수 — 함수면 **판을 열 때마다** 읽어요(⚙️ 「다음 판부터」 · 「바로」)
  *            `pos`("fw"·"wg"·"mf"·"df")는 화면에만 — 판에서 「나」 말이 서는 집 자리(없으면 윙어 자리)
  *     info = 엔진 result() + { rating, promise: { ok } | null, saved, first, boards }
@@ -99,6 +100,9 @@ window.WingerLive = (() => {
       /* 📋 약속은 **그 경기의 내 첫 순간**(27번 §5-1). 첫 순간이 없으면(최소 1번 규칙 뒤엔 안 생김) 판정 없음 */
       promise: cfg.promiseLine && first != null ? { ok: first === 1 } : null,
       saved: savedOf(res.cards), first, boards,
+      /* 🧩 52번 §2 — 엔진에 넘긴 배수 그대로 · 감독의 판단(부르는 쪽이 정해 넘김 · 없으면 null) */
+      form: cfg.form ? Object.assign({ us: cfg.form.us, them: cfg.form.them, why: cfg.form.why || null, lines: cfg.form.lines || [] }, cfg.form.cfg) : null,
+      pick: cfg.pick || null,
     });
   }
 
@@ -187,6 +191,7 @@ window.WingerLive = (() => {
     const m = E.createMatch({
       xi: c.xi, homeName: c.homeName, oppName: c.oppName,
       teamStr: c.teamStr, oppStr: c.oppStr, condition: c.condition,
+      form: c.form && c.form.cfg ? c.form.cfg : null, onMin: Math.max(0, Math.floor(Number(c.onMin)) || 0),   // 🧩 · 🔁(52번 — 없으면 옛 판)
     });
     const Scene = window.W2Scene;
     if (!host || !Scene || !Scene.mount) return headless(m, c, E);
@@ -202,6 +207,9 @@ window.WingerLive = (() => {
     Scene.mount(sceneEl, {
       home: c.homeName, away: c.oppName, myName, pos: c.pos || null,
       chibi: c.chibi || null, promiseLine: c.promiseLine || null, scout: c.scout || null,
+      /* 🧩 52번 §2 — 포메이션 이름(우리 · 상대) · 판에 서는 나의 자리(`info.pick.at`) · 교체 투입 분(③ · 아니면 0) */
+      form: c.form ? { us: c.form.us, them: c.form.them } : null, at: (c.pick && c.pick.at) || c.pos || null,
+      onMin: Math.max(0, Math.floor(Number(c.onMin)) || 0),
     });
     const gen = Scene.gen ? Scene.gen() : null;
     /* 🤖 자동 진행 · ⏩ 「빨리 감기로 시작」(설정)이면 연출만 짧게 — 판정 · 판은 그대로(29번 §4-1) */

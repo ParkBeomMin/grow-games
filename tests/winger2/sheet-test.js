@@ -6,7 +6,7 @@
  *   P-2  ⚽ 기록 칸은 **경기당** — 같은 경기당 기록이면 경기 수가 두 배여도 칸이 같다(누적으로 되돌리면 🏆 대회 운이 기록 칸에 새요)
  *   P-3  🏋️ 몸 점수표(v2 · 34번 R15 둘째 값 · 38번 §5) — **88 위는 6.10으로 평평** · 77 = 5.06 · 문턱 사이는 선으로 · 줄지 않음
  *   P-4  칸은 **다섯**(몸 · 관리 · 기록 · 무대 · 테스트 — v3 `skill` → `care` · 43번 §4 #4 솜씨 칸 퇴역) — **추천서 칸 없음**(22번 R8 둘째 값)
- *   P-5  📏 구간 문턱 **67.4 · 60.3 · 53.7**(47번 §1 · 46번 §2 — 화면 한 자리 · 박은 값) · 문턱은 그 구간 · **0.1 아래**는 한 칸 아래
+ *   P-5  📏 구간 문턱 **67.0 · 60.0 · 53.4**(15번 끝 · 51번 v5 — 화면 한 자리 · 박은 값) · 문턱은 그 구간 · **0.1 아래**는 한 칸 아래
  *   P-6  📋 중간 평가서는 **그 시점의 사실만** — 17주엔 무대 · 테스트 0(대회 · 테스트 전) · 34주엔 무대가 대회 결과 · 테스트 0 · 다시 열어도 같은 장(얼림)
  *   P-7  ✉️ 문 · 엔딩 규칙표(v2 · 29번 §3-2 P1 (가)) — 문은 **따라간 가족 이야기**에 붙음(🏭 아버지 「중」 · 🎓 엄마 「상」 · ✉️ 할머니 「최상」 · 외형과 무관)
  *        · **그 구간에서만** 나오고 **깃발을 세웠을 때만** 열림 · 가족 이야기가 없으면 문 0 · 정확히 한 엔딩 · 숨은 굴림 0
@@ -26,15 +26,15 @@ const check = (ok, msg) => { console.log(`${ok ? "✅" : "❌"} ${msg}`); if (!o
 const SSRC = fs.readFileSync(path.join(PAGE_DIR, "sheet.js"), "utf8");
 const sheetOf = (src) => new Function("window", `${src}\nreturn window.W2Sheet;`)({});
 const K6 = ["shoot", "pass", "dribble", "defense", "stamina", "speed"];
-const T = { top: 67.4, high: 60.3, mid: 53.7 };   // 🔒 47번 §1 · 46번 §2(새 기준 판 「늘 확정」 · 화면 한 자리) · 박은 값
+const T = { top: 67.0, high: 60.0, mid: 53.4 };   // 🔒 15번 끝 · 51번 「v5 — 이어서」(구현 판 66.95 · 60.01 · 53.44를 화면 한 자리로) · 박은 값
 const COLS = ["body", "care", "record", "stage", "test"];
 const CARE = (avg, n) => (n > 0 ? 10 * Math.min(1, Math.max(0, (avg - 20) / 50)) : 0);   // 🔒 44번 §1 산식 — 박은 꼴(λ 1)
 
 const MUT_S = {
-  CUMUL: [[/const perGame = games > 0 \? raw \/ games : 0;/, "const perGame = games > 0 ? raw / 14 : 0;"]],
+  CUMUL: [[/const perGame = games > 0 \? scoreSum \/ games : 0;/, "const perGame = games > 0 ? scoreSum / 14 : 0;"]],   // 🔄 v5: 경기 점수의 합(J19)
   BODYUP: [[/\[77, 5\.06\], \[88, 6\.10\]\]/, "[77, 5.06], [88, 6.10], [100, 6.6]]"]],
   RECO: [[/ {4}const tier = final \? tierOf\(total\) : null;/, '    cols.push({ k: "reco", label: "✉️ 추천서", v: 0, max: 5, note: "" });\n    const tier = final ? tierOf(total) : null;']],
-  TIER: [[/T: \{ top: 67\.4, high: 60\.3, mid: 53\.7 \},/, "T: { top: 67.4, high: 60.0, mid: 53.7 },"]],
+  TIER: [[/T: \{ top: 67\.0, high: 60\.0, mid: 53\.4 \},/, "T: { top: 67.0, high: 59.7, mid: 53.4 },"]],
   SPAN60: [[/CARE_LO: 20, CARE_SPAN: 50,/, "CARE_LO: 20, CARE_SPAN: 60,"]],
   SKILLBACK: [[/\{ k: "care", label: "🫀 관리"/, '{ k: "skill", label: "🎮 솜씨"']],
   MIDTIER: [[/const tier = final \? tierOf\(total\) : null;/, "const tier = tierOf(total);"]],
@@ -51,6 +51,8 @@ const MUT_G = {
   check(bad.length === 0, `0. 변이 정규식이 지금 소스에 전부 걸린다` + (bad.length ? bad.map((b) => `\n       · ${b}`).join("") : ""));
 }
 const apply = (src, muts) => muts.reduce((s, [re, rep]) => s.replace(re, rep), src);
+/* 경기 줄 n개에 골 · 도움 · 막음을 앞에서부터 나눠 담음 */
+const rows = (n, g, a, d) => Array.from({ length: n }, (_, i) => ({ t: "L", g: i < g ? 1 : 0, a: i < a ? 1 : 0, d: i < d ? 1 : 0 }));
 const mkS = (o) => Object.assign({ pos: "wg", preset: "jiho", gender: "m", trust: 0, stats: Object.fromEntries(K6.map((k) => [k, 60])),
   record: { apps: 14, g: 3, a: 4, d: 6, cs: 2, sN: 0, sSum: 0 }, world: { cup: { done: false } }, leagueChamp: false, test: null, story: {} }, o);
 
@@ -60,8 +62,10 @@ const mkS = (o) => Object.assign({ pos: "wg", preset: "jiho", gender: "m", trust
   const p2 = (Sh) => {
     const bad = [];
     for (const pos of ["fw", "wg", "mf", "df"]) for (const [g, a, d] of [[3, 2, 4], [1, 5, 9], [6, 1, 2]]) {
-      const one = Sh.compute(mkS({ pos, record: { apps: 12, g, a, d, sN: 0 } }), true).cols.find((c) => c.k === "record").v;
-      const two = Sh.compute(mkS({ pos, record: { apps: 24, g: 2 * g, a: 2 * a, d: 2 * d, sN: 0 } }), true).cols.find((c) => c.k === "record").v;
+      /* 🔄 v5(J19): 기록 칸은 경기 줄(`S.games[]`)마다의 점수 평균 — 같은 경기당 기록을 경기 줄로 나눠 넣음 */
+      const one = Sh.compute(mkS({ pos, record: { apps: 12 }, games: rows(12, g, a, d) }), true).cols.find((c) => c.k === "record").v;
+      const two = Sh.compute(mkS({ pos, record: { apps: 24 }, games: rows(12, g, a, d).concat(rows(12, g, a, d)) }), true).cols.find((c) => c.k === "record").v;
+      if (one === 0) bad.push(`${pos}: 기록 칸 0 — 재료가 안 닿음`);
       if (Math.abs(one - two) > 1e-9) bad.push(`${pos} ${g}/${a}/${d}: 12경기 ${one} ↔ 24경기 ${two}`);
     }
     return bad;
@@ -112,7 +116,7 @@ const mkS = (o) => Object.assign({ pos: "wg", preset: "jiho", gender: "m", trust
   const p5 = (Sh) => [[T.top, "top"], [down(T.top), "high"], [T.high, "high"], [down(T.high), "mid"], [T.mid, "mid"], [down(T.mid), "low"], [0, "low"], [100, "top"]]
     .every(([v, want]) => Sh.tierOf(v) === want);
   check(p5(SH), `P-5. 📏 구간 문턱 ${T.top} · ${T.high} · ${T.mid}(화면 한 자리) — 문턱은 그 구간 · 0.1 아래(${down(T.top)} · ${down(T.high)} · ${down(T.mid)})는 한 칸 아래`);
-  check(!p5(sheetOf(apply(SSRC, MUT_S.TIER))), `변이-TIER(「상」 문턱을 60.0으로) → P-5가 빨간불`);
+  check(!p5(sheetOf(apply(SSRC, MUT_S.TIER))), `변이-TIER(「상」 문턱을 59.7로) → P-5가 빨간불`);
 
   /* ══════════ P-7 — 문 · 엔딩 규칙표(가족 이야기) ══════════ */
   /* 가족 이야기 sid는 `W2Story.famSid(S)`가 줘요 — 표만 보게 그 자리를 갈아 끼움(`S.__fam`) */

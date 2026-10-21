@@ -167,6 +167,8 @@ window.W2Game = (() => {
       leagueChamp: false, crown: false, q: [],
     };
     ST().start(st);
+    X().upgrade(st);                                   // 🧩🔁 v5 세계(포메이션 · 또래 — 52번)
+    st.rivalLog = { team: [], league: [] };
     return st;
   }
   /* 읽는 쪽 기본값 — 모양이 깨졌으면 null(깨진 세이브를 연 채로 굴리지 않아요) */
@@ -193,6 +195,10 @@ window.W2Game = (() => {
     s.evFlags = Array.isArray(s.evFlags) ? s.evFlags.filter((f) => typeof f === "string") : [];   // 🔖 옛 세이브는 빈 목록
     s.trust = Number(s.trust) || 0;
     s.noOrig = s.noOrig != null ? s.noOrig : s.no;
+    /* 🧩🔁 옛 세이브(v4까지) → v5 세계 한 번: 상대 포메이션 · 리그 10자리 · {rival}(64) → 번호의 1학년 또래 · 내 포지션 또래.
+     *    지난 경기 · 순위표는 다시 안 셈 · 다음 경기부터 새 식(48번 §6 · 50번 §7) — 열 때 알림 한 줄 */
+    if (X().upgrade(s)) s.v5Note = true;
+    if (!s.rivalLog || typeof s.rivalLog !== "object") s.rivalLog = { team: [], league: [] };
     return s;
   }
   function save() {
@@ -728,10 +734,11 @@ window.W2Game = (() => {
       const ri = X().roundOf(w);
       const key = X().KEY.league(ri, 0);
       const head = `🏟️ ${S.world.league.name} ${ri + 1}라운드 · ${o.home ? "홈" : "원정"} — vs ${o.name}${o.ace ? " 🔥" : ""}`;
-      const { info, host } = await playLive(key, { oppName: o.name, oppStr: o.str, head });
+      const { info, host } = await playLive(key, { oppName: o.name, oppStr: o.str, oppForm: o.form, head });
       if (!info) return;
       X().afterOurLeague(S, w, info);                              // 🔒 엔진 난수원을 이어 써요 — 남의 경기보다 먼저
       const others = X().otherLeague(S, w);
+      noteRival("league", X().leagueRival(S));                    // 🏁 리그 라이벌(결과 0 · 바뀐 주만)
       const lines = official(info, { t: "L", opp: o.name });
       S.cond = clamp(S.cond + TUNE.COND_MATCH, 0, 100);
       S.ph += 1; save();
@@ -844,6 +851,7 @@ window.W2Game = (() => {
       const info = await fresh(window.WingerLive.play(host, liveCfg(X().KEY.test, {
         xi: X().testXI(S), teamStr: X().TUNE.TEST_STR, oppStr: X().TUNE.TEST_STR, condition: S.cond,
         homeName: "선발팀 A", oppName: "선발팀 B", keeper: null, promiseLine: null, scout: scoutArt(), rivalAb: null,
+        form: { us: "4-4-2", them: "4-4-2", why: "공개 테스트 — 양쪽 모두 ⚖️ 4-4-2", lines: [], cfg: X().formCfg("4-4-2", "4-4-2") },   // 판단 없음(`pick` null)
         rate: (res) => X().rate(res, S.pos, rr),
       })));
       if (!info) return;
@@ -948,23 +956,53 @@ window.W2Game = (() => {
     }, o);
   }
   /* 📍 {rival}의 실력 — 「같은 장면, {rival}라면」의 q(29번 §2-2) · 엔진 `blendOf`의 같은 자 */
-  const rivalAb = () => { const r = S.world.ours.find((x) => x.role === "rival"); return r ? E().blendOf(X().npc(r)) : null; };
+  /* 📍 「같은 장면, {rival}라면」의 그 사람 — 번호의 1학년 또래의 **그 주** 능력(50번 §4 · 51번 v4-3) */
+  const rivalAb = () => { const r = X().numberRow(S); return r && r.peer ? X().peerA(S, r, S.week) : null; };
+  const lastPickK = () => { for (let i = S.games.length - 1; i >= 0; i--) { const g = S.games[i]; if (g.t !== "T") return g.pick || null; } return null; };
+  const POS_KO = { fw: "공격수", wg: "윙어", mf: "미드필더", df: "수비수" };
+  const PICK_SAY = { 1: "「오늘 {pos} 자리는 너다.」", 2: "「오늘은 {at} 자리에서 뛰어라.」", 3: "「오늘은 후반 교체로 쓸 거다.」" };
+  /* 🧩🎯 경기 전 — 우리 · 상대 포메이션 · 감독의 선발 판단 · 경기 전 카드(보이는 값 = 엔진에 넘긴 값) */
+  function prematch(oppForm, cond) {
+    const F = X().formNow(S, S.week);
+    const them = oppForm || "4-4-2";
+    const cfg = X().formCfg(F.name, them);
+    const pk = X().pickFor(S, S.week, F.name, lastPickK(), cond);
+    const pick = { k: pk.k, at: pk.at, d: pk.d, parts: pk.parts, rival: pk.rival ? { name: pk.rival.name, grade: pk.rival.grade } : null, chance: pk.chance };
+    const say = X().fill(PICK_SAY[pk.k], { pos: POS_KO[S.pos], at: POS_KO[pk.at] });
+    const x = { form: { us: F.name, them, m: cfg.m, why: F.why, lines: F.lines }, pick,
+      rows: { us: { fa: cfg.fa, fd: cfg.fd }, them: { fa: cfg.fa2, fd: cfg.fd2 } },
+      say: `강 감독: ${say}`,
+      note: pk.k >= 2 ? `오늘은 ${POS_KO[pk.at]} 자리 — 이 경기 기록은 ${POS_KO[pk.at]}로 셈해요${pk.k === 3 ? ` · 후반 ${pk.onMin - 45}분에 들어가요` : ""}` : null,
+      chance: pk.chance ? "강 감독: 「지난 경기를 벤치에서 봤으니 오늘은 뛰어 봐라.」" : null };
+    return { F, them, cfg, pk, pick, x };
+  }
+  /* 🔁 라이벌이 바뀐 주만 적어요(`S.rivalLog` — 필름 · 2막) */
+  function noteRival(kind, r) {
+    if (!r) return;
+    const L = S.rivalLog[kind];
+    if (!L.length || L[L.length - 1].id !== r.id) L.push({ w: S.week, id: r.id, name: r.name });
+  }
   async function playLive(key, o) {
     const host = matchShell(o.head);
     const rr = X().rngOf(S.seed, X().KEY.rate(key), X().SALT.rate);
+    const cond0 = o.condition != null ? o.condition : S.cond;
+    const pre = prematch(o.oppForm, cond0);
+    if (window.W2Scenes && typeof window.W2Scenes.prematch === "function") await sc("prematch", pre.x);
     const cfg = liveCfg(key, {
-      xi: X().ourXI(S), teamStr: X().TUNE.US_STR, oppStr: o.oppStr, condition: o.condition != null ? o.condition : S.cond,
+      xi: X().ourXI(S, { w: S.week, form: pre.F.name, at: pre.pk.at, on: pre.pk.on }), teamStr: X().TUNE.US_STR, oppStr: o.oppStr, condition: cond0,
+      form: { us: pre.F.name, them: pre.them, why: pre.F.why, lines: pre.F.lines, cfg: pre.cfg }, onMin: pre.pk.onMin, pick: pre.pick,
       homeName: S.world.school.name, oppName: o.oppName, keeper: keeperShort(),
       promiseLine: EV().promiseLine(S), scout: null, rivalAb: rivalAb(), rate: (res) => X().rate(res, S.pos, rr),
     });
     const info = await fresh(window.WingerLive.play(host, cfg));
+    if (info && info.pick) noteRival("team", { id: pre.pk.rival ? pre.pk.rival.id : null, name: pre.pk.rival ? pre.pk.rival.name : null });
     if (info) { info.cond = cfg.condition; for (const b of info.boards) noteBoard(b); }   // 🫀 관리 칸 재료 — 엔진에 넘긴 그 값
     return { info, rr, host, auto: cfg.auto };      // 🤖은 그 경기의 승부차기까지 같은 값(⚙️ 「다음 경기부터」)
   }
   /* 🏆 대회 경기 — 🔒 회복(+10)은 **두 번째 경기부터** · 경기가 끝나야 반영(원자적 — 다시 열면 회복 전 컨디션에서 다시) */
   async function cupLive(key, opp, head) {
     const cond = S.cupGames > 0 ? clamp(S.cond + TUNE.CUP_RECOVER, 0, 100) : S.cond;
-    const r = await playLive(key, { oppName: opp.name, oppStr: opp.str, head, condition: cond });
+    const r = await playLive(key, { oppName: opp.name, oppStr: opp.str, oppForm: opp.form, head, condition: cond });
     if (!r.info) return r;
     if (S.cupGames === 0) S.cupFirstCond = cond;
     S.cupGames += 1;
@@ -995,16 +1033,21 @@ window.W2Game = (() => {
     const rec = { g: info.myGoals, a: info.assists, d: info.defense, ga: info.oppGoals, res: info.res, r: info.rating, sv: info.saved };
     if (info.first === 0 || info.first === 1) rec.f1 = info.first === 1;   // 📋 약속의 근거 — 첫 내 순간(27번 §8)
     S.recent = S.recent.concat([rec]).slice(-10);
+    /* 🎯 J19 — 그 경기에 **선 자리**(`at`)와 감독 판단(`pick` ①②③) — 기록 칸은 자리마다의 가중으로 셈(50번 §12-1) */
+    const at = info.pick && info.pick.at ? info.pick.at : S.pos;
     S.games.push({ w: S.week, t: o.t, opp: o.opp, gf: info.teamGoals, ga: info.oppGoals, res: info.res,
-      g: info.myGoals, a: info.assists, d: info.defense, r: info.rating, sv: info.saved });
+      g: info.myGoals, a: info.assists, d: info.defense, r: info.rating, sv: info.saved,
+      at, pick: info.pick ? info.pick.k : null, form: info.form ? info.form.us : null });
     EV().mem(S).last = { res: info.res, un };
     const lines = [];
     const pr = EV().judge(S, info.first);
     if (pr) lines.push(`${pr.text}${pr.chips.length ? ` · ${pr.chips.map((c) => `${c.emoji} ${c.text}`).join(" ")}` : ""}`);
+    /* ⚽ 이 경기 점수 — 선 자리의 가중 · n_pos(J19 · 평가서 기록 칸 = 이 점수의 평균) */
+    lines.push(`⚽ 이 경기 점수 ${SH().gameScore(S.games[S.games.length - 1], S.pos).toFixed(2)}(${POS_KO[at]}로)`);
     /* 📍 「같은 장면, {rival}라면」 — 경기 줄의 숫자를 더하면 집계와 같아요(보이는 값 = 판정 값 · 29번 §2-2) */
     const t = ST().tally(S, info.boards);
     if (t && t.n) {
-      const rn = X().short(S.world.ours.find((x) => x.role === "rival").name);
+      const rn = X().short(X().numberRow(S).name);
       lines.push(`📍 같은 장면 ${t.n}번 — 나 ${t.made}번 해냄 · ${X().fill("{r|라면}", { r: rn })} ${t.exp.toFixed(1)}번 → ${sign1(t.d)}(번호 집계 ${sign1(t.D)})`);
     }
     /* 🫀 경기 끝 줄 — 평가서 관리 칸의 재료 그대로(42번 §6) */
@@ -1148,6 +1191,23 @@ window.W2Game = (() => {
       return { k, label: `${d.emoji} ${d.name}`, grade: gr.g, next: r2(gr.p), eff: g.eff, v: Math.round(S.stats[k] * 10) / 10, to: gr.next };
     });
   }
+  /* 🔁 주간 화면 라이벌 줄(52번 · director 4) — `{ team, league }` 글 · 없으면 null */
+  function rivalLine() {
+    const out = { team: null, league: null };
+    const F = (S.world.form || {})[S.week < 20 ? "h1" : "h2"];
+    const pk = X().pickFor(S, S.week, F ? F.name : null, lastPickK());
+    if (pk.rival) {
+      const my = pk.parts.reduce((a, x) => a + Math.round(x.v * 10), 0) / 10;
+      out.team = `🔁 팀 내 라이벌 — ${pk.rival.name}(${pk.rival.grade}학년 · ${POS_KO[S.pos]}) · 선발 점수 차 ${my >= 0 ? "+" : "−"}${Math.abs(my).toFixed(1)}`
+        + ` · 지금 값으로는 ${pk.k === 1 ? "① 선발" : pk.k === 2 ? `② ${POS_KO[pk.at]} 자리` : "③ 후반 교체"}`;
+    }
+    const lr = X().leagueRival(S);
+    if (lr && (lr.v > 0 || lr.me > 0)) {
+      const cat = ["골", "도움", "수비"][X().catOf(S.pos)];
+      out.league = `🏁 리그 라이벌${lr.ace ? " 🔥" : ""} — ${lr.team} ${lr.name} · ${cat} ${lr.v} · 나 ${lr.me}`;
+    }
+    return out;
+  }
   function renderHome() {
     const s = screen("w2-home");
     const portrait = h("div", "w2-portrait");
@@ -1162,10 +1222,16 @@ window.W2Game = (() => {
     bar.style.width = `${g.v}%`;
     gz.append(bar, h("span", "w2-gauge-text", `🫀 컨디션 ${g.v} · ${g.label} · 경기 ×${g.mul.toFixed(2)}`));
     head.appendChild(gz);
+    /* 🔁 라이벌 두 줄 — 팀 내(지금 값으로 · 경기 날 다시 셈) · 리그 내(결과 0 · 50번 §2-3 · §3) */
+    X().formNow(S, S.week);                                   // 반기 첫 주에 감독의 포메이션을 정해 둬요(그 반기 내내)
+    const rl = rivalLine();
+    if (rl.team) head.appendChild(h("p", "w2-rivalline w2-rivalline-team", rl.team));
+    if (rl.league) head.appendChild(h("p", "w2-rivalline w2-rivalline-league", rl.league));
     /* 🦶 선수 칸 한 줄 — 주발 · 약발 단계(29번 §3-6) */
     head.appendChild(h("p", "w2-footline", `🦶 ${S.foot === "L" ? "왼발" : "오른발"} · 약발 ${S.weak}단계${S.weak >= TUNE.WEAK_MAX ? "(양발)" : ""}`));
     const notes = [];
     if (S.week === 1) notes.push("훈련은 컨디션이 좋을수록 크게 늘어요 — 버튼의 「효율 ×」가 곧 늘어나는 양이에요");
+    if (S.v5Note) { notes.push("🔁 이번 경기부터 포메이션 · 주전 경쟁이 들어왔어요 — 팀 내 라이벌은 이제 함께 자라는 또래예요"); delete S.v5Note; }
     for (const t of ST().notes(S, S.week)) notes.push(t);
     for (const t of notes) head.appendChild(h("p", "w2-note", t));
     s.appendChild(head);
@@ -1274,7 +1340,7 @@ window.W2Game = (() => {
   const POS_LINE = { fw: "3년 동안 골문 앞 그 자리에서 달던 번호예요.", wg: "3년 동안 측면을 가르며 달던 번호예요.",
     mf: "3년 동안 한가운데 그 자리에서 달던 번호예요.", df: "3년 동안 최종 수비 라인 그 자리에서 달던 번호예요." };
   function introCtx() {
-    const rival = S.world.ours.find((x) => x.role === "rival");
+    const rival = X().numberRow(S);
     const vars = { no: S.noOrig, rival: X().short(rival.name), me: S.name, posLine: POS_LINE[S.pos] };
     const text = (t) => X().fill(X().fill(t, { posLine: vars.posLine }), vars);
     return { who: who(), preset: S.preset, gender: S.gender, name: S.name, no: S.noOrig, pos: S.pos, posName: SH().POS[S.pos],
@@ -1358,6 +1424,6 @@ window.W2Game = (() => {
   }
 
   return { TUNE, ZONES, SAVE_KEY, gauge, effOf, stepsOf, newState, loadSave,
-    settings, help: openHelp, boardStats,
+    settings, help: openHelp, boardStats, rivalLine: () => (S ? rivalLine() : { team: null, league: null }),
     _t: { get S() { return S; }, set S(v) { S = v; }, run, save, official, STEP, trainButtons, renderEntry } };
 })();

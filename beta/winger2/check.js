@@ -206,8 +206,9 @@
   }
 
   /* 🏟️ 경기 화면 — 진짜 드라이버(`WingerLive.play`) · 🤖 자동(약발 1단계라 「🦶 약발」 꼬리표가 붙을 수 있음) · 📋 약속 줄 */
-  function matchView() {
+  function matchView(v5) {
     const S = fakeS({ week: 6 });
+    const o = v5 || {};
     const host = $("ck-match");
     host.textContent = "";
     const box = el("div", "w2-live");
@@ -216,7 +217,10 @@
     L.play(box, {
       xi: X.ourXI(S), teamStr: 58, oppStr: 58, condition: 51, homeName: "솔빛고", oppName: "해오름고", myName: S.name,
       foot: "R", pos: "wg", keeper: "태오", chibi: window.Art ? window.Art.chibi(who(), "base") : null,
-      promiseLine: "📋 약속: 그 경기의 내 첫 순간을 살린다", scout: null, seed: 31337, auto: true, weak: 1,
+      promiseLine: o.form ? null : "📋 약속: 그 경기의 내 첫 순간을 살린다", scout: null, seed: 31337, auto: true, weak: 1,
+      /* 🧩 v5 — 포메이션 · 그날 선 자리 · ③ 투입 분(52번 계약 — 배수는 engineer `formCfg` 그대로) */
+      form: o.form ? Object.assign({ us: o.form[0], them: o.form[1], why: null, lines: [] }, { cfg: X.formCfg ? X.formCfg(o.form[0], o.form[1]) : null }) : undefined,
+      pos: o.pos || "wg", pick: o.at ? { k: o.onMin ? 3 : 1, at: o.at, d: 0, parts: [], rival: null } : undefined, onMin: o.onMin || 0,
     }).then(() => say("🏟️ 경기 끝 — 스코어보드 안 ⚙️ · 첫 내 순간 줄의 「📋 약속이 걸린 순간」 · 🤖 결과 줄의 「🦶 약발」")).catch((e) => say(`❌ ${e.message}`));
   }
 
@@ -296,7 +300,29 @@
     return null;
   }
 
+  /* ⚽ v5 경기 전 카드 견본(52번 계약 모양 — 숫자는 engineer 표에서 · 판정 0) */
+  function preSample(k) {
+    const [us, them] = k === 1 ? ["4-3-3", "3-5-2"] : k === 2 ? ["4-3-3", "5-3-2"] : ["4-3-3", "4-4-2"];
+    const fc = X.formCfg ? X.formCfg(us, them) : {};
+    const parts = k === 1 ? [{ name: "능력", v: 1.6 }, { name: "🤝", v: 0.5 }, { name: "컨디션", v: 0.4 }]
+      : k === 2 ? [{ name: "능력", v: -2.1 }, { name: "🤝", v: 0.5 }, { name: "컨디션", v: 0.2 }]
+        : [{ name: "능력", v: -3.4 }, { name: "🤝", v: -0.5 }, { name: "컨디션", v: -0.6 }, { name: "🦶 약발", v: 0.3 }];
+    const d = Math.round(parts.reduce((a, q) => a + q.v, 0) * 10) / 10;
+    return Sc.prematch({
+      title: "솔빛고 vs 해오름고",
+      form: { us, them, m: fc.m, why: "「요즘 공격 줄이 좋다 — 측면으로 간다.」", lines: [{ name: "공격", v: 3.1 }, { name: "미드", v: 0.4 }, { name: "수비", v: -0.8 }] },
+      rows: { us: { fa: fc.fa, fd: fc.fd }, them: { fa: fc.fa2, fd: fc.fd2 } },
+      pick: { k, at: k === 1 ? "fw" : "wg", d, parts, rival: { name: "9번 한도윤", grade: "2학년" } },
+      note: k === 1 ? null : `오늘은 윙어 자리 — 이 경기 기록은 윙어로 셈해요${k === 3 ? " · 후반 15분에 들어가요" : ""}`,
+      chance: k === 2 ? "「두 경기를 벤치에서 봤으니 오늘은 측면에서 뛰어 봐라.」" : null,
+    });
+  }
   const SCENES = [
+    ["⚽ 경기 전 카드 ① 선발(견본)", "v5 · ● 우리 · ◆ 상대 포메이션 · 상성 · 배수 · 줄 폼 · 선발 점수 조각 합 = 차", () => preSample(1)],
+    ["⚽ 경기 전 카드 ② 이웃 자리(견본)", "v5 · 「오늘은 측면에서」 · 기록은 윙어로 · 기회 주기 줄", () => preSample(2)],
+    ["⚽ 경기 전 카드 ③ 교체(견본)", "v5 · 「후반 교체로」 · 60′ 투입 · 조각에 🦶", () => preSample(3)],
+    ["🏟️ 경기 판 11 대 11 — 4-3-3 vs 5-3-2", "v5 · 세로 판 22점 · ● · ◆ · 🧤 · 나(치비 + 이름) · 흐름 꼬리표 · [🏁 경기 시작]", () => matchView({ form: ["4-3-3", "5-3-2"], at: "fw", pos: "fw" })],
+    ["🏟️ 경기 판 11 대 11 — ③ 60′ 교체", "v5 · 투입 전엔 동료 점 · 60′ 「🔁 교체 투입」 뒤 내가 그 자리", () => matchView({ form: ["4-4-2", "3-5-2"], at: "wg", pos: "fw", onMin: 60 })],
     ["🎲 이벤트 카드 — 선택지 넷(견본)", "v4 · 🎲 크게 · 🎲 작게(「작게 +5」) · 🌿 확정 · 💬 이야기 · 각 2줄 · 320 × 568에서 스크롤 없음 · 키보드 1~4", () => sampleCard("night")],
     ["🎲 이벤트 카드 — 선택지 셋(견본)", "v4 · 🎲 둘 + 🌿 확정(🫀 · 🔖) · 확률 조각 줄 합 = %", () => sampleCard("boots")],
     ["🎲 이벤트 카드 — 반대발 주간(견본)", "v4 · 🎲 하나 · 🌿 둘 · 💬 · 본문 두 줄 넘치면 「…더 보기」", () => sampleCard("weak")],

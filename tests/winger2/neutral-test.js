@@ -83,7 +83,7 @@ const T = new Function(`
 ${P.clamp}${P.lerp}${P.mid}${P.scRef}${P.sc}
   const FIN = ${P.FIN}; const CON = ${P.CON};
 ${P.pFinish}${P.pConcede}
-  return { pFinish, pConcede, wOf: (us0, them0) => ({ atk: ${P.atkW}, def: ${P.defW} }) };
+  return { pFinish, pConcede, wOf: (us0, them0, F = null) => ({ atk: ${P.atkW}, def: ${P.defW} }) };   // 🔄 v5(52번 §2): 식에 포메이션 배수 \`F\`(\`c.form\`) — 없으면 null = 옛 식
 `)();
 
 /* 🧪 이 파일이 쓰는 변이 전부 — 0번 검사가 여기 있는 정규식을 소스와 대조합니다. */

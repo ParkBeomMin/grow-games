@@ -3,7 +3,7 @@
  *   TT-1  기술 테스트 판 셋 = 공격수 · 윙어 🥅 × 3 · 미드필더 🅰️ × 2 + 🧱 · 수비수 🧱 × 3(12번 §5-4 · 박은 값)
  *   TT-2  같은 상황 굴림 · **각자의 열쇠** — 판 i의 약발 상황 == `rngOf(판 시드, KEY.tech(i), SALT.board)() < WEAK_P`(손 · 🤖 둘 다 · v3 0.4 — 몫 자체는 sit-test ST-1)
  *   TT-3  🤖 = 0.5 × 상황 — 🤖 판은 sBoard 0.5 · s = 0.5 × 🦶 × 🫀(약발 아닌 판끼리 🫀 하나 · 약발 판은 그 🫀 × min(0.95, 0.75 + 0.13 × 단계))
- *   TT-4  승부차기 내 킥 · 기술 테스트는 🫀 관리 칸에 안 셈(v3 · 44번 §1 — 🎮 솜씨 칸 퇴역으로 옮김) — 승부차기가 있었던 판(시드 5008)의 관리 칸 경기 수 == 공식 경기 수
+ *   TT-4  승부차기 내 킥 · 기술 테스트는 🫀 관리 칸에 안 셈(v3 · 44번 §1 — 🎮 솜씨 칸 퇴역으로 옮김) — 승부차기가 있었던 판(v5 시드 5009)의 관리 칸 경기 수 == 공식 경기 수
  *   + 변이: 기술 판이 열쇠 하나를 같이 씀(`KEY.tech(0)`) · 승부차기 킥을 솜씨에 더함
  * 종료 코드: 0 통과 · 1 빨간불 · 2 💥 죽음 · ⏱️ 몇 분
  */
@@ -52,13 +52,13 @@ const t3 = (x) => {
   const nW = H.concat(A).reduce((a, x) => a + x.tb.filter((b) => b.weak).length, 0);
   check(H.concat(A).every(t2) && nW > 0, `TT-2. 🎲 기술 판 i의 약발 상황 == rngOf(판 시드, KEY.tech(i), SALT.board) — 손 · 🤖 ${H.length + A.length}판 × 3(약발 판 ${nW})`);
   check(A.every(t3), `TT-3. 🤖 기술 판 = 0.5 × 상황 — sBoard 0.5 · s = 0.5 × 🦶 × 🫀(🤖 ${A.length}판)`);
-  const pk = await one(5008, "fw");
+  const pk = await one(5009, "wg");   // 🔄 v5: 세계가 바뀌어 5008은 승부차기를 안 만남 — 승부차기가 있는 판을 다시 찾음(5009 · 윙어)
   check(pk.S.record.pkN > 0 && pk.nNote === pk.offDef, `TT-4. 🥅 승부차기 킥(${pk.S.record.pkN}번) · 기술 테스트는 관리 칸에 안 셈 — 관리 칸 경기 ${pk.nNote}번 == 공식 경기 ${pk.offDef}번`);
   if (fail === 0) {
     const m1 = [];
     for (const [seed, pos] of [[6101, "fw"], [6103, "mf"], [6104, "df"]]) m1.push(await one(seed, pos, { auto: true, muts: MUT.ONEKEY }));
     check(!m1.every(t2), "변이-ONEKEY(기술 판 셋이 열쇠 하나를 같이 씀) → TT-2가 빨간불");
-    const m2 = await one(5008, "fw", { muts: MUT.PK_IN });
+    const m2 = await one(5009, "wg", { muts: MUT.PK_IN });
     check(m2.nNote !== m2.offDef, `변이-PK_IN(승부차기 날 컨디션을 관리 칸에 더함) → TT-4가 빨간불 (${m2.nNote} ≠ ${m2.offDef})`);
   }
   console.log(fail ? `\n❌ ${fail}건 실패` : "\n✅ 통과");

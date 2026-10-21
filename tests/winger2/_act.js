@@ -207,6 +207,8 @@ function boot(opt) {
         return P.filmHang ? new Promise(() => {}) : Promise.resolve(P.film(f));
       },
       book: (b) => { note("book"); seen.book.push(JSON.parse(JSON.stringify(b))); return Promise.resolve(); },
+      /* 🔄 v5 — 경기 전 카드(포메이션 · 선발 판단) — 그대로 남기고 바로 닫음 */
+      prematch: (x) => { note("prematch"); (seen.prematch || (seen.prematch = [])).push(Object.assign({ week: S() ? S().week : null }, JSON.parse(JSON.stringify(x || {})))); return Promise.resolve(); },
     };
   }
   if (o.realScene === false) w.W2Scene = stubScene(w);
@@ -244,7 +246,13 @@ async function overlay(env, D, press) {
   const all = layer.querySelectorAll(".w2o");
   const top = all[all.length - 1];
   if (!top) return false;
-  const kind = (top.className.match(/w2o-(pick|intro|ending|card|grade|sheet|doors|film|book)\b/) || [])[1];
+  const kind = (top.className.match(/w2o-(pick|intro|ending|card|grade|sheet|doors|film|book|prematch)\b/) || [])[1];
+  /* 🔄 v5(52번 §2 · 31번 v5): 경기 전 카드(양쪽 포메이션 · 선발 판단) — 「▶ 경기장으로」 하나 */
+  if (kind === "prematch") {
+    const ok = top.querySelector(".w2o-ok");
+    if (ok) { press(ok, "경기 전 카드"); return true; }
+    return false;
+  }
   if (kind === "pick") {
     const heroes = [...top.querySelectorAll(".w2o-hero")];
     env.pickSeen = env.pickSeen || heroes.map((b) => ({ locked: b.classList.contains("is-locked"), name: (b.querySelector(".w2o-hero-name") || {}).textContent, world: (b.querySelector(".w2o-hero-world") || {}).className }));

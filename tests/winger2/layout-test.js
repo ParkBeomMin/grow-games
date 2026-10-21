@@ -21,13 +21,15 @@ let chromium;
 try { ({ chromium } = require(process.env.PW_CORE || "/workspace/.tools/node_modules/playwright-core")); }
 catch (e) { console.log(`💥 playwright-core가 없어요 — ${e.message}`); process.exit(2); }
 
+/* 🗂️ `LY_BETA` — 다른 판(예: HEAD를 `git archive`로 푼 사본)의 화면으로 같은 카드를 잴 때(빨강이 HEAD에서도 빨강인지 가르기) */
+const SERVE = process.env.LY_BETA || BETA;
 const TYPES = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".webp": "image/webp", ".json": "application/json", ".webmanifest": "application/manifest+json", ".png": "image/png", ".svg": "image/svg+xml" };
 function serve() {
   return new Promise((res) => {
     const srv = http.createServer((q, r) => {
       const u = decodeURIComponent(q.url.split("?")[0]);
-      const f = path.join(BETA, u.endsWith("/") ? u + "index.html" : u);
-      if (!f.startsWith(BETA) || !fs.existsSync(f) || fs.statSync(f).isDirectory()) { r.writeHead(404); r.end(); return; }
+      const f = path.join(SERVE, u.endsWith("/") ? u + "index.html" : u);
+      if (!f.startsWith(SERVE) || !fs.existsSync(f) || fs.statSync(f).isDirectory()) { r.writeHead(404); r.end(); return; }
       r.writeHead(200, { "content-type": TYPES[path.extname(f)] || "application/octet-stream" });
       fs.createReadStream(f).pipe(r);
     });
@@ -58,6 +60,15 @@ async function cards() {
 async function measure(page, card, extraCss) {
   return page.evaluate(async ({ card, extraCss }) => {
     if (extraCss) { const st = document.createElement("style"); st.textContent = extraCss; document.head.appendChild(st); }
+    /* 🔄 v5(31번 v5 · director 보고): 입구 화면의 광고(`ins.adsbygoogle` · `iframe` — 약 60px)가 측정 중에 들어와 페이지 높이를 늘려요.
+     *    카드와 무관한 높이라 **광고만 재고 빼서** 셈 — 카드 판 · 겹 · 버튼 · 「카드가 더한 페이지 높이」는 그대로 봄(뜻: 카드 스크롤 0) */
+    /* 🧪 입구 광고가 늘 오지는 않아요(바깥 요청을 막음) — 60px 광고 틀을 **늘 하나 끼워** 제외 길을 매번 지나게 함(director가 본 「페이지 +24」의 모양) */
+    const fake = document.createElement("iframe");
+    fake.className = "ly-fake-ad"; fake.style.cssText = "display:block;width:100%;height:60px;border:0";
+    (document.getElementById("w2-entry") || document.body).appendChild(fake);
+    const ads = [...document.querySelectorAll("ins.adsbygoogle, iframe")];
+    const adH = Math.max(0, ...ads.map((e) => Math.round(e.getBoundingClientRect().height)));
+    ads.forEach((e) => { e.dataset.lyHide = e.style.display; e.style.display = "none"; });
     const se0 = document.scrollingElement;
     const base = se0.scrollHeight - se0.clientHeight;             // 카드 밑 화면(입구) 자체의 넘침 — 카드가 더한 만큼만 셈
     const p = window.W2Scenes.card(card);
@@ -80,6 +91,9 @@ async function measure(page, card, extraCss) {
     if (first) first.click();
     await Promise.race([p, new Promise((res) => setTimeout(res, 300))]);
     if (extraCss) document.head.lastChild.remove();
+    ads.forEach((e) => { e.style.display = e.dataset.lyHide || ""; });
+    fake.remove();
+    r.adH = adH; r.ads = ads.length;
     return r;
   }, { card, extraCss });
 }
@@ -91,10 +105,18 @@ async function measure(page, card, extraCss) {
   const browser = await chromium.launch(fs.existsSync(exe) ? { executablePath: exe } : {});
   const page = await browser.newPage({ viewport: { width: 320, height: 568 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
   page.on("pageerror", (e) => console.log(`   ⚠️ 페이지 오류 ${e.message}`));
+  /* 🌐 바깥 요청(광고 · 분석)은 막음 — 판정에 무관하고 네트워크가 느리면 검사가 시간 초과로 죽어요(광고 높이는 아래에서 따로 빼고 셈) */
+  await page.route("**/*", (rt) => (/^http:\/\/127\.0\.0\.1/.test(rt.request().url()) ? rt.continue() : rt.abort()));
   await page.goto(url);
   await page.waitForFunction(() => window.W2Scenes && document.querySelector("#w2-entry"), null, { timeout: 15000 });
-  const run = async (css) => { const rs = []; for (const c of list) rs.push(Object.assign({ id: c.id, k: c.choices.length }, await measure(page, c, css))); return rs; };
+  /* 카드마다 페이지를 새로 엶 — 앞 카드의 결과 창 · 남은 겹이 다음 측정에 섞이지 않게 */
+  const fresh = async () => { await page.goto(url); await page.waitForFunction(() => window.W2Scenes && document.querySelector("#w2-entry"), null, { timeout: 15000 }); };
+  const run = async (css) => { const rs = []; for (const c of list) { await fresh(); rs.push(Object.assign({ id: c.id, k: c.choices.length }, await measure(page, c, css))); } return rs; };
   const rs = await run(null);
+  const adMax = Math.max(0, ...rs.map((x) => x.adH));
+  console.log(`   🔎 측정에서 뺀 광고 요소 ${Math.max(...rs.map((x) => x.ads))}개(끼워 넣은 60px 틀 포함) · 높이 최대 ${adMax}px(카드 밖 — 입구 화면)`);
+  check(rs.every((x) => x.adH >= 60), `LY-0. 🧪 광고 제외 길이 매번 지남 — 카드마다 60px 광고 틀을 끼우고 빼서 셈(${rs.filter((x) => x.adH >= 60).length}/${rs.length})`);
+  console.log(`   🃏 ${rs.map((x) => `${x.id}(${x.k})`).join(" · ")}`);
   const bad = rs.filter((x) => x.pageScroll > 0 || x.panelScroll > 0 || x.layerScroll > 0 || x.panelBottom > 0.5 || x.out > 0 || x.minH < 52 || x.n < x.k || !x.twoLine);
   check(list.length >= 6 && bad.length === 0, `LY-1. 📱 320 × 568 — 카드 ${list.length}장(넷 ${rs.filter((x) => x.k === 4).length} · 셋 ${rs.filter((x) => x.k === 3).length} · 약속 · 이야기 장 포함) 스크롤 0 · 버튼 화면 밖 0 · 버튼 높이 최소 ${Math.min(...rs.map((x) => x.minH)).toFixed(0)}px(≥ 52)`
     + (bad.length ? `\n     🔴 ${bad.slice(0, 3).map((x) => `${x.id}(${x.k}칸 · 버튼 ${x.n}): 페이지 +${x.pageScroll}(밑 화면 ${x.base}) · 판 바닥 ${x.panelBottom.toFixed(0)} · 두 줄 ${x.twoLine} · 판 ${x.panelScroll} · 겹 ${x.layerScroll} · 밖 ${x.out} · 높이 ${x.minH.toFixed(0)}`).join(" · ")}` : ""));

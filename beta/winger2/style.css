@@ -184,20 +184,35 @@ body:has(.w2m-ready, .w2m-board) .w2-gear-in { visibility: hidden; }
  * ♿ 색으로만 가르지 않습니다: 우리 편 = 꽉 찬 원 · 상대 = 속 빈 원 · 나 = 가장 큰 말 + 링 · 공 = 흰 핵.
  * ♿ 판은 aria-hidden — 같은 정보를 피드가 글로 말합니다. */
 .w2-pitch {
-  position: relative; margin-top: 7px; overflow: hidden;
-  height: clamp(76px, 25vw, 104px);
+  position: relative; margin-top: 3px; overflow: hidden;
+  /* 📏 v5 세로 판(48번 §4-1) — 폭은 스코어보드 폭 · 높이는 화면 높이를 따라(320 × 568에서 약 290px · 큰 폰에서 400px) */
+  height: clamp(220px, 50vh, 400px);
   border-radius: 8px; border: 1px solid var(--line);
   background:
-    radial-gradient(circle at 50% 50%, transparent calc(13% - 1px), rgba(255, 255, 255, .16) 13%, transparent calc(13% + 1px)),
-    linear-gradient(90deg, transparent calc(50% - .5px), rgba(255, 255, 255, .16) calc(50% - .5px), rgba(255, 255, 255, .16) calc(50% + .5px), transparent calc(50% + .5px)),
-    repeating-linear-gradient(90deg, var(--turf) 0 9%, var(--turf2) 9% 18%);
+    radial-gradient(circle at 50% 50%, transparent calc(11% - 1px), rgba(255, 255, 255, .18) 11%, transparent calc(11% + 1px)),
+    linear-gradient(180deg, transparent calc(50% - .5px), rgba(255, 255, 255, .18) calc(50% - .5px), rgba(255, 255, 255, .18) calc(50% + .5px), transparent calc(50% + .5px)),
+    repeating-linear-gradient(180deg, var(--turf) 0 10%, var(--turf2) 10% 20%);
+  transition: height .25s ease, margin .25s ease, opacity .2s ease;
 }
+/* 🔥 판(미니게임)이 열린 동안 — 22점은 멈춰 있으니 판을 접어 미니게임이 한 화면에 들어오게(320 × 568) */
+.w2-scene:has(.w2m-ready, .w2m-board) .w2-pitch { height: 0; margin-top: 0; border-width: 0; opacity: 0; }
+.w2-box { position: absolute; left: 26%; right: 26%; height: 13%; border: 1px solid rgba(255, 255, 255, .18); }
+.w2-box.a { top: -1px; border-top: 0; }
+.w2-box.h { bottom: -1px; border-bottom: 0; }
 .w2-mouth {
-  position: absolute; top: 30%; bottom: 30%; width: 5px;
+  position: absolute; left: 35%; right: 35%; height: 5px;
   border: 1px solid var(--cream); opacity: .55; border-radius: 2px;
 }
-.w2-mouth.h { left: 1px; border-right: 0; }
-.w2-mouth.a { right: 1px; border-left: 0; }
+.w2-mouth.a { top: 1px; border-top: 0; }
+.w2-mouth.h { bottom: 1px; border-bottom: 0; }
+/* ⚔️ 판 바로 위 한 줄 — 포메이션(● 우리 vs ◆ 상대) · 흐름 꼬리표(⚔️ · 🛡️ · ⚖️ 글자로 — 색만이 아니라) */
+.w2-pitchbar { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-top: 6px; min-height: 18px; font-size: .7rem; line-height: 1.5; }
+.w2-forms { color: var(--dim); white-space: nowrap; }
+.w2-flow { padding: 0 8px; border-radius: 999px; background: rgba(0, 0, 0, .35); color: var(--cream); white-space: nowrap; }
+.w2-flow:empty { display: none; }
+.w2-flow[data-side="a"] { color: var(--good2); }
+.w2-flow[data-side="h"] { color: var(--accent); }
+.w2-scene:has(.w2m-ready, .w2m-board) .w2-pitchbar { display: none; }
 
 /* 🧍 한 팀 = 판과 같은 크기의 겹. **이 겹은 안 움직입니다**(밀림은 match-scene.js `dotShift`가 냄).
  * ⚠️ `.w2-side`를 미는 규칙을 되살리지 마세요 — 두 번 밀려 우리 키퍼가 판 밖으로 나갑니다. */
@@ -208,16 +223,31 @@ body:has(.w2m-ready, .w2m-board) .w2-gear-in { visibility: hidden; }
   position: absolute; inset: 0;
   transition: transform .42s cubic-bezier(.3, .85, .35, 1);
 }
+/* ● 우리 · ◆ 상대 — **색 + 모양**(♿ 흑백에서도 가름 — 48번 §4-1) · 지름 16px · 등번호 9px · 탭 대상 아님 */
 .w2-dot {
-  position: absolute; width: 9px; height: 9px; margin: -4.5px 0 0 -4.5px;
+  position: absolute; width: 16px; height: 16px; margin: -8px 0 0 -8px;
+  display: flex; align-items: center; justify-content: center;
   border-radius: 50%; box-sizing: border-box;
+  font-style: normal; box-shadow: 0 1px 2px rgba(0, 0, 0, .5);
 }
-.w2-side.home .w2-dot { background: var(--good); }
-.w2-side.away .w2-dot { background: transparent; border: 2px solid var(--dim); }
-.w2-dot.gk { border-radius: 3px; }
+.w2-dot b { font: 600 9px/1 system-ui, sans-serif; font-variant-numeric: tabular-nums; letter-spacing: -.4px; white-space: nowrap; pointer-events: none; }
+.w2-side.home .w2-dot { background: var(--good); border: 1px solid rgba(0, 0, 0, .35); }
+.w2-side.home .w2-dot b { color: var(--ink-def, #10233a); }
+.w2-side.away .w2-dot { background: var(--bg2); border: 2px solid var(--cream); border-radius: 2px; transform: rotate(45deg) scale(.86); }
+.w2-side.away .w2-dot b { color: var(--cream); transform: rotate(-45deg); }
+/* 🧤 키퍼 — 테두리 굵게 + 장갑 표식(색만으로 안 가름) */
+.w2-dot.gk { border-width: 3px !important; border-style: double !important; border-color: var(--cream) !important; }
+.w2-dot.gk::after { content: "🧤"; position: absolute; right: -9px; top: -7px; font-size: 9px; line-height: 1; }
+.w2-side.away .w2-dot.gk::after { transform: rotate(-45deg); }
+/* ⚽ 공 가진 점 — 발밑 그림자 하나(공과 다른 표시 · 흰 링이 아님) */
+.w2-slot.has-ball .w2-dot::before {
+  content: ""; position: absolute; left: -3px; right: -3px; bottom: -6px; height: 5px; z-index: -1;
+  border-radius: 50%; background: rgba(0, 0, 0, .55);
+}
+.w2-slot[hidden] { display: none; }
 /* 🧡 나 — 가장 크고 혼자 바깥 링. 겹 이름을 같이 적어야 `.w2-side.home .w2-dot`(0,2,1)을 이깁니다 */
 .w2-side.home .w2-dot.me {
-  width: 14px; height: 14px; margin: -7px 0 0 -7px;
+  width: 18px; height: 18px; margin: -9px 0 0 -9px;
   background: var(--accent);
   border: 2px solid var(--cream);
   transition: transform .3s cubic-bezier(.2, 1.4, .4, 1);
@@ -234,9 +264,9 @@ body:has(.w2m-ready, .w2m-board) .w2-gear-in { visibility: hidden; }
  *    다가오면 반지름이 큰 말이 먼저 닿아요. 🔴 그래서 말을 줄였지 `STANDOFF`를 키우지 않았습니다(점 22개 전부의 간격이 바뀜).
  * 🔴 그림이 안 오면(오프라인 · 파일 없음) match-scene.js가 `has-chibi`를 떼고 원으로 물러섭니다. */
 .w2-side.home .w2-dot.me.has-chibi {
-  width: 22px; height: 22px; margin: -11px 0 0 -11px;
+  width: 26px; height: 26px; margin: -13px 0 0 -13px;
   background: radial-gradient(circle at 50% 40%, var(--cream), var(--sky) 140%);
-  border: 2px solid var(--accent);
+  border: 3px solid var(--accent);
   overflow: hidden;
   box-shadow: 0 1px 3px rgba(0, 0, 0, .6);
 }
@@ -245,6 +275,14 @@ body:has(.w2m-ready, .w2m-board) .w2-gear-in { visibility: hidden; }
   transform: scale(1.75); transform-origin: 50% 20%;
 }
 .w2-pitch.mine .w2-dot.me.has-chibi { transform: scale(1.1); }
+/* 🧡 이름 꼬리 — 22점 중 가장 먼저 보이게(점보다 큰 말 + 굵은 테두리 + 이름) */
+.w2-me-tag {
+  position: absolute; margin: 13px 0 0; transform: translateX(-50%); z-index: 2;
+  padding: 0 5px; border-radius: 999px; background: var(--accent); color: var(--ink, #1a1206);
+  font: 600 9px/1.5 system-ui, sans-serif; white-space: nowrap; pointer-events: none;
+}
+.w2-side.home .w2-slot:has(.w2-dot.me) { z-index: 2; }
+.w2-sub { padding: 6px 10px; border-radius: 8px; background: rgba(0, 0, 0, .22); border-left: 3px solid var(--sky); font-size: .84rem; color: var(--text); }
 
 /* ⚽ 공 — 겹이 판과 같은 크기라 `translate(84%, 40%)`가 곧 판의 84% · 40% */
 .w2-ball {
@@ -400,7 +438,7 @@ body:has(.w2m-ready, .w2m-board) .w2-gear-in { visibility: hidden; }
   .w2-pitch.net-a .w2-ball b, .w2-pitch.net-h .w2-ball b, .w2-ball b {
     animation: none !important;
   }
-  .w2-slot, .w2-ball, .w2-dot.me { transition: none !important; }
+  .w2-slot, .w2-ball, .w2-dot.me, .w2-pitch { transition: none !important; }
   .w2-flash, .w2-burst { display: none !important; }
   .w2-typing .w2-body::after { display: none; }
 }
@@ -1402,4 +1440,53 @@ body:has(.w2-top) .w2s-gear { display: none; }        /* 경기 화면은 스코
 @media (prefers-reduced-motion: reduce) {
   .w2-btn, .w2-live-fast, .w2-screen, .w2-after, .w2-title::before { animation: none !important; transition: none !important; }
   .w2-btn:active { transform: none; }
+}
+
+/* ---------- ⚽ v5 경기 전 카드 · 라이벌 줄 · 자리별 기록 표(52번) ----------
+ * 모양으로도 가름: ● 우리 · ◆ 상대 · ①②③ 숫자 · 조각 줄은 글 그대로 */
+.w2o-pre-vs { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; margin: 2px 0 6px; font-family: "Jua", sans-serif; font-size: .98rem; color: var(--cream); }
+.w2o-pre-us { color: var(--good2); }
+.w2o-pre-x { font-size: .8rem; color: var(--dim); }
+.w2o-pre-ring, .w2o-pre-mul, .w2o-pre-lines, .w2o-pre-parts, .w2o-pre-rival, .w2o-pre-chance, .w2o-pre-note {
+  font-size: .8rem; line-height: 1.55; color: var(--text); margin: 0 0 4px; font-variant-numeric: tabular-nums;
+}
+.w2o-pre-mul { color: var(--dim); white-space: pre-wrap; }
+.w2o-pre-why { font-size: .88rem; line-height: 1.55; color: var(--cream); margin: 4px 0; }
+.w2o-pre-pick { margin: 8px 0 4px; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line); background: rgba(0, 0, 0, .22); }
+.w2o-pre-pick.k1 { border-color: var(--good); }
+.w2o-pre-pick.k2 { border: 1px dashed var(--accent); }
+.w2o-pre-pick.k3 { border: 2px dotted var(--accent2); }
+.w2o-pre-say { font-size: .9rem; line-height: 1.55; color: var(--cream); margin: 0 0 4px; }
+.w2o-pre-note { color: var(--sky); }
+.w2o-rivals { display: flex; flex-direction: column; gap: 2px; font-size: .8rem; line-height: 1.5; color: var(--text); }
+.w2o-byat { margin: 8px 0 4px; font-size: .78rem; color: var(--text); }
+.w2o-byat summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; color: var(--sky); }
+.w2o-byat table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.w2o-byat th, .w2o-byat td { padding: 3px 4px; border-bottom: 1px solid var(--line); text-align: right; font-weight: 400; }
+.w2o-byat th:first-child { text-align: left; }
+/* 320 × 568에서 스크롤 없이 — 장면을 줄이고 판을 키워요(경기 전 카드는 글이 주인공) */
+.w2o-prematch .w2o-scene { min-height: 8vh; }
+.w2o-prematch .w2o-panel { max-height: 88vh; padding-top: 12px; }
+.w2o-prematch .w2o-title { font-size: 1.1rem; margin-bottom: 2px; }
+.w2o-prematch .w2o-pre-why { font-size: .84rem; }
+.w2o-prematch .w2o-ok { margin-top: 8px; }
+/* 🔁 주간 화면 라이벌 줄(engineer가 `#w2-home .w2-head`에 그림 — 옷만) · 팀 내 = 하늘빛 · 리그 = 앰버(글 앞 🔁 · 🏁로도 가름) */
+.w2-rivalline { margin: 4px 0 0; padding: 3px 10px; border-radius: 999px; font-size: .78rem; line-height: 1.5; color: var(--text);
+  background: rgba(0, 0, 0, .25); border: 1px solid var(--line); overflow-wrap: anywhere; }
+.w2-rivalline-team { border-color: var(--sky); }
+.w2-rivalline-league { border-style: dashed; border-color: var(--accent); }
+.w2o-prematch .w2o-pre-ring, .w2o-prematch .w2o-pre-mul, .w2o-prematch .w2o-pre-lines, .w2o-prematch .w2o-pre-parts { font-size: .76rem; margin-bottom: 2px; }
+/* 작은 폰(높이 600px 이하) — 장면을 접고 글만(감독 한마디가 글로 있어 그림이 없어도 뜻은 같아요) */
+@media (max-height: 600px) {
+  .w2o-prematch .w2o-scene { flex: 0 0 0; min-height: 0; }
+  .w2o-prematch .w2o-panel { max-height: 100vh; margin-top: 0; border-radius: 0; }
+}
+/* 📏 작은 폰(높이 640px 이하)에서 선택지 셋~넷 카드 — 버튼 · 글자는 그대로 두고 장면 그림을 줄여 판에 자리를 내줘요
+ *    (320 × 568에서 이야기 장 카드가 14~29px 넘쳤어요 — layout-test LY-1) */
+@media (max-height: 640px) {
+  .w2o-many .w2o-scene { min-height: 8vh; }
+  .w2o-many .w2o-panel { max-height: 92vh; margin-top: -10px; padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px)); }
+  .w2o-many .w2o-kicker { margin-bottom: 0; }
+  .w2o-many .w2o-cparts { margin-bottom: 4px; }
+  .w2o-many .w2o-foot { margin-top: 4px; }
 }

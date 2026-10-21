@@ -89,8 +89,10 @@ const check = (ok, msg) => { console.log(`${ok ? "✅" : "❌"} ${msg}`); if (!o
  *      · 264 = 실측 270에서 6px 더 좁게. 화면이 320보다 좁아질 일은 없지만 **여유를 검사 쪽에** 둡니다
  *      · 높이 76 = `style.css`의 `clamp(76px, 25vw, 104px)` **최솟값** (25vw라 화면 304px 아래에서만 걸려요)
  * 🔴 **이 둘을 소스에서 읽어 오지 마세요** — clamp를 바꾸면 검사가 따라가서 아무것도 안 잡습니다. */
+/* 🔄 v5(48번 §4 · 52번 — 11 대 11 **세로** 판): 판 높이 = `style.css` `clamp(220px, 50vh, 400px)`의 **최솟값 220** · 폭은 그대로 264(가장 좁은 칸)
+ *    판 안 좌표: 화면 `left` = acr(가로) · `top` = 100 − len(우리 골문이 아래) — 점 · 공의 translate도 (가로, 세로) 순 */
 const PITCH_W = 264;
-const PITCH_H = 76;
+const PITCH_H = 220;
 /* ⚽ **겹침을 재는 칸은 다릅니다 — 여기는 「실측 320px 판」(270 × 80)입니다.**
  * 🔴 위 264 × 76은 **잘림**에 여유를 두려고 실측보다 **좁게** 잡은 값이에요. 그런데
  *    **겹침을 좁은 칸에서 재면 없는 병이 보입니다** — 판을 좁히면 점 사이 거리가
@@ -98,7 +100,7 @@ const PITCH_H = 76;
  * 🔒 **여유의 방향이 반대라 칸도 반대**입니다: 잘림은 좁게, 겹침은 **실측 그대로**.
  * 📏 헤드리스 렌더 실측(145번 §3): 320px 화면 → 판 **270 × 80** · 390px → 340 × 97.5.
  *    가장 좁은 320px에서 잽니다 — 390px에서는 같은 자리가 +2.98px로 안 겹쳐요. */
-const RENDER_W = 270, RENDER_H = 80;
+const RENDER_W = 270, RENDER_H = 284;   // 🔄 v5: 320 × 568에서 판 270 × 284(50vh)
 /* ⚽ 결과가 가리키는 **진영**. 🔒 자리(%)가 아니라 **어느 쪽인가**입니다 —
  *    표의 숫자를 손봐도 「골은 상대 골문 쪽」이라는 문장은 그대로 살아야 해요. */
 const SIDE_OF = { goal: "away", assist: "away", shot: "away", save: "home", concede: "home" };
@@ -119,12 +121,14 @@ const FLOWS = [undefined, "a", "h", "mid"];
 const MUT = {
   /* 🔴🧤 **M-GK — 골키퍼를 밀림폭 「안쪽」으로 되돌립니다** (x 10% → 7%).
    *    director가 실제로 본 그 상태예요 — `push-h`가 걸리는 **실점 카드마다** 잘립니다. */
-  M_GK: { "match-scene.js": [[/const FORM_H = \[\[10, 50, " gk"\]/, 'const FORM_H = [[7, 50, " gk"]']] },
+  /* 🔄 v5: 집 자리 표는 `world.js` `FORMS`(engineer) — 우리 키퍼를 골라인 위(깊이 0)로 */
+  M_GK: { "world.js": [[/"4-4-2": \[\[50, 4, "gk"\]/, '"4-4-2": [[50, 0, "gk"]']] },
   /* 🔴🧤 **M-PUSH — 반대쪽에서 같은 사고를 냅니다** (팀 밀림 7 → 12).
    *    🔑 자리(`FORM_H`)와 밀림(`PUSH`)은 **한 쌍**이라 어느 쪽을 건드려도 같은 흠이 나요.
    *       한쪽만 재는 검사는 다른 쪽이 움직인 날 조용히 통과합니다.
    *    🕰️ 예전엔 이 값이 `style.css`에 있었어요 — 지금은 `dotShift`가 다 냅니다(위 🌍). */
-  M_PUSH: { "match-scene.js": [[/const PUSH = \{ home: 7, away: 4 \};/, "const PUSH = { home: 12, away: 4 };"]] },
+  /* 🔄 v5: 필드 점은 세로 [10, 90]에 갇혀(`LEN_MIN` · `LEN_MAX`) 밀림만으로는 못 나가요 — 가둠과 밀림은 **한 쌍**이라 둘을 함께 풉니다 */
+  M_PUSH: { "match-scene.js": [[/const PUSH = \{ home: 5, away: 4 \};/, "const PUSH = { home: 30, away: 30 };"], [/const LEN_MIN = 10, LEN_MAX = 90;/, "const LEN_MIN = -50, LEN_MAX = 150;"]] },
   /* 🔴🧡 **M-ME — 겹 이름을 떼어 특이도를 낮춥니다.** 소스에는 여전히 「앰버」라고
    *    적혀 있는데 화면에서는 우리 편과 **같은 초록**이 됩니다. */
   M_ME: { "style.css": [[/\.w2-side\.home \.w2-dot\.me \{/, ".w2-dot.me {"]] },
@@ -135,8 +139,8 @@ const MUT = {
    *    ①과 **같은 사고가 새 기구에서** 다시 나는 모양이에요: `push-h`(−7%)에 어긋남 −2%가
    *    겹쳐 우리 키퍼가 x 1%까지 내려가 **실점 카드마다 잘립니다**.
    *    🔑 자리(`FORM_H`)도 밀림(CSS)도 안 건드리는데 터져요 — **셋째 항이 생겼다**는 증거입니다. */
-  M_DEV: { "match-scene.js": [[/const out = home \? \(dir > 0 \? GK_OUT : 0\) : \(dir < 0 \? -GK_OUT : 0\);/,
-    "const out = home ? dir * GK_OUT : -dir * GK_OUT;"]] },
+  M_DEV: { "match-scene.js": [[/const fwd = home \? \(dir > 0 \? push \+ GK_OUT : 0\) : \(dir < 0 \? push - GK_OUT : 0\);/,
+    "const fwd = home ? push + dir * GK_OUT : push - dir * GK_OUT;"]] },
   /* 🔴🏃 **M-FLAT — 점마다 다른 자리를 없애고 「겹 하나가 통째로 밀리는」 옛 그림으로 되돌립니다.**
    *    🔑 판 밖으로 나가지도, 공이 엉뚱한 데 가지도 않아요 — **P-1도 P-3도 초록불입니다.**
    *       *"대형이 미끄러진다"*는 **P-4가 아니면 아무도 못 봅니다.** */
@@ -147,9 +151,10 @@ const MUT = {
   M_SIDE: { "match-scene.js": [[/const side = at\[2\] \|\| \(card\.flow === "a" \? "a" : card\.flow === "h" \? "h" : ""\);/,
     "const side = at[2];"]] },
   M_FLAT: { "match-scene.js": [
-    [/return \[push \+ out, clamp\(by - hy, -GK_SPAN, GK_SPAN\) \* GK_TRACK \+ \(fxRnd\(\) \* 2 - 1\) \* GK_JY\];/,
-      "return [push, 0];"],
-    [/return \[dx, clamp\(hy \+ dy, Y_MIN, Y_MAX\) - hy\];/, "return [push, 0];"]] },
+    /* 🔄 v5: 가둠(`LEN_MIN` · `LEN_MAX`)은 남겨요 — 「똑같이 밀림」만 되살리고 판 밖으로는 안 보내게(그래야 P-1 · P-5는 초록으로 남아요) */
+    [/return \[fwd, clamp\(by - hy, -GK_SPAN, GK_SPAN\) \* GK_TRACK \+ \(fxRnd\(\) \* 2 - 1\) \* GK_JY\];/,
+      "return [fwd, 0];"],
+    [/return \[clamp\(hx \+ dx, LEN_MIN, LEN_MAX\) - hx, clamp\(hy \+ dy, Y_MIN, Y_MAX\) - hy\];/, "return [clamp(hx + push, LEN_MIN, LEN_MAX) - hx, 0];"]] },
   /* 🔴🧤 **M-GKY — 키퍼가 공을 세로로 너무 쫓아갑니다** (0.25 → 1.2).
    *    골대는 판 높이의 30~70%인데 키퍼가 21~79%까지 나가요 — **골문을 떠난 그림**입니다.
    *    🔑 판 밖으로는 안 나가서 **P-1은 초록불로 남습니다** — P-5가 아니면 아무도 못 봐요. */
@@ -159,10 +164,10 @@ const MUT = {
    *    🔑 **똑같은 모양의 흠이 세 번째**예요 (🧤 키퍼 실종 → 🧤 키퍼가 공과 겹침 →
    *       🧡 내가 공 뒤로 숨음). 셋 다 *"가장 필요한 순간에만 안 보인다"*였습니다.
    *    📏 되돌리면 겹치는 상태가 **2 → 171 / 2112**, 최악 **−0.33 → −13.66px**. */
-  M_STAND: { "match-scene.js": [[/const STANDOFF = 8;/, "const STANDOFF = 0;"]] },
+  M_STAND: { "match-scene.js": [[/const STANDOFF = 8;/, "const STANDOFF = 0;"]] },   // 🔄 v5 고침(31번 「🔧 v5 고침」): 6 → 8
   /* 🔴🧸 **M-CHIBI24 — 말을 옛 시안 크기로**(24px · 내 순간 ×1.2 · director 31번 §1에서 렌더로 버린 크기) */
   M_CHIBI24: { "style.css": [
-    [/(\.w2-side\.home \.w2-dot\.me\.has-chibi \{\n {2}width: )22px; height: 22px; margin: -11px 0 0 -11px;/, "$1" + "24px; height: 24px; margin: -12px 0 0 -12px;"],
+    [/(\.w2-side\.home \.w2-dot\.me\.has-chibi \{\n {2}width: )26px; height: 26px; margin: -13px 0 0 -13px;/, "$1" + "30px; height: 30px; margin: -15px 0 0 -15px;"],
     [/\.w2-pitch\.mine \.w2-dot\.me\.has-chibi \{ transform: scale\(1\.1\); \}/, ".w2-pitch.mine .w2-dot.me.has-chibi { transform: scale(1.2); }"]] },
   /* 🔴🏁 **M-WHISTLE — 킥오프·종료 휘슬을 흐름 줄과 같은 옷으로** 되돌립니다.
    *    *"삐— 경기 종료 휘슬"*이 *"측면에서 두드립니다"*와 구분이 안 됩니다. */
@@ -184,9 +189,12 @@ const MUT = {
    *    🔑 「점이 다 서기 전에 오는가」로만 재면 **900은 더 여유로워서 조용히 통과**합니다. */
   M_FLOWMS: { "match-scene.js": [[/const FLOW_MS = 620;/, "const FLOW_MS = 900;"]] },
   M_ATTACK: { "match-scene.js": [
-    [/const PULL = \{ gk: 0, def: 5\.5, mid: 7, fwd: 6\.2, wing: 7\.6 \};/,
-      "const PULL = { gk: 0, def: 5.5, mid: 7, fwd: 40, wing: 40 };"],
-    [/const RANGE = 46;/, "const RANGE = 200;"]] },
+    [/const PULL = \{ gk: 0, def: 5\.5, wb: 6\.4, mid: 7, fwd: 6\.2, wing: 7\.6 \};/,
+      "const PULL = { gk: 0, def: 5.5, wb: 6.4, mid: 7, fwd: 80, wing: 80 };"],
+    [/const RANGE = 40;/, "const RANGE = 200;"],
+    /* 🔄 v5: 필드 점은 세로 [10, 90]에 갇혀 골망(97) 옆까지 못 와요 — 가둠까지 풀어야 148번이 안 하기로 한 그 그림이 됩니다 */
+    [/const LEN_MIN = 10, LEN_MAX = 90;/, "const LEN_MIN = 0, LEN_MAX = 100;"],
+    [/const CLOSE = 0\.6;/, "const CLOSE = 1;"]] },
 };
 
 {
@@ -245,10 +253,13 @@ function scene(muts, cfg) {
    *    상태 192개 × 창 여덟 벌이면 **2분을 기다리게** 됩니다.
    * 🔴 자리를 정하는 줄(`setPitch`)은 동기예요 — 여기서 지우는 건 **기다림뿐**입니다. */
   W.setTimeout = (f) => { f(); return 0; };
+  /* 🔄 v5: 집 자리는 `W2World.FORMS`에서 — 엔진 · world.js를 먼저 싣습니다(없으면 화면이 동료 점 없이 나와 공만 그려요) */
+  W.eval(fs.readFileSync(path.join(PAGE_DIR, "engine.js"), "utf8"));
+  W.eval(readSrc("world.js", muts));
   W.eval(readSrc("match-scene.js", muts));
   const Sc = W.W2Scene;
   if (!Sc || !Sc.mount) throw new Error("W2Scene이 안 실렸어요");
-  Sc.mount(W.document.getElementById("host"), Object.assign({ home: "우리 학교", away: "아라 중등부", myName: "나" }, cfg || {}));
+  Sc.mount(W.document.getElementById("host"), Object.assign({ home: "우리 학교", away: "아라 중등부", myName: "나", form: { us: "4-4-2", them: "4-3-3" } }, cfg || {}));
   Sc.fast();
   return { W, D: W.document, Sc, colors: painted.map, close: () => dom.window.close() };
 }
@@ -314,13 +325,16 @@ async function walk(h) {
   const shots = [];
   const snap = (label) => {
     const p = pushOf(h);
+    /* 🔄 v5 세로 판(48번 §4): 화면 좌표(sx = left = acr · sy = top = 100 − len)로 잘림 · 겹침을 재고,
+     *    나머지 문장(진영 · 키퍼 · 공 쪽으로 · 팀 안 폭)은 **옛 판 좌표**(x = len · y = acr)로 옮겨 그대로 씀 — 뜻이 같아요 */
     const dots = dotsOf(h).map((d) => {
       /* ①집 자리 + ②겹의 어긋남(팀 밀림까지 포함) — **둘을 더해야** 그 점의 진짜 자리예요 */
-      const cx = d.x + d.dx, cy = d.y + d.dy;
-      return { ...d, cx, cy, margin: inside(cx, cy, d.w, d.h) };
+      const sx = d.x + d.dx, sy = d.y + d.dy;
+      return { ...d, sx, sy, margin: inside(sx, sy, d.w, d.h),
+        cx: 100 - sy, cy: sx, x: 100 - d.y, y: d.x, dx: -d.dy, dy: d.dx };
     });
     const b = ballOf(h);
-    shots.push({ label, push: p, dots, ball: { ...b, margin: inside(b.x, b.y, b.w, b.h) } });
+    shots.push({ label, push: p, dots, ball: { ...b, sx: b.x, sy: b.y, margin: inside(b.x, b.y, b.w, b.h), x: 100 - b.y, y: b.x } });
     return shots[shots.length - 1];
   };
   const pairs = [];
@@ -418,7 +432,7 @@ async function p2(muts) {
   const h = scene(muts);
   const dots = dotsOf(h);
   const me = dots.find((d) => d.me);
-  const home = dots.find((d) => d.side === "home" && !d.me);
+  const home = dots.find((d) => d.side === "home" && !d.me && !d.gk);   // 🔄 v5: 11 대 11 — 첫 점이 키퍼(이중 테두리)라 필드 점으로
   const away = dots.find((d) => d.side === "away" && !d.gk);
   const r = { me, home, away };
   h.close();
@@ -444,10 +458,11 @@ async function p2(muts) {
         + `\n        ⚠️ \`!important\`로 이기지 마세요 — 다음 사람이 못 덮습니다`));
   /* ♿ 색을 통째로 빼도 갈려야 합니다. 🔑 P-2와 **성질이 다른 문장**이라 안 묶었어요 —
    *    묶으면 색이 고쳐진 뒤에도 흑백 문제로 빨간불이 남아 신호를 잃습니다. */
-  const mono = r.me.w > r.home.w && r.away.bw > 0 && r.home.bw === 0;
+  /* 🔄 v5(31번 v5 · style.css): 우리 편 점에도 얇은 테두리(1px)가 생겼고 상대는 **2px + 마름모**로 갈려요 — 「상대 테두리가 우리보다 굵다」로 옮김 */
+  const mono = r.me.w > r.home.w && r.away.bw > r.home.bw;
   check(mono,
     `P-2b. ♿ **색을 빼도 셋이 갈린다** — 나는 더 크고(${r.me.w}px > ${r.home.w}px),`
-    + ` 상대는 속이 비었어요(테두리 ${r.away.bw}px · 우리 편 ${r.home.bw}px)`
+    + ` 상대는 테두리가 굵어요(${r.away.bw}px > 우리 편 ${r.home.bw}px · 마름모)`
     + (mono ? "" : `\n     🔴 흑백·색약에서 «나»와 «상대»가 우리 편과 안 갈립니다`));
 }
 
@@ -689,6 +704,10 @@ console.log("\n── ⚽🏁⏳ P-8~10. 공 겹침 · 휘슬 옷 · 출발 시�
  * 🔒 개수 상한: 원 **8**(옛 그대로) · 말 **16**(말이 크니 스치는 상태가 많아요 — 실측 최대 10 · M-STAND 최소 26의 사이). */
 const OVERLAP_RATIO_CAP = 2 / 7;
 const OVERLAP_N_CAP = { circle: 8, chibi: 16 };
+/* 🔄 v5 고침 뒤(31번 「🔧 v5 고침」 · `STANDOFF` 8 · 판 270 × 284) — **차림별 개수 상한을 실측으로 조임**(🚧 지움):
+ *    원 · 윙어 0 · 🧸 공격수 1(−0.81px = 반지름 13px의 6.2%) · 🧸 윙어 0 · 🧸 미드필더 1(−0.49px · 3.7%) · 🧸 수비수 0.
+ *    깊이 상한은 그대로 반지름의 28.6%(2/7) — 개수가 늘거나 깊이가 그 비율을 넘으면 ❌ */
+const OVERLAP_N_BY_TAG = { "원 · 윙어": 0, "🧸 공격수": 1, "🧸 윙어": 0, "🧸 미드필더": 1, "🧸 수비수": 0 };
 for (const C of CONFIGS) {
   const h = scene(null, C.cfg);
   const r = await walk(h);
@@ -702,14 +721,14 @@ for (const C of CONFIGS) {
   let worstGap = Infinity, worstAt = "", nDots = 0;
   for (const sh of r.shots) for (const d of sh.dots) {
     const rd = (d.w / 2) * (d.me ? meScale : 1);
-    const dx = (d.cx - sh.ball.x) / 100 * RENDER_W, dy = (d.cy - sh.ball.y) / 100 * RENDER_H;
+    const dx = (d.sx - sh.ball.sx) / 100 * RENDER_W, dy = (d.sy - sh.ball.sy) / 100 * RENDER_H;   // 🔄 v5: 화면 좌표(가로 = 폭 · 세로 = 높이)
     const gap = Math.hypot(dx, dy) - rd - sh.ball.w / 2;
     nDots += 1;
     if (!Number.isFinite(gap)) { bad.push(`${sh.label}: 값을 못 읽었어요`); continue; }
     if (gap < 0) bad.push(`${sh.label}: ${d.side}${d.gk ? " 🧤gk" : d.me ? " 🧡나" : ""} ${gap.toFixed(2)}px`);
     if (gap < worstGap) { worstGap = gap; worstAt = `${d.side}${d.gk ? " 🧤gk" : d.me ? " 🧡나" : ""} · ${sh.label}`; }
   }
-  const nCap = OVERLAP_N_CAP[chib ? "chibi" : "circle"];
+  const nCap = OVERLAP_N_BY_TAG[C.tag] != null ? OVERLAP_N_BY_TAG[C.tag] : OVERLAP_N_CAP[chib ? "chibi" : "circle"];
   const pxCap = -OVERLAP_RATIO_CAP * meR;
   const ratio = -worstGap / meR;
   const meOK = meScale > 1 && Number.isFinite(meR) && okChibi;
@@ -718,9 +737,11 @@ for (const C of CONFIGS) {
   if (!meOK) {
     check(false, `${tag} ⚽ 🧡 「나」의 반지름 · 내 순간 배율을 캐스케이드에서 못 읽었어요 (반지름 ${meR} · 배율 ${meScale} · 말 ${okChibi ? "✔" : "🔴"})`
       + `\n     🔴 배율 없이 재면 🧡 나의 반지름을 **작게** 봐서 겹침이 조용히 사라집니다`);
-  } else if (bad.length === 0) {
-    check(false, `${tag} 🎉 **겹치는 점이 0개가 됐습니다** — 이 차림의 🚧를 지우고 상한을 0으로 내리세요`
+  } else if (bad.length === 0 && nCap > 0) {
+    check(false, `${tag} 🎉 **겹치는 점이 0개가 됐습니다** — 이 차림의 상한(${nCap})을 0으로 내리세요`
       + `\n     최악 여유 ${worstGap.toFixed(2)}px (${worstAt}) · 점 ${nDots}개`);
+  } else if (bad.length === 0) {
+    check(true, `${tag} ⚽ 점이 공을 덮는 상태 0 (상한 0) — 최악 여유 ${worstGap.toFixed(2)}px · 점 ${nDots}개`);
   } else if (!within) {
     check(false, `${tag} ⚽ **점이 공을 덮는 자리가 늘었습니다** — ${bad.length}개 (상한 ${nCap}) · 최악 **${worstGap.toFixed(2)}px**`
       + ` = 반지름 ${meR}px의 **${(ratio * 100).toFixed(1)}%** (상한 ${(OVERLAP_RATIO_CAP * 100).toFixed(1)}% = ${pxCap.toFixed(2)}px)`
@@ -728,8 +749,8 @@ for (const C of CONFIGS) {
       + bad.slice(0, 6).map((b) => `\n     🔴 ${b}`).join("")
       + `\n     🔑 \`STANDOFF\`(공 둘레를 비우는 칸)와 \`Y_MIN\`/\`Y_MAX\`(세로 가둠) · 말 크기(\`.has-chibi\` 22px · ×1.1)를 **같이** 보세요`);
   } else {
-    console.log(`🚧 ${tag} ⚽ 🧡 나와 공이 **${bad.length}개 상태에서 스칩니다** — 최악 ${worstGap.toFixed(2)}px = 반지름 ${meR}px의 ${(ratio * 100).toFixed(1)}% (${worstAt})`);
-    console.log(`     🔎 실측 320px 판 ${RENDER_W}×${RENDER_H}px · 점 ${nDots}개 · 내 순간 배율 ×${meScale} · 상한 ${nCap}개 / 반지름의 ${(OVERLAP_RATIO_CAP * 100).toFixed(1)}%(${pxCap.toFixed(2)}px) — 넘으면 ❌`);
+    check(true, `${tag} ⚽ 🧡 나와 공이 **${bad.length}개 상태에서 스칩니다**(상한 ${nCap}) — 최악 ${worstGap.toFixed(2)}px = 반지름 ${meR}px의 ${(ratio * 100).toFixed(1)}%(상한 ${(OVERLAP_RATIO_CAP * 100).toFixed(1)}%) (${worstAt})`
+      + `\n     🔎 실측 320px 판 ${RENDER_W}×${RENDER_H}px · 점 ${nDots}개 · 내 순간 배율 ×${meScale} — 개수 · 깊이가 넘으면 ❌`);
   }
   h.close();
 }
@@ -852,7 +873,7 @@ console.log(`     🔑 뿌리: \`Y_MAX\`(82%) 클램프가 물러설 자리를 �
       n += 1;
       const near = s.dots
         .map((d) => ({ who: `${d.side}${d.gk ? "🧤" : d.me ? "🧡" : ""}`, side: d.side,
-          dist: Math.hypot((d.cx - s.ball.x) / 100 * RENDER_W, (d.cy - s.ball.y) / 100 * RENDER_H) }))
+          dist: Math.hypot((d.sx - s.ball.sx) / 100 * RENDER_W, (d.sy - s.ball.sy) / 100 * RENDER_H) }))
         .sort((a, b) => a.dist - b.dist).slice(0, 2);
       if (!near.every((x) => x.side === want)) bad.push(`${s.label}: ${near.map((x) => `${x.who} ${x.dist.toFixed(0)}px`).join(" + ")} (계약 ${want} 둘)`);
     }
@@ -1045,14 +1066,14 @@ else for (const C of [CONFIGS[0], CONFIGS[2]]) {
   let over = 0, worst = Infinity, cut = 0;
   for (const sh of r.shots) for (const d of sh.dots) {
     const rd = (d.w / 2) * (d.me ? meScale : 1);
-    const dx = (d.cx - sh.ball.x) / 100 * RENDER_W, dy = (d.cy - sh.ball.y) / 100 * RENDER_H;
+    const dx = (d.sx - sh.ball.sx) / 100 * RENDER_W, dy = (d.sy - sh.ball.sy) / 100 * RENDER_H;   // 🔄 v5: 화면 좌표
     const gap = Math.hypot(dx, dy) - rd - sh.ball.w / 2;
     if (gap < 0) over += 1;
     if (gap < worst) worst = gap;
     if (d.margin < 0) cut += 1;
   }
   h.close();
-  const nCap = OVERLAP_N_CAP[C.cfg.chibi ? "chibi" : "circle"];
+  const nCap = OVERLAP_N_BY_TAG[C.tag] != null ? OVERLAP_N_BY_TAG[C.tag] : OVERLAP_N_CAP[C.cfg.chibi ? "chibi" : "circle"];
   const caught = over > nCap || -worst / meR > OVERLAP_RATIO_CAP;
   check(caught && cut === 0,
     `🧪⚽ **변이 M-STAND — \`STANDOFF\` 8 → 0** [${C.tag}] → P-8이 빨간불 · P-1은 초록불`
@@ -1067,7 +1088,8 @@ else for (const C of [CONFIGS[0], CONFIGS[2]]) {
  *    🔑 비율 상한이 **말 크기를 실제로 타는가**의 증거 — 원 차림은 그대로라 🧸 차림에서만 무는 게 맞아요. */
 if (pageMutsOK({ M_CHIBI24: MUT.M_CHIBI24 }).length) check(false, `🧪 **변이 M-CHIBI24 — 🧸 말 24px · ×1.2**${MUT_DEAD}`);
 else {
-  const h = scene(MUT.M_CHIBI24, CONFIGS[2].cfg);
+  /* 🔄 v5: 세로 판에선 🧸 윙어의 「나」가 공 곁에 안 와요(측면) — 「나」가 공 곁을 지나는 🧸 공격수 차림에서 잽니다 */
+  const h = scene(MUT.M_CHIBI24, CONFIGS[1].cfg);
   const r = await walk(h);
   const meDots = r.shots.flatMap((sh) => sh.dots.filter((d) => d.me));
   const meScale = Math.max(...meDots.map((d) => d.sc));
@@ -1075,7 +1097,7 @@ else {
   let worst = Infinity, over = 0;
   for (const sh of r.shots) for (const d of sh.dots) {
     if (!d.me) continue;
-    const dx = (d.cx - sh.ball.x) / 100 * RENDER_W, dy = (d.cy - sh.ball.y) / 100 * RENDER_H;
+    const dx = (d.sx - sh.ball.sx) / 100 * RENDER_W, dy = (d.sy - sh.ball.sy) / 100 * RENDER_H;   // 🔄 v5: 화면 좌표
     const gap = Math.hypot(dx, dy) - (d.w / 2) * meScale - sh.ball.w / 2;
     if (gap < 0) over += 1;
     if (gap < worst) worst = gap;
@@ -1154,7 +1176,7 @@ else {
     if (!want) continue;
     n += 1;
     const near = s.dots
-      .map((d) => ({ side: d.side, dist: Math.hypot((d.cx - s.ball.x) / 100 * RENDER_W, (d.cy - s.ball.y) / 100 * RENDER_H) }))
+      .map((d) => ({ side: d.side, dist: Math.hypot((d.sx - s.ball.sx) / 100 * RENDER_W, (d.sy - s.ball.sy) / 100 * RENDER_H) }))
       .sort((a, b) => a.dist - b.dist).slice(0, 2);
     if (!near.every((x) => x.side === want)) by[m[2]] += 1;
   }

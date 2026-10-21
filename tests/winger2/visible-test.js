@@ -43,7 +43,7 @@ const MUT_S = {
   M_EACH: [[/const t10 = tenths\(\[body, care, record, stagePt, test\]\);/, "const t10 = [body, care, record, stagePt, test].map((v) => Math.round(v * 10));"],
     [/const total = t10\.reduce\(\(a, b\) => a \+ b, 0\) \/ 10;/, "const total = Math.round((body + care + record + stagePt + test) * 10) / 10;"]],
   /* V-4c — 구간을 원래 합(두 자리 · 24번 문턱)으로 */
-  M_RAWTIER: [[/const tier = final \? tierOf\(total\) : null;/, 'const tier = final ? ((x) => (x >= 67.36 ? "top" : x >= 60.26 ? "high" : x >= 53.66 ? "mid" : "low"))(body + care + record + stagePt + test) : null;']],
+  M_RAWTIER: [[/const tier = final \? tierOf\(total\) : null;/, 'const tier = final ? ((x) => (x >= 66.95 ? "top" : x >= 59.99 ? "high" : x >= 53.42 ? "mid" : "low"))(body + care + record + stagePt + test) : null;']],
 };
 const SSRC = fs.readFileSync(path.join(PAGE_DIR, "sheet.js"), "utf8");
 {
@@ -202,7 +202,9 @@ async function v1(muts, seeds) {
   /* ══════════ V-4 · V-5 ══════════ */
   const SH = sheetOf(SSRC);
   const K6 = ["shoot", "pass", "dribble", "defense", "stamina", "speed"];
-  const mkS = (trust, i) => ({ pos: ["fw", "wg", "mf", "df"][i % 4], preset: "jiho", gender: "m", trust,
+  /* 🔄 v5(J19): 기록 칸은 경기 줄(`S.games[]`)로 셈 — 기록 수를 14경기에 나눠 담음(남는 것은 앞 경기에) */
+  const rows14 = (g, a, d) => Array.from({ length: 14 }, (_, k) => ({ t: "L", g: Math.floor(g / 14) + (k < g % 14 ? 1 : 0), a: Math.floor(a / 14) + (k < a % 14 ? 1 : 0), d: Math.floor(d / 14) + (k < d % 14 ? 1 : 0) }));
+  const mkS = (trust, i) => ({ games: rows14(i % 5, (i * 3) % 7, (i * 5) % 30), pos: ["fw", "wg", "mf", "df"][i % 4], preset: "jiho", gender: "m", trust,
     stats: Object.fromEntries(K6.map((k, j) => [k, 48 + ((i * 7 + j * 11) % 45)])),
     record: { apps: 14, g: i % 5, a: (i * 3) % 7, d: (i * 5) % 30, cs: 2, sN: 20 + i, sSum: (20 + i) * (0.3 + (i % 7) / 10) },
     world: { cup: { done: true, stage: i % 6, name: "푸른잔디배" } }, leagueChamp: i % 9 === 0, test: { tech: i % 7, rating: 5 + (i % 5) }, story: { door: false } });
@@ -226,7 +228,7 @@ async function v1(muts, seeds) {
   check(d.bad4.length === 0, `V-4. 📋 평가서 120장(중간 · 최종) — 칸 합 == \`total\` · 구간 == 문턱표 (어긋남 ${d.bad4.length})` + (d.bad4.length ? `\n     🔴 ${d.bad4.slice(0, 3).join(" · ")}` : ""));
   check(d.bad5.length === 0, `V-5. 📝 감독 의견은 **점수 0** — 🤝 −6 · 0 · +6에서 칸 · 합계가 같고 의견 한 줄만 바뀜 (60판 · 어긋남 ${d.bad5.length})` + (d.bad5.length ? `\n     🔴 ${d.bad5.slice(0, 3).join(" · ")}` : ""));
   /* ══════════ V-4b · V-4c — 진짜 화면에 그려진 숫자로 ══════════ */
-  const T1 = { top: 674, high: 603, mid: 537 };       // 🔒 47번 §1 — 한 자리 문턱 67.4 · 60.3 · 53.7을 0.1 단위 정수로 · 박은 값(중간 평가서엔 도장 없음 — 7′)
+  const T1 = { top: 670, high: 600, mid: 534 };       // 🔒 15번 끝 · 51번 v5 — 한 자리 문턱 67.0 · 60.0 · 53.4를 0.1 단위 정수로 · 박은 값(중간 평가서엔 도장 없음 — 7′)
   const TNAME = { top: "최상", high: "상", mid: "중", low: "하" };
   const tierOfShown = (t10) => (t10 >= T1.top ? "top" : t10 >= T1.high ? "high" : t10 >= T1.mid ? "mid" : "low");
   /* 문턱 바로 위 · 0.1 아래 판 — 속도 하나를 이분 탐색으로 움직여 **화면 합계가 문턱을 막 넘는 자리**를 찾아요.
@@ -236,7 +238,7 @@ async function v1(muts, seeds) {
     /* 손잡이 둘 — 나머지 다섯 능력치 L(밑바탕)과 골 g(기록 칸) · 속도 sp로 문턱을 막 넘는 자리를 찾아요 */
     const base = (L, g, sp) => ({ pos: "wg", preset: "jiho", gender: "m", trust: 0,
       stats: { shoot: L, pass: L, dribble: L, defense: L, stamina: L, speed: sp },
-      record: { apps: 14, g, a: 3, d: 4, cs: 2, sN: 20, sSum: 13.2 }, world: { cup: { done: true, stage: 2, name: "푸른잔디배" } },
+      record: { apps: 14, g, a: 3, d: 4, cs: 2, sN: 20, sSum: 13.2 }, games: rows14(g, 3, 4), world: { cup: { done: true, stage: 2, name: "푸른잔디배" } },
       leagueChamp: false, test: { tech: 3, rating: 7 }, story: { door: false } });
     const shown = (L, g, sp) => Math.round(Sh.compute(base(L, g, sp), true).total * 10);
     for (const T of [T1.top, T1.high, T1.mid]) {

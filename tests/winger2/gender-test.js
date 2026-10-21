@@ -55,7 +55,8 @@ async function gs1(muts) {
     if (diff.length) bad.push(`#${seed}: ${diff.join(",")}`);
     /* GS-2 */
     const wa = a.S.world, wb = b.S.world;
-    const rv = (w) => w.ours.find((x) => x.role === "rival").name;
+    /* 🔄 v5(50번 §4 · J17): 민재/민서는 고정 라이벌이 아니라 「번호의 1학년」 이야기 인물 — 세이브 업그레이드 뒤 `role: "number"` */
+    const rv = (w) => w.ours.find((x) => x.role === "number" || x.role === "rival").name;
     const ac = (w) => w.league.teams[5].xi.find((x) => x.role === "ace").name;
     const differ = [["팀", wa.school.team, wb.school.team], ["리그", wa.league.name, wb.league.name], ["대회", wa.cup.name, wb.cup.name],
       ["{rival}", rv(wa), rv(wb)], ["{keeper}", wa.keeper.name, wb.keeper.name], ["{ace}", ac(wa), ac(wb)], ["그림 열쇠", wa.rivalWho, wb.rivalWho]];

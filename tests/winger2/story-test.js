@@ -144,7 +144,10 @@ function audit(R) {
 
 async function sweep(muts, seeds) {
   const res = [];
-  for (const seed of seeds) for (const pol of POLS) {
+  /* 🔄 v5(51번 「v5 — 이어서」 · inspector 몫): 판마다 **다른 시드**(seed = 3001 + 37 × i + 1009 × 정책 번호) — 정책 여섯이 같은 세계를 나눠 쓰면
+   *    세계가 10벌뿐이라 🔥 「연 판 ≥ 1」이 운으로 빨개짐(10벌에서 0번일 확률 약 1% · 실제로 빨갰음). 60벌이면 ≈ 10⁻¹⁰ · 문턱은 그대로 */
+  for (const base of seeds) for (const pol of POLS) {
+    const seed = base + 1009 * POLS.indexOf(pol);
     const R = await oneRun(seed, pol, muts);
     if (!R.done) { res.push({ dead: `${seed}/${pol.name}: ${R.stuck}` }); R.w.close(); continue; }
     res.push(Object.assign({ seed, pol: pol.name }, audit(R)));

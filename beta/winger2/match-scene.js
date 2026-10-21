@@ -285,145 +285,100 @@ window.W2Scene = (() => {
    * ♿ 판은 `aria-hidden`이에요 — **같은 정보를 피드가 글로 이미 말합니다.**
    *    낭독에 두 번 읽히면 중계가 두 겹으로 들려요. */
 
-  /* 🧍 포메이션 — 판 **폭·높이의 %**. x 0 = 우리 골라인 · 100 = 상대 골라인.
-   * 🔒 4-4-2를 다 그리지 않습니다. 320px에서 22개가 서면 점이 서로 붙어 죽이 돼요.
-   *    한 줄에 하나씩만 세워 **누가 앞이고 누가 뒤인지**만 읽히게 했습니다. */
-  /* 🐛 **골키퍼가 판 밖으로 나갔습니다** — 렌더로만 보인 흠이에요(390·320 실측).
-   *    처음엔 `gk`가 x 7%였는데 `push-h`(우리 진영으로 밀림)가 −9%라 **−2%**가 되어,
-   *    390px에서 왼쪽 −10.3 ~ −1.3px — **통째로 잘렸습니다**. 하필 실점 카드마다요:
-   *    🔴 **키퍼가 가장 필요한 순간에만 사라지는** 그림이었어요.
-   *    🔒 그래서 골키퍼는 **밀림폭보다 안쪽**에 세웁니다 (10% > 7%). 밀림을 키우려면
-   *       `style.css`의 `push-*`와 여기를 **같이** 보세요 — 둘이 한 쌍입니다. */
-  const FORM_H = [[10, 50, " gk"], [24, 25, ""], [24, 75, ""], [42, 50, ""], [63, 27, ""]];
-  const FORM_A = [[90, 50, " gk"], [77, 27, ""], [77, 73, ""], [58, 50, ""], [37, 67, ""]];
-  /* 🧡 나 — **포지션마다 집 자리**가 다릅니다(1막은 넷 — 결정 4). [x, y, 역할]
-   * 🐛 옛 II는 윙어 하나라 [64, 76] 한 자리였어요. 그대로 두면 🧱 수비수의 말이 상대 진영에 서서
-   *    **우리 박스의 🧱 순간에 나만 멀리 있는** 그림이 됩니다 — 판이 카드를 따라간다는 약속이 깨져요.
-   * 📏 자리는 우리 · 상대 점과 **흐름(±7%)으로 밀려도** 반지름 합(말 12px + 점 4.5px)보다 떨어지게 골랐어요
-   *    (320px 판 기준 어림 — 👁️ 렌더로 한 번 더 봄). 역할은 라인 계수(`LINE` · `PULL`)를 고릅니다.
-   * 🔒 드라이버가 `pos`를 안 주면 윙어 자리 — 옛 판과 한 픽셀도 다르지 않아요. */
-  const ME_AT = { fw: [72, 46, "fwd"], wg: [64, 76, "wing"], mf: [48, 36, "mid"], df: [30, 40, "def"] };
+  /* ══════════════════════════════════════════════════════════════════
+   * 🧍 **11 대 11 · 세로 판**(v5 — 48번 §4 · 52번 계약) — 우리 골문이 아래, 상대 골문이 위
+   * ══════════════════════════════════════════════════════════════════
+   * 🔑 자리는 **`W2World.FORMS[이름]`**(engineer)에서 읽습니다 — 여기엔 좌표 표가 없어요(사본 0).
+   *    표 모양: `[[x, y, role], …]` 11개 · 키퍼가 첫 줄 · x 0~100 = 왼쪽→오른쪽(우리 골문을 아래에 두고) ·
+   *    y 0~50 = 우리 골라인에서 하프라인까지의 깊이 · role gk | def | wb | mid | wing | fwd.
+   * 🔑 판 안의 좌표는 **둘**이에요(움직임 산수는 예전 그대로 쓰려고):
+   *      len  0 = 우리 골라인 · 100 = 상대 골라인(예전 x)      → 화면 `top = 100 − len`
+   *      acr  0~100 왼쪽→오른쪽(예전 y)                      → 화면 `left = acr`
+   *    우리 = (len y, acr x) · 상대 = 같은 표를 **180° 돌려**(len 100 − y, acr 100 − x) — 위아래가 뒤집혀요.
+   * 🧡 나 = 그 경기에 선 자리(`cfg.at` — `info.pick.at`, 없으면 `pos`)에 맞는 role의 **첫 자리** — 동료 9 + 나 1.
+   *    ③ 교체(`cfg.onMin` > 0)면 투입 전엔 그 자리에 동료 점이 서고, 그 분에 내가 들어가요(연출만). */
+  const AT_ROLES = { fw: ["fwd"], wg: ["wing", "wb"], mf: ["mid", "wb"], df: ["def", "wb"] };
+  const formsOf = () => { try { const W = window.W2World; return W && W.FORMS ? W.FORMS : null; } catch { return null; } };
+  /* 표를 못 받으면(옛 화면 · world.js 없음) 동료 점 없이 나와 공만 — 판정에는 아무 영향이 없어요 */
+  function formRows(name) {
+    const F = formsOf();
+    const f = F && (F[name] || F["4-4-2"]);
+    return Array.isArray(f) ? f.filter((r) => Array.isArray(r) && r.length >= 3).map((r) => [+r[0], +r[1], String(r[2])]) : [];
+  }
+  function meIndex(rows, at) {
+    for (const role of (AT_ROLES[at] || AT_ROLES.wg)) { const i = rows.findIndex((r) => r[2] === role); if (i > 0) return i; }
+    return rows.length > 1 ? rows.length - 1 : -1;
+  }
+  /* 판에 서는 줄 — [len, acr, role, kind] · kind "gk" | "" | "me" */
+  function sideRows(name, home, at) {
+    const rows = formRows(name);
+    const mi = home ? meIndex(rows, at) : -1;
+    return rows.map((r, i) => [home ? r[1] : 100 - r[1], home ? r[0] : 100 - r[0], r[2], r[2] === "gk" ? "gk" : i === mi ? "me" : ""]);
+  }
+  /* 🛟 FORMS가 없을 때 「나」 자리 — 깊이만 역할로(우리 진영 · 가운데) */
+  const ME_LONE = { fw: [42, 50, "fwd"], wg: [36, 82, "wing"], mf: [28, 50, "mid"], df: [14, 40, "def"] };
 
   /* ══════════════════════════════════════════════════════════════════
    * 🏃 **점마다 다른 자리로 갑니다** — 대형이 통째로 미끄러지면 «뛴다»로 안 보여요
    * ══════════════════════════════════════════════════════════════════
-   * 🕰️ 여기 있던 것은 **겹 하나를 `translateX(±7%)`로 통째로 미는 것**이었습니다.
-   *    정직했지만 *"대형이 미끄러진다"*로 보이지 *"선수들이 뛴다"*로는 안 보였어요.
-   * 🔑 그래서 한 점의 자리를 **둘의 합**으로 다시 짰습니다:
-   *
-   *      인라인 `left`/`top`(집 자리)  +  `.w2-slot`의 인라인 `transform`(어긋남 — 여기)
-   *
-   *    🔒 둘 다 **숫자로 적혀 있습니다** — 검사가 `left`와 인라인 `transform`을 더하면
-   *       그 점이 판 안에 있는지 산수로 나옵니다.
-   *
-   * 🐛 **팀 밀림(±7%/±4%)이 예전엔 `.w2-side`의 CSS `translateX`였는데, 여기로 옮겼습니다.**
-   *    ⚽ **공은 `.w2-side` 밖**이라 그 밀림을 안 탔어요. 그래서 「점이 공에서 얼마나 먼가」를
-   *    재는 이 함수와 실제 화면이 **7%씩 어긋난 다른 좌표계**였습니다 —
-   *    320px 렌더에서 **우리 중원이 공 위에 정확히 포개졌어요**(−7.3px).
-   *    🔒 **두 좌표계를 하나로 합칩니다.** 밀림도 어긋남도 전부 이 함수가 냅니다.
-   *    ⚠️ 그래서 `style.css`에는 `.w2-side`를 미는 규칙이 **없습니다.** 되살리면 두 번 밀려요.
-   *
-   * ⏱️ **`dt`도 `requestAnimationFrame`도 안 씁니다.** 어긋남은 카드 한 장에 **한 번**
-   *    계산해서 인라인 `transform`에 적고, 미끄러지는 일은 CSS `transition`이 합니다.
-   *    가짜 시계(`cb(0)`)에서도 얼어붙을 게 없어요.
-   *
-   * 🔴 **여전히 결과를 만들지 않습니다.** 점이 어디 서든 골이 되지 않아요 —
-   *    입력은 «공이 어디 있나»(위 표가 정한 값)와 «흐름이 어느 쪽인가»뿐입니다.
-   *
-   * 🎲 굴림은 **`fxRnd`만** 씁니다(판정 난수원도 `Math.random()`도 아니에요).
-   *    개수는 **역할만 보고 정해집니다** — 🧤 키퍼 1번 · 필드 2번. `if` 안에서 부르는 굴림이
-   *    하나도 없어요. 그래서 `setPitch` 한 번이 언제나 **정확히 22번**입니다(아래 그 자리). */
-
-  /* 🧍 역할 — `FORM_H`/`FORM_A`와 **자리가 같은** 배열이에요.
-   * 🔒 표 안에 넣지 않은 이유: `FORM_H`의 **글자 그대로**를 검사(pitch-test M-GK)가 물고 있어요. */
-  const ROLE = ["gk", "def", "def", "mid", "fwd"];
-  /* 팀 전체가 미는 폭 — 우리가 더 크게 움직입니다(우리 이야기라서요).
-   * 🕰️ 예전 `style.css`의 `.w2-pitch.push-* .w2-side.*`와 **같은 값**이에요 (7 · 4). */
-  const PUSH = { home: 7, away: 4 };
-  /* 라인 계수 — 흐름이 갈릴 때 **수비가 제일 크게 오르내립니다**(공격수는 이미 높아요).
-   * 이 차이가 «라인이 내려앉는다»를 만듭니다 — 다 같은 값이면 또 미끄러져요. */
-  const LINE = { gk: 0, def: 1, mid: 0.68, fwd: 0.38, wing: 0.24 };
-  const LINE_STEP = 7;                 // 흐름 한 칸 = 판 폭의 7%
-  /* 공에 붙는 힘 — **가까운 점만** 붙습니다. `RANGE` 밖은 0이에요.
-   * 🔑 전원이 같은 거리를 붙으면 그것도 미끄러지는 그림이 됩니다. */
-  const PULL = { gk: 0, def: 5.5, mid: 7, fwd: 6.2, wing: 7.6 };
-  const RANGE = 46;
+   * 한 점의 자리 = 인라인 `left`/`top`(집 자리) + `.w2-slot`의 인라인 `transform`(어긋남 — 여기).
+   * 🔒 밀림 · 어긋남은 전부 이 함수가 냅니다(`style.css`에 `.w2-side`를 미는 규칙 없음 — 되살리면 두 번 밀려요).
+   * ⏱️ `dt` · `requestAnimationFrame` 0 — 카드 한 장에 한 번 계산하고 CSS `transition`이 미끄러뜨려요.
+   * 🔴 **여전히 결과를 만들지 않습니다.** 입력은 «공이 어디»(표) · «흐름이 어느 쪽» · «포메이션»뿐이에요.
+   * 🎲 굴림은 **`fxRnd`만** · 개수는 **역할만** 보고 정해요: 🧤 키퍼 1번 · 필드 2번 — `if` 안 굴림 0.
+   *    `setPitch` 한 번 = 공 2(`rx` · `ry`) + 키퍼 2 × 1 + 필드 20 × 2 = **정확히 44번**(15번 끝 기록 · 52번 정정). */
+  const PUSH = { home: 5, away: 4 };
+  /* 라인 계수 — 흐름이 갈릴 때 **수비가 제일 크게 오르내립니다**. 윙백(0.8)은 수비와 미드 사이 */
+  const LINE = { gk: 0, def: 1, wb: 0.8, mid: 0.68, fwd: 0.38, wing: 0.24 };
+  const LINE_STEP = 7;                 // 흐름 한 칸 = 판 길이의 7%
+  const PULL = { gk: 0, def: 5.5, wb: 6.4, mid: 7, fwd: 6.2, wing: 7.6 };
+  const RANGE = 40;
   const CLOSE = 0.6;                   // 아무리 가까워도 틈의 60%까지만 좁힙니다
-  /* 🐛 **공을 덮으면 안 됩니다** — 320px 렌더에서 🧡 나(반지름 7px)가 ⚽ 공(5.5px) **뒤로
-   *    숨었어요.** 하필 「내 순간」 카드라, 내가 관여한 그 순간에만 내가 안 보이는 그림입니다
-   *    (🧤 키퍼가 실점 카드마다 사라지던 것과 **같은 모양의 흠**이에요).
-   * 🔒 그래서 점은 공 둘레 **8칸을 비워 둡니다** — 320px에서 ≈21.6px이에요.
-   *    🔑 가장 큰 반지름 합은 **🧡 커진 나(9.45px) + 공(5.5px) = 14.95px**이라 6.6px 남고,
-   *       그 뒤에 붙는 흔들림(±1.7%·±2.2%)을 빼도 3px 넘게 떨어져요 (렌더 실측 최악 **+3.4px**).
-   *    붙을 때는 여덟 칸 앞에서 멈추고, **이미 그 안에 있으면 물러섭니다**(집 자리가 공 밑일 때).
-   * 🔒 물러서다 판 위아래로 나가지 않게 y는 [18, 82]에 가둡니다.
-   *    🔑 기준은 **가장 큰 점**이에요 — 🧡 커진 나는 지름 18.9px이고, 판이 가장 낮을 때
-   *       (`clamp(76px, …)`) 그 절반이 **높이의 12.45%**입니다. 82 + 12.45 = 94.5%라 4px 남아요.
-   *    ⚠️ 처음엔 [14, 86]으로 뒀는데 그 절반을 14%로 잘못 봐서 **여유가 1.2px**이었습니다. */
+  /* 공 둘레는 비워 둡니다(나 · 키퍼가 공 뒤로 숨지 않게) · 판 가장자리 밖으로 안 나가게 가로를 [6, 94]에 가둬요 */
   const STANDOFF = 8;
-  const Y_MIN = 18, Y_MAX = 82;
-  const YW = 0.35;                     // 판이 가로로 길어요 — y 1%는 x 0.35% 값어치
-  const JX = 1.7, JY = 2.2;            // 🎲 점마다 조금씩 다른 자리
-  /* 🧤 **골키퍼는 자기 골문을 안 떠납니다.**
-   * 🔴 x 어긋남은 **판 가운데 쪽으로만** 갑니다 — 골라인 쪽은 **언제나 0**이에요.
-   *    여기가 판 밖으로 나가는 **유일한 길**이라서요: 우리 키퍼는 집이 x 10%인데
-   *    팀 밀림 −7%가 붙어 3%까지 내려오고, 남은 여유가 **3.4px**뿐입니다(판 264px 기준).
-   *    ⚠️ 여기에 ±흔들림을 붙이면 **실점 카드마다 키퍼가 잘립니다**(140번에 실제로 났어요).
-   *    🔬 변이 M-DEV가 정확히 그 상태를 만들어 P-1을 빨간불로 만듭니다. */
-  const GK_OUT = 2;                    // 우리 팀이 밀어붙일 때만, 가운데로 두 칸
-  /* 🐛 **키퍼를 공 쪽으로 너무 붙이면 안 됩니다.** 0.5로 뒀더니 실점 카드(공 y 28%)에서
-   *    키퍼가 39%까지 올라와 **공과 겹쳤어요** — 320px 렌더에서 둘 사이가 8.5px인데
-   *    반지름 합이 10px입니다. «키퍼가 잡았다»처럼 보이는 그 그림이에요(위 BALL_RESULT 주석).
-   * 🔒 0.25면 공 y 26~74%에 대해 키퍼는 44~56%에만 있습니다 — 좌우로 지키는 건 읽히고,
-   *    골라인 카드에서 공과는 **12px 넘게** 떨어져요. */
-  const GK_TRACK = 0.25, GK_SPAN = 24, GK_JY = 0.8;
+  const Y_MIN = 6, Y_MAX = 94;
+  /* 필드 점은 세로 [10, 90] — 키퍼(골라인 4 · 96)와 16px 점이 안 포개지게(판 높이 284px에서 6% ≈ 17px) */
+  const LEN_MIN = 10, LEN_MAX = 90;
+  const YW = 0.8;                      // 세로 판 — 가로 1%는 세로 1%의 약 0.8(폭 ÷ 높이)
+  const JX = 1.5, JY = 2.2;            // 🎲 점마다 조금씩 다른 자리(세로 · 가로)
+  /* 🧤 키퍼 — 자기 골문을 안 떠나요. 우리 팀이 밀어붙일 때만 두 칸 앞으로 · 좌우는 공을 0.25만큼 따라감 */
+  const GK_OUT = 2;
+  const GK_TRACK = 0.25, GK_SPAN = 24, GK_JY = 0.8;   // 키퍼 흔들림은 가로로만 조금(±0.8%)
   const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
 
-  /* 한 점의 **어긋남** [dx, dy] (판 폭·높이의 %).
-   *   hx, hy  집 자리   ·  role  역할  ·  home  우리 편인가
-   *   bx, by  공        ·  dir   흐름 (+1 상대 진영 · −1 우리 진영 · 0 중원) */
+  /* 한 점의 **어긋남** [dLen, dAcr](판의 %).
+   *   hx, hy  집 자리(len · acr) · role · home 우리 편인가 · bx, by 공 · dir 흐름(+1 상대 진영 · −1 우리 진영 · 0) */
   function dotShift(hx, hy, role, home, bx, by, dir) {
     const push = PUSH[home ? "home" : "away"] * dir;
     if (role === "gk") {
-      /* 🧤 좌우로 골문을 지키고(y), 우리 팀이 밀어붙일 때만 한 칸 **더** 나옵니다(x).
-       *    🔒 `dir`이 내 골대 쪽을 가리키면 `out`은 **0**입니다 — 팀 밀림만 타요.
-       *    🔴 그래서 우리 키퍼의 가장 왼쪽은 `10 − 7 = 3%` — **밀림이 CSS에 있던 시절과 같은 값**입니다. */
-      const out = home ? (dir > 0 ? GK_OUT : 0) : (dir < 0 ? -GK_OUT : 0);
-      return [push + out, clamp(by - hy, -GK_SPAN, GK_SPAN) * GK_TRACK + (fxRnd() * 2 - 1) * GK_JY];
+      /* 🔒 키퍼는 **제 골문 쪽으로는 안 밀려요**(밀리면 판 밖) — 앞으로만 팀 밀림 + 두 칸 */
+      const fwd = home ? (dir > 0 ? push + GK_OUT : 0) : (dir < 0 ? push - GK_OUT : 0);
+      return [fwd, clamp(by - hy, -GK_SPAN, GK_SPAN) * GK_TRACK + (fxRnd() * 2 - 1) * GK_JY];
     }
-    let dx = push + LINE[role] * LINE_STEP * dir, dy = 0;
+    let dx = push + (LINE[role] == null ? LINE.mid : LINE[role]) * LINE_STEP * dir, dy = 0;
     const ux = bx - (hx + dx), uy = (by - hy) * YW;
     const d = Math.sqrt(ux * ux + uy * uy);
     if (d > 0.01) {
-      /* 🔴 `d - STANDOFF`가 **음수면 물러섭니다** — 공을 덮고 선 자리에서 한 걸음 비켜요 */
       const move = d <= STANDOFF ? d - STANDOFF
-        : Math.min(PULL[role] * Math.max(0, 1 - d / RANGE), d * CLOSE, d - STANDOFF);
+        : Math.min((PULL[role] == null ? PULL.mid : PULL[role]) * Math.max(0, 1 - d / RANGE), d * CLOSE, d - STANDOFF);
       dx += (ux / d) * move;
       dy += ((uy / d) * move) / YW;
     }
     dx += (fxRnd() * 2 - 1) * JX;
     dy += (fxRnd() * 2 - 1) * JY;
-    return [dx, clamp(hy + dy, Y_MIN, Y_MAX) - hy];
+    return [clamp(hx + dx, LEN_MIN, LEN_MAX) - hx, clamp(hy + dy, Y_MIN, Y_MAX) - hy];
   }
-  /* 판에 실제로 서는 줄 — `FORM_*`에서 **만들어 씁니다.** 베껴 적으면 표가 갈라져요
-   * (골키퍼 자리를 고쳤는데 움직임만 옛 자리를 보는 날이 그 날입니다). */
-  /* 🧡 **윙어인 나는 `wing`이에요 — 우리 편 공격수와 같은 값을 쓰면 둘이 늘 붙어 다닙니다.**
-   *    윙어라 라인을 덜 타고(0.24), 공은 더 쫓아요(7.6). 다른 포지션은 그 줄의 역할을 씁니다 —
-   *    집 자리가 떨어져 있어 같은 계수로 움직여도 **나란히** 갈 뿐 포개지지 않아요. */
-  const homeRows = (me) => FORM_H.map((f, i) => [f[0], f[1], ROLE[i] || "mid"]).concat([[me[0], me[1], me[2]]]);
-  const AWAY_ROWS = FORM_A.map((f, i) => [f[0], f[1], ROLE[i] || "mid"]);
 
-  /* ⚽ **공이 어디로 가는가 — 표 하나가 전부입니다.** [x, y, 어느 진영으로 밀리나]
-   * 🔒 `card.result`(엔진이 채운 값)를 그대로 읽습니다. `y`가 `null`이면 아래에서 흔들어요. */
-  /* 🐛 y를 **골키퍼와 갈라 둡니다** — 처음엔 골·실점 둘 다 y 46%였는데, 키퍼도 50%라
-   *    공이 **키퍼 위에 정확히 포개져** «키퍼가 잡았다»처럼 보였어요(390px 흑백 실측).
-   *    골은 **위 구석**(28%)으로 넣습니다 — 골문 안이고, 키퍼와 20px 떨어져요. */
+  /* ⚽ **공이 어디로 가는가 — 표 하나가 전부입니다.** [len, acr, 어느 진영으로 밀리나]
+   * 🔒 `card.result`(엔진이 채운 값)를 그대로 읽습니다. `acr`가 `null`이면 아래에서 흔들어요. */
+  /* 🐛 공을 **골키퍼와 갈라 둡니다** — 키퍼(가로 50%) 위에 포개지면 «키퍼가 잡았다»처럼 보여요.
+   *    골은 골문 안 **왼쪽**(가로 40% — 골문 입 35~65%)으로 넣습니다 */
   const BALL_RESULT = {
-    goal:    [97, 28, "a"],    // 🥅 상대 골망 — 위 구석
-    assist:  [97, 28, "a"],
+    goal:    [97, 40, "a"],    // 🥅 상대 골망 — 골문 안 왼쪽
+    assist:  [97, 40, "a"],
     shot:    [86, 50, "a"],    // 키퍼 정면 — 골문 앞에서 막혔어요
     save:    [18, 50, "h"],    // 🧱 걷어냈어요
-    concede: [3, 28, "h"],     // 😣 우리 골망 — 위 구석
+    concede: [3, 60, "h"],     // 😣 우리 골망 — 골문 안 오른쪽
   };
   /* 판정 **전**(무엇이 걸렸나) — 아직 결과가 없으니 「걸린 자리」에 공을 둡니다 */
   const BALL_OPEN = { goal: [79, null, "a"], assist: [71, null, "a"], defend: [21, null, "h"] };
@@ -449,11 +404,11 @@ window.W2Scene = (() => {
   function setPitch(card, phase) {
     if (!S || !S.pitchEl) return;
     /* ══════════════════════════════════════════════════════════════
-     * 🎲 **굴림 개수는 분기 밖에서 정합니다** — `setPitch` 한 번 = **언제나 정확히 22번**
+     * 🎲 **굴림 개수는 분기 밖에서 정합니다** — `setPitch` 한 번 = **언제나 정확히 44번**
      * ══════════════════════════════════════════════════════════════
-     *   여기 **2** (`rx`·`ry`) + 점 **20**
-     *   점 20 = 🧤 키퍼 2명 × 1 + 필드 9명 × 2. `dotShift`의 굴림은 **`if` 바깥**에 있고
-     *   개수는 **역할만** 보므로, 카드 내용이 뭐든 20입니다 (`HOME_ROWS` 6 + `AWAY_ROWS` 5).
+     *   여기 **2** (`rx`·`ry`) + 점 **42**
+     *   점 42 = 🧤 키퍼 2명 × 1 + 필드 20명 × 2. `dotShift`의 굴림은 **`if` 바깥**에 있고
+     *   개수는 **역할만** 보므로, 카드 내용이 뭐든 42입니다(우리 11 · 상대 11 — 교체 전 동료 점은 굴림 없이 같은 값을 받아요).
      *
      * 🔴 **예전엔 이 두 줄이 `if` 안에 있었습니다.** 골 카드는 0번, 놓친 카드는 1번이라
      *    **소비량이 판정 결과를 탔어요.** 값이 아무 데도 안 가도 그건 결합입니다 —
@@ -482,7 +437,7 @@ window.W2Scene = (() => {
       at = f ? [f[0] + (rx * 2 - 1) * f[1], null, ""] : [38 + rx * 24, null, ""];
     }
     const y = at[1] == null ? 26 + ry * 48 : at[1];
-    S.ballEl.style.transform = `translate(${at[0].toFixed(1)}%, ${y.toFixed(1)}%)`;
+    S.ballEl.style.transform = `translate(${y.toFixed(1)}%, ${(100 - at[0]).toFixed(1)}%)`;   // 세로 판 — 가로 = acr · 세로 = 100 − len
     /* 🌊 **흐름** — 공이 어느 진영에 있나(`at[2]`)가 먼저고, 그게 비어 있을 때만
      *    `card.flow`가 정합니다(🌫️ 전개 카드가 그 자리예요 — 결과가 없으니까요).
      * 🔴 `card.flow`를 **안 주는 갈래**(🏟️ 프로 경기 `engine.js`)에서는 `at[2] || ""`이라
@@ -494,9 +449,26 @@ window.W2Scene = (() => {
      * 🔒 여기서 굴리는 것도(fxRnd만) 세는 것도 뒤집는 것도 없습니다 — 공이 간 자리를 보고
      *    «누가 그 근처인가»를 산수로 옮길 뿐이에요. */
     const dir = side === "a" ? 1 : side === "h" ? -1 : 0;
+    /* ⚽ 공 가진 점 — 공에서 가장 가까운 필드 점 하나의 발밑에 그림자(산수만 · 굴림 0 · 결과 0) */
+    let near = null, best = 1e9;
+    /* ♿ 움직임 줄이기 — 점은 **집 자리만**(밀림 · 어긋남 0 · 48번 §4-2). 🔒 굴림은 그래도 같은 수(42) — 설정이 소비량을 안 타게 */
+    const still = reduced();
     for (const sl of (S.slots || [])) {
-      const [dx, dy] = dotShift(sl.x, sl.y, sl.role, sl.home, at[0], y, dir);
-      sl.el.style.transform = `translate(${dx.toFixed(2)}%, ${dy.toFixed(2)}%)`;
+      const [dx0, dy0] = dotShift(sl.x, sl.y, sl.role, sl.home, at[0], y, dir);
+      const dx = still ? 0 : dx0, dy = still ? 0 : dy0;
+      sl.el.style.transform = `translate(${dy.toFixed(2)}%, ${(-dx).toFixed(2)}%)`;
+      if (sl.twin) sl.twin.style.transform = sl.el.style.transform;
+      const dd = (sl.x + dx - at[0]) ** 2 + ((sl.y + dy - y) * YW) ** 2;
+      if (sl.role !== "gk" && dd < best) { best = dd; near = sl; }
+      sl.el.classList.remove("has-ball");
+      if (sl.twin) sl.twin.classList.remove("has-ball");
+    }
+    if (near && best < 144) { near.el.classList.add("has-ball"); if (near.twin) near.twin.classList.add("has-ball"); }
+    /* ⚔️ 흐름 꼬리표 — 판 위 가운데 한 줄(48번 §4-1) · 흐름은 위에서 정한 `side` 그대로 */
+    if (S.flowEl) {
+      const mm = card.min == null ? "" : ` · ${card.min > 90 ? `90+${card.min - 90}` : card.min}′`;
+      S.flowEl.textContent = side === "a" ? `⚔️ 우리 흐름${mm}` : side === "h" ? `🛡️ 상대 흐름${mm}` : `⚖️ 팽팽해요${mm}`;
+      S.flowEl.dataset.side = side || "mid";
     }
     /* 🧡 **내 순간에는 내 동그라미가 커집니다** — "지금 나한테 왔다"가 판에서도 읽혀야 해요 */
     S.pitchEl.classList.toggle("mine", !!card.mine && phase !== "close");
@@ -668,33 +640,48 @@ window.W2Scene = (() => {
    *    🔴 견줄 상대는 900·600·350이 아니라 **가장 짧은 줄인 🌊 흐름 줄의 `FLOW_MS`(620ms)**예요 —
    *    `FLOW_MS`가 이 값에 **종속**됩니다. 여기를 늘리면 점이 다 서기 전에 다음 줄이 옵니다
    *    (`style.css`의 `.w2-slot` · 설계 145번 §11 · 149번 §4-1). */
-  function dotsHTML(form) {
-    return form.map(([x, y, k], i) =>
-      `<i class="w2-slot" style="transition-delay:${(i % 4) * 26}ms">`
-      + `<i class="w2-dot${k}" style="left:${x}%;top:${y}%"></i></i>`).join("");
+  /* 점 하나 = 겹(`.w2-slot` — 옮김) + 점(`.w2-dot` — 모양 · 커짐). 등번호는 그 포메이션의 자리 순서(키퍼 1) —
+   *    9px 글자 · 판은 `aria-hidden`이라 낭독 0(같은 정보를 피드가 글로 말해요) */
+  const DOT = (len, acr, cls, i, inner) => `<i class="w2-slot" style="transition-delay:${(i % 4) * 26}ms">`
+    + `<i class="w2-dot${cls}" style="left:${acr}%;top:${100 - len}%">${inner}</i></i>`;
+  function dotsHTML(rows, chibi, sub) {
+    return rows.map(([len, acr, , k], i) => {
+      if (k !== "me") return DOT(len, acr, k === "gk" ? " gk" : "", i, `<b>${i + 1}</b>`);
+      /* 🧡 나 — 치비 말 + 이름 꼬리. ③ 교체면 같은 자리에 동료 점을 하나 더 두고(투입 전) 나는 숨겨 둬요 */
+      const me = DOT(len, acr, ` me${chibi ? " has-chibi" : ""}`, i, chibi ? `<img src="${esc(chibi)}" alt="" decoding="async">` : "")
+        .replace(/<\/i><\/i>$/, `</i><span class="w2-me-tag" style="left:${acr}%;top:${100 - len}%"></span></i>`);   // 이름 꼬리는 점 밖(말이 둥글게 잘려서)
+      return sub ? DOT(len, acr, " sub-out", i, `<b>${i + 1}</b>`) + me : me;
+    }).join("");
   }
-  /* 🧸 `chibi`가 있으면 「나」 원 안에 치비를 넣습니다(`has-chibi` — 받침 + 링은 그대로).
-   *    판은 `aria-hidden`이라 alt를 비워요 — 같은 정보를 피드가 글로 말합니다. */
-  function pitchHTML(me, chibi) {
-    return `<div class="w2-pitch" aria-hidden="true">`
+  /* 🟩 세로 판 — 위 = 상대 골문 · 아래 = 우리 골문. 선 · 박스 · 센터서클은 CSS 배경, 골문 입은 `.w2-mouth` */
+  function pitchHTML(home, away, chibi, sub, form) {
+    /* ⚔️ 판 바로 위 한 줄 — 포메이션(● 우리 · ◆ 상대) · 흐름 꼬리표. 판 안에 두면 22점과 겹쳐서 판 밖 위에 둬요 */
+    return `<div class="w2-pitchbar" aria-hidden="true"><span class="w2-forms">${form.us ? `● ${esc(form.us)}` : ""}${form.us && form.them ? " vs " : ""}${form.them ? `◆ ${esc(form.them)}` : ""}</span>`
+      + `<span class="w2-flow"></span></div>`
+      + `<div class="w2-pitch" aria-hidden="true">`
+      + `<span class="w2-box a"></span><span class="w2-box h"></span>`
       + `<span class="w2-mouth h"></span><span class="w2-mouth a"></span>`
-      + `<span class="w2-side away">${dotsHTML(FORM_A)}</span>`
-      + `<span class="w2-side home">${dotsHTML(FORM_H)}`
-      + `<i class="w2-slot" style="transition-delay:13ms">`
-      + `<i class="w2-dot me${chibi ? " has-chibi" : ""}" style="left:${me[0]}%;top:${me[1]}%">`
-      + `${chibi ? `<img src="${esc(chibi)}" alt="" decoding="async">` : ""}</i></i></span>`
+      + `<span class="w2-side away">${dotsHTML(away, null, false)}</span>`
+      + `<span class="w2-side home">${dotsHTML(home, chibi, sub)}</span>`
       + `<span class="w2-ball" style="transform:translate(50%,50%)"><b></b></span>`
       + `</div>`;
   }
-  /* 🧍 겹과 「집 자리·역할」을 짝지어 둡니다 — `setPitch`가 카드마다 이 목록만 돕니다.
-   * 🔒 겹이 하나라도 안 잡히면 **그 점은 그냥 안 움직입니다**(집 자리에 서 있어요).
-   *    화면이 통째로 죽는 것보다 낫고, 판정에는 아무 영향이 없습니다. */
-  function slotsOf(host, me) {
+  /* 🧍 겹과 「집 자리 · 역할」을 짝지어 둡니다 — `setPitch`가 카드마다 이 목록만 돕니다.
+   *    ③ 교체 전 동료 점(`sub-out`)과 나는 **같은 집 자리 · 같은 역할**이라 둘 다 목록에 넣어요(둘이 함께 움직임).
+   *    🔒 굴림 수는 한 자리에 한 번만 세요 — 숨은 쪽(`hidden` 겹)은 굴림 없이 보이는 쪽 값을 그대로 받아요 */
+  function slotsOf(host, home, away) {
     const out = [];
-    const hs = host.querySelectorAll(".w2-side.home .w2-slot");
-    const as = host.querySelectorAll(".w2-side.away .w2-slot");
-    homeRows(me).forEach((r, i) => { if (hs[i]) out.push({ el: hs[i], x: r[0], y: r[1], role: r[2], home: true }); });
-    AWAY_ROWS.forEach((r, i) => { if (as[i]) out.push({ el: as[i], x: r[0], y: r[1], role: r[2], home: false }); });
+    const take = (sel, rows, isHome) => {
+      const els = [...host.querySelectorAll(sel)];
+      let j = 0;
+      rows.forEach((r) => {
+        const pair = isHome && r[3] === "me" && els[j] && els[j].querySelector(".w2-dot.sub-out") ? [els[j], els[j + 1]] : [els[j]];
+        j += pair.length;
+        if (pair[0]) out.push({ el: pair[0], twin: pair[1] || null, x: r[0], y: r[1], role: r[2], home: isHome });
+      });
+    };
+    take(".w2-side.home .w2-slot", home, true);
+    take(".w2-side.away .w2-slot", away, false);
     return out;
   }
 
@@ -704,8 +691,14 @@ window.W2Scene = (() => {
     /* 🎬 세대를 올립니다 — 옛 세대가 남긴 그리기는 이 순간 전부 무효가 돼요.
      *    (그걸 실제로 막는 줄은 `push` 맨 앞입니다. 위 표 참고) */
     _gen += 1;
-    const me = ME_AT[c.pos] || ME_AT.wg;
     const chibi = typeof c.chibi === "string" && c.chibi ? c.chibi : null;
+    /* 🧍 11 대 11 — 우리 감독 포메이션(`form.us`) · 상대(`form.them`) · 그날 선 자리(`at`) · ③ 투입 분(`onMin`) */
+    const form = { us: c.form && typeof c.form.us === "string" ? c.form.us : "", them: c.form && typeof c.form.them === "string" ? c.form.them : "" };
+    const at = AT_ROLES[c.at] ? c.at : AT_ROLES[c.pos] ? c.pos : "wg";
+    const onMin = Number.isFinite(+c.onMin) && +c.onMin > 0 ? Math.round(+c.onMin) : 0;
+    let home = sideRows(form.us || "4-4-2", true, at);
+    if (!home.some((r) => r[3] === "me")) { const m = ME_LONE[at]; home = home.concat([[m[0], m[1], m[2], "me"]]); }
+    const away = sideRows(form.them || "4-4-2", false, null);
     const promise = typeof c.promiseLine === "string" && c.promiseLine.trim() ? c.promiseLine.trim() : null;
     const scout = typeof c.scout === "string" && c.scout ? c.scout : null;
     host.innerHTML = `
@@ -722,7 +715,7 @@ window.W2Scene = (() => {
             <button type="button" class="w2-gear-in" aria-label="설정">⚙️</button>
           </div>
           ${promise ? `<p class="w2-promise"></p>` : ""}
-          ${pitchHTML(me, chibi)}
+          ${pitchHTML(home, away, chibi, onMin > 0, form)}
         </div>
         <div class="w2-feed">${scout ? `<div class="w2-scout"><img alt="문 스카우트 — 관심" decoding="async">`
           + `<p><b>스카우트석</b><br>문 스카우트가 이 경기를 지켜봐요</p></div>` : ""}</div>
@@ -732,6 +725,11 @@ window.W2Scene = (() => {
     q(".w2-team.home").textContent = c.home || "우리 팀";
     q(".w2-team.away").textContent = c.away || "상대";
     if (promise) q(".w2-promise").textContent = promise;
+    const tag = q(".w2-me-tag");
+    if (tag) tag.textContent = c.myName || "나";
+    /* ③ 교체 — 투입 전엔 내 점 겹을 숨기고(동료 점이 그 자리) · 시계가 `onMin`에 닿으면 바꿔요(`clock`) */
+    const meSlot = q(".w2-dot.me") && q(".w2-dot.me").parentNode;
+    if (onMin > 0 && meSlot) meSlot.hidden = true;
     /* 🖼️ 깨진 그림 금지 — 치비를 못 받으면 **예전의 앰버 원**으로, 스카우트를 못 받으면 글자만 남깁니다 */
     const meImg = q(".w2-dot.me img");
     if (meImg) {
@@ -757,7 +755,8 @@ window.W2Scene = (() => {
       clockEl: q(".w2-clock"), mineEl: q(".w2-mine-count"),
       pitchEl: q(".w2-pitch"), ballEl: q(".w2-ball"), feed: q(".w2-feed"),
       h: 0, a: 0, mine: 0, fast: false, myName: c.myName || "나", chibi,
-      slot: null, pending: null, myGoals: [], slots: slotsOf(host, me), promise: !!promise,
+      slot: null, pending: null, myGoals: [], slots: slotsOf(host, home, away), promise: !!promise,
+      flowEl: q(".w2-flow"), onMin, meSlot, subEl: q(".w2-dot.sub-out") ? q(".w2-dot.sub-out").parentNode : null,
       /* 🔬 ⏱️ 이 경기의 **시계 수열** — 검사 전용입니다 (`_t.clocks()`).
        * 🔒 **경기 하나의 값이라 여기서 비웁니다.** `_drops`가 누적인 것과 성격이 달라요:
        *    drops는 *"확률이 아니라 수로"* 보려고 단조 증가였고, clocks는 **단계마다
@@ -845,6 +844,12 @@ window.W2Scene = (() => {
     if (!S) return false;
     setClock(min);
     S.clocks.push(min);
+    /* 🔁 ③ 교체 투입 — 동료 점이 빠지고 내가 그 자리에(연출만 · 판정은 엔진 `onMin`이 이미 정함) */
+    if (S.onMin && min >= S.onMin && S.meSlot && S.meSlot.hidden) {
+      S.meSlot.hidden = false;
+      if (S.subEl) S.subEl.hidden = true;
+      add(el("w2-sub", `🔁 ${esc(min)}′ 교체 투입 — <b>${esc(S.myName)}</b> 들어갑니다`));
+    }
     return true;
   }
 

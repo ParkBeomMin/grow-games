@@ -26,19 +26,22 @@ window.W2Sheet = (() => {
     /* 🫀 관리 — clamp((c̄ − 20) ÷ 50, 0, 1) × 10 × λ · c̄ = **공식 경기 날**(리그 + 대회) 엔진에 넘긴 컨디션 평균 · 0경기 0
      *    42번 §3 · 43번 §2 · 44번 §1(J10 — 🎮 솜씨 칸 · `READ_K` · ρ · 바닥 8은 퇴역 · 판 셋이 모두 감이라 손의 몫 0) */
     CARE_LO: 20, CARE_SPAN: 50, CARE_MAX: 10,
-    N_POS: { fw: 41.27, wg: 37.68, mf: 35.70, df: 38.58 },   // 43번 §2-1 · 44번 §1 — ⚽ 기록 경기당 원점수에 곱함(🔗 중립화)
+    N_POS: { fw: 40.31, wg: 36.42, mf: 34.56, df: 43.33 },   // 51번 v4-3 — ⚽ 기록 경기 점수 = 그날 선 자리의 n_pos × 가중 합(🔗 중립화)
     REC_MAX: 40,                                     // 21번 §3-3 — 기록 칸 상한
     STAGE_PTS: [0, 3, 5, 7, 8, 10],                  // 21번 §3-3 — 조별 · 16강 · 8강 · 4강 · 준우승 · 우승
     LEAGUE_WIN_PT: 1, STAGE_MAX: 10,                 // 〃 — 권역 리그 우승 +1 · 상한 10
     TEST_TECH: 1.6, TEST_MATCH: 2.4,                 // 34번 · 37번 §2(R9 둘째 값) — 🎯 테스트 0~4(기술 0~1.6 · 연습경기 0~2.4)
-    T: { top: 67.4, high: 60.3, mid: 53.7 },         // 46번 §2-1 · 47번 §1(67.37 · 60.29 · 53.65 — 새 기준 판 「늘 확정」) — 구간은 **화면의 합계**로
+    T: { top: 67.0, high: 60.0, mid: 53.4 },         // 51번 v5(구현 판 — 반올림 전 66.95 경계 위) — 구간은 **화면의 합계**로
     TRUST_LINE: 4,                                   // 23번 §7 — 감독 의견 한 줄이 갈리는 🤝(±4)
     TEST_REF: 56.0,                                  // 24번 §2 — 기술 판 중심의 능력치 기준선
     TEST_P: { goal: 1 / 3, assist: 1 / 3, defend: 1 / 2 },   // 12번 §5-4 — 🔗 판 한 번 기댓값 1점(포지션 무관)
   });
   /* 📐 기록 가중 — 옛 `career.js` `POS_AXIS`의 g · a · d(22번 §2-1 · `w_cs` 0) · 수비수는 골 · 도움 · 막음이 같은 한 번
    *    (29번 §2-3 — 0.55 × 3 · 판 2.5에서 「드문 수비수 골 ×2」가 성장 민감도를 부풀려서) */
-  const AXIS = { fw: { g: 1.0, a: 0.5, d: 0.15 }, wg: { g: 0.8, a: 0.8, d: 0.15 }, mf: { g: 0.5, a: 1.0, d: 0.30 }, df: { g: 0.55, a: 0.55, d: 0.55 } };
+  /* ⚽ 공식 경기 한 판의 점수 — 그날 선 자리 `at`(없으면 등록 포지션)의 n_pos × (골 · 도움 · 수비 × 가중) — J19 · 50번 §12-1 */
+  const gameScore = (x, pos) => { const p = (x && x.at) || pos; const w = AXIS[p] || AXIS.fw;
+    return (TUNE.N_POS[p] || 0) * ((Number(x.g) || 0) * w.g + (Number(x.a) || 0) * w.a + (Number(x.d) || 0) * w.d); };
+  const AXIS = { fw: { g: 1.0, a: 0.5, d: 0.15 }, wg: { g: 0.8, a: 0.8, d: 0.15 }, mf: { g: 0.5, a: 1.0, d: 0.30 }, df: { g: 0.4, a: 0.4, d: 0.55 } };   // 수비수 0.4 · 0.4 · 0.55(51번 v4-3)
 
   /* ---------- 🔢 등급 F~S — 불균등 구간(12번 §10-1) · 칸마다 「+」가 한 번(승급 카드 13칸) ----------
    * 🔒 「+」는 그 등급 구간의 **가운데**부터예요(D 52~60 → D+ 56 — `allc` 「여섯 모두 D+(56)」과 같은 자). */
@@ -111,12 +114,21 @@ window.W2Sheet = (() => {
     const cN = Math.max(0, Math.floor(Number(rec.cN)) || 0);
     const cAvg = cN > 0 ? (Number(rec.cSum) || 0) / cN : null;
     const care = cAvg == null ? 0 : Math.min(1, Math.max(0, (cAvg - T.CARE_LO) / T.CARE_SPAN)) * T.CARE_MAX * lam;
-    // ⚽ 기록 — 포지션 축 원점수의 **경기당** 평균(리그 + 대회) × n_pos · 상한 40
-    const ax = AXIS[S.pos] || AXIS.fw;
-    const games = Number(rec.apps) || 0;
-    const raw = (Number(rec.g) || 0) * ax.g + (Number(rec.a) || 0) * ax.a + (Number(rec.d) || 0) * ax.d;
-    const perGame = games > 0 ? raw / games : 0;
-    const record = Math.min(T.REC_MAX, (T.N_POS[S.pos] || 50) * perGame);
+    // ⚽ 기록(J19 · 50번 §12-1) — 공식 경기(리그 + 대회)마다 **그날 선 자리**의 n_pos × 가중으로 점수 · 그 평균 · 상한 40.
+    //   늘 내 자리면 옛 식(경기당 평균 × n_pos)과 같아요 · 옛 경기(`at` 없음)는 등록 포지션으로
+    const offi = (Array.isArray(S.games) ? S.games : []).filter((x) => x && x.t !== "T");
+    const games = offi.length;
+    const scoreSum = offi.reduce((a, x) => a + gameScore(x, S.pos), 0);
+    const perGame = games > 0 ? scoreSum / games : 0;
+    const record = Math.min(T.REC_MAX, perGame);
+    const byAt = [];
+    for (const p of ["fw", "wg", "mf", "df"]) {
+      const gs = offi.filter((x) => (x.at || S.pos) === p);
+      if (!gs.length) continue;
+      const sum = (k) => gs.reduce((a, x) => a + (Number(x[k]) || 0), 0);
+      byAt.push({ at: p, n: gs.length, g: sum("g"), a: sum("a"), d: sum("d"), w: Object.assign({}, AXIS[p]), nPos: T.N_POS[p],
+        avg: r2(gs.reduce((a, x) => a + gameScore(x, S.pos), 0) / gs.length) });
+    }
     // 🏆 무대 — 전국대회 도달 + 권역 리그 우승
     const cup = (S.world && S.world.cup) || {};
     const cupDone = !!cup.done;
@@ -151,8 +163,8 @@ window.W2Sheet = (() => {
       { k: "care", label: "🫀 관리", v: t10[1] / 10, max: T.CARE_MAX * lam, note: careNote,
         detail: { games: cN, avg: cAvg == null ? null : r2(cAvg), full } },
       { k: "record", label: "⚽ 기록", v: t10[2] / 10, max: T.REC_MAX,
-        note: games > 0 ? `${games}경기 · 경기당 ${perGame.toFixed(2)}` : "아직 공식 경기가 없어요",
-        detail: { games, g: Number(rec.g) || 0, a: Number(rec.a) || 0, d: Number(rec.d) || 0, perGame: r2(perGame) } },
+        note: games > 0 ? `공식 경기 ${games}(${byAt.map((b) => `${POS[b.at]}로 ${b.n}`).join(" · ")}) · 경기당 점수 평균 ${perGame.toFixed(2)}` : "아직 공식 경기가 없어요",
+        detail: { games, g: Number(rec.g) || 0, a: Number(rec.a) || 0, d: Number(rec.d) || 0, perGame: r2(perGame), byAt } },
       { k: "stage", label: "🏆 무대", v: t10[3] / 10, max: T.STAGE_MAX,
         note: open && open.stage > 0
           ? (cupDone ? `${cup.name || "전국대회"} ${stageName} · 권역 리그 우승 +${fmt(open.stage)} 아직` : "7월 말 전국대회")   // 「아직 · 최대 N」은 화면이 `col.open`으로 그려요
@@ -302,7 +314,7 @@ window.W2Sheet = (() => {
   function freeze(S, filmId) {
     const W = window.W2World;
     const ace = W ? W.aceRow(S) : null;
-    const rival = S.world.ours.find((x) => x.role === "rival");
+    const rival = W ? W.numberRow(S) : null;   // 번호의 1학년(이야기 인물 · 또래 곡선)
     const fam = famSidOf(S);
     const root = fam ? FAM_ROOT[fam] : null;
     const famDone = ((S.story && S.story.done) || []).find((d) => d.sid === fam) || null;
@@ -319,12 +331,19 @@ window.W2Sheet = (() => {
       stats: Object.assign({}, S.stats),
       school: { name: S.world.school.name, colors: S.world.school.colors.slice() },
       rivals: {
-        rival: rival ? { name: rival.name, pos: rival.pos, str: rival.str } : null,
+        rival: rival ? { name: rival.name, pos: rival.pos, str: rival.peer && W ? Math.round(W.peerA(S, rival, 36) * 10) / 10 : rival.str } : null,
+        /* 🔁 2막으로(50번 §6) — 번호의 1학년 · 팀 내 또래 · 바뀐 이력(팀 · 리그) */
+        number: rival ? { id: rival.id, name: rival.name, pos: rival.pos, grade: rival.peer ? rival.peer.grade : 1 } : null,
+        peers: W ? W.peers(S).map((q) => ({ id: q.id, name: q.name, school: (S.world.school || {}).name, pos: q.pos, grade: q.peer.grade,
+          a: Math.round(W.peerA(S, q, 36) * 10) / 10, pace: q.peer.pace })) : [],
+        team: S.rivalLog && Array.isArray(S.rivalLog.team) ? S.rivalLog.team.slice() : [],
+        league: S.rivalLog && Array.isArray(S.rivalLog.league) ? S.rivalLog.league.slice() : [],
         ace: ace ? { name: ace.name, school: S.world.league.teams[S.world.league.teams.length - 1].name, pos: ace.pos, str: ace.str } : null,
       },
       stories: ((S.story && S.story.done) || []).map((d) => ({ sid: d.sid, end: d.end })),
       sheet: S.sheet ? { cols: S.sheet.cols.map((c) => ({ k: c.k, v: c.v })), total: S.sheet.total } : null,
       record: Object.assign({}, S.record, { moments: undefined }),
+      apps: ["fw", "wg", "mf", "df"].reduce((a, p) => { const n = (S.games || []).filter((x) => x.t !== "T" && (x.at || S.pos) === p).length; if (n) a[p] = n; return a; }, {}),   // J19 — 선 자리별 출전
       filmId: filmId || null,
       age: Number(S.age) || 18,
     };
@@ -335,5 +354,5 @@ window.W2Sheet = (() => {
   const techCenter = (kind, blend) => TUNE.TEST_P[kind] * Math.min(1.4, Math.max(0.6, blend / TUNE.TEST_REF));
 
   return { TUNE, AXIS, GRADES, STAT, KEYS, POS, grade, bodyPt, compute, tierOf, TIER_NAME, coachOf, weeksLeft,
-    DOOR, doorOf, doorsOf, endingId, ending, endName, END_EMO, NEXT, waitOf, VOICE, voiceOf, freeze, TECH, techCenter };
+    gameScore, DOOR, doorOf, doorsOf, endingId, ending, endName, END_EMO, NEXT, waitOf, VOICE, voiceOf, freeze, TECH, techCenter };
 })();

@@ -44,7 +44,7 @@ window.W2Events = (() => {
     M: {
       a_call: -6.17, a_video: -7.28, a_helper: -6.26, a_weakfoot: -7.28, a_night: -4.86, a_boots: -8.68,
       a_tackle: -7.30, a_exam: -7.67, a_camp: -5.95,
-      s_slot1: { fw: -48.00, wg: -54.93, mf: -52.27, df: -64.00 },
+      s_slot1: { fw: 13.37, wg: 12.00, mf: 11.41, df: 13.61 },   // 51번 v4-3 — X = 내 주 능력치 − 번호의 1학년 또래(그 주)
       s_senior1: -10.33, s_fam1: -10.76, s_race1: -54.15,
     },
   });
@@ -66,7 +66,7 @@ window.W2Events = (() => {
     pass: (S) => S.stats.pass - leagueBase(), dribble: (S) => S.stats.dribble - leagueBase(),
     shoot: (S) => S.stats.shoot - leagueBase(), speed: (S) => S.stats.speed - leagueBase(),
     defense: (S) => S.stats.defense - leagueBase(), stamina: (S) => S.stats.stamina - leagueBase(),
-    rival: (S) => S.stats[mainOf(S)] - S.world.ours.find((x) => x.role === "rival").str,
+    rival: (S) => { const r = W().numberRow(S); return S.stats[mainOf(S)] - (r && r.peer ? W().peerA(S, r, S.week) : (r ? r.str : 0)); },
     ace: (S) => S.stats[mainOf(S)] - W().aceRow(S).str,
   };
   const XLABEL = { main: "주 능력치", overall: "종합", pass: "패스", dribble: "드리블", shoot: "슈팅", speed: "스피드",
@@ -78,7 +78,7 @@ window.W2Events = (() => {
   const famOf = (S) => { const sid = window.W2Story ? window.W2Story.famSid(S) : null; return sid ? FAMILY[sid] || null : null; };
   function vars(S) {
     const w = W();
-    const rival = S.world.ours.find((x) => x.role === "rival");
+    const rival = W().numberRow(S);   // 번호의 1학년(이야기 인물 — 50번 §4)
     return { me: S.name, no: S.noOrig != null ? S.noOrig : S.no, rival: w.short(rival.name), keeper: w.short(S.world.keeper.name),
       ace: w.short(w.aceRow(S).name), family: (famOf(S) || { name: "가족" }).name, coach: "강 감독" };
   }
@@ -516,7 +516,8 @@ window.W2Events = (() => {
     "도전은 판돈이 늘 한 가지라 얻는 것과 잃는 것이 같은 크기예요 — 성공 확률이 50%를 넘으면 걸 만해요. 🎲 작게는 판돈이 반이고 확률이 +5예요. 🌿 확정 · 💬 이야기를 고르면 적힌 몫을 그대로 받아요.",
     "📋 약속은 확률이 아니라 다음 공식 경기가 정해요 — 그 경기의 내 첫 순간을 살리면(골 · 골문 안 슛 · 도움 · 막음) 지킨 거예요. 적힌 숫자는 최근 경기에서 첫 순간을 살린 기록이에요.",
     "이야기의 약속은 늘 고를 수 있어요 — 🤝이 끝에 가까우면 판돈이 남은 만큼으로 줄어요(얻는 것과 잃는 것은 늘 같은 크기).",
-    "📍 번호 집계 — 내 판마다, 같은 장면을 {rival|가} 맡았다면 해냈을 확률을 더해 견줘요. 내가 해낸 수와의 차가 쌓이고, 번호 결정전 뒤 +1.5 이상이면 번호를 되찾아요.",
+    "📍 번호 집계 — 내 판마다, 같은 장면을 {rival|가} 맡았다면 해냈을 확률을 더해 견줘요. 내가 해낸 수와의 차가 쌓이고, 번호 결정전 뒤 +1.5 이상이면 번호를 되찾아요. {rival}의 실력은 1학년 또래처럼 자라요.",
+    "🎯 선발은 감독이 정해요 — 선발 점수(능력 + 🤝 × 0.5 + 컨디션 × 0.1 + 🦶 약발 × 1.5)를 같은 포지션 또래와 견줘, 앞서면 선발 · 3.5 차까지는 이웃 자리 선발 · 그보다 뒤지면 후반 교체예요. 벤치 다음 경기엔 늘 기회를 줘요.",
     "한 주에 카드는 한 장까지예요. 이야기의 다음 장이 먼저 자리를 잡고, 대회 주간 · 테스트 주에는 이벤트가 뜨지 않아요.",
     "🤝 감독 신뢰는 평가서 점수에 들어가지 않아요 — 감독의 얼굴과 말, 엔딩 한 줄, 그리고 다음 이야기로 이어져요.",
   ];

@@ -193,7 +193,7 @@ function objKeys(body) {
 }
 function k2(liveSrc, sceneSrc) {
   const lm = liveSrc.match(/Scene\.mount\(sceneEl, \{([\s\S]*?)\}\);/);
-  const passed = lm ? objKeys(lm[1]) : [];
+  const passed = lm ? objKeys(lm[1].replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "")) : [];   // 🔄 v5: 주석이 칸 앞에 붙으면 칸 이름을 못 읽어 — 주석을 먼저 뺌(`form`)
   const mm = sceneSrc.match(/function mount\(host, cfg\) \{([\s\S]*?)\n {2}\}/);
   const read = mm ? uniq([...mm[1].matchAll(/\bc\.(\w+)/g)].map((x) => x[1])) : [];
   const A = passed.slice().sort().join(","), B = read.slice().sort().join(",");

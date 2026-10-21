@@ -16,6 +16,8 @@
  *     book(book)             → Promise                       📖 도감
  *     drawCard(canvas, film) → Promise<canvas>  · share(film) → Promise<"share"|"download"|"image"|"fail">   📤 1080×1350
  *     settings()             → Promise                       ⚙️ 설정 레이어(29번 §4 · 38번 계약 14 · 17) — ⚙️ 버튼은 이 파일이 스스로 붙여요
+ *     prematch(x)            → Promise                       ⚽ 경기 전 카드(v5 — 52번) — 양쪽 포메이션 · 상성 · 배수 · 감독 한 줄 · 선발 판단
+ *     rivalRow(r)            → Element | null                🔁 주간 화면 라이벌 줄(`rivalLine: { team, league }` — 부르는 쪽이 꽂아요)
  *
  * ═══ 지키는 것 ═══
  * ① **그리기만 합니다.** 결과 · 확률 · 점수는 받은 값을 그대로 적어요. 다시 계산하지 않습니다
@@ -743,6 +745,28 @@ window.W2Scenes = (() => {
       });
       if (mid && !openSum && x.open && typeof x.open === "object") openSum = Object.values(x.open).reduce((a, v) => a + (fin(v) ? +v : 0), 0);
       panel.appendChild(list);
+      /* ⚽ 기록 칸 — 자리별 표(v5 J19 · 50번 §12-1): 그날 선 자리마다 경기 · 골 · 도움 · 수비 · 그 자리 가중 · 경기당 점수.
+       *    받은 값 그대로(자리 점수를 경기 수로 가중해 더하면 칸 값 — 화면은 셈하지 않아요) */
+      const byAt = x.detail && Array.isArray(x.detail.byAt) ? x.detail.byAt.filter((r) => r && r.at) : [];
+      if (byAt.length) {
+        const det = h("details", "w2o-byat");
+        det.appendChild(h("summary", null, `⚽ 기록 — 자리별(${byAt.map((r) => `${POS[r.at] || str(r.at)} ${fin(r.n) ? +r.n : 0}경기`).join(" · ")})`));
+        const tb = h("table");
+        const hr = h("tr");
+        ["자리", "경기", "골", "도움", "수비", "가중(골·도움·수비)", "경기당"].forEach((t) => hr.appendChild(h("th", null, t)));
+        tb.appendChild(put(h("thead"), hr));
+        const body = h("tbody");
+        byAt.forEach((r) => {
+          const w = r.w || {};
+          const tr = h("tr");
+          [POS[r.at] || str(r.at), r.n, r.g, r.a, r.d, [w.g, w.a, w.d].map((v) => (fin(v) ? +v : "—")).join(" · "), fin(r.avg) ? (+r.avg).toFixed(2) : "—"]
+            .forEach((v, i) => tr.appendChild(h(i ? "td" : "th", null, v == null ? "—" : v)));
+          body.appendChild(tr);
+        });
+        tb.appendChild(body);
+        det.appendChild(tb);
+        panel.appendChild(det);
+      }
       const sum = h("div", `w2o-total t-${tk || "none"}`);
       sum.style.setProperty("--d", `${cols.length * 180 + 150}ms`);
       if (mid) {
@@ -780,6 +804,76 @@ window.W2Scenes = (() => {
       put(s.box, scene(x.bg || "bg-test", "scout", x.scoutMood || (good ? "smile" : "base")), panel);
       s.focus();
     }));
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // ⚽ prematch — 경기 전 카드(v5 · 48번 §2-5 · §12-2 · 50번 §2-3 · §11 · 52번 계약). **그리기만** —
+  //   배수 · 상성 · 조각은 엔진에 넘긴 값 그대로(보이는 값 = 판정 값). 조각 합 ≠ Δ이면 글로 적어요(고치지 않음)
+  //   x = { title?, form: { us, them, m, m2?, why, lines: [{ name, v }] }, rows: { us: { fa, fd }, them: { fa, fd } },
+  //         pick: { k, at, d, parts, rival } | null, say?(감독 한마디), note?, chance?, onMin?, who?, bg? }
+  // ═══════════════════════════════════════════════════════════════
+  /* 포메이션 이름(「⚖️ 균형 4-4-2」)은 engineer 표(`W2World.FORM_W[이름].name`) 그대로 — 없으면 숫자만 */
+  const formLabel = (n) => { try { const W = window.W2World; const f = W && W.FORM_W && W.FORM_W[n]; return f && f.name ? f.name : str(n); } catch { return str(n); } };
+  const mul = (v) => (fin(v) ? `×${(+v).toFixed(2)}` : "×—");
+  const d1 = (v) => (v > 0 ? `+${(+v).toFixed(1)}` : v < 0 ? `−${Math.abs(+v).toFixed(1)}` : "±0");
+  const PICK_SAY = { 1: (at) => `「오늘 ${POS[at] || "네 자리"} 자리는 너다.」`, 2: () => "「오늘은 측면에서 뛰어라.」", 3: () => "「오늘은 후반 교체로 쓸 거다.」" };
+  function prematch(x0) {
+    return run(() => new Promise((resolve) => {
+      const x = x0 || {};
+      const f = x.form || {};
+      const s = shell("prematch");
+      const panel = h("div", "w2o-panel w2o-pre");
+      put(panel, h("p", "w2o-kicker", "⚽ 경기 전"), title("h2", "w2o-title", x.title || "오늘의 포메이션", s.id));
+      /* ⚖️ 양쪽 포메이션 — 이름(성격 + 숫자) · 모양(● 우리 · ◆ 상대) */
+      if (f.us || f.them) {
+        put(panel, put(h("p", "w2o-pre-vs"), h("span", "w2o-pre-us", `● 우리 ${formLabel(f.us)}`), h("span", "w2o-pre-x", "vs"),
+          h("span", "w2o-pre-them", `◆ 상대 ${formLabel(f.them)}`)));
+        /* 상성 — 우리 공격 배수 `m` · 상대 공격 배수 `m2`(엔진 값 그대로) */
+        const m = fin(f.m) ? +f.m : 1, m2 = fin(f.m2) ? +f.m2 : null;   // `m2`(상대 공격 상성)는 받았을 때만
+        /* 이름이 숫자로 끝나 조사가 흔들려서(「4-3-3이/가」) 기호로 — 「A ＞ B — 우리가 유리해요」 */
+        const ring = m > 1 ? `${formLabel(f.us)} ＞ ${formLabel(f.them)} — 우리가 유리해요` : m < 1 ? `${formLabel(f.them)} ＞ ${formLabel(f.us)} — 상대가 유리해요` : "상성 없음 — 서로 같아요";
+        panel.appendChild(h("p", "w2o-pre-ring", `상성: ${ring}${m !== 1 ? ` — 우리 공격 ${mul(m)}${m2 != null ? ` · 상대 공격 ${mul(m2)}` : ""}` : ""}`));
+        const R = x.rows || {}, ru = R.us || { fa: f.fa, fd: f.fd }, rt = R.them || { fa: f.fa2, fd: f.fd2 };
+        panel.appendChild(h("p", "w2o-pre-mul", `우리 공격 ${mul(ru.fa)} · 수비 ${mul(ru.fd)}   |   상대 공격 ${mul(rt.fa)} · 수비 ${mul(rt.fd)}`));
+      }
+      if (f.why) panel.appendChild(h("p", "w2o-pre-why", `📝 ${/^강 감독/.test(str(f.why)) ? "" : "강 감독: "}${str(f.why)}`));   // 받은 줄에 말한 사람이 이미 있으면 한 번만
+      const lines = (Array.isArray(f.lines) ? f.lines : []).filter((l) => l && fin(l.v));
+      if (lines.length) panel.appendChild(h("p", "w2o-pre-lines", `줄 폼 — ${lines.map((l) => `${str(l.name)} ${d1(+l.v)}`).join(" · ")}`));
+      /* 🔁 선발 판단(①②③) — 사실 한 줄 + 조각(정수 아닌 0.1 단위 — engineer가 먼저 반올림 · 합 = Δ) */
+      const pk = x.pick;
+      if (pk && PICK_SAY[pk.k]) {
+        const box = h("div", `w2o-pre-pick k${pk.k}`);
+        const rv = pk.rival && pk.rival.name ? pk.rival : null;
+        const fact = !fin(pk.d) ? "" : pk.k === 1 ? ` — 선발 점수 ${rv ? `나 − ${str(rv.name)}` : "차"} ${d1(+pk.d)}`
+          : pk.k === 2 ? ` — 선발 점수 ${d1(+pk.d)} · 차가 크지 않아 측면 선발` : ` — 선발 점수 ${d1(+pk.d)}${fin(x.onMin) ? ` · ${+x.onMin}′에 들어가요` : ""}`;
+        put(box, h("p", "w2o-pre-say", `${["", "①", "②", "③"][pk.k]} ${x.say ? str(x.say) : `강 감독: ${PICK_SAY[pk.k](pk.at)}`}${fact}`));
+        const ps = (Array.isArray(pk.parts) ? pk.parts : []).filter((q) => q && fin(q.v));
+        if (ps.length) {
+          const sum = Math.round(ps.reduce((a, q) => a + +q.v, 0) * 10) / 10;
+          const el = h("p", "w2o-pre-parts", `선발 점수 차 = ${ps.map((q) => `${str(q.name)} ${d1(+q.v)}`).join(" + ")}${fin(pk.d) ? ` = ${d1(+pk.d)}` : ""}`);
+          if (fin(pk.d) && Math.abs(sum - +pk.d) > 0.05) el.appendChild(h("span", "w2o-cut", ` (조각 합 ${d1(sum)})`));
+          box.appendChild(el);
+        }
+        if (rv) box.appendChild(h("p", "w2o-pre-rival", `🔁 팀 내 라이벌 — ${str(rv.name)}${rv.grade ? `(${fin(rv.grade) ? `${+rv.grade}학년` : str(rv.grade)})` : ""}`));
+        panel.appendChild(box);
+      }
+      if (x.chance) panel.appendChild(h("p", "w2o-pre-chance", `🤝 ${str(x.chance)}`));   // 받은 글 그대로(「강 감독: …」까지 든 줄)
+      if (x.note) panel.appendChild(h("p", "w2o-pre-note", `⚽ ${str(x.note)}`));
+      const ok = btn("btn btn-primary w2o-ok", "▶ 경기장으로");
+      panel.appendChild(ok);
+      let done = false;
+      ok.addEventListener("click", () => { if (done) return; done = true; s.close(); resolve(); });
+      put(s.box, scene(x.bg || "bg-locker", x.who || "coach", x.mood || "base", x.name), panel);
+      s.focus();
+    }));
+  }
+  /* 🔁 주간 화면 라이벌 줄 — 받은 글 그대로(🔁 팀 내 · 🏁 리그). 둘 다 없으면 null */
+  function rivalRow(r) {
+    if (!r || (!r.team && !r.league)) return null;
+    const box = h("div", "w2o-rivals");
+    if (r.team) box.appendChild(h("p", "w2o-rival-team", str(r.team)));
+    if (r.league) box.appendChild(h("p", "w2o-rival-league", str(r.league)));
+    return box;
   }
 
   // ═══════════════════════════════════════════════════════════════
@@ -1645,5 +1739,5 @@ window.W2Scenes = (() => {
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", gear);
   else gear();
 
-  return { pick, intro, portrait, card, grade, sheet, doors, ending, film, book, drawCard, share, settings };
+  return { pick, intro, portrait, card, grade, sheet, doors, ending, film, book, drawCard, share, settings, prematch, rivalRow };
 })();
