@@ -44,6 +44,23 @@ window.W2Scenes = (() => {
   };
   /* 게임 설정으로 켠 움직임 줄이기는 CSS가 못 보니(@media는 기기만) 뿌리에 표시를 달아요 — style.css의 `html.w2-still` */
   const syncStill = () => document.documentElement.classList.toggle("w2-still", setting("still"));
+  /* 📢 애드센스 자동 광고의 **앵커**(화면 위 · 아래에 붙는 띠) — 구글이 `ins.adsbygoogle[data-anchor-status="displayed"]`로 표시해요
+   *    (배포판에서 확인 · 10-23). 떠 있는 동안 그 높이를 CSS 변수로 알려 오버레이 판 · 바닥 줄이 그 아래로 숨지 않게 해요.
+   *    🔒 높이는 **잰 값**만(고정값 0) · 앵커가 없거나 닫히면 0 · 광고 요소는 읽기만(건드리지 않음) */
+  function syncAdAnchor() {
+    let top = 0, bottom = 0;
+    const vh = window.innerHeight || 0;
+    document.querySelectorAll('ins.adsbygoogle[data-anchor-status="displayed"]').forEach((ins) => {
+      const r = ins.getBoundingClientRect();
+      if (!(r.height > 0 && r.width > 0) || getComputedStyle(ins).display === "none") return;
+      if (r.top <= 1 && r.bottom < vh) top = Math.max(top, Math.round(r.bottom));
+      else if (r.bottom >= vh - 1 && r.top > 0) bottom = Math.max(bottom, Math.round(vh - r.top));
+    });
+    const root = document.documentElement.style;
+    root.setProperty("--w2-ad-t", `${top}px`);
+    root.setProperty("--w2-ad-b", `${bottom}px`);
+  }
+  try { setInterval(syncAdAnchor, 700); window.addEventListener("resize", syncAdAnchor); } catch { /* 화면 없음 */ }
   const art = () => window.Art || null;
   function h(tag, cls, text) {
     const e = document.createElement(tag);
@@ -747,23 +764,27 @@ window.W2Scenes = (() => {
       panel.appendChild(list);
       /* ⚽ 기록 칸 — 자리별 표(v5 J19 · 50번 §12-1): 그날 선 자리마다 경기 · 골 · 도움 · 수비 · 그 자리 가중 · 경기당 점수.
        *    받은 값 그대로(자리 점수를 경기 수로 가중해 더하면 칸 값 — 화면은 셈하지 않아요) */
-      const byAt = x.detail && Array.isArray(x.detail.byAt) ? x.detail.byAt.filter((r) => r && r.at) : [];
+      /* 자리별 표의 데이터는 ⚽ 기록 칸의 `detail.byAt`(sheet.js · 52번 계약) — 옛 모양(평가서 맨 위 `detail`)도 받아요 */
+      const recCol = cols.find((c) => c && c.k === "record");
+      const recDet = (recCol && recCol.detail) || x.detail || null;
+      const byAt = recDet && Array.isArray(recDet.byAt) ? recDet.byAt.filter((r) => r && r.at) : [];
       if (byAt.length) {
         const det = h("details", "w2o-byat");
         det.appendChild(h("summary", null, `⚽ 기록 — 자리별(${byAt.map((r) => `${POS[r.at] || str(r.at)} ${fin(r.n) ? +r.n : 0}경기`).join(" · ")})`));
         const tb = h("table");
         const hr = h("tr");
-        ["자리", "경기", "골", "도움", "수비", "가중(골·도움·수비)", "경기당"].forEach((t) => hr.appendChild(h("th", null, t)));
+        ["자리", "경기", "골", "도움", "수비", "가중", "경기당"].forEach((t) => hr.appendChild(h("th", null, t)));
         tb.appendChild(put(h("thead"), hr));
         const body = h("tbody");
         byAt.forEach((r) => {
           const w = r.w || {};
           const tr = h("tr");
-          [POS[r.at] || str(r.at), r.n, r.g, r.a, r.d, [w.g, w.a, w.d].map((v) => (fin(v) ? +v : "—")).join(" · "), fin(r.avg) ? (+r.avg).toFixed(2) : "—"]
+          [POS[r.at] || str(r.at), r.n, r.g, r.a, r.d, [w.g, w.a, w.d].map((v) => (fin(v) ? +v : "—")).join("·"), fin(r.avg) ? (+r.avg).toFixed(2) : "—"]
             .forEach((v, i) => tr.appendChild(h(i ? "td" : "th", null, v == null ? "—" : v)));
           body.appendChild(tr);
         });
         tb.appendChild(body);
+        tb.appendChild(h("caption", null, "가중 = 골 · 도움 · 수비 한 개의 그 자리 무게 · 경기당 = 그 자리 경기의 점수 평균"));
         det.appendChild(tb);
         panel.appendChild(det);
       }

@@ -3,7 +3,10 @@
  * jsdom은 배치를 안 해서 진짜 브라우저(headless Chromium · playwright-core)로 진짜 `index.html` + `scenes.js` + `style.css`를 띄웁니다.
  *   LY-1  진짜 1막(jsdom 장치)에서 나온 셋 · 넷 칸 카드(무작위 이벤트 · 이야기 장 · 약속)를 320 × 568에서 그림 —
  *         페이지 · 카드 판 모두 스크롤 0(scrollHeight ≤ clientHeight) · 선택지 버튼이 모두 화면 안 · 버튼 높이 ≥ 52px · 두 줄(줄 1 꼬리표 + 태도 · 줄 2 숫자)
- *   + 변이(스타일만 — 구현 파일은 안 건드림): 버튼 최소 높이 120px를 덧입히면 → LY-1이 빨간불(검사가 넘침을 잡는지)
+ *   LY-2  📋 평가서 자리별 표(`.w2o-byat` · v5 J19) — 자리가 섞인 진짜 평가서를 320 폭에서 펼쳤을 때 칸(th · td)이 낱자로 끊기지 않음
+ *         (칸 높이 ≤ 한 줄의 1.6배) · 표가 판 폭 안(가로 넘침 0) · 행이 byAt 줄 수만큼
+ *   + 변이(스타일만 — 구현 파일은 안 건드림): 버튼 최소 높이 120px를 덧입히면 → LY-1이 빨간불(검사가 넘침을 잡는지) ·
+ *     표 칸을 줄바꿈 허용 + 좁은 고정 폭으로 → LY-2가 빨간불
  * 🔧 필요한 것: playwright-core + Chromium(`PW_CORE` · `PW_CHROME` — 기본 /workspace/.tools · /workspace/.pw-browsers 의 headless shell). 없으면 💥(2)
  * 종료 코드: 0 통과 · 1 빨간불 · 2 💥 죽음 · ⏱️ 약 2분
  */
@@ -97,8 +100,38 @@ async function measure(page, card, extraCss) {
     return r;
   }, { card, extraCss });
 }
+/* 📋 자리가 섞인 평가서 하나 — 진짜 1막 판(스텁 장면 · byat-test와 같은 판) */
+async function mixedSheet() {
+  const env = boot({ seed: 4103, pos: "mf", operator: "normal", realScene: false });
+  const r = await runAct(env);
+  const sheet = JSON.parse(JSON.stringify(r.S.sheet));
+  env.w.close();
+  return sheet;
+}
+async function byatLayout(page, sheet, extraCss) {
+  return page.evaluate(async ({ sheet, extraCss }) => {
+    if (extraCss) { const st = document.createElement("style"); st.textContent = extraCss; document.head.appendChild(st); }
+    const p = window.W2Scenes.sheet(Object.assign({ title: "📋 스카우트 평가서" }, sheet));
+    await new Promise((r) => setTimeout(r, 1500));
+    const det = document.querySelector("#w2-layer .w2o-byat");
+    if (!det) return { none: true };
+    det.open = true;
+    await new Promise((r) => setTimeout(r, 100));
+    const tb = det.querySelector("table");
+    const cells = [...det.querySelectorAll("th, td")];
+    const lh = (el) => { const v = parseFloat(getComputedStyle(el).lineHeight); return Number.isFinite(v) ? v : parseFloat(getComputedStyle(el).fontSize) * 1.3; };
+    const broken = cells.filter((c) => c.getBoundingClientRect().height > lh(c) * 1.6 + 6).map((c) => c.textContent);
+    const panel = det.closest(".w2o-panel") || det.parentElement;
+    const r = { rows: det.querySelectorAll("tbody tr").length, broken, over: Math.round(tb.scrollWidth - det.clientWidth), panelOver: Math.round(panel.scrollWidth - panel.clientWidth), vw: window.innerWidth };
+    const ok = document.querySelector("#w2-layer .w2o-ok"); if (ok) ok.click();
+    await Promise.race([p, new Promise((res) => setTimeout(res, 300))]);
+    return r;
+  }, { sheet, extraCss });
+}
 (async () => {
   const list = await cards();
+  const msheet = await mixedSheet();
+  const mByAt = ((msheet.cols.find((c) => c.k === "record") || {}).detail || {}).byAt || [];
   const srv = await serve();
   const url = `http://127.0.0.1:${srv.address().port}/winger2/`;
   const exe = process.env.PW_CHROME || "/workspace/.pw-browsers/chromium_headless_shell-1234/chrome-headless-shell-linux64/chrome-headless-shell";
@@ -120,7 +153,18 @@ async function measure(page, card, extraCss) {
   const bad = rs.filter((x) => x.pageScroll > 0 || x.panelScroll > 0 || x.layerScroll > 0 || x.panelBottom > 0.5 || x.out > 0 || x.minH < 52 || x.n < x.k || !x.twoLine);
   check(list.length >= 6 && bad.length === 0, `LY-1. 📱 320 × 568 — 카드 ${list.length}장(넷 ${rs.filter((x) => x.k === 4).length} · 셋 ${rs.filter((x) => x.k === 3).length} · 약속 · 이야기 장 포함) 스크롤 0 · 버튼 화면 밖 0 · 버튼 높이 최소 ${Math.min(...rs.map((x) => x.minH)).toFixed(0)}px(≥ 52)`
     + (bad.length ? `\n     🔴 ${bad.slice(0, 3).map((x) => `${x.id}(${x.k}칸 · 버튼 ${x.n}): 페이지 +${x.pageScroll}(밑 화면 ${x.base}) · 판 바닥 ${x.panelBottom.toFixed(0)} · 두 줄 ${x.twoLine} · 판 ${x.panelScroll} · 겹 ${x.layerScroll} · 밖 ${x.out} · 높이 ${x.minH.toFixed(0)}`).join(" · ")}` : ""));
+  /* LY-2 */
+  {
+    await fresh();
+    const b = await byatLayout(page, msheet, null);
+    const ok = !b.none && b.rows === mByAt.length && mByAt.length > 1 && b.broken.length === 0 && b.over <= 0 && b.panelOver <= 0;
+    check(ok, `LY-2. 📋 320 폭 평가서 자리별 표 — 행 ${b.rows}(byAt ${mByAt.length}) · 낱자로 끊긴 칸 ${b.none ? "?" : b.broken.length} · 표 가로 넘침 ${b.over}px · 판 가로 넘침 ${b.panelOver}px`
+      + (b.none ? "\n     🔴 표가 안 그려짐" : b.broken.length ? `\n     🔴 끊긴 칸: ${b.broken.slice(0, 5).join(" · ")}` : ""));
+  }
   if (fail === 0) {
+    await fresh();
+    const mb2 = await byatLayout(page, msheet, ".w2o-byat th, .w2o-byat td { white-space: normal !important; word-break: break-all !important; } .w2o-byat table { table-layout: fixed !important; width: 120px !important; }");
+    check(!mb2.none && mb2.broken.length > 0, `변이-NARROW(표 칸 줄바꿈 허용 + 좁은 고정 폭) → LY-2가 빨간불 (끊긴 칸 ${mb2.broken ? mb2.broken.length : "?"})`);
     const m = await run("#w2-layer .w2o-panel button { min-height: 120px !important; }");
     const mb = m.filter((x) => x.pageScroll > 0 || x.panelScroll > 0 || x.layerScroll > 0 || x.out > 0);
     check(mb.length > 0, `변이-TALL(버튼 120px를 덧입힘) → LY-1이 빨간불 (넘친 카드 ${mb.length}/${m.length})`);

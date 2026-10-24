@@ -1462,7 +1462,8 @@ body:has(.w2-top) .w2s-gear { display: none; }        /* 경기 화면은 스코
 .w2o-byat { margin: 8px 0 4px; font-size: .78rem; color: var(--text); }
 .w2o-byat summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; color: var(--sky); }
 .w2o-byat table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
-.w2o-byat th, .w2o-byat td { padding: 3px 4px; border-bottom: 1px solid var(--line); text-align: right; font-weight: 400; }
+.w2o-byat th, .w2o-byat td { padding: 3px 3px; border-bottom: 1px solid var(--line); text-align: right; font-weight: 400; white-space: nowrap; }
+.w2o-byat caption { caption-side: bottom; text-align: left; padding-top: 3px; font-size: .7rem; color: var(--dim); }
 .w2o-byat th:first-child { text-align: left; }
 /* 320 × 568에서 스크롤 없이 — 장면을 줄이고 판을 키워요(경기 전 카드는 글이 주인공) */
 .w2o-prematch .w2o-scene { min-height: 8vh; }
@@ -1490,3 +1491,12 @@ body:has(.w2-top) .w2s-gear { display: none; }        /* 경기 화면은 스코
   .w2o-many .w2o-cparts { margin-bottom: 4px; }
   .w2o-many .w2o-foot { margin-top: 4px; }
 }
+
+/* ---------- 📢 광고 피하기(게임 쪽 · 10-23 사용자 결정 — 애드센스 설정은 그대로) ----------
+ * ① 자동 광고 앵커가 떠 있으면 그 높이(scenes.js `syncAdAnchor`가 잰 `--w2-ad-t` · `--w2-ad-b`)만큼 오버레이 · 바닥 줄을 비켜요 — 없으면 0
+ * ② 광고 칸(`#ad-anchor`) 안의 구글 요소가 화면 폭을 넘지 않게(320에서 374px로 커져 가로 스크롤 54px) */
+.w2o { padding-top: var(--w2-ad-t, 0px); padding-bottom: var(--w2-ad-b, 0px); box-sizing: border-box; }
+.w2-live-bar { bottom: var(--w2-ad-b, 0px); }
+.w2-toast.is-shown { bottom: calc(12px + var(--w2-ad-b, 0px) + env(safe-area-inset-bottom, 0px)); }
+#ad-anchor { max-width: 100%; overflow: hidden; }
+#ad-anchor ins.adsbygoogle, #ad-anchor .google-aiuf, #ad-anchor iframe { max-width: 100% !important; }

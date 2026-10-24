@@ -151,6 +151,8 @@
   function seasonS(week) {
     const S = fakeS({ week });
     Object.assign(S.record, { apps: 14, g: 3, a: 3, d: 18, cN: 14, cSum: 14 * 62 });
+    /* 공식 경기 14 — 그날 선 자리가 섞인 판(공격수로 11 · 윙어로 3) — 평가서 기록 칸의 자리별 표(byAt)가 서게 */
+    S.games = Array.from({ length: 14 }, (_, i) => ({ t: "L", w: 2 + i * 2, at: i < 11 ? "fw" : "wg", g: i % 4 === 0 ? 1 : 0, a: i % 5 === 0 ? 1 : 0, d: 1 }));
     S.world.cup = Object.assign({}, S.world.cup || {}, { done: true, stage: 2 });
     if (week >= 36) S.test = { tech: 4, rating: 7.1 };
     return S;

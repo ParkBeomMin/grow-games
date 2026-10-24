@@ -1,5 +1,7 @@
 # 설계 — ⚽ 더 윙어 II · 2막 「프로 커리어」 컨셉 · 구조 · 판단 지점
 
+> **[L3]** 2026-10-22 — 「2막」이라는 따로 된 막 · 입구 넷의 따로 짠 출발 · 「2막 = f(`act1`)」은 **53번 「한 판 · 같은 리듬」에 밀렸습니다.** 블록 시즌(§2-3 · §2-7) · 결정적 경기 규칙 · 제안 · 은퇴 · 길과 문은 53번이 살려 씀(53번 §3 · §8).
+
 > 슬러그 `winger2` · 2026-10-03 · grow-designer · **2막 설계 첫 단계**(컨셉 · 구조 · 사용자에게 물을 판단 지점)
 > 입력: `../15_decisions.md`(1~9 · A~K — 다시 열지 않음) · `../10_designer_concepts.md`(두 막의 원래 생각) · `../12_designer_act1.md`(1막 정본 — §2 · §6 · §7 · §8 · §9 · §11 · §13 · §15) · `../13_designer_gender.md` · `../11_designer_engine-audit.md` · `../21_designer_act1-rev1.md` §3-4 · §10 · `../23_designer_act1-rev2.md` §7
 > ② ③: `../../soccer/15_decisions.md`(결정 10~18) · `../../soccer/10_designer_overview.md` · `13_designer_military.md` · `14_designer_server.md` · `11_designer_events.md` §A-3 · §A-4 · `12_designer_retire-achievements.md` §B-1~B-3

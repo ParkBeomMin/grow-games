@@ -607,3 +607,15 @@ W2Scenes.film(/* W2Film.build 모양 — head + ch[] */);  W2Scenes.book(/* open
    - LY-1의 「페이지 +24」는 입구 화면의 광고 iframe이 측정 중에 들어올 때만 나는 흔들림(카드 무관 · 다시 돌리면 통과).
 - 테스트: smoke 0 · check-page 0 · layout 0 · fx-count 0 · `tests/winger2/` 44개 중 **pitch만 1**(위 검사 손질 몫).
 - 캡처: `qa/v5-fix-*`(경기 판 · 경기 전 카드 · 이벤트 카드 — 390 · 320 · 320 × 568 · 흑백 · 움직임 줄이기).
+
+**🔧 v5 고침 2(10-23 · 배포 베타 보고서에서 찾음) — 평가서 자리별 표(byAt)가 안 나오던 것**
+- 원인: 화면(`scenes.js` `sheet`)이 평가서 맨 위 `x.detail.byAt`를 읽었는데, 데이터는 ⚽ 기록 칸의 `detail.byAt`(`sheet.js:167` · 52번 계약 「평가서 `detail.byAt`」)에 있었음. 이제 기록 칸(`cols`의 `k: "record"`)의 `detail`을 먼저 읽고 옛 자리도 받음.
+- 320에서 표 머리 · 칸이 낱자로 끊기던 것 — 칸은 줄바꿈 0 · 머리 「가중」으로 줄이고 표 아래에 한 줄 풀이(「가중 = 골 · 도움 · 수비 한 개의 그 자리 무게 · 경기당 = 그 자리 경기의 점수 평균」).
+- 확인 페이지 「한 해를 뛴 판」에 공식 경기 14(공격수로 11 · 윙어로 3)를 얹어 표가 서게 함. 캡처 `qa/v5-byat-{mid,final}-{390,320x568}.png`.
+- 📌 있어야 할 검사(inspector 몫 · 테스트는 안 고침): **진짜 `W2Sheet.compute`가 낸 평가서를 진짜 `W2Scenes.sheet`로 그렸을 때, 자리가 둘 이상 섞인 판이면 `.w2o-byat` 표가 서고 그 행(자리 · 경기 수 · 골 · 도움 · 수비 · 경기당)이 기록 칸 `detail.byAt`와 같다** — 변이: 화면이 `x.detail.byAt`(옛 자리)만 읽게 하면 빨간불.
+
+**📢 광고 피하기(10-23 · 사용자 결정 「게임 쪽에서 피하기」 — 애드센스 설정 · 공용 `base.css` · `ads.js` 그대로)**
+- 배포판에서 본 구글 표식: 자동 광고 앵커 = `ins.adsbygoogle[data-anchor-status="displayed"][data-anchor-shown="true"]`(fixed · z 2147483646 · 위에 붙은 판도 봄 — 높이 175 · body `padding-top` 110). 우리 하단 칸(`#ad-anchor`)은 고정이 아니고 콘텐츠 맨 아래. 보고서의 「블로그 스킨 찾기 ✕」는 미충전 대체(`div.google-aiuf` · `data-ad-status="unfill-optimized"`).
+- ① `scenes.js` `syncAdAnchor` — 0.7초마다(+ resize) 표시된 앵커의 **잰 높이**를 `--w2-ad-t` · `--w2-ad-b`에 적음(위 · 아래 붙은 것 따로 · 없으면 0 · 광고 요소는 읽기만). `style.css`: `.w2o`(오버레이) 위 · 아래 여백 · `.w2-live-bar`(경기 바닥 줄) · 알림 띠가 그만큼 비킴.
+- ② `#ad-anchor`와 그 안 `ins.adsbygoogle` · `.google-aiuf` · iframe에 `max-width: 100%`(+ 칸 `overflow: hidden`). 54px 가로 넘침은 **390에서 구글이 적은 폭(358px)이 화면을 320으로 줄인 뒤에도 남은 것**(보고서 장치가 창을 줄였을 때 — 실기기에선 회전 때 같은 일) — 견본으로 재현: 규칙 없이 374 → 고친 뒤 320.
+- 확인: 배포판에 이 두 파일만 얹어 봄(실제 앵커는 이번 두 번 다 안 뜸 → 같은 표식의 견본으로) — 하단 견본 100px에서 설정 판이 그 위에서 끝나고 마지막 단추 아래 26px 여유 · 견본을 빼면 변수 0 · 위 견본 110px에서 판이 그 아래부터. 캡처 `qa/v5-ads-{real,mock}-settings(-end)-{320x568,390}.png` · `v5-ads-mock-{top,width}-320x568.png`.

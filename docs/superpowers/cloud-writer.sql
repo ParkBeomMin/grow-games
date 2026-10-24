@@ -19,7 +19,7 @@ declare
   v_at  timestamptz;
   v_bare text := regexp_replace(coalesce(p_game, ''), '^beta:', '');
 begin
-  if v_bare not in ('rookie','idol','stock','dev','chef','stream','soccer','unicorn','_shared') then
+  if v_bare not in ('rookie','idol','stock','dev','chef','stream','soccer','unicorn','winger2','_shared') then
     raise exception '알 수 없는 게임이에요';
   end if;
   if length(p_data::text) > 512000 then
