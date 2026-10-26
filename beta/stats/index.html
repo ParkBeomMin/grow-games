@@ -86,6 +86,10 @@
     .fv-list tr.past { color: var(--dim); }
     .fv-row-btns { text-align: right; white-space: nowrap; }
     .fv-row-btns button, #fv-new { border-radius: 8px; padding: 5px 10px; cursor: pointer; font-size: .76rem; font-family: inherit; margin-left: 4px; }
+    .hf-tbl .hf-sub { font-size: .72rem; color: var(--dim); margin-top: 2px; }
+    .hf-tbl .hf-num, .hf-tbl .hf-btn { white-space: nowrap; text-align: right; }
+    .hf-tbl .hf-btn button { border-radius: 8px; padding: 5px 10px; cursor: pointer; font-size: .76rem; font-family: inherit; }
+    .hf-h3 { font-size: .86rem; margin: 14px 0 6px; color: var(--dim); }
     .fv-hint { font-size: .74rem; color: var(--dim); margin-top: 10px; line-height: 1.6; }
   </style>
 </head>
@@ -634,6 +638,7 @@ grant select on public.stats_summary, public.stats_choices, public.stats_daily, 
       const parts = [
         feverSection(game),
         wordSection(game),
+        hofHideSection(game),
         insightSection(STATE, game),
         leagueSection(STATE.league, game),
         dailySection(STATE.daily, game),
@@ -644,6 +649,7 @@ grant select on public.stats_summary, public.stats_choices, public.stats_daily, 
       $("panel").innerHTML = parts.join("").trim() || emptyCard(game);
       wireFever(game);
       wireWords();
+      wireHofHide();
     }
 
     // ---------- 🎉 피버 타임 (⚽ 더 윙어 전용) ----------
@@ -819,6 +825,112 @@ grant select on public.stats_summary, public.stats_choices, public.stats_daily, 
           <td><button type="button" class="fv-ghost wd-hide" data-id="${esc(r.id)}">가리기</button></td>
         </tr>`).join("")}</tbody></table>
       </section>`;
+    }
+
+    // ---------- 🙈 명예의 전당 기록 가리기 (조작 기록은 사람이 보고 판단해요) ----------
+    /* 제보: 「밀란 노바크」 — 초월 60,000회 · 능력치 60,034로 1위에 올라온 조작 세이브.
+     * 숫자 문턱은 그럴듯하게 꾸민 조작(초월 30회 같은 것)을 못 잡아요 — 사람이 보고 가려요.
+     *
+     * **지우지 않고 가려요**(hof.hidden). 잘못 가려도 「되돌리기」로 돌아와요.
+     * 가린 줄은 DB 읽기 정책이 공개 키에 아예 안 내줘요 — 옛 버전 게임에서도 안 보이고,
+     * 달별 뷰(hof_month_top)도 가린 줄을 빼고 100명을 세요. 가리기·되돌리기·가린 목록은
+     * 비번을 보는 RPC(hof_hide · hof_hidden_list)로만 돼요. 표에 UPDATE 정책은 없어요. */
+    let HOF_Q = "";                 // 이름 찾기
+    let HOF_HIDDEN = null;          // 가린 목록 — 비번으로 불러와요. null이면 아직 안 불렀어요
+    let HOF_PW = "";                // 다시 그려도 비번 칸이 비지 않게 — 메모리에만 둬요(저장하지 않아요)
+    const HOF_LIST_MAX = 30;
+    const hofRowId = (game, d) => `${game}-${d.id}`;
+    function hofHideSection(game) {
+      const all = (STATE.hofRows || []).filter((r) => r.game === game && r.data && r.data.id != null);
+      const hidden = (HOF_HIDDEN || []).filter((r) => r.game === game);
+      if (!all.length && !hidden.length) return "";
+      const q = HOF_Q.trim();
+      const rows = all.filter((r) => !q || String(r.data.name || "").includes(q))
+        .sort((a, b) => (Number(b.data.score) || 0) - (Number(a.data.score) || 0))
+        .slice(0, HOF_LIST_MAX);
+      const when = (d) => (d.at ? fmtWhen(new Date(d.at).toISOString()) : "-");
+      const num = (v) => (Number.isFinite(Number(v)) ? Number(v).toLocaleString() : "-");
+      return `<section>
+        <h2>🙈 명예의 전당 기록 가리기 <span class="sub">${all.length.toLocaleString()}건</span></h2>
+        <p class="fv-hint">조작이 의심되는 기록을 <b>모두의 명예의 전당에서 숨겨요.</b> 지우지 않아서
+          「가린 기록」에서 되돌릴 수 있어요. 그 기록을 올린 사람 기기에는 자기 기록으로 계속 보여요.</p>
+        <div class="fv-btns">
+          <label class="fv-f">이름 찾기<input id="hf-q" type="text" value="${esc(HOF_Q)}" placeholder="예: 노바크" /></label>
+          <button type="button" class="fv-ghost" id="hf-find">찾기</button>
+          <label class="fv-f">관리 비밀번호<input id="hf-pw" type="password" value="" /></label>
+          <button type="button" class="fv-ghost" id="hf-hidden">가린 기록 보기</button>
+        </div>
+        <p class="fv-msg" id="hf-msg"></p>
+        ${rows.length ? `<table class="tbl hf-tbl"><thead><tr><th>${q ? "찾은 기록" : `점수 상위 ${rows.length}`}</th><th>점수</th><th></th></tr></thead>
+        <tbody>${rows.map((r) => `<tr>
+          <td>${esc(r.data.name || "?")}<div class="hf-sub">${[`${num(r.data.seasons)}시즌`, r.data.at ? when(r.data) : ""].filter(Boolean).join(" · ")}</div></td>
+          <td class="hf-num">${num(r.data.score)}</td>
+          <td class="hf-btn"><button type="button" class="fv-ghost hf-hide" data-id="${esc(hofRowId(game, r.data))}" data-name="${esc(r.data.name || "?")}">가리기</button></td>
+        </tr>`).join("")}</tbody></table>` : `<p class="empty">찾는 이름이 없어요.</p>`}
+        ${HOF_HIDDEN ? `<h3 class="hf-h3">가린 기록 ${hidden.length}건</h3>${hidden.length
+          ? `<table class="tbl hf-tbl"><tbody>${hidden.map((r) => `<tr>
+              <td>${esc((r.data && r.data.name) || r.player || "?")}<div class="hf-sub">${when(r.data || {})}</div></td>
+              <td class="hf-num">${num(r.score)}</td>
+              <td class="hf-btn"><button type="button" class="fv-ghost hf-show" data-id="${esc(r.id)}">되돌리기</button></td>
+            </tr>`).join("")}</tbody></table>`
+          : `<p class="empty">가린 기록이 없어요.</p>`}` : ""}
+      </section>`;
+    }
+
+    function wireHofHide() {
+      if (!$("hf-pw")) return;
+      $("hf-pw").value = HOF_PW;
+      const msg = (t, bad) => { const el = $("hf-msg"); if (el) { el.textContent = t; el.style.color = bad ? "var(--bad)" : "var(--accent)"; } };
+      const pwOrAsk = () => { HOF_PW = $("hf-pw").value; if (!HOF_PW) msg("관리 비밀번호를 넣어주세요", true); return HOF_PW; };
+      const redraw = (done) => { HOF_PW = $("hf-pw").value; renderPanel(); if (done) msg(done); };
+      const find = () => { HOF_Q = $("hf-q").value; redraw(); };
+      $("hf-find").onclick = find;
+      $("hf-q").onkeydown = (e) => { if (e.key === "Enter") find(); };
+      const loadHidden = async (pw) => {
+        try {
+          const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/hof_hidden_list`, {
+            method: "POST", headers: { ...H, "Content-Type": "application/json" }, body: JSON.stringify({ p_pw: pw }) });
+          if (!res.ok) { let m = `HTTP ${res.status}`; try { m = (await res.json()).message || m; } catch { /* 본문 없음 */ } return m; }
+          HOF_HIDDEN = (await res.json()) || [];
+          return null;
+        } catch (e) { return String(e.message || e); }
+      };
+      $("hf-hidden").onclick = async () => {
+        const pw = pwOrAsk();
+        if (!pw) return;
+        msg("불러오는 중…");
+        const err = await loadHidden(pw);
+        if (err) return msg(`못 불러왔어요 — ${err}`, true);
+        redraw();
+      };
+      for (const b of document.querySelectorAll(".hf-hide")) {
+        b.onclick = async () => {
+          const pw = pwOrAsk();
+          if (!pw) return;
+          const name = b.dataset.name;
+          if (!confirm(`「${name}」 기록을 가릴까요? 모두의 명예의 전당에서 사라져요. 「가린 기록」에서 되돌릴 수 있어요.`)) return;
+          msg("가리는 중…");
+          const err = await feverRpc("hof_hide", { p_pw: pw, p_id: b.dataset.id, p_hidden: true });
+          if (err) return msg(`못 가렸어요 — ${err}`, true);
+          // 목록에서 빼고, 가린 목록을 다시 받아요 — 화면이 서버와 같은 상태를 보여야 해요
+          STATE.hofRows = (STATE.hofRows || []).filter((r) => !(r.data && hofRowId(r.game, r.data) === b.dataset.id));
+          const e2 = await loadHidden(pw);
+          redraw(e2 ? `✅ 가렸어요 (가린 목록은 못 불러왔어요 — ${e2})` : `✅ 「${name}」 기록을 가렸어요`);
+        };
+      }
+      for (const b of document.querySelectorAll(".hf-show")) {
+        b.onclick = async () => {
+          const pw = pwOrAsk();
+          if (!pw) return;
+          const r = (HOF_HIDDEN || []).find((x) => x.id === b.dataset.id);
+          msg("되돌리는 중…");
+          const err = await feverRpc("hof_hide", { p_pw: pw, p_id: b.dataset.id, p_hidden: false });
+          if (err) return msg(`못 되돌렸어요 — ${err}`, true);
+          if (r) STATE.hofRows = (STATE.hofRows || []).concat([{ game: r.game, data: r.data }]);
+          const e2 = await loadHidden(pw);
+          redraw(e2 ? `✅ 되돌렸어요 (가린 목록은 못 불러왔어요 — ${e2})` : "✅ 되돌렸어요 — 다시 보여요");
+        };
+      }
     }
 
     function wireWords() {
