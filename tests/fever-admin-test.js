@@ -17,6 +17,7 @@
  *      「지금 끄기」는 지우지 않고 종료만 당긴다(fever_set), 예약 취소만 지운다(fever_clear)
  *   ⑧ 게임은 **안 끝난 줄만 이른 순으로** 받는다 — 예약이 쌓여도 가장 가까운 게 안 잘린다
  *   ⑨ 🔁 반복은 그날그날 한 줄씩 — 요일 규칙 · 횟수 · 같은 길이 · 상한 · 회끼리 겹침
+ *   ⑩ 📋 복사는 **새 줄** — 내용·효과는 그대로, 시각은 같은 시각의 가장 가까운 미래, 길이 그대로
  *
  * 실제 페이지를 띄워 **폼에 입력하고 저장 버튼을 눌러**, 서버로 나가는 몸통을 읽어요.
  */
@@ -50,6 +51,7 @@ let html = SRC.replace("</head>", `<script>
   };
   window.confirm = () => true;
   window.scrollTo = () => {};
+  window.Element.prototype.scrollIntoView = () => {};
 </script></head>`);
 const dom = new JSDOM(html, { runScripts: "dangerously", pretendToBeVisual: true,
   url: "https://x.test/beta/stats/#soccer" });
@@ -238,6 +240,63 @@ const $ = (id) => w.document.getElementById(id);
     // 수정 중에는 반복 칸이 없어요 — 한 줄을 고치는 거라서요
     w.eval(`FEVER_ROWS = [{ id: "e1", title: "e1", starts_at: "2026-10-20T04:00:00Z", ends_at: "2026-10-20T05:00:00Z", boost: {} }]; FEVER_EDIT = "e1"; renderPanel();`);
     check(!$("fv-rep"), "수정 중에는 🔁 반복 칸이 안 보인다");
+  }
+
+  // ---------- ⑩ 복사 ----------
+  console.log("=== ⑩ 📋 복사 ===");
+  {
+    /* 지난 이벤트(9일 전 · 1시간 30분)를 복사해 저장해요. 시각은 **검사를 돌리는 지금**을 기준으로
+     * 두 가지를 다 만들어요 — 오늘 그 시각이 ⓐ 이미 지났으면 내일, ⓑ 아직이면 오늘이어야 해요.
+     * 고정 시각(07:30)으로 재면 돌리는 시간대에 따라 한쪽만 재서, 「내일로 미는」 줄을 지워도 초록불이었어요. */
+    const copyOnce = async (offsetMin) => {
+      const t = new Date(Date.now() + offsetMin * 60e3); t.setSeconds(0, 0);
+      const past = new Date(t); past.setDate(past.getDate() - 9);
+      const src = { id: "old1", game: "soccer", emoji: "🐦", title: "일찍 일어나는 새", note: "아침 한 판",
+        starts_at: past.toISOString(), ends_at: new Date(past.getTime() + 90 * 60e3).toISOString(),
+        boost: { train: 0.5, rate: 0.3 } };
+      w.eval(`FEVER_ROWS = [${JSON.stringify(src)}]; FEVER_EDIT = null; FEVER_COPY = null; renderPanel();`);
+      $("fv-pw").value = "아무비번";
+      w.document.querySelector('.fv-copy[data-id="old1"]').click();
+      const kept = $("fv-pw").value === "아무비번", rep = !!$("fv-rep");
+      w.__sent.length = 0;
+      $("fv-save").click();
+      for (let i = 0; i < 60 && !w.__sent.length; i++) await new Promise((r) => setTimeout(r, 10));
+      return { src, t, kept, rep, c: (w.__sent.find((x) => /rpc\/fever_set/.test(x.url)) || {}).body };
+    };
+    const sameHM = (a, b) => a.getHours() === b.getHours() && a.getMinutes() === b.getMinutes();
+    const dayDiff = (a, b) => Math.round((new Date(a).setHours(0, 0, 0, 0) - new Date(b).setHours(0, 0, 0, 0)) / 864e5);
+
+    // ⓐ 오늘 그 시각이 2시간 전 → 내일
+    const A = await copyOnce(-120);
+    check(A.kept, "복사를 눌러도 넣어 둔 비번이 그대로다");
+    check(A.rep, "복사한 폼에서도 🔁 반복을 고를 수 있다");
+    check(!!A.c, "복사한 폼의 저장이 fever_set을 부른다");
+    if (A.c) {
+      const f = new Date(A.c.p_starts);
+      console.log(`   ⓐ 지난 시각 — ${toLocal(A.c.p_starts)} ~ ${toLocal(A.c.p_ends)} · ${A.c.p_emoji} ${A.c.p_title} · ${JSON.stringify(A.c.p_boost)}`);
+      check(A.c.p_id !== "old1", `원본을 덮지 않고 새 id로 저장한다 (${A.c.p_id})`);
+      check(A.c.p_title === A.src.title && A.c.p_emoji === A.src.emoji && A.c.p_note === A.src.note, "제목·이모지·설명이 그대로다");
+      check(A.c.p_boost.train === 0.5 && A.c.p_boost.rate === 0.3 && Object.keys(A.c.p_boost).length === 2, "효과가 그대로다");
+      check(sameHM(f, A.t), `시작 시각이 원본과 같은 시·분이다 (${toLocal(A.c.p_starts)})`);
+      check(f.getTime() > Date.now(), "복사본은 미래 시각이다 — 저장하자마자 지난 이벤트가 되지 않는다");
+      check(Date.parse(A.c.p_ends) - f.getTime() === 90 * 60e3, "길이가 1시간 30분 그대로다");
+    }
+    /* 날짜를 가르는 판정은 **지금을 고정해서** 재요. 「지금 ± 2시간」은 자정 근처에서 날짜를 넘어가,
+     * 검사를 돌리는 시각에 따라 내일로 미는 줄을 지워도 초록불이었어요(변이 M9가 안 잡힘). */
+    const when = (src, nowStr) => w.eval(`feverCopyWhen(${JSON.stringify(src)}, ${new Date(nowStr).getTime()})`)
+      .map((d) => new Date(d.getTime()));
+    const src0 = { starts_at: new Date("2026-10-01T07:30").toISOString(), ends_at: new Date("2026-10-01T09:00").toISOString() };
+    const src1 = { starts_at: new Date("2026-10-01T13:00").toISOString(), ends_at: new Date("2026-10-01T14:15").toISOString() };
+    const src2 = { starts_at: new Date("2026-10-01T23:30").toISOString(), ends_at: new Date("2026-10-02T01:00").toISOString() };
+    const [a0] = when(src0, "2026-10-26T10:00"), [a1] = when(src1, "2026-10-26T10:00"), [a2, b2] = when(src2, "2026-10-26T23:45");
+    const [a3] = when(src0, "2026-10-26T07:30");
+    console.log(`   지금 10:00 → 07:30 원본은 ${toLocal(a0)} · 13:00 원본은 ${toLocal(a1)} · 지금 23:45 → 23:30 원본은 ${toLocal(a2)} ~ ${toLocal(b2)}`);
+    check(dayDiff(a0, new Date("2026-10-26T10:00")) === 1 && sameHM(a0, new Date("2026-10-01T07:30")),
+      "오늘 그 시각이 지났으면 내일로 민다 (지금 10:00 · 원본 07:30 → 내일 07:30)");
+    check(dayDiff(a1, new Date("2026-10-26T10:00")) === 0, "오늘 그 시각이 아직이면 오늘 그대로다 (원본 13:00 → 오늘 13:00)");
+    check(dayDiff(a2, new Date("2026-10-26T23:45")) === 1 && b2 - a2 === 90 * 60e3,
+      "자정을 넘는 이벤트도 내일로 밀고 길이가 그대로다");
+    check(dayDiff(a3, new Date("2026-10-26T07:30")) === 1, "바로 그 시각이면 지난 걸로 보고 내일로 민다");
   }
 
   // ---------- ⑧ 게임이 받는 줄 ----------
