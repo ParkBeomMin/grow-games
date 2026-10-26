@@ -16,6 +16,7 @@
  *   ⑥ 카드를 누르면 헌액 카드가 열리고 커리어가 적힌다
  *   ⑦ 없는 기록은 줄 자체를 안 그린다 (0과 "없음"이 같은 얼굴이 되면 안 돼요)
  *   ⑧ 달이 하나뿐이면 탭 줄이 아예 안 뜬다 — 탭 수가 데이터에서 나온다는 증거
+ *   ⑩ 달 탭에 「이 달 헌액 N명 · 점수 상위 M명」 — 서버가 상위만 돌려줘서 「50에서 안 늘어요」로 읽혔어요(제보)
  *
  * 실제 화면(#hof-list)을 Career.showHof()로 그려서 DOM을 읽어요.
  */
@@ -221,6 +222,51 @@ const cardNames = () => cardEls().map((c) => c.querySelector(".hof-name").textCo
     const dead = run(() => Promise.resolve({ ok: false, json: () => Promise.resolve(null) }),
       "https://x.test", () => ({}), () => true, (d) => d, Promise);
     check((await dead("soccer")) === null, "둘 다 실패하면 null — 로컬 기록으로 넘어가요");
+  }
+
+  // ---------- ⑩ 그 달에 실제로 몇 명인가 (제보) ----------
+  console.log("=== ⑩ 달 탭의 실제 헌액 수 ===");
+  {
+    /* 제보: "10월 명예의전당이 50개에서 안 느는 것 같은데" — 서버의 달별 뷰가 **상위 50명만**
+     * 돌려줘서, 그 달 헌액이 541명이어도 탭에는 50명이 떠요. 세어서 적어 주는지 봐요.
+     * 원격은 Match를 갈아 끼워 흉내 내고, 세는 요청은 fetch로 붙잡아 content-range로 답해요. */
+    seed([]);
+    const remote = [
+      entry({ id: "w" + at(2026, 8), name: "팔월가", score: 500, at: at(2026, 8) }),
+      entry({ id: "w" + (at(2026, 8) + 1), name: "팔월나", score: 400, at: at(2026, 8) + 1 }),
+      entry({ id: "w" + at(2026, 7), name: "칠월다", score: 300, at: at(2026, 7) }),
+    ];
+    const asked = [];
+    const real = w.Match;
+    w.Match = { ...real, enabled: () => true, backfillHof: async () => {}, fetchHof: async () => remote,
+      cfg: { url: "https://db.test", key: "k" } };
+    w.fetch = (url, opt) => {
+      const u = decodeURIComponent(String(url));
+      asked.push({ u, prefer: opt && opt.headers && opt.headers.Prefer });
+      const from = (u.match(/created_at=gte\.([^&]+)/) || [])[1] || "";
+      const n = new Date(from).getMonth() === 7 ? 541 : 1;          // 8월만 서버에 541명
+      return Promise.resolve({ ok: true, headers: { get: (h) => (/content-range/i.test(h) ? `0-0/${n}` : null) } });
+    };
+    await Career.showHof();
+    for (let i = 0; i < 50 && !box().querySelector(".hof-total"); i++) await new Promise((r) => setTimeout(r, 10));
+    const total = () => (box().querySelector(".hof-total") || {}).textContent || "";
+    console.log(`   세는 요청 ${asked.length}번 — ${asked.map((a) => a.u.replace(/^.*\?/, "")).join(" | ").slice(0, 160)}`);
+    check(asked.length > 0 && asked.every((a) => a.prefer === "count=exact" && /select=id/.test(a.u)),
+      "헤더만 받는 세기 요청이다 (목록을 내려받지 않아요)");
+    check(total() === "", `전체 탭에는 안 뜬다 (${total() || "없음"})`);
+    tabEls().find((t) => t.dataset.k === "2026-08").click();
+    console.log(`   8월 — ${total()}`);
+    check(/이 달 헌액 541명 · 점수 상위 2명/.test(total()), `8월 탭에 실제 헌액 수가 적힌다 (${total()})`);
+    tabEls().find((t) => t.dataset.k === "2026-07").click();
+    check(total() === "", `다 실려 온 달(7월 1명)에는 안 뜬다 (${total() || "없음"})`);
+
+    // 세다가 실패하면 안내만 빠지고 목록은 그대로예요
+    w.fetch = () => Promise.reject(new Error("net off"));
+    await Career.showHof();
+    await new Promise((r) => setTimeout(r, 50));
+    tabEls().find((t) => t.dataset.k === "2026-08").click();
+    check(total() === "" && cardEls().length === 2, "세기가 실패하면 안내만 빠지고 사람은 그대로 보인다");
+    w.Match = real;
   }
 
   console.log(fail ? `\n❌ ${fail}건 실패` : "\n✅ 통과");

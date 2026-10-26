@@ -3427,7 +3427,35 @@ window.WingerCareer = (() => {
     hofTab = "all";
     hofAll = list;
     hofMine = localIds;
+    hofTotals = {};
     drawHof();
+    // 달 탭은 점수 상위만 실려 와요 — 그 달에 실제로 몇 명이 들어왔는지는 따로 세서 덧붙여요
+    if (remote && remote.length) countHofMonths().then((got) => { if (got) drawHof(); });
+  }
+
+  /* 🗓️ 달 탭이 「50명에서 안 늘어요」로 읽히던 것(제보). 서버의 달별 뷰(hof_month_top)가
+   * **점수 상위만** 돌려줘서, 그 달 헌액이 541명이어도 탭에는 50명이 떠요. 숫자를 세어
+   * 「541명 중 상위 50명」이라고 적어 줍니다 — 안 느는 게 아니라 경쟁이 센 거예요.
+   * 세는 건 헤더만 받는 요청(count=exact)이라 목록을 내려받지 않아요. 실패하면 안내만 빠져요. */
+  let hofTotals = {};
+  async function countHofMonths() {
+    const c = window.Match && window.Match.enabled() && window.Match.cfg;
+    if (!c) return false;
+    const keys = hofTabs().map((t) => t.key).filter((k) => /^\d{4}-\d{2}$/.test(k));
+    const res = await Promise.all(keys.map(async (k) => {
+      const [y, m] = k.split("-").map(Number);
+      const from = new Date(y, m - 1, 1).toISOString(), to = new Date(y, m, 1).toISOString();
+      try {
+        const r = await fetch(`${c.url}/rest/v1/hof?game=eq.soccer&created_at=gte.${encodeURIComponent(from)}`
+          + `&created_at=lt.${encodeURIComponent(to)}&select=id`,
+          { headers: { apikey: c.key, Authorization: `Bearer ${c.key}`, Prefer: "count=exact", Range: "0-0" } });
+        const n = Number(((r.headers.get("content-range") || "").split("/")[1]));
+        return r.ok && Number.isFinite(n) ? [k, n] : null;
+      } catch { return null; }
+    }));
+    let got = false;
+    for (const x of res) if (x) { hofTotals[x[0]] = x[1]; got = true; }
+    return got;
   }
 
   /* 🗓️ 달 탭 — 명예의 전당이 한 줄로만 쌓이면 "이번 달에 누가 들어왔나"를 볼 수가
@@ -3474,6 +3502,13 @@ window.WingerCareer = (() => {
         drawHof();
       });
       box.appendChild(bar);
+    }
+    const total = hofTotals[hofTab];
+    if (total > list.length) {
+      const p = document.createElement("p");
+      p.className = "hint hof-total";
+      p.textContent = `🗓️ 이 달 헌액 ${total.toLocaleString()}명 · 점수 상위 ${list.length}명을 보여 줘요`;
+      box.appendChild(p);
     }
     if (!list.length) {
       const p = document.createElement("p");
