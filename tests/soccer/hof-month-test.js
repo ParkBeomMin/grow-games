@@ -17,6 +17,7 @@
  *   ⑦ 없는 기록은 줄 자체를 안 그린다 (0과 "없음"이 같은 얼굴이 되면 안 돼요)
  *   ⑧ 달이 하나뿐이면 탭 줄이 아예 안 뜬다 — 탭 수가 데이터에서 나온다는 증거
  *   ⑩ 달 탭에 「이 달 헌액 N명 · 점수 상위 M명」 — 서버가 상위만 돌려줘서 「50에서 안 늘어요」로 읽혔어요(제보)
+ *      탭 숫자도 **실제 헌액 수**다(제보: "탭 숫자가 총 인원수 나오면 좋겠는데") — 전체 탭 포함
  *
  * 실제 화면(#hof-list)을 Career.showHof()로 그려서 DOM을 읽어요.
  */
@@ -244,7 +245,8 @@ const cardNames = () => cardEls().map((c) => c.querySelector(".hof-name").textCo
       const u = decodeURIComponent(String(url));
       asked.push({ u, prefer: opt && opt.headers && opt.headers.Prefer });
       const from = (u.match(/created_at=gte\.([^&]+)/) || [])[1] || "";
-      const n = new Date(from).getMonth() === 7 ? 541 : 1;          // 8월만 서버에 541명
+      // 서버에는 8월 541명 · 7월 1명 · 전체(날짜 조건 없음) 900명
+      const n = !from ? 900 : new Date(from).getMonth() === 7 ? 541 : 1;
       return Promise.resolve({ ok: true, headers: { get: (h) => (/content-range/i.test(h) ? `0-0/${n}` : null) } });
     };
     await Career.showHof();
@@ -253,7 +255,12 @@ const cardNames = () => cardEls().map((c) => c.querySelector(".hof-name").textCo
     console.log(`   세는 요청 ${asked.length}번 — ${asked.map((a) => a.u.replace(/^.*\?/, "")).join(" | ").slice(0, 160)}`);
     check(asked.length > 0 && asked.every((a) => a.prefer === "count=exact" && /select=id/.test(a.u)),
       "헤더만 받는 세기 요청이다 (목록을 내려받지 않아요)");
-    check(total() === "", `전체 탭에는 안 뜬다 (${total() || "없음"})`);
+    const badge = (k) => { const t = tabEls().find((x) => x.dataset.k === k); return t ? t.textContent.replace(/\s+/g, " ").trim() : ""; };
+    console.log(`   탭 — ${tabEls().map((t) => t.textContent.replace(/\s+/g, " ").trim()).join(" | ")}`);
+    check(badge("2026-08") === "26.08 541", `8월 탭 숫자가 실제 헌액 수다 (${badge("2026-08")}) — 실려 온 2명이 아니라`);
+    check(badge("all") === "전체 900", `전체 탭 숫자도 실제 헌액 수다 (${badge("all")})`);
+    check(badge("2026-07") === "26.07 1", `다 실려 온 달은 그대로다 (${badge("2026-07")})`);
+    check(/전체 헌액 900명 · 점수 상위 3명/.test(total()), `전체 탭에는 「전체 헌액」으로 뜬다 (${total()})`);
     tabEls().find((t) => t.dataset.k === "2026-08").click();
     console.log(`   8월 — ${total()}`);
     check(/이 달 헌액 541명 · 점수 상위 2명/.test(total()), `8월 탭에 실제 헌액 수가 적힌다 (${total()})`);
@@ -266,6 +273,7 @@ const cardNames = () => cardEls().map((c) => c.querySelector(".hof-name").textCo
     await new Promise((r) => setTimeout(r, 50));
     tabEls().find((t) => t.dataset.k === "2026-08").click();
     check(total() === "" && cardEls().length === 2, "세기가 실패하면 안내만 빠지고 사람은 그대로 보인다");
+    check(badge("2026-08") === "26.08 2", `세기가 실패하면 탭 숫자는 실려 온 수로 돌아간다 (${badge("2026-08")})`);
     w.Match = real;
   }
 

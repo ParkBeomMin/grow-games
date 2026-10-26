@@ -3441,13 +3441,16 @@ window.WingerCareer = (() => {
   async function countHofMonths() {
     const c = window.Match && window.Match.enabled() && window.Match.cfg;
     if (!c) return false;
-    const keys = hofTabs().map((t) => t.key).filter((k) => /^\d{4}-\d{2}$/.test(k));
+    const keys = hofTabs().map((t) => t.key).filter((k) => k === "all" || /^\d{4}-\d{2}$/.test(k));
     const res = await Promise.all(keys.map(async (k) => {
-      const [y, m] = k.split("-").map(Number);
-      const from = new Date(y, m - 1, 1).toISOString(), to = new Date(y, m, 1).toISOString();
+      let range = "";
+      if (k !== "all") {
+        const [y, m] = k.split("-").map(Number);
+        range = `&created_at=gte.${encodeURIComponent(new Date(y, m - 1, 1).toISOString())}`
+          + `&created_at=lt.${encodeURIComponent(new Date(y, m, 1).toISOString())}`;
+      }
       try {
-        const r = await fetch(`${c.url}/rest/v1/hof?game=eq.soccer&created_at=gte.${encodeURIComponent(from)}`
-          + `&created_at=lt.${encodeURIComponent(to)}&select=id`,
+        const r = await fetch(`${c.url}/rest/v1/hof?game=eq.soccer${range}&select=id`,
           { headers: { apikey: c.key, Authorization: `Bearer ${c.key}`, Prefer: "count=exact", Range: "0-0" } });
         const n = Number(((r.headers.get("content-range") || "").split("/")[1]));
         return r.ok && Number.isFinite(n) ? [k, n] : null;
@@ -3472,8 +3475,10 @@ window.WingerCareer = (() => {
       .filter((m) => m.key !== PAST_KEY)
       .sort((a, b) => (a.key < b.key ? 1 : -1));
     const past = seen.get(PAST_KEY);
+    // 탭 숫자는 **실제 헌액 수**예요 — 센 값이 있으면 그걸, 없으면(세기 전·실패) 실려 온 수를 써요
     return [{ key: "all", short: "전체", label: "전체", n: hofAll.length }]
-      .concat(months, past ? [past] : []);
+      .concat(months, past ? [past] : [])
+      .map((t) => (hofTotals[t.key] > t.n ? { ...t, n: hofTotals[t.key] } : t));
   }
 
   // 더 보기로 20명씩 늘리고, 내 기록이 목록 밖이면 하단에 고정해서 보여줘요
@@ -3507,7 +3512,7 @@ window.WingerCareer = (() => {
     if (total > list.length) {
       const p = document.createElement("p");
       p.className = "hint hof-total";
-      p.textContent = `🗓️ 이 달 헌액 ${total.toLocaleString()}명 · 점수 상위 ${list.length}명을 보여 줘요`;
+      p.textContent = `🗓️ ${hofTab === "all" ? "전체" : "이 달"} 헌액 ${total.toLocaleString()}명 · 점수 상위 ${list.length}명을 보여 줘요`;
       box.appendChild(p);
     }
     if (!list.length) {
