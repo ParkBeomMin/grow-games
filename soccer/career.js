@@ -3427,7 +3427,39 @@ window.WingerCareer = (() => {
     hofTab = "all";
     hofAll = list;
     hofMine = localIds;
+    hofTotals = {};
     drawHof();
+    // 달 탭은 점수 상위만 실려 와요 — 그 달에 실제로 몇 명이 들어왔는지는 따로 세서 덧붙여요
+    if (remote && remote.length) countHofMonths().then((got) => { if (got) drawHof(); });
+  }
+
+  /* 🗓️ 달 탭이 「50명에서 안 늘어요」로 읽히던 것(제보). 서버의 달별 뷰(hof_month_top)가
+   * **점수 상위만** 돌려줘서, 그 달 헌액이 541명이어도 탭에는 50명이 떠요. 숫자를 세어
+   * 「541명 중 상위 50명」이라고 적어 줍니다 — 안 느는 게 아니라 경쟁이 센 거예요.
+   * 세는 건 헤더만 받는 요청(count=exact)이라 목록을 내려받지 않아요. 실패하면 안내만 빠져요. */
+  let hofTotals = {};
+  const HOF_MONTH_TOP = 100;        // 서버 달별 뷰(hof_month_top)가 달마다 돌려주는 인원 — 뷰와 같이 바꿔요
+  async function countHofMonths() {
+    const c = window.Match && window.Match.enabled() && window.Match.cfg;
+    if (!c) return false;
+    const keys = hofTabs().map((t) => t.key).filter((k) => k === "all" || /^\d{4}-\d{2}$/.test(k));
+    const res = await Promise.all(keys.map(async (k) => {
+      let range = "";
+      if (k !== "all") {
+        const [y, m] = k.split("-").map(Number);
+        range = `&created_at=gte.${encodeURIComponent(new Date(y, m - 1, 1).toISOString())}`
+          + `&created_at=lt.${encodeURIComponent(new Date(y, m, 1).toISOString())}`;
+      }
+      try {
+        const r = await fetch(`${c.url}/rest/v1/hof?game=eq.soccer${range}&select=id`,
+          { headers: { apikey: c.key, Authorization: `Bearer ${c.key}`, Prefer: "count=exact", Range: "0-0" } });
+        const n = Number(((r.headers.get("content-range") || "").split("/")[1]));
+        return r.ok && Number.isFinite(n) ? [k, n] : null;
+      } catch { return null; }
+    }));
+    let got = false;
+    for (const x of res) if (x) { hofTotals[x[0]] = x[1]; got = true; }
+    return got;
   }
 
   /* 🗓️ 달 탭 — 명예의 전당이 한 줄로만 쌓이면 "이번 달에 누가 들어왔나"를 볼 수가
@@ -3444,8 +3476,10 @@ window.WingerCareer = (() => {
       .filter((m) => m.key !== PAST_KEY)
       .sort((a, b) => (a.key < b.key ? 1 : -1));
     const past = seen.get(PAST_KEY);
+    // 탭 숫자는 **실제 헌액 수**예요 — 센 값이 있으면 그걸, 없으면(세기 전·실패) 실려 온 수를 써요
     return [{ key: "all", short: "전체", label: "전체", n: hofAll.length }]
-      .concat(months, past ? [past] : []);
+      .concat(months, past ? [past] : [])
+      .map((t) => (hofTotals[t.key] > t.n ? { ...t, n: hofTotals[t.key] } : t));
   }
 
   // 더 보기로 20명씩 늘리고, 내 기록이 목록 밖이면 하단에 고정해서 보여줘요
@@ -3474,6 +3508,17 @@ window.WingerCareer = (() => {
         drawHof();
       });
       box.appendChild(bar);
+    }
+    const total = hofTotals[hofTab];
+    if (total > list.length) {
+      const p = document.createElement("p");
+      p.className = "hint hof-total";
+      /* 보이는 수가 뷰 인원보다 적으면(뷰를 아직 안 바꿨거나 실려 온 게 적으면) 그 수를 적어요 —
+       * 「상위 100명」이라고 써 놓고 50명만 보이면 안 되니까요. */
+      p.textContent = hofTab === "all"
+        ? `🗓️ 전체 헌액 ${total.toLocaleString()}명 중 ${list.length}명을 보여 줘요`
+        : `🗓️ 이 달 헌액 ${total.toLocaleString()}명 · 점수 상위 ${Math.min(HOF_MONTH_TOP, list.length)}명을 보여 줘요`;
+      box.appendChild(p);
     }
     if (!list.length) {
       const p = document.createElement("p");

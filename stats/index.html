@@ -676,6 +676,15 @@ grant select on public.stats_summary, public.stats_choices, public.stats_daily, 
      * 종료 시각만 당겨서 기록으로 남겨요. 게임은 안 끝난 줄만 받아 가요(fever.js). */
     let FEVER_ROWS = [];
     let FEVER_EDIT = null;          // 수정 중인 줄의 id — null이면 새 이벤트
+    let FEVER_COPY = null;          // 📋 복사해 온 줄 — 새 이벤트 폼을 이 값으로 채워요
+    /* 복사하면 시각은 **같은 시각의 가장 가까운 미래**로 옮겨요(오늘 그 시각이 지났으면 내일).
+     * 지난 이벤트 날짜를 그대로 두면 저장하자마자 「지난 이벤트」가 돼서 아무에게도 안 붙어요. */
+    function feverCopyWhen(row, now) {
+      const from = new Date(row.starts_at), len = Date.parse(row.ends_at) - from.getTime();
+      const s = new Date(now); s.setHours(from.getHours(), from.getMinutes(), 0, 0);
+      if (s.getTime() <= now) s.setDate(s.getDate() + 1);
+      return [s, new Date(s.getTime() + len)];
+    }
     const FEVER_LIST_MAX = 60;      // 목록에 보일 최근 이벤트 수
     /* 🔁 반복 — 규칙을 저장하지 않고 **그날그날 한 줄씩** 만들어요. 하루만 빼려면 그 줄만
      * 예약 취소하면 되고, 게임과 DB는 반복을 몰라도 돼요. [값, 이름, 그 요일이 맞나(일=0)] */
@@ -723,8 +732,11 @@ grant select on public.stats_summary, public.stats_choices, public.stats_daily, 
       if (game !== FEVER_GAME) return "";
       const now = Date.now();
       const r = FEVER_ROWS.find((x) => x.id === FEVER_EDIT) || null;
+      const cp = r ? null : FEVER_COPY;
+      const src = r || cp;           // 폼을 채울 줄 — 수정이면 그 줄, 복사면 복사해 온 줄
+      const [cpFrom, cpTo] = cp ? feverCopyWhen(cp, now) : [];
       // 새 이벤트면 효과는 가장 최근 이벤트 값을 미리 채워요 — 보통 "지난번과 같게"예요
-      const eff = ((r || FEVER_ROWS[0]) || {}).boost || {};
+      const eff = ((src || FEVER_ROWS[0]) || {}).boost || {};
       const list = FEVER_ROWS.length
         ? `<table class="fv-list"><tbody>${FEVER_ROWS.map((x) => {
             const st = feverState(x, now);
@@ -732,6 +744,7 @@ grant select on public.stats_summary, public.stats_choices, public.stats_daily, 
               <td><span class="fv-st">${FEVER_STATE_LABEL[st]}</span><br/>
                 <b>${esc(x.emoji || "🎉")} ${esc(x.title || "")}</b><br/>${fmtWhen(x.starts_at)} ~ ${fmtWhen(x.ends_at)}</td>
               <td class="fv-row-btns">
+                <button type="button" class="fv-ghost fv-copy" data-id="${esc(x.id)}">복사</button>
                 <button type="button" class="fv-ghost fv-edit" data-id="${esc(x.id)}">수정</button>
                 ${st === "live" ? `<button type="button" class="fv-ghost fv-stop" data-id="${esc(x.id)}">지금 끄기</button>` : ""}
                 ${st === "soon" ? `<button type="button" class="fv-ghost fv-del" data-id="${esc(x.id)}">예약 취소</button>` : ""}
@@ -743,15 +756,17 @@ grant select on public.stats_summary, public.stats_choices, public.stats_daily, 
       return `<section>
         <h2>🎉 피버 타임</h2>
         ${list}
-        <div class="fv-now${r ? " on" : ""}" id="fv-mode">${r
+        <div class="fv-now${src ? " on" : ""}" id="fv-mode">${r
           ? `✏️ 수정 중 — <b>${esc(r.emoji || "🎉")} ${esc(r.title || "")}</b> <button type="button" class="fv-ghost" id="fv-new">새 이벤트로</button>`
+          : cp
+          ? `📋 복사해서 새로 — <b>${esc(cp.emoji || "🎉")} ${esc(cp.title || "")}</b> · 시각은 가장 가까운 그 시각으로 옮겼어요 <button type="button" class="fv-ghost" id="fv-new">빈 폼으로</button>`
           : "➕ 새 이벤트 — 저장하면 목록에 한 줄 더해져요. 미래 시각이면 예약이에요."}</div>
         <div class="fv-grid">
-          ${field("fv-title", "제목", esc((r && r.title) || "피버 타임"), "text")}
-          ${field("fv-emoji", "이모지", esc((r && r.emoji) || "🎉"), "text")}
-          ${field("fv-note", "한 줄 설명", esc((r && r.note) || ""), "text")}
-          ${field("fv-from", "시작", toLocalInput((r && r.starts_at) || new Date().toISOString()), "datetime-local")}
-          ${field("fv-to", "종료", toLocalInput((r && r.ends_at) || new Date(Date.now() + 864e5).toISOString()), "datetime-local")}
+          ${field("fv-title", "제목", esc((src && src.title) || "피버 타임"), "text")}
+          ${field("fv-emoji", "이모지", esc((src && src.emoji) || "🎉"), "text")}
+          ${field("fv-note", "한 줄 설명", esc((src && src.note) || ""), "text")}
+          ${field("fv-from", "시작", toLocalInput(cp ? cpFrom.toISOString() : (r && r.starts_at) || new Date().toISOString()), "datetime-local")}
+          ${field("fv-to", "종료", toLocalInput(cp ? cpTo.toISOString() : (r && r.ends_at) || new Date(Date.now() + 864e5).toISOString()), "datetime-local")}
           ${r ? "" : `<label class="fv-f">🔁 반복<select id="fv-rep">${FEVER_REPEAT.map(([v, l]) =>
             `<option value="${v}">${l}</option>`).join("")}</select></label>
           ${field("fv-n", `몇 번 (최대 ${FEVER_REPEAT_MAX})`, 1, "number")}`}
@@ -869,9 +884,17 @@ grant select on public.stats_summary, public.stats_choices, public.stats_daily, 
         $("fv-from").value = toLocalInput(now.toISOString());
         $("fv-to").value = toLocalInput(new Date(now.getTime() + 864e5).toISOString());
       };
-      if ($("fv-new")) $("fv-new").onclick = () => { FEVER_EDIT = null; renderPanel(); };
+      if ($("fv-new")) $("fv-new").onclick = () => { FEVER_EDIT = null; FEVER_COPY = null; renderPanel(); };
       for (const b of document.querySelectorAll(".fv-edit")) {
-        b.onclick = () => { const pw = $("fv-pw").value; FEVER_EDIT = b.dataset.id; renderPanel(); $("fv-pw").value = pw; };
+        b.onclick = () => { const pw = $("fv-pw").value; FEVER_EDIT = b.dataset.id; FEVER_COPY = null; renderPanel(); $("fv-pw").value = pw; };
+      }
+      for (const b of document.querySelectorAll(".fv-copy")) {
+        b.onclick = () => {
+          const pw = $("fv-pw").value;
+          FEVER_EDIT = null; FEVER_COPY = rowOf(b.dataset.id) || null;
+          renderPanel(); $("fv-pw").value = pw;
+          $("fv-mode").scrollIntoView({ block: "nearest" });
+        };
       }
 
       $("fv-save").onclick = async () => {
@@ -918,7 +941,7 @@ grant select on public.stats_summary, public.stats_choices, public.stats_daily, 
         /* 서버가 "됐어요"라고 해도 줄이 실제로 생겼는지 다시 읽어서 봐요 */
         const missing = ids.filter((id) => !rowOf(id)).length;
         if (missing) return msg(`서버는 받았다는데 ${missing}개가 목록에 안 보여요 — 새로고침해서 확인해 주세요`, true);
-        FEVER_EDIT = null;
+        FEVER_EDIT = null; FEVER_COPY = null;
         await redraw(pw, occ.length > 1 ? `✅ ${occ.length}개를 예약했어요` : "✅ 저장했어요");
       };
 
