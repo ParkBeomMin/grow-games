@@ -3438,6 +3438,7 @@ window.WingerCareer = (() => {
    * 「541명 중 상위 50명」이라고 적어 줍니다 — 안 느는 게 아니라 경쟁이 센 거예요.
    * 세는 건 헤더만 받는 요청(count=exact)이라 목록을 내려받지 않아요. 실패하면 안내만 빠져요. */
   let hofTotals = {};
+  const HOF_MONTH_TOP = 100;        // 서버 달별 뷰(hof_month_top)가 달마다 돌려주는 인원 — 뷰와 같이 바꿔요
   async function countHofMonths() {
     const c = window.Match && window.Match.enabled() && window.Match.cfg;
     if (!c) return false;
@@ -3512,7 +3513,11 @@ window.WingerCareer = (() => {
     if (total > list.length) {
       const p = document.createElement("p");
       p.className = "hint hof-total";
-      p.textContent = `🗓️ ${hofTab === "all" ? "전체" : "이 달"} 헌액 ${total.toLocaleString()}명 · 점수 상위 ${list.length}명을 보여 줘요`;
+      /* 보이는 수가 뷰 인원보다 적으면(뷰를 아직 안 바꿨거나 실려 온 게 적으면) 그 수를 적어요 —
+       * 「상위 100명」이라고 써 놓고 50명만 보이면 안 되니까요. */
+      p.textContent = hofTab === "all"
+        ? `🗓️ 전체 헌액 ${total.toLocaleString()}명 중 ${list.length}명을 보여 줘요`
+        : `🗓️ 이 달 헌액 ${total.toLocaleString()}명 · 점수 상위 ${Math.min(HOF_MONTH_TOP, list.length)}명을 보여 줘요`;
       box.appendChild(p);
     }
     if (!list.length) {

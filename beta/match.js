@@ -208,12 +208,16 @@ window.Match = (() => {
    * 두 갈래 어디에도 안 걸립니다. 지난달은 **영원히 그렇습니다.**
    * 점수는 오래 쌓일수록 커지니, 이 컷은 시간이 갈수록 지난 달을 밀어내요.
    *
-   * 그래서 **달마다 상위를 뽑아 오는 뷰**(hof_month_top · 달별 50명)를 씁니다.
+   * 그래서 **달마다 상위를 뽑아 오는 뷰**(hof_month_top · 달별 100명)를 씁니다.
    * 달 탭이 제 일을 하려면 각 달이 목록에 실려 있어야 해요.
    * 역대 상위 100명도 같이 가져와 합쳐요 — 뷰의 달별 컷에 밀린 옛 전설이
    * 전체 탭에서 사라지면 안 되니까요.
-   * 뷰가 없는 환경(SQL을 아직 안 돌린 곳)에서는 점수순 하나로 굴러갑니다. */
-  const HOF_LIMIT = 100, HOF_MONTH_LIMIT = 600;
+   * 뷰가 없는 환경(SQL을 아직 안 돌린 곳)에서는 점수순 하나로 굴러갑니다.
+   *
+   * ⚠️ 달별 뷰는 **최근 순으로** 받아요. 점수순으로 자르면 위와 같은 병이 한 단계 위에서
+   * 다시 나요 — 달이 쌓여 한도를 넘는 순간 점수가 낮은 달이 통째로 빠집니다.
+   * 한도 1000은 Supabase가 한 번에 주는 최대 줄 수예요(달별 100명 × 10달). */
+  const HOF_LIMIT = 100, HOF_MONTH_LIMIT = 1000;
   async function fetchHof(game) {
     if (!enabled()) return null;
     const q = async (table, order, limit) => {
@@ -227,7 +231,7 @@ window.Match = (() => {
     };
     const [top, months] = await Promise.all([
       q("hof", "score.desc", HOF_LIMIT),
-      q("hof_month_top", "score.desc", HOF_MONTH_LIMIT),
+      q("hof_month_top", "created_at.desc", HOF_MONTH_LIMIT),
     ]);
     if (!top && !months) return null;
     const byId = new Map();

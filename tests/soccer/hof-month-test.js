@@ -207,6 +207,29 @@ const cardNames = () => cardEls().map((c) => c.querySelector(".hof-name").textCo
     const out = await fetchHof("soccer");
     console.log(`   두드린 곳 ${calls.join(" · ")} → ${out.length}명 (${out.map((x) => x.name).join(", ")})`);
     check(calls.includes("hof") && calls.includes("hof_month_top"), "두 곳을 다 두드린다");
+    /* 달별 뷰를 **점수순으로** 자르면, 달이 쌓여 한도를 넘는 순간 점수 낮은 달이 통째로 빠져요
+     * (⑨의 병이 한 단계 위에서 다시 나요). 최근 순이어야 최근 달들이 온전히 실려 와요. */
+    {
+      // 달 11개 × 100명. **가장 최근 달의 점수가 가장 낮아요**(막 들어온 커리어들). 서버처럼 order·limit를 지켜 돌려줘요
+      const big = [];
+      for (let m = 0; m < 11; m++) for (let i = 0; i < 100; i++) {
+        big.push({ id: `m${m}-${i}`, created_at: new Date(Date.UTC(2026, m, 5)).toISOString(),
+          score: (11 - m) * 1000 + i, data: { id: `m${m}-${i}`, name: `m${m}`, score: (11 - m) * 1000 + i } });
+      }
+      const serve = (url) => {
+        const u = new URL(String(url));
+        const table = u.pathname.split("/rest/v1/")[1];
+        if (table !== "hof_month_top") return Promise.resolve({ ok: true, json: () => Promise.resolve([]) });
+        const [col, dir] = (u.searchParams.get("order") || "").split(".");
+        const rows = big.slice().sort((a, b) => (a[col] < b[col] ? -1 : a[col] > b[col] ? 1 : 0) * (dir === "desc" ? -1 : 1))
+          .slice(0, Number(u.searchParams.get("limit")));
+        return Promise.resolve({ ok: true, json: () => Promise.resolve(rows) });
+      };
+      const got = await run(serve, "https://x.test", () => ({}), () => true, (d) => d, Promise)("soccer");
+      const newest = got.filter((x) => x.name === "m10").length;
+      console.log(`   달 11개 × 100명 → ${got.length}명 실림 · 가장 최근 달 ${newest}명`);
+      check(newest === 100, `달이 한도를 넘게 쌓여도 가장 최근 달은 온전히 실려 온다 (${newest}/100) — 점수순으로 자르면 0명이에요`);
+    }
     check(out.length === 2, `겹치는 사람은 한 번만 담는다 (${out.length}명)`);
     check(out.some((x) => x.name === "7월사람"), "지난 달 사람이 실려 온다 — 여기가 이번 제보예요");
 
@@ -260,7 +283,7 @@ const cardNames = () => cardEls().map((c) => c.querySelector(".hof-name").textCo
     check(badge("2026-08") === "26.08 541", `8월 탭 숫자가 실제 헌액 수다 (${badge("2026-08")}) — 실려 온 2명이 아니라`);
     check(badge("all") === "전체 900", `전체 탭 숫자도 실제 헌액 수다 (${badge("all")})`);
     check(badge("2026-07") === "26.07 1", `다 실려 온 달은 그대로다 (${badge("2026-07")})`);
-    check(/전체 헌액 900명 · 점수 상위 3명/.test(total()), `전체 탭에는 「전체 헌액」으로 뜬다 (${total()})`);
+    check(/전체 헌액 900명 중 3명을 보여 줘요/.test(total()), `전체 탭에는 「전체 헌액 N명 중 M명」으로 뜬다 (${total()})`);
     tabEls().find((t) => t.dataset.k === "2026-08").click();
     console.log(`   8월 — ${total()}`);
     check(/이 달 헌액 541명 · 점수 상위 2명/.test(total()), `8월 탭에 실제 헌액 수가 적힌다 (${total()})`);
