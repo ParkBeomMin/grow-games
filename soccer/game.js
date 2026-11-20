@@ -783,6 +783,7 @@ function show(id) {
    * 말을 걸 수 없어서, 이미 켜 둔 화면에서도 다음 화면으로 넘어가는 순간
    * 배너가 뜨게 하는 자리예요. 네트워크는 안 씁니다(구간만 보고 판정해요). */
   if (window.WingerFever) WingerFever.tick();
+  if (window.WingerNotice) WingerNotice.tick(); // 📢 공지(notice.js)
 }
 
 const BACK_SAFE = ["screen-title", "screen-agency", "screen-position", "screen-name", "screen-hof", "screen-battle"];
