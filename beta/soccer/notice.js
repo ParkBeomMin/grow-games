@@ -77,11 +77,18 @@
     ok.focus();
   }
 
+  let shown = false; // 한 번 열 때 공지는 하나만: 여러 개가 줄줄이 뜨지 않게(남은 건 다음 방문에)
   function tick() {
-    if (document.querySelector(".av-overlay")) return;
+    if (shown || document.querySelector(".av-overlay")) return;
     const n = next();
-    if (n) open(n);
+    if (n) { shown = true; open(n); }
   }
+
+  // 📢 타이틀의 더 윙어 2 배너: 누르면 GA 이벤트만 보내고 이동은 링크(새 탭)가 해요
+  const promo = document.getElementById("w2-promo");
+  if (promo) promo.addEventListener("click", () => {
+    try { if (window.gtag) gtag("event", "winger2_banner_click", { place: "title" }); } catch { /* 측정 실패는 무시 */ }
+  });
 
   fetch("notice.json", { cache: "no-store" })
     .then((r) => (r.ok ? r.json() : []))
